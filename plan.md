@@ -475,6 +475,29 @@ Stacked on `feat/org-admin-billing`.
   in the PR). Anchors: `apps/fleet-operator/src/{trusted-proxies.ts,config.ts}`, `tenants/deploy/2-config-map.ts`,
   `platform/helm/{values.yaml,values/gke-dev.yaml,templates/operator-deployment.yaml}`.
 
+- [ ] **CONN.11 Fleet-manager internal-API separation + CLI IAM gap (follow-up to the clustertenant split #115).**
+  *Landed on the clustertenant side (2026-07-02):* the tokenless `/api/internal/*` routes were mounted before the
+  session auth middleware (#114) and are now served on a **separate internal listener** (`:8081`, `createInternalApp`),
+  NetworkPolicy-gated and OFF the public ingress (#115) — the org ingress `/api` path only reaches the public port.
+  **The fleet-manager needs the same treatment, plus an auth fix — audited 2026-07-02, NOT yet done:**
+  - **(a) Move the sensitive admin/IAM surface to an internal listener.** `/api/v1/admin/zitadel/*` (esp.
+    `sa-key:rotate` — the master IdP SA key) and `/api/v1/platform/dns` (DNS-01 solver creds) are platform-operator/CLI
+    ops, not browser self-service. Split them onto an internal listener (mirror #115: separate port + NetworkPolicy,
+    not on the fleet ingress); the CLI reaches them via `kubectl port-forward`/in-cluster. Public listener keeps
+    `/auth`, `/cluster-tenants` (+`/members`), `/billing-accounts`.
+  - **(b) Fix the fleet CLI auth gap (the real finding).** The fleet mounts `___AuthMiddleware()` with **no
+    `AccessTokenReader`** ("fleet has no AccessToken model"), and live it has `OIDC_ISSUER_URL` SET + `OPENCRANE_API_TOKEN`
+    UNSET. So the fleet authenticates **browser OIDC sessions only** — a CLI **per-user Bearer** from `oc auth login`
+    (a control-plane-issued DB token) is **not validated** on the fleet (step 4 skipped, step 3 unavailable). Net: the
+    actual callers of the crown-jewel routes (`oc admin zitadel …`, `oc platform dns set`) have **no valid per-user IAM
+    path to the fleet** — they 401 or would need the (unset) shared static token. Give the internal admin listener a
+    defined machine-auth story (a scoped bearer the CLI passes in-cluster, or a fleet-side per-user token reader).
+  - **(c) Reserve the internal listener for the future silo→fleet cross-cluster callback.** Today silo↔fleet is entirely
+    K8s-CR coordination in ONE cluster (no silo→fleet HTTP). In the `dedicatedCluster` tier (tenant in its own cluster)
+    CRs can't cross the boundary → the silo must forward status/registration over HTTP (the CR-status→DB write-back gap).
+    That machine-to-machine API must be born on the internal listener (mTLS/scoped token), never the browser ingress.
+  Anchors: `apps/fleet-operator/src/{index.ts,routes.ts}`, `apps/fleet-platform/templates/{fleet-manager-deployment,fleet-manager-service,fleet-manager-ingress,networkpolicy-*}.yaml`, `libs/infra-auth` (AuthMiddleware reader), `apps/cli/src/commands/{admin,platform}.ts`. Pattern reference: PR #115 (clustertenant internal listener).
+
 
 ### Track P4-D — MCP & Skills platform completion (the two 🔶 gaps)
 
