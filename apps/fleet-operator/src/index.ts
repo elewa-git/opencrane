@@ -93,7 +93,7 @@ async function main(): Promise<void>
   // `pending` to `ready` — bind the namespace boundary and (gated) the per-org domain. Without
   // this, an org created via the control plane would sit `pending` forever. The fleet watches
   // ONLY this cluster-scoped CR; everything inside a silo is the silo's own concern.
-  const clusterTenantOperator = _CreateClusterTenantOperator(kc, config, log);
+  const clusterTenantOperator = _CreateClusterTenantOperator(kc, config, prisma, log);
   await clusterTenantOperator.start();
 }
 

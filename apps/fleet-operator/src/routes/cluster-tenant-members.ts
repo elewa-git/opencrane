@@ -327,7 +327,29 @@ export function clusterTenantMembersRouter(prisma: PrismaClient, zitadelClient: 
       return;
     }
 
-    // 4. Delete the membership row.
+    // 4. Revoke the IdP grant BEFORE the local delete (#126 S4d). Offboarding must remove the
+    //    Zitadel org membership too, or a removed member keeps a live grant at the org's login
+    //    surface. The IdP call MUST succeed first: if it fails we return 502 and leave the local
+    //    row, so the removal is retried — deleting the local row while the IdP grant survives
+    //    would let the membership-adoption reconcile backstop RE-ADD the member (a resurrection
+    //    loop). When the org is not yet Zitadel-provisioned (null ids) there is no grant to
+    //    revoke, so the delete proceeds directly.
+    const zitadelIds = await _readOrgZitadelIds(prisma, orgName);
+    if (zitadelIds)
+    {
+      try
+      {
+        await zitadelClient.removeOrgMember(zitadelIds.orgId, subject);
+      }
+      catch (err)
+      {
+        _log.warn({ orgName, subject, err }, "failed to remove org member from Zitadel; leaving local row for retry (avoids reconcile resurrection)");
+        res.status(502).json({ error: "Failed to revoke the member's IdP grant; please retry.", code: "UPSTREAM_ERROR" });
+        return;
+      }
+    }
+
+    // 5. Delete the membership row (only after the IdP grant is gone).
     await prisma.orgMembership.delete({
       where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
     });

@@ -35,14 +35,19 @@ interface Seed
 /** A grant call recorded by the fake Zitadel client. */
 interface GrantCall { orgId: string; projectId: string; subject: string; roleKey: string }
 
+/** A member-removal call recorded by the fake Zitadel client. */
+interface RemoveCall { orgId: string; subject: string }
+
 /**
- * Build a fake Zitadel client that records `grantProjectRole` calls. When `throwOnGrant`
- * is set, the grant rejects — exercising the transactional rollback (the DB write must
- * not survive an IdP failure).
+ * Build a fake Zitadel client that records `grantProjectRole` + `removeOrgMember` calls.
+ * When `throwOnGrant` is set, the grant rejects — exercising the transactional rollback (the DB
+ * write must not survive an IdP failure). When `throwOnRemove` is set, `removeOrgMember` rejects
+ * — exercising the offboarding path where the local row must survive so the removal is retried.
  */
-function _fakeZitadel(opts: { throwOnGrant?: boolean } = {}): { client: ZitadelManagementClient; grants: GrantCall[] }
+function _fakeZitadel(opts: { throwOnGrant?: boolean; throwOnRemove?: boolean } = {}): { client: ZitadelManagementClient; grants: GrantCall[]; removes: RemoveCall[] }
 {
   const grants: GrantCall[] = [];
+  const removes: RemoveCall[] = [];
   const client: ZitadelManagementClient = {
     async provisionOrg(input) { return { orgId: "z", projectId: "p", appId: "a", clientId: "c", redirectUri: input.redirectUri }; },
     async setAppRedirectUris() { /* no-op */ },
@@ -52,11 +57,17 @@ function _fakeZitadel(opts: { throwOnGrant?: boolean } = {}): { client: ZitadelM
       if (opts.throwOnGrant) { throw new Error("zitadel grant rejected"); }
       grants.push({ orgId, projectId, subject, roleKey });
     },
+    async listOrgUsers() { return []; },
+    async removeOrgMember(orgId, subject)
+    {
+      if (opts.throwOnRemove) { throw new Error("zitadel remove rejected"); }
+      removes.push({ orgId, subject });
+    },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* no-op */ },
   };
-  return { client, grants };
+  return { client, grants, removes };
 }
 
 /**
@@ -312,6 +323,40 @@ describe("clusterTenantMembersRouter — org member management (S3c)", function 
 
     expect(res.status).toBe(404);
     expect(res.body.code).toBe("MEMBERSHIP_NOT_FOUND");
+  });
+
+  // --- offboarding: revoke the IdP grant before the local delete (#126 S4d) ------------------
+
+  it("revokes the member's Zitadel org membership before deleting the local row (provisioned org)", async function _removeRevokesIdp()
+  {
+    const { prisma, memberships } = _mockPrisma({ orgs: [{ name: "acme", zitadelOrgId: "z-org", zitadelProjectId: "z-proj" }], memberships: [
+      { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
+      { clusterTenant: "acme", subject: "user-2", role: "Member" },
+    ] });
+    const { client, removes } = _fakeZitadel();
+    const res = await request(_buildApp(prisma, _owner, client)).delete("/api/v1/cluster-tenants/acme/members/user-2");
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ subject: "user-2", status: "removed" });
+    // The IdP grant was revoked with the org's provisioned id, and the local row is gone.
+    expect(removes).toEqual([{ orgId: "z-org", subject: "user-2" }]);
+    expect(memberships.find(m => m.subject === "user-2")).toBeUndefined();
+  });
+
+  it("returns 502 and LEAVES the local row when the Zitadel removal fails (no resurrection loop)", async function _removeIdpFailsLeavesRow()
+  {
+    const { prisma, memberships } = _mockPrisma({ orgs: [{ name: "acme", zitadelOrgId: "z-org", zitadelProjectId: "z-proj" }], memberships: [
+      { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
+      { clusterTenant: "acme", subject: "user-2", role: "Member" },
+    ] });
+    const { client } = _fakeZitadel({ throwOnRemove: true });
+    const res = await request(_buildApp(prisma, _owner, client)).delete("/api/v1/cluster-tenants/acme/members/user-2");
+
+    // IdP removal must succeed before the local delete: on failure the row survives for retry so
+    // the membership-adoption backstop cannot re-add a still-seated member.
+    expect(res.status).toBe(502);
+    expect(res.body.code).toBe("UPSTREAM_ERROR");
+    expect(memberships.find(m => m.subject === "user-2")).toBeDefined();
   });
 
   // --- org-manager gate ----------------------------------------------------

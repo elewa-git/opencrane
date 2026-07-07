@@ -144,6 +144,52 @@ describe("_HttpZitadelManagementClient — live provisioning lifecycle (injected
     await expect(client.grantProjectRole("org-9", "proj-9", "user-2", "member")).rejects.toThrow(/grants failed \(500\)/);
   });
 
+  it("listOrgUsers POSTs the org-scoped user search and maps result → { subject, email } (#126 S4b)", async function _listUsers()
+  {
+    const { fetchImpl, calls } = _fakeFetch({
+      "/management/v1/users/_search": { status: 200, body: { result: [
+        { userId: "u-1", human: { email: { email: "a@acme.test" } } },
+        { id: "u-2" },                       // no `human` block → email omitted
+        { human: { email: { email: "ghost@acme.test" } } }, // no id/userId → dropped
+      ] } },
+    });
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+
+    const users = await client.listOrgUsers("org-9");
+
+    const search = calls.find(c => c.path === "/management/v1/users/_search");
+    expect(search?.method).toBe("POST");
+    expect(search?.orgId).toBe("org-9");
+    // Entries without a subject are dropped; email is carried through when present.
+    expect(users).toEqual([{ subject: "u-1", email: "a@acme.test" }, { subject: "u-2" }]);
+  });
+
+  it("listOrgUsers tolerates a response with no result array (returns [])", async function _listUsersEmpty()
+  {
+    const { fetchImpl } = _fakeFetch({ "/management/v1/users/_search": { status: 200, body: {} } });
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+    await expect(client.listOrgUsers("org-9")).resolves.toEqual([]);
+  });
+
+  it("removeOrgMember DELETEs the org-scoped membership (#126 S4d)", async function _removeMember()
+  {
+    const { fetchImpl, calls } = _fakeFetch();
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+
+    await client.removeOrgMember("org-9", "user-2");
+
+    const del = calls.find(c => c.path === "/management/v1/orgs/me/members/user-2");
+    expect(del?.method).toBe("DELETE");
+    expect(del?.orgId).toBe("org-9");
+  });
+
+  it("removeOrgMember throws on a non-OK Zitadel response (offboarding keeps the local row)", async function _removeMemberFails()
+  {
+    const { fetchImpl } = _fakeFetch({ "/management/v1/orgs/me/members/user-2": { status: 500, body: { message: "boom" } } });
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+    await expect(client.removeOrgMember("org-9", "user-2")).rejects.toThrow(/members\/user-2 failed \(500\)/);
+  });
+
   it("teardownOrg tolerates an already-absent org (404)", async function _teardown404()
   {
     const { fetchImpl } = _fakeFetch({ "/admin/v1/orgs/gone": { status: 404, body: {} } });

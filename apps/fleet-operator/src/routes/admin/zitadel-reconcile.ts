@@ -1,11 +1,11 @@
 import { Router } from "express";
-import type { PrismaClient } from "../../generated/prisma/index.js";
+import { Prisma, type PrismaClient } from "../../generated/prisma/index.js";
 
 import { _RequirePlatformOperator } from "@opencrane/infra-auth";
 import { _DeriveOrgRedirectUri, _DeriveVanityRedirectUri } from "../../infra/zitadel/zitadel-client.js";
 import type { ZitadelManagementClient } from "../../infra/zitadel/zitadel-client.types.js";
 import { _log } from "../../log.js";
-import type { ZitadelReconcileRequest, ZitadelReconcileSummary } from "./zitadel-reconcile.types.js";
+import type { ZitadelMemberAdoptionResult, ZitadelReconcileRequest, ZitadelReconcileSummary } from "./zitadel-reconcile.types.js";
 
 /** A `cluster_tenants` row as returned by Prisma `findMany`/`findUnique`. */
 type ClusterTenantRow = NonNullable<Awaited<ReturnType<PrismaClient["clusterTenant"]["findUnique"]>>>;
@@ -62,6 +62,60 @@ async function _ReconcileOne(prisma: PrismaClient, zitadelClient: ZitadelManagem
 }
 
 /**
+ * Adopt an org's Zitadel Console users as local `Member` memberships (the #126 backstop).
+ *
+ * A user invited directly in the Zitadel Console never hits the app's member-add route, so
+ * they hold an IdP grant but no `OrgMembership` row — the org-admin surface can't see them.
+ * This lists the org's Zitadel user pool and, for every subject with NO existing membership,
+ * creates a `Member` row. It is **create-if-absent**: an existing membership (of ANY role) is
+ * left untouched, so an Owner/Admin is NEVER downgraded to Member. A concurrent create that
+ * loses the unique race (P2002) is tolerated and counted as a skip.
+ *
+ * @param prisma        - Prisma client for the membership reads/writes.
+ * @param zitadelClient - Live Zitadel client used to list the org's users.
+ * @param orgName       - ClusterTenant (org) name — the membership `clusterTenant`.
+ * @param zitadelOrgId  - Zitadel Organization id whose user pool is listed.
+ * @returns The per-org `{ adopted, skipped }` counts.
+ */
+async function _AdoptOrgMembers(prisma: PrismaClient, zitadelClient: ZitadelManagementClient,
+                                orgName: string, zitadelOrgId: string): Promise<ZitadelMemberAdoptionResult>
+{
+  const users = await zitadelClient.listOrgUsers(zitadelOrgId);
+  let adopted = 0;
+  let skipped = 0;
+  for (const user of users)
+  {
+    // Create-if-absent: never overwrite an existing membership, so an Owner/Admin invited via
+    // the Console (or seeded locally) keeps their role rather than being reset to Member.
+    const existing = await prisma.orgMembership.findUnique({
+      where: { clusterTenant_subject: { clusterTenant: orgName, subject: user.subject } },
+      select: { subject: true },
+    });
+    if (existing)
+    {
+      skipped += 1;
+      continue;
+    }
+    try
+    {
+      await prisma.orgMembership.create({ data: { clusterTenant: orgName, subject: user.subject, role: "Member" } });
+      adopted += 1;
+    }
+    catch (err)
+    {
+      // Tolerate a lost unique race (P2002) — the row now exists, so treat it as a skip.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+      {
+        skipped += 1;
+        continue;
+      }
+      throw err;
+    }
+  }
+  return { name: orgName, adopted, skipped };
+}
+
+/**
  * Superadmin-gated router for the idempotent Zitadel reconcile/backfill (S3d).
  *
  * For every ClusterTenant whose Zitadel ids are incomplete (missing orgId OR clientId OR appId
@@ -113,7 +167,7 @@ export function zitadelReconcileRouter(prisma: PrismaClient, zitadelClient: Zita
       rows = await prisma.clusterTenant.findMany({ orderBy: { createdAt: "asc" } });
     }
 
-    const summary: ZitadelReconcileSummary = { reconciled: [], skipped: [], failed: [] };
+    const summary: ZitadelReconcileSummary = { reconciled: [], skipped: [], failed: [], memberAdoption: [], memberAdoptionFailed: [] };
 
     // 2. Walk every candidate. Each CT lands in exactly one bucket; a per-CT failure is
     //    collected and the loop continues so one bad org never strands the rest.
@@ -152,7 +206,34 @@ export function zitadelReconcileRouter(prisma: PrismaClient, zitadelClient: Zita
       }
     }
 
-    _log.info({ reconciled: summary.reconciled.length, skipped: summary.skipped.length, failed: summary.failed.length }, "zitadel reconcile: run complete");
+    // 3. Membership-adoption backstop (#126): adopt Console-invited users who never hit the
+    //    member-add route. Re-read the rows so any org just healed in pass 1 carries its freshly
+    //    persisted orgId/projectId. For every fully-provisioned org (both ids set) list its
+    //    Zitadel users and create a `Member` membership for each subject with none. Best-effort
+    //    per org — a `listOrgUsers`/adopt failure for one org is collected and does not abort.
+    const names = rows.map(function _name(row) { return row.name; });
+    const fresh = await prisma.clusterTenant.findMany({ where: { name: { in: names } } });
+    for (const row of fresh)
+    {
+      if (!row.zitadelOrgId || !row.zitadelProjectId)
+      {
+        continue;
+      }
+      try
+      {
+        const result = await _AdoptOrgMembers(prisma, zitadelClient, row.name, row.zitadelOrgId);
+        _log.info({ orgName: row.name, adopted: result.adopted, skipped: result.skipped }, "zitadel reconcile: member-adoption pass complete for org");
+        summary.memberAdoption.push(result);
+      }
+      catch (err)
+      {
+        const message = err instanceof Error ? err.message : String(err);
+        _log.error({ err, orgName: row.name }, "zitadel reconcile: member-adoption FAILED for this org (continuing with the rest)");
+        summary.memberAdoptionFailed.push({ name: row.name, error: message });
+      }
+    }
+
+    _log.info({ reconciled: summary.reconciled.length, skipped: summary.skipped.length, failed: summary.failed.length, adopted: summary.memberAdoption.reduce(function _sum(n, r) { return n + r.adopted; }, 0), adoptFailed: summary.memberAdoptionFailed.length }, "zitadel reconcile: run complete");
     res.status(200).json(summary);
   });
 

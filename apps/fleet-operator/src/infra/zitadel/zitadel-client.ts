@@ -325,6 +325,40 @@ export class _HttpZitadelManagementClient implements ZitadelManagementClient
     _log.info({ orgId, projectId, subject, roleKey }, "granted Zitadel project role to org member");
   }
 
+  public async listOrgUsers(orgId: string): Promise<Array<{ subject: string; email?: string }>>
+  {
+    // Zitadel v1 user search: POST /management/v1/users/_search returns `{ result: [...] }`,
+    // each entry an org user with an `id` (some builds echo `userId`) and, for human users, a
+    // nested `human.email.email`. Org-scoped via the x-zitadel-orgid header (4th `_call` arg).
+    // Empty body → no filter, so the whole org pool is returned. Be defensive about the exact
+    // field names (v1 search shape is assumed here) and drop any entry without a subject.
+    const res = await this._call("POST", "/management/v1/users/_search", {}, orgId) as {
+      result?: Array<{ userId?: string; id?: string; human?: { email?: { email?: string } } }>;
+    };
+    const users: Array<{ subject: string; email?: string }> = [];
+    for (const entry of res.result ?? [])
+    {
+      const subject = entry.userId ?? entry.id;
+      if (!subject)
+      {
+        continue;
+      }
+      const email = entry.human?.email?.email;
+      users.push(email ? { subject, email } : { subject });
+    }
+    return users;
+  }
+
+  public async removeOrgMember(orgId: string, subject: string): Promise<void>
+  {
+    // Org-scoped delete of the user's org membership: DELETE /management/v1/orgs/me/members/{userId}
+    // (the org is resolved from the x-zitadel-orgid header, not the path). Removing the org
+    // membership revokes the user's grants in that org. Fail-loud (via _call) so offboarding can
+    // keep the local row until the IdP grant is actually gone.
+    await this._call("DELETE", `/management/v1/orgs/me/members/${subject}`, undefined, orgId);
+    _log.info({ orgId, subject }, "removed org member from Zitadel org");
+  }
+
   /** Issue an authenticated, org-scoped Management API call; throw on any non-OK status. */
   private async _call(method: string, path: string, body: unknown, orgId?: string): Promise<unknown>
   {

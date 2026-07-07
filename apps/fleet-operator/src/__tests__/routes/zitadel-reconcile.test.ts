@@ -19,10 +19,15 @@ import type { ZitadelManagementClient } from "../../infra/zitadel/zitadel-client
 /** An in-memory cluster_tenants row. */
 type Row = Record<string, unknown>;
 
-/** A spyable Zitadel client double; `provisionThrowsFor` forces a per-org failure by name. */
-function _fakeZitadel(opts: { provisionThrowsFor?: Set<string> } = {}): {
+/**
+ * A spyable Zitadel client double. `provisionThrowsFor` forces a per-org provision failure by
+ * name; `orgUsers` maps a Zitadel org id → its user pool (for the adoption backstop pass);
+ * `listThrowsFor` forces a `listOrgUsers` failure for a given Zitadel org id.
+ */
+function _fakeZitadel(opts: { provisionThrowsFor?: Set<string>; orgUsers?: Map<string, Array<{ subject: string; email?: string }>>; listThrowsFor?: Set<string> } = {}): {
   client: ZitadelManagementClient;
   provisionOrg: ReturnType<typeof vi.fn>;
+  listOrgUsers: ReturnType<typeof vi.fn>;
 }
 {
   const provisionOrg = vi.fn(async function _provision(input: { orgName: string; redirectUri: string })
@@ -30,46 +35,79 @@ function _fakeZitadel(opts: { provisionThrowsFor?: Set<string> } = {}): {
     if (opts.provisionThrowsFor?.has(input.orgName)) { throw new Error(`zitadel boom for ${input.orgName}`); }
     return { orgId: `zorg-${input.orgName}`, projectId: `zproj-${input.orgName}`, appId: `zapp-${input.orgName}`, clientId: `zclient-${input.orgName}`, redirectUri: input.redirectUri };
   });
+  const listOrgUsers = vi.fn(async function _listOrgUsers(orgId: string)
+  {
+    if (opts.listThrowsFor?.has(orgId)) { throw new Error(`zitadel list boom for ${orgId}`); }
+    return opts.orgUsers?.get(orgId) ?? [];
+  });
   const client = {
     provisionOrg,
+    listOrgUsers,
+    async removeOrgMember() { /* unused */ },
     async setAppRedirectUris() { /* unused */ },
     async teardownOrg() { /* unused */ },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* unused */ },
   } as unknown as ZitadelManagementClient;
-  return { client, provisionOrg };
+  return { client, provisionOrg, listOrgUsers };
 }
+
+/** An in-memory OrgMembership row for the adoption-pass assertions. */
+interface Membership { clusterTenant: string; subject: string; role: string }
 
 /**
  * Build a Prisma stub over in-memory maps. `owners` maps a CT name → the Owner subject (absent
  * → no Owner membership). The `update` mutates the backing row so the persisted ids are visible.
+ * `seedMemberships` pre-populates the membership store the adoption backstop reads/writes; the
+ * Owner from `owners` is added as a membership too so create-if-absent skips it.
  */
-function _mockPrisma(store: Map<string, Row>, owners: Map<string, string>): { prisma: PrismaClient; update: ReturnType<typeof vi.fn>; tx: ReturnType<typeof vi.fn> }
+function _mockPrisma(store: Map<string, Row>, owners: Map<string, string>, seedMemberships: Membership[] = []): { prisma: PrismaClient; update: ReturnType<typeof vi.fn>; tx: ReturnType<typeof vi.fn>; memberships: Membership[]; create: ReturnType<typeof vi.fn> }
 {
+  const memberships: Membership[] = [
+    ...Array.from(owners.entries()).map(([clusterTenant, subject]) => ({ clusterTenant, subject, role: "Owner" })),
+    ...seedMemberships.map(m => ({ ...m })),
+  ];
   const update = vi.fn(async function _update(args: { where: { name: string }; data: Row })
   {
     const row = { ...(store.get(args.where.name) as Row), ...args.data };
     store.set(args.where.name, row);
     return row;
   });
+  const create = vi.fn(async function _create(args: { data: Membership })
+  {
+    memberships.push({ ...args.data });
+    return { ...args.data };
+  });
   const tx = vi.fn(async function _tx(fn: (t: PrismaClient) => Promise<unknown>) { return fn(prisma); });
   const prisma = {
     clusterTenant: {
-      findMany: vi.fn(async function _findMany() { return Array.from(store.values()); }),
+      findMany: vi.fn(async function _findMany(args?: { where?: { name?: { in?: string[] } } })
+      {
+        const inNames = args?.where?.name?.in;
+        const all = Array.from(store.values());
+        return inNames ? all.filter(r => inNames.includes(r.name as string)) : all;
+      }),
       findUnique: vi.fn(async function _findUnique(args: { where: { name: string } }) { return store.get(args.where.name) ?? null; }),
       update,
     },
     orgMembership: {
       findFirst: vi.fn(async function _findFirst(args: { where: { clusterTenant: string; role: string } })
       {
-        const subject = owners.get(args.where.clusterTenant);
-        return subject ? { clusterTenant: args.where.clusterTenant, subject, role: "Owner" } : null;
+        const m = memberships.find(x => x.clusterTenant === args.where.clusterTenant && x.role === args.where.role);
+        return m ? { ...m } : null;
       }),
+      findUnique: vi.fn(async function _findUnique(args: { where: { clusterTenant_subject: { clusterTenant: string; subject: string } } })
+      {
+        const { clusterTenant, subject } = args.where.clusterTenant_subject;
+        const m = memberships.find(x => x.clusterTenant === clusterTenant && x.subject === subject);
+        return m ? { subject: m.subject } : null;
+      }),
+      create,
     },
     $transaction: tx,
   } as unknown as PrismaClient;
-  return { prisma, update, tx };
+  return { prisma, update, tx, memberships, create };
 }
 
 /** A complete (already-provisioned) CT row. */
@@ -202,6 +240,62 @@ describe("zitadelReconcileRouter — POST /reconcile (idempotent backfill)", fun
     const missing = await request(_buildApp(prisma, client, _OP)).post("/api/v1/admin/zitadel/reconcile").send({ name: "ghost" });
     expect(missing.status).toBe(404);
     expect(missing.body.code).toBe("CLUSTER_TENANT_NOT_FOUND");
+  });
+
+  // --- membership-adoption backstop (#126 S4b) -----------------------------
+
+  it("adopts a Console-invited user (no membership) as a Member on a provisioned org", async function _adoptsConsoleUser()
+  {
+    const store = new Map<string, Row>([["acme", _complete("acme")]]); // already provisioned (orgId=o, projectId=p)
+    // Owner "subj-owner" already has a membership; "console-user" was invited in the Console only.
+    const { prisma, memberships, create } = _mockPrisma(store, new Map([["acme", "subj-owner"]]));
+    const { client } = _fakeZitadel({ orgUsers: new Map([["o", [{ subject: "subj-owner", email: "o@a.test" }, { subject: "console-user", email: "c@a.test" }]]]) });
+
+    const res = await request(_buildApp(prisma, client, _OP)).post("/api/v1/admin/zitadel/reconcile").send({});
+
+    expect(res.status).toBe(200);
+    // The Console-only user is adopted as Member; the Owner (already a member) is skipped.
+    expect(res.body.memberAdoption).toContainEqual({ name: "acme", adopted: 1, skipped: 1 });
+    expect(create).toHaveBeenCalledOnce();
+    expect(memberships).toContainEqual({ clusterTenant: "acme", subject: "console-user", role: "Member" });
+  });
+
+  it("does NOT downgrade an existing Owner during adoption (create-if-absent)", async function _neverDowngradesOwner()
+  {
+    const store = new Map<string, Row>([["acme", _complete("acme")]]);
+    // The Owner is also present in the Zitadel org pool — adoption must NOT touch their row.
+    const { prisma, memberships, create } = _mockPrisma(store, new Map([["acme", "owner-1"]]));
+    const { client } = _fakeZitadel({ orgUsers: new Map([["o", [{ subject: "owner-1" }]]]) });
+
+    const res = await request(_buildApp(prisma, client, _OP)).post("/api/v1/admin/zitadel/reconcile").send({});
+
+    expect(res.status).toBe(200);
+    expect(res.body.memberAdoption).toContainEqual({ name: "acme", adopted: 0, skipped: 1 });
+    expect(create).not.toHaveBeenCalled();
+    // The Owner keeps their role — never reset to Member.
+    expect(memberships.find(m => m.subject === "owner-1")?.role).toBe("Owner");
+  });
+
+  it("isolates a listOrgUsers failure for one org (collected, does not abort the others)", async function _adoptFailureIsolation()
+  {
+    const store = new Map<string, Row>([
+      ["bad", { ..._complete("bad"), zitadelOrgId: "o-bad" }],
+      ["good", { ..._complete("good"), zitadelOrgId: "o-good" }],
+    ]);
+    const { prisma, memberships } = _mockPrisma(store, new Map([["bad", "s1"], ["good", "s2"]]));
+    const { client } = _fakeZitadel({
+      listThrowsFor: new Set(["o-bad"]),
+      orgUsers: new Map([["o-good", [{ subject: "new-good" }]]]),
+    });
+
+    const res = await request(_buildApp(prisma, client, _OP)).post("/api/v1/admin/zitadel/reconcile").send({});
+
+    expect(res.status).toBe(200);
+    // The failing org lands in memberAdoptionFailed; the healthy org still adopts.
+    expect(res.body.memberAdoptionFailed).toHaveLength(1);
+    expect(res.body.memberAdoptionFailed[0]).toMatchObject({ name: "bad" });
+    expect(res.body.memberAdoption).toContainEqual({ name: "good", adopted: 1, skipped: 0 });
+    expect(memberships).toContainEqual({ clusterTenant: "good", subject: "new-good", role: "Member" });
   });
 
   it("returns 403 for a non-operator (platform-operator gate, fail-closed)", async function _nonOperator()
