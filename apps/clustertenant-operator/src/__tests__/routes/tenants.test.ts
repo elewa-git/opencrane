@@ -384,6 +384,43 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
   });
 });
 
+describe("tenantsRouter delete — offboarding teardown (#126)", () =>
+{
+  it("cuts sessions, deletes the LiteLLM key metadata, deletes the tenant, and RETAINS datasets", async () =>
+  {
+    const customApi = {
+      deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+
+    const tenantDeleteSpy = vi.fn().mockResolvedValue({});
+    const litellmDeleteManySpy = vi.fn().mockResolvedValue({ count: 1 });
+    const datasetDeleteManySpy = vi.fn(); // must NOT be called — datasets are retained
+    const prisma = {
+      tenant: { delete: tenantDeleteSpy },
+      tenantLiteLlmKey: {
+        findFirst: vi.fn().mockResolvedValue({ keyAlias: "alias-acme" }),
+        deleteMany: litellmDeleteManySpy,
+      },
+      // _CutTenant reads/marks brokered devices; empty set keeps it a clean no-op path.
+      brokeredDevice: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      tenantDatasetMembership: { deleteMany: datasetDeleteManySpy },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app).delete("/api/tenants/acme");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ name: "acme", status: "deleted" });
+    // LiteLLM key metadata is cleaned (no cascade → would otherwise block the delete)…
+    expect(litellmDeleteManySpy).toHaveBeenCalledWith({ where: { tenant: "acme" } });
+    // …the projection row is deleted…
+    expect(tenantDeleteSpy).toHaveBeenCalledWith({ where: { name: "acme" } });
+    // …and NO explicit dataset purge runs: offboarding retains harvested data (Cognee untouched).
+    expect(datasetDeleteManySpy).not.toHaveBeenCalled();
+  });
+});
+
 describe("tenantsRouter get + update — clusterTenantRef round-trip and clear (WOI.2)", () =>
 {
   it("returns clusterTenantRef from a single-tenant get", async () =>

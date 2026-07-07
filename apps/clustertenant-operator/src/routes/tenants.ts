@@ -8,7 +8,9 @@ import { compile, compileForPrincipals } from "../core/grants/grant-compiler.js"
 import { GrantCompilerAccess, GrantCompilerPayloadType } from "../core/grants/grant-compiler.types.js";
 import { _DeriveTenantDatasetMembership } from "../core/grants/derive-dataset-membership.js";
 import { _CutTenant } from "../core/connections/cut-tenant.js";
+import { _deleteLiteLlmKey } from "../core/ai-budget/ai-budget.logic.js";
 import type { OpenClawGatewayAdmin } from "../core/connections/gateway-admin.types.js";
+import { _log } from "../log.js";
 import { OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL, _IsK8sNotFound } from "@opencrane/infra-api";
 
 import type { CreateTenantRequest, TenantDatasetsResponse, TenantResponse, UpdateTenantDatasetsRequest } from "../types.js";
@@ -551,30 +553,70 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
   });
 
   /** Delete a tenant (dual-write: K8s CRD + database). */
-  router.delete("/:name", async function _deleteTenant(req, res)
+  router.delete("/:name", async function _deleteTenant(req, res, next)
   {
-    const name = req.params.name;
+    try
+    {
+      const name = req.params.name;
 
-    await customApi.deleteNamespacedCustomObject({
-      group: OPENCRANE_API_GROUP,
-      version: OPENCRANE_API_VERSION,
-      namespace,
-      plural: TENANT_CRD_PLURAL,
-      name,
-    });
+      // Offboarding teardown (#126). Order matters: revoke access on the LIVE pod first, then
+      // tear the pod down, then clean local metadata — while RETAINING harvested data.
+      //
+      // 1. Revoke sessions + brokered devices (gateway revoke + registry mark) and force-delete
+      //    the pod so live WebSockets are severed immediately — same kill-switch as POST /cut.
+      //    Best-effort: a gateway/pod hiccup must not strand the delete.
+      try
+      {
+        await _CutTenant(coreApi, prisma, gatewayAdmin, { tenant: name, namespace, reason: "tenant deleted (offboarding)" });
+      }
+      catch (err)
+      {
+        _log.warn({ err, tenant: name }, "cut during tenant delete failed (non-fatal); continuing teardown");
+      }
 
-    await prisma.auditEntry.create({
-      data: {
-        tenant: name,
-        action: "Deleted",
-        resource: `Tenant/${name}`,
-        message: `Tenant ${name} deleted`,
-      },
-    });
+      // 2. Delete the tenant's upstream LiteLLM virtual key (best-effort; never throws). Resolve
+      //    the active alias from the metadata rows before they are removed below.
+      const activeKey = await prisma.tenantLiteLlmKey.findFirst({
+        where: { tenant: name, revokedAt: null },
+        orderBy: { issuedAt: "desc" },
+        select: { keyAlias: true },
+      });
+      const litellmDeleted = (await _deleteLiteLlmKey(activeKey?.keyAlias ?? null)).deleted;
 
-    await prisma.tenant.delete({ where: { name } });
+      // 3. Delete the Tenant CRD (the operator finaliser tears down the pod + PVC).
+      await customApi.deleteNamespacedCustomObject({
+        group: OPENCRANE_API_GROUP,
+        version: OPENCRANE_API_VERSION,
+        namespace,
+        plural: TENANT_CRD_PLURAL,
+        name,
+      });
 
-    res.json({ name, status: "deleted" });
+      await prisma.auditEntry.create({
+        data: {
+          tenant: name,
+          action: "Deleted",
+          resource: `Tenant/${name}`,
+          message: `Tenant ${name} deleted (litellmKeyDeleted=${litellmDeleted})`,
+        },
+      });
+
+      // 4. Remove the LiteLLM key metadata rows explicitly — they have no cascade, so they would
+      //    otherwise block the tenant delete below (FK), and they carry no data worth keeping.
+      await prisma.tenantLiteLlmKey.deleteMany({ where: { tenant: name } });
+
+      // 5. Delete the projection row. Cascades take the per-tenant pointer rows (audit, brokered
+      //    devices, dataset MEMBERSHIPS, docs). NOTE: this is deliberately NOT a Cognee delete —
+      //    offboarding RETAINS the org's harvested datasets in Cognee (decision 2026-07-05); only
+      //    this tenant's local access pointers go, never the collected organisational data.
+      await prisma.tenant.delete({ where: { name } });
+
+      res.json({ name, status: "deleted" });
+    }
+    catch (err)
+    {
+      next(err);
+    }
   });
 
   /** Suspend a tenant (scale deployment to zero). */
