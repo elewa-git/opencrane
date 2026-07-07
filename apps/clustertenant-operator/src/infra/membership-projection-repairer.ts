@@ -76,6 +76,68 @@ export function _BuildHttpFleetMembershipReader(fleetInternalUrl: string, token:
   };
 }
 
+/** Writes member adoptions through to the fleet — the authoritative `OrgMembership` store (S4). */
+export interface FleetMembershipWriter
+{
+  /**
+   * Adopt a member into the org at the fleet (create-if-absent, never downgrade). Returns true
+   * when the fleet accepted the write, false on any transport error or non-OK status (the login
+   * proceeds regardless — the next login and the projection sweep are the backstops).
+   */
+  adopt(clusterTenant: string, subject: string): Promise<boolean>;
+}
+
+/**
+ * Build the HTTP fleet membership writer over the fleet internal adopt endpoint
+ * (`POST <fleetInternalUrl>/api/internal/cluster-tenants/<org>/members/adopt`).
+ *
+ * Returns **null** when the fleet URL is unset — the #151 standalone case, where the silo's own
+ * `OrgMembership` is the system-of-record and adoption writes locally instead. A non-null writer
+ * means fleet-managed: the fleet owns membership, so adoption must write through here (the
+ * projection repairer then mirrors the row straight back), or a silo-local write would be reaped
+ * by the next sweep. Presents the `OPENCRANE_API_TOKEN` bearer when set.
+ *
+ * @param fleetInternalUrl - Base URL of the fleet internal listener; empty ⇒ null (standalone).
+ * @param token            - Shared service bearer for the fleet internal API (empty ⇒ omitted).
+ * @param log              - Scoped logger.
+ * @param fetchImpl        - Injectable fetch (defaults to global `fetch`) for testability.
+ */
+export function _BuildHttpFleetMembershipWriter(fleetInternalUrl: string, token: string, log: Logger,
+                                                fetchImpl: typeof fetch = fetch): FleetMembershipWriter | null
+{
+  const base = fleetInternalUrl.trim().replace(/\/+$/, "");
+  if (!base)
+  {
+    return null;
+  }
+  return {
+    async adopt(clusterTenant: string, subject: string): Promise<boolean>
+    {
+      const url = `${base}/api/internal/cluster-tenants/${encodeURIComponent(clusterTenant)}/members/adopt`;
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (token)
+      {
+        headers.authorization = `Bearer ${token}`;
+      }
+      try
+      {
+        const res = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify({ subject }) });
+        if (!res.ok)
+        {
+          log.warn({ clusterTenant, status: res.status }, "fleet member adoption returned non-OK; will retry on next login/sweep");
+          return false;
+        }
+        return true;
+      }
+      catch (err)
+      {
+        log.warn({ err, clusterTenant }, "fleet member adoption failed; will retry on next login/sweep");
+        return false;
+      }
+    },
+  };
+}
+
 /** Narrow an unknown list entry to a `{ subject, role }` row. */
 function _isFleetMembershipRow(value: unknown): value is FleetMembershipRow
 {

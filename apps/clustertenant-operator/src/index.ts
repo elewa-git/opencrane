@@ -23,7 +23,7 @@ import { _TransportSecurity } from "./infra/middleware/transport-security.middle
 import { _log as log } from "./log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./routes.js";
 import { TenantProjectionRepairer } from "./infra/tenant-projection-repairer.js";
-import { MembershipProjectionRepairer, _BuildHttpFleetMembershipReader } from "./infra/membership-projection-repairer.js";
+import { MembershipProjectionRepairer, _BuildHttpFleetMembershipReader, _BuildHttpFleetMembershipWriter } from "./infra/membership-projection-repairer.js";
 import { _ResolveOwnClusterTenantName } from "./core/cluster-tenants/resolve-own-cluster-tenant.js";
 
 // In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
@@ -58,7 +58,11 @@ export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi,
   // First-login member workspaces are seeded into the TenantOperator's watch namespace
   // (WATCH_NAMESPACE) — the same target as the owner-default seed — falling back to NAMESPACE
   // then "default" for dev/test. It is deliberately NOT the projection-repair namespace.
-  const authService = ___CreateOidcAuthService(log, prisma, customApi, process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default");
+  // Member adoption writes THROUGH to the fleet's authoritative membership when FLEET_INTERNAL_URL
+  // is set (fleet-managed); the writer is null for a standalone silo, where adoption writes local.
+  const authWatchNamespace = process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default";
+  const authFleetWriter = _BuildHttpFleetMembershipWriter(process.env.FLEET_INTERNAL_URL?.trim() ?? "", process.env.OPENCRANE_API_TOKEN?.trim() ?? "", log);
+  const authService = ___CreateOidcAuthService(log, prisma, customApi, authWatchNamespace, authFleetWriter);
 
   // Middleware
   app.set("trust proxy", 1);

@@ -65,7 +65,7 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
     await _AdoptMemberOnLogin({
       prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate: vi.fn() }),
       customApi: _mockApi(_cr("acme"), vi.fn()),
-      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "", email: "dev@acme.com", log: _log,
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "", email: "dev@acme.com", fleetWriter: null, log: _log,
     });
     expect(upsert).not.toHaveBeenCalled();
   });
@@ -77,7 +77,7 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
       prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate: vi.fn() }),
       // customApi=null → _ResolvePerOrgClient returns null (no org to adopt into).
       customApi: null,
-      namespace: "ns", host: "app.dev.opencrane.ai", subject: "sub-1", email: "dev@acme.com", log: _log,
+      namespace: "ns", host: "app.dev.opencrane.ai", subject: "sub-1", email: "dev@acme.com", fleetWriter: null, log: _log,
     });
     expect(upsert).not.toHaveBeenCalled();
   });
@@ -89,10 +89,11 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
     await _AdoptMemberOnLogin({
       prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate }),
       customApi: _mockApi(_cr("acme"), vi.fn()),
-      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "sub-42", email: "dev@acme.com", log: _log,
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "sub-42", email: "dev@acme.com", fleetWriter: null, log: _log,
     });
 
-    // Adopted into acme as Member, create-if-absent, `update: {}` preserving any existing role.
+    // Standalone silo (no fleet writer) → adopted into acme's LOCAL read-model as Member,
+    // create-if-absent, `update: {}` preserving any existing role.
     expect(upsert).toHaveBeenCalledWith({
       where: { clusterTenant_subject: { clusterTenant: "acme", subject: "sub-42" } },
       create: { clusterTenant: "acme", subject: "sub-42", role: "Member" },
@@ -112,12 +113,32 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
       // The owner already holds `acme-default` under their email → the collision guard fires.
       prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate, existingForEmail: { name: "acme-default" } }),
       customApi: _mockApi(_cr("acme"), vi.fn()),
-      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "owner-sub", email: "owner@acme.com", log: _log,
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "owner-sub", email: "owner@acme.com", fleetWriter: null, log: _log,
     });
 
     // Membership upsert is still idempotent with `update: {}` — never downgrading the Owner role...
     expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ update: {} }));
     // ...but NO second workspace is seeded (a duplicate email would break the 1:1 email→tenant router).
     expect(tenantCreate).not.toHaveBeenCalled();
+  });
+
+  it("writes adoption THROUGH to the fleet (not the local read-model) when a fleet writer is present", async function _fleetManaged()
+  {
+    const upsert = vi.fn();
+    const tenantCreate = vi.fn();
+    const adopt = vi.fn().mockResolvedValue(true);
+    await _AdoptMemberOnLogin({
+      prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate }),
+      customApi: _mockApi(_cr("acme"), vi.fn()),
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "sub-42", email: "dev@acme.com",
+      fleetWriter: { adopt }, log: _log,
+    });
+
+    // Fleet-managed: the adoption is written through to the fleet SoR (the repairer mirrors it
+    // back) — NOT to the local read-model, which the next projection sweep would otherwise reap.
+    expect(adopt).toHaveBeenCalledWith("acme", "sub-42");
+    expect(upsert).not.toHaveBeenCalled();
+    // The workspace seed is silo-local either way.
+    expect(tenantCreate).toHaveBeenCalledWith(expect.objectContaining({ name: _MemberTenantName("acme", "sub-42") }));
   });
 });

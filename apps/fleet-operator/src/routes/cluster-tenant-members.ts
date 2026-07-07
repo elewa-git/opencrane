@@ -18,7 +18,7 @@ type OrgRoleValue = (typeof _ORG_ROLES)[number];
  * lower-cased role, so an Owner/Admin gets project-admin authority and a Member
  * gets plain participation on the org's `opencrane` project.
  */
-function _zitadelRoleKey(role: OrgRoleValue): string
+export function _zitadelRoleKey(role: OrgRoleValue): string
 {
   return role.toLowerCase();
 }
@@ -45,7 +45,7 @@ function _isOrgRole(value: unknown): value is OrgRoleValue
  * @param name   - ClusterTenant (org) name from the path.
  * @returns True when a ClusterTenant row with that name exists.
  */
-async function _orgExists(prisma: PrismaClient, name: string): Promise<boolean>
+export async function _orgExists(prisma: PrismaClient, name: string): Promise<boolean>
 {
   const row = await prisma.clusterTenant.findUnique({ where: { name }, select: { name: true } });
   return row !== null;
@@ -61,7 +61,7 @@ async function _orgExists(prisma: PrismaClient, name: string): Promise<boolean>
  * @param name   - ClusterTenant (org) name.
  * @returns The org's `{ orgId, projectId }` when both are set, else null.
  */
-async function _readOrgZitadelIds(prisma: PrismaClient, name: string): Promise<{ orgId: string; projectId: string } | null>
+export async function _readOrgZitadelIds(prisma: PrismaClient, name: string): Promise<{ orgId: string; projectId: string } | null>
 {
   const row = await prisma.clusterTenant.findUnique({ where: { name }, select: { zitadelOrgId: true, zitadelProjectId: true } });
   if (!row || !row.zitadelOrgId || !row.zitadelProjectId)

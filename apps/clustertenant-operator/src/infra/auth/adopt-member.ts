@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 
 import { _EnsureMemberTenant } from "../../core/cluster-tenants/default-tenant.js";
+import type { FleetMembershipWriter } from "../membership-projection-repairer.js";
 import { _ResolvePerOrgClient } from "./per-org-client.js";
 
 /**
@@ -18,22 +19,26 @@ import { _ResolvePerOrgClient } from "./per-org-client.js";
  * login resolves to null and is skipped (nothing to adopt into).
  *
  * On a per-org login we:
- *  1. upsert `OrgMembership { clusterTenant, subject, role: Member }` — create-if-absent, and
- *     crucially never downgrade an existing Owner/Admin (the owner logs in the same way);
+ *  1. adopt the membership `{ clusterTenant, subject, role: Member }` — create-if-absent, and
+ *     crucially never downgrade an existing Owner/Admin (the owner logs in the same way). WHERE
+ *     the row is written depends on topology: fleet-managed silos write THROUGH to the fleet (the
+ *     authoritative store) via `fleetWriter`, so the projection repairer mirrors it back and it is
+ *     not reaped; standalone silos (`fleetWriter` null) own membership locally and upsert directly.
  *  2. seed the member's subject-bound workspace via {@link _EnsureMemberTenant} (idempotent,
  *     gated on ≥1 registered model, and a no-op for the owner who already holds `<org>-default`).
  *
  * Best-effort by contract: the caller catches and logs any throw so adoption can never break
- * a login, and the periodic Zitadel→membership reconcile is the backstop for a login where the
- * upsert or seed did not complete.
+ * a login, and the periodic membership reconcile is the backstop for a login where the write or
+ * seed did not complete.
  *
- * @param opts.prisma    - Silo Prisma client (membership registry + workspace projection).
- * @param opts.customApi - Cluster custom-objects client for per-org CR resolution (null in dev/test → skip).
- * @param opts.namespace - The silo namespace the seeded Tenant CRD is written into.
- * @param opts.host      - The request host the login arrived on (resolves the org + its client).
- * @param opts.subject   - The member's IdP-verified subject (OIDC `sub`).
- * @param opts.email     - The member's IdP-verified email.
- * @param opts.log       - Scoped logger.
+ * @param opts.prisma      - Silo Prisma client (local membership read-model + workspace projection).
+ * @param opts.customApi   - Cluster custom-objects client for per-org CR resolution (null in dev/test → skip).
+ * @param opts.namespace   - The silo namespace the seeded Tenant CRD is written into.
+ * @param opts.host        - The request host the login arrived on (resolves the org + its client).
+ * @param opts.subject     - The member's IdP-verified subject (OIDC `sub`).
+ * @param opts.email       - The member's IdP-verified email.
+ * @param opts.fleetWriter - Writer to the fleet's authoritative membership; null ⇒ standalone (write local).
+ * @param opts.log         - Scoped logger.
  */
 export async function _AdoptMemberOnLogin(opts: {
   prisma: PrismaClient;
@@ -42,10 +47,11 @@ export async function _AdoptMemberOnLogin(opts: {
   host: string | undefined;
   subject: string | undefined;
   email: string | undefined;
+  fleetWriter: FleetMembershipWriter | null;
   log: Logger;
 }): Promise<void>
 {
-  const { prisma, customApi, namespace, host, log } = opts;
+  const { prisma, customApi, namespace, host, fleetWriter, log } = opts;
   const subject = opts.subject?.trim() ?? "";
   const email = opts.email?.trim() ?? "";
 
@@ -66,13 +72,21 @@ export async function _AdoptMemberOnLogin(opts: {
   }
   const orgName = perOrg.clusterTenant;
 
-  // 1. Adopt into the org. Upsert so a re-login is idempotent; `update: {}` guarantees an
-  //    existing Owner/Admin membership is never downgraded to Member.
-  await prisma.orgMembership.upsert({
-    where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
-    create: { clusterTenant: orgName, subject, role: "Member" },
-    update: {},
-  });
+  // 1. Adopt into the org (create-if-absent, never downgrade). Fleet-managed silos write through
+  //    to the fleet's authoritative store — a local write would be reaped by the next projection
+  //    sweep — and the repairer mirrors the row back. Standalone silos own membership locally.
+  if (fleetWriter)
+  {
+    await fleetWriter.adopt(orgName, subject);
+  }
+  else
+  {
+    await prisma.orgMembership.upsert({
+      where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
+      create: { clusterTenant: orgName, subject, role: "Member" },
+      update: {},
+    });
+  }
 
   // 2. Seed the member's subject-bound workspace (idempotent; ≥1-model gated; owner-safe).
   const seed = await _EnsureMemberTenant({ customApi, prisma, namespace, orgName, email, subject });
