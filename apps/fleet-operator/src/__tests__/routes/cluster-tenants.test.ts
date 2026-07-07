@@ -211,6 +211,11 @@ describe("clusterTenantsRouter (CT.2 management API)", function _suite()
     const okRes = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), seatCap: 25 });
     expect(okRes.status).toBe(201);
 
+    // Minimum viable cap: seatCap=1 succeeds — the founding owner is seeded in the create tx
+    // and is never blocked by the cap (it consumes the single seat; members are then refused).
+    const capOne = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), name: "solo", seatCap: 1 });
+    expect(capOne.status).toBe(201);
+
     // Fractional / negative caps are client errors on both create and update.
     const fractional = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), name: "frac", seatCap: 2.5 });
     expect(fractional.status).toBe(400);

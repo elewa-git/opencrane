@@ -1,6 +1,6 @@
 import { Router } from "express";
 import type { Request } from "express";
-import type { PrismaClient } from "../generated/prisma/index.js";
+import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
 
 import { _RequireOrgManager } from "@opencrane/infra-auth";
 import { _log } from "../log.js";
@@ -87,26 +87,43 @@ async function _ownerCount(prisma: PrismaClient, orgName: string): Promise<numbe
 /** Error code returned when a member-create would exceed the org's seat cap. */
 export const _SEAT_CAP_EXCEEDED_CODE = "SEAT_CAP_EXCEEDED";
 
-/**
- * Whether the org has no seat available for a NEW member (#126 S6). The fleet is the seat
- * authority: an org's `seatCap` (null ⇒ uncapped) bounds its total `OrgMembership` count.
- * Only a create consumes a seat, so callers check this ONLY before adding a new subject — a
- * role change on an existing member, and every standalone silo (which never reaches the fleet),
- * stay unaffected.
- *
- * @param prisma  - Prisma client for the cap + count reads.
- * @param orgName - ClusterTenant (org) name.
- * @returns True when the org is capped and already at (or over) its seat cap.
- */
-export async function _atSeatCap(prisma: PrismaClient, orgName: string): Promise<boolean>
+/** Thrown by {@link _reserveSeatInTx} when the org is at its seat cap; mapped to a 409 by callers. */
+export class SeatCapExceededError extends Error
 {
-  const org = await prisma.clusterTenant.findUnique({ where: { name: orgName }, select: { seatCap: true } });
+  constructor()
+  {
+    super("Organisation is at its seat cap.");
+    this.name = "SeatCapExceededError";
+  }
+}
+
+/**
+ * Reserve a seat for a NEW member, inside the create transaction (#126 S6). The fleet is the
+ * seat authority: an org's `seatCap` (null ⇒ uncapped) bounds its total `OrgMembership` count.
+ *
+ * Call this ONLY on the create path (a role change consumes no seat) and ONLY from within the
+ * `$transaction` that then creates the row. It first takes a row lock on the org
+ * (`SELECT … FOR UPDATE`), so concurrent member-creates for the SAME org serialize and the
+ * count→create window cannot interleave — the cap is exact, not a racy check-then-act. Different
+ * orgs never contend on the lock, and standalone silos never reach the fleet at all.
+ *
+ * @param tx      - The active transaction client (a row lock outside a tx would release immediately).
+ * @param orgName - ClusterTenant (org) name.
+ * @throws {SeatCapExceededError} when the org is capped and already at its cap.
+ */
+export async function _reserveSeatInTx(tx: Prisma.TransactionClient, orgName: string): Promise<void>
+{
+  await tx.$queryRaw`SELECT 1 FROM cluster_tenants WHERE name = ${orgName} FOR UPDATE`;
+  const org = await tx.clusterTenant.findUnique({ where: { name: orgName }, select: { seatCap: true } });
   if (!org || org.seatCap === null || org.seatCap === undefined)
   {
-    return false;
+    return;
   }
-  const count = await prisma.orgMembership.count({ where: { clusterTenant: orgName } });
-  return count >= org.seatCap;
+  const count = await tx.orgMembership.count({ where: { clusterTenant: orgName } });
+  if (count >= org.seatCap)
+  {
+    throw new SeatCapExceededError();
+  }
 }
 
 /**
@@ -192,19 +209,14 @@ export function clusterTenantMembersRouter(prisma: PrismaClient, zitadelClient: 
       return;
     }
 
-    // 2b. Seat cap (S6): only a NEW member consumes a seat, so refuse an add for an
-    //     unseen subject once the org is at its cap. A role change on an existing member is
-    //     never blocked (no new seat). The founding owner is seeded outside this route.
+    // 2b. Seat cap (S6): only a NEW member consumes a seat. Decide create-vs-update here; the
+    //     actual reservation happens INSIDE the write tx (row-locked) so the cap is exact under
+    //     concurrent adds. A role change on an existing member never reserves a seat, and the
+    //     founding owner is seeded outside this route.
     const alreadyMember = await prisma.orgMembership.findUnique({
       where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
       select: { subject: true },
     });
-    if (!alreadyMember && (await _atSeatCap(prisma, orgName)))
-    {
-      _log.warn({ orgName, subject }, "denied org-membership add: organisation is at its seat cap");
-      res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
-      return;
-    }
 
     // 3. Last-Owner guardrail: if this write would demote the org's sole Owner to a
     //    lesser role, reject — an org must always retain ≥1 Owner. Only relevant when
@@ -228,25 +240,45 @@ export function clusterTenantMembersRouter(prisma: PrismaClient, zitadelClient: 
     //    membership is then recorded locally and the grant is skipped.
     const zitadelIds = await _readOrgZitadelIds(prisma, orgName);
 
-    // 5. Upsert on the unique [clusterTenant, subject] and — when the org is provisioned —
-    //    seat the member's Zitadel project role as the LAST fallible step, so a grant
-    //    failure rolls the DB write back (no membership without its IdP seat).
+    // 5. Reserve a seat (only for a new member) then upsert on the unique [clusterTenant, subject]
+    //    and — when the org is provisioned — seat the member's Zitadel project role as the LAST
+    //    fallible step, so a grant failure rolls the DB write back (no membership without its IdP
+    //    seat). The seat reservation and the write share ONE transaction: the row lock it takes
+    //    serialises concurrent adds so the cap is exact.
     let seated = false;
-    const member = await prisma.$transaction(async function _upsertWithSeating(tx)
+    let member: { subject: string; role: string };
+    try
     {
-      const row = await tx.orgMembership.upsert({
-        where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
-        create: { clusterTenant: orgName, subject, role },
-        update: { role },
-        select: { subject: true, role: true },
-      });
-      if (zitadelIds)
+      member = await prisma.$transaction(async function _upsertWithSeating(tx)
       {
-        await zitadelClient.grantProjectRole(zitadelIds.orgId, zitadelIds.projectId, subject, _zitadelRoleKey(role));
-        seated = true;
+        if (!alreadyMember)
+        {
+          await _reserveSeatInTx(tx, orgName);
+        }
+        const row = await tx.orgMembership.upsert({
+          where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
+          create: { clusterTenant: orgName, subject, role },
+          update: { role },
+          select: { subject: true, role: true },
+        });
+        if (zitadelIds)
+        {
+          await zitadelClient.grantProjectRole(zitadelIds.orgId, zitadelIds.projectId, subject, _zitadelRoleKey(role));
+          seated = true;
+        }
+        return row;
+      });
+    }
+    catch (err)
+    {
+      if (err instanceof SeatCapExceededError)
+      {
+        _log.warn({ orgName, subject }, "denied org-membership add: organisation is at its seat cap");
+        res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
+        return;
       }
-      return row;
-    });
+      throw err;
+    }
 
     if (!seated)
     {

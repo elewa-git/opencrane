@@ -4,7 +4,7 @@ import type { Request } from "express";
 import { Prisma } from "../../generated/prisma/index.js";
 import type { PrismaClient } from "../../generated/prisma/index.js";
 import type { ZitadelManagementClient } from "../../infra/zitadel/zitadel-client.types.js";
-import { _SEAT_CAP_EXCEEDED_CODE, _atSeatCap, _orgExists, _readOrgZitadelIds, _zitadelRoleKey } from "../cluster-tenant-members.js";
+import { SeatCapExceededError, _SEAT_CAP_EXCEEDED_CODE, _orgExists, _readOrgZitadelIds, _reserveSeatInTx, _zitadelRoleKey } from "../cluster-tenant-members.js";
 import type { InternalOrgMembershipView } from "./cluster-tenant-members.types.js";
 
 /**
@@ -98,20 +98,16 @@ export function _RegisterInternalClusterTenantMembers(prisma: PrismaClient, zita
       return;
     }
 
-    // Seat cap (S6): a new adoption consumes a seat, so refuse it once the org is at its cap.
-    // The silo treats the 409 as a fail-closed non-adopt (no local row, no workspace seed).
-    if (await _atSeatCap(prisma, orgName))
-    {
-      res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
-      return;
-    }
-
     const zitadelIds = await _readOrgZitadelIds(prisma, orgName);
     let seated = false;
     try
     {
       const row = await prisma.$transaction(async function _createWithSeating(tx)
       {
+        // Seat cap (S6): a new adoption consumes a seat. Reserve it under a row lock INSIDE the
+        // tx so concurrent first-logins can't over-cap; the silo treats the resulting 409 as a
+        // fail-closed non-adopt (no local row, no workspace seed).
+        await _reserveSeatInTx(tx, orgName);
         const created = await tx.orgMembership.create({
           data: { clusterTenant: orgName, subject, role: "Member" },
           select: { subject: true, role: true },
@@ -129,6 +125,11 @@ export function _RegisterInternalClusterTenantMembers(prisma: PrismaClient, zita
     }
     catch (err)
     {
+      if (err instanceof SeatCapExceededError)
+      {
+        res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
+        return;
+      }
       // Lost a create race against a concurrent first-login for the same subject — the row
       // now exists, which is the desired end state; report it as already-adopted.
       if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")

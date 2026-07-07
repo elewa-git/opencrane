@@ -53,6 +53,7 @@ function _mockPrisma(orgs: OrgFixture, seed: Membership[]): PrismaClient
         return { subject: args.data.subject, role: args.data.role };
       }),
     },
+    $queryRaw: vi.fn(async function _queryRaw() { return []; }),
     $transaction: async function _tx<T>(fn: (tx: unknown) => Promise<T>): Promise<T> { return fn(api); },
   };
   return api as unknown as PrismaClient;

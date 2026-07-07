@@ -76,6 +76,7 @@ function _mockPrisma(seed: Seed = {}): { prisma: PrismaClient; memberships: Memb
     memberships.find(m => m.clusterTenant === clusterTenant && m.subject === subject);
 
   const prisma = {
+    $queryRaw: vi.fn(async function _queryRaw() { return []; }),
     $transaction: vi.fn(async function _transaction(fn: (tx: PrismaClient) => Promise<unknown>)
     {
       // Snapshot for rollback: the seating grant is the last fallible step, so a throw
