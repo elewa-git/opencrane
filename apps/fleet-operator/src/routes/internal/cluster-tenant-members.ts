@@ -4,7 +4,7 @@ import type { Request } from "express";
 import { Prisma } from "../../generated/prisma/index.js";
 import type { PrismaClient } from "../../generated/prisma/index.js";
 import type { ZitadelManagementClient } from "../../infra/zitadel/zitadel-client.types.js";
-import { _orgExists, _readOrgZitadelIds, _zitadelRoleKey } from "../cluster-tenant-members.js";
+import { _SEAT_CAP_EXCEEDED_CODE, _atSeatCap, _orgExists, _readOrgZitadelIds, _zitadelRoleKey } from "../cluster-tenant-members.js";
 import type { InternalOrgMembershipView } from "./cluster-tenant-members.types.js";
 
 /**
@@ -95,6 +95,14 @@ export function _RegisterInternalClusterTenantMembers(prisma: PrismaClient, zita
     if (existing)
     {
       res.json({ subject, role: existing.role, created: false, zitadelSeated: false });
+      return;
+    }
+
+    // Seat cap (S6): a new adoption consumes a seat, so refuse it once the org is at its cap.
+    // The silo treats the 409 as a fail-closed non-adopt (no local row, no workspace seed).
+    if (await _atSeatCap(prisma, orgName))
+    {
+      res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
       return;
     }
 

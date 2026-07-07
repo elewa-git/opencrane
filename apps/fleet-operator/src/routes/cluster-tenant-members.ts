@@ -84,6 +84,31 @@ async function _ownerCount(prisma: PrismaClient, orgName: string): Promise<numbe
   return prisma.orgMembership.count({ where: { clusterTenant: orgName, role: "Owner" } });
 }
 
+/** Error code returned when a member-create would exceed the org's seat cap. */
+export const _SEAT_CAP_EXCEEDED_CODE = "SEAT_CAP_EXCEEDED";
+
+/**
+ * Whether the org has no seat available for a NEW member (#126 S6). The fleet is the seat
+ * authority: an org's `seatCap` (null ⇒ uncapped) bounds its total `OrgMembership` count.
+ * Only a create consumes a seat, so callers check this ONLY before adding a new subject — a
+ * role change on an existing member, and every standalone silo (which never reaches the fleet),
+ * stay unaffected.
+ *
+ * @param prisma  - Prisma client for the cap + count reads.
+ * @param orgName - ClusterTenant (org) name.
+ * @returns True when the org is capped and already at (or over) its seat cap.
+ */
+export async function _atSeatCap(prisma: PrismaClient, orgName: string): Promise<boolean>
+{
+  const org = await prisma.clusterTenant.findUnique({ where: { name: orgName }, select: { seatCap: true } });
+  if (!org || org.seatCap === null || org.seatCap === undefined)
+  {
+    return false;
+  }
+  const count = await prisma.orgMembership.count({ where: { clusterTenant: orgName } });
+  return count >= org.seatCap;
+}
+
 /**
  * Member-management router for an organisation (ClusterTenant): the authoritative
  * membership registry the silo projection repairer pulls (S2) and the org-admin
@@ -164,6 +189,20 @@ export function clusterTenantMembersRouter(prisma: PrismaClient, zitadelClient: 
     if (!(await _orgExists(prisma, orgName)))
     {
       res.status(404).json({ error: "Cluster tenant not found", code: "CLUSTER_TENANT_NOT_FOUND" });
+      return;
+    }
+
+    // 2b. Seat cap (S6): only a NEW member consumes a seat, so refuse an add for an
+    //     unseen subject once the org is at its cap. A role change on an existing member is
+    //     never blocked (no new seat). The founding owner is seeded outside this route.
+    const alreadyMember = await prisma.orgMembership.findUnique({
+      where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
+      select: { subject: true },
+    });
+    if (!alreadyMember && (await _atSeatCap(prisma, orgName)))
+    {
+      _log.warn({ orgName, subject }, "denied org-membership add: organisation is at its seat cap");
+      res.status(409).json({ error: "Organisation is at its seat cap; increase the seat cap to add more members.", code: _SEAT_CAP_EXCEEDED_CODE });
       return;
     }
 

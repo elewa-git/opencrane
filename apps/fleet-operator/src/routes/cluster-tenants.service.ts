@@ -165,6 +165,26 @@ export function _ValidateResources(resources: ClusterTenantResourcesInput | unde
 }
 
 /**
+ * Validate an optional seat cap. `undefined`/`null` mean "uncapped" and are accepted; any present
+ * value must be a non-negative integer (a fractional or negative cap is a client error).
+ *
+ * @param seatCap - The seat cap from the write body, if any.
+ * @returns An error message, or null when valid/omitted.
+ */
+export function _ValidateSeatCap(seatCap: number | null | undefined): string | null
+{
+  if (seatCap === undefined || seatCap === null)
+  {
+    return null;
+  }
+  if (!Number.isInteger(seatCap) || seatCap < 0)
+  {
+    return "seatCap must be a non-negative integer.";
+  }
+  return null;
+}
+
+/**
  * Project a stored row into the shared {@link ClusterTenant} contract shape.
  *
  * @param row - The persisted cluster_tenants row.

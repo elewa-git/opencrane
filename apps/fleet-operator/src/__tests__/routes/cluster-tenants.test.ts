@@ -203,6 +203,28 @@ describe("clusterTenantsRouter (CT.2 management API)", function _suite()
     expect(deleteRes.body).toEqual({ name: "acme", status: "deleted" });
   });
 
+  it("accepts a valid seat cap on create/update and rejects a non-negative-integer one (S6)", async function _seatCap()
+  {
+    const app = _buildApp(_mockPrisma(new Map()), _mockRegistry(false));
+
+    // Valid cap on create.
+    const okRes = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), seatCap: 25 });
+    expect(okRes.status).toBe(201);
+
+    // Fractional / negative caps are client errors on both create and update.
+    const fractional = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), name: "frac", seatCap: 2.5 });
+    expect(fractional.status).toBe(400);
+    expect(fractional.body.code).toBe("VALIDATION_ERROR");
+
+    const negative = await request(app).put("/api/v1/cluster-tenants/acme").send({ seatCap: -1 });
+    expect(negative.status).toBe(400);
+    expect(negative.body.code).toBe("VALIDATION_ERROR");
+
+    // Null clears the cap (uncapped) — accepted.
+    const cleared = await request(app).put("/api/v1/cluster-tenants/acme").send({ seatCap: null });
+    expect(cleared.status).toBe(200);
+  });
+
   it("rejects a dedicatedCluster request with 422 TIER_UNAVAILABLE when no backend is registered", async function _overTier()
   {
     const app = _buildApp(_mockPrisma(new Map()), _mockRegistry(false));

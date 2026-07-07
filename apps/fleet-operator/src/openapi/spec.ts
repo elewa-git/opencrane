@@ -320,6 +320,7 @@ const ClusterTenantWriteSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: ["integer", "null"], minimum: 0, description: "Maximum org memberships (seats). Omit or null for uncapped. The fleet refuses a new member once the org is at its cap." },
   },
 };
 
@@ -364,6 +365,7 @@ const ClusterTenantUpdateSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: ["integer", "null"], minimum: 0, description: "New seat cap; null clears it (uncapped). The fleet refuses a new member once the org is at its cap." },
   },
 };
 

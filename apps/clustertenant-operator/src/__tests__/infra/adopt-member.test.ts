@@ -141,4 +141,19 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
     // The workspace seed is silo-local either way.
     expect(tenantCreate).toHaveBeenCalledWith(expect.objectContaining({ name: _MemberTenantName("acme", "sub-42") }));
   });
+
+  it("does NOT seed a workspace when the fleet write-through fails (transient error or seat cap)", async function _writeThroughFailed()
+  {
+    const tenantCreate = vi.fn();
+    const adopt = vi.fn().mockResolvedValue(false); // fleet 409 (seat cap) or transport error
+    await _AdoptMemberOnLogin({
+      prisma: _mockPrisma({ modelCount: 1, upsert: vi.fn(), tenantCreate }),
+      customApi: _mockApi(_cr("acme"), vi.fn()),
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "sub-42", email: "dev@acme.com",
+      fleetWriter: { adopt }, log: _log,
+    });
+
+    // No seat ⇒ no workspace: the seed is deferred to a login where the membership write succeeds.
+    expect(tenantCreate).not.toHaveBeenCalled();
+  });
 });

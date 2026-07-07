@@ -17,8 +17,8 @@ import { _RegisterInternalClusterTenantMembers } from "../../routes/internal/clu
 /** A membership fixture row. */
 interface Membership { clusterTenant: string; subject: string; role: string }
 
-/** Org fixture: name → its provisioned Zitadel ids (absent ⇒ a pending, unprovisioned org). */
-type OrgFixture = Record<string, { zitadelOrgId?: string; zitadelProjectId?: string }>;
+/** Org fixture: name → its Zitadel ids (absent ⇒ pending) and optional seat cap (absent ⇒ uncapped). */
+type OrgFixture = Record<string, { zitadelOrgId?: string; zitadelProjectId?: string; seatCap?: number }>;
 
 /** Build a Prisma stub over in-memory orgs + memberships (mutated by adopt's create). */
 function _mockPrisma(orgs: OrgFixture, seed: Membership[]): PrismaClient
@@ -29,7 +29,7 @@ function _mockPrisma(orgs: OrgFixture, seed: Membership[]): PrismaClient
       findUnique: vi.fn(async function _findUnique(args: { where: { name: string } })
       {
         const org = orgs[args.where.name];
-        return org ? { name: args.where.name, zitadelOrgId: org.zitadelOrgId ?? null, zitadelProjectId: org.zitadelProjectId ?? null } : null;
+        return org ? { name: args.where.name, zitadelOrgId: org.zitadelOrgId ?? null, zitadelProjectId: org.zitadelProjectId ?? null, seatCap: org.seatCap ?? null } : null;
       }),
     },
     orgMembership: {
@@ -42,6 +42,10 @@ function _mockPrisma(orgs: OrgFixture, seed: Membership[]): PrismaClient
         const { clusterTenant, subject } = args.where.clusterTenant_subject;
         const row = members.find(m => m.clusterTenant === clusterTenant && m.subject === subject);
         return row ? { role: row.role } : null;
+      }),
+      count: vi.fn(async function _count(args: { where: { clusterTenant: string } })
+      {
+        return members.filter(m => m.clusterTenant === args.where.clusterTenant).length;
       }),
       create: vi.fn(async function _create(args: { data: Membership })
       {
@@ -133,6 +137,30 @@ describe("POST /:name/members/adopt — first-login write-through (#126 S4)", fu
     expect(res.status).toBe(201);
     expect(res.body).toMatchObject({ created: true, zitadelSeated: false });
     expect(grantProjectRole).not.toHaveBeenCalled();
+  });
+
+  it("refuses a new adoption with 409 when the org is at its seat cap", async function _atCap()
+  {
+    const prisma = _mockPrisma({ acme: { zitadelOrgId: "org-a", zitadelProjectId: "proj-a", seatCap: 1 } }, [
+      { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
+    ]);
+    const { client, grantProjectRole } = _mockZitadel();
+    const res = await request(_buildApp(prisma, client)).post("/api/internal/cluster-tenants/acme/members/adopt").send({ subject: "sub-new" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SEAT_CAP_EXCEEDED");
+    expect(grantProjectRole).not.toHaveBeenCalled();
+  });
+
+  it("still no-ops an EXISTING member at cap (no new seat consumed)", async function _existingAtCap()
+  {
+    const prisma = _mockPrisma({ acme: { seatCap: 1 } }, [
+      { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
+    ]);
+    const res = await request(_buildApp(prisma, _mockZitadel().client)).post("/api/internal/cluster-tenants/acme/members/adopt").send({ subject: "owner-1" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ created: false, role: "Owner" });
   });
 
   it("returns 404 for an unknown org and 400 for a missing subject", async function _guards()

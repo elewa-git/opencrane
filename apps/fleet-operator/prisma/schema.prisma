@@ -52,6 +52,10 @@ model ClusterTenant {
   nodePool       String?                    @map("node_pool")
   /// Aggregate resource ceiling ({cpu,memory,pods,storage,gpu}).
   quota          Json?
+  /// Maximum org memberships (seats) allowed. Null = uncapped. The fleet is the seat
+  /// authority (seats are ordered centrally); member-create paths refuse a new seat once
+  /// the org is at its cap. Standalone silos never reach the fleet and are always uncapped.
+  seatCap        Int?                       @map("seat_cap")
   /// Current lifecycle phase (pending|provisioning|ready|failed).
   phase          String                     @default("pending")
   /// Human-readable detail, set on failure or transitional states.

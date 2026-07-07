@@ -75,15 +75,17 @@ export async function _AdoptMemberOnLogin(opts: {
   // 1. Adopt into the org (create-if-absent, never downgrade). Fleet-managed silos write through
   //    to the fleet's authoritative store — a local write would be reaped by the next projection
   //    sweep — and the repairer mirrors the row back. Standalone silos own membership locally.
+  let membershipEnsured: boolean;
   if (fleetWriter)
   {
     // The writer already logs its own transport/HTTP failures, but surface the outcome at the
     // silo call site too so an operator tracing "member not adopted" sees it here, not only on
     // the fleet. A false is non-fatal — the next login retries and the projection sweep backstops.
-    const wroteThrough = await fleetWriter.adopt(orgName, subject);
-    if (!wroteThrough)
+    // It also covers a fleet seat-cap 409: the member has no seat, so we must NOT seed a workspace.
+    membershipEnsured = await fleetWriter.adopt(orgName, subject);
+    if (!membershipEnsured)
     {
-      log.warn({ orgName, subject }, "member adoption not written through to fleet this login; will retry on next login/sweep");
+      log.warn({ orgName, subject }, "member adoption not written through to fleet this login (transport error or seat cap); will retry on next login/sweep");
     }
   }
   else
@@ -93,9 +95,15 @@ export async function _AdoptMemberOnLogin(opts: {
       create: { clusterTenant: orgName, subject, role: "Member" },
       update: {},
     });
+    membershipEnsured = true;
   }
 
-  // 2. Seed the member's subject-bound workspace (idempotent; ≥1-model gated; owner-safe).
+  // 2. Seed the member's subject-bound workspace only once the membership is ensured — no seat,
+  //    no workspace. A failed write-through (transient or seat-cap) defers both to the next login.
+  if (!membershipEnsured)
+  {
+    return;
+  }
   const seed = await _EnsureMemberTenant({ customApi, prisma, namespace, orgName, email, subject });
   if (seed.created)
   {

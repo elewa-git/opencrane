@@ -22,8 +22,8 @@ type Row = Record<string, unknown>;
 /** A membership fixture row. */
 interface Membership { clusterTenant: string; subject: string; role: "Owner" | "Admin" | "Member" }
 
-/** An org fixture: name plus optional provisioned Zitadel ids (present ⇒ seatable). */
-interface OrgFixture { name: string; zitadelOrgId?: string | null; zitadelProjectId?: string | null }
+/** An org fixture: name plus optional provisioned Zitadel ids (present ⇒ seatable) and seat cap. */
+interface OrgFixture { name: string; zitadelOrgId?: string | null; zitadelProjectId?: string | null; seatCap?: number | null }
 
 /** Seed shape for the in-memory fixtures. */
 interface Seed
@@ -89,11 +89,9 @@ function _mockPrisma(seed: Seed = {}): { prisma: PrismaClient; memberships: Memb
       {
         const org = orgFixtures.get(args.where.name);
         if (!org) { return null; }
-        if (args.select?.zitadelOrgId || args.select?.zitadelProjectId)
-        {
-          return { zitadelOrgId: org.zitadelOrgId ?? null, zitadelProjectId: org.zitadelProjectId ?? null };
-        }
-        return { name: org.name };
+        // The stub ignores `select` granularity and returns the fields callers read: the
+        // zitadel ids (seating), the seat cap (S6), and the name (existence).
+        return { name: org.name, zitadelOrgId: org.zitadelOrgId ?? null, zitadelProjectId: org.zitadelProjectId ?? null, seatCap: org.seatCap ?? null };
       }),
     },
     orgMembership: {
@@ -107,9 +105,10 @@ function _mockPrisma(seed: Seed = {}): { prisma: PrismaClient; memberships: Memb
         const m = _find(clusterTenant, subject);
         return m ? { role: m.role } : null;
       }),
-      count: vi.fn(async function _count(args: { where: { clusterTenant: string; role: string } })
+      count: vi.fn(async function _count(args: { where: { clusterTenant: string; role?: string } })
       {
-        return memberships.filter(m => m.clusterTenant === args.where.clusterTenant && m.role === args.where.role).length;
+        // Role-scoped (owner-count guardrail) OR total (seat-cap check) when no role is given.
+        return memberships.filter(m => m.clusterTenant === args.where.clusterTenant && (args.where.role === undefined || m.role === args.where.role)).length;
       }),
       upsert: vi.fn(async function _upsert(args: { where: { clusterTenant_subject: { clusterTenant: string; subject: string } }; create: Membership; update: { role: Membership["role"] } })
       {
@@ -202,6 +201,28 @@ describe("clusterTenantMembersRouter — org member management (S3c)", function 
     // is additive (false here since the seed org has no provisioned Zitadel ids).
     expect(res.body).toEqual({ subject: "user-2", role: "Admin", zitadelSeated: false });
     expect(memberships).toContainEqual({ clusterTenant: "acme", subject: "user-2", role: "Admin" });
+  });
+
+  it("refuses adding a NEW member with 409 when the org is at its seat cap (S6)", async function _addAtCap()
+  {
+    const { prisma, memberships } = _mockPrisma({ orgs: [{ name: "acme", seatCap: 1 }], memberships: [{ clusterTenant: "acme", subject: "owner-1", role: "Owner" }] });
+    const res = await request(_buildApp(prisma, _owner)).post("/api/v1/cluster-tenants/acme/members").send({ subject: "user-2", role: "Member" });
+
+    expect(res.status).toBe(409);
+    expect(res.body.code).toBe("SEAT_CAP_EXCEEDED");
+    expect(memberships).toHaveLength(1); // no new seat consumed
+  });
+
+  it("still allows a role change for an EXISTING member at cap (no new seat)", async function _changeAtCap()
+  {
+    const { prisma } = _mockPrisma({ orgs: [{ name: "acme", seatCap: 2 }], memberships: [
+      { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
+      { clusterTenant: "acme", subject: "user-2", role: "Member" },
+    ] });
+    const res = await request(_buildApp(prisma, _owner)).post("/api/v1/cluster-tenants/acme/members").send({ subject: "user-2", role: "Admin" });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ subject: "user-2", role: "Admin" });
   });
 
   it("updates an existing member's role on upsert", async function _upsert()
