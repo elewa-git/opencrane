@@ -8,6 +8,11 @@
  * request body and its per-CT outcome summary.
  */
 
+import type { PrismaClient } from "../../generated/prisma/index.js";
+
+/** A `cluster_tenants` row as returned by Prisma `findMany`/`findUnique`. */
+export type ClusterTenantRow = NonNullable<Awaited<ReturnType<PrismaClient["clusterTenant"]["findUnique"]>>>;
+
 /** Optional request body for the reconcile route: scope the run to a single ClusterTenant. */
 export interface ZitadelReconcileRequest
 {

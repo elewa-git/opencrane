@@ -198,6 +198,11 @@ fleetManager:
     #    key-rotation Role/RoleBinding.
     existingSecret: ""
     serviceAccountKeyKey: service-account-key
+    # -- Periodic Zitadel reconcile cadence in ms (ZITADEL_RECONCILE_INTERVAL_MS). The
+    #    fleet-manager re-runs the idempotent reconcile/backfill (heal half-provisioned orgs +
+    #    adopt Console-invited users as members) on this interval so org-user counts converge
+    #    without a manual reconcile POST. 0 disables the loop. Default: 6 hours.
+    reconcileIntervalMs: 21600000
   replicas: 1
   resources:
     requests:

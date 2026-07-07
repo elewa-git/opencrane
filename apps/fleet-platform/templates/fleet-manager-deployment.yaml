@@ -148,6 +148,11 @@ spec:
             #    to build the Zitadel client without it. Defaults to the ingress base domain.
             - name: PLATFORM_BASE_DOMAIN
               value: {{ $.Values.ingress.domain | quote }}
+            # -- Periodic reconcile cadence (ms); 0 disables the loop. Rendered verbatim (no
+            #    `default` pipe — that would swallow an explicit 0); the code falls back to 6h
+            #    when the value is empty or non-numeric.
+            - name: ZITADEL_RECONCILE_INTERVAL_MS
+              value: {{ .reconcileIntervalMs | quote }}
             {{- if .existingSecret }}
             - name: ZITADEL_MGMT_SA_KEY
               valueFrom:

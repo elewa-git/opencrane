@@ -7,6 +7,7 @@ import type { PrismaClient } from "./generated/prisma/index.js";
 import { spec } from "./openapi/spec.js";
 import { _BuildClusterTenantProvisionerRegistry } from "./core/cluster-tenants/registry.js";
 import { _BuildZitadelManagementClient } from "./infra/zitadel/zitadel-client.js";
+import type { ZitadelManagementClient } from "./infra/zitadel/zitadel-client.types.js";
 import { _BuildZitadelKeySecretStore } from "./infra/zitadel/key-secret-store.js";
 import { clusterTenantsRouter } from "./routes/cluster-tenants.js";
 import { clusterTenantMembersRouter } from "./routes/cluster-tenant-members.js";
@@ -44,22 +45,27 @@ function _featureEnabled(name: string): boolean
  * @param prisma    - Fleet registry Prisma client used by the route handlers.
  * @param customApi - Kubernetes Custom Objects API (ClusterTenant CR bridge, platform DNS).
  * @param coreApi   - Kubernetes Core V1 API (platform DNS creds Secret, Zitadel key Secret).
- * @returns The Express application with routes registered.
+ * @returns The shared Zitadel management client when the cluster-tenant manager is enabled,
+ *          else null. Returned so the periodic reconcile loop runs on the SAME instance the
+ *          key-rotation route reloads — a second client would keep a rotated-out SA key.
  */
 export function _RegisterFleetRoutes(
   app: Express,
   prisma: PrismaClient,
   customApi: k8s.CustomObjectsApi,
   coreApi: k8s.CoreV1Api,
-): Express
+): ZitadelManagementClient | null
 {
+  /** The one Zitadel client instance shared by every router (and the caller's reconcile loop). */
+  let zitadelClient: ZitadelManagementClient | null = null;
+
   // ClusterTenant lifecycle + Zitadel admin + platform DNS — the super-admin / org-management
   // surface. Gated so a fleet install can be stood up without it; Zitadel is a hard dependency
   // of this path, built (and only built) here so an install without it never requires Zitadel.
   if (_featureEnabled("OPENCRANE_CLUSTER_TENANT_MANAGER_ENABLED"))
   {
     const registry = _BuildClusterTenantProvisionerRegistry();
-    const zitadelClient = _BuildZitadelManagementClient();
+    zitadelClient = _BuildZitadelManagementClient();
 
     // Platform DNS is a fleet/platform-admin surface (provisions the cert-manager DNS-01
     // issuer + creds Secret for the wildcard tenant cert).
@@ -92,5 +98,5 @@ export function _RegisterFleetRoutes(
   app.use("/api/v1/openapi.json", _OpenapiRouter(spec));
 
   app.get("/healthz", _CheckDbHealth(prisma));
-  return app;
+  return zitadelClient;
 }
