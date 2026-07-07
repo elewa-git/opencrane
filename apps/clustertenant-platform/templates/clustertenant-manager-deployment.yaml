@@ -325,6 +325,11 @@ spec:
             #    closed if the Linkerd policy CRDs are absent — a safe no-op without Linkerd.
             - name: LINKERD_MESH_ENABLED
               value: {{ .Values.fleetManager.linkerdMeshEnabled | quote }}
+            # -- Whether this silo creates per-ClusterTenant namespaces itself (standalone) or
+            #    defers to the fleet-manager (default). Paired with the gated namespace-management
+            #    ClusterRole in clustertenant-manager-rbac.yaml.
+            - name: MANAGE_TENANT_NAMESPACES
+              value: {{ .Values.clustertenantManager.manageTenantNamespaces | default false | quote }}
             # -- Runtime-plane endpoints injected into tenant Deployments (sharedPlatform scope, B5).
             - name: MCP_GATEWAY_URL
               value: {{ include "opencrane.mcpGatewayUrl" . | quote }}

@@ -213,6 +213,13 @@ clustertenantManager:
   # first (the fleet-manager's CLUSTERTENANT_MANAGER_INTERNAL_URL + the shared LiteLLM secret).
   # Today the fleet install renders an idle clustertenant-manager + planes (waste, not harm). The
   # correctness-critical gate — never running a SECOND fleet-manager in a silo — is `fleetManager.enabled`.
+
+  # -- Whether this silo OWNS per-ClusterTenant namespace creation. Default false: the
+  #    fleet-manager creates + owns each org's namespace, and the silo SA is granted NO
+  #    cluster-scoped `namespaces` RBAC, so the silo skips the create. Set true ONLY for an
+  #    all-in-one / standalone silo — it renders the gated namespace-management ClusterRole
+  #    (clustertenant-manager-rbac.yaml) and injects MANAGE_TENANT_NAMESPACES=true.
+  manageTenantNamespaces: false
   image:
     repository: ghcr.io/italanta/opencrane-clustertenant-manager
     tag: latest
