@@ -6,6 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import { OidcAuthServiceBase, _RequestHost } from "@opencrane/infra-auth";
 import type { AuthUser, LoginClient } from "@opencrane/infra-auth";
 
+import { _AdoptMemberOnLogin } from "./adopt-member.js";
 import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
 import { _ClusterTenantFromHost } from "./request-silo.js";
 import { _OrgScope, _ResolvePerOrgClient } from "./per-org-client.js";
@@ -71,6 +72,25 @@ export class OidcAuthService extends OidcAuthServiceBase
   {
     const clusterTenant = await _ResolveCallerClusterTenant(this.prisma, authUser.email, _ClusterTenantFromHost(_RequestHost(req)));
     return { clusterTenant };
+  }
+
+  /**
+   * Adopt the verified user into their org and seed their workspace on first login (#126 S4).
+   * Runs only when the login resolved a per-org client (proof of org membership); a masters /
+   * platform login is a no-op. Delegated to {@link _AdoptMemberOnLogin}; the base wraps this in
+   * a best-effort try/catch so a failure here can never break the login.
+   */
+  protected override async onLoginEstablished(req: Request, authUser: AuthUser): Promise<void>
+  {
+    await _AdoptMemberOnLogin({
+      prisma: this.prisma,
+      customApi: this.customApi,
+      namespace: process.env.NAMESPACE ?? "default",
+      host: _RequestHost(req),
+      subject: authUser.sub,
+      email: authUser.email,
+      log: this.log,
+    });
   }
 }
 
