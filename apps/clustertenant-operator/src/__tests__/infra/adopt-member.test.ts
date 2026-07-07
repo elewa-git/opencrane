@@ -40,13 +40,14 @@ function _mockPrisma(opts: {
   modelCount: number;
   upsert: ReturnType<typeof vi.fn>;
   tenantCreate: ReturnType<typeof vi.fn>;
+  existingForEmail?: { name: string } | null;
 }): PrismaClient
 {
   return {
     orgMembership: { upsert: opts.upsert },
     tenant: {
       findUnique: async function _findUnique() { return null; },
-      findFirst: async function _findFirst() { return null; },
+      findFirst: async function _findFirst() { return opts.existingForEmail ?? null; },
       create: async function _create(args: { data: Record<string, unknown> }) { opts.tenantCreate(args.data); return args.data; },
     },
     modelDefinition: { count: async function _count() { return opts.modelCount; } },
@@ -101,5 +102,22 @@ describe("_AdoptMemberOnLogin — first-login org adoption + workspace seed", fu
     expect(tenantCreate).toHaveBeenCalledWith(expect.objectContaining({
       name: _MemberTenantName("acme", "sub-42"), email: "dev@acme.com", subject: "sub-42", clusterTenantRef: "acme",
     }));
+  });
+
+  it("does not create a second workspace when the owner re-logs in through the per-org client", async function _ownerRelogin()
+  {
+    const upsert = vi.fn().mockResolvedValue({});
+    const tenantCreate = vi.fn();
+    await _AdoptMemberOnLogin({
+      // The owner already holds `acme-default` under their email → the collision guard fires.
+      prisma: _mockPrisma({ modelCount: 1, upsert, tenantCreate, existingForEmail: { name: "acme-default" } }),
+      customApi: _mockApi(_cr("acme"), vi.fn()),
+      namespace: "ns", host: "acme.dev.opencrane.ai", subject: "owner-sub", email: "owner@acme.com", log: _log,
+    });
+
+    // Membership upsert is still idempotent with `update: {}` — never downgrading the Owner role...
+    expect(upsert).toHaveBeenCalledWith(expect.objectContaining({ update: {} }));
+    // ...but NO second workspace is seeded (a duplicate email would break the 1:1 email→tenant router).
+    expect(tenantCreate).not.toHaveBeenCalled();
   });
 });
