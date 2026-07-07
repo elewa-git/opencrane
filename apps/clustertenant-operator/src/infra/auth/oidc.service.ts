@@ -8,6 +8,7 @@ import type { AuthUser, LoginClient } from "@opencrane/infra-auth";
 
 import type { FleetMembershipWriter } from "../membership-projection-repairer.js";
 import { _AdoptMemberOnLogin } from "./adopt-member.js";
+import { _MirrorGroupsOnLogin } from "./mirror-groups.js";
 import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
 import { _ClusterTenantFromHost } from "./request-silo.js";
 import { _OrgScope, _ResolvePerOrgClient } from "./per-org-client.js";
@@ -112,6 +113,10 @@ export class OidcAuthService extends OidcAuthServiceBase
       fleetWriter: this.fleetWriter,
       log: this.log,
     });
+
+    // Mirror the user's `group:*` project-role claims into the persisted Group.members (#126 S4b).
+    // Independent of adoption + best-effort; the token stays the live source for request-time groups.
+    await _MirrorGroupsOnLogin({ prisma: this.prisma, subject: authUser.sub, groups: authUser.groups, log: this.log });
   }
 }
 
