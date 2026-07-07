@@ -55,7 +55,10 @@ const _unbindConsole = ___BindConsole(log);
 export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
 {
   const app = express();
-  const authService = ___CreateOidcAuthService(log, prisma, customApi);
+  // First-login member workspaces are seeded into the TenantOperator's watch namespace
+  // (WATCH_NAMESPACE) — the same target as the owner-default seed — falling back to NAMESPACE
+  // then "default" for dev/test. It is deliberately NOT the projection-repair namespace.
+  const authService = ___CreateOidcAuthService(log, prisma, customApi, process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default");
 
   // Middleware
   app.set("trust proxy", 1);
