@@ -77,7 +77,14 @@ export async function _AdoptMemberOnLogin(opts: {
   //    sweep — and the repairer mirrors the row back. Standalone silos own membership locally.
   if (fleetWriter)
   {
-    await fleetWriter.adopt(orgName, subject);
+    // The writer already logs its own transport/HTTP failures, but surface the outcome at the
+    // silo call site too so an operator tracing "member not adopted" sees it here, not only on
+    // the fleet. A false is non-fatal — the next login retries and the projection sweep backstops.
+    const wroteThrough = await fleetWriter.adopt(orgName, subject);
+    if (!wroteThrough)
+    {
+      log.warn({ orgName, subject }, "member adoption not written through to fleet this login; will retry on next login/sweep");
+    }
   }
   else
   {
