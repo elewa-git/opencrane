@@ -365,13 +365,29 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
   {
     const body = req.body as CreateTenantRequest;
 
-    // Bind the workspace to its owner subject and VALIDATE membership before seeding (#126 S1):
-    // when a subject + parent org are given, the subject MUST be an OrgMembership of that org
-    // (the read-model the fleet→silo repairer populates), else a non-member could seat a
-    // workspace inside an org they don't belong to. Reject with 403. When no subject is given
-    // (legacy/owner-seed path) validation is skipped — nothing to bind or check.
+    // The internal seed funnel (_EnsureOwnerDefaultTenant / _EnsureMemberTenant, #126 S4) is now
+    // the way workspaces are created; this public route is the admin/import path. Every workspace
+    // it creates MUST be routable (email — the email→tenant router key) AND subject-bound (the
+    // contract compiler inherits the user's rights over {tenant, subject, groups}; a subject-less
+    // pod silently degrades to a {tenant}-only contract). So both are now required here — no more
+    // unvalidated side door that seats degraded pods (#126: harden POST /tenants).
     const subject = body.subject?.trim() || undefined;
-    if (subject && body.clusterTenantRef)
+    const email = body.email?.trim() || "";
+    if (!email)
+    {
+      res.status(400).json({ error: "email is required.", code: "VALIDATION_ERROR" });
+      return;
+    }
+    if (!subject)
+    {
+      res.status(400).json({ error: "subject is required (a workspace must be bound to its user's IdP subject).", code: "VALIDATION_ERROR" });
+      return;
+    }
+
+    // VALIDATE membership before seeding (#126 S1): when a parent org is given, the subject MUST
+    // be an OrgMembership of that org (the read-model the fleet→silo repairer populates), else a
+    // non-member could seat a workspace inside an org they don't belong to. Reject with 403.
+    if (body.clusterTenantRef)
     {
       const membership = await prisma.orgMembership.findUnique({
         where: { clusterTenant_subject: { clusterTenant: body.clusterTenantRef, subject } },

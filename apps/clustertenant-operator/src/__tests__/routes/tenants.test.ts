@@ -311,6 +311,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
         name: "acme",
         displayName: "Acme",
         email: "owner@acme.io",
+        subject: "u-owner",
       });
 
     expect(response.status).toBe(201);
@@ -329,12 +330,13 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const prisma = {
       tenant: { create: tenantCreateSpy },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
+      orgMembership: { findUnique: vi.fn().mockResolvedValue({ role: "Owner" }) },
     } as unknown as PrismaClient;
 
     const app = _buildTenantsApp(customApi, prisma);
     const response = await request(app)
       .post("/api/tenants")
-      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", clusterTenantRef: "acme-corp" });
+      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", subject: "u-owner", clusterTenantRef: "acme-corp" });
 
     expect(response.status).toBe(201);
     // CRD spec carries clusterTenantRef…
@@ -369,6 +371,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
         name: "slow-tenant",
         displayName: "Slow Tenant",
         email: "owner@acme.io",
+        subject: "u-owner",
       });
 
     delete process.env.TENANT_CR_APPEARANCE_TIMEOUT_MS;
@@ -518,15 +521,16 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     expect(tenantCreateSpy).not.toHaveBeenCalled();
   });
 
-  it("skips membership validation when no subject is given (owner-seed / legacy path)", async () =>
+  it("rejects a create with no subject (400) — no more subject-less/degraded pods", async () =>
   {
     const customApi = {
       createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
       getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
     } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
     const membershipFindUnique = vi.fn();
     const prisma = {
-      tenant: { create: vi.fn().mockResolvedValue({}) },
+      tenant: { create: tenantCreateSpy },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -536,9 +540,33 @@ describe("tenantsRouter create/update — subject binding + membership validatio
       .post("/api/tenants")
       .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", clusterTenantRef: "acme" });
 
-    expect(response.status).toBe(201);
-    // No subject ⇒ nothing to validate.
+    // Internal seeding is the funnel now; the public route must never seat a subject-less pod.
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
     expect(membershipFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects a create with no email (400) — a workspace must be routable", async () =>
+  {
+    const customApi = {
+      createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
+    const prisma = {
+      tenant: { create: tenantCreateSpy },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app)
+      .post("/api/tenants")
+      .send({ name: "acme", displayName: "Acme", subject: "u-owner" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
   });
 
   it("rejects an update that reassigns a non-member subject (403)", async () =>
