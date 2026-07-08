@@ -45,7 +45,7 @@ interface StoredGroup
  */
 function _storePrisma(rows: StoredGroup[]): { prisma: PrismaClient; update: ReturnType<typeof vi.fn>; del: ReturnType<typeof vi.fn>; store: Map<string, StoredGroup> }
 {
-  const store = new Map(rows.map(row => [row.name, { ...row, members: [...row.members] }] as const));
+  const store = new Map<string, StoredGroup>(rows.map(row => [row.name, { ...row, members: [...row.members] }]));
   const update = vi.fn(async function _update(args: { where: { name: string }; data: { members: string[] } })
   {
     const row = store.get(args.where.name);
