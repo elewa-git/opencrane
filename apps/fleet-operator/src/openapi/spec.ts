@@ -287,6 +287,7 @@ const ClusterTenantSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: "integer", minimum: 0, description: "Maximum org memberships (seats); absent when uncapped. New members are refused with 409 SEAT_CAP_EXCEEDED once the org is at its cap." },
     status: {
       type: "object",
       properties: {
@@ -372,7 +373,7 @@ const ClusterTenantUpdateSchema = {
 const OrgMemberSchema = {
   type: "object" as const,
   required: ["subject", "role"],
-  description: "A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant).",
+  description: "A single organisation membership row — the fleet's authoritative membership registry (the org-admin gate reads it; the silo mirrors it). Writes are Zitadel-seated transactionally: an upsert grants the member's project role and a removal revokes their org membership at the IdP.",
   properties: {
     subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) holding the membership." },
     role: { type: "string", enum: ["Owner", "Admin", "Member"], description: "Role held within the organisation." },
@@ -1342,7 +1343,7 @@ export const spec = {
       get: {
         operationId: "listClusterTenantMembers",
         summary: "List an organisation's members (operator OR owner/admin of that org)",
-        description: "Lists the org's membership rows (subject + role) — the LOCAL membership registry the org-admin gate reads (OrgMembership rows, NOT Zitadel grants).",
+        description: "Lists the org's membership rows (subject + role) from the fleet's authoritative membership registry (writes are Zitadel-seated; the silo read-model mirrors this set).",
         tags: ["Cluster Tenants"],
         parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
         responses: {

@@ -123,6 +123,13 @@ fleetManager:
   #    is seeded directly at boot — see `clusterTenant.seed`).
   clusterTenantApi:
     enabled: true
+  # -- Shared service bearer the fleet VALIDATES on its internal + automation surfaces
+  #    (`/api/internal/*` member adoption from silos, CI via OPENCRANE_TOKEN). The silo chart's
+  #    `clustertenantManager.fleetApiToken*` must present this same value. Empty = the bearer
+  #    path is unconfigured (dev). Prefer the existing-Secret form; inline is for dev only.
+  apiToken: ""
+  apiTokenExistingSecret: ""
+  apiTokenSecretKey: "token"
   image:
     repository: ghcr.io/italanta/opencrane-fleet-manager
     tag: latest

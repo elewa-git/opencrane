@@ -126,6 +126,11 @@ export interface ClusterTenant
   /** Resource gating for the customer's namespace. */
   resources: ClusterTenantResources;
   /**
+   * Maximum org memberships (seats). Absent = uncapped. The fleet refuses a new member
+   * once the org is at its cap (409 SEAT_CAP_EXCEEDED); role changes never consume a seat.
+   */
+  seatCap?: number | null;
+  /**
    * Public per-org Zitadel OIDC identifiers, projected onto the CR spec so the silo can
    * resolve per-org login from the CR. Absent until the org is provisioned in Zitadel.
    */

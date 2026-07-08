@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 
 import { _EnsureMemberTenant, _MemberTenantName } from "../../core/cluster-tenants/default-tenant.js";
 

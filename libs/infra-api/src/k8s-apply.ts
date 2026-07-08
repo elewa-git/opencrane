@@ -302,23 +302,6 @@ function _isK8sError(err: unknown): err is { statusCode: number }
 }
 
 /**
- * Whether a Kubernetes API error is a 403 Forbidden — the caller's
- * ServiceAccount lacks RBAC for the attempted verb.
- *
- * Lets a reconcile tolerate a forbidden CREATE on an externally-owned,
- * cluster-scoped resource (e.g. a per-silo operator whose namespace is
- * provisioned and owned by the fleet-manager): the operator has no
- * cluster-scoped namespace RBAC, so the create returns 403 (not 409
- * AlreadyExists), and the caller treats it as "already provisioned elsewhere".
- *
- * @param err - Unknown error value from a client call.
- */
-export function __IsK8sForbidden(err: unknown): boolean
-{
-  return _getK8sErrorStatus(err) === 403;
-}
-
-/**
  * Extract a Kubernetes API status code from common error shapes.
  */
 function _getK8sErrorStatus(err: unknown): number | undefined

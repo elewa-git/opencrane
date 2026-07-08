@@ -55,11 +55,11 @@ function _makeRecordingClient(): RecordingClient
 
 /**
  * Like {@link _makeRecordingClient}, but `createNamespace` rejects with the given
- * HTTP status — simulating a per-silo operator whose ServiceAccount has no
- * cluster-scoped namespace RBAC (403), or a genuine API failure (e.g. 500). All
- * other (namespaced) creates record and succeed as usual.
+ * HTTP status — simulating a genuine API failure (e.g. 500) on a silo that OWNS
+ * namespace creation (`manageTenantNamespaces=true`). All other (namespaced)
+ * creates record and succeed as usual.
  */
-function _makeForbiddenNamespaceClient(statusCode: number): RecordingClient
+function _makeFailingNamespaceClient(statusCode: number): RecordingClient
 {
   const created: k8s.KubernetesObject[] = [];
   return new Proxy(
@@ -294,7 +294,7 @@ describe("ClusterTenant isolation enforcement (CT.5 reconcile flow)", () =>
 
     // manageTenantNamespaces=true: the silo attempts the create; a genuine API failure (500) must
     // propagate to an Error status, never be silently swallowed.
-    const erroringCore = _makeForbiddenNamespaceClient(500);
+    const erroringCore = _makeFailingNamespaceClient(500);
     const statuses: Record<string, unknown>[] = [];
     const operator = _makeOperator(erroringCore, apps, networking, clusterTenant, statuses, { manageTenantNamespaces: true });
 

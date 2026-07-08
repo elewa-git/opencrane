@@ -386,6 +386,19 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
       return;
     }
 
+    // Same ≥1-model onboarding precondition as the internal seed funnel (LiteLLM runs in
+    // `replace` mode, so a workspace without a registered model is a pod with an empty
+    // allowlist and zero usable models). The admin path must not bypass the gate the funnel
+    // enforces. Refuse with 422 — register a model (or set a provider key) first.
+    const modelCount = await prisma.modelDefinition.count({
+      where: { OR: [{ scope: "Global" }, { scope: "ClusterTenant", clusterTenant: body.clusterTenantRef ?? "" }] },
+    });
+    if (modelCount === 0)
+    {
+      res.status(422).json({ error: "No models registered for this scope — register a model or set a provider key before creating a workspace (LiteLLM replace mode requires ≥1 model).", code: "NO_MODELS_REGISTERED" });
+      return;
+    }
+
     // VALIDATE membership before seeding (#126 S1): when a parent org is given, the subject MUST
     // be an OrgMembership of that org (the read-model the fleet→silo repairer populates), else a
     // non-member could seat a workspace inside an org they don't belong to. Reject with 403.

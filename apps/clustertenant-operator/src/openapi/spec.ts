@@ -116,6 +116,7 @@ const TenantSchema = {
     name: { type: "string" },
     displayName: { type: "string" },
     email: { type: "string", format: "email" },
+    subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants." },
     team: { type: "string" },
     clusterTenantRef: { type: "string", description: "Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path." },
     phase: { type: "string" },
@@ -1165,7 +1166,8 @@ export const spec = {
       },
       post: {
         operationId: "createTenant",
-        summary: "Create a new tenant (dual-write: K8s CRD + database)",
+        summary: "Create a new tenant (admin/import path; dual-write: K8s CRD + database)",
+        description: "Internal seeding (owner-default on org create; member workspace on first login) is the production funnel — this route is the admin/import path. Every workspace it creates must be routable (email) and subject-bound; when a parent clusterTenantRef is given the subject must be a member of that org.",
         tags: ["Tenants"],
         requestBody: {
           required: true,
@@ -1173,11 +1175,12 @@ export const spec = {
             "application/json": {
               schema: {
                 type: "object",
-                required: ["name", "displayName", "email"],
+                required: ["name", "displayName", "email", "subject"],
                 properties: {
                   name: { type: "string" },
                   displayName: { type: "string" },
                   email: { type: "string", format: "email" },
+                  subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) to bind the workspace to. Required — subject-less pods degrade the compiled contract to {tenant} only." },
                   team: { type: "string" },
                   clusterTenantRef: { type: "string", description: "Parent ClusterTenant (customer) to attach this tenant to." },
                   monthlyBudgetUsd: { type: "number" },
@@ -1190,6 +1193,9 @@ export const spec = {
         },
         responses: {
           201: created("Tenant created.", { type: "object", properties: { name: { type: "string" }, status: { type: "string" } } }),
+          400: badRequest("Missing email or subject."),
+          403: forbidden("Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE)."),
+          422: { description: "No models registered for this scope (NO_MODELS_REGISTERED) — the same ≥1-model onboarding gate the internal seed funnel enforces.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
           502: upstreamError(),
           504: { description: "Tenant CR did not appear in Kubernetes within the SLO window.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
@@ -1246,6 +1252,7 @@ export const spec = {
                 properties: {
                   displayName: { type: "string" },
                   email: { type: "string", format: "email" },
+                  subject: { type: "string", description: "Re-bind the workspace to this IdP subject; must be a member of the (new or existing) parent org." },
                   team: { type: "string" },
                   clusterTenantRef: { type: "string", description: "Parent ClusterTenant (customer) to attach this tenant to." },
                   monthlyBudgetUsd: { type: "number" },
@@ -1258,11 +1265,12 @@ export const spec = {
         },
         responses: {
           200: ok("Tenant updated.", { type: "object", properties: { name: { type: "string" }, status: { type: "string" } } }),
+          403: forbidden("Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE)."),
         },
       },
       delete: {
         operationId: "deleteTenant",
-        summary: "Delete a tenant (dual-write: K8s CRD + database)",
+        summary: "Delete a tenant (offboarding teardown: cut sessions/devices, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets)",
         tags: ["Tenants"],
         parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
         responses: {

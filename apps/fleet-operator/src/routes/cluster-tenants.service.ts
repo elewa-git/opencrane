@@ -202,6 +202,9 @@ export function _ToContract(row: ClusterTenantRow): ClusterTenant
       ...(row.nodePool ? { nodePool: row.nodePool } : {}),
     },
     resources: { quota: (row.quota as ClusterTenantResourceQuota | null) ?? {} },
+    // Read-back for the cap set on create/update: the seats UI (weownai #30) and billing
+    // need to see the current cap, not just set it. Omitted when uncapped.
+    ...(row.seatCap !== null && row.seatCap !== undefined ? { seatCap: row.seatCap } : {}),
     // Public per-org Zitadel OIDC ids (set after `provisionOrg`). Included only when at
     // least one id is present, so the CR-projection (and merge-patch) does not carry an
     // empty `zitadel` block on an as-yet-unprovisioned org.

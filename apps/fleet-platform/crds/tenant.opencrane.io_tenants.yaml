@@ -119,7 +119,14 @@ spec:
               properties:
                 phase:
                   type: string
-                  enum: [Pending, Running, Suspended, Error]
+                  enum: [Pending, Running, Suspended, Degraded, Error]
+                degradedReason:
+                  type: string
+                  description: >-
+                    Why the tenant is Degraded (ModelSetEmpty | ModelFetchFailed — the fail-safe
+                    reconcile keeps the last-known-good pod instead of rendering an empty model
+                    allowlist). Set only while phase is Degraded. MUST be declared here or the
+                    structural schema prunes it from status writes.
                 podName:
                   type: string
                 ingressHost:
@@ -146,6 +153,14 @@ spec:
                     guard and re-reconciling on every watch cycle — which, because each reconcile
                     writes status (lastReconciled), self-triggers an endless MODIFIED → reconcile
                     loop.
+                observedConfigChecksum:
+                  type: string
+                  description: >-
+                    Checksum of the operator config the tenant was last reconciled under. The
+                    reconcile-skip guard re-arms a full reconcile when the OPERATOR's config
+                    changes even though metadata.generation did not. Same pruning rule as
+                    observedGeneration: MUST be declared here or the API server silently drops
+                    it from status writes and the config-change re-reconcile never fires.
       additionalPrinterColumns:
         - name: Display Name
           type: string

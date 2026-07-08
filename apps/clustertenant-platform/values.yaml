@@ -220,6 +220,19 @@ clustertenantManager:
   #    all-in-one / standalone silo — it renders the gated namespace-management ClusterRole
   #    (clustertenant-manager-rbac.yaml) and injects MANAGE_TENANT_NAMESPACES=true.
   manageTenantNamespaces: false
+
+  # -- Fleet internal API base for the fleet-managed topology, e.g.
+  #    http://<fleet-fullname>-fleet-manager.<fleet-namespace>.svc:8080. Empty = STANDALONE:
+  #    the silo owns membership locally, and the fleet→silo membership mirror + first-login
+  #    adoption write-through both idle. A fleet-managed silo MUST set this — without it
+  #    member adoptions never reach the fleet's authoritative registry (the next mirror sweep
+  #    reaps them) and login-path seat caps are unenforced.
+  fleetInternalUrl: ""
+  # -- Bearer presented to the fleet internal API (the fleet's OPENCRANE_API_TOKEN — one
+  #    shared service credential). Prefer the existing-Secret form; inline is for dev only.
+  fleetApiToken: ""
+  fleetApiTokenExistingSecret: ""
+  fleetApiTokenSecretKey: "token"
   image:
     repository: ghcr.io/italanta/opencrane-clustertenant-manager
     tag: latest

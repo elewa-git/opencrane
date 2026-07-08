@@ -301,6 +301,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const auditCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: auditCreateSpy },
     } as unknown as PrismaClient;
 
@@ -329,6 +330,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const tenantCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
       orgMembership: { findUnique: vi.fn().mockResolvedValue({ role: "Owner" }) },
     } as unknown as PrismaClient;
@@ -361,6 +363,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const auditCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: auditCreateSpy },
     } as unknown as PrismaClient;
 
@@ -506,6 +509,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const membershipFindUnique = vi.fn().mockResolvedValue({ role: "Member" });
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -542,6 +546,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const membershipFindUnique = vi.fn().mockResolvedValue(null);
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -568,6 +573,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const membershipFindUnique = vi.fn();
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -593,6 +599,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const tenantCreateSpy = vi.fn();
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
 
@@ -603,6 +610,29 @@ describe("tenantsRouter create/update — subject binding + membership validatio
 
     expect(response.status).toBe(400);
     expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a create with no models registered (422) — same onboarding gate as the seed funnel", async () =>
+  {
+    const customApi = {
+      createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
+    const prisma = {
+      tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(0) },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app)
+      .post("/api/tenants")
+      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", subject: "u-owner" });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe("NO_MODELS_REGISTERED");
     expect(tenantCreateSpy).not.toHaveBeenCalled();
   });
 
