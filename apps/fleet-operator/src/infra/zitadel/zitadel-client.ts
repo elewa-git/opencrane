@@ -349,6 +349,24 @@ export class _HttpZitadelManagementClient implements ZitadelManagementClient
     return users;
   }
 
+  public async deactivateUser(orgId: string, subject: string): Promise<void>
+  {
+    // Org-scoped user deactivation: POST /management/v1/users/{userId}/_deactivate. A deactivated
+    // user is blocked from logging in at the org's surface (the IdP half of member suspension).
+    // Fail-loud (via _call) so the caller suspends the IdP before flipping the local status.
+    await this._call("POST", `/management/v1/users/${subject}/_deactivate`, {}, orgId);
+    _log.info({ orgId, subject }, "deactivated org member in Zitadel org");
+  }
+
+  public async reactivateUser(orgId: string, subject: string): Promise<void>
+  {
+    // Org-scoped user reactivation: POST /management/v1/users/{userId}/_reactivate. Restores the
+    // user's ability to log in at the org's surface (the IdP half of member reactivation).
+    // Fail-loud (via _call) so the caller reactivates the IdP before flipping the local status.
+    await this._call("POST", `/management/v1/users/${subject}/_reactivate`, {}, orgId);
+    _log.info({ orgId, subject }, "reactivated org member in Zitadel org");
+  }
+
   public async removeOrgMember(orgId: string, subject: string): Promise<void>
   {
     // Org-scoped delete of the user's org membership: DELETE /management/v1/orgs/me/members/{userId}

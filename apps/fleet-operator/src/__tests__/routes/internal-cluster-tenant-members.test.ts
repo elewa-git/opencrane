@@ -14,8 +14,8 @@ import { _RegisterInternalClusterTenantMembers } from "../../routes/internal/clu
  *     downgrade, seat the member project role on a genuine create, 404/400 guards.
  */
 
-/** A membership fixture row. */
-interface Membership { clusterTenant: string; subject: string; role: string }
+/** A membership fixture row. `status` defaults to Active when omitted. */
+interface Membership { clusterTenant: string; subject: string; role: string; status?: string }
 
 /** Org fixture: name → its Zitadel ids (absent ⇒ pending) and optional seat cap (absent ⇒ uncapped). */
 type OrgFixture = Record<string, { zitadelOrgId?: string; zitadelProjectId?: string; seatCap?: number }>;
@@ -35,17 +35,18 @@ function _mockPrisma(orgs: OrgFixture, seed: Membership[]): PrismaClient
     orgMembership: {
       findMany: vi.fn(async function _findMany(args: { where: { clusterTenant: string } })
       {
-        return members.filter(m => m.clusterTenant === args.where.clusterTenant).map(m => ({ subject: m.subject, role: m.role }));
+        return members.filter(m => m.clusterTenant === args.where.clusterTenant).map(m => ({ subject: m.subject, role: m.role, status: m.status ?? "Active" }));
       }),
       findUnique: vi.fn(async function _findUnique(args: { where: { clusterTenant_subject: { clusterTenant: string; subject: string } } })
       {
         const { clusterTenant, subject } = args.where.clusterTenant_subject;
         const row = members.find(m => m.clusterTenant === clusterTenant && m.subject === subject);
-        return row ? { role: row.role } : null;
+        return row ? { role: row.role, status: row.status ?? "Active" } : null;
       }),
-      count: vi.fn(async function _count(args: { where: { clusterTenant: string } })
+      count: vi.fn(async function _count(args: { where: { clusterTenant: string; status?: string } })
       {
-        return members.filter(m => m.clusterTenant === args.where.clusterTenant).length;
+        // Seat-cap count is Active-only (a Suspended member frees its seat).
+        return members.filter(m => m.clusterTenant === args.where.clusterTenant && (args.where.status === undefined || (m.status ?? "Active") === args.where.status)).length;
       }),
       create: vi.fn(async function _create(args: { data: Membership })
       {
@@ -81,16 +82,17 @@ describe("_RegisterInternalClusterTenantMembers — GET fleet→silo source (#12
   {
     const prisma = _mockPrisma({ acme: {} }, [
       { clusterTenant: "acme", subject: "owner-1", role: "Owner" },
-      { clusterTenant: "acme", subject: "user-2", role: "Member" },
+      { clusterTenant: "acme", subject: "user-2", role: "Member", status: "Suspended" },
       { clusterTenant: "other", subject: "x", role: "Owner" },
     ]);
     const res = await request(_buildApp(prisma, _mockZitadel().client)).get("/api/internal/cluster-tenants/acme/members");
 
     expect(res.status).toBe(200);
     expect(res.body.clusterTenant).toBe("acme");
+    // Each row carries its lifecycle status — the silo repairer enforces suspension off it.
     expect(res.body.members).toEqual([
-      { subject: "owner-1", role: "Owner" },
-      { subject: "user-2", role: "Member" },
+      { subject: "owner-1", role: "Owner", status: "Active" },
+      { subject: "user-2", role: "Member", status: "Suspended" },
     ]);
   });
 
@@ -150,6 +152,20 @@ describe("POST /:name/members/adopt — first-login write-through (#126 S4)", fu
 
     expect(res.status).toBe(409);
     expect(res.body.code).toBe("SEAT_CAP_EXCEEDED");
+    expect(grantProjectRole).not.toHaveBeenCalled();
+  });
+
+  it("refuses adopting a subject whose existing membership is Suspended (403 MEMBER_SUSPENDED)", async function _adoptSuspended()
+  {
+    // A suspended member has been disabled in the org; re-login must NOT silently re-admit them.
+    const prisma = _mockPrisma({ acme: { zitadelOrgId: "org-a", zitadelProjectId: "proj-a" } }, [
+      { clusterTenant: "acme", subject: "user-2", role: "Member", status: "Suspended" },
+    ]);
+    const { client, grantProjectRole } = _mockZitadel();
+    const res = await request(_buildApp(prisma, client)).post("/api/internal/cluster-tenants/acme/members/adopt").send({ subject: "user-2" });
+
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe("MEMBER_SUSPENDED");
     expect(grantProjectRole).not.toHaveBeenCalled();
   });
 

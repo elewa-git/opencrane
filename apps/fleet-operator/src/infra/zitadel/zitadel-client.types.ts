@@ -150,6 +150,29 @@ export interface ZitadelManagementClient
   removeOrgMember(orgId: string, subject: string): Promise<void>;
 
   /**
+   * Deactivate a user in an org's Zitadel user pool — the IdP half of member suspension (#126).
+   * A deactivated user is blocked at the IdP: new logins are refused and existing sessions can no
+   * longer refresh, so a suspended member cannot re-enter the org's login surface. Org-scoped via
+   * the `x-zitadel-orgid` header; throws on failure so the caller can suspend the IdP FIRST and
+   * only flip the local status once the block is in place.
+   *
+   * @param orgId   - Zitadel Organization id the user belongs to.
+   * @param subject - IdP subject (Zitadel user id) to deactivate.
+   */
+  deactivateUser(orgId: string, subject: string): Promise<void>;
+
+  /**
+   * Reactivate a previously-deactivated user in an org's Zitadel user pool — the IdP half of
+   * member reactivation (#126). Restores the user's ability to log in at the org's surface.
+   * Org-scoped via the `x-zitadel-orgid` header; throws on failure so the caller reactivates the
+   * IdP FIRST and only flips the local status once the user can log in again.
+   *
+   * @param orgId   - Zitadel Organization id the user belongs to.
+   * @param subject - IdP subject (Zitadel user id) to reactivate.
+   */
+  reactivateUser(orgId: string, subject: string): Promise<void>;
+
+  /**
    * Validate a CANDIDATE service-account key WITHOUT touching the live client's key or
    * token cache. Builds a throwaway signer from the candidate, performs a jwt-bearer token
    * exchange, then a NON-DESTRUCTIVE instance-`IAM_OWNER` probe (`GET /admin/v1/instances/me`,

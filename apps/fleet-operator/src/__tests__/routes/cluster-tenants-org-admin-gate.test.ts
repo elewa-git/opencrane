@@ -17,6 +17,8 @@ const _fakeZitadel: ZitadelManagementClient = {
   async grantProjectRole() { /* no-op */ },
   async listOrgUsers() { return []; },
   async removeOrgMember() { /* no-op */ },
+  async deactivateUser() { /* no-op */ },
+  async reactivateUser() { /* no-op */ },
   async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
   currentKeyId() { return "k"; },
   reloadKey() { /* no-op */ },

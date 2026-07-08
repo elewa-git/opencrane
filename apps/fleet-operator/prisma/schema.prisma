@@ -37,6 +37,11 @@ enum OrgRole {
   Member @map("member")
 }
 
+enum OrgMemberStatus {
+  Active    @map("active")
+  Suspended @map("suspended")
+}
+
 model ClusterTenant {
   /// Stable cluster-scoped identifier (the customer key).
   name           String                     @id
@@ -111,6 +116,8 @@ model OrgMembership {
   subject       String
   /// Role held within the organisation.
   role          OrgRole
+  /// Lifecycle status. A Suspended member is disabled in the org (blocked at the IdP, sessions/devices cut, pod suspended) and FREES their seat — seat caps count only Active memberships.
+  status        OrgMemberStatus @default(Active) @map("status")
   /// Creation timestamp.
   createdAt     DateTime      @default(now()) @map("created_at")
   /// Last update timestamp.

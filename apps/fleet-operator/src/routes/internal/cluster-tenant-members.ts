@@ -49,12 +49,12 @@ export function _RegisterInternalClusterTenantMembers(prisma: PrismaClient, zita
     const rows = await prisma.orgMembership.findMany({
       where: { clusterTenant: orgName },
       orderBy: { createdAt: "asc" },
-      select: { subject: true, role: true },
+      select: { subject: true, role: true, status: true },
     });
 
     const members: InternalOrgMembershipView[] = rows.map(function _toView(row)
     {
-      return { subject: row.subject, role: row.role };
+      return { subject: row.subject, role: row.role, status: row.status };
     });
     res.json({ clusterTenant: orgName, members });
   });
@@ -90,10 +90,18 @@ export function _RegisterInternalClusterTenantMembers(prisma: PrismaClient, zita
     // must never downgrade an Owner/Admin who logs in through the same per-org client.
     const existing = await prisma.orgMembership.findUnique({
       where: { clusterTenant_subject: { clusterTenant: orgName, subject } },
-      select: { role: true },
+      select: { role: true, status: true },
     });
     if (existing)
     {
+      // A Suspended member has been disabled in the org (billing revoked their license). Adoption
+      // must NOT silently re-admit them on a login attempt — refuse fail-closed (403). The
+      // suspension is only lifted by the explicit reactivate route, never by re-login.
+      if (existing.status === "Suspended")
+      {
+        res.status(403).json({ error: "Member is suspended in this organisation.", code: "MEMBER_SUSPENDED" });
+        return;
+      }
       res.json({ subject, role: existing.role, created: false, zitadelSeated: false });
       return;
     }

@@ -190,6 +190,44 @@ describe("_HttpZitadelManagementClient — live provisioning lifecycle (injected
     await expect(client.removeOrgMember("org-9", "user-2")).rejects.toThrow(/members\/user-2 failed \(500\)/);
   });
 
+  it("deactivateUser POSTs the org-scoped _deactivate (#126 member suspend)", async function _deactivate()
+  {
+    const { fetchImpl, calls } = _fakeFetch();
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+
+    await client.deactivateUser("org-9", "user-2");
+
+    const call = calls.find(c => c.path === "/management/v1/users/user-2/_deactivate");
+    expect(call?.method).toBe("POST");
+    expect(call?.orgId).toBe("org-9");
+  });
+
+  it("deactivateUser throws on a non-OK Zitadel response (suspend leaves status for retry)", async function _deactivateFails()
+  {
+    const { fetchImpl } = _fakeFetch({ "/management/v1/users/user-2/_deactivate": { status: 500, body: { message: "boom" } } });
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+    await expect(client.deactivateUser("org-9", "user-2")).rejects.toThrow(/_deactivate failed \(500\)/);
+  });
+
+  it("reactivateUser POSTs the org-scoped _reactivate (#126 member reactivate)", async function _reactivate()
+  {
+    const { fetchImpl, calls } = _fakeFetch();
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+
+    await client.reactivateUser("org-9", "user-2");
+
+    const call = calls.find(c => c.path === "/management/v1/users/user-2/_reactivate");
+    expect(call?.method).toBe("POST");
+    expect(call?.orgId).toBe("org-9");
+  });
+
+  it("reactivateUser throws on a non-OK Zitadel response (reactivation rolls back)", async function _reactivateFails()
+  {
+    const { fetchImpl } = _fakeFetch({ "/management/v1/users/user-2/_reactivate": { status: 500, body: { message: "boom" } } });
+    const client = new _HttpZitadelManagementClient({ apiUrl: "https://z.example.com", serviceAccountKey: _saKeyJson(), baseDomain: "d" }, fetchImpl);
+    await expect(client.reactivateUser("org-9", "user-2")).rejects.toThrow(/_reactivate failed \(500\)/);
+  });
+
   it("teardownOrg tolerates an already-absent org (404)", async function _teardown404()
   {
     const { fetchImpl } = _fakeFetch({ "/admin/v1/orgs/gone": { status: 404, body: {} } });
