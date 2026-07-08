@@ -301,6 +301,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const auditCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: auditCreateSpy },
     } as unknown as PrismaClient;
 
@@ -311,6 +312,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
         name: "acme",
         displayName: "Acme",
         email: "owner@acme.io",
+        subject: "u-owner",
       });
 
     expect(response.status).toBe(201);
@@ -328,13 +330,15 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const tenantCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
+      orgMembership: { findUnique: vi.fn().mockResolvedValue({ role: "Owner" }) },
     } as unknown as PrismaClient;
 
     const app = _buildTenantsApp(customApi, prisma);
     const response = await request(app)
       .post("/api/tenants")
-      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", clusterTenantRef: "acme-corp" });
+      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", subject: "u-owner", clusterTenantRef: "acme-corp" });
 
     expect(response.status).toBe(201);
     // CRD spec carries clusterTenantRef…
@@ -359,6 +363,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     const auditCreateSpy = vi.fn().mockResolvedValue({});
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       auditEntry: { create: auditCreateSpy },
     } as unknown as PrismaClient;
 
@@ -369,6 +374,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
         name: "slow-tenant",
         displayName: "Slow Tenant",
         email: "owner@acme.io",
+        subject: "u-owner",
       });
 
     delete process.env.TENANT_CR_APPEARANCE_TIMEOUT_MS;
@@ -378,6 +384,43 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
     expect(response.body.error).toContain("within 30 seconds");
     expect(tenantCreateSpy).not.toHaveBeenCalled();
     expect(auditCreateSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("tenantsRouter delete — offboarding teardown (#126)", () =>
+{
+  it("cuts sessions, deletes the LiteLLM key metadata, deletes the tenant, and RETAINS datasets", async () =>
+  {
+    const customApi = {
+      deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+
+    const tenantDeleteSpy = vi.fn().mockResolvedValue({});
+    const litellmDeleteManySpy = vi.fn().mockResolvedValue({ count: 1 });
+    const datasetDeleteManySpy = vi.fn(); // must NOT be called — datasets are retained
+    const prisma = {
+      tenant: { delete: tenantDeleteSpy },
+      tenantLiteLlmKey: {
+        findFirst: vi.fn().mockResolvedValue({ keyAlias: "alias-acme" }),
+        deleteMany: litellmDeleteManySpy,
+      },
+      // _CutTenant reads/marks brokered devices; empty set keeps it a clean no-op path.
+      brokeredDevice: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+      tenantDatasetMembership: { deleteMany: datasetDeleteManySpy },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app).delete("/api/tenants/acme");
+
+    expect(response.status).toBe(200);
+    expect(response.body).toEqual({ name: "acme", status: "deleted" });
+    // LiteLLM key metadata is cleaned (no cascade → would otherwise block the delete)…
+    expect(litellmDeleteManySpy).toHaveBeenCalledWith({ where: { tenant: "acme" } });
+    // …the projection row is deleted…
+    expect(tenantDeleteSpy).toHaveBeenCalledWith({ where: { name: "acme" } });
+    // …and NO explicit dataset purge runs: offboarding retains harvested data (Cognee untouched).
+    expect(datasetDeleteManySpy).not.toHaveBeenCalled();
   });
 });
 
@@ -466,6 +509,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const membershipFindUnique = vi.fn().mockResolvedValue({ role: "Member" });
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -502,6 +546,7 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     const membershipFindUnique = vi.fn().mockResolvedValue(null);
     const prisma = {
       tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -518,15 +563,17 @@ describe("tenantsRouter create/update — subject binding + membership validatio
     expect(tenantCreateSpy).not.toHaveBeenCalled();
   });
 
-  it("skips membership validation when no subject is given (owner-seed / legacy path)", async () =>
+  it("rejects a create with no subject (400) — no more subject-less/degraded pods", async () =>
   {
     const customApi = {
       createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
       getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
     } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
     const membershipFindUnique = vi.fn();
     const prisma = {
-      tenant: { create: vi.fn().mockResolvedValue({}) },
+      tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
       orgMembership: { findUnique: membershipFindUnique },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;
@@ -536,9 +583,57 @@ describe("tenantsRouter create/update — subject binding + membership validatio
       .post("/api/tenants")
       .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", clusterTenantRef: "acme" });
 
-    expect(response.status).toBe(201);
-    // No subject ⇒ nothing to validate.
+    // Internal seeding is the funnel now; the public route must never seat a subject-less pod.
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
     expect(membershipFindUnique).not.toHaveBeenCalled();
+  });
+
+  it("rejects a create with no email (400) — a workspace must be routable", async () =>
+  {
+    const customApi = {
+      createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
+    const prisma = {
+      tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(1) },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app)
+      .post("/api/tenants")
+      .send({ name: "acme", displayName: "Acme", subject: "u-owner" });
+
+    expect(response.status).toBe(400);
+    expect(response.body.code).toBe("VALIDATION_ERROR");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
+  });
+
+  it("rejects a create with no models registered (422) — same onboarding gate as the seed funnel", async () =>
+  {
+    const customApi = {
+      createNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+      getNamespacedCustomObject: vi.fn().mockResolvedValue({}),
+    } as unknown as k8s.CustomObjectsApi;
+    const tenantCreateSpy = vi.fn();
+    const prisma = {
+      tenant: { create: tenantCreateSpy },
+      modelDefinition: { count: vi.fn().mockResolvedValue(0) },
+      auditEntry: { create: vi.fn().mockResolvedValue({}) },
+    } as unknown as PrismaClient;
+
+    const app = _buildTenantsApp(customApi, prisma);
+    const response = await request(app)
+      .post("/api/tenants")
+      .send({ name: "acme", displayName: "Acme", email: "owner@acme.io", subject: "u-owner" });
+
+    expect(response.status).toBe(422);
+    expect(response.body.code).toBe("NO_MODELS_REGISTERED");
+    expect(tenantCreateSpy).not.toHaveBeenCalled();
   });
 
   it("rejects an update that reassigns a non-member subject (403)", async () =>

@@ -17,7 +17,9 @@ import { ___CreateFleetPrismaClient } from "./infra/db/db.js";
 import { ___CreateFleetOidcAuthService } from "./infra/auth/oidc.service.js";
 import { _SeedClusterTenant } from "./infra/cluster-tenant-seed.js";
 import { ___FleetAuthRouter } from "./infra/auth/auth.router.js";
+import { ZitadelReconcileLoop, _ReadZitadelReconcileIntervalMs } from "./infra/zitadel/zitadel-reconcile-loop.js";
 import { _RegisterFleetRoutes } from "./routes.js";
+import { _RunZitadelReconcile } from "./routes/admin/zitadel-reconcile.js";
 import type { PrismaClient } from "./generated/prisma/index.js";
 
 // Route any stray console.* output through the structured logger.
@@ -28,6 +30,9 @@ let _serverRef: Server | null = null;
 
 /** Reference to the fleet registry Prisma client, for graceful shutdown. */
 let _prismaRef: PrismaClient | null = null;
+
+/** Reference to the periodic Zitadel reconcile loop, for graceful shutdown. */
+let _zitadelReconcileLoopRef: ZitadelReconcileLoop | null = null;
 
 /**
  * Bootstrap the fleet-manager: the cluster-wide singleton that owns the
@@ -76,13 +81,25 @@ async function main(): Promise<void>
   app.use(___AuthMiddleware());
   const fleetCustomApi = kc.makeApiClient(k8s.CustomObjectsApi);
   const fleetCoreApi = kc.makeApiClient(k8s.CoreV1Api);
-  _RegisterFleetRoutes(app, prisma, fleetCustomApi, fleetCoreApi);
+  const zitadelClient = _RegisterFleetRoutes(app, prisma, fleetCustomApi, fleetCoreApi);
   // Global error handler — registered AFTER routes so route errors (incl. the authz gates'
   // `.catch(next)`) are structured-logged + returned as the standard envelope, not Express's
   // unlogged default 500.
   app.use(_ErrorHandler(log));
   const apiPort = Number(process.env.PORT ?? "8080");
   _serverRef = app.listen(apiPort, function _onApiListen() { log.info({ port: apiPort }, "fleet-manager API listening"); });
+
+  // Periodic Zitadel reconcile (#126 hardening): the on-demand reconcile route only converges
+  // org-user counts when someone calls it, so Console-only invites lag until then. Run the same
+  // pass on a cadence (ZITADEL_RECONCILE_INTERVAL_MS, default 6h, 0 disables). Skipped silently
+  // when the cluster-tenant manager (and thus the Zitadel client) is not enabled; reuses the
+  // routes' client instance so a key rotation via the admin route reaches the loop too.
+  if (zitadelClient)
+  {
+    const zitadelReconcileLoop = new ZitadelReconcileLoop(function _runReconcile() { return _RunZitadelReconcile(prisma, zitadelClient); }, log, _ReadZitadelReconcileIntervalMs());
+    zitadelReconcileLoop.start();
+    _zitadelReconcileLoopRef = zitadelReconcileLoop;
+  }
 
   // Single-tenant profile: seed the configured ClusterTenant + its owner membership into the
   // fleet registry directly (the seed pattern, NOT the billing-gated POST). A strict no-op when
@@ -93,7 +110,7 @@ async function main(): Promise<void>
   // `pending` to `ready` — bind the namespace boundary and (gated) the per-org domain. Without
   // this, an org created via the control plane would sit `pending` forever. The fleet watches
   // ONLY this cluster-scoped CR; everything inside a silo is the silo's own concern.
-  const clusterTenantOperator = _CreateClusterTenantOperator(kc, config, log);
+  const clusterTenantOperator = _CreateClusterTenantOperator(kc, config, prisma, log);
   await clusterTenantOperator.start();
 }
 
@@ -112,6 +129,7 @@ async function _shutdown(signal: string): Promise<void>
 
   try
   {
+    _zitadelReconcileLoopRef?.stop();
     if (_serverRef)
     {
       await new Promise<void>(function _close(resolve) { _serverRef?.close(function _done() { resolve(); }); });

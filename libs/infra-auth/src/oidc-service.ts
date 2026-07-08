@@ -296,6 +296,19 @@ export abstract class OidcAuthServiceBase
     }
     await _saveSession(req);
 
+    // 4. Post-login extension point (e.g. adopt the verified user into their org + seed
+    //    their workspace on first login). Best-effort: a hook failure must never break the
+    //    login — adoption self-heals via the periodic membership reconcile — so it is caught
+    //    and logged here rather than propagated.
+    try
+    {
+      await this.onLoginEstablished(req, authUser);
+    }
+    catch (err)
+    {
+      this.log.warn({ err }, "post-login hook failed (non-fatal)");
+    }
+
     return returnTo;
   }
 
@@ -332,6 +345,21 @@ export abstract class OidcAuthServiceBase
   protected async enrichStatusUser(_req: Request, _authUser: AuthUser): Promise<Record<string, unknown>>
   {
     return {};
+  }
+
+  /**
+   * Extension point invoked exactly once per login, right after a fresh session is
+   * established (post token-exchange, claim validation, and session persistence). The base
+   * does nothing; override to run first-login side effects — the clustertenant-manager
+   * adopts the verified user into the org the per-org login proved membership of, and seeds
+   * their workspace. Invoked best-effort: {@link completeLogin} catches and logs any throw so
+   * a side-effect failure can never break the login.
+   *
+   * @param _req      - The completed callback request (unused by the base).
+   * @param _authUser - The freshly established session identity (unused by the base).
+   */
+  protected async onLoginEstablished(_req: Request, _authUser: AuthUser): Promise<void>
+  {
   }
 
   /** Discover and memoize the provider metadata and client configuration (masters client). */

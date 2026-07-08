@@ -9,7 +9,7 @@ import type { Tenant } from "./models/tenant.interface.js";
 import { TenantPolicyResolutionState, TenantStatusPhase } from "./models/tenant-status.interface.js";
 import type { TenantDegradedReason } from "./models/tenant-status.interface.js";
 
-import { __IsK8sForbidden, __K8sApplyResource, _IsK8sNotFound } from "@opencrane/infra-api";
+import { __K8sApplyResource, _IsK8sNotFound } from "@opencrane/infra-api";
 import { _RunWatchLoop, K8sWatchEventType } from "@opencrane/infra-api";
 import { OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL } from "@opencrane/infra-api";
 import { _BuildClusterTenantLimitRange, _BuildClusterTenantNamespace, _BuildClusterTenantResourceQuota, _BuildConfigMap, _BuildDeployment, _BuildGatewayNetworkPolicy, _BuildService, _BuildServiceAccount, _BuildSiloBaselineNetworkPolicy, _BuildSiloLinkerdIdentityPolicy, _BuildStatePvc, _ConfigChecksum, _ResolveTenantModelGate } from "./deploy/index.js";
@@ -510,28 +510,24 @@ export class TenantOperator
     const clusterTenantName = clusterTenant.metadata?.name ?? namespace;
 
     // 1. Namespace — ensure the fenced namespace exists and carries the PSA
-    //    restricted enforce/warn/audit labels before any workload lands in it. When the
+    //    baseline enforce/warn/audit labels before any workload lands in it. When the
     //    Linkerd gate is on (S5) it is also annotated for mesh injection so workloads
     //    pick up the sidecar/identity; the annotation is inert on a Linkerd-less cluster.
     //
-    //    In the per-silo topology the fleet-manager creates and owns this namespace, and
-    //    the silo operator's ServiceAccount has NO cluster-scoped namespace RBAC — so the
-    //    create returns 403 Forbidden (it cannot even attempt it), not the 409 AlreadyExists
-    //    that __K8sApplyResource treats as a converged no-op. Tolerate that 403: the
-    //    namespace is provisioned externally, and if it were genuinely absent the namespaced
-    //    applies that follow (baseline NetworkPolicy, quota) would themselves fail with
-    //    NotFound, surfacing the real problem rather than this one masking it.
-    try
+    //    Ownership is explicit (not inferred from a 403): in the fleet-managed topology the
+    //    fleet-manager creates and owns each org's namespace and the silo SA holds NO
+    //    cluster-scoped `namespaces` RBAC, so the silo must SKIP the create entirely — it is
+    //    `manageTenantNamespaces=false`. Only an all-in-one / standalone silo that has been
+    //    granted the gated namespace-management ClusterRole sets the flag true and creates it.
+    //    Either way, a genuinely-absent namespace still surfaces below: the baseline
+    //    NetworkPolicy + quota applies target this namespace and fail NotFound if it is missing.
+    if (this.config.manageTenantNamespaces)
     {
       await __K8sApplyResource(this.coreApi, _BuildClusterTenantNamespace(namespace, clusterTenantName, this.config.linkerdMeshEnabled), this.log);
     }
-    catch (err)
+    else
     {
-      if (!__IsK8sForbidden(err))
-      {
-        throw err;
-      }
-      this.log.warn({ namespace, clusterTenant: clusterTenantName }, "namespace create forbidden; assuming it is externally provisioned (fleet-manager-owned silo)");
+      this.log.debug({ namespace, clusterTenant: clusterTenantName }, "manageTenantNamespaces=false: skipping namespace create (fleet-manager owns it)");
     }
 
     // 1b. Silo baseline NetworkPolicy — flip the namespace to default-deny (S2 /

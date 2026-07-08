@@ -65,6 +65,19 @@ export interface ClusterTenantResource extends KubernetesObject
       /** The owner's IdP-verified email; becomes the default Tenant's contact email. */
       email?: string;
     };
+    /**
+     * Public per-org Zitadel OIDC identifiers, projected onto the CR spec by the control plane
+     * after `provisionOrg`. Carries only PUBLIC ids (client_id / org id / redirect URI); the
+     * orphan-CR adoption backfills them onto the registry row when present.
+     */
+    zitadel?: {
+      /** The org's OIDC `client_id`. */
+      clientId?: string;
+      /** The org's Zitadel Organization id. */
+      orgId?: string;
+      /** The redirect URI registered on the org's OIDC app. */
+      redirectUri?: string;
+    };
   };
 
   /** Observed state; absent until first reconciled by the control plane. */

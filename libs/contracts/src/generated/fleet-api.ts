@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * List an organisation's members (operator OR owner/admin of that org)
-         * @description Lists the org's membership rows (subject + role) — the LOCAL membership registry the org-admin gate reads (OrgMembership rows, NOT Zitadel grants).
+         * @description Lists the org's membership rows (subject + role + lifecycle status) from the fleet's authoritative membership registry (writes are Zitadel-seated; the silo read-model mirrors this set).
          */
         get: operations["listClusterTenantMembers"];
         put?: never;
@@ -261,6 +261,46 @@ export interface paths {
          * @description Removes a membership row. Last-Owner guardrail: removing the org's sole Owner is rejected (409 LAST_OWNER).
          */
         delete: operations["removeClusterTenantMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cluster-tenants/{name}/members/{subject}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend an organisation member (operator OR owner/admin of that org)
+         * @description Disables a member in the org (billing revoked their license): the IdP user is deactivated FIRST (new logins blocked; the silo then cuts live sessions/devices and suspends the workspace pod), then the local status flips to Suspended. A Suspended member FREES their seat (seat caps count only Active memberships). Idempotent (already-Suspended ⇒ 200 no-op). Last-Owner guardrail: suspending the org's sole Active Owner is rejected (409 LAST_OWNER).
+         */
+        post: operations["suspendClusterTenantMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/cluster-tenants/{name}/members/{subject}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a suspended organisation member (operator OR owner/admin of that org)
+         * @description Re-enables a suspended member: a seat is RESERVED first (reactivation re-occupies a seat, so it fails when the org is at its Active-seat cap), then the IdP user is reactivated and the local status flips to Active (the silo then clears the pod suspension). Idempotent (already-Active ⇒ 200 no-op, no seat consumed).
+         */
+        post: operations["reactivateClusterTenantMember"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -458,6 +498,8 @@ export interface components {
             resources: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description Maximum org memberships (seats); absent when uncapped. New members are refused with 409 SEAT_CAP_EXCEEDED once the org is at its cap. */
+            seatCap?: number;
             status?: {
                 /** @enum {string} */
                 phase?: "pending" | "provisioning" | "ready" | "failed";
@@ -483,6 +525,8 @@ export interface components {
             resources: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description Maximum org memberships (seats). Omit or null for uncapped. The fleet refuses a new member once the org is at its cap. */
+            seatCap?: number | null;
         };
         /** @description Partial cluster-tenant update; the immutable name comes from the path. Every field is optional — only those present are changed. */
         ClusterTenantUpdate: {
@@ -504,6 +548,8 @@ export interface components {
             resources?: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description New seat cap; null clears it (uncapped). The fleet refuses a new member once the org is at its cap. */
+            seatCap?: number | null;
         };
         ClusterTenantResourceQuota: {
             /** @description Total CPU the customer may request (e.g. '4', '500m'). */
@@ -517,7 +563,7 @@ export interface components {
             /** @description Total GPUs the customer may request. */
             gpu?: number;
         };
-        /** @description A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant). */
+        /** @description A single organisation membership row — the fleet's authoritative membership registry (the org-admin gate reads it; the silo mirrors it). Writes are Zitadel-seated transactionally: an upsert grants the member's project role and a removal revokes their org membership at the IdP. */
         OrgMember: {
             /** @description IdP-verified subject (OIDC `sub`) holding the membership. */
             subject: string;
@@ -526,6 +572,11 @@ export interface components {
              * @enum {string}
              */
             role: "Owner" | "Admin" | "Member";
+            /**
+             * @description Lifecycle status. A Suspended member is disabled in the org (blocked at the IdP, live sessions/devices cut, workspace pod suspended) and FREES their seat — seat caps count only Active memberships.
+             * @enum {string}
+             */
+            status?: "Active" | "Suspended";
         };
         /** @description Add or update an organisation member (upsert on the unique [org, subject]). */
         OrgMemberWrite: {
@@ -2066,6 +2117,142 @@ export interface operations {
             };
             /** @description Removing this member would remove the organisation's last Owner (code LAST_OWNER). */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    suspendClusterTenantMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member suspended (or already suspended). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMember"];
+                };
+            };
+            /** @description No authenticated session (real-auth deployments). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is neither a platform operator nor an owner/admin of this org. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Cluster tenant or membership not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Suspending this member would suspend the organisation's last Owner (code LAST_OWNER). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reactivateClusterTenantMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+                subject: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Member reactivated (or already active). */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrgMember"];
+                };
+            };
+            /** @description No authenticated session (real-auth deployments). */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Caller is neither a platform operator nor an owner/admin of this org. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Cluster tenant or membership not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The organisation is at its Active-seat cap; a seat must be freed before reactivating (code SEAT_CAP_EXCEEDED). */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
+            502: {
                 headers: {
                     [name: string]: unknown;
                 };

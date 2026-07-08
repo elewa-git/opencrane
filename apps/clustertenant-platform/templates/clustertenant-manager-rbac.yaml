@@ -106,3 +106,39 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "opencrane.fullname" . }}-clustertenant-manager
     namespace: {{ .Release.Namespace }}
+{{- if .Values.clustertenantManager.manageTenantNamespaces }}
+---
+{{- /*
+  STANDALONE ONLY (clustertenantManager.manageTenantNamespaces=true): grant the silo the
+  cluster-scoped `namespaces` verbs it needs to create + PSA-label each ClusterTenant's namespace
+  itself. In the default fleet-managed topology this block is NOT rendered — the fleet-manager owns
+  namespace creation and the silo skips it (MANAGE_TENANT_NAMESPACES=false), so the silo never holds
+  this grant. Namespaces are cluster-scoped, so this cannot be a namespaced Role. Kept minimal — no
+  delete (teardown is the fleet's / a human's call): get/list/watch/create/patch only.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "opencrane.fullname" . }}-clustertenant-manager-ns-manage-{{ .Release.Namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get", "list", "watch", "create", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "opencrane.fullname" . }}-clustertenant-manager-ns-manage-{{ .Release.Namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "opencrane.fullname" . }}-clustertenant-manager-ns-manage-{{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opencrane.fullname" . }}-clustertenant-manager
+    namespace: {{ .Release.Namespace }}
+{{- end }}

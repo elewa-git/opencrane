@@ -31,6 +31,8 @@ export interface ClusterTenantCreateRequest
   compute: ClusterTenantComputeInput;
   /** Resource gating for the customer's namespace. */
   resources: ClusterTenantResourcesInput;
+  /** Maximum org memberships (seats). Omit or null for uncapped; must be a non-negative integer. */
+  seatCap?: number | null;
 }
 
 /** Request body used to update a cluster tenant (name is immutable, taken from the path). */
@@ -46,4 +48,6 @@ export interface ClusterTenantUpdateRequest
   compute?: ClusterTenantComputeInput;
   /** New resource gating block. */
   resources?: ClusterTenantResourcesInput;
+  /** New seat cap; null clears it (uncapped). Must be a non-negative integer when present. */
+  seatCap?: number | null;
 }

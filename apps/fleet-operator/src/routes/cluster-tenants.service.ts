@@ -165,6 +165,26 @@ export function _ValidateResources(resources: ClusterTenantResourcesInput | unde
 }
 
 /**
+ * Validate an optional seat cap. `undefined`/`null` mean "uncapped" and are accepted; any present
+ * value must be a non-negative integer (a fractional or negative cap is a client error).
+ *
+ * @param seatCap - The seat cap from the write body, if any.
+ * @returns An error message, or null when valid/omitted.
+ */
+export function _ValidateSeatCap(seatCap: number | null | undefined): string | null
+{
+  if (seatCap === undefined || seatCap === null)
+  {
+    return null;
+  }
+  if (!Number.isInteger(seatCap) || seatCap < 0)
+  {
+    return "seatCap must be a non-negative integer.";
+  }
+  return null;
+}
+
+/**
  * Project a stored row into the shared {@link ClusterTenant} contract shape.
  *
  * @param row - The persisted cluster_tenants row.
@@ -182,6 +202,9 @@ export function _ToContract(row: ClusterTenantRow): ClusterTenant
       ...(row.nodePool ? { nodePool: row.nodePool } : {}),
     },
     resources: { quota: (row.quota as ClusterTenantResourceQuota | null) ?? {} },
+    // Read-back for the cap set on create/update: the seats UI (weownai #30) and billing
+    // need to see the current cap, not just set it. Omitted when uncapped.
+    ...(row.seatCap !== null && row.seatCap !== undefined ? { seatCap: row.seatCap } : {}),
     // Public per-org Zitadel OIDC ids (set after `provisionOrg`). Included only when at
     // least one id is present, so the CR-projection (and merge-patch) does not carry an
     // empty `zitadel` block on an as-yet-unprovisioned org.

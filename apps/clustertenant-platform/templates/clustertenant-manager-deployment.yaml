@@ -325,6 +325,28 @@ spec:
             #    closed if the Linkerd policy CRDs are absent — a safe no-op without Linkerd.
             - name: LINKERD_MESH_ENABLED
               value: {{ .Values.fleetManager.linkerdMeshEnabled | quote }}
+            # -- Whether this silo creates per-ClusterTenant namespaces itself (standalone) or
+            #    defers to the fleet-manager (default). Paired with the gated namespace-management
+            #    ClusterRole in clustertenant-manager-rbac.yaml.
+            - name: MANAGE_TENANT_NAMESPACES
+              value: {{ .Values.clustertenantManager.manageTenantNamespaces | default false | quote }}
+            {{- if .Values.clustertenantManager.fleetInternalUrl }}
+            # -- Fleet internal API (fleet-managed topology): the membership mirror pulls the
+            #    authoritative OrgMembership set from here and first-login adoption writes
+            #    through to it. Absent = standalone (the silo owns membership locally).
+            - name: FLEET_INTERNAL_URL
+              value: {{ .Values.clustertenantManager.fleetInternalUrl | quote }}
+            {{- if .Values.clustertenantManager.fleetApiTokenExistingSecret }}
+            - name: OPENCRANE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.clustertenantManager.fleetApiTokenExistingSecret }}
+                  key: {{ .Values.clustertenantManager.fleetApiTokenSecretKey | default "token" }}
+            {{- else if .Values.clustertenantManager.fleetApiToken }}
+            - name: OPENCRANE_API_TOKEN
+              value: {{ .Values.clustertenantManager.fleetApiToken | quote }}
+            {{- end }}
+            {{- end }}
             # -- Runtime-plane endpoints injected into tenant Deployments (sharedPlatform scope, B5).
             - name: MCP_GATEWAY_URL
               value: {{ include "opencrane.mcpGatewayUrl" . | quote }}

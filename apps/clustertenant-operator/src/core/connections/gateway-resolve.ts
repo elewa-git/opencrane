@@ -19,7 +19,33 @@ export interface GatewayResolveResult
 }
 
 /** Fail-closed reasons a gateway target cannot be resolved (all map to 403 at the edge). */
-export type GatewayResolveFailure = "NO_EMAIL" | "NO_TENANT" | "AMBIGUOUS_TENANT";
+export type GatewayResolveFailure = "NO_EMAIL" | "NO_TENANT" | "AMBIGUOUS_TENANT" | "MEMBER_SUSPENDED";
+
+/**
+ * Whether the given subject holds a SUSPENDED OrgMembership in the org (`#126` license lifecycle).
+ * The silo read-model is the projection of the fleet's authoritative membership; a Suspended row
+ * means billing disabled the member's license, so the connect path must fail closed. A missing
+ * membership row ⇒ NOT suspended (legacy/standalone tenants with no org ref, or a member the
+ * projection has not populated, keep working — suspension is an explicit Suspended row, never an
+ * absence).
+ *
+ * @param prisma           - Prisma client for the silo OrgMembership read-model.
+ * @param clusterTenantRef - The tenant's owning org (null ⇒ no membership scope ⇒ not suspended).
+ * @param subject          - The session subject to check.
+ * @returns True only when an OrgMembership row exists for (org, subject) AND its status is Suspended.
+ */
+export async function _IsMemberSuspended(prisma: PrismaClient, clusterTenantRef: string | null, subject: string): Promise<boolean>
+{
+  if (!clusterTenantRef || !subject)
+  {
+    return false;
+  }
+  const membership = await prisma.orgMembership.findUnique({
+    where: { clusterTenant_subject: { clusterTenant: clusterTenantRef, subject } },
+    select: { status: true },
+  });
+  return membership?.status === "Suspended";
+}
 
 /** Resolution outcome: a forward target, or a fail-closed reason. */
 export type GatewayResolveOutcome =
@@ -85,6 +111,16 @@ export async function _ResolveGatewayTarget(
   }
 
   const tenant = matches[0];
+
+  // Fail closed on a suspended membership (#126): billing disabled this member's license, so the
+  // gateway upgrade must be refused even though a pod exists. Keyed on the tenant's owning org +
+  // the session subject; a tenant with no org ref (legacy/standalone) has no membership row and is
+  // allowed through.
+  if (await _IsMemberSuspended(prisma, tenant.clusterTenantRef, sub))
+  {
+    return { ok: false, code: "MEMBER_SUSPENDED" };
+  }
+
   const namespace = tenant.clusterTenantRef ? _NamespaceForOrg(tenant.clusterTenantRef) : defaultNamespace;
 
   return {

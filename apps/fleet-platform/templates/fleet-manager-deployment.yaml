@@ -48,6 +48,18 @@ spec:
             # -- Fleet registry DB (Stage 3): the fleet-manager's HTTP API + registry live here.
             #    Resolved from fleetManager.database.* (installer-provisioned); empty → no DB wired.
             {{- include "opencrane.fleetManagerDatabaseEnv" . | nindent 12 }}
+            {{- if .Values.fleetManager.apiTokenExistingSecret }}
+            # -- Shared service bearer validated on the internal + automation surfaces
+            #    (silo member-adoption write-through, CI). The silo presents the same value.
+            - name: OPENCRANE_API_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.fleetManager.apiTokenExistingSecret }}
+                  key: {{ .Values.fleetManager.apiTokenSecretKey | default "token" }}
+            {{- else if .Values.fleetManager.apiToken }}
+            - name: OPENCRANE_API_TOKEN
+              value: {{ .Values.fleetManager.apiToken | quote }}
+            {{- end }}
             # -- Fleet self-service gates (Stage 4): ClusterTenant management + billing are mounted
             #    on the fleet plane. When false the matching router is not mounted (and the fleet's
             #    cluster-scoped management/issuer RBAC is not rendered — see fleet-manager-rbac.yaml).
@@ -136,6 +148,11 @@ spec:
             #    to build the Zitadel client without it. Defaults to the ingress base domain.
             - name: PLATFORM_BASE_DOMAIN
               value: {{ $.Values.ingress.domain | quote }}
+            # -- Periodic reconcile cadence (ms); 0 disables the loop. Rendered verbatim (no
+            #    `default` pipe — that would swallow an explicit 0); the code falls back to 6h
+            #    when the value is empty or non-numeric.
+            - name: ZITADEL_RECONCILE_INTERVAL_MS
+              value: {{ .reconcileIntervalMs | quote }}
             {{- if .existingSecret }}
             - name: ZITADEL_MGMT_SA_KEY
               valueFrom:

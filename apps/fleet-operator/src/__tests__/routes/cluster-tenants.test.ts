@@ -18,6 +18,10 @@ function _fakeZitadel(): ZitadelManagementClient
     async setAppRedirectUris() { /* no-op */ },
     async teardownOrg() { /* no-op */ },
     async grantProjectRole() { /* no-op */ },
+    async listOrgUsers() { return []; },
+    async removeOrgMember() { /* no-op */ },
+    async deactivateUser() { /* no-op */ },
+    async reactivateUser() { /* no-op */ },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* no-op */ },
@@ -203,6 +207,33 @@ describe("clusterTenantsRouter (CT.2 management API)", function _suite()
     expect(deleteRes.body).toEqual({ name: "acme", status: "deleted" });
   });
 
+  it("accepts a valid seat cap on create/update and rejects a non-negative-integer one (S6)", async function _seatCap()
+  {
+    const app = _buildApp(_mockPrisma(new Map()), _mockRegistry(false));
+
+    // Valid cap on create.
+    const okRes = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), seatCap: 25 });
+    expect(okRes.status).toBe(201);
+
+    // Minimum viable cap: seatCap=1 succeeds — the founding owner is seeded in the create tx
+    // and is never blocked by the cap (it consumes the single seat; members are then refused).
+    const capOne = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), name: "solo", seatCap: 1 });
+    expect(capOne.status).toBe(201);
+
+    // Fractional / negative caps are client errors on both create and update.
+    const fractional = await request(app).post("/api/v1/cluster-tenants").send({ ..._sharedBody(), name: "frac", seatCap: 2.5 });
+    expect(fractional.status).toBe(400);
+    expect(fractional.body.code).toBe("VALIDATION_ERROR");
+
+    const negative = await request(app).put("/api/v1/cluster-tenants/acme").send({ seatCap: -1 });
+    expect(negative.status).toBe(400);
+    expect(negative.body.code).toBe("VALIDATION_ERROR");
+
+    // Null clears the cap (uncapped) — accepted.
+    const cleared = await request(app).put("/api/v1/cluster-tenants/acme").send({ seatCap: null });
+    expect(cleared.status).toBe(200);
+  });
+
   it("rejects a dedicatedCluster request with 422 TIER_UNAVAILABLE when no backend is registered", async function _overTier()
   {
     const app = _buildApp(_mockPrisma(new Map()), _mockRegistry(false));
@@ -350,6 +381,10 @@ describe("clusterTenantsRouter — Zitadel org provisioning (S3 / Phase 2a)", fu
       async setAppRedirectUris(input) { redirectCalls.push(input); },
       async teardownOrg() { /* no-op */ },
       async grantProjectRole() { /* no-op */ },
+      async listOrgUsers() { return []; },
+      async removeOrgMember() { /* no-op */ },
+      async deactivateUser() { /* no-op */ },
+      async reactivateUser() { /* no-op */ },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* no-op */ },
@@ -385,6 +420,10 @@ describe("clusterTenantsRouter — Zitadel org provisioning (S3 / Phase 2a)", fu
       async setAppRedirectUris() { /* no-op */ },
       async teardownOrg() { /* no-op */ },
       async grantProjectRole() { /* no-op */ },
+      async listOrgUsers() { return []; },
+      async removeOrgMember() { /* no-op */ },
+      async deactivateUser() { /* no-op */ },
+      async reactivateUser() { /* no-op */ },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* no-op */ },
@@ -409,6 +448,10 @@ describe("clusterTenantsRouter — Zitadel org provisioning (S3 / Phase 2a)", fu
       async setAppRedirectUris() { /* no-op */ },
       async teardownOrg() { teardownCalled = true; throw new Error("zitadel unreachable"); },
       async grantProjectRole() { /* no-op */ },
+      async listOrgUsers() { return []; },
+      async removeOrgMember() { /* no-op */ },
+      async deactivateUser() { /* no-op */ },
+      async reactivateUser() { /* no-op */ },
       async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
       currentKeyId() { return "k"; },
       reloadKey() { /* no-op */ },
@@ -463,6 +506,10 @@ describe("clusterTenantsRouter — Zitadel org provisioning (S3 / Phase 2a)", fu
       async setAppRedirectUris() { syncCalled = true; throw new Error("zitadel unreachable"); },
       async teardownOrg() { /* no-op */ },
       async grantProjectRole() { /* no-op */ },
+      async listOrgUsers() { return []; },
+      async removeOrgMember() { /* no-op */ },
+      async deactivateUser() { /* no-op */ },
+      async reactivateUser() { /* no-op */ },
     async validateCandidateKey() { return { tokenExchangeOk: true, instanceScopeOk: true, keyId: "k", detail: "ok" }; },
     currentKeyId() { return "k"; },
     reloadKey() { /* no-op */ },

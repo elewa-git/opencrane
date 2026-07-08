@@ -287,6 +287,7 @@ const ClusterTenantSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: "integer", minimum: 0, description: "Maximum org memberships (seats); absent when uncapped. New members are refused with 409 SEAT_CAP_EXCEEDED once the org is at its cap." },
     status: {
       type: "object",
       properties: {
@@ -320,6 +321,7 @@ const ClusterTenantWriteSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: ["integer", "null"], minimum: 0, description: "Maximum org memberships (seats). Omit or null for uncapped. The fleet refuses a new member once the org is at its cap." },
   },
 };
 
@@ -364,16 +366,18 @@ const ClusterTenantUpdateSchema = {
       required: ["quota"],
       properties: { quota: { $ref: "#/components/schemas/ClusterTenantResourceQuota" } },
     },
+    seatCap: { type: ["integer", "null"], minimum: 0, description: "New seat cap; null clears it (uncapped). The fleet refuses a new member once the org is at its cap." },
   },
 };
 
 const OrgMemberSchema = {
   type: "object" as const,
   required: ["subject", "role"],
-  description: "A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant).",
+  description: "A single organisation membership row — the fleet's authoritative membership registry (the org-admin gate reads it; the silo mirrors it). Writes are Zitadel-seated transactionally: an upsert grants the member's project role and a removal revokes their org membership at the IdP.",
   properties: {
     subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) holding the membership." },
     role: { type: "string", enum: ["Owner", "Admin", "Member"], description: "Role held within the organisation." },
+    status: { type: "string", enum: ["Active", "Suspended"], description: "Lifecycle status. A Suspended member is disabled in the org (blocked at the IdP, live sessions/devices cut, workspace pod suspended) and FREES their seat — seat caps count only Active memberships." },
   },
 };
 
@@ -1340,7 +1344,7 @@ export const spec = {
       get: {
         operationId: "listClusterTenantMembers",
         summary: "List an organisation's members (operator OR owner/admin of that org)",
-        description: "Lists the org's membership rows (subject + role) — the LOCAL membership registry the org-admin gate reads (OrgMembership rows, NOT Zitadel grants).",
+        description: "Lists the org's membership rows (subject + role + lifecycle status) from the fleet's authoritative membership registry (writes are Zitadel-seated; the silo read-model mirrors this set).",
         tags: ["Cluster Tenants"],
         parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
         responses: {
@@ -1387,6 +1391,48 @@ export const spec = {
           403: forbidden("Caller is neither a platform operator nor an owner/admin of this org."),
           404: notFound("Cluster tenant or membership not found."),
           409: conflict("Removing this member would remove the organisation's last Owner (code LAST_OWNER)."),
+        },
+      },
+    },
+
+    "/cluster-tenants/{name}/members/{subject}/suspend": {
+      post: {
+        operationId: "suspendClusterTenantMember",
+        summary: "Suspend an organisation member (operator OR owner/admin of that org)",
+        description: "Disables a member in the org (billing revoked their license): the IdP user is deactivated FIRST (new logins blocked; the silo then cuts live sessions/devices and suspends the workspace pod), then the local status flips to Suspended. A Suspended member FREES their seat (seat caps count only Active memberships). Idempotent (already-Suspended ⇒ 200 no-op). Last-Owner guardrail: suspending the org's sole Active Owner is rejected (409 LAST_OWNER).",
+        tags: ["Cluster Tenants"],
+        parameters: [
+          { name: "name", in: "path", required: true, schema: { type: "string" } },
+          { name: "subject", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: ok("Member suspended (or already suspended).", { $ref: "#/components/schemas/OrgMember" }),
+          401: unauthorized("No authenticated session (real-auth deployments)."),
+          403: forbidden("Caller is neither a platform operator nor an owner/admin of this org."),
+          404: notFound("Cluster tenant or membership not found."),
+          409: conflict("Suspending this member would suspend the organisation's last Owner (code LAST_OWNER)."),
+          502: upstreamError(),
+        },
+      },
+    },
+
+    "/cluster-tenants/{name}/members/{subject}/reactivate": {
+      post: {
+        operationId: "reactivateClusterTenantMember",
+        summary: "Reactivate a suspended organisation member (operator OR owner/admin of that org)",
+        description: "Re-enables a suspended member: a seat is RESERVED first (reactivation re-occupies a seat, so it fails when the org is at its Active-seat cap), then the IdP user is reactivated and the local status flips to Active (the silo then clears the pod suspension). Idempotent (already-Active ⇒ 200 no-op, no seat consumed).",
+        tags: ["Cluster Tenants"],
+        parameters: [
+          { name: "name", in: "path", required: true, schema: { type: "string" } },
+          { name: "subject", in: "path", required: true, schema: { type: "string" } },
+        ],
+        responses: {
+          200: ok("Member reactivated (or already active).", { $ref: "#/components/schemas/OrgMember" }),
+          401: unauthorized("No authenticated session (real-auth deployments)."),
+          403: forbidden("Caller is neither a platform operator nor an owner/admin of this org."),
+          404: notFound("Cluster tenant or membership not found."),
+          409: conflict("The organisation is at its Active-seat cap; a seat must be freed before reactivating (code SEAT_CAP_EXCEEDED)."),
+          502: upstreamError(),
         },
       },
     },

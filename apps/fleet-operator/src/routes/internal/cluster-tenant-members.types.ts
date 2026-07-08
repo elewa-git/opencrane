@@ -9,4 +9,6 @@ export interface InternalOrgMembershipView
   subject: string;
   /** Role held within the organisation (Owner | Admin | Member). */
   role: string;
+  /** Lifecycle status (Active | Suspended). The silo repairer enforces suspension off this. */
+  status: string;
 }

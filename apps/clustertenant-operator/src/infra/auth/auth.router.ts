@@ -13,7 +13,7 @@ import { _ClusterTenantFromHost } from "./request-silo.js";
 import { _RecordBrokeredDevice } from "./brokered-device.js";
 import { _CutTenant } from "../../core/connections/cut-tenant.js";
 import type { OpenClawGatewayAdmin } from "../../core/connections/gateway-admin.types.js";
-import { _ResolveGatewayTarget } from "../../core/connections/gateway-resolve.js";
+import { _IsMemberSuspended, _ResolveGatewayTarget } from "../../core/connections/gateway-resolve.js";
 
 /**
  * Build the auth router covering:
@@ -97,7 +97,9 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
           ? "Multiple OpenClaw pods match this account; contact your administrator"
           : outcome.code === "NO_TENANT"
             ? "No OpenClaw is provisioned for this account"
-            : "Session has no email claim; cannot resolve a tenant";
+            : outcome.code === "MEMBER_SUSPENDED"
+              ? "Your membership in this organisation is suspended"
+              : "Session has no email claim; cannot resolve a tenant";
         res.status(403).json({ error: message, code: outcome.code });
         return;
       }
@@ -161,7 +163,7 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
       const silo = _ClusterTenantFromHost(_RequestHost(req));
       const matches = await prisma.tenant.findMany({
         where: { email: { equals: email, mode: "insensitive" }, ...(silo ? { clusterTenantRef: silo } : {}) },
-        select: { name: true, ingressHost: true, configOverrides: true },
+        select: { name: true, ingressHost: true, configOverrides: true, clusterTenantRef: true },
       });
 
       if (matches.length === 0)
@@ -179,6 +181,16 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
       }
 
       const tenant = matches[0];
+      const subject = authUser.sub.length > 0 ? authUser.sub : email;
+
+      // Fail closed on a suspended membership (#126): billing disabled this member's license, so
+      // the connect path is refused even though a pod exists (mirrors `/gateway-resolve`). A tenant
+      // with no org ref (legacy/standalone) has no membership row and is allowed through.
+      if (await _IsMemberSuspended(prisma, tenant.clusterTenantRef, subject))
+      {
+        res.status(403).json({ error: "Your membership in this organisation is suspended", code: "MEMBER_SUSPENDED" });
+        return;
+      }
 
       // 3. Resolve the pod's gateway URL (the connection coordinate).
       const pairing = _ResolveOpenClawPairing(tenant.configOverrides, tenant.ingressHost);
@@ -191,7 +203,6 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
       // 4. Record the brokered connection so the per-user kill-switch (CONN.5)
       //    knows which (tenant, subject) connections exist to revoke. Best-effort:
       //    a registry write failure must not deny the caller their pod connection.
-      const subject = authUser.sub.length > 0 ? authUser.sub : email;
       try
       {
         await _RecordBrokeredDevice(prisma, { tenant: tenant.name, subject, gatewayUrl: pairing.gatewayUrl });

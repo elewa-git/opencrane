@@ -128,6 +128,51 @@ export interface ZitadelManagementClient
   grantProjectRole(orgId: string, projectId: string, subject: string, roleKey: string): Promise<void>;
 
   /**
+   * List the human users in an org's Zitadel user pool — the input the periodic reconcile
+   * backstop uses to adopt members who were invited directly in the Zitadel Console (and so
+   * never hit the app's member-add route that writes an `OrgMembership`). Org-scoped via the
+   * `x-zitadel-orgid` header. Returns `{ subject, email }` per user (`email` optional).
+   *
+   * @param orgId - Zitadel Organization id whose user pool is listed.
+   */
+  listOrgUsers(orgId: string): Promise<Array<{ subject: string; email?: string }>>;
+
+  /**
+   * Remove a subject from an org's user pool — the IdP half of offboarding. Revokes the
+   * user's org membership (and with it their grants in that org) so a removed member can no
+   * longer authorize at the org's login surface. Org-scoped via the `x-zitadel-orgid` header;
+   * throws on failure so the caller can keep the local `OrgMembership` row until the IdP grant
+   * is gone (avoiding a reconcile-driven resurrection of a still-seated member).
+   *
+   * @param orgId   - Zitadel Organization id the membership lives in.
+   * @param subject - IdP subject (Zitadel user id) to remove from the org.
+   */
+  removeOrgMember(orgId: string, subject: string): Promise<void>;
+
+  /**
+   * Deactivate a user in an org's Zitadel user pool — the IdP half of member suspension (#126).
+   * A deactivated user is blocked at the IdP: new logins are refused and existing sessions can no
+   * longer refresh, so a suspended member cannot re-enter the org's login surface. Org-scoped via
+   * the `x-zitadel-orgid` header; throws on failure so the caller can suspend the IdP FIRST and
+   * only flip the local status once the block is in place.
+   *
+   * @param orgId   - Zitadel Organization id the user belongs to.
+   * @param subject - IdP subject (Zitadel user id) to deactivate.
+   */
+  deactivateUser(orgId: string, subject: string): Promise<void>;
+
+  /**
+   * Reactivate a previously-deactivated user in an org's Zitadel user pool — the IdP half of
+   * member reactivation (#126). Restores the user's ability to log in at the org's surface.
+   * Org-scoped via the `x-zitadel-orgid` header; throws on failure so the caller reactivates the
+   * IdP FIRST and only flips the local status once the user can log in again.
+   *
+   * @param orgId   - Zitadel Organization id the user belongs to.
+   * @param subject - IdP subject (Zitadel user id) to reactivate.
+   */
+  reactivateUser(orgId: string, subject: string): Promise<void>;
+
+  /**
    * Validate a CANDIDATE service-account key WITHOUT touching the live client's key or
    * token cache. Builds a throwaway signer from the candidate, performs a jwt-bearer token
    * exchange, then a NON-DESTRUCTIVE instance-`IAM_OWNER` probe (`GET /admin/v1/instances/me`,

@@ -199,6 +199,18 @@ export interface OpenClawTenantOperatorConfig
    * exists, and the apply itself fails closed (skips) if the Linkerd CRDs are absent.
    */
   linkerdMeshEnabled: boolean;
+
+  /**
+   * Whether this silo OWNS per-ClusterTenant namespace creation. Default false: in the
+   * fleet-managed topology the fleet-manager creates + owns each org's namespace
+   * (`managed-by: opencrane-fleet-manager`) and the silo's ServiceAccount is granted NO
+   * cluster-scoped `namespaces` verbs — so the silo must NOT attempt the create (it would only
+   * ever be Forbidden). When true — an all-in-one / standalone deploy that grants the silo the
+   * gated namespace-management ClusterRole — the silo creates the namespace itself. Either way
+   * the namespaced applies that follow (baseline NetworkPolicy, quota) require the namespace to
+   * exist, so a genuinely-absent namespace still surfaces as NotFound there.
+   */
+  manageTenantNamespaces: boolean;
 }
 
 /**
@@ -277,6 +289,7 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
     controlPlaneInternalServiceUrl: _readEnvValue<string>("CLUSTERTENANT_MANAGER_INTERNAL_SERVICE_URL", "string", false, `http://opencrane-clustertenant-manager.${ownNamespace}.svc:8081`),
     projectedTokenTtlSeconds: _readEnvValue<number>("PROJECTED_TOKEN_TTL_SECONDS", "number", false, 600),
     linkerdMeshEnabled: _readEnvValue<boolean>("LINKERD_MESH_ENABLED", "boolean", false, false),
+    manageTenantNamespaces: _readEnvValue<boolean>("MANAGE_TENANT_NAMESPACES", "boolean", false, false),
   };
 
   // 4. Fail closed in multi-instance mode: refuse to watch the whole cluster when

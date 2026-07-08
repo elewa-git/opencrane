@@ -6,7 +6,7 @@ import type { ClusterTenantProvisionerRegistry } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
 
 import type { ClusterTenantCreateRequest, ClusterTenantUpdateRequest } from "./cluster-tenants.models.js";
-import { _IsIsolationTier, _ObservedStatusToContract, _SyncObservedStatusToDb, _ToContract, _ToPrismaCompute, _ToPrismaTier, _ValidateCompute, _ValidateResources } from "./cluster-tenants.service.js";
+import { _IsIsolationTier, _ObservedStatusToContract, _SyncObservedStatusToDb, _ToContract, _ToPrismaCompute, _ToPrismaTier, _ValidateCompute, _ValidateResources, _ValidateSeatCap } from "./cluster-tenants.service.js";
 import { _IsDevAuthMode } from "@opencrane/infra-auth";
 import { _RequireBillingAccountForOrgCreate, _RequireOrgManager } from "@opencrane/infra-auth";
 import { _ApplyClusterTenantCr, _DeleteClusterTenantCr } from "../core/cluster-tenants/cr-bridge.js";
@@ -204,6 +204,12 @@ export function clusterTenantsRouter(prisma: PrismaClient, registry: ClusterTena
       res.status(400).json({ error: resourcesError, code: "VALIDATION_ERROR" });
       return;
     }
+    const seatCapError = _ValidateSeatCap(body.seatCap);
+    if (seatCapError)
+    {
+      res.status(400).json({ error: seatCapError, code: "VALIDATION_ERROR" });
+      return;
+    }
 
     // 3. Reject an over-tier request: no registered provisioner can serve it, so
     //    persisting it would strand the customer in `pending` forever.
@@ -234,6 +240,7 @@ export function clusterTenantsRouter(prisma: PrismaClient, registry: ClusterTena
             computeMode: _ToPrismaCompute(body.compute.mode),
             nodePool: body.compute.nodePool?.trim() || null,
             quota: (body.resources.quota as Prisma.InputJsonValue),
+            seatCap: body.seatCap ?? null,
             phase: ClusterTenantPhase.Pending,
           },
         });
@@ -381,6 +388,19 @@ export function clusterTenantsRouter(prisma: PrismaClient, registry: ClusterTena
         return;
       }
       data.quota = (body.resources.quota as Prisma.InputJsonValue);
+    }
+
+    // 5. Apply a seat-cap change when present; null clears it (uncapped). A present value
+    //    must be a non-negative integer.
+    if (body.seatCap !== undefined)
+    {
+      const seatCapError = _ValidateSeatCap(body.seatCap);
+      if (seatCapError)
+      {
+        res.status(400).json({ error: seatCapError, code: "VALIDATION_ERROR" });
+        return;
+      }
+      data.seatCap = body.seatCap;
     }
 
     // Persist ONLY the desired-state fields collected above. `data` never carries

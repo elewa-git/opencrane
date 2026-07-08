@@ -55,7 +55,7 @@ The cross-silo super-admin surface, served from the fleet registry DB. Both feat
 and are env-gated off (`OPENCRANE_CLUSTER_TENANT_MANAGER_ENABLED`, `OPENCRANE_BILLING_ENABLED`):
 
 - **cluster-tenants** — ClusterTenant lifecycle CRUD: `GET /`, `GET /:name`, `GET /:name/status`, `POST /:name/refresh`, `POST /` (org create, billing-gated), `PUT /:name`, `DELETE /:name`. Wires the **provisioner registry** (gates `isolationTier` → `422 TIER_UNAVAILABLE`) and the Zitadel management client (per-org OIDC client provisioning). Most routes `requireOrgManager`.
-- **cluster-tenants/:name/members** — org membership registry (mergeParams under the parent org).
+- **cluster-tenants/:name/members** — the fleet's authoritative org membership registry (mergeParams under the parent org). Writes are Zitadel-seated transactionally (upsert grants the project role; DELETE revokes the IdP org membership FIRST — an IdP failure returns 502 and keeps the row so the reconcile backstop can't resurrect a half-removed member). Seat caps enforced on create via a row-locked in-tx reservation. The silo mirrors this set (projection repairer) and self-adopts on first login via the internal `/api/internal/cluster-tenants/:name/members/adopt` seam.
 - **billing-accounts** — fleet-level seat ordering; the fleet notifies the silo of approved seats.
 - **platform/dns** — platform-admin cert-manager DNS-01 issuer + creds Secret for the wildcard tenant cert.
 - **admin/zitadel** — superadmin-gated rotation of the platform Zitadel SA key (the master IdP credential) + idempotent reconcile/backfill of half-provisioned orgs.

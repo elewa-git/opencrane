@@ -23,7 +23,7 @@ import { _TransportSecurity } from "./infra/middleware/transport-security.middle
 import { _log as log } from "./log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./routes.js";
 import { TenantProjectionRepairer } from "./infra/tenant-projection-repairer.js";
-import { MembershipProjectionRepairer, _BuildHttpFleetMembershipReader } from "./infra/membership-projection-repairer.js";
+import { MembershipProjectionRepairer, _BuildHttpFleetMembershipReader, _BuildHttpFleetMembershipWriter } from "./infra/membership-projection-repairer.js";
 import { _ResolveOwnClusterTenantName } from "./core/cluster-tenants/resolve-own-cluster-tenant.js";
 
 // In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
@@ -55,7 +55,14 @@ const _unbindConsole = ___BindConsole(log);
 export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
 {
   const app = express();
-  const authService = ___CreateOidcAuthService(log, prisma, customApi);
+  // First-login member workspaces are seeded into the TenantOperator's watch namespace
+  // (WATCH_NAMESPACE) — the same target as the owner-default seed — falling back to NAMESPACE
+  // then "default" for dev/test. It is deliberately NOT the projection-repair namespace.
+  // Member adoption writes THROUGH to the fleet's authoritative membership when FLEET_INTERNAL_URL
+  // is set (fleet-managed); the writer is null for a standalone silo, where adoption writes local.
+  const authWatchNamespace = process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default";
+  const authFleetWriter = _BuildHttpFleetMembershipWriter(process.env.FLEET_INTERNAL_URL?.trim() ?? "", process.env.OPENCRANE_API_TOKEN?.trim() ?? "", log);
+  const authService = ___CreateOidcAuthService(log, prisma, customApi, authWatchNamespace, authFleetWriter);
 
   // Middleware
   app.set("trust proxy", 1);
@@ -196,7 +203,11 @@ void (async function _startMembershipRepairer()
   const fleetInternalUrl = process.env.FLEET_INTERNAL_URL?.trim() ?? "";
   const fleetInternalToken = process.env.OPENCRANE_API_TOKEN?.trim() ?? "";
   const reader = _BuildHttpFleetMembershipReader(fleetInternalUrl, fleetInternalToken, log);
-  const repairer = new MembershipProjectionRepairer(prisma, reader, clusterTenant, log, _projectionRepairIntervalMs);
+  // Suspension ENFORCEMENT (#126): the sweep cuts a Suspended member's sessions/devices and
+  // suspends their workspace pod. Thread the k8s clients + gateway admin + this silo's namespace so
+  // the repairer can drive `_CutTenant` and the Tenant `spec.suspended` patch.
+  const enforcement = { customApi, coreApi, gatewayAdmin: _BuildGatewayAdmin(), namespace: _projectionRepairNamespace };
+  const repairer = new MembershipProjectionRepairer(prisma, reader, clusterTenant, log, _projectionRepairIntervalMs, enforcement);
   repairer.start();
   _membershipRepairerRef = repairer;
 })();

@@ -7,8 +7,42 @@ import { ClusterTenantOperator } from "../../cluster-tenants/operator.js";
 import { ClusterTenantStatusWriter } from "../../cluster-tenants/internal/cluster-tenant-status-writer.js";
 import type { OrgDomainProvisioner, OrgDomainProvisionRequest, OrgDomainProvisionResult } from "../../cluster-tenants/internal/org-domain-provisioner.types.js";
 import type { ClusterTenantResource } from "@opencrane/infra-api";
+import type { PrismaClient } from "../../generated/prisma/index.js";
 
 const log = pino({ level: "silent" });
+
+/** A cluster_tenants row as tracked by the in-memory Prisma stub (orphan-adoption tests). */
+interface CtRow { name: string; displayName: string; isolationTier: string; computeMode: string; nodePool?: string; quota?: unknown; vanityDomain?: string; zitadelOrgId?: string; zitadelClientId?: string; zitadelRedirectUri?: string; phase: string }
+
+/** An org_memberships row as tracked by the stub. */
+interface MemberRow { clusterTenant: string; subject: string; role: string }
+
+/**
+ * Build an in-memory Prisma stub for the operator's orphan-CR adoption (#126 F1). Backed by
+ * two arrays; implements clusterTenant.{findUnique,create}, orgMembership.create, and a
+ * $transaction that runs its callback against the stub. `seedRows` pre-populates existing rows
+ * so the "already has a row" no-op path can be asserted.
+ */
+function _makePrisma(seedRows: CtRow[] = []): { prisma: PrismaClient; rows: CtRow[]; members: MemberRow[] }
+{
+  const rows: CtRow[] = seedRows.map(r => ({ ...r }));
+  const members: MemberRow[] = [];
+  const prisma = {
+    $transaction: vi.fn(async function _tx(fn: (tx: PrismaClient) => Promise<unknown>) { return fn(prisma); }),
+    clusterTenant: {
+      findUnique: vi.fn(async function _findUnique(args: { where: { name: string } })
+      {
+        const row = rows.find(r => r.name === args.where.name);
+        return row ? { name: row.name } : null;
+      }),
+      create: vi.fn(async function _create(args: { data: CtRow }) { rows.push({ ...args.data }); return { ...args.data }; }),
+    },
+    orgMembership: {
+      create: vi.fn(async function _create(args: { data: MemberRow }) { members.push({ ...args.data }); return { ...args.data }; }),
+    },
+  } as unknown as PrismaClient;
+  return { prisma, rows, members };
+}
 
 /** Recorded status-patch body so a test can read what the reconciler stamped. */
 type StatusPatch = Record<string, unknown>;
@@ -88,12 +122,12 @@ function _emit(operator: ClusterTenantOperator, type: string, ct: ClusterTenantR
   return (operator as unknown as { handleEvent(t: string, c: ClusterTenantResource): Promise<void> }).handleEvent(type, ct);
 }
 
-/** Assemble a ClusterTenantOperator over the supplied stubs. */
-function _buildOperator(customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, domain: OrgDomainProvisioner): ClusterTenantOperator
+/** Assemble a ClusterTenantOperator over the supplied stubs (a benign empty-registry Prisma by default). */
+function _buildOperator(customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, domain: OrgDomainProvisioner, prisma?: PrismaClient): ClusterTenantOperator
 {
   const statusWriter = new ClusterTenantStatusWriter(customApi, log);
   const watch = {} as k8s.Watch;
-  return new ClusterTenantOperator(watch, customApi, coreApi, statusWriter, domain, defaultConfig, log);
+  return new ClusterTenantOperator(watch, customApi, coreApi, statusWriter, domain, defaultConfig, prisma ?? _makePrisma().prisma, log);
 }
 
 describe("ClusterTenantOperator.reconcile", () =>
@@ -304,6 +338,67 @@ describe("ClusterTenantOperator default-tenant seed (Stage 5 — fleet stops at 
 
     expect(patches.at(-1)!.phase).toBe("ready");
     expect(seeds).toHaveLength(0);
+  });
+});
+
+describe("ClusterTenantOperator orphan-CR adoption (#126 F1)", () =>
+{
+  beforeEach(() => vi.clearAllMocks());
+
+  it("adopts a CR with no DB row: creates the registry row + Owner membership from spec.owner", async () =>
+  {
+    const { api: customApi } = _makeStubCustomApi();
+    const { api: coreApi } = _makeStubCoreApi();
+    const { provisioner } = _makeDomainProvisioner({ skipped: true, ready: false });
+    const { prisma, rows, members } = _makePrisma(); // empty registry → the CR is an orphan
+    const operator = _buildOperator(customApi, coreApi, provisioner, prisma);
+
+    const ct = _makeClusterTenant("acme");
+    ct.spec.owner = { subject: "auth0|owner", email: "owner@acme.example" };
+    ct.spec.vanityDomain = "ai.acme.com";
+    ct.spec.compute = { mode: "dedicated", nodePool: "gpu" };
+    await operator.reconcile(ct);
+
+    // The row was backfilled from spec, with the enum fields mapped to the Prisma members.
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ name: "acme", displayName: "Acme", isolationTier: "Shared", computeMode: "Dedicated", nodePool: "gpu", vanityDomain: "ai.acme.com", phase: "pending" });
+    // The Owner membership was created from spec.owner.subject.
+    expect(members).toContainEqual({ clusterTenant: "acme", subject: "auth0|owner", role: "Owner" });
+  });
+
+  it("is a no-op when a DB row already exists (never duplicates or overwrites)", async () =>
+  {
+    const { api: customApi } = _makeStubCustomApi();
+    const { api: coreApi } = _makeStubCoreApi();
+    const { provisioner } = _makeDomainProvisioner({ skipped: true, ready: false });
+    const existing: CtRow = { name: "acme", displayName: "Existing Acme", isolationTier: "DedicatedNodes", computeMode: "Shared", phase: "ready" };
+    const { prisma, rows, members } = _makePrisma([existing]);
+    const operator = _buildOperator(customApi, coreApi, provisioner, prisma);
+
+    const ct = _makeClusterTenant("acme");
+    ct.spec.owner = { subject: "auth0|owner" };
+    await operator.reconcile(ct);
+
+    // No duplicate row created and the existing row is untouched; no membership backfilled.
+    expect(rows).toHaveLength(1);
+    expect(rows[0].displayName).toBe("Existing Acme");
+    expect(rows[0].isolationTier).toBe("DedicatedNodes");
+    expect(members).toHaveLength(0);
+    expect((prisma.clusterTenant.create as ReturnType<typeof vi.fn>)).not.toHaveBeenCalled();
+  });
+
+  it("creates the row but skips the membership when spec.owner.subject is absent", async () =>
+  {
+    const { api: customApi } = _makeStubCustomApi();
+    const { api: coreApi } = _makeStubCoreApi();
+    const { provisioner } = _makeDomainProvisioner({ skipped: true, ready: false });
+    const { prisma, rows, members } = _makePrisma();
+    const operator = _buildOperator(customApi, coreApi, provisioner, prisma);
+
+    await operator.reconcile(_makeClusterTenant("acme")); // fixture has no spec.owner
+
+    expect(rows).toHaveLength(1);
+    expect(members).toHaveLength(0); // no owner subject → no membership, row still created
   });
 });
 

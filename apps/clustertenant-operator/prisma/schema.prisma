@@ -130,6 +130,14 @@ enum OrgRole {
   Member @map("member")
 }
 
+/// Lifecycle status of an org membership, projected from the fleet (#126). A Suspended
+/// member has had their license disabled: the connect path fails closed and the repairer
+/// sweep cuts their sessions/devices and suspends their workspace pod.
+enum OrgMemberStatus {
+  Active    @map("active")
+  Suspended @map("suspended")
+}
+
 /// A user's billing account, the prerequisite for creating an organisation.
 ///
 /// Org creation is gated on the caller HAVING a billing account, breaking the
@@ -167,6 +175,8 @@ model OrgMembership {
   subject       String
   /// Role held within the organisation.
   role          OrgRole
+  /// Lifecycle status projected from the fleet (#126). Suspended ⇒ the member is disabled in the org.
+  status        OrgMemberStatus @default(Active) @map("status")
   /// Creation timestamp.
   createdAt     DateTime      @default(now()) @map("created_at")
   /// Last update timestamp.

@@ -236,7 +236,7 @@ export async function _RevokeLiteLlmKey(req: Request, res: Response, deps: AiBud
  * @param keyAlias - The active key's alias, or null when none is known.
  * @returns `{ deleted: true }` only on a confirmed 2xx delete; `{ deleted: false }` otherwise.
  */
-async function _deleteLiteLlmKey(keyAlias: string | null): Promise<{ deleted: boolean }>
+export async function _deleteLiteLlmKey(keyAlias: string | null): Promise<{ deleted: boolean }>
 {
   const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
   const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";

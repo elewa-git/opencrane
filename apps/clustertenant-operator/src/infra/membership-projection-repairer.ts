@@ -1,7 +1,9 @@
 import type { Logger } from "pino";
-import type { PrismaClient } from "@prisma/client";
+import type { OrgMemberStatus, PrismaClient } from "@prisma/client";
 
-import type { FleetMembershipReader, FleetMembershipRow } from "./membership-projection-repairer.types.js";
+import { _CutTenant } from "../core/connections/cut-tenant.js";
+import { _SetTenantSuspended } from "../core/tenants/tenant-suspension.js";
+import type { FleetMembershipReader, FleetMembershipRow, MembershipEnforcementDeps } from "./membership-projection-repairer.types.js";
 
 /** Default interval (seconds) between membership-projection sweeps. */
 const _DEFAULT_INTERVAL_SECONDS = 60;
@@ -16,6 +18,29 @@ type OrgRoleValue = (typeof _ORG_ROLES)[number];
 function _isOrgRole(value: unknown): value is OrgRoleValue
 {
   return typeof value === "string" && (_ORG_ROLES as readonly string[]).includes(value);
+}
+
+/**
+ * Normalise a wire `status` to the silo enum. The fleet emits `"Active"`/`"Suspended"`; anything
+ * absent or unrecognised is treated as `Active` (fail-open on the STATUS field so a schema skew
+ * never mass-suspends an org — a genuine suspension is always an explicit `"Suspended"`).
+ *
+ * @param value - The raw `status` field off the wire row (may be undefined).
+ * @param log   - Optional logger; when given, a PRESENT-but-unrecognized value is warned (schema skew).
+ * @param ctx   - Optional log context (e.g. `{ clusterTenant, subject }`).
+ * @returns The projected `OrgMemberStatus` (`Suspended` only for an exact `"Suspended"`).
+ */
+function _toMemberStatus(value: unknown, log?: Logger, ctx?: Record<string, unknown>): OrgMemberStatus
+{
+  if (value === "Suspended") return "Suspended";
+  // Absent/empty is the normal pre-status wire shape (an older fleet) → Active, silently.
+  // A PRESENT but unrecognized value is fleet schema skew: still fail OPEN to Active (never
+  // mass-suspend on an unknown value) but surface it so the drift is visible in telemetry.
+  if (value !== undefined && value !== null && value !== "" && value !== "Active")
+  {
+    log?.warn({ ...ctx, rawStatus: value }, "unrecognized OrgMembership status from fleet; treating as Active (schema skew?)");
+  }
+  return "Active";
 }
 
 /**
@@ -76,6 +101,68 @@ export function _BuildHttpFleetMembershipReader(fleetInternalUrl: string, token:
   };
 }
 
+/** Writes member adoptions through to the fleet — the authoritative `OrgMembership` store (S4). */
+export interface FleetMembershipWriter
+{
+  /**
+   * Adopt a member into the org at the fleet (create-if-absent, never downgrade). Returns true
+   * when the fleet accepted the write, false on any transport error or non-OK status (the login
+   * proceeds regardless — the next login and the projection sweep are the backstops).
+   */
+  adopt(clusterTenant: string, subject: string): Promise<boolean>;
+}
+
+/**
+ * Build the HTTP fleet membership writer over the fleet internal adopt endpoint
+ * (`POST <fleetInternalUrl>/api/internal/cluster-tenants/<org>/members/adopt`).
+ *
+ * Returns **null** when the fleet URL is unset — the #151 standalone case, where the silo's own
+ * `OrgMembership` is the system-of-record and adoption writes locally instead. A non-null writer
+ * means fleet-managed: the fleet owns membership, so adoption must write through here (the
+ * projection repairer then mirrors the row straight back), or a silo-local write would be reaped
+ * by the next sweep. Presents the `OPENCRANE_API_TOKEN` bearer when set.
+ *
+ * @param fleetInternalUrl - Base URL of the fleet internal listener; empty ⇒ null (standalone).
+ * @param token            - Shared service bearer for the fleet internal API (empty ⇒ omitted).
+ * @param log              - Scoped logger.
+ * @param fetchImpl        - Injectable fetch (defaults to global `fetch`) for testability.
+ */
+export function _BuildHttpFleetMembershipWriter(fleetInternalUrl: string, token: string, log: Logger,
+                                                fetchImpl: typeof fetch = fetch): FleetMembershipWriter | null
+{
+  const base = fleetInternalUrl.trim().replace(/\/+$/, "");
+  if (!base)
+  {
+    return null;
+  }
+  return {
+    async adopt(clusterTenant: string, subject: string): Promise<boolean>
+    {
+      const url = `${base}/api/internal/cluster-tenants/${encodeURIComponent(clusterTenant)}/members/adopt`;
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      if (token)
+      {
+        headers.authorization = `Bearer ${token}`;
+      }
+      try
+      {
+        const res = await fetchImpl(url, { method: "POST", headers, body: JSON.stringify({ subject }) });
+        if (!res.ok)
+        {
+          log.warn({ clusterTenant, status: res.status }, "fleet member adoption returned non-OK; will retry on next login/sweep");
+          return false;
+        }
+        return true;
+      }
+      catch (err)
+      {
+        log.warn({ err, clusterTenant }, "fleet member adoption failed; will retry on next login/sweep");
+        return false;
+      }
+    },
+  };
+}
+
 /** Narrow an unknown list entry to a `{ subject, role }` row. */
 function _isFleetMembershipRow(value: unknown): value is FleetMembershipRow
 {
@@ -123,20 +210,29 @@ export class MembershipProjectionRepairer
   private _running = false;
 
   /**
+   * Kubernetes + gateway clients for suspension ENFORCEMENT; null ⇒ enforcement disabled (the
+   * projection still runs, but Suspended members are not cut/pod-suspended). Standalone installs
+   * with no enforcement wiring stay projection-only.
+   */
+  private readonly _enforcement: MembershipEnforcementDeps | null;
+
+  /**
    * @param prisma        - Prisma client for the silo OrgMembership rows.
    * @param reader        - Reader over the fleet's authoritative membership.
    * @param clusterTenant - The org whose membership to reconcile (this silo's org).
    * @param log           - Pino logger; a scoped child is derived.
    * @param intervalMs    - Sweep interval in ms (default 60 000; 0 disables).
+   * @param enforcement   - K8s/gateway clients for suspension enforcement; null ⇒ projection-only.
    */
   constructor(prisma: PrismaClient, reader: FleetMembershipReader, clusterTenant: string, log: Logger,
-              intervalMs = _DEFAULT_INTERVAL_SECONDS * 1000)
+              intervalMs = _DEFAULT_INTERVAL_SECONDS * 1000, enforcement: MembershipEnforcementDeps | null = null)
   {
     this._prisma = prisma;
     this._reader = reader;
     this._clusterTenant = clusterTenant;
     this._log = log.child({ component: "membership-projection-repairer" });
     this._intervalMs = intervalMs;
+    this._enforcement = enforcement;
   }
 
   /**
@@ -194,6 +290,9 @@ export class MembershipProjectionRepairer
       {
         this._log.info({ clusterTenant: this._clusterTenant, changed }, "membership projection reconciled drifted rows");
       }
+      // Enforce the projected status: cut + pod-suspend Suspended members, resume Active ones.
+      // Best-effort per member; a failure is logged inside and never aborts the sweep.
+      await this._enforceStatuses(fleetRows);
     }
     catch (err)
     {
@@ -221,24 +320,25 @@ export class MembershipProjectionRepairer
 
     const existing = await this._prisma.orgMembership.findMany({
       where: { clusterTenant },
-      select: { subject: true, role: true },
+      select: { subject: true, role: true, status: true },
     });
-    const existingBySubject = new Map(existing.map(function _entry(row) { return [row.subject, row.role]; }));
+    const existingBySubject = new Map(existing.map(function _entry(row) { return [row.subject, row]; }));
 
     let changed = 0;
 
-    // Upsert every desired member: create the missing, correct the drifted role.
+    // Upsert every desired member: create the missing, correct the drifted role AND status.
     for (const row of desired)
     {
-      const currentRole = existingBySubject.get(row.subject);
-      if (currentRole === row.role)
+      const status = _toMemberStatus(row.status, this._log, { clusterTenant: this._clusterTenant, subject: row.subject });
+      const current = existingBySubject.get(row.subject);
+      if (current && current.role === row.role && current.status === status)
       {
         continue;
       }
       await this._prisma.orgMembership.upsert({
         where: { clusterTenant_subject: { clusterTenant, subject: row.subject } },
-        create: { clusterTenant, subject: row.subject, role: row.role as OrgRoleValue },
-        update: { role: row.role as OrgRoleValue },
+        create: { clusterTenant, subject: row.subject, role: row.role as OrgRoleValue, status },
+        update: { role: row.role as OrgRoleValue, status },
       });
       changed += 1;
     }
@@ -256,5 +356,76 @@ export class MembershipProjectionRepairer
     }
 
     return changed;
+  }
+
+  /**
+   * Enforce each member's projected lifecycle status (#126). For a SUSPENDED member: cut their
+   * live sessions/devices (per-subject `_CutTenant`) and suspend their workspace pod (patch the
+   * member's Tenant CR `spec.suspended: true` — the TenantOperator scales suspended→0). For an
+   * ACTIVE member: clear `spec.suspended` so a reactivated member's pod comes back. Idempotent and
+   * best-effort per member — a failure on one member is logged, not thrown, so the sweep and the
+   * pod both survive.
+   *
+   * Enforcement is a no-op when the enforcement clients were not wired (standalone/projection-only)
+   * OR when a member has no per-member Tenant workspace in this silo (the cut/patch key the Tenant
+   * CR + pod off the member's own tenant; a member with no workspace has nothing to enforce).
+   *
+   * @param fleetRows - The org's authoritative membership from the fleet (carrying status).
+   */
+  private async _enforceStatuses(fleetRows: FleetMembershipRow[]): Promise<void>
+  {
+    const enforcement = this._enforcement;
+    if (!enforcement)
+    {
+      return;
+    }
+
+    for (const row of fleetRows)
+    {
+      if (!_isOrgRole(row.role))
+      {
+        continue;
+      }
+      const suspended = _toMemberStatus(row.status, this._log, { clusterTenant: this._clusterTenant, subject: row.subject }) === "Suspended";
+
+      // 1. Locate this member's own workspace tenant in the silo, keyed on the member's OIDC
+      //    subject (the Tenant.subject binding) scoped to this org. The Tenant CR name + pod are
+      //    keyed off it; a member with no workspace (e.g. an admin who never provisioned one) has
+      //    nothing to cut or suspend, so skip.
+      const tenant = await this._prisma.tenant.findFirst({
+        where: { clusterTenantRef: this._clusterTenant, subject: row.subject },
+        select: { name: true },
+      });
+      const tenantName = tenant?.name;
+      if (!tenantName)
+      {
+        continue;
+      }
+
+      try
+      {
+        if (suspended)
+        {
+          // 2a. Sever the member's live sessions/devices (per-subject scope — does NOT delete the
+          //     shared pod), then suspend their workspace pod via the Tenant CR flag.
+          await _CutTenant(enforcement.coreApi, this._prisma, enforcement.gatewayAdmin, {
+            tenant: tenantName,
+            namespace: enforcement.namespace,
+            subject: row.subject,
+            reason: "membership suspended (#126 license lifecycle)",
+          });
+          await _SetTenantSuspended(enforcement.customApi, enforcement.namespace, tenantName, true);
+        }
+        else
+        {
+          // 2b. Reactivated: clear the suspension so the TenantOperator scales the pod back up.
+          await _SetTenantSuspended(enforcement.customApi, enforcement.namespace, tenantName, false);
+        }
+      }
+      catch (err)
+      {
+        this._log.warn({ err, clusterTenant: this._clusterTenant, subject: row.subject, tenant: tenantName, suspended }, "membership suspension enforcement failed for a member; will retry next sweep");
+      }
+    }
   }
 }

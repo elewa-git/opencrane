@@ -13,6 +13,9 @@ import {
 } from "@opencrane/infra-api";
 
 import type { FleetOperatorConfig } from "../config.js";
+import { Prisma, type PrismaClient } from "../generated/prisma/index.js";
+import { _IsIsolationTier, _IsComputeMode, _ToPrismaTier, _ToPrismaCompute } from "../routes/cluster-tenants.service.js";
+import { ClusterTenantIsolationTier, ClusterTenantComputeMode } from "@opencrane/contracts";
 
 import { ClusterTenantStatusWriter } from "./internal/cluster-tenant-status-writer.js";
 import { _NamespaceForOrg, _ProvisionBoundary } from "./internal/shared-cluster.provisioner.js";
@@ -68,6 +71,13 @@ export class ClusterTenantOperator
   /** Operator runtime configuration loaded from environment. */
   private config: FleetOperatorConfig;
 
+  /**
+   * Fleet registry client used to adopt an orphan CR (a ClusterTenant CR with no DB row).
+   * The invariant is that an org never exists without a `cluster_tenants` row + an Owner
+   * membership, so a CR the fleet finds without a row is backfilled from `spec` at reconcile.
+   */
+  private prisma: PrismaClient;
+
   /** Scoped logger. */
   private log: Logger;
 
@@ -100,6 +110,7 @@ export class ClusterTenantOperator
               statusWriter: ClusterTenantStatusWriter,
               domainProvisioner: OrgDomainProvisioner,
               config: FleetOperatorConfig,
+              prisma: PrismaClient,
               log: Logger)
   {
     this.watch = watch;
@@ -108,6 +119,7 @@ export class ClusterTenantOperator
     this.statusWriter = statusWriter;
     this.domainProvisioner = domainProvisioner;
     this.config = config;
+    this.prisma = prisma;
     this.log = log;
   }
 
@@ -224,6 +236,12 @@ export class ClusterTenantOperator
       return;
     }
 
+    // Adopt an orphan CR (no DB row) BEFORE provisioning: an org must never exist without a
+    // `cluster_tenants` row + an Owner. A CR reaches `ready` only via this fleet, which needs a
+    // row, so a converged CR (skipped by the guard above) is never an orphan — running adoption
+    // after the guard keeps the storm-guard's zero-DB-cost fast path for converged orgs intact.
+    await this._adoptOrphanCrIfNeeded(clusterTenant);
+
     this.log.info({ name }, "reconciling cluster tenant");
 
     try
@@ -303,6 +321,87 @@ export class ClusterTenantOperator
   }
 
   /**
+   * Adopt an orphan ClusterTenant CR — one with no `cluster_tenants` row — by backfilling the
+   * row (from `spec`) and an Owner membership (from `spec.owner.subject`) in ONE transaction
+   * (#126 F1). This upholds the invariant that an org never exists without a DB row + Owner:
+   * a CR created out-of-band (or whose control-plane DB write was lost) is otherwise invisible
+   * to the fleet registry, the member API, and billing.
+   *
+   * Idempotent and non-destructive: a `findUnique` guard skips the whole step when a row already
+   * exists (an existing row is NEVER overwritten), and a lost create race (P2002) is tolerated as
+   * a no-op. When `spec.owner.subject` is absent the row is still created but the Owner membership
+   * is skipped with a warning — a row without an owner is repairable; a phantom org is not.
+   *
+   * @param clusterTenant - The ClusterTenant CR being reconciled.
+   */
+  private async _adoptOrphanCrIfNeeded(clusterTenant: ClusterTenantResource): Promise<void>
+  {
+    const name = clusterTenant.metadata!.name!;
+
+    // Fast path: a row already exists → nothing to adopt (never overwrite an existing row).
+    const existing = await this.prisma.clusterTenant.findUnique({ where: { name }, select: { name: true } });
+    if (existing)
+    {
+      return;
+    }
+
+    // Map the CR spec's enum fields through the shared mappers, defaulting a malformed/absent
+    // value to the same defaults the schema uses (Shared / Shared).
+    const spec = clusterTenant.spec;
+    const tier = _IsIsolationTier(spec.isolationTier) ? _ToPrismaTier(spec.isolationTier) : _ToPrismaTier(ClusterTenantIsolationTier.Shared);
+    const computeMode = _IsComputeMode(spec.compute?.mode) ? _ToPrismaCompute(spec.compute.mode) : _ToPrismaCompute(ClusterTenantComputeMode.Shared);
+    const ownerSubject = spec.owner?.subject?.trim();
+
+    this.log.info({ name, hasOwner: Boolean(ownerSubject) }, "adopting orphan ClusterTenant CR (no DB row) — backfilling registry row + owner");
+
+    try
+    {
+      await this.prisma.$transaction(async (tx) =>
+      {
+        await tx.clusterTenant.create({
+          data: {
+            name,
+            displayName: spec.displayName ?? name,
+            isolationTier: tier,
+            computeMode,
+            ...(spec.compute?.nodePool ? { nodePool: spec.compute.nodePool } : {}),
+            ...(spec.resources?.quota ? { quota: spec.resources.quota as Prisma.InputJsonValue } : {}),
+            ...(spec.vanityDomain ? { vanityDomain: spec.vanityDomain } : {}),
+            // Public per-org Zitadel ids the control plane may have projected onto spec.zitadel
+            // (clientId/orgId/redirectUri only — appId/projectId are not carried on the CR).
+            ...(spec.zitadel?.orgId ? { zitadelOrgId: spec.zitadel.orgId } : {}),
+            ...(spec.zitadel?.clientId ? { zitadelClientId: spec.zitadel.clientId } : {}),
+            ...(spec.zitadel?.redirectUri ? { zitadelRedirectUri: spec.zitadel.redirectUri } : {}),
+            phase: "pending",
+          },
+        });
+        // An owner subject is the org's founding Owner. Absent → create the row anyway (repairable)
+        // but skip the membership, warning so the missing owner is traceable.
+        if (ownerSubject)
+        {
+          await tx.orgMembership.create({ data: { clusterTenant: name, subject: ownerSubject, role: "Owner" } });
+        }
+        else
+        {
+          this.log.warn({ name }, "orphan ClusterTenant CR has no spec.owner.subject — created the row without an Owner membership");
+        }
+      });
+      this.log.info({ name }, "adopted orphan ClusterTenant CR");
+    }
+    catch (err)
+    {
+      // Tolerate a lost create race (a concurrent reconcile/control-plane write already created
+      // the row): the invariant now holds, so the adoption is a no-op.
+      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002")
+      {
+        this.log.info({ name }, "orphan-CR adoption raced a concurrent create (P2002) — row already exists, treating as no-op");
+        return;
+      }
+      throw err;
+    }
+  }
+
+  /**
    * Tear down an org's per-org domain when its ClusterTenant CR is deleted (DOMAIN.T2).
    *
    * Deletes the per-org wildcard Certificate + external-dns DNSEndpoint so external-dns
@@ -349,9 +448,10 @@ export class ClusterTenantOperator
  *
  * @param kc - Resolved KubeConfig.
  * @param config - Operator runtime configuration.
+ * @param prisma - Fleet registry client (used to adopt orphan CRs into the registry).
  * @param baseLog - Root logger; scoped to `cluster-tenant-operator` inside.
  */
-export function _CreateClusterTenantOperator(kc: k8s.KubeConfig, config: FleetOperatorConfig, baseLog: Logger): ClusterTenantOperator
+export function _CreateClusterTenantOperator(kc: k8s.KubeConfig, config: FleetOperatorConfig, prisma: PrismaClient, baseLog: Logger): ClusterTenantOperator
 {
   const customApi = kc.makeApiClient(k8s.CustomObjectsApi);
   const coreApi = kc.makeApiClient(k8s.CoreV1Api);
@@ -361,5 +461,5 @@ export function _CreateClusterTenantOperator(kc: k8s.KubeConfig, config: FleetOp
   const statusWriter = new ClusterTenantStatusWriter(customApi, log);
   const domainProvisioner = _BuildOrgDomainProvisioner(customApi, config);
 
-  return new ClusterTenantOperator(watch, customApi, coreApi, statusWriter, domainProvisioner, config, log);
+  return new ClusterTenantOperator(watch, customApi, coreApi, statusWriter, domainProvisioner, config, prisma, log);
 }
