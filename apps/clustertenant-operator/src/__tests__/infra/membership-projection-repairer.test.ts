@@ -138,12 +138,17 @@ describe("MembershipProjectionRepairer._reconcile", function _reconcileSuite()
       { subject: "unk", role: "Member", status: "weird" },
       { subject: "abs", role: "Member" },
     ]);
-    await _sweepOnce(new MembershipProjectionRepairer(prisma, reader, "acme", _log, 60_000));
+    // Capturing logger (the repairer derives a child, so spy the child surface directly).
+    const warn = vi.fn();
+    const capturing = { warn, info: vi.fn(), error: vi.fn(), debug: vi.fn(), child() { return capturing; } } as unknown as typeof _log;
+    await _sweepOnce(new MembershipProjectionRepairer(prisma, reader, "acme", capturing, 60_000));
 
     expect(rows.find(r => r.subject === "susp")?.status).toBe("Suspended");
     expect(rows.find(r => r.subject === "act")?.status).toBe("Active");
     expect(rows.find(r => r.subject === "unk")?.status).toBe("Active"); // unknown ⇒ Active (fail-open)
     expect(rows.find(r => r.subject === "abs")?.status).toBe("Active"); // absent ⇒ Active
+    // The PRESENT-but-unrecognized "weird" value is surfaced (schema skew); absent is silent.
+    expect(warn).toHaveBeenCalledWith(expect.objectContaining({ rawStatus: "weird", subject: "unk" }), expect.stringMatching(/unrecognized OrgMembership status/));
   });
 
   it("re-upserts when only the status drifts (Active → Suspended)", async function _statusDrift()

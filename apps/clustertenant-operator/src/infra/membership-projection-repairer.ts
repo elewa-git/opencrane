@@ -26,11 +26,21 @@ function _isOrgRole(value: unknown): value is OrgRoleValue
  * never mass-suspends an org — a genuine suspension is always an explicit `"Suspended"`).
  *
  * @param value - The raw `status` field off the wire row (may be undefined).
+ * @param log   - Optional logger; when given, a PRESENT-but-unrecognized value is warned (schema skew).
+ * @param ctx   - Optional log context (e.g. `{ clusterTenant, subject }`).
  * @returns The projected `OrgMemberStatus` (`Suspended` only for an exact `"Suspended"`).
  */
-function _toMemberStatus(value: unknown): OrgMemberStatus
+function _toMemberStatus(value: unknown, log?: Logger, ctx?: Record<string, unknown>): OrgMemberStatus
 {
-  return value === "Suspended" ? "Suspended" : "Active";
+  if (value === "Suspended") return "Suspended";
+  // Absent/empty is the normal pre-status wire shape (an older fleet) → Active, silently.
+  // A PRESENT but unrecognized value is fleet schema skew: still fail OPEN to Active (never
+  // mass-suspend on an unknown value) but surface it so the drift is visible in telemetry.
+  if (value !== undefined && value !== null && value !== "" && value !== "Active")
+  {
+    log?.warn({ ...ctx, rawStatus: value }, "unrecognized OrgMembership status from fleet; treating as Active (schema skew?)");
+  }
+  return "Active";
 }
 
 /**
@@ -319,7 +329,7 @@ export class MembershipProjectionRepairer
     // Upsert every desired member: create the missing, correct the drifted role AND status.
     for (const row of desired)
     {
-      const status = _toMemberStatus(row.status);
+      const status = _toMemberStatus(row.status, this._log, { clusterTenant: this._clusterTenant, subject: row.subject });
       const current = existingBySubject.get(row.subject);
       if (current && current.role === row.role && current.status === status)
       {
@@ -376,7 +386,7 @@ export class MembershipProjectionRepairer
       {
         continue;
       }
-      const suspended = _toMemberStatus(row.status) === "Suspended";
+      const suspended = _toMemberStatus(row.status, this._log, { clusterTenant: this._clusterTenant, subject: row.subject }) === "Suspended";
 
       // 1. Locate this member's own workspace tenant in the silo, keyed on the member's OIDC
       //    subject (the Tenant.subject binding) scoped to this org. The Tenant CR name + pod are
