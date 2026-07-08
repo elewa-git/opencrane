@@ -12,10 +12,15 @@ import type { Logger } from "pino";
  * Scope-aware retrieval keys on the live token groups, so this mirror is the persistence half,
  * not on the hot path.
  *
- * DEFERRED (tracked on #126): (1) periodic reconcile to PRUNE stale members (a user dropped from
- * a group in the Console keeps their `Group.members` entry until then); (2) control-plane group
- * mutations writing Zitadel role grants via the fleet management client — for now org admins
- * manage group roles in the Zitadel Console they own (the decided native primitive).
+ * The mirror is bidirectional at login: the user's claims are ADDED into `Group.members`, and
+ * stale entries are PRUNED — a subject sitting in a convention (`group:`-prefixed) Group but
+ * absent from the login's claims was dropped in the Console, so their entry is removed.
+ * Operator-curated groups (non-convention names) are never touched, and an emptied group is
+ * retained (it may still carry grants).
+ *
+ * DEFERRED (tracked on #126): control-plane group mutations writing Zitadel role grants via
+ * the fleet management client — for now org admins manage group roles in the Zitadel Console
+ * they own (the decided native primitive).
  */
 
 /** Maps the scope segment of a `group:<scope>:<name>` claim to the `GrantScope` enum. */
@@ -105,9 +110,37 @@ async function _addMemberToGroup(prisma: PrismaClient, claim: ParsedGroupClaim, 
 }
 
 /**
+ * Remove `subject` from one group's members. Same row-locked read-modify-write transaction as
+ * {@link _addMemberToGroup} (a `SELECT … FOR UPDATE` serialises concurrent logins mutating the
+ * SAME group's JSON members array). Idempotent: a vanished group or an already-absent subject
+ * is a no-op. The group row is KEPT even when its last member leaves — an empty group may
+ * still carry grants.
+ */
+async function _removeMemberFromGroup(prisma: PrismaClient, name: string, subject: string): Promise<void>
+{
+  await prisma.$transaction(async function _tx(tx)
+  {
+    // Lock the row so the read→filter→write below is serialised per group.
+    await tx.$queryRaw`SELECT 1 FROM groups WHERE name = ${name} FOR UPDATE`;
+    const existing = await tx.group.findUnique({ where: { name }, select: { members: true } });
+    if (!existing) return; // group vanished concurrently — nothing to prune
+    const members = _asMemberArray(existing.members as Prisma.JsonValue);
+    if (!members.includes(subject)) return; // idempotent — already pruned
+    const remaining = members.filter(m => m !== subject); // filter preserves the sorted order
+    await tx.group.update({ where: { name }, data: { members: remaining as Prisma.InputJsonValue } });
+  });
+}
+
+/**
  * Mirror a logged-in user's `group:*` role claims into the silo's `Group.members` (#126 S4b).
- * Best-effort and idempotent: each claim is handled independently so one failure never blocks the
- * others or the login, and re-logins converge (a subject already in a group is a no-op).
+ * Best-effort and idempotent: each group is handled independently so one failure never blocks
+ * the others or the login, and re-logins converge (a subject already in / already out of a
+ * group is a no-op).
+ *
+ * Two passes: (1) ADD — every parsed claim upserts the subject into its Group; (2) PRUNE —
+ * every convention (`group:`-prefixed) Group still holding the subject but absent from this
+ * login's claims loses the entry (the user was dropped in the Zitadel Console). Only
+ * convention groups are pruned; operator-curated groups (any other name) are never touched.
  *
  * @param opts.prisma  - Silo Prisma client.
  * @param opts.subject - The member's IdP-verified subject (OIDC `sub`).
@@ -124,6 +157,7 @@ export async function _MirrorGroupsOnLogin(opts: {
   const subject = opts.subject?.trim() ?? "";
   if (!subject) return;
 
+  // 1. ADD pass — persist every group claim the token carries (create-or-append, idempotent).
   const claims = _ParseGroupClaims(opts.groups);
   for (const claim of claims)
   {
@@ -134,6 +168,35 @@ export async function _MirrorGroupsOnLogin(opts: {
     catch (err)
     {
       opts.log.warn({ err, group: claim.name }, "group-claim mirror failed for one group; continuing");
+    }
+  }
+
+  // 2. PRUNE pass — the token is the source of truth, so a convention group still listing this
+  //    subject without a matching claim is stale (dropped in the Console). One scan over the
+  //    `group:*` namespace; the members-contains check runs in JS (members is a Json column).
+  const held = new Set(claims.map(claim => claim.name));
+  let conventionGroups: Array<{ name: string; members: Prisma.JsonValue }>;
+  try
+  {
+    conventionGroups = await opts.prisma.group.findMany({ where: { name: { startsWith: "group:" } }, select: { name: true, members: true } });
+  }
+  catch (err)
+  {
+    // The prune is best-effort hardening — a scan failure never blocks the login.
+    opts.log.warn({ err }, "group-claim prune scan failed; skipping prune for this login");
+    return;
+  }
+  for (const group of conventionGroups)
+  {
+    if (held.has(group.name)) continue; // still claimed — keep the membership
+    if (!_asMemberArray(group.members).includes(subject)) continue; // not a member — nothing to prune
+    try
+    {
+      await _removeMemberFromGroup(opts.prisma, group.name, subject);
+    }
+    catch (err)
+    {
+      opts.log.warn({ err, group: group.name }, "group-claim prune failed for one group; continuing");
     }
   }
 }
