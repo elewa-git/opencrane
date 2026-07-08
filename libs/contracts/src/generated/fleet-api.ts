@@ -231,7 +231,7 @@ export interface paths {
         };
         /**
          * List an organisation's members (operator OR owner/admin of that org)
-         * @description Lists the org's membership rows (subject + role) — the LOCAL membership registry the org-admin gate reads (OrgMembership rows, NOT Zitadel grants).
+         * @description Lists the org's membership rows (subject + role) from the fleet's authoritative membership registry (writes are Zitadel-seated; the silo read-model mirrors this set).
          */
         get: operations["listClusterTenantMembers"];
         put?: never;
@@ -458,6 +458,8 @@ export interface components {
             resources: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description Maximum org memberships (seats); absent when uncapped. New members are refused with 409 SEAT_CAP_EXCEEDED once the org is at its cap. */
+            seatCap?: number;
             status?: {
                 /** @enum {string} */
                 phase?: "pending" | "provisioning" | "ready" | "failed";
@@ -483,6 +485,8 @@ export interface components {
             resources: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description Maximum org memberships (seats). Omit or null for uncapped. The fleet refuses a new member once the org is at its cap. */
+            seatCap?: number | null;
         };
         /** @description Partial cluster-tenant update; the immutable name comes from the path. Every field is optional — only those present are changed. */
         ClusterTenantUpdate: {
@@ -504,6 +508,8 @@ export interface components {
             resources?: {
                 quota: components["schemas"]["ClusterTenantResourceQuota"];
             };
+            /** @description New seat cap; null clears it (uncapped). The fleet refuses a new member once the org is at its cap. */
+            seatCap?: number | null;
         };
         ClusterTenantResourceQuota: {
             /** @description Total CPU the customer may request (e.g. '4', '500m'). */
@@ -517,7 +523,7 @@ export interface components {
             /** @description Total GPUs the customer may request. */
             gpu?: number;
         };
-        /** @description A single organisation membership row — the LOCAL membership registry the org-admin gate reads (an OrgMembership, NOT a Zitadel grant). */
+        /** @description A single organisation membership row — the fleet's authoritative membership registry (the org-admin gate reads it; the silo mirrors it). Writes are Zitadel-seated transactionally: an upsert grants the member's project role and a removal revokes their org membership at the IdP. */
         OrgMember: {
             /** @description IdP-verified subject (OIDC `sub`) holding the membership. */
             subject: string;

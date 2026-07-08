@@ -119,7 +119,10 @@ export interface paths {
         /** List all tenants */
         get: operations["listTenants"];
         put?: never;
-        /** Create a new tenant (dual-write: K8s CRD + database) */
+        /**
+         * Create a new tenant (admin/import path; dual-write: K8s CRD + database)
+         * @description Internal seeding (owner-default on org create; member workspace on first login) is the production funnel — this route is the admin/import path. Every workspace it creates must be routable (email) and subject-bound; when a parent clusterTenantRef is given the subject must be a member of that org.
+         */
         post: operations["createTenant"];
         delete?: never;
         options?: never;
@@ -173,7 +176,7 @@ export interface paths {
         /** Update a tenant (dual-write: K8s CRD + database) */
         put: operations["updateTenant"];
         post?: never;
-        /** Delete a tenant (dual-write: K8s CRD + database) */
+        /** Delete a tenant (offboarding teardown: cut sessions/devices, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets) */
         delete: operations["deleteTenant"];
         options?: never;
         head?: never;
@@ -1613,6 +1616,8 @@ export interface components {
             displayName?: string;
             /** Format: email */
             email?: string;
+            /** @description IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants. */
+            subject?: string;
             team?: string;
             /** @description Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path. */
             clusterTenantRef?: string;
@@ -2792,6 +2797,8 @@ export interface operations {
                     displayName: string;
                     /** Format: email */
                     email: string;
+                    /** @description IdP-verified subject (OIDC `sub`) to bind the workspace to. Required — subject-less pods degrade the compiled contract to {tenant} only. */
+                    subject: string;
                     team?: string;
                     /** @description Parent ClusterTenant (customer) to attach this tenant to. */
                     clusterTenantRef?: string;
@@ -2812,6 +2819,33 @@ export interface operations {
                         name?: string;
                         status?: string;
                     };
+                };
+            };
+            /** @description Missing email or subject. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No models registered for this scope (NO_MODELS_REGISTERED) — the same ≥1-model onboarding gate the internal seed funnel enforces. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
             /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
@@ -2923,6 +2957,8 @@ export interface operations {
                     displayName?: string;
                     /** Format: email */
                     email?: string;
+                    /** @description Re-bind the workspace to this IdP subject; must be a member of the (new or existing) parent org. */
+                    subject?: string;
                     team?: string;
                     /** @description Parent ClusterTenant (customer) to attach this tenant to. */
                     clusterTenantRef?: string;
@@ -2943,6 +2979,15 @@ export interface operations {
                         name?: string;
                         status?: string;
                     };
+                };
+            };
+            /** @description Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE). */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
