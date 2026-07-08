@@ -3,6 +3,7 @@ import type { Logger } from "pino";
 
 import type { OpenClawTenantOperatorConfig } from "../../config.js";
 import { OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL } from "@opencrane/infra-api";
+import { _SetTenantSuspended } from "../../core/tenants/tenant-suspension.js";
 import { _ComputeLastActivityMs, _ListIdleCandidates, _ShouldSuspend } from "./idle-policy.js";
 import type { Tenant } from "../models/tenant.interface.js";
 
@@ -146,14 +147,7 @@ export class IdleChecker
   {
     try
     {
-      await this.customApi.patchNamespacedCustomObject({
-        group: OPENCRANE_API_GROUP,
-        version: OPENCRANE_API_VERSION,
-        namespace,
-        plural: TENANT_CRD_PLURAL,
-        name,
-        body: { spec: { suspended: true } },
-      }, k8s.setHeaderOptions("Content-Type", k8s.PatchStrategy.MergePatch));
+      await _SetTenantSuspended(this.customApi, namespace, name, true);
     }
     catch (err)
     {

@@ -20,14 +20,19 @@ interface TestSession
 const _CORE_API = {} as k8s.CoreV1Api;
 
 /**
- * Build a Prisma stub whose tenant.findMany returns the given matches. `suspended` (when set)
- * makes `orgMembership.findUnique` report a Suspended status for the resolved (org, subject),
- * exercising the connect-path fail-closed on suspension.
+ * Build a Prisma stub whose tenant.findMany returns the given matches (the email→tenant
+ * resolution) and whose tenant.findUnique returns the single match (the follow-up
+ * ingressHost/configOverrides lookup the pod-token route does by resolved name). `suspended`
+ * (when set) makes `orgMembership.findUnique` report a Suspended status for the resolved
+ * (org, subject), exercising the connect-path fail-closed on suspension.
  */
 function _buildPrisma(matches: unknown[], suspended = false): PrismaClient
 {
 	return {
-		tenant: { findMany: vi.fn().mockResolvedValue(matches) },
+		tenant: {
+			findMany: vi.fn().mockResolvedValue(matches),
+			findUnique: vi.fn().mockResolvedValue(matches[0] ?? null),
+		},
 		orgMembership: { findUnique: vi.fn().mockResolvedValue(suspended ? { status: "Suspended" } : null) },
 		brokeredDevice: { upsert: vi.fn().mockResolvedValue({}) },
 	} as unknown as PrismaClient;

@@ -4,10 +4,10 @@ import { OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL } from "@
 
 /**
  * Set (or clear) a Tenant CR's `spec.suspended` flag via a JSON merge-patch — the shared
- * suspend/resume patch the tenants route (`POST /:name/suspend|/resume`) and the membership
- * projection repairer (#126) both drive, so the patch shape stays consistent between them. The
- * TenantOperator watches this flag and scales a suspended tenant's Deployment to zero (and back).
- * (The idle-checker's auto-suspend still holds its own inline copy — a candidate follow-up dedup.)
+ * suspend/resume patch the tenants route (`POST /:name/suspend|/resume`), the membership
+ * projection repairer (#126), and the idle-checker's auto-suspend all drive, so the patch shape
+ * stays consistent between them. The TenantOperator watches this flag and scales a suspended
+ * tenant's Deployment to zero (and back).
  *
  * A merge-patch touches only `spec.suspended`, leaving the rest of the spec untouched, so it is
  * safe to re-apply idempotently (a no-op when the flag is already at the target value). It does

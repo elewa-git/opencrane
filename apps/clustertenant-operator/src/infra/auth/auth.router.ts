@@ -13,7 +13,7 @@ import { _ClusterTenantFromHost } from "./request-silo.js";
 import { _RecordBrokeredDevice } from "./brokered-device.js";
 import { _CutTenant } from "../../core/connections/cut-tenant.js";
 import type { OpenClawGatewayAdmin } from "../../core/connections/gateway-admin.types.js";
-import { _IsMemberSuspended, _ResolveGatewayTarget } from "../../core/connections/gateway-resolve.js";
+import { _ResolveGatewayTarget } from "../../core/connections/gateway-resolve.js";
 
 /**
  * Build the auth router covering:
@@ -148,53 +148,47 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
         return;
       }
 
-      // 2. Resolve the caller's tenant by their verified email (one pod per user PER silo).
-      //    Scope the lookup to the silo the caller is on — each org is served at
-      //    `<clusterTenant>.<base>`, so a user who owns a workspace in more than one silo
-      //    resolves to the pod for the host they are connecting through. Without a derivable
-      //    silo the lookup stays global (and still fail-closes on ambiguity below).
-      const email = typeof authUser.email === "string" ? authUser.email.toLowerCase() : "";
-      if (!email)
-      {
-        res.status(403).json({ error: "Session has no email claim; cannot resolve a tenant", code: "FORBIDDEN" });
-        return;
-      }
-
+      // 2. Resolve the caller's tenant through the single fail-closed authority
+      //    (`_ResolveGatewayTarget`): email→tenant, scoped to the silo the caller is on
+      //    (each org is served at `<clusterTenant>.<base>`, so a user who owns a workspace
+      //    in more than one silo resolves to the pod for the host they are connecting
+      //    through; without a derivable silo the lookup stays global), plus the #126
+      //    suspended-membership gate — all mirrored with `/gateway-resolve`.
+      const email = typeof authUser.email === "string" ? authUser.email : undefined;
+      const sub = typeof authUser.sub === "string" ? authUser.sub : "";
       const silo = _ClusterTenantFromHost(_RequestHost(req));
-      const matches = await prisma.tenant.findMany({
-        where: { email: { equals: email, mode: "insensitive" }, ...(silo ? { clusterTenantRef: silo } : {}) },
-        select: { name: true, ingressHost: true, configOverrides: true, clusterTenantRef: true },
+      const outcome = await _ResolveGatewayTarget(prisma, namespace, email, sub, silo);
+
+      if (!outcome.ok)
+      {
+        // Map each fail-closed reason onto the pod-token HTTP contract: an ambiguous mapping
+        // is a 409, every other reason a 403. A missing email keeps the legacy `FORBIDDEN`
+        // code; the rest surface the resolver code verbatim so the SPA can branch on them.
+        const status = outcome.code === "AMBIGUOUS_TENANT" ? 409 : 403;
+        const code = outcome.code === "NO_EMAIL" ? "FORBIDDEN" : outcome.code;
+        const message = outcome.code === "AMBIGUOUS_TENANT"
+          ? "Multiple OpenClaw pods match this account; contact your administrator"
+          : outcome.code === "NO_TENANT"
+            ? "No OpenClaw is provisioned for this account"
+            : outcome.code === "MEMBER_SUSPENDED"
+              ? "Your membership in this organisation is suspended"
+              : "Session has no email claim; cannot resolve a tenant";
+        res.status(status).json({ error: message, code });
+        return;
+      }
+
+      const { tenant, user } = outcome.resolved;
+      const subject = user.sub;
+
+      // 3. Load the gateway coordinates the resolver does not carry (`ingressHost` +
+      //    `configOverrides`) by the resolved tenant's name (its primary key), then derive
+      //    the pod's `wss://` gateway URL from them.
+      const record = await prisma.tenant.findUnique({
+        where: { name: tenant.name },
+        select: { ingressHost: true, configOverrides: true },
       });
-
-      if (matches.length === 0)
-      {
-        res.status(403).json({ error: "No OpenClaw is provisioned for this account", code: "NO_TENANT" });
-        return;
-      }
-
-      // Fail closed: an ambiguous email→tenant mapping must never silently pick
-      // one pod, which could hand the caller another tenant's connection.
-      if (matches.length > 1)
-      {
-        res.status(409).json({ error: "Multiple OpenClaw pods match this account; contact your administrator", code: "AMBIGUOUS_TENANT" });
-        return;
-      }
-
-      const tenant = matches[0];
-      const subject = authUser.sub.length > 0 ? authUser.sub : email;
-
-      // Fail closed on a suspended membership (#126): billing disabled this member's license, so
-      // the connect path is refused even though a pod exists (mirrors `/gateway-resolve`). A tenant
-      // with no org ref (legacy/standalone) has no membership row and is allowed through.
-      if (await _IsMemberSuspended(prisma, tenant.clusterTenantRef, subject))
-      {
-        res.status(403).json({ error: "Your membership in this organisation is suspended", code: "MEMBER_SUSPENDED" });
-        return;
-      }
-
-      // 3. Resolve the pod's gateway URL (the connection coordinate).
-      const pairing = _ResolveOpenClawPairing(tenant.configOverrides, tenant.ingressHost);
-      if (!pairing)
+      const pairing = record ? _ResolveOpenClawPairing(record.configOverrides, record.ingressHost) : null;
+      if (!record || !pairing)
       {
         res.status(409).json({ error: "OpenClaw pod is not paired yet", code: "POD_NOT_READY" });
         return;
@@ -217,7 +211,7 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
       res.status(200).json({
         gatewayUrl: pairing.gatewayUrl,
         tenant: tenant.name,
-        ingressHost: tenant.ingressHost,
+        ingressHost: record.ingressHost,
       });
     }
     catch (err)
@@ -251,7 +245,9 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
 
       // 2. Resolve the caller's tenant by their verified email (one pod per user per silo),
       //    scoped to the silo the caller is on, failing closed on a missing or ambiguous
-      //    mapping — never cut another user's connections. Mirrors `/pod-token`.
+      //    mapping — never cut another user's connections. Same fail-closed email→tenant rule
+      //    as `_ResolveGatewayTarget`, kept inline here: the cut path deliberately omits the
+      //    suspension gate so a suspended member can still sever their own sessions.
       const email = typeof authUser.email === "string" ? authUser.email.toLowerCase() : "";
       if (!email)
       {
