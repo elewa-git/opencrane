@@ -3,12 +3,23 @@ import { describe, expect, it, vi } from "vitest";
 
 import { _ResolveGatewayTarget } from "../../core/connections/gateway-resolve.js";
 
-/** Build a Prisma stub whose `tenant.findMany` returns the supplied matches. */
-function _buildPrisma(matches: Array<{ name: string; clusterTenantRef: string | null }>)
+/**
+ * Build a Prisma stub whose `tenant.findMany` returns the supplied matches. `suspendedMemberships`
+ * lists the (clusterTenant, subject) pairs whose OrgMembership status is Suspended — everything
+ * else resolves to Active (or a missing row ⇒ not suspended), matching the projected read-model.
+ */
+function _buildPrisma(matches: Array<{ name: string; clusterTenantRef: string | null }>,
+	suspendedMemberships: Array<{ clusterTenant: string; subject: string }> = [])
 {
 	const findMany = vi.fn().mockResolvedValue(matches);
-	const prisma = { tenant: { findMany } } as unknown as PrismaClient;
-	return { prisma, findMany };
+	const findUnique = vi.fn(async function _findUnique(args: { where: { clusterTenant_subject: { clusterTenant: string; subject: string } } })
+	{
+		const { clusterTenant, subject } = args.where.clusterTenant_subject;
+		const suspended = suspendedMemberships.some(m => m.clusterTenant === clusterTenant && m.subject === subject);
+		return suspended ? { status: "Suspended" } : null;
+	});
+	const prisma = { tenant: { findMany }, orgMembership: { findUnique } } as unknown as PrismaClient;
+	return { prisma, findMany, findUnique };
 }
 
 describe("_ResolveGatewayTarget (DOMAIN.T4 routing authority)", function _suite()
@@ -92,6 +103,39 @@ describe("_ResolveGatewayTarget (DOMAIN.T4 routing authority)", function _suite(
 			select: { name: true, clusterTenantRef: true },
 			take: 2,
 		});
+	});
+
+	it("fails closed with MEMBER_SUSPENDED when the resolved subject has a Suspended membership (#126)", async function ()
+	{
+		const { prisma } = _buildPrisma(
+			[{ name: "alice", clusterTenantRef: "acme" }],
+			[{ clusterTenant: "acme", subject: "sub-1" }],
+		);
+
+		const outcome = await _ResolveGatewayTarget(prisma, "default", "alice@example.com", "sub-1", "acme");
+
+		expect(outcome).toEqual({ ok: false, code: "MEMBER_SUSPENDED" });
+	});
+
+	it("allows a tenant with NO membership row (legacy/standalone — absence is not suspension)", async function ()
+	{
+		// A resolved tenant whose subject has no OrgMembership row must still connect.
+		const { prisma } = _buildPrisma([{ name: "alice", clusterTenantRef: "acme" }], []);
+
+		const outcome = await _ResolveGatewayTarget(prisma, "default", "alice@example.com", "sub-1", "acme");
+
+		expect(outcome.ok).toBe(true);
+	});
+
+	it("allows a tenant with no org ref (no membership scope ⇒ never suspended)", async function ()
+	{
+		const { prisma, findUnique } = _buildPrisma([{ name: "alice", clusterTenantRef: null }]);
+
+		const outcome = await _ResolveGatewayTarget(prisma, "control-plane-ns", "alice@example.com", "sub-1");
+
+		expect(outcome.ok).toBe(true);
+		// No org ref ⇒ the suspension check short-circuits without a membership query.
+		expect(findUnique).not.toHaveBeenCalled();
 	});
 
 	it("scopes the lookup to the given silo so a multi-silo owner routes to one pod", async function ()

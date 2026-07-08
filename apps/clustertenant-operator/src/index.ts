@@ -203,7 +203,11 @@ void (async function _startMembershipRepairer()
   const fleetInternalUrl = process.env.FLEET_INTERNAL_URL?.trim() ?? "";
   const fleetInternalToken = process.env.OPENCRANE_API_TOKEN?.trim() ?? "";
   const reader = _BuildHttpFleetMembershipReader(fleetInternalUrl, fleetInternalToken, log);
-  const repairer = new MembershipProjectionRepairer(prisma, reader, clusterTenant, log, _projectionRepairIntervalMs);
+  // Suspension ENFORCEMENT (#126): the sweep cuts a Suspended member's sessions/devices and
+  // suspends their workspace pod. Thread the k8s clients + gateway admin + this silo's namespace so
+  // the repairer can drive `_CutTenant` and the Tenant `spec.suspended` patch.
+  const enforcement = { customApi, coreApi, gatewayAdmin: _BuildGatewayAdmin(), namespace: _projectionRepairNamespace };
+  const repairer = new MembershipProjectionRepairer(prisma, reader, clusterTenant, log, _projectionRepairIntervalMs, enforcement);
   repairer.start();
   _membershipRepairerRef = repairer;
 })();

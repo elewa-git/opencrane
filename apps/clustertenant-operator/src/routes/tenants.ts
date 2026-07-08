@@ -8,6 +8,7 @@ import { compile, compileForPrincipals } from "../core/grants/grant-compiler.js"
 import { GrantCompilerAccess, GrantCompilerPayloadType } from "../core/grants/grant-compiler.types.js";
 import { _DeriveTenantDatasetMembership } from "../core/grants/derive-dataset-membership.js";
 import { _CutTenant } from "../core/connections/cut-tenant.js";
+import { _SetTenantSuspended } from "../core/tenants/tenant-suspension.js";
 import { _deleteLiteLlmKey } from "../core/ai-budget/ai-budget.logic.js";
 import type { OpenClawGatewayAdmin } from "../core/connections/gateway-admin.types.js";
 import { _log } from "../log.js";
@@ -637,14 +638,7 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
   {
     const name = req.params.name;
 
-    await customApi.patchNamespacedCustomObject({
-      group: OPENCRANE_API_GROUP,
-      version: OPENCRANE_API_VERSION,
-      namespace,
-      plural: TENANT_CRD_PLURAL,
-      name,
-      body: { spec: { suspended: true } },
-    }, k8s.setHeaderOptions("Content-Type", k8s.PatchStrategy.MergePatch));
+    await _SetTenantSuspended(customApi, namespace, name, true);
 
     await prisma.tenant.update({
       where: { name },
@@ -668,14 +662,7 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
   {
     const name = req.params.name;
 
-    await customApi.patchNamespacedCustomObject({
-      group: OPENCRANE_API_GROUP,
-      version: OPENCRANE_API_VERSION,
-      namespace,
-      plural: TENANT_CRD_PLURAL,
-      name,
-      body: { spec: { suspended: false } },
-    }, k8s.setHeaderOptions("Content-Type", k8s.PatchStrategy.MergePatch));
+    await _SetTenantSuspended(customApi, namespace, name, false);
 
     await prisma.tenant.update({
       where: { name },

@@ -19,11 +19,16 @@ interface TestSession
 /** Core V1 client stub; the broker records a device but never touches k8s. */
 const _CORE_API = {} as k8s.CoreV1Api;
 
-/** Build a Prisma stub whose tenant.findMany returns the given matches. */
-function _buildPrisma(matches: unknown[]): PrismaClient
+/**
+ * Build a Prisma stub whose tenant.findMany returns the given matches. `suspended` (when set)
+ * makes `orgMembership.findUnique` report a Suspended status for the resolved (org, subject),
+ * exercising the connect-path fail-closed on suspension.
+ */
+function _buildPrisma(matches: unknown[], suspended = false): PrismaClient
 {
 	return {
 		tenant: { findMany: vi.fn().mockResolvedValue(matches) },
+		orgMembership: { findUnique: vi.fn().mockResolvedValue(suspended ? { status: "Suspended" } : null) },
 		brokeredDevice: { upsert: vi.fn().mockResolvedValue({}) },
 	} as unknown as PrismaClient;
 }
@@ -125,6 +130,22 @@ describe("POST /auth/pod-token (OpenClaw connection broker)", function _suite()
 		expect((prisma.tenant.findMany as ReturnType<typeof vi.fn>)).toHaveBeenCalledWith(expect.objectContaining({
 			where: { email: { equals: "jente@elewa.ke", mode: "insensitive" }, clusterTenantRef: "elewa-be" },
 		}));
+	});
+
+	it("fails closed with 403 MEMBER_SUSPENDED when the resolved member is suspended (#126)", async function _suspended()
+	{
+		const prisma = _buildPrisma([{
+			name: "alex.oc",
+			ingressHost: "alex.oc.example.com",
+			configOverrides: { openclaw: { gatewayUrl: "wss://alex.oc.example.com/gateway" } },
+			clusterTenantRef: "acme",
+		}], true);
+		const app = _buildApp({ authUser: { sub: "u1", email: "alex@acme.com" } }, prisma);
+
+		const res = await request(app).post("/auth/pod-token");
+
+		expect(res.status).toBe(403);
+		expect(res.body.code).toBe("MEMBER_SUSPENDED");
 	});
 
 	it("returns 409 when the pod is neither paired nor has an ingress host", async function _notReady()
