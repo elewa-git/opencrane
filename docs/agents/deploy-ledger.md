@@ -99,3 +99,47 @@ Friction items seen across runs; bump the count, and when it hits 2, file the fi
 - lesson: a successful `helm upgrade` + "successfully rolled out" is NOT proof the
   intended runtime change took effect inside the tenant pod — verify the actual
   installed package version on the PVC, not just the pod's env vars/ConfigMap.
+
+## 2026-07-10 · dev · clustertenant-platform (silo: elewa) · e974df3 · LIVE
+- findings: infra: opencrane-dev (gke_weownai-proto_europe-west1-b_opencrane-dev) does NOT
+  enforce NetworkPolicy — standard GKE, Autopilot disabled (`autopilot: {}`), no Dataplane V2
+  (`networkConfig.datapathProvider` unset, no anetd pods), GKE NetworkPolicy addon off
+  (`networkPolicy` field null), no calico/cilium/weave/antrea/kube-router DaemonSet in
+  kube-system (matches the deploy script's own preflight probe). PR #178's Cognee
+  external-egress carve-out is CORRECTLY SHAPED (verified via `kubectl get networkpolicy -o
+  yaml`: `opencrane-elewa-external-egress` podSelector has `app.kubernetes.io/component NotIn
+  [cognee]`, port 443 only; `opencrane-elewa-silo-baseline` egress no longer has a bare
+  `{port:443}` rule) but is NOT ENFORCED: `kubectl exec` probes from both the Cognee pod and a
+  non-Cognee pod (openclaw tenant) reached `https://www.google.com` (200) and `https://1.1.1.1`
+  (301) successfully — the split is currently decorative on this cluster. 3 ClusterTenants
+  (elewa/elewa-be/northwind) share this cluster's nodes, so this is a fleet-wide gap, not
+  specific to this fix. Needs a cluster-level fix (enable the NetworkPolicy addon or Dataplane
+  V2 on opencrane-dev) — outside deploy-script scope.
+- findings: codebase (known, see 2026-07-09 entry — unchanged): elewa's
+  clustertenant-manager fell back into the same unthrottled reconcile loop immediately after
+  this restart — "litellm key update failed ... Team=elewa" (404) at ~0.3-0.6s cadence (94
+  hits in the last 500 log lines, 316m CPU sustained seconds after rollout). Confirms the
+  2026-07-09 finding is still unfixed and reproduces on every operator restart, including
+  ones unrelated to litellm.
+- findings: chart (minor, pre-existing, not hit by this run): helm history shows revision 27
+  (14:53:15, before this session started) failed upgrading `opencrane-cognee` —
+  `.spec.template.metadata.annotations.restartedAt: expected string, got
+  &value.valueUnstructured{Value:1783684360}` (an unquoted numeric annotation value). Self
+  -resolved by revision 28 before this run; flagging in case the `restartedAt` templating
+  (PR #177) recurs elsewhere.
+- friction: `--preflight`'s NS-delegation check (`dig NS $BASE_DOMAIN`) runs unconditionally
+  whenever --base-domain is set, even on a silo upgrade that never reaches ACME/DNS-01
+  (cert-manager already installed centrally) — FAILS here because dev.opencrane.ai's records
+  live directly in the parent opencrane.ai zone (no separately delegated subzone), a false
+  positive already referenced (but not previously detailed) in the 2026-07-09 entry. Does not
+  block the actual (non-preflight) apply path, only the advisory `--preflight` run.
+- friction: the CNI-enforcement preflight check is only FATAL under `--multi-ct`; nothing in
+  the script/docs flags that opencrane-dev already hosts 3 ClusterTenants sharing nodes and
+  should probably always run with `--multi-ct` (or the check should key off "more than one
+  ClusterTenant namespace already exists on this cluster" rather than a caller-supplied flag).
+- lesson: the silo NetworkPolicies are applied imperatively by the operator's own k8s client
+  on every ClusterTenant reconcile (`enforceClusterTenantIsolation` in
+  apps/clustertenant-operator/src/tenants/operator.ts), not via Helm templates — bumping
+  `--control-plane-tag` and letting the `opencrane-clustertenant-manager` pod restart is
+  sufficient to pick up a NetworkPolicy-shape change; it re-applies within seconds of pod
+  start (no separate reconcile trigger, CR touch, or migration needed).
