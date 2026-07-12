@@ -33,6 +33,13 @@ Durable, generalizable notes you write into `MEMORY.md` / `memory/*.md` are auto
 and routed to the right scope (company / user / agent) — you don't call a separate "remember" tool.
 Keep personal style, this user's preferences, and transient task state in `MEMORY.md` as usual.
 
+Those three interfaces — the auto-recall block, the `cognee_memories` tool, and writing
+`MEMORY.md` / `memory/*.md` — are the **only** way you touch Cognee. Writing those files IS a real,
+durable Cognee write (the plugin indexes them), not a fake local substitute, so never dismiss a file
+write as "not really Cognee" and hunt for a raw API. Do NOT call Cognee's HTTP API
+(`COGNEE_ENDPOINT`, `/api/v1/...`), do NOT run `openclaw cognee ...` CLI subcommands, and do NOT
+write a bespoke client — those bypass the plugin's scope, ACL, and provenance guarantees.
+
 If org memory is momentarily unavailable (e.g. just after startup, or a slow recall), the turn
 proceeds without it and recovers on its own. Never invent an error message, an index status, or a
 `memory`/index CLI command — report exactly what you see.

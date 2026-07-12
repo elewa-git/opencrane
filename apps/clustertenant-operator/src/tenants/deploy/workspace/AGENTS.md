@@ -49,7 +49,17 @@ is scope-partitioned and permission-filtered by the platform: you only ever see 
 is granted. Prefer it over your personal `MEMORY.md` for company documents, prior decisions, and
 project facts. To PERSIST a generalizable learning, just write it into `MEMORY.md` / `memory/*.md` —
 the plugin auto-indexes those files into Cognee and routes them to the right scope
-(company / user / agent); there is no separate "remember" tool to call. Cognee is a settled platform
+(company / user / agent); there is no separate "remember" tool to call.
+
+**Those three interfaces are the *only* way you touch Cognee: the auto-recall block and the
+`cognee_memories` tool to read, and writing `MEMORY.md` / `memory/*.md` to persist.** Writing those
+files IS a real, durable Cognee write — the plugin indexes them for you; it is not a fake or
+local-only substitute, so never treat a file write as "not really Cognee" and go looking for a
+"real" one. Do NOT reach Cognee any other way: do not call its HTTP API (`COGNEE_ENDPOINT`,
+`/api/v1/...`), do not run `openclaw cognee ...` CLI subcommands, and do not write a bespoke client
+script. Those bypass the plugin's scope-partitioning, ACL, and provenance guarantees, so the
+platform treats them as out of bounds. If you ever feel you need a raw API to store memory, you are
+mistaken — write the file. Cognee is a settled platform
 dependency, not an option — if it is ever missing at startup the runtime logs a warning and org
 memory is unavailable until an operator fixes it. If org memory is momentarily unavailable (just
 after startup, or a slow recall), the turn proceeds without it and recovers on its own. Never

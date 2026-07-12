@@ -66,6 +66,12 @@ const _ORG_MEMORY_SECTION = [
   "Durable, generalizable notes you write into `MEMORY.md` / `memory/*.md` are auto-indexed into " +
     "Cognee and routed to the right scope; keep personal style, this user's preferences, and transient " +
     "task state in MEMORY.md as usual.",
+  "Those three interfaces — auto-recall, the cognee_memories tool, and writing `MEMORY.md` / " +
+    "`memory/*.md` — are the ONLY way you touch Cognee. Writing those files IS a real, durable Cognee " +
+    "write (the plugin indexes them), not a fake local substitute, so never dismiss a file write as " +
+    "\"not really Cognee\" and hunt for a raw API. Do NOT call Cognee's HTTP API (COGNEE_ENDPOINT, " +
+    "/api/v1/...), do NOT run `openclaw cognee ...` CLI subcommands, and do NOT write a bespoke client " +
+    "— those bypass the plugin's scope, ACL, and provenance guarantees.",
   "If memory is momentarily unavailable (e.g. just after startup), the turn proceeds without it and " +
     "recovers on its own — never invent an error, an index status, or a remediation command; report " +
     "what you actually see.",
