@@ -1416,6 +1416,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org/workspace-docs/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a company doc's current state and latest content */
+        get: operations["getCompanyDoc"];
+        /**
+         * Publish a new immutable version of a company doc
+         * @description Appends an immutable version and bumps the doc's currentVersion. Content is rejected before any write when empty (400) or when it asserts L0 platform mechanics (422).
+         */
+        put: operations["publishCompanyDoc"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a company doc's published versions, newest first */
+        get: operations["listCompanyDocVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve a specific immutable version by number */
+        get: operations["getCompanyDocVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/reconcile": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a reconciliation proposal for a tenant against the current company version
+         * @description Merges the tenant's doc toward the current company version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The reconciler is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.
+         */
+        post: operations["reconcileCompanyDoc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List reconciliation proposals for a doc */
+        get: operations["listDocProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a proposal — delivers the merged doc into the tenant workspace */
+        post: operations["approveDocProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/workspace-docs/{name}/proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a proposal — leaves the tenant doc untouched */
+        post: operations["rejectDocProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1870,6 +1996,85 @@ export interface components {
             resourceId: string;
             /** @description IdP subjects the resource is shared with (incl. the owner). */
             members: string[];
+        };
+        /** @description The current state of an L1 company personalisation doc plus its latest content. */
+        CompanyDoc: {
+            /** @description Document name (workspace file stem, e.g. SOUL). */
+            name: string;
+            /** @description The highest published version number (0 when none published yet). */
+            currentVersion: number;
+            /** @description The current version's content, or null when nothing is published yet. */
+            content: string | null;
+            /**
+             * Format: date-time
+             * @description When the document was last updated.
+             */
+            updatedAt: string;
+        };
+        /** @description Summary metadata for one immutable company-doc version (no content). */
+        CompanyDocVersionSummary: {
+            /** @description Monotonic version number. */
+            version: number;
+            /** @description Identity that published this version. */
+            createdBy: string;
+            /**
+             * Format: date-time
+             * @description When this version was published.
+             */
+            createdAt: string;
+        };
+        /** @description One immutable company-doc version with its full content. */
+        CompanyDocVersion: {
+            /** @description Monotonic version number. */
+            version: number;
+            /** @description The version's full document content. */
+            content: string;
+            /** @description Identity that published this version. */
+            createdBy: string;
+            /**
+             * Format: date-time
+             * @description When this version was published.
+             */
+            createdAt: string;
+        };
+        /** @description A per-tenant reconciliation proposal: the merged doc awaiting an approve/reject decision. */
+        DocProposal: {
+            /** @description Stable proposal identifier. */
+            id: string;
+            /** @description Tenant the proposal targets. */
+            tenant: string;
+            /** @description Document name being reconciled. */
+            docName: string;
+            /** @description The company version used as the merge base. */
+            baseVersion: number;
+            /** @description The company version reconciled toward. */
+            targetVersion: number;
+            /** @description The proposed merged content. */
+            proposedContent: string;
+            /** @description Human-readable change summary. */
+            diff: string;
+            /**
+             * @description Lifecycle status.
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /**
+             * Format: date-time
+             * @description When the proposal was generated.
+             */
+            createdAt: string;
+        };
+        /** @description Outcome of approving or rejecting a reconciliation proposal. */
+        DocProposalDecision: {
+            /** @description Proposal identifier. */
+            id: string;
+            /**
+             * @description Resulting status.
+             * @enum {string}
+             */
+            status: "approved" | "rejected";
+            /** @description For an approval: the tenant's new reconciled version; null on reject. */
+            deliveredVersion: number | null;
         };
         SkillBundle: {
             id?: string;
@@ -6677,6 +6882,364 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+        };
+    };
+    getCompanyDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Company doc detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyDoc"];
+                };
+            };
+            /** @description Company doc not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishCompanyDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The full document content for the new version. */
+                    content: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Version published. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @description The version number assigned to the newly published content. */
+                        version: number;
+                    };
+                };
+            };
+            /** @description Content is missing or empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Content asserts L0 platform mechanics. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCompanyDocVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Version summaries, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        versions: components["schemas"]["CompanyDocVersionSummary"][];
+                    };
+                };
+            };
+            /** @description Company doc not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCompanyDocVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Monotonic version number. */
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Version content and metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CompanyDocVersion"];
+                };
+            };
+            /** @description Version is not a positive integer. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Company doc or version not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    reconcileCompanyDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The tenant to reconcile toward the current company version. */
+                    tenant: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Tenant already reconciled to the current version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "up-to-date";
+                        version: number;
+                    };
+                };
+            };
+            /** @description Reconciliation proposal generated. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocProposal"];
+                };
+            };
+            /** @description Tenant is missing or empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Tenant not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No company version published for this doc. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The merged output asserted L0 platform mechanics. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listDocProposals: {
+        parameters: {
+            query?: {
+                /** @description Filter to proposals targeting this tenant. */
+                tenant?: string;
+                /** @description Filter by lifecycle status. */
+                status?: "pending" | "approved" | "rejected";
+            };
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        proposals: components["schemas"]["DocProposal"][];
+                    };
+                };
+            };
+        };
+    };
+    approveDocProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Proposal identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal approved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocProposalDecision"];
+                };
+            };
+            /** @description Proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal already decided. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectDocProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Proposal identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal rejected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DocProposalDecision"];
+                };
+            };
+            /** @description Proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal already decided. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
