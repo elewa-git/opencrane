@@ -61,8 +61,7 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 │  │   this NS only)   │               ┌─────────────────┐    │
 │  └───────────────────┘               │ Cognee          │    │
 │                                      └─────────────────┘    │
-│  clusterTenantManagement.enabled: false                       │
-│  billing.enabled: false                                       │
+│  fleetManager.enabled: false                                      │
 │  Reuses cluster-wide infra installed by the fleet release     │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -121,7 +120,7 @@ Repeat this command for each ClusterTenant. Each invocation:
 - installs into the silo namespace (`opencrane-<cluster-tenant>` by default);
 - passes `--no-ingress-nginx --no-external-dns --no-db-operator` so the cluster-wide singletons are not re-installed;
 - applies a dedicated CNPG `Cluster` CR in the silo namespace — one Postgres per silo, reconciled by the cluster-wide CNPG operator;
-- sets `clusterTenantManagement.enabled=false` and `billing.enabled=false`.
+- disables the fleet-manager and its self-service surfaces (`fleetManager.enabled=false`, `fleetManager.clusterTenantApi.enabled=false`) — a silo runs no ClusterTenant-management or billing API.
 
 ::: info One Postgres per silo
 Each silo gets its own CNPG `Cluster` in its own namespace. The silo's clustertenant-manager connects to its own database — there is no shared database and no cross-tenant query path. The cluster-wide CloudNativePG operator (installed by the fleet release) watches all namespaces and reconciles every silo's `Cluster` CR.

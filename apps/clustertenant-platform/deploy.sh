@@ -89,10 +89,11 @@ if [[ -n "${OIDC_ISSUER_URL:-}" ]]; then
   [[ -n "${OIDC_REDIRECT_URI:-}" ]] || export OIDC_REDIRECT_URI="https://${CLUSTER_TENANT}.${BASE_DOMAIN}/api/v1/auth/callback"
 fi
 
-# SILO value profile: a per-ClusterTenant install in its own namespace — self-service manager +
-# billing OFF, multi-instance OFF. The cluster-wide infra is installed once by the admin/registry
-# release, so skip re-installing the ingress controller, external-dns and the CNPG operator (the
-# silo's own per-namespace CNPG Cluster CR is still applied and reconciled by the cluster-wide operator).
+# SILO value profile: a per-ClusterTenant install in its own namespace — the fleet-manager and its
+# self-service surfaces (ClusterTenant management + billing) are OFF, multi-instance OFF. The
+# cluster-wide infra is installed once by the admin/registry release, so skip re-installing the
+# ingress controller, external-dns and the CNPG operator (the silo's own per-namespace CNPG Cluster
+# CR is still applied and reconciled by the cluster-wide operator).
 PROFILE_SET=(
   --namespace "$NAMESPACE"
   --no-ingress-nginx
@@ -102,7 +103,6 @@ PROFILE_SET=(
   # (apps/fleet-platform/deploy.sh). Two fleet-managers would contend over the ClusterTenant CRs + IAM.
   --set "fleetManager.enabled=false"
   --set "fleetManager.clusterTenantApi.enabled=false"
-  --set "billing.enabled=false"
   --set "multiInstance.enabled=false"
   # NOTE: same-origin org hosting is now the chart's only mode (the legacy `*.<domain>` wildcard
   # gateway-ingress was removed) — no --set needed here to select it.
