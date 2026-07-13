@@ -104,7 +104,6 @@ PROFILE_SET=(
   # Two fleet-managers would contend over the ClusterTenant CRs + IAM.
   --set "fleetManager.enabled=false"
   --set "fleetManager.clusterTenantApi.enabled=false"
-  --set "billing.enabled=false"
   --set "multiInstance.enabled=false"
   # NOTE: same-origin org hosting is now the chart's only mode (the legacy `*.<domain>` wildcard
   # gateway-ingress was removed) — no --set needed here to select it.
