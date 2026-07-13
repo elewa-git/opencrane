@@ -776,6 +776,180 @@
           "members"
         ]
       },
+      "CultureDoc": {
+        "type": "object",
+        "required": [
+          "name",
+          "currentVersion",
+          "content",
+          "updatedAt"
+        ],
+        "description": "The current state of an L1 org-culture personalisation doc plus its latest content.",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Document name (workspace file stem, e.g. SOUL)."
+          },
+          "currentVersion": {
+            "type": "integer",
+            "description": "The highest published version number (0 when none published yet)."
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The current version's content, or null when nothing is published yet."
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the document was last updated."
+          }
+        }
+      },
+      "CultureDocVersionSummary": {
+        "type": "object",
+        "required": [
+          "version",
+          "createdBy",
+          "createdAt"
+        ],
+        "description": "Summary metadata for one immutable culture-doc version (no content).",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "Monotonic version number."
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "Identity that published this version."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this version was published."
+          }
+        }
+      },
+      "CultureDocVersion": {
+        "type": "object",
+        "required": [
+          "version",
+          "content",
+          "createdBy",
+          "createdAt"
+        ],
+        "description": "One immutable culture-doc version with its full content.",
+        "properties": {
+          "version": {
+            "type": "integer",
+            "description": "Monotonic version number."
+          },
+          "content": {
+            "type": "string",
+            "description": "The version's full document content."
+          },
+          "createdBy": {
+            "type": "string",
+            "description": "Identity that published this version."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When this version was published."
+          }
+        }
+      },
+      "PropagationProposal": {
+        "type": "object",
+        "required": [
+          "id",
+          "tenant",
+          "docName",
+          "baseVersion",
+          "targetVersion",
+          "proposedContent",
+          "diff",
+          "status",
+          "createdAt"
+        ],
+        "description": "A per-tenant culture-propagation proposal: the merged doc awaiting an approve/reject decision.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Stable proposal identifier."
+          },
+          "tenant": {
+            "type": "string",
+            "description": "Tenant the proposal targets."
+          },
+          "docName": {
+            "type": "string",
+            "description": "Document name being propagated."
+          },
+          "baseVersion": {
+            "type": "integer",
+            "description": "The culture version used as the merge base."
+          },
+          "targetVersion": {
+            "type": "integer",
+            "description": "The culture version propagated toward."
+          },
+          "proposedContent": {
+            "type": "string",
+            "description": "The proposed merged content."
+          },
+          "diff": {
+            "type": "string",
+            "description": "Human-readable change summary."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "approved",
+              "rejected"
+            ],
+            "description": "Lifecycle status."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the proposal was generated."
+          }
+        }
+      },
+      "PropagationDecision": {
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "deliveredVersion"
+        ],
+        "description": "Outcome of approving or rejecting a culture-propagation proposal.",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Proposal identifier."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "approved",
+              "rejected"
+            ],
+            "description": "Resulting status."
+          },
+          "deliveredVersion": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "For an approval: the tenant's new propagated version; null on reject."
+          }
+        }
+      },
       "SkillBundle": {
         "type": "object",
         "properties": {
@@ -8309,6 +8483,559 @@
                   "items": {
                     "$ref": "#/components/schemas/TokenUsage"
                   }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}": {
+      "get": {
+        "operationId": "getCultureDoc",
+        "summary": "Get a culture doc's current state and latest content",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Culture doc detail.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CultureDoc"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Culture doc not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "publishCultureDoc",
+        "summary": "Publish a new immutable version of a culture doc",
+        "description": "Appends an immutable version and bumps the doc's currentVersion. Content is rejected before any write when empty (400) or when it asserts L0 platform mechanics (422).",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "content"
+                ],
+                "properties": {
+                  "content": {
+                    "type": "string",
+                    "description": "The full document content for the new version."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Version published.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "version"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "integer",
+                      "description": "The version number assigned to the newly published content."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Content is missing or empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Content asserts L0 platform mechanics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/versions": {
+      "get": {
+        "operationId": "listCultureDocVersions",
+        "summary": "List a culture doc's published versions, newest first",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version summaries, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "versions"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "versions": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/CultureDocVersionSummary"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Culture doc not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/versions/{version}": {
+      "get": {
+        "operationId": "getCultureDocVersion",
+        "summary": "Retrieve a specific immutable version by number",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          },
+          {
+            "name": "version",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "description": "Monotonic version number."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Version content and metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CultureDocVersion"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Version is not a positive integer.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Culture doc or version not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/propagate": {
+      "post": {
+        "operationId": "propagateCultureDoc",
+        "summary": "Generate a propagation proposal for a tenant against the current culture version",
+        "description": "Merges the tenant's doc toward the current culture version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The merge engine is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "tenant"
+                ],
+                "properties": {
+                  "tenant": {
+                    "type": "string",
+                    "description": "The tenant to propagate the current culture version toward."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Tenant already propagated to the current version.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "status",
+                    "version"
+                  ],
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "up-to-date"
+                      ]
+                    },
+                    "version": {
+                      "type": "integer"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Propagation proposal generated.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropagationProposal"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Tenant is missing or empty.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Tenant not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "No culture version published for this doc.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The merged output asserted L0 platform mechanics.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/proposals": {
+      "get": {
+        "operationId": "listPropagationProposals",
+        "summary": "List propagation proposals for a doc",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          },
+          {
+            "name": "tenant",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter to proposals targeting this tenant."
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "pending",
+                "approved",
+                "rejected"
+              ]
+            },
+            "description": "Filter by lifecycle status."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposal list.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "name",
+                    "proposals"
+                  ],
+                  "properties": {
+                    "name": {
+                      "type": "string"
+                    },
+                    "proposals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PropagationProposal"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/proposals/{id}/approve": {
+      "post": {
+        "operationId": "approvePropagationProposal",
+        "summary": "Approve a proposal — delivers the merged doc into the tenant workspace",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Proposal identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposal approved.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropagationDecision"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proposal not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Proposal already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/org/culture-docs/{name}/proposals/{id}/reject": {
+      "post": {
+        "operationId": "rejectPropagationProposal",
+        "summary": "Reject a proposal — leaves the tenant doc untouched",
+        "tags": [
+          "Org Culture"
+        ],
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
+          },
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Proposal identifier."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Proposal rejected.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PropagationDecision"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proposal not found.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Proposal already decided.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

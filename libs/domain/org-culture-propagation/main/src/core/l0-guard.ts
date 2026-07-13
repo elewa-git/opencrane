@@ -3,13 +3,13 @@ import type { L0DirectivePattern } from "./l0-guard.types.js";
 /**
  * Forbidden L0 system-mechanic directives.
  *
- * L1 company docs and L2 tenant docs personalise voice/identity only; the
+ * L1 culture docs and L2 tenant docs personalise voice/identity only; the
  * platform mechanics (managed mode, Obot MCP gateway routing, per-entitlement
  * skill pulls, the effective-contract loop, workspace pinning) live exclusively
  * in the OpenCrane-owned, boot-restamped L0 files (`AGENTS.md`/`TOOLS.md`).
- * Letting company/tenant prose redefine these would be a (futile, since L0 is
+ * Letting culture/tenant prose redefine these would be a (futile, since L0 is
  * re-stamped and the IAM planes are the real boundary) attempt to change core
- * behaviour — so the publish path and the reconciler reject content asserting them.
+ * behaviour — so the publish path and the merge engine reject content asserting them.
  */
 const _L0_DIRECTIVE_PATTERNS: L0DirectivePattern[] = [
   { label: "managed-mode", pattern: /\bmanaged\s+mode\b/i },
@@ -39,7 +39,7 @@ export function _FindL0Directives(content: string): string[]
 /**
  * Assert that a document carries no L0 system-mechanic directives.
  *
- * Used by the company-doc publish path (P4C.3) and as the reconciler sandbox
+ * Used by the culture-doc publish path (P4C.3) and as the merge-engine sandbox
  * guard (P4C.4) so an agent-proposed merge can never smuggle L0 directives into
  * L1/L2.
  *

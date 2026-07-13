@@ -18,7 +18,7 @@ import { resourceSharesRouter, sharesRouter } from "@opencrane/domain/grants";
 import { tenantsRouter } from "@opencrane/domain/tenants";
 import { thirdPartySourcesRouter } from "@opencrane/domain/retrieval";
 import { _BuildGatewayAdmin } from "@opencrane/domain/connections";
-import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/domain/company-docs";
+import { _BuildCultureMergeEngine, cultureDocsRouter } from "@opencrane/domain/org-culture-propagation";
 import { sessionsRouter } from "@opencrane/domain/sessions";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/infra/http";
 import { spec } from "../openapi/spec.js";
@@ -76,6 +76,20 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
   app.use("/api/internal/awareness/participation", _RegisterInternalParticipation(prisma, authApi));
 }
 
+/**
+ * Mount every session-gated `/api/v1/*` domain router on the app.
+ *
+ * The internal (`/api/internal/*`) routers are mounted separately by
+ * `_RegisterInternalRoutes` (before `___AuthMiddleware`) and must not be
+ * re-mounted here.
+ *
+ * @param app       - The Express application.
+ * @param prisma    - Prisma client for persistence.
+ * @param customApi - Kubernetes custom-objects API client.
+ * @param coreApi   - Kubernetes core API client.
+ * @param authApi   - Kubernetes authentication API client.
+ * @returns The same app, with routers mounted.
+ */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
 {
   // NOTE: the internal (`/api/internal/*`) routers are mounted separately by
@@ -109,7 +123,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/model-routing/recommendations", modelRoutingRecommendationsRouter(prisma));
   app.use("/api/v1/model-routing/metrics", modelRoutingMetricsRouter(prisma));
   app.use("/api/v1/third-party-sources", thirdPartySourcesRouter(prisma));
-  app.use("/api/v1/org/workspace-docs", companyDocsRouter(prisma, _BuildDocMergeReconciler()));
+  app.use("/api/v1/org/culture-docs", cultureDocsRouter(prisma, _BuildCultureMergeEngine()));
   // NOTE: the fleet / super-admin surfaces — ClusterTenant lifecycle, billing accounts, org
   // membership, platform DNS, and Zitadel administration — have moved to the cluster-wide
   // fleet-manager (Stage 4). The silo keeps ClusterTenant + OrgMembership as local READ-MODELS

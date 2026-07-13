@@ -1,14 +1,14 @@
-/// Lifecycle of a per-tenant company→tenant doc reconciliation proposal (P4C.5).
-enum DocProposalStatus {
+/// Lifecycle of a per-tenant culture→tenant propagation proposal (P4C.5).
+enum PropagationStatus {
   Pending  @map("pending")
   Approved @map("approved")
   Rejected @map("rejected")
 }
 
-/// An L1 *company* personalisation document (e.g. `SOUL`) — org-owned, editable
-/// via the control-plane API, versioned immutably (P4C.3). Must carry **no** L0
-/// system-mechanic directives; the publish path rejects content that does.
-model CompanyDoc {
+/// An L1 *org-culture* personalisation document (e.g. `SOUL`) — org-owned,
+/// editable via the control-plane API, versioned immutably (P4C.3). Must carry
+/// **no** L0 system-mechanic directives; the publish path rejects content that does.
+model CultureDoc {
   /// Surrogate key.
   id             String              @id @default(cuid())
   /// Stable document name (the workspace file stem, e.g. `SOUL`); one row per name.
@@ -20,18 +20,18 @@ model CompanyDoc {
   /// When the document (or its current version) was last updated.
   updatedAt      DateTime            @updatedAt @map("updated_at")
   /// Immutable published versions, newest resolvable via `currentVersion`.
-  versions       CompanyDocVersion[]
+  versions       CultureDocVersion[]
 
-  @@map("company_docs")
+  @@map("culture_docs")
 }
 
-/// An immutable published version of a `CompanyDoc` (P4C.3). Never updated in
+/// An immutable published version of a `CultureDoc` (P4C.3). Never updated in
 /// place — a new publish always inserts a new row with the next version number.
-model CompanyDocVersion {
+model CultureDocVersion {
   /// Surrogate key.
   id           String     @id @default(cuid())
-  /// Owning company document.
-  companyDocId String     @map("company_doc_id")
+  /// Owning culture document.
+  cultureDocId String     @map("culture_doc_id")
   /// Monotonic version number, unique within the document.
   version      Int
   /// The full document content for this version.
@@ -41,30 +41,30 @@ model CompanyDocVersion {
   /// When this version was published (immutable thereafter).
   createdAt    DateTime   @default(now()) @map("created_at")
   /// Owning document; cascades so versions never outlive their doc.
-  companyDoc   CompanyDoc @relation(fields: [companyDocId], references: [id], onDelete: Cascade)
+  cultureDoc   CultureDoc @relation(fields: [cultureDocId], references: [id], onDelete: Cascade)
 
-  @@unique([companyDocId, version])
-  @@index([companyDocId])
-  @@map("company_doc_versions")
+  @@unique([cultureDocId, version])
+  @@index([cultureDocId])
+  @@map("culture_doc_versions")
 }
 
 /// The control-plane's view of a tenant's effective L2 workspace doc (P4C.4/P4C.5).
 ///
 /// `content` is the tenant's current doc ("theirs" in the 3-way merge) and the
 /// payload delivered into the pod workspace via the re-pull loop on approval;
-/// `lastReconciledVersion` is the company version this tenant has accepted (the
+/// `lastPropagatedVersion` is the culture version this tenant has accepted (the
 /// merge "base"). One row per (tenant, docName).
-model TenantWorkspaceDoc {
+model TenantCultureDoc {
   /// Surrogate key.
   id                    String   @id @default(cuid())
   /// Tenant the doc belongs to.
   tenant                String
-  /// Document name, matching `CompanyDoc.name` (e.g. `SOUL`).
+  /// Document name, matching `CultureDoc.name` (e.g. `SOUL`).
   docName               String   @map("doc_name")
   /// The tenant's current effective content (delivered into the workspace).
   content               String
-  /// The company version this content was last reconciled against (the merge base).
-  lastReconciledVersion Int      @default(0) @map("last_reconciled_version")
+  /// The culture version this content was last propagated against (the merge base).
+  lastPropagatedVersion Int      @default(0) @map("last_propagated_version")
   /// When this doc was last delivered/updated.
   updatedAt             DateTime @updatedAt @map("updated_at")
   /// Owning tenant; cascades on tenant delete.
@@ -72,32 +72,32 @@ model TenantWorkspaceDoc {
 
   @@unique([tenant, docName])
   @@index([tenant])
-  @@map("tenant_workspace_docs")
+  @@map("tenant_culture_docs")
 }
 
-/// A pending/decided company→tenant reconciliation proposal (P4C.4/P4C.5).
+/// A pending/decided culture→tenant propagation proposal (P4C.4/P4C.5).
 ///
 /// Produced by the agent-driven 3-way merge: it holds the proposed merged
 /// content + a human-readable diff and awaits owner approval before it lands.
-/// Idempotent/resumable: re-running reconciliation for the same target version
+/// Idempotent/resumable: re-running propagation for the same target version
 /// upserts the same (tenant, docName, targetVersion) row.
-model DocMergeProposal {
+model CulturePropagationProposal {
   /// Surrogate key.
   id              String            @id @default(cuid())
   /// Tenant the proposal targets.
   tenant          String
-  /// Document name being reconciled (e.g. `SOUL`).
+  /// Document name being propagated (e.g. `SOUL`).
   docName         String            @map("doc_name")
-  /// The company version used as the merge base (tenant's lastReconciledVersion).
+  /// The culture version used as the merge base (tenant's lastPropagatedVersion).
   baseVersion     Int               @map("base_version")
-  /// The company version being reconciled toward (the new "ours").
+  /// The culture version being propagated toward (the new "ours").
   targetVersion   Int               @map("target_version")
   /// The agent-proposed merged content (L1/L2 only — never L0).
   proposedContent String            @map("proposed_content")
   /// A human-readable unified-style diff of the proposed change.
   diff            String
   /// Lifecycle status.
-  status          DocProposalStatus @default(Pending)
+  status          PropagationStatus @default(Pending)
   /// When the proposal was generated.
   createdAt       DateTime          @default(now()) @map("created_at")
   /// When the proposal was approved/rejected; null while pending.
@@ -110,5 +110,5 @@ model DocMergeProposal {
   @@unique([tenant, docName, targetVersion])
   @@index([tenant, docName])
   @@index([status])
-  @@map("doc_merge_proposals")
+  @@map("culture_propagation_proposals")
 }

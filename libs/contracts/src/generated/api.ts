@@ -1416,6 +1416,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/org/culture-docs/{name}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a culture doc's current state and latest content */
+        get: operations["getCultureDoc"];
+        /**
+         * Publish a new immutable version of a culture doc
+         * @description Appends an immutable version and bumps the doc's currentVersion. Content is rejected before any write when empty (400) or when it asserts L0 platform mechanics (422).
+         */
+        put: operations["publishCultureDoc"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/versions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List a culture doc's published versions, newest first */
+        get: operations["listCultureDocVersions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/versions/{version}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Retrieve a specific immutable version by number */
+        get: operations["getCultureDocVersion"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/propagate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Generate a propagation proposal for a tenant against the current culture version
+         * @description Merges the tenant's doc toward the current culture version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The merge engine is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.
+         */
+        post: operations["propagateCultureDoc"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/proposals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List propagation proposals for a doc */
+        get: operations["listPropagationProposals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/proposals/{id}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve a proposal — delivers the merged doc into the tenant workspace */
+        post: operations["approvePropagationProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/org/culture-docs/{name}/proposals/{id}/reject": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reject a proposal — leaves the tenant doc untouched */
+        post: operations["rejectPropagationProposal"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1870,6 +1996,85 @@ export interface components {
             resourceId: string;
             /** @description IdP subjects the resource is shared with (incl. the owner). */
             members: string[];
+        };
+        /** @description The current state of an L1 org-culture personalisation doc plus its latest content. */
+        CultureDoc: {
+            /** @description Document name (workspace file stem, e.g. SOUL). */
+            name: string;
+            /** @description The highest published version number (0 when none published yet). */
+            currentVersion: number;
+            /** @description The current version's content, or null when nothing is published yet. */
+            content: string | null;
+            /**
+             * Format: date-time
+             * @description When the document was last updated.
+             */
+            updatedAt: string;
+        };
+        /** @description Summary metadata for one immutable culture-doc version (no content). */
+        CultureDocVersionSummary: {
+            /** @description Monotonic version number. */
+            version: number;
+            /** @description Identity that published this version. */
+            createdBy: string;
+            /**
+             * Format: date-time
+             * @description When this version was published.
+             */
+            createdAt: string;
+        };
+        /** @description One immutable culture-doc version with its full content. */
+        CultureDocVersion: {
+            /** @description Monotonic version number. */
+            version: number;
+            /** @description The version's full document content. */
+            content: string;
+            /** @description Identity that published this version. */
+            createdBy: string;
+            /**
+             * Format: date-time
+             * @description When this version was published.
+             */
+            createdAt: string;
+        };
+        /** @description A per-tenant culture-propagation proposal: the merged doc awaiting an approve/reject decision. */
+        PropagationProposal: {
+            /** @description Stable proposal identifier. */
+            id: string;
+            /** @description Tenant the proposal targets. */
+            tenant: string;
+            /** @description Document name being propagated. */
+            docName: string;
+            /** @description The culture version used as the merge base. */
+            baseVersion: number;
+            /** @description The culture version propagated toward. */
+            targetVersion: number;
+            /** @description The proposed merged content. */
+            proposedContent: string;
+            /** @description Human-readable change summary. */
+            diff: string;
+            /**
+             * @description Lifecycle status.
+             * @enum {string}
+             */
+            status: "pending" | "approved" | "rejected";
+            /**
+             * Format: date-time
+             * @description When the proposal was generated.
+             */
+            createdAt: string;
+        };
+        /** @description Outcome of approving or rejecting a culture-propagation proposal. */
+        PropagationDecision: {
+            /** @description Proposal identifier. */
+            id: string;
+            /**
+             * @description Resulting status.
+             * @enum {string}
+             */
+            status: "approved" | "rejected";
+            /** @description For an approval: the tenant's new propagated version; null on reject. */
+            deliveredVersion: number | null;
         };
         SkillBundle: {
             id?: string;
@@ -6677,6 +6882,364 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+        };
+    };
+    getCultureDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Culture doc detail. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CultureDoc"];
+                };
+            };
+            /** @description Culture doc not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    publishCultureDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The full document content for the new version. */
+                    content: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Version published. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @description The version number assigned to the newly published content. */
+                        version: number;
+                    };
+                };
+            };
+            /** @description Content is missing or empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Content asserts L0 platform mechanics. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listCultureDocVersions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Version summaries, newest first. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        versions: components["schemas"]["CultureDocVersionSummary"][];
+                    };
+                };
+            };
+            /** @description Culture doc not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getCultureDocVersion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Monotonic version number. */
+                version: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Version content and metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CultureDocVersion"];
+                };
+            };
+            /** @description Version is not a positive integer. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Culture doc or version not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    propagateCultureDoc: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description The tenant to propagate the current culture version toward. */
+                    tenant: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Tenant already propagated to the current version. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        status: "up-to-date";
+                        version: number;
+                    };
+                };
+            };
+            /** @description Propagation proposal generated. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropagationProposal"];
+                };
+            };
+            /** @description Tenant is missing or empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Tenant not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No culture version published for this doc. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The merged output asserted L0 platform mechanics. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listPropagationProposals: {
+        parameters: {
+            query?: {
+                /** @description Filter to proposals targeting this tenant. */
+                tenant?: string;
+                /** @description Filter by lifecycle status. */
+                status?: "pending" | "approved" | "rejected";
+            };
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal list. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        name: string;
+                        proposals: components["schemas"]["PropagationProposal"][];
+                    };
+                };
+            };
+        };
+    };
+    approvePropagationProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Proposal identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal approved. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropagationDecision"];
+                };
+            };
+            /** @description Proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal already decided. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    rejectPropagationProposal: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
+                name: string;
+                /** @description Proposal identifier. */
+                id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Proposal rejected. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PropagationDecision"];
+                };
+            };
+            /** @description Proposal not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal already decided. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

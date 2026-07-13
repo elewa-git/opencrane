@@ -19,8 +19,8 @@ model Tenant {
   litellmKeys        TenantLiteLlmKey[]
   datasetMemberships TenantDatasetMembership[]
   brokeredDevices    BrokeredDevice[]
-  workspaceDocs      TenantWorkspaceDoc[]
-  docMergeProposals  DocMergeProposal[]
+  cultureDocs        TenantCultureDoc[]
+  propagationProposals CulturePropagationProposal[]
   participationEvents ParticipationEvent[]
   participation      TenantParticipation?
 

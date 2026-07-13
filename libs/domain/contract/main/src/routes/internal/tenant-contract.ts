@@ -188,14 +188,14 @@ export function _RegisterInternalTenantContract(prisma: PrismaClient, authApi: k
       //     (platform-owned, re-applied every poll), these are tenant-editable, so
       //     they are delivered as *version-gated* `managedDocs`: the entrypoint
       //     writes a doc only when its version increases, preserving the tenant's
-      //     live in-pod edits between company reconciliations.
-      const workspaceDocs = await prisma.tenantWorkspaceDoc.findMany({
+      //     live in-pod edits between culture propagations.
+      const cultureDocs = await prisma.tenantCultureDoc.findMany({
         where: { tenant: name },
-        select: { docName: true, content: true, lastReconciledVersion: true },
+        select: { docName: true, content: true, lastPropagatedVersion: true },
       });
-      const managedDocs = workspaceDocs.map(function _toManagedDoc(doc)
+      const managedDocs = cultureDocs.map(function _toManagedDoc(doc)
       {
-        return { file: `${doc.docName}.md`, content: doc.content, version: doc.lastReconciledVersion };
+        return { file: `${doc.docName}.md`, content: doc.content, version: doc.lastPropagatedVersion };
       });
 
       // 7c. Resolve this tenant's awareness contract version from the fleet rollout
@@ -244,7 +244,7 @@ export function _RegisterInternalTenantContract(prisma: PrismaClient, authApi: k
           "TOOLS.md": toolsMarkdown,
         },
         // Version-gated tenant-editable L2 docs (P4C.5). Delivered once per version
-        // bump so approved company reconciliations land without a restart while the
+        // bump so approved culture propagations land without a restart while the
         // tenant's between-bump in-pod edits are preserved.
         managedDocs,
         // Awareness contract version this tenant runs under the fleet rollout (P4B.3).

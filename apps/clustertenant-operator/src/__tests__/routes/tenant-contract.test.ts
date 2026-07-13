@@ -70,7 +70,7 @@ function _buildPrismaStub(overrides: {
     skillBundle: {
       findMany: vi.fn().mockResolvedValue([]),
     },
-    tenantWorkspaceDoc: {
+    tenantCultureDoc: {
       findMany: vi.fn().mockResolvedValue([]),
     },
     awarenessRollout: {

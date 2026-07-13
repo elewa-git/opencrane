@@ -29,6 +29,7 @@ import { _ModelRoutingOpenapiPaths } from "@opencrane/domain/model-routing";
 import { _SpendOpenapiPaths } from "@opencrane/domain/spend";
 import { _AuditOpenapiPaths } from "@opencrane/domain/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/domain/metrics";
+import { _CultureDocsOpenapiPaths } from "@opencrane/domain/org-culture-propagation";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -395,6 +396,69 @@ const GroupSchema = {
     description: { type: "string" },
     memberCount: { type: "integer" },
     awarenessGrants: { type: "array", items: { type: "object" } },
+  },
+};
+
+const CultureDocSchema = {
+  type: "object" as const,
+  required: ["name", "currentVersion", "content", "updatedAt"],
+  description: "The current state of an L1 org-culture personalisation doc plus its latest content.",
+  properties: {
+    name: { type: "string", description: "Document name (workspace file stem, e.g. SOUL)." },
+    currentVersion: { type: "integer", description: "The highest published version number (0 when none published yet)." },
+    content: { type: ["string", "null"], description: "The current version's content, or null when nothing is published yet." },
+    updatedAt: { type: "string", format: "date-time", description: "When the document was last updated." },
+  },
+};
+
+const CultureDocVersionSummarySchema = {
+  type: "object" as const,
+  required: ["version", "createdBy", "createdAt"],
+  description: "Summary metadata for one immutable culture-doc version (no content).",
+  properties: {
+    version: { type: "integer", description: "Monotonic version number." },
+    createdBy: { type: "string", description: "Identity that published this version." },
+    createdAt: { type: "string", format: "date-time", description: "When this version was published." },
+  },
+};
+
+const CultureDocVersionSchema = {
+  type: "object" as const,
+  required: ["version", "content", "createdBy", "createdAt"],
+  description: "One immutable culture-doc version with its full content.",
+  properties: {
+    version: { type: "integer", description: "Monotonic version number." },
+    content: { type: "string", description: "The version's full document content." },
+    createdBy: { type: "string", description: "Identity that published this version." },
+    createdAt: { type: "string", format: "date-time", description: "When this version was published." },
+  },
+};
+
+const PropagationProposalSchema = {
+  type: "object" as const,
+  required: ["id", "tenant", "docName", "baseVersion", "targetVersion", "proposedContent", "diff", "status", "createdAt"],
+  description: "A per-tenant culture-propagation proposal: the merged doc awaiting an approve/reject decision.",
+  properties: {
+    id: { type: "string", description: "Stable proposal identifier." },
+    tenant: { type: "string", description: "Tenant the proposal targets." },
+    docName: { type: "string", description: "Document name being propagated." },
+    baseVersion: { type: "integer", description: "The culture version used as the merge base." },
+    targetVersion: { type: "integer", description: "The culture version propagated toward." },
+    proposedContent: { type: "string", description: "The proposed merged content." },
+    diff: { type: "string", description: "Human-readable change summary." },
+    status: { type: "string", enum: ["pending", "approved", "rejected"], description: "Lifecycle status." },
+    createdAt: { type: "string", format: "date-time", description: "When the proposal was generated." },
+  },
+};
+
+const PropagationDecisionSchema = {
+  type: "object" as const,
+  required: ["id", "status", "deliveredVersion"],
+  description: "Outcome of approving or rejecting a culture-propagation proposal.",
+  properties: {
+    id: { type: "string", description: "Proposal identifier." },
+    status: { type: "string", enum: ["approved", "rejected"], description: "Resulting status." },
+    deliveredVersion: { type: ["integer", "null"], description: "For an approval: the tenant's new propagated version; null on reject." },
   },
 };
 
@@ -794,6 +858,7 @@ function paginated(itemSchema: object)
 // Spec document — Composed from domain path fragments
 // ---------------------------------------------------------------------------
 
+/** The control-plane OpenAPI 3.1 document, composed from domain path fragments. */
 export const spec = {
   openapi: "3.1.0",
   info: {
@@ -852,6 +917,11 @@ export const spec = {
         },
         required: ["groupId", "resourceType", "resourceId", "members"],
       },
+      CultureDoc: CultureDocSchema,
+      CultureDocVersionSummary: CultureDocVersionSummarySchema,
+      CultureDocVersion: CultureDocVersionSchema,
+      PropagationProposal: PropagationProposalSchema,
+      PropagationDecision: PropagationDecisionSchema,
       SkillBundle: SkillBundleSchema,
       AuditEntry: AuditEntrySchema,
       AccessToken: AccessTokenSchema,
@@ -1003,6 +1073,7 @@ export const spec = {
     ..._SpendOpenapiPaths,
     ..._AuditOpenapiPaths,
     ..._MetricsOpenapiPaths,
+    ..._CultureDocsOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow, device authorization grant, session introspection
