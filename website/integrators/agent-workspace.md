@@ -1,9 +1,9 @@
 # Agent workspace & control layers
 
 How OpenCrane keeps every tenant agent (OpenClaw) inside organisational policy:
-the **layered workspace** (L0/L1/L2), the **SOUL.md reconciler** that merges company
-voice into a personalised agent without erasing it, and why none of this prose is
-trusted as a security boundary.
+the **layered workspace** (L0/L1/L2), the **SOUL.md propagation** that merges
+org-culture voice into a personalised agent without erasing it, and why none of this
+prose is trusted as a security boundary.
 
 > See also: [Architecture](/advanced/architecture) (how the pieces fit together),
 > [Obot MCP gateway](/integrators/mcp-gateway) and [Skill registry](/integrators/skill-registry)
@@ -16,7 +16,7 @@ OpenCrane controls an agent with **two completely different mechanisms**, and th
 distinction is the most important thing on this page.
 
 - **Conditioning** — prose the agent can read, and even argue with: its persona, the
-  company voice, the operating brief. This shapes *who the agent thinks it is*.
+  organisation's culture voice, the operating brief. This shapes *who the agent thinks it is*.
 - **Enforcement** — infrastructure the agent cannot see, touch, or talk its way around:
   the Obot gateway, the skill registry, per-tenant isolation, projected tokens. This
   decides *what the agent can actually do*.
@@ -43,7 +43,7 @@ ownership layer, and the layer decides who may write it and whether it survives 
                  ┌─────────────────────────────────────────────┐
   re-stamped ──▶ │ L0  Platform   AGENTS.md · TOOLS.md          │  never editable
    every boot    ├─────────────────────────────────────────────┤
-                 │ L1  Company    SOUL.md + policy / voice docs │  versioned, immutable
+                 │ L1  Org culture SOUL.md + policy / voice docs│  versioned, immutable
    API-edited ──▶├─────────────────────────────────────────────┤
                  │ L2  Tenant     SOUL.md · IDENTITY.md ·       │  live, persistent
    live in-pod   │                USER.md · MEMORY.md           │  (seeded from L1)
@@ -53,7 +53,7 @@ ownership layer, and the layer decides who may write it and whether it survives 
 | Layer | Owner | Files | Editable? | Survives restart? |
 |-------|-------|-------|-----------|-------------------|
 | **L0 Platform** | OpenCrane | `AGENTS.md`, `TOOLS.md` | No | Re-stamped every boot |
-| **L1 Company** | Organisation | company `SOUL.md` + policy/voice docs | Via control-plane API | Versioned v1…vN (immutable) |
+| **L1 Org culture** | Organisation | culture `SOUL.md` + policy/voice docs | Via control-plane API | Versioned v1…vN (immutable) |
 | **L2 Tenant** | Tenant / agent | `SOUL.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md` | Yes, live in-pod | Yes (persistent volume) |
 
 - **L0** encodes system mechanics — managed mode, the fact that MCP calls route through
@@ -61,9 +61,9 @@ ownership layer, and the layer decides who may write it and whether it survives 
   contract semantics. The entrypoint (`apps/tenant/deploy/entrypoint.sh`) rewrites these
   files on **every pod start**, so any edit an agent makes to them is reverted within one
   boot.
-- **L1** is the company's persona, tone, values and policy language. It is edited through
-  the control-plane API, published as immutable versions, and by rule carries **no** system
-  mechanics (see [the L0 guard](#the-l0-guard) below).
+- **L1** is the organisation's persona, tone, values and policy language. It is edited
+  through the control-plane API, published as immutable versions, and by rule carries
+  **no** system mechanics (see [the L0 guard](#the-l0-guard) below).
 - **L2** is where an agent becomes a distinct individual: its name, working style, what it
   remembers, who it works with. It is seeded from L1 at create time, then edited live and
   persisted across restarts.
@@ -75,21 +75,21 @@ live in the IAM planes. Behaviour is enforced by infrastructure, not by which fi
 model reads last.
 :::
 
-## The SOUL.md reconciler
+## Culture propagation
 
-An agent is allowed to personalise its own soul, so when the company updates its policy or
-voice OpenCrane cannot just overwrite the file — that would erase the tenant's identity.
-Instead the control plane runs a governed, reviewable **three-way merge**. This is the
-closest thing to "conditioning" an agent, and it is deliberately consensual.
+An agent is allowed to personalise its own soul, so when the organisation updates its
+policy or voice OpenCrane cannot just overwrite the file — that would erase the tenant's
+identity. Instead the control plane runs a governed, reviewable **three-way merge**. This
+is the closest thing to "conditioning" an agent, and it is deliberately consensual.
 
-1. **Company publishes a new L1 version.** An admin edits the company `SOUL.md` via
-   `PUT /api/v1/org/workspace-docs/:name` ([company-docs.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/company-docs/main/src/routes/company-docs.ts)).
+1. **The organisation publishes a new L1 version.** An admin edits the culture `SOUL.md`
+   via `PUT /api/v1/org/culture-docs/:name` ([culture-docs.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/org-culture-propagation/main/src/routes/culture-docs.ts)).
    It is stored as a new immutable version. Before storage, the **L0 guard** scans it and
    rejects anything asserting system mechanics.
-2. **Three-way merge is computed.** The reconciler
-   ([reconciliation.logic.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/company-docs/main/src/core/reconciliation.logic.ts))
-   reads **base** (the version the tenant last reconciled), **ours** (the new company
-   version) and **theirs** (the agent's current live `SOUL.md`). Policy: company wins, but
+2. **Three-way merge is computed.** The merge engine
+   ([propagation.logic.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/org-culture-propagation/main/src/core/propagation.logic.ts))
+   reads **base** (the version the tenant last propagated), **ours** (the new culture
+   version) and **theirs** (the agent's current live `SOUL.md`). Policy: culture wins, but
    lines the tenant genuinely added are preserved under a clearly-labelled section — never
    silently discarded.
 3. **A proposal is emitted — not applied.** The merge and a readable diff become a
@@ -99,22 +99,23 @@ closest thing to "conditioning" an agent, and it is deliberately consensual.
    change and diff. There is no silent identity swap-out.
 5. **On approval, it rides the contract into the pod.** The merged document is delivered
    through the same token-authenticated contract loop that already feeds the pod, and the
-   reconciliation cursor advances so the next company update merges cleanly.
+   propagation cursor advances so the next culture update merges cleanly.
 
 ::: tip Implementation status
-The merge engine today is a deterministic *company-wins, preserve-tenant-additions* merger
-(`_DeterministicReconciler` in [reconciler.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/company-docs/main/src/core/reconciler.ts))
+The merge engine today is a deterministic *culture-wins, preserve-tenant-additions* merger
+(`_DeterministicCultureMerge` in [merge-engine.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/org-culture-propagation/main/src/core/merge-engine.ts))
 — predictable and testable with no model in the loop. The locked design swaps a
-LiteLLM-backed, agent-driven merge in at a single seam (`_BuildDocMergeReconciler`); the
+LiteLLM-backed, agent-driven merge in at a single seam (`_BuildCultureMergeEngine`); the
 orchestration around it is already final. 🔶
 :::
 
 ## The L0 guard
 
-The model only works if company and tenant prose stays in its lane. The L0 guard
-([l0-guard.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/company-docs/main/src/core/l0-guard.ts))
-is a hard gate on **both** the publish path and the reconciler output: if a document tries
-to assert platform mechanics, the write is rejected with a `422` before anything lands.
+The model only works if culture and tenant prose stays in its lane. The L0 guard
+([l0-guard.ts](https://github.com/italanta/opencrane/blob/main/libs/domain/org-culture-propagation/main/src/core/l0-guard.ts))
+is a hard gate on **both** the publish path and the merge-engine output: if a document
+tries to assert platform mechanics, the write is rejected with a `422` before anything
+lands.
 
 | Forbidden in L1 / L2 prose | Why it is blocked |
 |----------------------------|-------------------|
@@ -125,7 +126,7 @@ to assert platform mechanics, the write is rejected with a `422` before anything
 | `OPENCRANE_*`, `/data/openclaw` | Env and workspace wiring are L0-owned |
 | `AGENTS.md` / `TOOLS.md` | A doc may not redefine the platform-owned files |
 
-This is what makes "company wins" safe. Even a future model-driven merge agent is sandboxed
+This is what makes "culture wins" safe. Even a future model-driven merge agent is sandboxed
 by the guard: it can rephrase a soul freely, but it can never smuggle a system directive
 from L1/L2 into the layer that controls behaviour — and even if it did, L0 is re-stamped and
 the IAM planes ignore prose entirely.
@@ -167,7 +168,7 @@ the sentences in `AGENTS.md` that are actually backed by infrastructure.
 
 It is a fair nickname for one half of the system and a misleading one for the whole.
 OpenCrane does shape an agent's identity — it seeds the soul, teaches the platform, and
-periodically merges the company's evolving voice into the agent's self. But it does so **in
+periodically merges the organisation's evolving culture voice into the agent's self. But it does so **in
 the open**: the agent can read every conditioning file, it is told when its soul is about to
 change, and it reviews the diff before anything is applied. That is closer to onboarding than
 to coercion.

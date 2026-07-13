@@ -23,9 +23,6 @@
       "@opencrane/domain/cluster-tenants": [
         "libs/domain/cluster-tenants/main/src/index.ts"
       ],
-      "@opencrane/domain/company-docs": [
-        "libs/domain/company-docs/main/src/index.ts"
-      ],
       "@opencrane/domain/connections": [
         "libs/domain/connections/main/src/index.ts"
       ],
@@ -46,6 +43,9 @@
       ],
       "@opencrane/domain/model-routing": [
         "libs/domain/model-routing/main/src/index.ts"
+      ],
+      "@opencrane/domain/org-culture-propagation": [
+        "libs/domain/org-culture-propagation/main/src/index.ts"
       ],
       "@opencrane/domain/policies": [
         "libs/domain/policies/main/src/index.ts"

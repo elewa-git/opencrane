@@ -20,7 +20,7 @@ the org-scoped management surface below; it READS the cluster-scoped `ClusterTen
 
 - `infra/` — cross-cutting: `auth/` (OIDC service, device-grant, pod-token pairing, brokered-device registry), `middleware/` (`___AuthMiddleware`, transport security), `db/` (Prisma client + healthcheck).
 - `core/` — domain logic (non-HTTP): `grants/` (grant compiler + Cognee sync), `awareness/` (rollout, participation, metrics), `cluster-tenants/` (own `<org>-default` Tenant seed — read-model only, no provisioner registry; that's fleet), `connections/` (kill-switch/gateway-admin), `oci/` (Zot bundle store + backfill), `personalisation/`, `sessions/`, `scanning/`, `ai-budget/`.
-- `features/` — higher-level workflows: `mcp-servers/`, `groups/`, `company-docs/`.
+- `features/` — higher-level workflows: `mcp-servers/`, `groups/`, `org-culture-propagation/`.
 - `routes/` — HTTP handlers (each a `*.ts` + `*.types.ts` pair); `routes/internal/` are the auth-less, NetworkPolicy-gated endpoints.
 
 ## Bootstrap (`src/index.ts`)
@@ -37,7 +37,7 @@ CRUD + notable actions:
 - **policies** — `+ drift/repair`; best-effort Cognee propagation. Dual-writes CRD ↔ Postgres.
 - **mcp-servers** — `+ credentials` (static-fallback vs per-user OBO brokering).
 - **skills/catalog** — `+ /:id/scan`, promote-gate (publish only if scan passed), `/backfill` (DB→OCI dual-write).
-- **groups**, **third-party-sources**, **provider-keys**, **access-tokens** (CLI tokens), **audit**, **metrics** (`/projection-drift` + alert webhook), **token-usage**, **ai-budget** (LiteLLM spend, read-only), **org/workspace-docs** (company-doc versioning + 3-way merge proposals), **awareness/rollout** (`+ promote/rollback/resolve`), **awareness/participation**, **sessions** (scope binding).
+- **groups**, **third-party-sources**, **provider-keys**, **access-tokens** (CLI tokens), **audit**, **metrics** (`/projection-drift` + alert webhook), **token-usage**, **ai-budget** (LiteLLM spend, read-only), **org/culture-docs** (culture-doc versioning + 3-way propagation proposals), **awareness/rollout** (`+ promote/rollback/resolve`), **awareness/participation**, **sessions** (scope binding).
 
 **Not served here (fleet-only since the split):** `cluster-tenants` lifecycle CRUD + provisioning, org membership, billing, `platform/dns`, and Zitadel administration moved to the [`fleet-operator`](./fleet-operator.md). The silo keeps `ClusterTenant` + `OrgMembership` as local **read-models** (per-org login + the org-admin gate) but does not mount their management routers.
 
@@ -63,7 +63,7 @@ Boot-time (the `index.ts` in-silo IIFE) provisions Cognee's dependencies, all be
 
 ## Prisma Schema (`prisma/schema.prisma`)
 
-PostgreSQL. ~30 models incl. `Tenant`, `ClusterTenant`, `AccessPolicy`, `Group`, `Grant`/`McpServerGrant`/`SkillEntitlement`, `McpServer`/`McpServerCredential`, `SkillBundle`/`SkillPromotion`, `ThirdPartySource(+Item)`, `BrokeredDevice`, `AccessToken`, `ProviderApiKey`, `AuditEntry`, `SessionScope`, `AwarenessRollout`, `ParticipationEvent`/`TenantParticipation`, `CompanyDoc(+Version)`/`TenantWorkspaceDoc`/`DocMergeProposal`, `OrgDocument`/`HarvestingCursor`, `TenantDatasetMembership`, budget/usage snapshots. Enums mirror `@opencrane/contracts` (GrantAccess/Scope/SubjectType, McpServer*, SkillBundle*, ClusterTenant*, etc.).
+PostgreSQL. ~30 models incl. `Tenant`, `ClusterTenant`, `AccessPolicy`, `Group`, `Grant`/`McpServerGrant`/`SkillEntitlement`, `McpServer`/`McpServerCredential`, `SkillBundle`/`SkillPromotion`, `ThirdPartySource(+Item)`, `BrokeredDevice`, `AccessToken`, `ProviderApiKey`, `AuditEntry`, `SessionScope`, `AwarenessRollout`, `ParticipationEvent`/`TenantParticipation`, `CultureDoc(+Version)`/`TenantCultureDoc`/`CulturePropagationProposal`, `OrgDocument`/`HarvestingCursor`, `TenantDatasetMembership`, budget/usage snapshots. Enums mirror `@opencrane/contracts` (GrantAccess/Scope/SubjectType, McpServer*, SkillBundle*, ClusterTenant*, etc.).
 
 ## Key Env
 
@@ -71,4 +71,4 @@ PostgreSQL. ~30 models incl. `Tenant`, `ClusterTenant`, `AccessPolicy`, `Group`,
 
 ## In-flight
 
-OCI/Zot skill delivery is mid-cutover (dual-write DB + registry; resolve OCI-first, DB fallback). Awareness rollout `shadowMode` and the doc-reconciliation merge agent are partly scaffolded. AI-budget enforcement lives in LiteLLM; the control-plane only reads spend.
+OCI/Zot skill delivery is mid-cutover (dual-write DB + registry; resolve OCI-first, DB fallback). Awareness rollout `shadowMode` and the culture-propagation merge agent are partly scaffolded. AI-budget enforcement lives in LiteLLM; the control-plane only reads spend.

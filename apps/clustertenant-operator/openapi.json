@@ -776,7 +776,7 @@
           "members"
         ]
       },
-      "CompanyDoc": {
+      "CultureDoc": {
         "type": "object",
         "required": [
           "name",
@@ -784,7 +784,7 @@
           "content",
           "updatedAt"
         ],
-        "description": "The current state of an L1 company personalisation doc plus its latest content.",
+        "description": "The current state of an L1 org-culture personalisation doc plus its latest content.",
         "properties": {
           "name": {
             "type": "string",
@@ -808,14 +808,14 @@
           }
         }
       },
-      "CompanyDocVersionSummary": {
+      "CultureDocVersionSummary": {
         "type": "object",
         "required": [
           "version",
           "createdBy",
           "createdAt"
         ],
-        "description": "Summary metadata for one immutable company-doc version (no content).",
+        "description": "Summary metadata for one immutable culture-doc version (no content).",
         "properties": {
           "version": {
             "type": "integer",
@@ -832,7 +832,7 @@
           }
         }
       },
-      "CompanyDocVersion": {
+      "CultureDocVersion": {
         "type": "object",
         "required": [
           "version",
@@ -840,7 +840,7 @@
           "createdBy",
           "createdAt"
         ],
-        "description": "One immutable company-doc version with its full content.",
+        "description": "One immutable culture-doc version with its full content.",
         "properties": {
           "version": {
             "type": "integer",
@@ -861,7 +861,7 @@
           }
         }
       },
-      "DocProposal": {
+      "PropagationProposal": {
         "type": "object",
         "required": [
           "id",
@@ -874,7 +874,7 @@
           "status",
           "createdAt"
         ],
-        "description": "A per-tenant reconciliation proposal: the merged doc awaiting an approve/reject decision.",
+        "description": "A per-tenant culture-propagation proposal: the merged doc awaiting an approve/reject decision.",
         "properties": {
           "id": {
             "type": "string",
@@ -886,15 +886,15 @@
           },
           "docName": {
             "type": "string",
-            "description": "Document name being reconciled."
+            "description": "Document name being propagated."
           },
           "baseVersion": {
             "type": "integer",
-            "description": "The company version used as the merge base."
+            "description": "The culture version used as the merge base."
           },
           "targetVersion": {
             "type": "integer",
-            "description": "The company version reconciled toward."
+            "description": "The culture version propagated toward."
           },
           "proposedContent": {
             "type": "string",
@@ -920,14 +920,14 @@
           }
         }
       },
-      "DocProposalDecision": {
+      "PropagationDecision": {
         "type": "object",
         "required": [
           "id",
           "status",
           "deliveredVersion"
         ],
-        "description": "Outcome of approving or rejecting a reconciliation proposal.",
+        "description": "Outcome of approving or rejecting a culture-propagation proposal.",
         "properties": {
           "id": {
             "type": "string",
@@ -946,7 +946,7 @@
               "integer",
               "null"
             ],
-            "description": "For an approval: the tenant's new reconciled version; null on reject."
+            "description": "For an approval: the tenant's new propagated version; null on reject."
           }
         }
       },
@@ -8490,12 +8490,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}": {
+    "/org/culture-docs/{name}": {
       "get": {
-        "operationId": "getCompanyDoc",
-        "summary": "Get a company doc's current state and latest content",
+        "operationId": "getCultureDoc",
+        "summary": "Get a culture doc's current state and latest content",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8505,22 +8505,22 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           }
         ],
         "responses": {
           "200": {
-            "description": "Company doc detail.",
+            "description": "Culture doc detail.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CompanyDoc"
+                  "$ref": "#/components/schemas/CultureDoc"
                 }
               }
             }
           },
           "404": {
-            "description": "Company doc not found.",
+            "description": "Culture doc not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8532,11 +8532,11 @@
         }
       },
       "put": {
-        "operationId": "publishCompanyDoc",
-        "summary": "Publish a new immutable version of a company doc",
+        "operationId": "publishCultureDoc",
+        "summary": "Publish a new immutable version of a culture doc",
         "description": "Appends an immutable version and bumps the doc's currentVersion. Content is rejected before any write when empty (400) or when it asserts L0 platform mechanics (422).",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8546,7 +8546,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           }
         ],
         "requestBody": {
@@ -8615,12 +8615,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/versions": {
+    "/org/culture-docs/{name}/versions": {
       "get": {
-        "operationId": "listCompanyDocVersions",
-        "summary": "List a company doc's published versions, newest first",
+        "operationId": "listCultureDocVersions",
+        "summary": "List a culture doc's published versions, newest first",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8630,7 +8630,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           }
         ],
         "responses": {
@@ -8651,7 +8651,7 @@
                     "versions": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/CompanyDocVersionSummary"
+                        "$ref": "#/components/schemas/CultureDocVersionSummary"
                       }
                     }
                   }
@@ -8660,7 +8660,7 @@
             }
           },
           "404": {
-            "description": "Company doc not found.",
+            "description": "Culture doc not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8672,12 +8672,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/versions/{version}": {
+    "/org/culture-docs/{name}/versions/{version}": {
       "get": {
-        "operationId": "getCompanyDocVersion",
+        "operationId": "getCultureDocVersion",
         "summary": "Retrieve a specific immutable version by number",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8687,7 +8687,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           },
           {
             "name": "version",
@@ -8706,7 +8706,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/CompanyDocVersion"
+                  "$ref": "#/components/schemas/CultureDocVersion"
                 }
               }
             }
@@ -8722,7 +8722,7 @@
             }
           },
           "404": {
-            "description": "Company doc or version not found.",
+            "description": "Culture doc or version not found.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8734,13 +8734,13 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/reconcile": {
+    "/org/culture-docs/{name}/propagate": {
       "post": {
-        "operationId": "reconcileCompanyDoc",
-        "summary": "Generate a reconciliation proposal for a tenant against the current company version",
-        "description": "Merges the tenant's doc toward the current company version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The reconciler is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.",
+        "operationId": "propagateCultureDoc",
+        "summary": "Generate a propagation proposal for a tenant against the current culture version",
+        "description": "Merges the tenant's doc toward the current culture version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The merge engine is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8750,7 +8750,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           }
         ],
         "requestBody": {
@@ -8765,7 +8765,7 @@
                 "properties": {
                   "tenant": {
                     "type": "string",
-                    "description": "The tenant to reconcile toward the current company version."
+                    "description": "The tenant to propagate the current culture version toward."
                   }
                 }
               }
@@ -8774,7 +8774,7 @@
         },
         "responses": {
           "200": {
-            "description": "Tenant already reconciled to the current version.",
+            "description": "Tenant already propagated to the current version.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8799,11 +8799,11 @@
             }
           },
           "201": {
-            "description": "Reconciliation proposal generated.",
+            "description": "Propagation proposal generated.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocProposal"
+                  "$ref": "#/components/schemas/PropagationProposal"
                 }
               }
             }
@@ -8829,7 +8829,7 @@
             }
           },
           "409": {
-            "description": "No company version published for this doc.",
+            "description": "No culture version published for this doc.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8851,12 +8851,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/proposals": {
+    "/org/culture-docs/{name}/proposals": {
       "get": {
-        "operationId": "listDocProposals",
-        "summary": "List reconciliation proposals for a doc",
+        "operationId": "listPropagationProposals",
+        "summary": "List propagation proposals for a doc",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8866,7 +8866,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           },
           {
             "name": "tenant",
@@ -8910,7 +8910,7 @@
                     "proposals": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/DocProposal"
+                        "$ref": "#/components/schemas/PropagationProposal"
                       }
                     }
                   }
@@ -8921,12 +8921,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/proposals/{id}/approve": {
+    "/org/culture-docs/{name}/proposals/{id}/approve": {
       "post": {
-        "operationId": "approveDocProposal",
+        "operationId": "approvePropagationProposal",
         "summary": "Approve a proposal — delivers the merged doc into the tenant workspace",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8936,7 +8936,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           },
           {
             "name": "id",
@@ -8954,7 +8954,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocProposalDecision"
+                  "$ref": "#/components/schemas/PropagationDecision"
                 }
               }
             }
@@ -8982,12 +8982,12 @@
         }
       }
     },
-    "/org/workspace-docs/{name}/proposals/{id}/reject": {
+    "/org/culture-docs/{name}/proposals/{id}/reject": {
       "post": {
-        "operationId": "rejectDocProposal",
+        "operationId": "rejectPropagationProposal",
         "summary": "Reject a proposal — leaves the tenant doc untouched",
         "tags": [
-          "Company Docs"
+          "Org Culture"
         ],
         "parameters": [
           {
@@ -8997,7 +8997,7 @@
             "schema": {
               "type": "string"
             },
-            "description": "Company doc name (workspace file stem, e.g. SOUL)."
+            "description": "Culture doc name (workspace file stem, e.g. SOUL)."
           },
           {
             "name": "id",
@@ -9015,7 +9015,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/DocProposalDecision"
+                  "$ref": "#/components/schemas/PropagationDecision"
                 }
               }
             }
