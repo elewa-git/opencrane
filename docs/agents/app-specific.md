@@ -32,7 +32,7 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 
 The control plane's HTTP surface is split into 20 NX packages, one per functional domain
 (`@opencrane/domain-<d>` at `libs/domain/<d>/main`): tenants, policies, grants, skills,
-model-routing, providers, awareness, spend, groups, mcp, sessions, company-docs, audit,
+model-routing, providers, awareness, spend, groups, mcp, sessions, org-culture-propagation, audit,
 access-tokens, metrics, connections, cluster-tenants, retrieval, contract, projection.
 Each owns its routes, core services, API types, tests, and (where applicable) a
 `prisma/schema/<d>.prisma` slice. Layout, boundary rules (`scope:domain`), and the

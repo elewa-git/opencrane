@@ -1,8 +1,8 @@
 {
-  "name": "domain-company-docs",
+  "name": "domain-org-culture-propagation",
   "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
   "projectType": "library",
-  "sourceRoot": "libs/domain/company-docs/main/src",
+  "sourceRoot": "libs/domain/org-culture-propagation/main/src",
   "tags": [
     "scope:domain"
   ],
@@ -11,14 +11,14 @@
       "executor": "nx:run-commands",
       "options": {
         "command": "tsc -p tsconfig.json --noEmit",
-        "cwd": "libs/domain/company-docs/main"
+        "cwd": "libs/domain/org-culture-propagation/main"
       }
     },
     "test": {
       "executor": "nx:run-commands",
       "options": {
         "command": "vitest run --passWithNoTests",
-        "cwd": "libs/domain/company-docs/main"
+        "cwd": "libs/domain/org-culture-propagation/main"
       }
     }
   }

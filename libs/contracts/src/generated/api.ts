@@ -1416,20 +1416,20 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}": {
+    "/org/culture-docs/{name}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get a company doc's current state and latest content */
-        get: operations["getCompanyDoc"];
+        /** Get a culture doc's current state and latest content */
+        get: operations["getCultureDoc"];
         /**
-         * Publish a new immutable version of a company doc
+         * Publish a new immutable version of a culture doc
          * @description Appends an immutable version and bumps the doc's currentVersion. Content is rejected before any write when empty (400) or when it asserts L0 platform mechanics (422).
          */
-        put: operations["publishCompanyDoc"];
+        put: operations["publishCultureDoc"];
         post?: never;
         delete?: never;
         options?: never;
@@ -1437,15 +1437,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/versions": {
+    "/org/culture-docs/{name}/versions": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List a company doc's published versions, newest first */
-        get: operations["listCompanyDocVersions"];
+        /** List a culture doc's published versions, newest first */
+        get: operations["listCultureDocVersions"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1454,7 +1454,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/versions/{version}": {
+    "/org/culture-docs/{name}/versions/{version}": {
         parameters: {
             query?: never;
             header?: never;
@@ -1462,7 +1462,7 @@ export interface paths {
             cookie?: never;
         };
         /** Retrieve a specific immutable version by number */
-        get: operations["getCompanyDocVersion"];
+        get: operations["getCultureDocVersion"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1471,7 +1471,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/reconcile": {
+    "/org/culture-docs/{name}/propagate": {
         parameters: {
             query?: never;
             header?: never;
@@ -1481,25 +1481,25 @@ export interface paths {
         get?: never;
         put?: never;
         /**
-         * Generate a reconciliation proposal for a tenant against the current company version
-         * @description Merges the tenant's doc toward the current company version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The reconciler is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.
+         * Generate a propagation proposal for a tenant against the current culture version
+         * @description Merges the tenant's doc toward the current culture version. Returns 200 when the tenant is already up to date, 201 with a pending proposal otherwise. The merge engine is sandboxed to L1/L2 — an L0 breach in its output is a merge fault surfaced as 422.
          */
-        post: operations["reconcileCompanyDoc"];
+        post: operations["propagateCultureDoc"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/proposals": {
+    "/org/culture-docs/{name}/proposals": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List reconciliation proposals for a doc */
-        get: operations["listDocProposals"];
+        /** List propagation proposals for a doc */
+        get: operations["listPropagationProposals"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1508,7 +1508,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/proposals/{id}/approve": {
+    "/org/culture-docs/{name}/proposals/{id}/approve": {
         parameters: {
             query?: never;
             header?: never;
@@ -1518,14 +1518,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Approve a proposal — delivers the merged doc into the tenant workspace */
-        post: operations["approveDocProposal"];
+        post: operations["approvePropagationProposal"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/org/workspace-docs/{name}/proposals/{id}/reject": {
+    "/org/culture-docs/{name}/proposals/{id}/reject": {
         parameters: {
             query?: never;
             header?: never;
@@ -1535,7 +1535,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Reject a proposal — leaves the tenant doc untouched */
-        post: operations["rejectDocProposal"];
+        post: operations["rejectPropagationProposal"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1997,8 +1997,8 @@ export interface components {
             /** @description IdP subjects the resource is shared with (incl. the owner). */
             members: string[];
         };
-        /** @description The current state of an L1 company personalisation doc plus its latest content. */
-        CompanyDoc: {
+        /** @description The current state of an L1 org-culture personalisation doc plus its latest content. */
+        CultureDoc: {
             /** @description Document name (workspace file stem, e.g. SOUL). */
             name: string;
             /** @description The highest published version number (0 when none published yet). */
@@ -2011,8 +2011,8 @@ export interface components {
              */
             updatedAt: string;
         };
-        /** @description Summary metadata for one immutable company-doc version (no content). */
-        CompanyDocVersionSummary: {
+        /** @description Summary metadata for one immutable culture-doc version (no content). */
+        CultureDocVersionSummary: {
             /** @description Monotonic version number. */
             version: number;
             /** @description Identity that published this version. */
@@ -2023,8 +2023,8 @@ export interface components {
              */
             createdAt: string;
         };
-        /** @description One immutable company-doc version with its full content. */
-        CompanyDocVersion: {
+        /** @description One immutable culture-doc version with its full content. */
+        CultureDocVersion: {
             /** @description Monotonic version number. */
             version: number;
             /** @description The version's full document content. */
@@ -2037,17 +2037,17 @@ export interface components {
              */
             createdAt: string;
         };
-        /** @description A per-tenant reconciliation proposal: the merged doc awaiting an approve/reject decision. */
-        DocProposal: {
+        /** @description A per-tenant culture-propagation proposal: the merged doc awaiting an approve/reject decision. */
+        PropagationProposal: {
             /** @description Stable proposal identifier. */
             id: string;
             /** @description Tenant the proposal targets. */
             tenant: string;
-            /** @description Document name being reconciled. */
+            /** @description Document name being propagated. */
             docName: string;
-            /** @description The company version used as the merge base. */
+            /** @description The culture version used as the merge base. */
             baseVersion: number;
-            /** @description The company version reconciled toward. */
+            /** @description The culture version propagated toward. */
             targetVersion: number;
             /** @description The proposed merged content. */
             proposedContent: string;
@@ -2064,8 +2064,8 @@ export interface components {
              */
             createdAt: string;
         };
-        /** @description Outcome of approving or rejecting a reconciliation proposal. */
-        DocProposalDecision: {
+        /** @description Outcome of approving or rejecting a culture-propagation proposal. */
+        PropagationDecision: {
             /** @description Proposal identifier. */
             id: string;
             /**
@@ -2073,7 +2073,7 @@ export interface components {
              * @enum {string}
              */
             status: "approved" | "rejected";
-            /** @description For an approval: the tenant's new reconciled version; null on reject. */
+            /** @description For an approval: the tenant's new propagated version; null on reject. */
             deliveredVersion: number | null;
         };
         SkillBundle: {
@@ -6886,28 +6886,28 @@ export interface operations {
             };
         };
     };
-    getCompanyDoc: {
+    getCultureDoc: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Company doc detail. */
+            /** @description Culture doc detail. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyDoc"];
+                    "application/json": components["schemas"]["CultureDoc"];
                 };
             };
-            /** @description Company doc not found. */
+            /** @description Culture doc not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -6918,12 +6918,12 @@ export interface operations {
             };
         };
     };
-    publishCompanyDoc: {
+    publishCultureDoc: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
             };
             cookie?: never;
@@ -6970,12 +6970,12 @@ export interface operations {
             };
         };
     };
-    listCompanyDocVersions: {
+    listCultureDocVersions: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
             };
             cookie?: never;
@@ -6990,11 +6990,11 @@ export interface operations {
                 content: {
                     "application/json": {
                         name: string;
-                        versions: components["schemas"]["CompanyDocVersionSummary"][];
+                        versions: components["schemas"]["CultureDocVersionSummary"][];
                     };
                 };
             };
-            /** @description Company doc not found. */
+            /** @description Culture doc not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7005,12 +7005,12 @@ export interface operations {
             };
         };
     };
-    getCompanyDocVersion: {
+    getCultureDocVersion: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
                 /** @description Monotonic version number. */
                 version: number;
@@ -7025,7 +7025,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CompanyDocVersion"];
+                    "application/json": components["schemas"]["CultureDocVersion"];
                 };
             };
             /** @description Version is not a positive integer. */
@@ -7037,7 +7037,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description Company doc or version not found. */
+            /** @description Culture doc or version not found. */
             404: {
                 headers: {
                     [name: string]: unknown;
@@ -7048,12 +7048,12 @@ export interface operations {
             };
         };
     };
-    reconcileCompanyDoc: {
+    propagateCultureDoc: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
             };
             cookie?: never;
@@ -7061,13 +7061,13 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @description The tenant to reconcile toward the current company version. */
+                    /** @description The tenant to propagate the current culture version toward. */
                     tenant: string;
                 };
             };
         };
         responses: {
-            /** @description Tenant already reconciled to the current version. */
+            /** @description Tenant already propagated to the current version. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -7080,13 +7080,13 @@ export interface operations {
                     };
                 };
             };
-            /** @description Reconciliation proposal generated. */
+            /** @description Propagation proposal generated. */
             201: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocProposal"];
+                    "application/json": components["schemas"]["PropagationProposal"];
                 };
             };
             /** @description Tenant is missing or empty. */
@@ -7107,7 +7107,7 @@ export interface operations {
                     "application/json": components["schemas"]["Error"];
                 };
             };
-            /** @description No company version published for this doc. */
+            /** @description No culture version published for this doc. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -7127,7 +7127,7 @@ export interface operations {
             };
         };
     };
-    listDocProposals: {
+    listPropagationProposals: {
         parameters: {
             query?: {
                 /** @description Filter to proposals targeting this tenant. */
@@ -7137,7 +7137,7 @@ export interface operations {
             };
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
             };
             cookie?: never;
@@ -7152,18 +7152,18 @@ export interface operations {
                 content: {
                     "application/json": {
                         name: string;
-                        proposals: components["schemas"]["DocProposal"][];
+                        proposals: components["schemas"]["PropagationProposal"][];
                     };
                 };
             };
         };
     };
-    approveDocProposal: {
+    approvePropagationProposal: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
                 /** @description Proposal identifier. */
                 id: string;
@@ -7178,7 +7178,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocProposalDecision"];
+                    "application/json": components["schemas"]["PropagationDecision"];
                 };
             };
             /** @description Proposal not found. */
@@ -7201,12 +7201,12 @@ export interface operations {
             };
         };
     };
-    rejectDocProposal: {
+    rejectPropagationProposal: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                /** @description Company doc name (workspace file stem, e.g. SOUL). */
+                /** @description Culture doc name (workspace file stem, e.g. SOUL). */
                 name: string;
                 /** @description Proposal identifier. */
                 id: string;
@@ -7221,7 +7221,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["DocProposalDecision"];
+                    "application/json": components["schemas"]["PropagationDecision"];
                 };
             };
             /** @description Proposal not found. */

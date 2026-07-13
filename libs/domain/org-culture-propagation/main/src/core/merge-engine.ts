@@ -1,36 +1,36 @@
-import type { DocMergeInput, DocMergeOutput, DocMergeReconciler } from "./reconciler.types.js";
+import type { CultureMergeInput, CultureMergeOutput, CultureMergeEngine } from "./merge-engine.types.js";
 
 /** Heading under which tenant-only additions are preserved on a conflicting merge. */
 const _TENANT_ADDENDUM_HEADING = "## Tenant additions (preserved)";
 
 /**
- * Dependency-free deterministic 3-way merger — the default reconciler.
+ * Dependency-free deterministic 3-way merger — the default merge engine.
  *
  * It is not the agent-driven merge of the locked design (that is the
- * LiteLLM-backed seam in {@link _BuildDocMergeReconciler}); it is a predictable
- * fallback so the reconciliation pipeline is functional and testable without a
+ * LiteLLM-backed seam in {@link _BuildCultureMergeEngine}); it is a predictable
+ * fallback so the propagation pipeline is functional and testable without a
  * live model. Policy:
  *   - If the tenant never diverged (`theirs === base`), fast-forward to `ours`.
- *   - Otherwise company wins: take `ours`, then append the tenant's own added
+ *   - Otherwise culture wins: take `ours`, then append the tenant's own added
  *     lines (present in `theirs` but in neither `base` nor `ours`) under a
  *     clearly-labelled addendum so tenant intent is preserved, not discarded.
  */
-export class _DeterministicReconciler implements DocMergeReconciler
+export class _DeterministicCultureMerge implements CultureMergeEngine
 {
   /**
    * Compute the deterministic merge.
    * @param input - Base/ours/theirs documents and the doc name.
    */
-  async reconcile(input: DocMergeInput): Promise<DocMergeOutput>
+  async merge(input: CultureMergeInput): Promise<CultureMergeOutput>
   {
-    // 1. Clean fast-forward — the tenant has no local edits, so the new company
+    // 1. Clean fast-forward — the tenant has no local edits, so the new culture
     //    version applies wholesale with no addendum.
     if (input.theirs.trim() === input.base.trim())
     {
       return { merged: input.ours, diff: _SummariseDiff(input.theirs, input.ours) };
     }
 
-    // 2. Conflicting merge — company content wins, but preserve the lines the
+    // 2. Conflicting merge — culture content wins, but preserve the lines the
     //    tenant added on top (not in base, not already in ours) so their intent
     //    survives instead of being silently overwritten.
     const baseLines = new Set(_lines(input.base));
@@ -49,16 +49,16 @@ export class _DeterministicReconciler implements DocMergeReconciler
 }
 
 /**
- * Build the document-merge reconciler from the environment.
+ * Build the culture-doc merge engine from the environment.
  *
  * Today this always returns the deterministic merger. A LiteLLM-backed,
  * agent-driven merger (the locked design) is the single seam to swap in here
  * once a model endpoint is wired — its merge quality needs live LiteLLM, so it
  * is not built in this slice.
  */
-export function _BuildDocMergeReconciler(): DocMergeReconciler
+export function _BuildCultureMergeEngine(): CultureMergeEngine
 {
-  return new _DeterministicReconciler();
+  return new _DeterministicCultureMerge();
 }
 
 /**

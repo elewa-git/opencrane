@@ -1,40 +1,34 @@
-import { type DocMergeProposal, type PrismaClient, DocProposalStatus } from "@prisma/client";
+import { type CulturePropagationProposal, type PrismaClient, PropagationStatus } from "@prisma/client";
 
 import { _AssertNoL0Directives } from "./l0-guard.js";
-import type { DocMergeReconciler } from "./reconciler.types.js";
-import type { DecideProposalResult, DocProposalResponse } from "../routes/company-docs.types.js";
-
-/** Distinct outcomes of a reconcile attempt. */
-export type ReconcileOutcome =
-  | { kind: "no-company-version" }
-  | { kind: "no-tenant" }
-  | { kind: "up-to-date"; version: number }
-  | { kind: "proposed"; proposal: DocProposalResponse };
+import type { CultureMergeEngine } from "./merge-engine.types.js";
+import type { PropagationOutcome } from "./propagation.types.js";
+import type { PropagationDecisionResult, PropagationProposalResponse } from "../routes/culture-docs.types.js";
 
 /**
- * Generate a company→tenant reconciliation proposal (P4C.4).
+ * Generate a culture→tenant propagation proposal (P4C.4).
  *
- * Runs the 3-way merge (base = the tenant's last-reconciled company version,
- * ours = the current company version, theirs = the tenant's current doc),
+ * Runs the 3-way merge (base = the tenant's last-propagated culture version,
+ * ours = the current culture version, theirs = the tenant's current doc),
  * guards the result against L0 directives (the agent can never edit L0), and
  * upserts a pending proposal keyed by (tenant, docName, targetVersion) so the
  * run is idempotent/resumable. No tenant doc is changed until approval (P4C.5).
  *
- * @param prisma      - Prisma client.
- * @param reconciler  - The merge engine (deterministic default or LiteLLM seam).
- * @param name        - Company doc name.
- * @param tenant      - Tenant to reconcile.
+ * @param prisma  - Prisma client.
+ * @param engine  - The merge engine (deterministic default or LiteLLM seam).
+ * @param name    - Culture doc name.
+ * @param tenant  - Tenant to propagate toward.
  * @returns A tagged outcome: missing prerequisites, already up-to-date, or a proposal.
  * @throws When the merged result carries forbidden L0 directives (sandbox breach).
  */
-export async function _ReconcileTenantDoc(prisma: PrismaClient, reconciler: DocMergeReconciler, name: string, tenant: string): Promise<ReconcileOutcome>
+export async function _PropagateCultureDocToTenant(prisma: PrismaClient, engine: CultureMergeEngine, name: string, tenant: string): Promise<PropagationOutcome>
 {
-  // 1. Resolve the current company version (the merge target); nothing to do
-  //    until at least one company version is published.
-  const doc = await prisma.companyDoc.findUnique({ where: { name }, select: { id: true, currentVersion: true } });
+  // 1. Resolve the current culture version (the merge target); nothing to do
+  //    until at least one culture version is published.
+  const doc = await prisma.cultureDoc.findUnique({ where: { name }, select: { id: true, currentVersion: true } });
   if (!doc || doc.currentVersion === 0)
   {
-    return { kind: "no-company-version" };
+    return { kind: "no-culture-version" };
   }
 
   // 2. The tenant must exist before we record a proposal against it.
@@ -44,100 +38,100 @@ export async function _ReconcileTenantDoc(prisma: PrismaClient, reconciler: DocM
     return { kind: "no-tenant" };
   }
 
-  // 3. Load the tenant's current doc + reconciliation cursor; absent means a
+  // 3. Load the tenant's current doc + propagation cursor; absent means a
   //    fresh tenant with no local edits (base/theirs empty, cursor 0).
-  const workspace = await prisma.tenantWorkspaceDoc.findUnique({
+  const workspace = await prisma.tenantCultureDoc.findUnique({
     where: { tenant_docName: { tenant, docName: name } },
-    select: { content: true, lastReconciledVersion: true },
+    select: { content: true, lastPropagatedVersion: true },
   });
-  const lastReconciledVersion = workspace?.lastReconciledVersion ?? 0;
+  const lastPropagatedVersion = workspace?.lastPropagatedVersion ?? 0;
   const theirs = workspace?.content ?? "";
 
   // 4. Idempotent fast-exit — the tenant is already on the current version.
-  if (lastReconciledVersion === doc.currentVersion)
+  if (lastPropagatedVersion === doc.currentVersion)
   {
     return { kind: "up-to-date", version: doc.currentVersion };
   }
 
   // 5. Resolve the base ("ours-last-accepted") and ours (target) version content.
-  const base = lastReconciledVersion > 0
-    ? (await prisma.companyDocVersion.findUnique({ where: { companyDocId_version: { companyDocId: doc.id, version: lastReconciledVersion } }, select: { content: true } }))?.content ?? ""
+  const base = lastPropagatedVersion > 0
+    ? (await prisma.cultureDocVersion.findUnique({ where: { cultureDocId_version: { cultureDocId: doc.id, version: lastPropagatedVersion } }, select: { content: true } }))?.content ?? ""
     : "";
-  const ours = (await prisma.companyDocVersion.findUnique({ where: { companyDocId_version: { companyDocId: doc.id, version: doc.currentVersion } }, select: { content: true } }))?.content ?? "";
+  const ours = (await prisma.cultureDocVersion.findUnique({ where: { cultureDocId_version: { cultureDocId: doc.id, version: doc.currentVersion } }, select: { content: true } }))?.content ?? "";
 
   // 6. Run the merge and enforce the L0 sandbox on its output before persisting.
-  const merge = await reconciler.reconcile({ docName: name, base, ours, theirs });
+  const merge = await engine.merge({ docName: name, base, ours, theirs });
   _AssertNoL0Directives(merge.merged);
 
   // 7. Upsert the pending proposal (idempotent on the target version); a re-run
   //    refreshes the proposed content and resets any prior decision.
-  const proposal = await prisma.docMergeProposal.upsert({
+  const proposal = await prisma.culturePropagationProposal.upsert({
     where: { tenant_docName_targetVersion: { tenant, docName: name, targetVersion: doc.currentVersion } },
     create: {
       tenant,
       docName: name,
-      baseVersion: lastReconciledVersion,
+      baseVersion: lastPropagatedVersion,
       targetVersion: doc.currentVersion,
       proposedContent: merge.merged,
       diff: merge.diff,
     },
     update: {
-      baseVersion: lastReconciledVersion,
+      baseVersion: lastPropagatedVersion,
       proposedContent: merge.merged,
       diff: merge.diff,
-      status: DocProposalStatus.Pending,
+      status: PropagationStatus.Pending,
       decidedAt: null,
       decidedBy: null,
     },
   });
 
-  return { kind: "proposed", proposal: _ToProposalResponse(proposal) };
+  return { kind: "proposed", proposal: _ToPropagationProposalResponse(proposal) };
 }
 
 /**
- * List reconciliation proposals for a company doc, newest first (P4C.4/P4C.5).
+ * List propagation proposals for a culture doc, newest first (P4C.4/P4C.5).
  *
  * @param prisma  - Prisma client.
- * @param name    - Company doc name.
+ * @param name    - Culture doc name.
  * @param filters - Optional tenant and status filters.
  */
-export async function _ListProposals(prisma: PrismaClient, name: string, filters: { tenant?: string; status?: DocProposalStatus }): Promise<DocProposalResponse[]>
+export async function _ListPropagationProposals(prisma: PrismaClient, name: string, filters: { tenant?: string; status?: PropagationStatus }): Promise<PropagationProposalResponse[]>
 {
-  const proposals = await prisma.docMergeProposal.findMany({
+  const proposals = await prisma.culturePropagationProposal.findMany({
     where: { docName: name, ...(filters.tenant ? { tenant: filters.tenant } : {}), ...(filters.status ? { status: filters.status } : {}) },
     orderBy: { createdAt: "desc" },
   });
-  return proposals.map(_ToProposalResponse);
+  return proposals.map(_ToPropagationProposalResponse);
 }
 
 /**
- * Approve or reject a reconciliation proposal (P4C.5).
+ * Approve or reject a propagation proposal (P4C.5).
  *
  * On **approve**, the proposed content becomes the tenant's effective workspace
- * doc and the reconciliation cursor advances to the target version — both in one
+ * doc and the propagation cursor advances to the target version — both in one
  * transaction with the status flip — so the next contract re-pull delivers it
  * into the pod with no restart. On **reject**, only the proposal status changes;
  * the tenant doc is left untouched.
  *
  * @param prisma     - Prisma client.
- * @param name       - Company doc name (must match the proposal).
+ * @param name       - Culture doc name (must match the proposal).
  * @param proposalId - The proposal to decide.
  * @param decision   - `"approve"` or `"reject"`.
  * @param decidedBy  - Identity making the decision (for audit).
  * @returns The decision result, or null when the proposal is missing/mismatched.
  * @throws When the proposal is not pending (already decided).
  */
-export async function _DecideProposal(prisma: PrismaClient, name: string, proposalId: string, decision: "approve" | "reject", decidedBy: string): Promise<DecideProposalResult | null>
+export async function _DecidePropagationProposal(prisma: PrismaClient, name: string, proposalId: string, decision: "approve" | "reject", decidedBy: string): Promise<PropagationDecisionResult | null>
 {
   // 1. Load and validate the proposal — it must exist and belong to this doc.
-  const proposal = await prisma.docMergeProposal.findUnique({ where: { id: proposalId } });
+  const proposal = await prisma.culturePropagationProposal.findUnique({ where: { id: proposalId } });
   if (!proposal || proposal.docName !== name)
   {
     return null;
   }
 
   // 2. Only a pending proposal can be decided — guard against double-apply.
-  if (proposal.status !== DocProposalStatus.Pending)
+  if (proposal.status !== PropagationStatus.Pending)
   {
     throw new Error(`proposal ${proposalId} is already ${proposal.status.toLowerCase()}`);
   }
@@ -145,9 +139,9 @@ export async function _DecideProposal(prisma: PrismaClient, name: string, propos
   // 3. Reject — flip status only; the tenant's doc and cursor stay as they were.
   if (decision === "reject")
   {
-    await prisma.docMergeProposal.update({
+    await prisma.culturePropagationProposal.update({
       where: { id: proposalId },
-      data: { status: DocProposalStatus.Rejected, decidedAt: new Date(), decidedBy },
+      data: { status: PropagationStatus.Rejected, decidedAt: new Date(), decidedBy },
     });
     return { id: proposalId, status: "rejected", deliveredVersion: null };
   }
@@ -156,23 +150,23 @@ export async function _DecideProposal(prisma: PrismaClient, name: string, propos
   //    advance the cursor atomically with the status flip.
   await prisma.$transaction(async function _approve(tx): Promise<void>
   {
-    await tx.tenantWorkspaceDoc.upsert({
+    await tx.tenantCultureDoc.upsert({
       where: { tenant_docName: { tenant: proposal.tenant, docName: proposal.docName } },
       create: {
         tenant: proposal.tenant,
         docName: proposal.docName,
         content: proposal.proposedContent,
-        lastReconciledVersion: proposal.targetVersion,
+        lastPropagatedVersion: proposal.targetVersion,
       },
       update: {
         content: proposal.proposedContent,
-        lastReconciledVersion: proposal.targetVersion,
+        lastPropagatedVersion: proposal.targetVersion,
       },
     });
 
-    await tx.docMergeProposal.update({
+    await tx.culturePropagationProposal.update({
       where: { id: proposalId },
-      data: { status: DocProposalStatus.Approved, decidedAt: new Date(), decidedBy },
+      data: { status: PropagationStatus.Approved, decidedAt: new Date(), decidedBy },
     });
   });
 
@@ -183,7 +177,7 @@ export async function _DecideProposal(prisma: PrismaClient, name: string, propos
  * Map a Prisma proposal row to the API response shape.
  * @param row - The proposal row.
  */
-function _ToProposalResponse(row: DocMergeProposal): DocProposalResponse
+function _ToPropagationProposalResponse(row: CulturePropagationProposal): PropagationProposalResponse
 {
   return {
     id: row.id,
