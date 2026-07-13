@@ -3,7 +3,7 @@ import { ___LoadOidcAuthConfig } from "./oidc-config.js";
 /**
  * True when the manager runs with NO real auth configured — neither OIDC nor an
  * `OPENCRANE_API_TOKEN`. This is the dev-mode bypass, mirroring the condition in
- * `___AuthMiddleware` (`!_envToken && !_oidcConfig.enabled`).
+ * `___AuthMiddleware` (`!envToken && !oidcConfig.enabled`).
  *
  * Scope guards and read-time scope filters use this to decide their fallthrough posture for a
  * request with no established session: **fail OPEN under dev mode** (so a fresh local install or

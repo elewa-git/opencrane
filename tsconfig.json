@@ -1,7 +1,0 @@
-{
-  "files": [],
-  "references": [
-    { "path": "operator" },
-    { "path": "control-plane" }
-  ]
-}

@@ -4,6 +4,7 @@ import type { Express } from "express";
 import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
 import request from "supertest";
 
+import { ___AuthMiddleware } from "@opencrane/infra/auth";
 import { _CheckDbHealth, _RateLimit } from "@opencrane/infra/http";
 
 /**
@@ -25,16 +26,14 @@ function _buildHealthApp(dbHealthy: boolean): Express
 }
 
 /**
- * Build a minimal Express app with auth middleware loaded after env setup.
+ * Build a minimal Express app with the auth middleware constructed after env setup —
+ * the factory snapshots OPENCRANE_API_TOKEN when called, so each test gets a fresh read.
  * No Prisma client is passed so DB-token validation is skipped; these tests
  * only exercise the env-var token and dev-mode bypass paths.
  * @returns An Express app wired for auth testing
  */
-async function _buildAuthApp(): Promise<Express>
+function _buildAuthApp(): Express
 {
-  vi.resetModules();
-
-  const { ___AuthMiddleware } = await import("@opencrane/infra/auth");
   const app = express();
   app.use(express.json());
   // Mirror production middleware order: the per-IP limiter is mounted before auth + routes.
@@ -94,14 +93,12 @@ describe("Control Plane", () =>
       {
         delete process.env.OPENCRANE_API_TOKEN;
       }
-
-      vi.resetModules();
     });
 
     it("rejects requests without Authorization header when token is configured", async () =>
     {
       process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = await _buildAuthApp();
+      const app = _buildAuthApp();
 
       const res = await request(app).get("/api/test");
       expect(res.status).toBe(401);
@@ -111,7 +108,7 @@ describe("Control Plane", () =>
     it("rejects requests with wrong token", async () =>
     {
       process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = await _buildAuthApp();
+      const app = _buildAuthApp();
 
       const res = await request(app)
         .get("/api/test")
@@ -124,7 +121,7 @@ describe("Control Plane", () =>
     it("allows requests with correct token", async () =>
     {
       process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = await _buildAuthApp();
+      const app = _buildAuthApp();
 
       const res = await request(app)
         .get("/api/test")
@@ -136,7 +133,7 @@ describe("Control Plane", () =>
     it("allows all requests when no token is configured (dev mode)", async () =>
     {
       delete process.env.OPENCRANE_API_TOKEN;
-      const app = await _buildAuthApp();
+      const app = _buildAuthApp();
 
       const res = await request(app).get("/api/test");
       expect(res.status).toBe(200);
@@ -145,7 +142,7 @@ describe("Control Plane", () =>
     it("healthz bypasses auth even with token configured", async () =>
     {
       process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = await _buildAuthApp();
+      const app = _buildAuthApp();
 
       const res = await request(app).get("/healthz");
       expect(res.status).toBe(200);

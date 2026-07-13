@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import { ___LoadOidcAuthConfig } from "./oidc-config.js";
+import type { OidcAuthConfig } from "./oidc-config.types.js";
 
 /**
  * Minimal `AccessToken` read surface for per-user DB token validation. A manager that
@@ -18,14 +19,6 @@ export interface AccessTokenReader
 }
 
 /**
- * Module-level env-var snapshot read once at startup.
- * Tests that need a different value must call `vi.resetModules()` before
- * re-importing this module so the variable is re-evaluated.
- */
-const _envToken = process.env.OPENCRANE_API_TOKEN?.trim() ?? "";
-const _oidcConfig = ___LoadOidcAuthConfig();
-
-/**
  * Express authentication middleware shared by both managers.
  *
  * Authentication is resolved in priority order:
@@ -35,33 +28,44 @@ const _oidcConfig = ___LoadOidcAuthConfig();
  *   4. DB access token      — per-user token created via `oc auth login` (when a reader is given).
  *   5. Dev-mode bypass     — when neither OIDC nor OPENCRANE_API_TOKEN is configured.
  *
+ * The env-var token and OIDC config are snapshotted when the factory is called —
+ * once at startup in production; per-test in tests, so setting the env before
+ * calling the factory is enough (no module re-import needed).
+ *
  * @param reader - Optional access-token reader. When provided, bearer tokens are also
  *                 validated against the `access_tokens` table (step 4). Omit when the
  *                 manager issues no DB tokens.
  */
 export function ___AuthMiddleware(reader?: AccessTokenReader): RequestHandler
 {
+  const envToken = process.env.OPENCRANE_API_TOKEN?.trim() ?? "";
+  const oidcConfig = ___LoadOidcAuthConfig();
+
   return function _authHandler(req, res, next)
   {
     // Delegate to an async helper so we can await the DB lookup while still
     // presenting the synchronous `RequestHandler` signature Express expects.
-    _resolveAuth(req, res, next, reader).catch(next);
+    _resolveAuth(req, res, next, reader, envToken, oidcConfig).catch(next);
   };
 }
 
 /**
  * Resolve authentication for a single request.
  *
- * @param req    - Incoming Express request.
- * @param res    - Express response (used only to send 401/403).
- * @param next   - Express next function (called with no args on success).
- * @param reader - Optional access-token reader for per-user DB token lookup.
+ * @param req        - Incoming Express request.
+ * @param res        - Express response (used only to send 401/403).
+ * @param next       - Express next function (called with no args on success).
+ * @param reader     - Optional access-token reader for per-user DB token lookup.
+ * @param envToken   - The OPENCRANE_API_TOKEN snapshot taken at factory time.
+ * @param oidcConfig - The OIDC config snapshot taken at factory time.
  */
 async function _resolveAuth(
   req: Request,
   res: Response,
   next: NextFunction,
   reader: AccessTokenReader | undefined,
+  envToken: string,
+  oidcConfig: OidcAuthConfig,
 ): Promise<void>
 {
   // 1. Public paths bypass all auth checks — /healthz and the auth router
@@ -73,7 +77,7 @@ async function _resolveAuth(
   }
 
   // 2. Accept an established OIDC browser session (human operator flow).
-  if (_oidcConfig.enabled && req.session?.authUser)
+  if (oidcConfig.enabled && req.session?.authUser)
   {
     next();
     return;
@@ -84,7 +88,7 @@ async function _resolveAuth(
   const providedToken = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : null;
 
   // 4. Accept the static env-var token (CI / service-account automation).
-  if (_envToken && providedToken === _envToken)
+  if (envToken && providedToken === envToken)
   {
     next();
     return;
@@ -119,7 +123,7 @@ async function _resolveAuth(
 
   // 6. Dev-mode bypass — allow unauthenticated access when OIDC is disabled
   //    and no env-var token is set.
-  if (!_envToken && !_oidcConfig.enabled)
+  if (!envToken && !oidcConfig.enabled)
   {
     next();
     return;
