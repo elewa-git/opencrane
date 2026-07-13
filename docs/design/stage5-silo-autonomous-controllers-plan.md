@@ -18,7 +18,7 @@ fleet-namespace plane endpoint into every tenant) — a silo-local controller in
 ## Grounded facts (verified)
 
 - ~5,100 LOC / 47 files move: `src/{tenants,policies,runtime-planes,gateway-proxy,tenant-rollout,mcp-gateway}`.
-- The operator is **DB-less** — no Prisma; it drives k8s + calls the opencrane-api **internal HTTP
+- The operator is **DB-less** — no Prisma; it drives k8s + calls the opencrane-server **internal HTTP
   API** (`/api/internal/{contract,tenant-models,…}`). After the move those calls hit the silo's
   **own** API (localhost / its own Service) — no Prisma refactor needed.
 - Shared deps used by BOTH the staying ClusterTenantOperator and the moving controllers:

@@ -53,7 +53,7 @@ ownership layer, and the layer decides who may write it and whether it survives 
 | Layer | Owner | Files | Editable? | Survives restart? |
 |-------|-------|-------|-----------|-------------------|
 | **L0 Platform** | OpenCrane | `AGENTS.md`, `TOOLS.md` | No | Re-stamped every boot |
-| **L1 Company** | Organisation | company `SOUL.md` + policy/voice docs | Via opencrane-api | Versioned v1…vN (immutable) |
+| **L1 Company** | Organisation | company `SOUL.md` + policy/voice docs | Via opencrane-server | Versioned v1…vN (immutable) |
 | **L2 Tenant** | Tenant / agent | `SOUL.md`, `IDENTITY.md`, `USER.md`, `MEMORY.md` | Yes, live in-pod | Yes (persistent volume) |
 
 - **L0** encodes system mechanics — managed mode, the fact that MCP calls route through
@@ -62,7 +62,7 @@ ownership layer, and the layer decides who may write it and whether it survives 
   files on **every pod start**, so any edit an agent makes to them is reverted within one
   boot.
 - **L1** is the company's persona, tone, values and policy language. It is edited through
-  the opencrane-api, published as immutable versions, and by rule carries **no** system
+  the opencrane-server, published as immutable versions, and by rule carries **no** system
   mechanics (see [the L0 guard](#the-l0-guard) below).
 - **L2** is where an agent becomes a distinct individual: its name, working style, what it
   remembers, who it works with. It is seeded from L1 at create time, then edited live and

@@ -23,9 +23,9 @@ strength is a per-customer choice (`isolationTier`).
 │  ┌── install / instance namespace (e.g. "opencrane" or "oc-acme") ────┐ │
 │  │  PLATFORM PLANES (Helm-deployed, 1 replica each by default)         │ │
 │  │   • operator            reconciles CRs → tenant workloads           │ │
-│  │   • opencrane-api :8080  API /api/v1 + internal /api/internal       │ │
+│  │   • opencrane-server :8080  API /api/v1 + internal /api/internal    │ │
 │  │   • litellm     :4000    LLM cost/budget proxy (egress for pods)    │ │
-│  │   • mcp-gateway :8080    Obot — MCP runtime, polls opencrane-api    │ │
+│  │   • mcp-gateway :8080    Obot — MCP runtime, polls opencrane-server │ │
 │  │   • feat-skill-registry :5000 entitlement-gated skill delivery          │ │
 │  │   • skill-oci-store :5000 Zot OCI registry (optional)              │ │
 │  │                                                                     │ │
@@ -34,7 +34,7 @@ strength is a per-customer choice (`isolationTier`).
 │  │   · Secrets(enc-key, litellm-key) · SA · (CT) ResourceQuota+LimitRange │
 │  └─────────────────────────────────────────────────────────────────────┘ │
 │         ▲ external traffic: GCE LB (GCP) / ingress-nginx (on-prem)       │
-│  opencrane-api host → opencrane-api:8080 · *.<base> → operator proxy → UserTenant pods │
+│  opencrane-server host → opencrane-server:8080 · *.<base> → operator proxy → UserTenant pods │
 └────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -51,7 +51,7 @@ topology** the platform owns ONE wildcard base domain and every org/user name is
 
 ### DNS hierarchy
 
-There are exactly **two platform-owned DNS entries** — a fixed super-operator/opencrane-api host, and one
+There are exactly **two platform-owned DNS entries** — a fixed super-operator/opencrane-server host, and one
 platform wildcard base — under which every org name is **derived** (one flat DNS tree, not per-customer
 domains). There are **no per-user subdomains**:
 
@@ -71,7 +71,7 @@ UserTenant pods are **not** exposed on their own public host.
 
 - **Control plane** → the **fixed super-operator host** (`ingress.controlPlaneHost`, defaults to
   `platform.<base>`). It is one management API above every org — a distinct host, **never** an org under
-  `*.<base>`. Wired by `opencrane-api-ingress.yaml`.
+  `*.<base>`. Wired by `clustertenant-manager-ingress.yaml`.
 - **Org host** → an explicit `<org>.<base>` A record emitted by the operator as an external-dns
   `DNSEndpoint` at org-provision time; external-dns reconciles it into the zone. Resolved by the platform
   wildcard `*.<base>`.
@@ -85,8 +85,8 @@ UserTenant pods are **not** exposed on their own public host.
 
 > **Note (June 2026):** the operator derives per-org DNS records via `DefaultOrgDomainProvisioner`
 > (`apps/fleet-operator/src/cluster-tenants/internal/org-domain.provisioner.ts`); the platform
-> cert-manager `Certificate` covers `*.<base>` + apex + the opencrane-api host
-> (`cluster-issuer.yaml`); the opencrane-api host is wired by `opencrane-api-ingress.yaml`.
+> cert-manager `Certificate` covers `*.<base>` + apex + the opencrane-server host
+> (`cluster-issuer.yaml`); the opencrane-server host is wired by `clustertenant-manager-ingress.yaml`.
 > `*.<base>` matches **org hosts** `<org>.<base>` — one label — which is sufficient because
 > there are no per-user subdomains to cover.
 
@@ -97,12 +97,12 @@ UserTenant pods are **not** exposed on their own public host.
 
 ## Helm Template Inventory
 
-The deployable templates are split across two charts: the central **fleet** chart `apps/fleet-platform/templates/` (`opencrane-fleet` — operator, opencrane-api, CRDs, cert issuer, external-secrets) and the per-silo **silo** chart `apps/opencrane-infra/templates/` (`opencrane-silo` — litellm, obot gateway, feat-skill-registry, OCI store, plane NetworkPolicies). Both pull shared named-templates from the `k8s-platform` Helm **library** chart `libs/k8s-platform/templates/` (`_helpers.tpl` holds the scope-resolution logic):
+The deployable templates are split across two charts: the central **fleet** chart `apps/fleet-platform/templates/` (`opencrane-fleet` — operator, opencrane-server, CRDs, cert issuer, external-secrets) and the per-silo **silo** chart `apps/opencrane-infra/templates/` (`opencrane-silo` — litellm, obot gateway, feat-skill-registry, OCI store, plane NetworkPolicies). Both pull shared named-templates from the `k8s-platform` Helm **library** chart `libs/k8s-platform/templates/` (`_helpers.tpl` holds the scope-resolution logic):
 
 | Template | Creates |
 |----------|---------|
 | `operator-deployment.yaml` / `operator-rbac.yaml` | Operator Deployment + SA + (Cluster)Role/Binding |
-| `opencrane-api-deployment.yaml` / `-service.yaml` / `-rbac.yaml` | Control-plane Deployment, ClusterIP `:8080`, SA + RBAC (incl. TokenRequest mint, pod kill-switch) |
+| `clustertenant-manager-deployment.yaml` / `-service.yaml` / `-rbac.yaml` | Control-plane Deployment, ClusterIP `:8080`, SA + RBAC (incl. TokenRequest mint, pod kill-switch) |
 | `litellm-deployment.yaml` / `-service.yaml` / `-secret.yaml` | LiteLLM Deployment, ClusterIP `:4000`, master-key Secret |
 | `obot-mcp-gateway-deployment.yaml` / `mcp-gateway-service.yaml` | Obot gateway Deployment, ClusterIP `:8080` |
 | `feat-skill-registry-deployment.yaml` / `-service.yaml` | Skill-registry Deployment (+ ClusterRole for TokenReview), ClusterIP `:5000` |
@@ -122,9 +122,9 @@ CRDs are shipped separately under `apps/fleet-platform/crds/` (see below), not i
 All planes are **ClusterIP-only** (no external LB) — external traffic arrives through Ingress. Internal DNS is `<release>-<plane>.<namespace>.svc`. Each plane is independently release-local (`instance`) or `shared` via `values.yaml` (`sharedPlatform.*`).
 
 - **operator** → Kubernetes API only. Watches Tenant/AccessPolicy/ClusterTenant CRs; injects the other planes' URLs into tenant pods. Deep-dive: [`apps/fleet-operator.md`](./apps/fleet-operator.md).
-- **opencrane-api** (`:8080`) → Postgres + K8s API + Cognee + LiteLLM. The hub everything else talks to. Deep-dive: [`apps/opencrane.md`](./apps/opencrane.md).
-- **mcp-gateway / Obot** (`:8080`) → polls opencrane-api `GET /api/internal/obot-registry`; tenant pods reach MCP servers through it (projected token `aud=obot-gateway`).
-- **feat-skill-registry** (`:5000`) → validates tenant projected token (`aud=feat-skill-registry`) via TokenReview, proxies to opencrane-api internal bundle endpoint. Deep-dive: [`apps/feat-skill-registry.md`](./apps/feat-skill-registry.md).
+- **opencrane-server** (`:8080`) → Postgres + K8s API + Cognee + LiteLLM. The hub everything else talks to. Deep-dive: [`apps/opencrane.md`](./apps/opencrane.md).
+- **mcp-gateway / Obot** (`:8080`) → polls opencrane-server `GET /api/internal/obot-registry`; tenant pods reach MCP servers through it (projected token `aud=obot-gateway`).
+- **feat-skill-registry** (`:5000`) → validates tenant projected token (`aud=feat-skill-registry`) via TokenReview, proxies to opencrane-server internal bundle endpoint. Deep-dive: [`apps/feat-skill-registry.md`](./apps/feat-skill-registry.md).
 - **litellm** (`:4000`) → the only LLM egress path for tenant pods; operator mints a per-tenant virtual key Secret; enforces budget.
 
 ## Namespace Model
@@ -138,9 +138,9 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
 ## Network Topology
 
 - **Ingress:** GCE Ingress (GCP) or ingress-nginx (on-prem). The **control plane** is reached on the **fixed super-operator host** (`ingress.controlPlaneHost`, default `platform.<base>`); org hosts `<org>.<base>` are resolved by the platform wildcard `*.<base>` and routed via a single wildcard Ingress to the operator's identity-routing proxy (gateway WebSocket) and the control plane (API). There are no per-user Ingress objects. See [Tenancy Model](#tenancy-model--clustertenant-vs-usertenant).
-- **`networkpolicy-planes.yaml`** restricts opencrane-api ingress to: ingress controller, operator, mcp-gateway, feat-skill-registry, and tenant pods (contract re-pull). The Zot OCI store accepts the opencrane-api only. Because `/api/internal/*` has **no auth middleware**, this policy is its only boundary — see [`k8s.md`](./k8s.md#internal-routes-without-auth-middleware). Per-pod gateway NetworkPolicy admits the gateway port only from the operator pods (which host the proxy) in the operator's namespace.
+- **`networkpolicy-planes.yaml`** restricts opencrane-server ingress to: ingress controller, operator, mcp-gateway, feat-skill-registry, and tenant pods (contract re-pull). The Zot OCI store accepts the opencrane-server only. Because `/api/internal/*` has **no auth middleware**, this policy is its only boundary — see [`k8s.md`](./k8s.md#internal-routes-without-auth-middleware). Per-pod gateway NetworkPolicy admits the gateway port only from the operator pods (which host the proxy) in the operator's namespace.
 - **Tenant egress** is default-DNS + the CIDR/FQDN allow-lists compiled from the tenant's AccessPolicy (standard NetworkPolicy always; optional CiliumNetworkPolicy for FQDN filtering).
-- **TLS:** one **platform** cert (`*.<base>` + apex + opencrane-api host), issued via cert-manager DNS-01. It covers every org host `<org>.<base>`. A per-org HTTP-01 cert is issued only when a `vanityDomain` is set on the ClusterTenant. The platform cert is rendered by the chart; per-org vanity certs by the cluster-tenants operator. There are no per-org wildcard certs.
+- **TLS:** one **platform** cert (`*.<base>` + apex + opencrane-server host), issued via cert-manager DNS-01. It covers every org host `<org>.<base>`. A per-org HTTP-01 cert is issued only when a `vanityDomain` is set on the ClusterTenant. The platform cert is rendered by the chart; per-org vanity certs by the cluster-tenants operator. There are no per-org wildcard certs.
 
 ### TLS certificates
 
@@ -149,7 +149,7 @@ platform `*.<base>` cert covers every org host. No per-org wildcard cert is need
 
 | Cert | Covers | Challenge | Issued by |
 |------|--------|-----------|-----------|
-| **Platform** `*.<base>` (+ `<base>` + opencrane-api host) | every org host `<org>.<base>`, the apex, the fixed opencrane-api host | DNS-01 (wildcard requires DNS-01) | the chart (`cluster-issuer.yaml`) at install |
+| **Platform** `*.<base>` (+ `<base>` + opencrane-server host) | every org host `<org>.<base>`, the apex, the fixed opencrane-server host | DNS-01 (wildcard requires DNS-01) | the chart (`cluster-issuer.yaml`) at install |
 | **Per-org vanity** (SAN = customer vanity host) | the vanity host only, e.g. `ai.client-company.com` | HTTP-01 | the cluster-tenants operator at org-provision, only when `vanityDomain` is set |
 
 The control plane persists the org and hands off to the operator, which calls the
@@ -181,7 +181,7 @@ reconciler (in the operator) does (fail-closed, API-first).
 |------|---------------|--------|
 | `shared` | Namespace on bin-packed shared nodes; ResourceQuota caps the customer. | ✅ Built |
 | `dedicatedNodes` | Namespace + a tainted node pool; operator stamps `nodeSelector`+`tolerations` (from `compute.mode=dedicated`, `compute.nodePool`). | ✅ Built |
-| `dedicatedCluster` | Customer gets its own kube-apiserver via an **external provisioner** (webhook seam, AGPL-clean; Kamaji-shaped). | ⏸️ **Parked** — opencrane-api validates and rejects with `422 TIER_UNAVAILABLE` unless a provisioner is registered. |
+| `dedicatedCluster` | Customer gets its own kube-apiserver via an **external provisioner** (webhook seam, AGPL-clean; Kamaji-shaped). | ⏸️ **Parked** — opencrane-server validates and rejects with `422 TIER_UNAVAILABLE` unless a provisioner is registered. |
 
 The provisioner seam is a registry (`libs/backend/cluster-tenants/main/src/core/`) with a built-in shared provisioner plus an optional external webhook (`CLUSTER_TENANT_PROVISIONER_WEBHOOK_*`).
 
@@ -191,7 +191,7 @@ The provisioner seam is a registry (`libs/backend/cluster-tenants/main/src/core/
 
 | Concern | Single-install | Multi-instance |
 |---------|---------------|----------------|
-| Operator/opencrane-api RBAC | `ClusterRole`/`ClusterRoleBinding` | namespaced `Role`/`RoleBinding` per instance |
+| Operator/opencrane-server RBAC | `ClusterRole`/`ClusterRoleBinding` | namespaced `Role`/`RoleBinding` per instance |
 | Operator watch scope | `WATCH_NAMESPACE=""` (all) | scoped + **fail-closed** if unset (`REQUIRE_WATCH_NAMESPACE`) |
 | CRDs | installed with the release | installed once cluster-wide, `--skip-crds` on releases |
 | cert Issuer / SecretStore | `ClusterIssuer` / `ClusterSecretStore` | namespaced `Issuer` / `SecretStore` |
@@ -200,7 +200,7 @@ The provisioner seam is a registry (`libs/backend/cluster-tenants/main/src/core/
 ## Workload Identity
 
 - **Cloud (GKE):** operator's SA carries `iam.gke.io/gcp-service-account: …`; GKE exchanges the projected K8s token for a GSA access token so the operator can provision GCS buckets without static creds. On-prem this is absent.
-- **In-cluster (tenant pods):** up to three audience-bound projected SA tokens mounted read-only under `/var/run/opencrane/tokens/` — `aud=obot-gateway|feat-skill-registry|opencrane-api`, kubelet-rotated (`projectedTokenTtlSeconds`). Each receiving plane validates the audience via TokenReview. These tokens are never exposed to a browser.
+- **In-cluster (tenant pods):** up to three audience-bound projected SA tokens mounted read-only under `/var/run/opencrane/tokens/` — `aud=obot-gateway|feat-skill-registry|opencrane-ui`, kubelet-rotated (`projectedTokenTtlSeconds`). Each receiving plane validates the audience via TokenReview. These tokens are never exposed to a browser.
 
 ## CRDs
 
@@ -215,4 +215,4 @@ Six CRDs in `apps/fleet-platform/crds/`, across **two API groups**:
 | `Schedule` | `opencrane.io` | Namespaced — recurring task schedule. |
 | `SkillRegistry` | `opencrane.io` | Namespaced — skill registry catalog. |
 
-All use `spec`/`status` subresources: spec is user/opencrane-api-owned, status is operator-owned.
+All use `spec`/`status` subresources: spec is user/opencrane-server-owned, status is operator-owned.

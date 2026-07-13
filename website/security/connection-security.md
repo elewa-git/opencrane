@@ -46,7 +46,7 @@ requirement emerges for per-session cutting or a standing per-frame audit/policy
 point, **and** the computational/operational cost is judged worth it (a
 connection-stateful app tier: LB affinity, reconnect storms on every deploy;
 message content transiting the CP; ~days of build). If that day comes, prefer an
-**Envoy/mesh sidecar** over a bespoke opencrane-api proxy. Option B is a strict
+**Envoy/mesh sidecar** over a bespoke opencrane-server proxy. Option B is a strict
 prerequisite, so nothing built for B is wasted.
 
 Build slices: frontend repo `plan.md` — **S5** (Option B) and **S6** (proxy vision).
@@ -138,7 +138,7 @@ On each gateway WS upgrade the proxy, in order:
 4. **Inject + forward.** It strips any client-supplied `X-Forwarded-User`, sets it to
    the verified email, and reverse-proxies to the resolved pod's Service
    (`openclaw-<user>.<ns>.svc:<gatewayPort>`) — so the pod's trusted-proxy auth trusts
-   only the opencrane-api-resolved identity.
+   only the opencrane-server-resolved identity.
 
 **Defence in depth.** Cross-tenant safety rests on **two independent layers**: the
 proxy's `gateway-resolve` (routing level) *and* per-pod owner pinning (CONN.10, pod
@@ -384,7 +384,7 @@ is accurate; the cost is uptime during outages/deploys.*
   (CNI-independent) or NetworkPolicy. This is the recommended default given the
   per-tenant pod topology.
 - **Per-session, or a standing audited choke point, is required** → **Option C**
-  (opencrane-api proxy, or a mesh/Envoy sidecar if already on a mesh). Accept the
+  (opencrane-server proxy, or a mesh/Envoy sidecar if already on a mesh). Accept the
   stateful-CP weight.
 
 **Do regardless:** Option B's hardening (drop browser persistence, short single-use

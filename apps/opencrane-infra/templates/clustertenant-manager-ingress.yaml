@@ -9,7 +9,7 @@ wildcard `*.<ingress.domain>`. See docs/agents/cluster-architecture.md → "Tena
 {{- /* SPA backend for the `/` rule below: the chart-native Deployment/Service
        (opencrane-ui-spa-{deployment,service}.yaml) when controlPlaneSpa.enabled,
        else ingress.sameOrigin.spaService/spaPort unchanged (the external-Service seam
-       from the "fall back / to opencrane-ui when no SPA is configured" fix). */ -}}
+       from the "fall back / to opencrane-server when no SPA is configured" fix). */ -}}
 {{- $spaService := .Values.ingress.sameOrigin.spaService -}}
 {{- $spaPort := .Values.ingress.sameOrigin.spaPort -}}
 {{- if .Values.controlPlaneSpa.enabled -}}
@@ -41,7 +41,7 @@ spec:
     - host: {{ $host | quote }}
       http:
         paths:
-          # Same-origin hosting (DOMAIN.T4): the opencrane-ui API under /api
+          # Same-origin hosting (DOMAIN.T4): the opencrane-server API under /api
           # (auth = /api/v1/auth/*), the gateway WS under /gateway, and the org-admin SPA
           # owns /. One origin → first-party session cookies, no CORS. Helm OWNS these rules,
           # so the frontend layer never has to kubectl-patch the Ingress out-of-band (that

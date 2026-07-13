@@ -11,10 +11,10 @@ Managing who can administer a ClusterTenant (organisation) — the roles, the AP
 
 ## What the membership registry is
 
-Each ClusterTenant owns a set of **OrgMembership** rows in the opencrane-api database. These rows record which OIDC subjects (users) can manage the org and at what role. The org-manager gate — the middleware that guards every ClusterTenant write and the members API itself — reads this registry to decide whether to admit or reject a request.
+Each ClusterTenant owns a set of **OrgMembership** rows in the opencrane-server database. These rows record which OIDC subjects (users) can manage the org and at what role. The org-manager gate — the middleware that guards every ClusterTenant write and the members API itself — reads this registry to decide whether to admit or reject a request.
 
 ::: info Local registry, not Zitadel grants
-`OrgMembership` rows are **opencrane-api-local**: they live in the platform's own database and are not Zitadel role grants. Adding a member here does not automatically create a Zitadel grant, and removing one does not touch the IdP. The registry's purpose is to control who may call the management API for a given org; it is not the full RBAC model for what users _inside_ the org can access (that is handled by the grant/policy system described in [Silo IAM](/integrators/silo-iam)).
+`OrgMembership` rows are **opencrane-server-local**: they live in the platform's own database and are not Zitadel role grants. Adding a member here does not automatically create a Zitadel grant, and removing one does not touch the IdP. The registry's purpose is to control who may call the management API for a given org; it is not the full RBAC model for what users _inside_ the org can access (that is handled by the grant/policy system described in [Silo IAM](/integrators/silo-iam)).
 :::
 
 The three membership roles are:

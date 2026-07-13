@@ -99,7 +99,7 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
-# --image-tag pins all three platform images (opencrane-ui, operator, tenant)
+# --image-tag pins all three platform images (opencrane-server, operator, tenant)
 # to the same tag. To roll a SINGLE component to a different build, pass the
 # matching per-component flag (e.g. --opencrane-ui-tag sha-abc123); it overrides
 # --image-tag for that component only. ALWAYS bump component images this way —
@@ -159,7 +159,7 @@ OIDC_REDIRECT_URI="${OIDC_REDIRECT_URI:-}"
 # env so it never has to sit in a values file. When OIDC is configured this installer
 # CREATES the K8s Secret the chart references (client secret + an auto-generated session
 # secret) and wires clustertenantManager.oidc.existingSecret — previously the secret was ASSUMED
-# to already exist, so a fresh OIDC install rendered a opencrane-ui that crash-looped on a
+# to already exist, so a fresh OIDC install rendered a opencrane-server that crash-looped on a
 # missing Secret. The session secret signs login cookies; we generate one when not supplied.
 OIDC_CLIENT_SECRET="${OPENCRANE_OIDC_CLIENT_SECRET:-${OIDC_CLIENT_SECRET:-}}"
 OIDC_SESSION_SECRET="${OPENCRANE_OIDC_SESSION_SECRET:-${OIDC_SESSION_SECRET:-}}"
@@ -247,7 +247,7 @@ MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 # Opt-in; an explicit ingress.externalIp --set always wins. Also via OPENCRANE_AUTO_INGRESS_IP=1.
 AUTO_INGRESS_IP="${OPENCRANE_AUTO_INGRESS_IP:-0}"
 # --verify runs an advisory post-deploy check (pods Running, DNSEndpoints present, external-dns
-# error-free, opencrane-ui host resolves). Never fails the install. Also via OPENCRANE_VERIFY=1.
+# error-free, opencrane-server host resolves). Never fails the install. Also via OPENCRANE_VERIFY=1.
 VERIFY="${OPENCRANE_VERIFY:-0}"
 
 DB_CLUSTER="opencrane-db"
@@ -1019,8 +1019,8 @@ helm_args+=(--set "langfuse.clickhouse.auth.password=$LANGFUSE_CH_PASSWORD")
 # a stale true from a previous in-cluster install.
 helm_args+=(--set "langfuse.inCluster.enabled=false")
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set-string "langfuse.langfuse.nextauth.url=https://langfuse.${BASE_DOMAIN}")
-# OIDC human-login (opencrane-ui silo). Rendered iff an issuer URL is given; otherwise
-# the chart emits no OIDC env and the opencrane-ui stays in token/development mode.
+# OIDC human-login (opencrane-server silo). Rendered iff an issuer URL is given; otherwise
+# the chart emits no OIDC env and the opencrane-server stays in token/development mode.
 # --set-string (NOT --set): a large numeric Zitadel clientId passed via --set is YAML-parsed
 # as a float and rendered in scientific notation (e.g. 3.78…e+17) → Zitadel App.NotFound and
 # all login breaks. Strings stay strings (issue #100).
@@ -1031,7 +1031,7 @@ helm_args+=(--set "langfuse.inCluster.enabled=false")
 # its inline values empty — keeps secrets out of Helm values + the rendered manifest.
 [[ -n "$OIDC_ISSUER_URL" ]]   && helm_args+=(--set-string "clustertenantManager.oidc.existingSecret=$OIDC_SECRET_NAME")
 # Platform-operator bootstrap (seed email AND/OR IdP group mapping). The operator identity
-# is PLANE-AGNOSTIC, so forward it to BOTH the fleet plane and the opencrane-ui silo —
+# is PLANE-AGNOSTIC, so forward it to BOTH the fleet plane and the opencrane-server silo —
 # previously only the silo received it, so the fleet (super-admin) UI was inaccessible to
 # everyone even with a seed set (issue #100). Set ONLY when non-empty; empty → fail-closed.
 if [[ -n "$PLATFORM_OPERATOR_SEED_EMAIL" ]]; then
@@ -1082,9 +1082,9 @@ fi
 helm "${helm_args[@]}"
 
 # 4. Wait for the core workloads.
-# Database migrations run via the opencrane-ui's pre-upgrade hook Job
+# Database migrations run via the opencrane-server's pre-upgrade hook Job
 # (prisma migrate deploy), which `helm upgrade` above blocks on before the
-# rollout — so EVERY deploy reconciles the schema, even when the opencrane-ui
+# rollout — so EVERY deploy reconciles the schema, even when the opencrane-server
 # pod template is unchanged (a plain `helm upgrade` won't roll an unchanged pod,
 # so the db-migrate initContainer alone could leave the schema behind when the
 # database was recreated under a running pod). The initContainer remains a
@@ -1099,7 +1099,7 @@ for _comp in fleet-manager clustertenant-manager; do
   fi
 done
 
-# Read the ACTUAL opencrane-ui host(s) off the deployed ingress(es). Never assume platform.<base>:
+# Read the ACTUAL opencrane-server host(s) off the deployed ingress(es). Never assume platform.<base>:
 # the fleet may serve the apex (controlPlaneHost=<base>), a silo serves <org>.<base>, and only the
 # unset default is platform.<base>. Ask the cluster what was rendered; fall back to platform.<base>
 # when no ingress exposes a host (e.g. ingress disabled) so callers still get a sensible hint.

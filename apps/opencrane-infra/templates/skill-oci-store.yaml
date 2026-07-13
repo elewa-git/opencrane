@@ -4,7 +4,7 @@ P4D.2 — Zot OCI registry for digest-pinned skill-bundle storage.
 In-cluster, OCI-native store the control plane pushes published bundles into and the
 internal delivery path pulls from by digest (see docs/skills-registry.md). Gated by
 skillRegistry.ociStore.enabled (default off) so existing installs are unchanged until
-the publish/delivery cutover lands. NetworkPolicy ingress (opencrane-ui only) is
+the publish/delivery cutover lands. NetworkPolicy ingress (opencrane-server only) is
 tightened in the cutover slice; nothing depends on this store until then.
 */ -}}
 {{- if and .Values.skillRegistry.ociStore.enabled }}

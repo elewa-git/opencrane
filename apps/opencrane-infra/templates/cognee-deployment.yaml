@@ -1,7 +1,7 @@
-{{- /* In-cluster Cognee — the graph-RAG service the opencrane-ui syncs awareness
+{{- /* In-cluster Cognee — the graph-RAG service the opencrane-server syncs awareness
        grants/permissions to and that tenant pods query for org context. Cognee is a
        REQUIRED service, so it is installed by default (controlPlane.cognee.install:
-       true). Set that false to BYO an external/shared Cognee — the opencrane-ui then
+       true). Set that false to BYO an external/shared Cognee — the opencrane-server then
        talks to controlPlane.cognee.endpoint and no workload is rendered here.
 
        The Service is named `cognee` (a cluster singleton, like ingress-nginx) so it
@@ -13,7 +13,7 @@
        SILO role (S6 / ADR 0002): every ClusterTenant gets its OWN dedicated Cognee, so
        the bundled workload IS rendered here — but the Service is release-prefixed
        (`<fullname>-cognee`, B5) instead of the legacy unprefixed `cognee` singleton, so
-       two silos never collide. The opencrane-ui's COGNEE_ENDPOINT is derived from this
+       two silos never collide. The opencrane-server's COGNEE_ENDPOINT is derived from this
        release-prefixed Service by the `opencrane.cogneeEndpoint` helper.
 
        CENTRAL role: Cognee is a per-CT plane, not a central component (ADR 0002 decision
@@ -185,7 +185,7 @@ spec:
 {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
-# Defence-in-depth ingress policy for the bundled Cognee. Only the opencrane-ui
+# Defence-in-depth ingress policy for the bundled Cognee. Only the opencrane-server
 # (awareness grant / permission sync) and tenant pods (direct org-context queries via
 # the Cognee memory plugin) reach it; everything else is denied at the network layer.
 apiVersion: networking.k8s.io/v1

@@ -1,6 +1,6 @@
 # ClusterTenant manager configuration reference
 
-**The opencrane-api (clustertenant-manager) runs in each silo and serves the tenant-facing API, auth, permissions, and organization data.** This reference documents every Helm configuration key under `clustertenantManager`, with defaults from `apps/opencrane-infra/values.yaml`.
+**The opencrane-server (clustertenant-manager) runs in each silo and serves the tenant-facing API, auth, permissions, and organization data.** This reference documents every Helm configuration key under `clustertenantManager`, with defaults from `apps/opencrane-infra/values.yaml`.
 
 > See also:
 > [Silo deployment model](/operators/silo-deployment) — fleet vs silo topology and the deploy sequence.
@@ -12,8 +12,8 @@
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `clustertenantManager.image.repository` | `ghcr.io/italanta/opencrane-clustertenant-manager` | Container image registry and name. |
-| `clustertenantManager.image.tag` | `latest` | Image tag. Pinned at deploy time via `--opencrane-api-tag` (image tags must be restated per invocation because `--reset-then-reuse-values` re-applies chart defaults for unsupplied keys). |
+| `clustertenantManager.image.repository` | `ghcr.io/italanta/opencrane-server` | Container image registry and name. |
+| `clustertenantManager.image.tag` | `latest` | Image tag. Pinned at deploy time via `--opencrane-ui-tag` (image tags must be restated per invocation because `--reset-then-reuse-values` re-applies chart defaults for unsupplied keys). |
 | `clustertenantManager.image.pullPolicy` | `IfNotPresent` | Image pull policy; `Always` forces a pull on every pod start. |
 | `clustertenantManager.replicas` | `1` | Number of clustertenant-manager pod replicas. Increase for HA; the Helm chart does not currently auto-scale based on load. |
 | `clustertenantManager.resources.requests.cpu` | `100m` | CPU request per pod (allocated guarantee). |
@@ -54,7 +54,7 @@ The Prisma migration Helm hook that runs `prisma migrate deploy` as a pre-instal
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `clustertenantManager.migrationJob.enabled` | `true` | When true, renders a Job that runs schema migrations before the opencrane-api pod starts. Reconciles the database schema even when the pod template is unchanged (a plain `helm upgrade` without this would not roll the pod, leaving the schema behind). |
+| `clustertenantManager.migrationJob.enabled` | `true` | When true, renders a Job that runs schema migrations before the opencrane-server pod starts. Reconciles the database schema even when the pod template is unchanged (a plain `helm upgrade` without this would not roll the pod, leaving the schema behind). |
 | `clustertenantManager.migrationJob.backoffLimit` | `3` | Number of retries before the migration Job fails (fails the entire deploy). |
 
 ---
@@ -75,14 +75,14 @@ Settings for connecting this silo to the fleet's authoritative registry and API.
 
 ## Cognee (retrieval & memory)
 
-Cognee integration for opencrane-api permission synchronization and tenant-isolation ACLs. Cognee is a required service: the opencrane-api's permission sync and the awareness retrieval ACL both depend on it.
+Cognee integration for opencrane-server permission synchronization and tenant-isolation ACLs. Cognee is a required service: the opencrane-server's permission sync and the awareness retrieval ACL both depend on it.
 
 ### Install & endpoint
 
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `clustertenantManager.cognee.install` | `true` | Install an in-cluster Cognee Deployment as part of this release. A fresh cluster gets a working Cognee with no extra step. Set false to bring your own (BYO): the `endpoint` below then points at your external Cognee and no workload is rendered. Separate from `backendAccessControl` so an operator can BYO Cognee while still enforcing the backend ACL. |
-| `clustertenantManager.cognee.endpoint` | `http://cognee:8000` | Cognee HTTP endpoint used by opencrane-api permission sync routes. When `install` is true, the in-chart Service is reachable at this name. Point it elsewhere only when BYO (`install: false`). |
+| `clustertenantManager.cognee.endpoint` | `http://cognee:8000` | Cognee HTTP endpoint used by opencrane-server permission sync routes. When `install` is true, the in-chart Service is reachable at this name. Point it elsewhere only when BYO (`install: false`). |
 | `clustertenantManager.cognee.backendAccessControl` | `true` | Enable Cognee backend access controls (tenant isolation + RBAC enforcement). Defaults true: the bundled Cognee makes this a real, enforced default rather than a latent gap. |
 | `clustertenantManager.cognee.permissionsTimeoutMs` | `5000` | Permission sync timeout in milliseconds. Calls to Cognee that exceed this duration are cancelled. |
 
@@ -131,13 +131,13 @@ Cognee's own embedding and LLM (graph-extraction) providers, routed through this
 
 ## OIDC & authentication
 
-Per-org OIDC session config for the opencrane-api. Zitadel is the single trusted issuer (Mode-2 broker, no upstream Entra), but any spec-compliant OIDC issuer works. OIDC is off unless `issuerUrl` is set.
+Per-org OIDC session config for the opencrane-server. Zitadel is the single trusted issuer (Mode-2 broker, no upstream Entra), but any spec-compliant OIDC issuer works. OIDC is off unless `issuerUrl` is set.
 
 | Key | Default | Purpose |
 |-----|---------|---------|
 | `clustertenantManager.oidc.issuerUrl` | `""` | OIDC issuer URL for discovery (e.g. `https://weownai-oidc-8dwlat.eu1.zitadel.cloud`). Rendered as `OIDC_ISSUER_URL`. Empty ⇒ OIDC disabled; the cluster-tenant API falls back to development (open) auth. |
 | `clustertenantManager.oidc.clientId` | `""` | Registered OAuth client ID (e.g. `123456789@weownai.iam.zitadel.cloud`). Rendered as `OIDC_CLIENT_ID`. |
-| `clustertenantManager.oidc.redirectUri` | `""` | Callback URL on the opencrane-api (e.g. `https://<opencrane-api-host>/api/v1/auth/callback`). Rendered as `OIDC_REDIRECT_URI`. Must match the registered redirect_uri in your OIDC provider. |
+| `clustertenantManager.oidc.redirectUri` | `""` | Callback URL on the opencrane-server (e.g. `https://<opencrane-server-host>/api/v1/auth/callback`). Rendered as `OIDC_REDIRECT_URI`. Must match the registered redirect_uri in your OIDC provider. |
 | `clustertenantManager.oidc.existingSecret` | `""` | Name of an existing Kubernetes Secret carrying the OIDC client secret and session secret (strongly preferred over inline values in production). |
 | `clustertenantManager.oidc.clientSecretKey` | `OIDC_CLIENT_SECRET` | Key within `existingSecret` holding the OIDC client secret. |
 | `clustertenantManager.oidc.sessionSecretKey` | `OIDC_SESSION_SECRET` | Key within `existingSecret` holding the session secret. |
@@ -157,7 +157,7 @@ The silo's OIDC above is for per-org **login only** and never holds the IAM_OWNE
 
 ## Ingress same-origin routing
 
-Same-origin hosting is the only mode: the opencrane-api host's Ingress serves the org-admin SPA at `/`, the public API at `/api`, and the OpenClaw gateway WS proxy at `/gateway` (when `gatewayProxy.enabled`) from one origin, so the browser gets first-party cookies with no CORS. Helm owns these rules, so the frontend layer never kubectl-patches the Ingress out-of-band. The legacy `*.<domain>` wildcard Ingress and the bare `/`→opencrane-api layout were removed once every silo migrated.
+Same-origin hosting is the only mode: the opencrane-server host's Ingress serves the org-admin SPA at `/`, the public API at `/api`, and the OpenClaw gateway WS proxy at `/gateway` (when `gatewayProxy.enabled`) from one origin, so the browser gets first-party cookies with no CORS. Helm owns these rules, so the frontend layer never kubectl-patches the Ingress out-of-band. The legacy `*.<domain>` wildcard Ingress and the bare `/`→opencrane-server layout were removed once every silo migrated.
 
 | Key | Default | Purpose |
 |-----|---------|---------|

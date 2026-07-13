@@ -7,7 +7,7 @@ title: API reference
 # API reference
 
 This interactive reference is generated directly from the control plane's OpenAPI
-3.1 specification (`apps/opencrane-api/openapi.json`) — the same spec served at
+3.1 specification (`apps/opencrane/openapi.json`) — the same spec served at
 runtime from `GET /api/v1/openapi.json` and published as a release asset. It is
 always in sync with the implementation (a CI drift gate enforces it).
 

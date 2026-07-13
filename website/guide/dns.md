@@ -21,7 +21,7 @@ opencrane.example.com.   NS   ns-cloud-a1.googledomains.com.
 opencrane.example.com.   NS   ns-cloud-a2.googledomains.com.   # …etc
 ```
 
-The install-time records (the opencrane-api host, the apex, and the platform wildcard
+The install-time records (the opencrane-server host, the apex, and the platform wildcard
 `*.opencrane.example.com` that lets every assistant appear at its own address instantly)
 are created in that zone for you. **Per-org records are written automatically at runtime**
 by the in-cluster **external-dns** controller, from the declarations OpenCrane's operator

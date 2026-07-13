@@ -2,9 +2,9 @@
 
 > Deep-dive for `apps/cli`. Index: [`../app-specific.md`](../app-specific.md). Verified June 2026.
 
-A **thin, typed wrapper** over the opencrane-api — Commander.js for parsing, the
+A **thin, typed wrapper** over the opencrane-server — Commander.js for parsing, the
 `@opencrane/contracts` client for every call, **zero business logic**. The API/CLI-first rule means
-every opencrane-api capability should have a matching command here.
+every opencrane-server capability should have a matching command here.
 
 ## Structure (`src/index.ts`)
 

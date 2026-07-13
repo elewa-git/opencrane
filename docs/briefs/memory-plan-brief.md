@@ -48,7 +48,7 @@ These need to be answered in the implementation plan:
 
 - **Dataset granularity**: is a dataset `= tenant`, `= (tenant, source-system)`, `= (tenant, project)`, or finer? A SharePoint doc shared only with finance and a tenant-wide doc cannot coexist in the same dataset without sub-dataset filtering in OpenClaw, because Cognee will return both on a Read query.
 
--> ANSWER: Datasets are personal, project-wide, team-wide, . All tenants have access to org-wide info.  Each tenant further has a personal cognee. Finally, Tenants are bound to projects, team and department datasets from the opencrane-api.
+-> ANSWER: Datasets are personal, project-wide, team-wide, . All tenants have access to org-wide info.  Each tenant further has a personal cognee. Finally, Tenants are bound to projects, team and department datasets from the opencrane-server.
 
 - **AccessPolicy mapping**: how does OpenCrane's existing AccessPolicy model map onto Cognee's Users/Tenants/Roles + Read/Write/Share/Delete? This is a real piece of work but bounded.
 

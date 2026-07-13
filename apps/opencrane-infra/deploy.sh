@@ -4,9 +4,9 @@
 #
 # A thin profile over the shared install core (k8s-deploy.sh). It installs ONE
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
-# nodes: its own operator + Obot + feat-skill-registry + LiteLLM + Cognee + opencrane-ui +
+# nodes: its own operator + Obot + feat-skill-registry + LiteLLM + Cognee + opencrane-server +
 # per-CT networking + a per-CT database (one CNPG cluster IN THIS SILO'S NAMESPACE,
-# serving the silo opencrane-ui + its planes), with self-service manager/billing OFF.
+# serving the silo opencrane-server + its planes), with self-service manager/billing OFF.
 #
 # The CLUSTER-WIDE infra (ingress-nginx, external-dns, the CloudNativePG operator,
 # cert-manager) is installed ONCE by the CENTRAL release (the fleet-platform chart's deploy.sh,
@@ -17,7 +17,7 @@
 # applied and reconciled by the cluster-wide operators.
 #
 # The self-service ClusterTenant manager + billing are OFF (a silo serves exactly one
-# ClusterTenant; the fleet is managed by the central super-admin opencrane-ui).
+# ClusterTenant; the fleet is managed by the central super-admin opencrane-server).
 #
 # Usage:
 #   apps/opencrane-infra/deploy.sh \
@@ -80,7 +80,7 @@ fi
 
 # Per-org OIDC (org-admin login). opencrane-server resolves the per-org CLIENT from the
 # ClusterTenant CR at runtime, but its BASE OIDC config must be present or login 503s ("OIDC is not
-# configured for this opencrane-ui instance"). The shared loader requires ALL of issuer+client+
+# configured for this opencrane-server instance"). The shared loader requires ALL of issuer+client+
 # redirect+session once ANY is set, else the pod crashloops ("OIDC is partially configured"). So when
 # an issuer is given: require this org's client id (from provisionOrg / the ClusterTenant row), and
 # DERIVE this silo's callback at the org host when not supplied (the core generates the session

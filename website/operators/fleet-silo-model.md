@@ -37,7 +37,7 @@ OpenCrane's Stage 4 architecture splits platform management into two distinct ma
 ┌──────────────────────────────────────────────────────────────────┐
 │  SILO PLANE  (one per ClusterTenant)                             │
 │  namespace: opencrane-<cluster-tenant>                           │
-│  image: ghcr.io/italanta/opencrane-clustertenant-manager         │
+│  image: ghcr.io/italanta/opencrane-server                        │
 │                                                                  │
 │  clustertenant-manager:                                          │
 │    • Tenant (UserTenant / OpenClaw pod) lifecycle                │

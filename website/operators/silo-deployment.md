@@ -4,7 +4,7 @@ OpenCrane splits a platform installation into a single **fleet release** (cluste
 
 > See also:
 > [Fleet and silo operating model](/operators/fleet-silo-model) — how the fleet-manager and clustertenant-manager differ, what each owns, and how to configure fleet OIDC and Zitadel management.
-> [ClusterTenant manager configuration](/operators/clustertenantmanager-config) — Helm values reference for every silo opencrane-api setting.
+> [ClusterTenant manager configuration](/operators/clustertenantmanager-config) — Helm values reference for every silo opencrane-server setting.
 > [Networking & isolation](/operators/networking) — the NetworkPolicy floor and the silo boundary.
 > [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) — the identity-keyed mTLS layer that rides on top of the silo boundary.
 > [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how IAM policies, skills, and resource shares are scoped per silo.
@@ -61,8 +61,8 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 │  │   this NS only)   │               ┌─────────────────┐    │
 │  └───────────────────┘               │ Cognee          │    │
 │                                      └─────────────────┘    │
+│  fleetManager.enabled: false                                  │
 │  fleetManager.clusterTenantApi.enabled: false                 │
-│  billing.enabled: false                                       │
 │  Reuses cluster-wide infra installed by the fleet release     │
 └───────────────────────────────────────────────────────────────┘
 ```
@@ -121,7 +121,7 @@ Repeat this command for each ClusterTenant. Each invocation:
 - installs into the silo namespace (`opencrane-<cluster-tenant>` by default);
 - passes `--no-ingress-nginx --no-external-dns --no-db-operator` so the cluster-wide singletons are not re-installed;
 - applies a dedicated CNPG `Cluster` CR in the silo namespace — one Postgres per silo, reconciled by the cluster-wide CNPG operator;
-- sets `fleetManager.clusterTenantApi.enabled=false` and `billing.enabled=false`.
+- sets `fleetManager.enabled=false` and `fleetManager.clusterTenantApi.enabled=false` (billing is a fleet-only concern and is not part of the silo chart).
 
 ::: info One Postgres per silo
 Each silo gets its own CNPG `Cluster` in its own namespace. The silo's clustertenant-manager connects to its own database — there is no shared database and no cross-tenant query path. The cluster-wide CloudNativePG operator (installed by the fleet release) watches all namespaces and reconciles every silo's `Cluster` CR.

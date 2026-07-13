@@ -196,7 +196,7 @@ spec:
             #
             # OBOT_SERVER_PROVIDER_REGISTRIES was REMOVED here: upstream confirms it configures
             # LLM model-provider *filesystem directories*, NOT MCP catalogues, so pointing it at
-            # the opencrane-ui was a silent no-op (Obot held none of OpenCrane's MCP servers).
+            # the opencrane-server was a silent no-op (Obot held none of OpenCrane's MCP servers).
             - name: OBOT_SERVER_DEFAULT_MCPCATALOG_PATH
               value: {{ (.Values.mcpGateway.catalog).path | quote }}
             {{- end }}

@@ -1,5 +1,5 @@
 {{- if .Values.networkPolicy.enabled }}
-# Ingress policy for the opencrane-ui service.
+# Ingress policy for the opencrane-server service.
 #
 # Two listeners, two ports:
 #   - PUBLIC port (service.port): /api/v1/* + /auth, session-authed. Reachable from the
@@ -13,7 +13,7 @@
 #       - Tenant pods: /api/internal/contract/:name (runtime-contract re-pull; TokenReview
 #         inside the handler is the identity check, this is defence-in-depth).
 #   The operator's own /api/internal/tenant-models fetch is a localhost call within the
-#   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
+#   opencrane-server pod, so it is not subject to this NetworkPolicy at all.
 #
 # NetworkPolicy cannot filter by URL path — the path/port split IS the boundary: internal
 # routes only exist on the internal port, and only known platform pods may reach it.

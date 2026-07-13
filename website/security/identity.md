@@ -1,7 +1,7 @@
 # Authentication
 
 How identities authenticate to OpenCrane and how a single human login grants
-access to **both** the opencrane-api and the user's own OpenClaw pod.
+access to **both** the opencrane-server and the user's own OpenClaw pod.
 
 > **Terminology:** the per-user OpenClaw agent gateway is a **UserTenant** (the openclaw /
 > `Tenant` CRD); "UserTenant" is the canonical doc name while the CRD kind is still `Tenant`
@@ -11,7 +11,7 @@ access to **both** the opencrane-api and the user's own OpenClaw pod.
 > [Tenancy Model](https://github.com/italanta/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
 > Below, "tenant pod" / "tenant gateway" means a UserTenant.
 
-> **Status legend:** ✅ implemented · 🔶 planned/target. The OIDC opencrane-api
+> **Status legend:** ✅ implemented · 🔶 planned/target. The OIDC opencrane-server
 > session and the identity-routing proxy (`GET /api/v1/auth/gateway-resolve`) are
 > implemented today. The browser holds **no pod credential** — connection auth is
 > handled entirely by the proxy replaying the OIDC session cookie. The connection
@@ -24,7 +24,7 @@ OpenCrane has two backends a user touches, and they must not require two logins:
 
 | Plane | What it serves | How it is reached |
 |-------|----------------|-------------------|
-| **Control plane** | management + metadata: tenants, policies, groups, budgets, skills, audit, auth | the versioned opencrane-api (OIDC session) |
+| **Control plane** | management + metadata: tenants, policies, groups, budgets, skills, audit, auth | the versioned opencrane-server (OIDC session) |
 | **UserTenant pod (OpenClaw)** | the live agent session: chat, Cognee retrieval, canvas | the org's gateway WebSocket at `wss://<org>.<base>/gateway`, routed to the user's pod by the identity-routing proxy, via the OpenClaw Gateway v4 protocol |
 
 The principle is **one identity, brokered access**: the human signs in once via
@@ -72,7 +72,7 @@ All steps are ✅ implemented (gated by `gatewayProxy.enabled`).
 | Credential | Subject | Audience / target | TTL / storage | Status |
 |-----------|---------|-------------------|---------------|--------|
 | **Control-plane session cookie** | the human | control plane + identity-routing proxy | server-signed, HTTP-only cookie (~12h) | ✅ |
-| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `feat-skill-registry` / `opencrane-api` | ~600s, kubelet-rotated, in-cluster only | ✅ |
+| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `feat-skill-registry` / `opencrane-ui` | ~600s, kubelet-rotated, in-cluster only | ✅ |
 
 The browser holds **only** the HTTP-only session cookie. There is no bootstrap token, no
 device token, and no pod-specific credential in the browser.
@@ -80,7 +80,7 @@ device token, and no pod-specific credential in the browser.
 The **projected SA token** is *workload* identity and must **never be handed to a
 browser**. It is how the pod calls *outward* — e.g. OpenClaw → Obot MCP Gateway
 (`aud=obot-gateway`), and the contract re-pull loop → control plane
-(`aud=opencrane-api`). The browser never holds an `obot-gateway` token and never talks
+(`aud=opencrane-ui`). The browser never holds an `obot-gateway` token and never talks
 to Obot directly.
 
 The pod's Kubernetes ServiceAccount is also what SPIRE mints its **SPIFFE SVID** from
@@ -128,8 +128,8 @@ Set these via Helm (`fleetManager.oidc.*` for the fleet plane, `clustertenantMan
 | `OIDC_ISSUER_URL` | Yes | Issuer URL used for OIDC discovery |
 | `OIDC_CLIENT_ID` | Yes | Client identifier registered with the IdP |
 | `OIDC_CLIENT_SECRET` | Optional | Client secret for confidential clients |
-| `OIDC_REDIRECT_URI` | Yes | Must point to `/api/auth/callback` on the opencrane-api |
-| `OIDC_SESSION_SECRET` | Yes | Secret used to sign the opencrane-api session cookie |
+| `OIDC_REDIRECT_URI` | Yes | Must point to `/api/auth/callback` on the opencrane-server |
+| `OIDC_SESSION_SECRET` | Yes | Secret used to sign the opencrane-server session cookie |
 | `OIDC_SCOPES` | No | Defaults to `openid email profile` |
 | `OIDC_COOKIE_NAME` | No | Defaults to `opencrane_oidc` |
 | `OIDC_COOKIE_SECURE` | No | Explicit override; otherwise **forced `true` in production** and inferred from the redirect-URI scheme in dev (fail-closed — see CONN.2) |
@@ -146,7 +146,7 @@ Set these via Helm (`fleetManager.oidc.*` for the fleet plane, `clustertenantMan
 
 OpenCrane trusts **exactly one** OIDC issuer: the one at `OIDC_ISSUER_URL`. In the
 deployed topology that issuer is **Zitadel**, operated as a **Mode-2 broker** — it is
-the single identity provider the opencrane-api validates tokens against. **There is no
+the single identity provider the opencrane-server validates tokens against. **There is no
 upstream Entra (Azure AD) dependency**: OpenCrane does not federate to, call, or require
 Microsoft Entra. The login flow is standards-only OIDC discovery + Authorization Code
 with PKCE, so any spec-compliant issuer works, but the trusted, supported issuer is
@@ -190,14 +190,14 @@ first-class role model lands — the API stays the enforcement point.
 ### Google Identity example
 
 1. Create a Web application OAuth client in Google Cloud.
-2. Add the opencrane-api callback URL as an authorized redirect URI.
-3. Set the opencrane-api environment variables.
+2. Add the opencrane-server callback URL as an authorized redirect URI.
+3. Set the opencrane-server environment variables.
 
 ```env
 OIDC_ISSUER_URL=https://accounts.google.com
 OIDC_CLIENT_ID=1234567890-abc123.apps.googleusercontent.com
 OIDC_CLIENT_SECRET=replace-me
-OIDC_REDIRECT_URI=https://opencrane-api.example.com/api/auth/callback
+OIDC_REDIRECT_URI=https://opencrane-server.example.com/api/auth/callback
 OIDC_SESSION_SECRET=replace-with-a-long-random-secret
 OIDC_ALLOWED_EMAIL_DOMAINS=example.com
 ```
@@ -208,7 +208,7 @@ Use any OIDC-capable IdP that exposes a discovery document. Example with Keycloa
 
 ```env
 OIDC_ISSUER_URL=https://keycloak.local/realms/opencrane
-OIDC_CLIENT_ID=opencrane-api
+OIDC_CLIENT_ID=opencrane-server
 OIDC_CLIENT_SECRET=replace-me
 OIDC_REDIRECT_URI=http://localhost:8080/api/auth/callback
 OIDC_SESSION_SECRET=replace-with-a-long-random-secret
@@ -276,7 +276,7 @@ Authentication establishes *who*; authorization is split across the two planes:
 
 ## Kubernetes and IAM split
 
-- Human identity is handled by the OIDC provider and the opencrane-api session.
+- Human identity is handled by the OIDC provider and the opencrane-server session.
 - Kubernetes RBAC remains machine-facing and is bound to Kubernetes service
   accounts.
 - Cloud IAM or local secret systems are bound to workloads through the

@@ -20,10 +20,10 @@ OpenCrane organises all cluster traffic into **two distinct planes**: a narrow p
 │  Internet ──► single LoadBalancer IP (ingress-nginx)                │
 │                │                                                    │
 │                ├── platform host  (dev.opencrane.ai / apex)         │
-│                │     └── /  ──► opencrane-api Service :8080         │
+│                │     └── /  ──► opencrane-server Service :8080      │
 │                │                                                    │
 │                └── org wildcard  (*.dev.opencrane.ai)               │
-│                      ├── /api/*   ──► opencrane-api Service :8080   │
+│                      ├── /api/* ──► opencrane-server Service :8080  │
 │                      ├── /gateway ──► gateway-proxy Service :8090   │
 │                      └── /        ──► org control-UI (SPA)          │
 │                                                                     │
@@ -38,7 +38,7 @@ OpenCrane organises all cluster traffic into **two distinct planes**: a narrow p
 ┌─────────────────────────────────────────────────────────────────────┐
 │  PLANE 2 — INTERNAL CLUSTER NETWORK (ClusterIP only)                │
 │                                                                     │
-│  opencrane-api :8080    mcp-gateway :8080    feat-skill-registry :5000   │
+│  opencrane-server :8080    mcp-gateway :8080    feat-skill-registry :5000│
 │  litellm :4000          cognee :8000         postgres (CNPG) :5432  │
 │                                                                     │
 │  per-org namespaces (opencrane-<org>):                              │
@@ -58,12 +58,12 @@ Exactly two host classes ever receive external traffic. Everything else is Clust
 
 | Host | Example (dev) | Resolves to | Routes to |
 |------|--------------|-------------|-----------|
-| Control-plane host | `dev.opencrane.ai` | LoadBalancer IP | opencrane-api Service :8080 |
-| Per-org host | `acme.dev.opencrane.ai` | LoadBalancer IP | org control-UI SPA (`/`) + gateway-proxy :8090 (`/gateway` WebSocket) + opencrane-api :8080 (`/api/*`) |
+| Control-plane host | `dev.opencrane.ai` | LoadBalancer IP | opencrane-server Service :8080 |
+| Per-org host | `acme.dev.opencrane.ai` | LoadBalancer IP | org control-UI SPA (`/`) + gateway-proxy :8090 (`/gateway` WebSocket) + opencrane-server :8080 (`/api/*`) |
 
-The opencrane-api host is either the apex (`<base>`) or a dedicated `platform.<base>`, controlled by the chart value `ingress.controlPlaneHost`. The dev cluster uses the apex directly (`dev.opencrane.ai`). The wildcard Ingress is rendered only when both `ingress.enabled` and `gatewayProxy.enabled` are true (see [`apps/opencrane-infra/templates/gateway-ingress.yaml`](https://github.com/italanta/opencrane/blob/main/apps/opencrane-infra/templates/gateway-ingress.yaml)).
+The opencrane-server host is either the apex (`<base>`) or a dedicated `platform.<base>`, controlled by the chart value `ingress.controlPlaneHost`. The dev cluster uses the apex directly (`dev.opencrane.ai`). The wildcard Ingress is rendered only when both `ingress.enabled` and `gatewayProxy.enabled` are true (see [`apps/opencrane-infra/templates/gateway-ingress.yaml`](https://github.com/italanta/opencrane/blob/main/apps/opencrane-infra/templates/gateway-ingress.yaml)).
 
-There are **no per-user subdomains**. Every user in an org connects through one org host; the identity-routing proxy resolves each session to its own pod. All three surfaces are served **same-origin** under that one host: the org control-UI owns `/`, opencrane-api owns `/api/*`, and the gateway WebSocket is routed at `/gateway`.
+There are **no per-user subdomains**. Every user in an org connects through one org host; the identity-routing proxy resolves each session to its own pod. All three surfaces are served **same-origin** under that one host: the org control-UI owns `/`, opencrane-server owns `/api/*`, and the gateway WebSocket is routed at `/gateway`.
 
 ### How an org host resolves
 
@@ -79,7 +79,7 @@ Creation is gated on two conditions: `ingress.externalIp` (the `INGRESS_IP` env 
 
 ### TLS
 
-A single platform wildcard cert (`*.<base>`) covers every `<org>.<base>` host. The cert also carries explicit SANs for the opencrane-api host and the apex. It is issued by cert-manager via ACME DNS-01 (wildcards require DNS-01) into the Secret named by `ingress.tls.secretName` (default `opencrane-wildcard-tls`; v3 in dev). The wildcard Ingress and the opencrane-api Ingress both reference this Secret.
+A single platform wildcard cert (`*.<base>`) covers every `<org>.<base>` host. The cert also carries explicit SANs for the opencrane-server host and the apex. It is issued by cert-manager via ACME DNS-01 (wildcards require DNS-01) into the Secret named by `ingress.tls.secretName` (default `opencrane-wildcard-tls`; v3 in dev). The wildcard Ingress and the opencrane-server Ingress both reference this Secret.
 
 The wildcard matches exactly one DNS label, so `*.<base>` covers `<org>.<base>` but not `<user>.<org>.<base>`. This is intentional — there are no per-user subdomains, so a second wildcard level is neither needed nor issued.
 
@@ -99,7 +99,7 @@ All platform services are ClusterIP-only. No plane service exposes an Ingress or
 
 | Service | Port | Namespace |
 |---------|------|-----------|
-| opencrane-api | 8080 | opencrane-system |
+| opencrane-server | 8080 | opencrane-system |
 | mcp-gateway (Obot) | 8080 | opencrane-system |
 | feat-skill-registry | 5000 | opencrane-system |
 | litellm | 4000 | opencrane-system |
@@ -155,10 +155,10 @@ The silo chart renders per-plane ingress NetworkPolicies when `networkPolicy.ena
 
 | Policy | Protects | Admits ingress from |
 |--------|----------|---------------------|
-| `*-opencrane-api-ingress` | opencrane-api :8080 | ingress-nginx namespace + operator + mcp-gateway + feat-skill-registry + tenant pods (contract re-pull) |
-| `*-mcp-gateway-ingress` | mcp-gateway :8080 | tenant pods + opencrane-api + operator |
-| `*-feat-skill-registry-ingress` | feat-skill-registry :5000 | tenant pods + opencrane-api + operator |
-| `*-skill-oci-ingress` | skill OCI store | opencrane-api only |
+| `*-opencrane-server-ingress` | opencrane-server :8080 | ingress-nginx namespace + operator + mcp-gateway + feat-skill-registry + tenant pods (contract re-pull) |
+| `*-mcp-gateway-ingress` | mcp-gateway :8080 | tenant pods + opencrane-server + operator |
+| `*-feat-skill-registry-ingress` | feat-skill-registry :5000 | tenant pods + opencrane-server + operator |
+| `*-skill-oci-ingress` | skill OCI store | opencrane-server only |
 
 Tenant pods reach the control plane to re-pull their effective contract (`GET /api/internal/contract/:name`); the policy allows this, and the handler enforces identity via TokenReview — so network and application auth are both in play.
 
@@ -175,9 +175,9 @@ The policy uses an **empty `podSelector`** (it selects every pod in the silo nam
 | Direction | Allowed | Why |
 |-----------|---------|-----|
 | Ingress | the same silo namespace (intra-silo) | pods within one org talk to each other |
-| Ingress | the opencrane-api / operator namespace | the super-admin plane is the only principal allowed to reach inward (it brokers the gateway connection) |
+| Ingress | the opencrane-server / operator namespace | the super-admin plane is the only principal allowed to reach inward (it brokers the gateway connection) |
 | Egress | cluster DNS (`kube-system`, UDP/TCP 53) | without this every name lookup fails and the pod is dead |
-| Egress | the same silo namespace + the opencrane-api / operator namespace | reach the shared planes (opencrane-api, Obot/MCP, feat-skill-registry, LiteLLM, Cognee) in the shared tier |
+| Egress | the same silo namespace + the opencrane-server / operator namespace | reach the shared planes (opencrane-server, Obot/MCP, feat-skill-registry, LiteLLM, Cognee) in the shared tier |
 | Egress | external HTTPS (TCP 443) | the agent legitimately calls out to LLM / MCP / Git endpoints |
 
 This **replaces the retired `opencrane-tenant-default` policy**, which sat in the install namespace (`opencrane-system`) and selected tenant pods cluster-wide by `app.kubernetes.io/component=tenant` — so it governed nothing in the per-org namespaces where tenant pods actually run, leaving egress unrestricted there. The operator now emits one correctly-scoped policy per silo namespace it provisions, so egress (DNS + HTTPS only) and east-west default-deny are enforced in the right place. The companion per-tenant gateway policy (`openclaw-<tenant>-gateway`, [Layer 1](#the-authenticated-operator-seam) above) narrows the gateway *port* to the operator on top of this baseline; `NetworkPolicy` rules are additive, so the two compose.

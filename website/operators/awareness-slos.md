@@ -2,7 +2,7 @@
 
 Operational runbook for the OpenCrane fleet-awareness SLO alerts (P4B.6). Alerts
 are defined in `apps/fleet-platform/templates/awareness-prometheusrule.yaml` and fire on
-metrics from the opencrane-api `/prom` endpoint (`opencrane_awareness_*`). The
+metrics from the opencrane-server `/prom` endpoint (`opencrane_awareness_*`). The
 dashboard is "OpenCrane — Fleet Awareness SLOs" (uid `opencrane-awareness-slo`).
 
 Severity follows the locked model: **policy-violation = page**, **drift /
@@ -47,7 +47,7 @@ rollout wave expects. Usually transient during a canary promotion.
 Tenants have not reported a participation event within the staleness window.
 
 1. `oc awareness participation --severity warning` to list non-participating tenants.
-2. Confirm the tenant pod is running and can reach the opencrane-api internal
-   participation endpoint (NetworkPolicy + projected `opencrane-api` token).
+2. Confirm the tenant pod is running and can reach the opencrane-server internal
+   participation endpoint (NetworkPolicy + projected `opencrane-ui` token).
 3. A newly-provisioned tenant that has never emitted an event will show here until
    its first heartbeat/agent-card — expected during onboarding.

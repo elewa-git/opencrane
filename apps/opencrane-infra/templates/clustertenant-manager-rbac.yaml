@@ -6,8 +6,8 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
 {{- if eq (include "opencrane.namespacedRbac" .) "true" }}
 {{- /*
-  Multi-instance mode (brief B1): grant the opencrane-ui only over the namespace(s)
-  this instance owns, via Role + RoleBinding. Instance A's opencrane-ui SA therefore
+  Multi-instance mode (brief B1): grant the opencrane-server only over the namespace(s)
+  this instance owns, via Role + RoleBinding. Instance A's opencrane-server SA therefore
   cannot read/write instance B's Tenants, AccessPolicies, or pods.
 */}}
 {{- $namespaces := include "opencrane.instanceNamespaces" . | fromJsonArray }}
@@ -42,7 +42,7 @@ subjects:
 {{- else }}
 {{- /*
   Legacy single-install mode: cluster-wide ClusterRole + ClusterRoleBinding over the
-  (namespaced) opencrane-ui rules.
+  (namespaced) opencrane-server rules.
 */}}
 ---
 apiVersion: rbac.authorization.k8s.io/v1

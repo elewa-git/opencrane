@@ -10,11 +10,11 @@ global:
   environment: dev
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG cluster
-#    IN ITS OWN NAMESPACE, serving that silo's opencrane-ui + runtime planes — so the silo's
-#    database holds exactly one ClusterTenant's data and the opencrane-ui API never has to
+#    IN ITS OWN NAMESPACE, serving that silo's opencrane-server + runtime planes — so the silo's
+#    database holds exactly one ClusterTenant's data and the opencrane-server API never has to
 #    disambiguate which tenant a row belongs to (the silo IS the scope). That per-namespace
 #    cluster + its credentials Secret are provisioned by the deploy scripts (apps/opencrane-infra/deploy.sh →
-#    k8s-deploy.sh), and the opencrane-ui consumes it via controlPlane.database.existingSecret —
+#    k8s-deploy.sh), and the opencrane-server consumes it via controlPlane.database.existingSecret —
 #    identically to the central release, just scoped to the silo namespace. No chart-side
 #    per-CT DB block is needed.
 
@@ -84,7 +84,7 @@ multiInstance:
   # -- The namespace(s) this instance owns. Namespaced RBAC is rendered for each.
   #    Empty → defaults to the release namespace.
   instanceNamespaces: []
-  # -- Operator/opencrane-ui RBAC mode: `namespaced` (Role/RoleBinding, isolated)
+  # -- Operator/opencrane-server RBAC mode: `namespaced` (Role/RoleBinding, isolated)
   #    or `cluster` (legacy ClusterRole/ClusterRoleBinding). Forced `namespaced`
   #    semantics when `enabled` and `namespaced`.
   rbac: namespaced
@@ -354,7 +354,7 @@ clustertenantManager:
     secretKey: DATABASE_URL
   # -- Prisma migration Helm hook. Runs `prisma migrate deploy` as a
   #    pre-install/pre-upgrade Job so EVERY deploy reconciles the schema, even when
-  #    the opencrane-ui pod template is unchanged (a plain `helm upgrade` won't roll
+  #    the opencrane-server pod template is unchanged (a plain `helm upgrade` won't roll
   #    the pod, so the db-migrate initContainer alone can leave the schema behind when
   #    the database is recreated under a running pod). The initContainer remains a
   #    belt-and-suspenders guard so a pod never serves an un-migrated database.
@@ -362,17 +362,17 @@ clustertenantManager:
     enabled: true
     # -- Retries before the migration hook is considered failed (fails the deploy).
     backoffLimit: 3
-  # -- Cognee integration for opencrane-ui permission synchronization
+  # -- Cognee integration for opencrane-server permission synchronization
   cognee:
     # -- Install an in-cluster Cognee as part of this release. Cognee is a REQUIRED
-    #    service (the opencrane-ui's permission sync + the awareness retrieval ACL
+    #    service (the opencrane-server's permission sync + the awareness retrieval ACL
     #    both depend on it), so this defaults true — a fresh cluster gets a working
     #    Cognee with no extra step. Set false to bring your own (BYO): the endpoint
     #    below then points at your external/shared Cognee and no workload is rendered.
     #    Separate from `backendAccessControl` (the runtime enforcement switch) so an
     #    operator can BYO Cognee while still enforcing the backend ACL.
     install: true
-    # -- Cognee HTTP endpoint used by opencrane-ui permission sync routes. When
+    # -- Cognee HTTP endpoint used by opencrane-server permission sync routes. When
     #    `install` is true the in-chart Service is reachable at this name; point it
     #    elsewhere only when BYO (`install: false`).
     endpoint: "http://cognee:8000"
@@ -467,7 +467,7 @@ clustertenantManager:
     #    to force Cognee to pick up a credential it missed at boot, without touching kubectl/helm
     #    directly.
     podAnnotations: {}
-  # -- OIDC human-login session config for the opencrane-ui. Zitadel is the single
+  # -- OIDC human-login session config for the opencrane-server. Zitadel is the single
   #    trusted issuer (Mode-2 broker, no upstream Entra), but nothing here is
   #    Zitadel-specific — any spec-compliant issuer works. OIDC is OFF unless
   #    `issuerUrl` is set; when set, supply the client id + a session secret
@@ -477,8 +477,8 @@ clustertenantManager:
     issuerUrl: ""
     # -- Registered OAuth client id (OIDC_CLIENT_ID).
     clientId: ""
-    # -- Callback URL on the opencrane-ui (OIDC_REDIRECT_URI), e.g.
-    #    https://<opencrane-ui-host>/api/v1/auth/callback.
+    # -- Callback URL on the opencrane-server (OIDC_REDIRECT_URI), e.g.
+    #    https://<opencrane-server-host>/api/v1/auth/callback.
     redirectUri: ""
     # -- Existing K8s Secret carrying the OIDC client secret + session secret. Strongly
     #    preferred over inline values in production. Keys are configurable below.
@@ -533,14 +533,14 @@ litellm:
   # NOTE: the LiteLLM endpoint is no longer set here. It is derived per scope by the
   # `opencrane.litellmEndpoint` helper — release-prefixed in-cluster Service in
   # instance mode, or `sharedPlatform.litellm.shared.endpoint` in shared mode.
-  # -- Existing Secret containing LITELLM_MASTER_KEY for operator and opencrane-ui
+  # -- Existing Secret containing LITELLM_MASTER_KEY for operator and opencrane-server
   existingSecret: ""
   secretKey: LITELLM_MASTER_KEY
   # -- Auto-generate and persist a random master key in chart-managed Secret when not using existingSecret.
   generateMasterKey: true
   # -- Default budget used by operator when tenant does not define monthlyBudgetUsd
   defaultMonthlyBudgetUsd: 50
-  # -- Default spend path template for opencrane-ui to query tenant spend from LiteLLM (tenant_id placeholder: {tenant})
+  # -- Default spend path template for opencrane-server to query tenant spend from LiteLLM (tenant_id placeholder: {tenant})
   spendPathTemplate: "/spend/tenant/{tenant}"
   image:
     # -- non_root variant: ships PRE-GENERATED Prisma engine binaries (baked at
@@ -615,7 +615,7 @@ litellm:
   #    of Langfuse and join them by skill.
   #    Two modes:
   #      in-cluster (recommended): set langfuse.inCluster.enabled=true. The chart
-  #        deploys Langfuse as a subchart and auto-configures LiteLLM + opencrane-ui.
+  #        deploys Langfuse as a subchart and auto-configures LiteLLM + opencrane-server.
   #        Leave litellm.langfuse.enabled=false in that case (auto-wired by templates).
   #      external: set litellm.langfuse.enabled=true and supply host/keys below.
   #    OFF by default: a default render is byte-identical with this disabled.
@@ -664,7 +664,7 @@ tenant:
   # -- OpenClaw gateway trusted-proxy auth (OC-2 / CONN.4).
   gateway:
     # -- CIDR(s)/IP(s) the gateway trusts the X-Forwarded-User identity header from
-    #    — the ingress controller's pod source range. The opencrane-ui brokers every
+    #    — the ingress controller's pod source range. The opencrane-server brokers every
     #    gateway WebSocket upgrade (auth_request → /auth/gateway-verify → 204 +
     #    X-Forwarded-User), so the gateway honours that header only from a trusted source.
     #
@@ -732,7 +732,7 @@ ingress:
   #    The platform wildcard `*.<domain>` covers the org apexes. Wired to the operator as
   #    INGRESS_DOMAIN. See docs/agents/cluster-architecture.md → "Tenancy Model".
   domain: opencrane.local
-  # -- The FIXED super-operator / opencrane-ui host (the management API above every
+  # -- The FIXED super-operator / opencrane-server host (the management API above every
   #    org). DISTINCT from the org-wildcard base above — it is its own host, never an
   #    org under `*.<domain>`. Defaults to `platform.<domain>` when left empty so a
   #    default render still produces a sane, separate host. Set it to a dedicated name
@@ -745,22 +745,22 @@ ingress:
   #    as INGRESS_IP.
   externalIp: ""
   # -- Same-origin hosting (DOMAIN.T4 / frontend-same-origin) — the ONLY hosting mode.
-  #    The opencrane-ui host's Ingress serves the org-admin SPA at `/` and path-routes the
+  #    The opencrane-server host's Ingress serves the org-admin SPA at `/` and path-routes the
   #    SAME origin so the browser gets first-party cookies with no CORS:
-  #      /api      → the opencrane-ui backend (auth lives at /api/v1/auth/*)
+  #      /api      → the opencrane-server backend (auth lives at /api/v1/auth/*)
   #      /gateway  → the OpenClaw gateway WS proxy (only when gatewayProxy.enabled)
   #      /         → the org-admin SPA Service (spaService, applied by the frontend layer)
   #    Helm OWNS these rules, so the frontend layer never kubectl-patches the Ingress
   #    out-of-band (that patch fought `helm upgrade` via an SSA field-manager conflict and
   #    reverted on every reconcile — see docs/optimalisation-plan.md §5). The legacy
-  #    `*.<domain>` wildcard gateway-ingress + the bare `/`→opencrane-ui layout were removed
+  #    `*.<domain>` wildcard gateway-ingress + the bare `/`→opencrane-server layout were removed
   #    once every silo migrated (2026-07-12 deploy run); the mirror-image fleet host was
   #    already same-origin (fleet-manager-ingress renders /api+/auth unconditionally).
   sameOrigin:
     # -- Name of the same-origin SPA Service that owns `/` (applied by the frontend layer, e.g.
     #    weownai's platform/k8s/frontend-opencrane-ui.yaml). Set to "" for a standalone /
-    #    headless silo with no SPA: `/` then falls back to the opencrane-ui backend (the pre-
-    #    same-origin `/`→opencrane-ui behaviour) instead of routing to an absent Service (502).
+    #    headless silo with no SPA: `/` then falls back to the opencrane-server backend (the pre-
+    #    same-origin `/`→opencrane-server behaviour) instead of routing to an absent Service (502).
     #    `/api` and `/gateway` are served regardless.
     spaService: weownai-opencrane-ui
     # -- Port on the SPA Service (ignored when spaService is "").
@@ -917,8 +917,8 @@ certManager:
   issuerName: opencrane-issuer
   # -- cert-manager controller namespace. The `oc platform dns set` endpoint writes
   # the DNS-01 credentials Secret here (cert-manager reads ClusterIssuer solver
-  # Secrets only from its own namespace), and the opencrane-ui gets a namespaced
-  # Role here for that write (see opencrane-ui-rbac.yaml). Wired to the opencrane-ui
+  # Secrets only from its own namespace), and the opencrane-server gets a namespaced
+  # Role here for that write (see clustertenant-manager-rbac.yaml). Wired to the opencrane-server
   # as CERT_MANAGER_NAMESPACE so the runtime write target matches the Role.
   namespace: cert-manager
   # -- Namespace the wildcard Certificate (and its Secret) are created in. Defaults to
@@ -957,7 +957,7 @@ certManager:
 # By default authentication is disabled and access is controlled by NetworkPolicy
 # (in-cluster only); enable `auth.enabled` for per-user credentials + access policies.
 # The MCP catalogue is loaded from `catalog.path` (a local filesystem dir of entry YAMLs)
-# and/or Git Source URLs added at runtime via Obot Admin — NOT from a opencrane-ui poll.
+# and/or Git Source URLs added at runtime via Obot Admin — NOT from a opencrane-server poll.
 mcpGateway:
   enabled: true
   image:
@@ -1125,7 +1125,7 @@ networkPolicy:
     - api.anthropic.com
   # -- Reserved for CIDR-based egress rules (future per-silo egress refinement).
   egressAllowCIDRs: []
-  # -- Namespace where the ingress controller runs. Used by the opencrane-ui
+  # -- Namespace where the ingress controller runs. Used by the opencrane-server
   # ingress NetworkPolicy to permit external API traffic routed through it.
   # Override for non-standard ingress namespaces (e.g. "traefik", "gateway").
   ingressNamespace: ingress-nginx
@@ -1133,7 +1133,7 @@ networkPolicy:
   # -- Default-deny baseline for the shared platform namespace (opencrane-system).
   #
   #    CONTEXT: S2 ships per-silo (per-ClusterTenant-namespace) default-deny policies
-  #    emitted by the operator. The PLATFORM namespace — where opencrane-ui, LiteLLM,
+  #    emitted by the operator. The PLATFORM namespace — where opencrane-server, LiteLLM,
   #    Cognee, Obot (mcp-gateway), feat-skill-registry, and the CNPG Postgres cluster run —
   #    has no such policy by default. This section adds one as a gated, additive block.
   #
@@ -1236,7 +1236,7 @@ observability:
 #    isolation tiers need NO configuration here — the operator enforces them inline.
 #    To additionally serve the `dedicatedCluster` tier, point this at an external,
 #    out-of-process provisioner webhook (e.g. a private vendor backend). Left empty
-#    (the default), `dedicatedCluster` stays unavailable and the opencrane-ui API
+#    (the default), `dedicatedCluster` stays unavailable and the opencrane-server API
 #    rejects it with 422 TIER_UNAVAILABLE (fail-closed). The control plane refuses a
 #    non-`https://` URL so the bearer token is never sent in plaintext.
 # NOTE: the tenancy-profile gates — self-service billing (`OPENCRANE_BILLING_ENABLED`) and the
@@ -1259,7 +1259,7 @@ clusterTenant:
 
 # -- In-cluster Langfuse LLM observability.
 #    When inCluster.enabled=true, the official Langfuse Helm subchart (v1.x) is deployed
-#    inside this release. The opencrane-ui metrics proxy and LiteLLM trace callback
+#    inside this release. The opencrane-server metrics proxy and LiteLLM trace callback
 #    are auto-wired to the in-cluster service — no manual host/key configuration needed.
 #    k8s-deploy.sh creates the `opencrane-langfuse` Secret (stable across upgrades) and
 #    adds the `langfuse` database to the shared CNPG cluster before the Helm install.

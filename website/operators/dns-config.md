@@ -8,7 +8,7 @@ multi-instance options.
 ## The model: one fixed platform wildcard, orgs derived under it
 
 OpenCrane uses a **fixed wildcard topology**. The platform owns **one base domain**
-(`<base>`, e.g. `weownai.eu`) and a **fixed super-operator / opencrane-api host**
+(`<base>`, e.g. `weownai.eu`) and a **fixed super-operator / opencrane-server host**
 (`platform.<base>`). Every org name is **derived** under the base — customers do
 not bring their own domain (a vanity domain is an optional overlay):
 
@@ -96,7 +96,7 @@ its canonical `<org>.<base>` host.
 
 | Cert | Covers | Challenge | Issued |
 |------|--------|-----------|--------|
-| **Platform wildcard** `*.<base>` (+ apex + opencrane-api host) | every org host `<org>.<base>`, the apex, the fixed opencrane-api host | DNS-01 (wildcard requires DNS-01) | once at install by the chart (`cluster-issuer.yaml`) |
+| **Platform wildcard** `*.<base>` (+ apex + opencrane-server host) | every org host `<org>.<base>`, the apex, the fixed opencrane-server host | DNS-01 (wildcard requires DNS-01) | once at install by the chart (`cluster-issuer.yaml`) |
 | **Per-org vanity** (SAN = the vanity host only) | the customer-vanity host only | HTTP-01 (no wildcard, so DNS-01 is unnecessary) | at org provision, only when a `vanityDomain` is set |
 
 The platform wildcard cert is the **only** cert that requires DNS-01 and a zone-write
@@ -230,7 +230,7 @@ token takes effect on re-apply):
    holding the provider token under the `api-token` key.
 2. **A cert-manager issuer** — an ACME DNS-01 issuer referencing that Secret (or the raw
    solver block). cert-manager then issues/renews the **platform** wildcard `*.<base>`
-   certificate (plus the apex and the opencrane-api host) into the Secret the chart
+   certificate (plus the apex and the opencrane-server host) into the Secret the chart
    references (`ingress.tls.secretName`, default `opencrane-wildcard-tls`).
 
 This authorises the issuer **on the zone**. The platform wildcard cert covers every org host

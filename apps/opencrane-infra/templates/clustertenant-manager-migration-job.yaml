@@ -1,8 +1,8 @@
 {{- if .Values.clustertenantManager.migrationJob.enabled }}
-# Run Prisma migrations on EVERY install/upgrade, independent of the opencrane-ui
-# pod template. The opencrane-ui also carries a `db-migrate` initContainer, but an
+# Run Prisma migrations on EVERY install/upgrade, independent of the opencrane-server
+# pod template. The opencrane-server also carries a `db-migrate` initContainer, but an
 # initContainer only fires when the pod is (re)created — so a `helm upgrade` whose
-# opencrane-ui values are unchanged never rolls the pod and never re-runs migrations.
+# opencrane-server values are unchanged never rolls the pod and never re-runs migrations.
 # That left the schema silently behind whenever the database was recreated under a
 # still-running pod (e.g. a CNPG cluster rebuild). This pre-upgrade hook closes that
 # gap: it blocks the rollout until `prisma migrate deploy` succeeds against the live

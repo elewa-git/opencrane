@@ -14,7 +14,7 @@ This brief is self-contained; file references point into the OpenCrane repo.
 
 Elewa operates a single large GKE Autopilot cluster and wants to run **many
 OpenCrane instances** in it — one per customer organisation. Each instance is a
-full OpenCrane (opencrane-api + operator + Postgres + its own tenant OpenClaw
+full OpenCrane (opencrane-server + operator + Postgres + its own tenant OpenClaw
 pods) and must be **strictly isolated** from every other instance: no shared
 data, no cross-namespace reconciliation, no shared cloud credentials.
 
@@ -37,7 +37,7 @@ Credit where due: the data model does not block this. We found:
 - **The operator already supports namespace-scoped watching** — `WATCH_NAMESPACE`
   (`apps/fleet-operator/src/config.ts:12`) drives `listNamespacedCustomObject` vs
   `listClusterCustomObject` (`apps/fleet-operator/src/tenants/runtime/idle-checker.ts:105-106`).
-- **The opencrane-api already targets a configurable namespace** for CR writes
+- **The opencrane-server already targets a configurable namespace** for CR writes
   (`libs/backend/tenants/main/src/routes/tenants.ts` — `process.env.NAMESPACE ?? "default"`).
 - **Helm names are release-prefixed** via `opencrane.fullname`, so distinct releases
   produce distinct object names.
@@ -81,7 +81,7 @@ Each item: the finding, why it blocks multi-instance, and a proposed change.
   run two instances on CRD-incompatible OpenCrane versions at once.
 - **Ask:** (a) install CRDs **once, cluster-wide**, decoupled from the per-instance
   release (documented `--skip-crds` + a separate CRD chart/step); and (b) a stated
-  **fleet CRD-version compatibility contract** (which opencrane-api/operator
+  **fleet CRD-version compatibility contract** (which opencrane-server/operator
   versions a given CRD version supports), so we can plan rolling upgrades.
 
 ### B4 — Cluster-scoped cert + secret singletons
@@ -170,7 +170,7 @@ would let us — and other operators — validate this on every release.
 
 ## 7. Open questions back to OpenCrane
 
-- **Q1** Is anything in the opencrane-api or operator hardcoded to a fixed namespace
+- **Q1** Is anything in the opencrane-server or operator hardcoded to a fixed namespace
   or a cluster-wide list beyond what we found (e.g. cross-namespace lookups,
   cluster-scoped informers, global Postgres assumptions)?
 - **Q2** Are any CRD names or API groups assumed singleton in a way that a future

@@ -56,12 +56,12 @@ Current CRD fields (`spec`), each grounded in the CRD YAML and the `ClusterTenan
 | `isolationTier` | enum `shared \| dedicatedNodes \| dedicatedCluster` | yes (default `shared`) | Isolation strength. `dedicatedCluster` requires a registered external provisioner (surface 4). |
 | `compute` | `{ mode: shared \| dedicated, nodePool? }` | no (default `shared`) | Bin-pack on shared nodes vs. pin to a dedicated pool. `nodePool` required when `mode=dedicated`. |
 | `resources.quota` | `{ cpu?, memory?, pods?, storage?, gpu? }` | no | Aggregate ceiling enforced as `ResourceQuota`/`LimitRange` over the org namespace. |
-| `owner` | `{ subject, email? }` | yes at create (opencrane-api-enforced, not CRD-enforced) | The org root owner's OIDC `sub` (+ IdP-verified email). The **only channel** for owner identity — the operator has no DB access and attributes the auto-seeded default `Tenant` from this field. |
+| `owner` | `{ subject, email? }` | yes at create (opencrane-server-enforced, not CRD-enforced) | The org root owner's OIDC `sub` (+ IdP-verified email). The **only channel** for owner identity — the operator has no DB access and attributes the auto-seeded default `Tenant` from this field. |
 
 **Contract gap — `spec.zitadel` (see surface 3).** The shared TypeScript type
 (`ClusterTenantZitadel` in `libs/contracts/src/cluster-tenant.types.ts`), the fleet writer
 (`_BuildSpecPatch` in `cr-bridge.ts`), and the silo reader (`_ResolvePerOrgClient` in
-`apps/opencrane-api/src/infra/auth/per-org-client.ts`) **all already reference
+`apps/opencrane/src/infra/auth/per-org-client.ts`) **all already reference
 `spec.zitadel.{clientId, orgId, redirectUri}`** — but the CRD YAML
 (`opencrane.io_clustertenants.yaml`) does **not declare it**. On an API server pruning unknown fields
 (the default under structural schemas), the block is silently dropped on write, so the silo reads nothing
@@ -219,7 +219,7 @@ The delegation payload is delivered on the `ClusterTenant` CR `spec.zitadel` blo
 API call. This is Option A from the [silo read-model projection design](silo-readmodel-projection-design.md):
 the fleet writes the ids onto the CR after `provisionOrg` (`_BuildSpecPatch` in `cr-bridge.ts`), and the silo
 reads them straight off the CR at login (`_ResolvePerOrgClient` in
-`apps/opencrane-api/src/infra/auth/per-org-client.ts`). Chosen over the alternatives because it:
+`apps/opencrane/src/infra/auth/per-org-client.ts`). Chosen over the alternatives because it:
 
 - keeps the **CR as the single source of truth** (consistent with the desired-state pattern);
 - removes the silo's `ClusterTenant` read-model table rather than adding a sync path;

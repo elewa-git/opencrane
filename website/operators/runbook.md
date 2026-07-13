@@ -37,7 +37,7 @@ This document covers the essential operational procedures for deploying, verifyi
 # 1. Start k3d cluster
 k3d cluster create opencrane --agents 1 --port "8080:80@loadbalancer"
 
-# 2. Bootstrap the full local stack (PostgreSQL + LiteLLM + opencrane-api + operator)
+# 2. Bootstrap the full local stack (PostgreSQL + LiteLLM + opencrane-server + operator)
 libs/k8s-platform/tests/k3d-local.sh
 
 # 3. Verify all pods are running
@@ -104,7 +104,7 @@ Set these via Helm values — the deploy scripts wire them automatically. The va
 |----------|----------|----------|-------------|
 | `DATABASE_URL` | Yes | `clustertenantManager.database.existingSecret` | Per-silo PostgreSQL connection string |
 | `LITELLM_MASTER_KEY` | Yes (if LiteLLM enabled) | `litellm.existingSecret` | LiteLLM master API key |
-| `OPENCRANE_API_TOKEN` | Yes | — | Bearer token for opencrane-api auth |
+| `OPENCRANE_API_TOKEN` | Yes | — | Bearer token for opencrane-server auth |
 | `OPENCRANE_PROJECTION_DRIFT_ALERT_THRESHOLD` | No | — | Drift count before alert fires (0 = disabled) |
 | `OPENCRANE_DRIFT_WEBHOOK_URL` | No | — | Webhook URL for projection-drift alert delivery |
 
@@ -132,7 +132,7 @@ curl http://litellm.opencrane-acme.svc.cluster.local:4000/health
 kubectl logs -n opencrane-system deployment/opencrane-fleet-manager --tail 50
 
 # Silo clustertenant-manager logs (replace <ct> with the ClusterTenant name)
-kubectl logs -n opencrane-<ct> deployment/opencrane-clustertenant-manager --tail 50
+kubectl logs -n opencrane-<ct> deployment/opencrane-server --tail 50
 
 # List all tenants and their phases (in a specific silo)
 kubectl get tenants -n opencrane-<ct>
@@ -269,7 +269,7 @@ Prisma migrations do not have automatic down-migrations. For critical data rollb
 
 1. **Stop the clustertenant-manager** in the affected silo to prevent write conflicts:
    ```bash
-   kubectl scale deployment/opencrane-clustertenant-manager -n opencrane-<ct> --replicas 0
+   kubectl scale deployment/opencrane-server -n opencrane-<ct> --replicas 0
    ```
 
 2. **Restore from backup** (GCP Cloud SQL):
@@ -282,7 +282,7 @@ Prisma migrations do not have automatic down-migrations. For critical data rollb
 3. **Redeploy the previous version**:
    ```bash
    helm rollback opencrane-<ct> -n opencrane-<ct>
-   kubectl scale deployment/opencrane-clustertenant-manager -n opencrane-<ct> --replicas 1
+   kubectl scale deployment/opencrane-server -n opencrane-<ct> --replicas 1
    ```
 
 ### Tenant Rollback (OpenClaw Version Pin)
@@ -319,7 +319,7 @@ kubectl delete pod -n opencrane-<ct> -l opencrane.io/tenant=acme
 
 **Response**:
 1. Check pod status: `kubectl get pods -n opencrane-<ct>`
-2. Check logs: `kubectl logs -n opencrane-<ct> deployment/opencrane-clustertenant-manager --tail 100`
+2. Check logs: `kubectl logs -n opencrane-<ct> deployment/opencrane-server --tail 100`
 3. Check database connectivity (per-silo DB)
 4. Roll back if a recent upgrade is suspected: `helm rollback opencrane-<ct> -n opencrane-<ct>`
 
@@ -371,7 +371,7 @@ kubectl delete pod -n opencrane-<ct> -l opencrane.io/tenant=acme
    curl -X POST ".../api/tenants/repair?dryRun=false"
    curl -X POST ".../api/policies/repair?dryRun=false"
    ```
-4. If drift persists, check for split-brain between operator and opencrane-api write paths
+4. If drift persists, check for split-brain between operator and opencrane-server write paths
 
 ### P2: Budget overage (tenant exceeds 100% of monthly budget)
 

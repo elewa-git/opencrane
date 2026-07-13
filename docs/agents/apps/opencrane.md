@@ -49,7 +49,7 @@ CRUD + notable actions:
 - **Device flow** — `POST /auth/device` → browser activate → poll `/auth/device/token` → mints a DB `AccessToken` (this is what `oc auth login` uses).
 - **pod-token pairing broker** — `POST /api/v1/auth/pod-token` resolves the tenant **solely from the verified session email** (fail-closed `409 AMBIGUOUS_TENANT`), returns `{ gatewayUrl, bootstrapToken, tenant, ingressHost }`, and records a `BrokeredDevice` for per-user kill-switch. `/pod-token/cut` revokes the caller's connections without touching the shared pod.
 - **`___AuthMiddleware` fallback chain** — public paths → OIDC session → `OPENCRANE_API_TOKEN` env → DB access token → dev bypass. **No per-route role enforcement yet** (roles are a planned target).
-- **TokenReview** — internal endpoints validate projected tokens with `aud=opencrane-api`, parsing the tenant from `system:serviceaccount:<ns>:<name>`.
+- **TokenReview** — internal endpoints validate projected tokens with `aud=opencrane-ui`, parsing the tenant from `system:serviceaccount:<ns>:<name>`.
 
 ## Dual-Write & Grant Compiler
 

@@ -216,7 +216,7 @@ Routing is **opt-in**. Most calls use an explicitly chosen model; the autonomous
 3. **"auto"** (request- or skill-level opt-in) → the router/optimizer picks within the auto config (§§4, 10, 11).
 4. **Global default** → fallback when nothing above is set.
 
-Mechanically the resolved model is written into the effective-contract (per-skill) + the pod's `models[]`/default; the per-tenant virtual key's `models[]` allowlist is the hard ceiling on what *any* mode may select (opencrane-api-enforced, §4 rules). Auto is a per-skill (or per-tenant-default) flag — never global-implicit.
+Mechanically the resolved model is written into the effective-contract (per-skill) + the pod's `models[]`/default; the per-tenant virtual key's `models[]` allowlist is the hard ceiling on what *any* mode may select (opencrane-server-enforced, §4 rules). Auto is a per-skill (or per-tenant-default) flag — never global-implicit.
 
 ### How per-skill resolution works — intent → resolution → enforcement
 
@@ -228,7 +228,7 @@ A common misread is "model selection is a property of the skill." It isn't — t
 | **Resolution** | `_ResolveContractSkillModels` → `_ResolveSkillModel` at contract-compile | `posture × scope defaults` → the concrete model for *this* tenant, *now* |
 | **Enforcement** | the per-tenant LiteLLM virtual key's `models[]` allowlist (AIR.0c) | the hard runtime gate on what any selection may reach |
 
-**The resolver** (`apps/opencrane-api/src/core/model-routing/`): `_ResolveContractSkillModels` (the DB wrapper) loads the scope defaults **once** — the Global `ModelRoutingDefault` plus the tenant's ClusterTenant default when it has one — and the posture rows for the entitled skills (joined by name; a posture-bearing row beats a null one). It then runs the **pure** `_ResolveSkillModel` per entitled skill, emitting `{ skillId, model, auto }` into the contract's `skills.models`. The resolver does **no I/O and never calls LiteLLM** — the wrapper does the loads, so the precedence stays unit-testable and the compile stays cheap.
+**The resolver** (`apps/opencrane/src/core/model-routing/`): `_ResolveContractSkillModels` (the DB wrapper) loads the scope defaults **once** — the Global `ModelRoutingDefault` plus the tenant's ClusterTenant default when it has one — and the posture rows for the entitled skills (joined by name; a posture-bearing row beats a null one). It then runs the **pure** `_ResolveSkillModel` per entitled skill, emitting `{ skillId, model, auto }` into the contract's `skills.models`. The resolver does **no I/O and never calls LiteLLM** — the wrapper does the loads, so the precedence stays unit-testable and the compile stays cheap.
 
 **Per-posture resolution** (the precedence chain `_ResolveSkillModel` implements):
 - **`pinned`** → `pinnedModel`. The *only* case where the skill itself names the concrete model.
@@ -277,11 +277,11 @@ Verified 2026-06-18 against langfuse.com/docs + the langfuse repo. **All Langfus
 
 ## 14. Frontend management capabilities (the WeOwnAI console)
 
-WeOwnAI is a **separate proprietary Angular repo** and, per the locked rule, **just another API client**: `/auth/me` claims (`isPlatformOperator`, `clusterTenant`) **hide UI only**; the opencrane-api (the AIR.0b scope guard) is the enforcement point. Everything below is backed by AIR APIs that **already exist** plus two small opencrane-api enablers (see end).
+WeOwnAI is a **separate proprietary Angular repo** and, per the locked rule, **just another API client**: `/auth/me` claims (`isPlatformOperator`, `clusterTenant`) **hide UI only**; the opencrane-server (the AIR.0b scope guard) is the enforcement point. Everything below is backed by AIR APIs that **already exist** plus two small opencrane-server enablers (see end).
 
 ### Langfuse integration pattern (verified)
 - **Embed nothing** — Langfuse has no iframe/embed and no per-request SSO deep-link. Don't try to iframe it.
-- **Build native over the API** for the at-a-glance views (score trends, eval pass-rates, cost/latency tiles, per-tenant rollups): query Langfuse's **v1 Metrics + Public API** (v2 is Cloud-only today — design self-hosted views around **v1**), **proxied through the opencrane-api** so Langfuse project keys never reach the browser.
+- **Build native over the API** for the at-a-glance views (score trends, eval pass-rates, cost/latency tiles, per-tenant rollups): query Langfuse's **v1 Metrics + Public API** (v2 is Cloud-only today — design self-hosted views around **v1**), **proxied through the opencrane-server** so Langfuse project keys never reach the browser.
 - **Link out** to the full Langfuse UI for the expensive-to-rebuild deep surfaces: trace inspection, LLM-judge evaluator config, experiment A-vs-B comparison, annotation queues. A *seamless* SSO handoff needs enterprise SAML; without it users hit a Langfuse login (acceptable for the admin persona), or scope isolation stays entirely in our proxy.
 
 ### Capability catalogue (prioritized) — each mapped to its backing API
@@ -314,7 +314,7 @@ No surveyed product (OpenRouter, LiteLLM, NotDiamond, Portkey, Requesty, Helicon
 - **Requesty** — cascading policy engine through the org hierarchy (= our tenant→skill inheritance).
 
 ### Control-plane enablers still needed (so the console stays API-first)
-1. **AIR.10 — Langfuse-metrics proxy**: an opencrane-api read endpoint that proxies Langfuse's v1 Metrics/Public API with the project keys held server-side + scoped per tenant (the browser never holds Langfuse credentials).
+1. **AIR.10 — Langfuse-metrics proxy**: an opencrane-server read endpoint that proxies Langfuse's v1 Metrics/Public API with the project keys held server-side + scoped per tenant (the browser never holds Langfuse credentials).
 2. **AIR.11 — savings-recommendation read endpoint**: aggregates the latest `RoutingMeasurement` + open `RoutingProposal` per skill/tenant into the "save up to N%" feed that powers capability #7. (Pure read over data the loop already produces.)
 
 Both are small, additive, and IAM-gated; the frontend *views* themselves live in the WeOwnAI repo (out of this AGPL tree).

@@ -15,11 +15,11 @@ OpenCrane is being restructured (Phase 3) so that `opencrane-2` becomes a **stan
 template** — deployable alone (self-hosted, single-tenant) or fleet-managed by an external fleet manager that
 lives in a separate repo, `weownai`. The fleet manager (`apps/fleet-operator`'s HTTP/provisioning routes plus
 the `apps/fleet-platform` Helm chart) moves OUT to `weownai`; the per-silo control plane
-(`apps/opencrane-api`) and the rest of `opencrane-2` stay behind, joined to the fleet only by the
+(`apps/opencrane`) and the rest of `opencrane-2` stay behind, joined to the fleet only by the
 cross-repo contract specified in the fleet↔silo contract design.
 
 Today the whole platform is **AGPL-3.0-or-later** (root `LICENSE`; `apps/fleet-operator` and
-`apps/opencrane-api` both declare `"license": "AGPL-3.0-or-later"`), with **one deliberate
+`apps/opencrane` both declare `"license": "AGPL-3.0-or-later"`), with **one deliberate
 exception already in place**: `libs/contracts` is **MIT** so external — including proprietary — consumers can
 generate a typed client from the published OpenAPI spec without inheriting AGPL obligations
 (`libs/contracts/README.md`).
@@ -50,7 +50,7 @@ sit on:
 | Fleet manager — `apps/fleet-operator` provisioning/HTTP routes (cluster-tenants, billing, platform DNS, Zitadel admin) | `weownai` | **Proprietary** | The hosted multi-tenant value-add; the commercial product. |
 | `apps/fleet-platform` Helm chart | `weownai` | **Proprietary** | Deploys the proprietary fleet manager. |
 | Dedicated-cluster provisioner (behind the webhook seam) | `weownai` | **Proprietary** | The enterprise dedicated-tier backend (ADR 0001/0002's arm's-length seam). |
-| `apps/opencrane-api` (the silo control plane) | `opencrane-2` | **AGPL-3.0-or-later** | The self-hostable template. |
+| `apps/opencrane` (the silo control plane) | `opencrane-2` | **AGPL-3.0-or-later** | The self-hostable template. |
 | Silo planes, operator, per-org identity/tenant/model/skill surfaces | `opencrane-2` | **AGPL-3.0-or-later** | The template. |
 | Control-plane frontend (arriving from weownai) | `opencrane-2` | **AGPL-3.0-or-later** | Ships with the template as its UI. |
 | `libs/contracts` (shared DTOs + generated clients + CR types) | `opencrane-2` | **MIT** (unchanged) | The contract must be linkable from BOTH the AGPL silo and the proprietary fleet without imposing AGPL on the latter. |

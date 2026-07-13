@@ -4,7 +4,7 @@
 
 ## Goal
 
-Replace the policy-only "MCP Server Plane" and the shared-PVC skill mount with **two config-slaved ingress service planes**, both governed by a single opencrane-api authority:
+Replace the policy-only "MCP Server Plane" and the shared-PVC skill mount with **two config-slaved ingress service planes**, both governed by a single opencrane-server authority:
 
 - **Obot MCP Gateway** — in-cluster MCP registry + gateway (runtime tool broker).
 - **Skill Registry & Delivery** — our org-aligned ClawHub alternative for skills management & sharing (content registry + scoped delivery).
@@ -48,7 +48,7 @@ Full cluster context lives in `README.md`; this brief covers the two service pla
 
 ## Authorization model (canonical — groups, not tiers)
 
-**The compiler is tier-agnostic.** It knows only **principals, groups, and grants** — it has no concept of "department", "team", or "project". Org structure is an opencrane-api concern. This is deliberate: a fixed scope-tier enum would be baked into the compiler, CRDs, the versioned contract, the DB, and the UI, so adding or changing a level later would mean a migration across all of them **plus a fleet contract-version rollout**. Groups make the level set free to evolve with zero compiler/contract change. **Do not introduce a scope-tier enum anywhere downstream.**
+**The compiler is tier-agnostic.** It knows only **principals, groups, and grants** — it has no concept of "department", "team", or "project". Org structure is an opencrane-server concern. This is deliberate: a fixed scope-tier enum would be baked into the compiler, CRDs, the versioned contract, the DB, and the UI, so adding or changing a level later would mean a migration across all of them **plus a fleet contract-version rollout**. Groups make the level set free to evolve with zero compiler/contract change. **Do not introduce a scope-tier enum anywhere downstream.**
 
 **Primitives:**
 
@@ -75,7 +75,7 @@ The compiler never interprets what a group *means*.
 
 ## Components & responsibilities
 
-- **Control plane** (`apps/opencrane-api`): MCP + skill registry CRUD, permission compiler, versioned effective-contract endpoint, config authority for both planes, promotion/demotion workflow. Absorbs both admin UIs.
+- **Control plane** (`apps/opencrane`): MCP + skill registry CRUD, permission compiler, versioned effective-contract endpoint, config authority for both planes, promotion/demotion workflow. Absorbs both admin UIs.
 - **Operator** (`apps/fleet-operator`): reconciles both planes' config + registries into the cluster; injects projected token + contract into tenant pods; drift-detects/repairs.
 - **Obot MCP Gateway** (headless, in-cluster): validates projected JWT, per-call scope check, brokers downstream creds via RFC 8693 shim.
 - **Skill Registry & Delivery** (in-cluster ingress): scoped content delivery over OCI/ORAS; entitlement enforced per read.
@@ -85,7 +85,7 @@ The compiler never interprets what a group *means*.
 
 - **(0) config** — control plane → operator → plane: registries, IdP binding, gateway/auth, lifecycle. Drift-repaired.
 - **(1) grants** — control plane → plane: per-tenant compiled scope, pushed live.
-- **(2) contract** — opencrane-api effective-contract endpoint → pod: versioned, pulled at loop boundaries.
+- **(2) contract** — opencrane-server effective-contract endpoint → pod: versioned, pulled at loop boundaries.
 - **(3) JWT** — pod → plane: short-lived, audience-bound identity.
 
 ## Skill registry & delivery (build thin, reuse the rest)
@@ -95,7 +95,7 @@ Build our own registry, but stand it on existing substrate — do **not** rebuil
 - **Reuse — storage + immutable digests:** The Zot OCI registry via **ORAS**. This realises the plan's "OCI digest-pinned bundles."
 - **Reuse — scanning:** Trivy/Grype on ingest.
 - **Reuse — discovery search:** Cognee dataset (no second vector index).
-- **Build (thin, ours in control plane):** scope tagging; promotion/demotion workflow (opencrane-api-gated ingest, incl. mirroring curated bundles from upstream ClawHub / `anthropics/skills`); entitlement resolution (shared compiler); the delivery endpoint. 
+- **Build (thin, ours in control plane):** scope tagging; promotion/demotion workflow (opencrane-server-gated ingest, incl. mirroring curated bundles from upstream ClawHub / `anthropics/skills`); entitlement resolution (shared compiler); the delivery endpoint. 
 
 `SKILL.md` is the cross-vendor open standard (Anthropic + OpenAI, Dec 2025) — existing `skills/shared/**` files already conform.
 
@@ -109,7 +109,7 @@ Build our own registry, but stand it on existing substrate — do **not** rebuil
 
 The registry — not the contract — is the boundary. The pod can reach the ingress and is untrusted (prompt-injection), so enforce on **every read**, treating the verified `sub` as a mandatory filter:
 
-- **Split the surface by audience:** the pod-facing delivery endpoint supports *only* scoped `get-by-entitled-digest` — **no list/search verb**. Catalog/search is reachable only by the opencrane-api / human UI.
+- **Split the surface by audience:** the pod-facing delivery endpoint supports *only* scoped `get-by-entitled-digest` — **no list/search verb**. Catalog/search is reachable only by the opencrane-server / human UI.
 - **Content-addressable pull is still entitlement-checked:** knowing a digest must not grant the blob.
 - **Existence-hiding:** non-entitled lookups return `404`/empty, not `403`.
 - **NetworkPolicy:** pods reach only the delivery ingress, never the backing OCI store.
@@ -117,7 +117,7 @@ The registry — not the contract — is the boundary. The pod can reach the ing
 
 ## Control-plane extensions for MCP & skill management
 
-The existing control plane (`apps/opencrane-api`) needs three new domain surfaces: **MCP server management**, **skill catalog & sharing**, and **third-party source installation**. Each surface follows the same pattern — the control plane is the sole authority; the planes are config-slaved consumers.
+The existing control plane (`apps/opencrane`) needs three new domain surfaces: **MCP server management**, **skill catalog & sharing**, and **third-party source installation**. Each surface follows the same pattern — the control plane is the sole authority; the planes are config-slaved consumers.
 
 ### MCP server management
 
@@ -127,7 +127,7 @@ Extend the control plane to own the full lifecycle of MCP servers available to t
 
 - `McpServer` — canonical registry entry: `{ id, name, description, transport (stdio | sse | streamable-http), image?, url?, envSchema, configSchema, tags[], sourceRef?, createdAt, updatedAt }`.
 - `McpServerGrant` — an instance of the canonical `Grant`: `{ mcpServerId, targetGroupId, effect (allow | deny), priority, grantedBy, createdAt }`. The group-based compiler rolls these into the effective set (deny-wins → priority).
-- `McpServerCredential` — pointer to the Obot token store entry (never stored in the opencrane-api DB directly): `{ mcpServerId, obotCredentialRef, rotatedAt }`.
+- `McpServerCredential` — pointer to the Obot token store entry (never stored in the opencrane-server DB directly): `{ mcpServerId, obotCredentialRef, rotatedAt }`.
 
 **Routes** (`libs/backend/mcp/main/src/routes/mcp-servers.ts`):
 
@@ -191,7 +191,7 @@ Support installing MCP servers and skills from external registries and curated u
 | [Anthropic skills](https://github.com/anthropics/skills) | Skills | Mirror `SKILL.md` bundles into OCI/ORAS via ORAS push |
 | ClawHub (future) | Skills + MCPs | OCI pull from upstream registry |
 | Custom URL / Git repo | Either | Clone + ingest pipeline |
-| Manual upload | Either | Direct upload via opencrane-ui / opencrane-api |
+| Manual upload | Either | Direct upload via opencrane-ui / opencrane-server |
 
 **Third-party source data model** (Prisma):
 

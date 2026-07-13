@@ -4,7 +4,7 @@
 - **Date:** 2026-07-02
 - **Task:** platform-direction decision (2026-07-02) — fires the reserve trigger ADR 0001 left open
 - **Supersedes / superseded by:** supersedes [ADR 0001](0001-cluster-tenant-virtual-network-isolation.md)
-- **Related:** [`silo-multi-tenant-plan.md`](../../silo-multi-tenant-plan.md) (§2 identity loop — this ADR realigns the decision with that plan's original OIDC→opencrane-api→operator→Cilium/SPIFFE phrasing) · [`docs/adr/0002`](0002-per-clustertenant-silo-architecture.md) (the silo architecture this substrate secures) · [`website/operators/networking.md`](../../website/operators/networking.md) · the reader-facing identity model at `website/security/identity.md` + `website/operators/cilium-spiffe-identity.md`
+- **Related:** [`silo-multi-tenant-plan.md`](../../silo-multi-tenant-plan.md) (§2 identity loop — this ADR realigns the decision with that plan's original OIDC→opencrane-server→operator→Cilium/SPIFFE phrasing) · [`docs/adr/0002`](0002-per-clustertenant-silo-architecture.md) (the silo architecture this substrate secures) · [`website/operators/networking.md`](../../website/operators/networking.md) · the reader-facing identity model at `website/security/identity.md` + `website/operators/cilium-spiffe-identity.md`
 
 ## Context
 
@@ -41,8 +41,8 @@ Two facts pushed the decision:
   and used for mutual TLS (Cilium mutual authentication) between silo workloads. Identities are
   short-lived, auto-rotating, and churn-robust — no shared secret, no IP allow-list to drift.
 - **Human identity stays Zitadel OIDC (per-org), unchanged.** Human and workload identity meet
-  only at OIDC-guarded opencrane-api hops via token-exchange; the crown-jewel super-admin
-  (opencrane-api/operator) identity remains the **only** cross-silo principal, now enforced by
+  only at OIDC-guarded opencrane-server hops via token-exchange; the crown-jewel super-admin
+  (opencrane-server/operator) identity remains the **only** cross-silo principal, now enforced by
   Cilium identity at L3/L4 **and** L7.
 
 ### Rollout is additive

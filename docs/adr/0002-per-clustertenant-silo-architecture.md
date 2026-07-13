@@ -10,7 +10,7 @@
 
 ADR 0001 settled the *boundary*: each ClusterTenant is a strictly isolated silo, with a
 per-silo default-deny `NetworkPolicy` floor (S2) and Linkerd mTLS identity + L7 authorization
-(S5) layered on top, and the super-admin opencrane-api as the only cross-silo principal.
+(S5) layered on top, and the super-admin opencrane-server as the only cross-silo principal.
 
 But the *brains* are still communal. As-built, `opencrane-system` runs **shared singletons**
 that serve every tenant:
@@ -22,7 +22,7 @@ that serve every tenant:
 | Control-plane API + DB | one shared API + DB | the **resolution-ambiguity class**: the shared plane must constantly infer *which tenant* a request/row/resource belongs to — the root of a recurring family of bugs (default-tenant projection, cross-tenant lookups, the resolver patches), shimmed today by PR #68 |
 
 This ADR decides **what runs per-ClusterTenant vs. stays central**. Every tenant gets its own
-dedicated plane instances (decision 1); only the opencrane-api and Zitadel stay central. The
+dedicated plane instances (decision 1); only the opencrane-server and Zitadel stay central. The
 decision reuses the machinery the chart already has and preserves per-org ingress, and it
 pushes the cost question to **bin-packing density** (S7), not to multiplexing tenants inside
 one plane. **Isolation tiers are out of scope here and deferred** — for now every tenant's
@@ -41,7 +41,7 @@ S6 is largely **applying these per-ClusterTenant**, not inventing a new mechanis
 
 ## Decision
 
-### 1. Every ClusterTenant gets DEDICATED instances; only the opencrane-api and Zitadel stay central
+### 1. Every ClusterTenant gets DEDICATED instances; only the opencrane-server and Zitadel stay central
 
 Each ClusterTenant runs its **own dedicated instances** of the full per-tenant stack:
 
@@ -54,7 +54,7 @@ Each ClusterTenant runs its **own dedicated instances** of the full per-tenant s
 - its own **tenant DB** (a dedicated Postgres database for the tenant)
 
 Planes are **never shared singletons multiplexing tenants behind an ACL**. The **only central
-(shared, cross-silo) components are the opencrane-api and Zitadel** — nothing else. (Other
+(shared, cross-silo) components are the opencrane-server and Zitadel** — nothing else. (Other
 central components may be introduced later — e.g. a central skills *catalog/registry* distinct
 from per-CT delivery — but that is future work, not part of this decision; see
 [`future-work.md`](../../future-work.md).)
@@ -77,9 +77,9 @@ resolution-ambiguity class uniformly** (decision 3) — there is no shared tenan
 left to disambiguate. The cost trade-off moves to **bin-packing density** on shared nodes, not
 to multiplexing tenants inside one plane.
 
-### 2. The super-admin opencrane-api stays the *only* shared cross-silo plane
+### 2. The super-admin opencrane-server stays the *only* shared cross-silo plane
 
-The fleet/provisioning/billing opencrane-api remains shared in `opencrane-system` (consistent
+The fleet/provisioning/billing opencrane-server remains shared in `opencrane-system` (consistent
 with ADR 0001: super-admin is the only cross-silo principal). It operates on **named**
 ClusterTenants — provisioning org X, listing the fleet — which is **unambiguous by
 construction** (no resolution needed; the CT name is the input). What moves out is the
@@ -90,7 +90,7 @@ construction** (no resolution needed; the CT name is the input). What moves out 
 Because every tier has a **dedicated per-CT tenant-facing API + DB instance** (decision 1),
 the resolution-ambiguity class is killed **the same way at every tier**: the silo *is* the
 scope, so the tenant-facing plane never infers a caller's tenant from request shape. The only
-cross-silo plane left (the super-admin opencrane-api, decision 2) acts on **named** CTs, which
+cross-silo plane left (the super-admin opencrane-server, decision 2) acts on **named** CTs, which
 is unambiguous by construction. **PR #68's resolution shim is retired outright** — there is no
 shared tenant-facing plane anywhere that needs to disambiguate. (This is strictly stronger than
 the first draft's "logical partition + ACL at the `shared` tier".)

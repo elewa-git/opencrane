@@ -16,7 +16,7 @@ import { _CredentialsSecretName } from "../internal/cognee-tenant-identity.js";
  * strategy, LiteLLM integration, and pod hardening defaults.
  *
  * Skill and MCP grants are NOT injected here. They are compiled by the
- * opencrane-ui effective-contract endpoint and re-pulled by the pod at each
+ * opencrane-server effective-contract endpoint and re-pulled by the pod at each
  * agentic-loop boundary. The contract is advisory; the ingress planes (Obot
  * MCP Gateway and Skill Registry) are the live authz boundary.
  *
@@ -55,7 +55,7 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
   //    runtime hints so the tenant process knows where state, secrets, policy,
   //    and platform contract files live.
   //    Note: CSV skill/MCP allow lists are removed — authorization is now
-  //    group-based and compiled by the opencrane-ui effective-contract endpoint.
+  //    group-based and compiled by the opencrane-server effective-contract endpoint.
   const envVars: k8s.V1EnvVar[] = [
     { name: "OPENCLAW_STATE_DIR", value: "/data/openclaw" },
     { name: "OPENCLAW_SECRETS_DIR", value: "/data/secrets" },
@@ -68,7 +68,7 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     { name: "OPENCRANE_SKILL_REGISTRY_URL", value: config.skillRegistryUrl },
     { name: "OPENCRANE_MCP_GATEWAY_TOKEN_PATH", value: "/var/run/opencrane/tokens/obot-gateway.token" },
     { name: "OPENCRANE_SKILL_REGISTRY_TOKEN_PATH", value: "/var/run/opencrane/tokens/feat-skill-registry.token" },
-    // The tenant pod reaches /api/internal/contract on the opencrane-ui's INTERNAL listener
+    // The tenant pod reaches /api/internal/contract on the opencrane-server's INTERNAL listener
     // via the Service DNS (a pod's own localhost is itself — controlPlaneInternalUrl is the
     // operator's self-call and must NOT be injected here).
     { name: "OPENCRANE_CONTROL_PLANE_URL", value: config.controlPlaneInternalServiceUrl },
@@ -78,7 +78,7 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     { name: "NPM_CONFIG_CACHE", value: "/tmp/npm-cache" },
     ...(config.liteLlmEnabled ? [{ name: "LITELLM_ENDPOINT", value: config.liteLlmEndpoint }] : []),
     // Org-memory backend. When Cognee is wired at the cluster level, the Cognee OpenClaw memory plugin
-    // retrieves org context DIRECTLY from its per-tenant Cognee (no opencrane-ui mediation in the hot
+    // retrieves org context DIRECTLY from its per-tenant Cognee (no opencrane-server mediation in the hot
     // path). `OPENCRANE_MEMORY_BACKEND=cognee` is the explicit signal the
     // runtime/workspace docs key off; both are injected only when configured so a Cognee-less
     // deployment renders byte-for-byte unchanged and the runtime cleanly falls back to workspace-file

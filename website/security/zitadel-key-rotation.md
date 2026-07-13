@@ -130,7 +130,7 @@ remains active. Diagnose the failure before retrying.
 
 After a successful rotation, confirm that the control plane can still provision
 ClusterTenant organisations by creating a test ClusterTenant (or re-provisioning an
-existing one with a forced reconcile). Check the opencrane-api logs:
+existing one with a forced reconcile). Check the opencrane-server logs:
 
 ```bash
 kubectl logs -n opencrane-system deployment/opencrane-fleet-manager --tail 50 | grep zitadel
@@ -193,7 +193,7 @@ key is untouched. Check:
 - The key JSON is complete and valid (has `keyId`, `key`, `userId`).
 - The service account in Zitadel still exists and the key has not expired.
 - The service account holds the **instance-level** `IAM_OWNER` role (not org-level).
-- `ZITADEL_MGMT_API_URL` is reachable from the opencrane-api pod.
+- `ZITADEL_MGMT_API_URL` is reachable from the opencrane-server pod.
 
 ### Rotation returns 409 (persistence not configured)
 

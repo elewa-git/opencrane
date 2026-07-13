@@ -433,7 +433,7 @@ apps/fleet-platform/      # chart: opencrane-fleet
                           #   ingress.className=nginx, certManager.enabled=false.
 
 apps/opencrane-infra/   # chart: opencrane-silo
-├── Chart.yaml                 # per-org opencrane-api + runtime planes (Obot, feat-skill-registry,
+├── Chart.yaml                 # per-org opencrane-server + runtime planes (Obot, feat-skill-registry,
 │                              #   LiteLLM, Cognee) + per-silo CNPG Cluster CR
 └── values.yaml
 
@@ -470,7 +470,7 @@ compatibility contract.
 TLS is deliberately **k8s-native and provider-agnostic** rather than per-cloud managed
 certs, so the same mechanism works on-prem and on any cloud.
 
-- **cert-manager** issues one **wildcard `*.<base>` (+ apex + opencrane-api host) certificate** via
+- **cert-manager** issues one **wildcard `*.<base>` (+ apex + opencrane-server host) certificate** via
   ACME **DNS-01** (wildcards require DNS-01) into the `ingress.tls.secretName` Secret
   (default `opencrane-wildcard-tls`). One cert covers every org host `<org>.<base>`, so
   adding an org needs no new cert issuance. There are no per-org wildcard certs.
@@ -502,10 +502,10 @@ certs, so the same mechanism works on-prem and on any cloud.
 - The wildcard Ingress references the shared platform wildcard TLS Secret
   (`ingress.tls.secretName`) when `ingress.tls.enabled=true`. Default off → no behaviour
   change.
-- **Apex / opencrane-api gap.** The wildcard cert *covers* the apex (`<base>`) as a SAN,
-  and the intended model routes the apex to the opencrane-api management API. But the
-  **apex→opencrane-api Ingress is not shipped in the chart today**. Routing the
-  (cert-covered) apex to the opencrane-api Service is currently an installer/out-of-chart
+- **Apex / opencrane-server gap.** The wildcard cert *covers* the apex (`<base>`) as a SAN,
+  and the intended model routes the apex to the opencrane-server management API. But the
+  **apex→opencrane-server Ingress is not shipped in the chart today**. Routing the
+  (cert-covered) apex to the opencrane-server Service is currently an installer/out-of-chart
   step.
 
 ## 7. Configuration Model

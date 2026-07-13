@@ -15,7 +15,7 @@ and is unchanged — installing the chart with no extra flags still provisions o
 
 This document covers the **CRD lifecycle** for a fleet: how CRDs are installed
 cluster-wide and decoupled from each per-instance Helm release (multi-instance blocker
-**B3**), and the **CRD-version ↔ opencrane-api/operator compatibility contract** the
+**B3**), and the **CRD-version ↔ opencrane-server/operator compatibility contract** the
 fleet uses to plan rolling upgrades.
 
 For the RBAC / watch-namespace isolation defaults, see the `multiInstance.*` block in
@@ -48,7 +48,7 @@ with `--skip-crds`.
 > single `opencrane.io` API group and one served CRD bundle version. Instances are isolated
 > by **namespace + RBAC + `WATCH_NAMESPACE`**, never by forking the schema. Per-instancing
 > the group would multiply the schema surface by the fleet size and break shared tooling
-> (the `oc` CLI, opencrane-api, awareness layer) that targets one group.
+> (the `oc` CLI, opencrane-server, awareness layer) that targets one group.
 
 ---
 
@@ -152,7 +152,7 @@ The fleet plans rolling upgrades against this matrix.
 
 ### 3.2 Compatibility matrix
 
-| CRD bundle version | Served apiVersion(s) | Compatible opencrane-api/operator (`appVersion`) | Status |
+| CRD bundle version | Served apiVersion(s) | Compatible opencrane-server/operator (`appVersion`) | Status |
 |--------------------|----------------------|--------------------------------------------------|--------|
 | `v1alpha1` (1) | `opencrane.io/v1alpha1` | `0.1.x` | Current |
 
@@ -161,7 +161,7 @@ Notes:
 1. **`v1alpha1` is the current bundle.** All CRDs serve and store `v1alpha1` only; there
    is no conversion webhook yet, so the served and storage versions are the same.
 2. As the schema evolves, add a row per bundle version and list the `appVersion` range that
-   can both read and write it. An opencrane-api/operator build is "compatible" with a bundle
+   can both read and write it. An opencrane-server/operator build is "compatible" with a bundle
    version only if it (a) recognises every required field that bundle marks required, and
    (b) sends no field that bundle's schema rejects under `x-kubernetes-preserve-unknown-fields: false`.
 
@@ -310,7 +310,7 @@ is needed to enforce this.
 
 ### 5.3 Managing cluster tenants (API-first)
 
-Everything is on the opencrane-api (`/api/v1/cluster-tenants`) and mirrored by the CLI —
+Everything is on the opencrane-server (`/api/v1/cluster-tenants`) and mirrored by the CLI —
 the frontend is just another client, never a privileged path:
 
 ```bash
@@ -328,7 +328,7 @@ The `dedicatedCluster` tier is served by an **out-of-process** provisioner webho
 in-tree vendor code. The control plane POSTs a vendor-neutral `ClusterTenantProvisionRequest`
 (published in the MIT `libs/contracts`) to a configured HTTPS endpoint and reads back a status
 plus a kubeconfig **Secret reference** — the credential material never crosses the wire inline.
-A private vendor (e.g. a hosted-opencrane-api product) implements that contract in their own
+A private vendor (e.g. a hosted-opencrane-server product) implements that contract in their own
 service; nothing vendor-specific lives in the AGPL tree. See
 `enterprise-needs.md` for the licensing rationale and the Kamaji parking note.
 
@@ -349,7 +349,7 @@ plaintext.
 ### 5.5 Validation
 
 `helm template` proves the opt-in gate statically: with no flags the chart renders the
-`ClusterTenant` CRD but **no** provisioner env on the opencrane-api Deployment; setting
+`ClusterTenant` CRD but **no** provisioner env on the opencrane-server Deployment; setting
 `clusterTenant.provisionerWebhook.url` renders the env block. The per-`ClusterTenant` namespace,
 quota, and scheduling are reconciled at runtime by the operator (the live-infra seam), and the
 conformance script (`libs/k8s-platform/tests/multi-instance-conformance.sh`) carries the in-cluster

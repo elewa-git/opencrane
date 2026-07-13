@@ -273,7 +273,7 @@ Personal  →  Project  →  Team  →  Department  →  Org
 ```
 
 Cognee has no native per-scope weighting and no exposed similarity score for the
-graph-completion search family. Scope precedence is therefore **opencrane-api
+graph-completion search family. Scope precedence is therefore **opencrane-server
 orchestration over Cognee**, not a Cognee setting.
 
 ### Pattern A — cascade (start here)

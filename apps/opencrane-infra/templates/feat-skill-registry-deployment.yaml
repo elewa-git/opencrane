@@ -79,7 +79,7 @@ spec:
             - name: PORT
               value: {{ .Values.skillRegistry.service.port | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "feat-skill-registry") | nindent 12 }}
-            # In-cluster opencrane-ui URL for internal entitlement + content calls
+            # In-cluster opencrane-server URL for internal entitlement + content calls
             # (/api/internal/bundles) — targets the INTERNAL listener port, not the public one.
             - name: CONTROL_PLANE_URL
               value: "http://{{ include "opencrane.fullname" . }}-opencrane-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.clustertenantManager.service.internalPort }}"

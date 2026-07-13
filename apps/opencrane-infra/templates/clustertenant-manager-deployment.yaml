@@ -25,7 +25,7 @@ spec:
         # no-op when the DB is already at the latest migration. This is a
         # belt-and-suspenders guard for pod (re)creation BETWEEN deploys: the
         # deploy-time migration authority is the pre-upgrade hook Job
-        # (opencrane-ui-migration-job.yaml), which an unchanged `helm upgrade`
+        # (clustertenant-manager-migration-job.yaml), which an unchanged `helm upgrade`
         # cannot skip the way it skips an unchanged pod template.
         - name: db-migrate
           image: "{{ .Values.clustertenantManager.image.repository }}:{{ .Values.clustertenantManager.image.tag }}"
@@ -108,8 +108,8 @@ spec:
             #    registry + management surface. The silo keeps only its per-org LOGIN OIDC below.
             {{- with .Values.clustertenantManager.oidc }}
             {{- if .issuerUrl }}
-            # -- OIDC human-login session (opencrane-ui only). Rendered iff issuerUrl is
-            #    set; otherwise the opencrane-ui stays in token/development auth mode.
+            # -- OIDC human-login session (opencrane-server only). Rendered iff issuerUrl is
+            #    set; otherwise the opencrane-server stays in token/development auth mode.
             #    Zitadel is the single trusted issuer (Mode-2 broker, no upstream Entra) —
             #    standards-only, so any spec-compliant issuer at OIDC_ISSUER_URL works.
             - name: OIDC_ISSUER_URL
@@ -215,7 +215,7 @@ spec:
                   key: {{ .Values.clusterTenant.provisionerWebhook.secretKey }}
             {{- end }}
             {{- end }}
-            {{- /* Langfuse metrics proxy (AIR.10): wire the opencrane-ui to the in-cluster
+            {{- /* Langfuse metrics proxy (AIR.10): wire the opencrane-server to the in-cluster
                    Langfuse when it is deployed as a subchart. LANGFUSE_HOST points at the
                    in-cluster Service; public/secret keys come from the opencrane-langfuse
                    Secret created by k8s-deploy.sh (never appear in rendered manifests). */ -}}

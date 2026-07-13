@@ -26,7 +26,7 @@ existence-hiding (a non-entitled or unknown digest returns `404`, never `403`).
 
 ## The catalog (control plane)
 
-`SkillBundle` Prisma model (`apps/opencrane-api/prisma/schema.prisma`): `id`, `name`,
+`SkillBundle` Prisma model (`apps/opencrane/prisma/schema.prisma`): `id`, `name`,
 `description`, `version`, `digest` (unique on `name+version+digest`), `content` (the
 raw skill markdown), `scope` (org/department/project/personal), `status`
 (Draft/Review/Published), `tags`, optional `sourceId`, and the scan fields
@@ -99,7 +99,7 @@ runtime contract governs whether the skill mechanism is active at all — see
   backfill tool for existing bundles all exist behind
   `skillRegistry.ociStore.enabled` (default `false` — see
   [skill-oci-store.yaml](https://github.com/italanta/opencrane/blob/main/apps/opencrane-infra/templates/skill-oci-store.yaml)),
-  so today bundle `content` is still served from the opencrane-api DB through the
+  so today bundle `content` is still served from the opencrane-server DB through the
   registry. The `digest` field already pins identity, so flipping the flag changes
   only the storage backend, not the delivery contract. Tracked in
   [issue #133](https://github.com/italanta/opencrane/issues/133).

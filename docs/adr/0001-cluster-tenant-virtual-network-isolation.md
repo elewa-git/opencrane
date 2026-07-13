@@ -11,7 +11,7 @@
 Every ClusterTenant (a customer org) is modelled as a strictly isolated **silo / virtual
 network**. All silos feed a single **main network** (`opencrane-system`) that hosts the
 super-admin control plane. The goal is east-west default-deny: no silo→silo traffic ever,
-and the opencrane-api/operator super-admin identity as the **only** cross-silo principal.
+and the opencrane-server/operator super-admin identity as the **only** cross-silo principal.
 
 The live system has already shipped the L3/4 floor of this model in S2 (`task_08734d58` +
 `task_d6404452`): the operator emits a per-silo default-deny `NetworkPolicy`
@@ -40,7 +40,7 @@ authorization on top of that floor**, given two hard constraints:
   auto-rotating, churn-robust identity the silo model requires — keyed on the workload, not
   its IP.
 - **L7 `AuthorizationPolicy`.** Linkerd `Server` + `AuthorizationPolicy` resources let the
-  operator express "only the super-admin/opencrane-api identity may reach into this silo" at
+  operator express "only the super-admin/opencrane-server identity may reach into this silo" at
   the request layer, on top of the namespace floor.
 - **Portable / no cloud lock-in.** Linkerd runs on any conformant Kubernetes — GKE, and
   whatever the org moves to. This is the deciding factor: it keeps the isolation substrate
@@ -122,7 +122,7 @@ The substrate is not one-size-fits-all; it tracks `ClusterTenant.spec.isolationT
 - **Autopilot stays viable.** Because we did not choose self-managed Cilium, GKE Autopilot
   remains an option for the shared/dedicated-node tiers; the Cilium/SPIFFE path is held in
   reserve behind an explicit "we need full CiliumNetworkPolicy + SPIFFE" trigger.
-- **The crown jewel is unchanged and reinforced.** The super-admin (opencrane-api/operator)
+- **The crown jewel is unchanged and reinforced.** The super-admin (opencrane-server/operator)
   identity is still the only cross-silo principal; Linkerd authorization now enforces that at
   L7 in addition to the namespace floor, making its issuance/rotation/audit even more
   load-bearing.

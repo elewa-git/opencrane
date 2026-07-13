@@ -22,7 +22,7 @@
 How the operator actually shapes the cluster (verified June 2026):
 
 - **Six CRDs** in `apps/fleet-platform/crds/`: `Tenant`, `ClusterTenant` (cluster-scoped), `AccessPolicy`, `MCPServer`, `SkillRegistry`, `Schedule`. CRDs use `spec`/`status` subresources — spec is user-owned, status is operator-owned (patched via `*StatusWriter` / `patchNamespacedCustomObjectStatus`).
-- **Operator reconcile is an idempotent ~10-step sequence per UserTenant** (`Tenant` CR, `apps/opencrane-api/src/tenants/operator.ts` — the in-silo controller runs in each silo over its OWN namespace): resolve parent ClusterTenant → enforce isolation (PSA labels + ResourceQuota + LimitRange) → resolve effective AccessPolicy (precedence: explicit `policyRef` > selector > default > none) → ServiceAccount (+ Workload Identity annotation on GKE) → external storage → per-UserTenant AES-256 key Secret → LiteLLM virtual key (best-effort) → ConfigMap → state volume → single-replica Deployment + Service + Ingress → patch status. **All applies are server-side (fieldManager `openclane-operator`)** so re-runs are safe.
+- **Operator reconcile is an idempotent ~10-step sequence per UserTenant** (`Tenant` CR, `apps/opencrane/src/tenants/operator.ts` — the in-silo controller runs in each silo over its OWN namespace): resolve parent ClusterTenant → enforce isolation (PSA labels + ResourceQuota + LimitRange) → resolve effective AccessPolicy (precedence: explicit `policyRef` > selector > default > none) → ServiceAccount (+ Workload Identity annotation on GKE) → external storage → per-UserTenant AES-256 key Secret → LiteLLM virtual key (best-effort) → ConfigMap → state volume → single-replica Deployment + Service + Ingress → patch status. **All applies are server-side (fieldManager `openclane-operator`)** so re-runs are safe.
 - **Watch loop auto-reconnects** with 5s backoff (`shared/watch-runner.ts`); the K8s API closes streams every ~5–10 min — treat reconnects as normal, never as an error path.
 - **Namespace isolation is enforced per-ClusterTenant**: PSA *baseline* profile labels (not *restricted* — silos run 3rd-party planes like Obot's embedded root Postgres, Cognee-as-root, and Langfuse subcharts that can't meet *restricted*; *baseline* still blocks privileged containers, host namespaces, `hostPath`, and host ports; tightening is a tracked security follow-up), a `ResourceQuota` (cpu/mem/pods/storage/gpu), and a `LimitRange` (per-container defaults — required because the quota constrains `requests.*`). Pod placement: `nodeSelector` + `tolerations` are stamped only when the parent's `compute.mode = dedicated`; shared mode is left unconstrained (byte-for-byte baseline preserved).
 - **Delete is non-destructive for data**: removing a UserTenant (`Tenant` CR) deletes Deployment/ConfigMap/Service/Ingress/PVC but **retains GCS buckets and the encryption-key Secret**. Suspend (`spec.suspended=true`) scales to 0 replicas and keeps all state.
@@ -30,7 +30,7 @@ How the operator actually shapes the cluster (verified June 2026):
 
 ### Ingress hosts & DNS hierarchy
 
-The cluster routes **two public host shapes** — the platform opencrane-api host and org hosts (full
+The cluster routes **two public host shapes** — the platform opencrane-server host and org hosts (full
 model in [`cluster-architecture.md` → Tenancy Model](./cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant)):
 
 ```
@@ -44,10 +44,10 @@ acme.weownai.eu              → org "acme" — UI, /api/*, gateway WebSocket [o
   per UserTenant.
 - A **single wildcard Ingress** at `*.<base>` path-routes `/api` to the control plane and the gateway
   WebSocket path to the operator's identity-routing proxy Service.
-- cert-manager issues `*.<base>` + apex + opencrane-api host (`cluster-issuer.yaml`). The wildcard
+- cert-manager issues `*.<base>` + apex + opencrane-server host (`cluster-issuer.yaml`). The wildcard
   covers every org host `<org>.<base>`. A per-org HTTP-01 cert is issued only when `vanityDomain` is set.
 - The **control plane's own host is not wired by an Ingress in the chart** today: routing
-  `platform.<base>` to the opencrane-api Service is an installer/out-of-chart step.
+  `platform.<base>` to the opencrane-server Service is an installer/out-of-chart step.
 - The per-pod gateway NetworkPolicy admits the gateway port only from the operator pods (which host
   the proxy). UserTenant pods are not reachable directly from the ingress controller.
 
@@ -75,7 +75,7 @@ When a route is intentionally excluded from `___AuthMiddleware` and relies on Ku
  * Access is enforced by Kubernetes NetworkPolicy.
  *
  * @see apps/opencrane-infra/templates/networkpolicy-planes.yaml — policy restricting
- *   which pods can reach the opencrane-api service.
+ *   which pods can reach the opencrane-server service.
  * @see apps/opencrane-infra/templates/widget-consumer-deployment.yaml — deployment
  *   that sets WIDGET_URL to this endpoint.
  */
@@ -85,10 +85,10 @@ export function _RegisterInternalWidgets(prisma: PrismaClient): Router { ... }
 > Network reachability does not imply authorization — see
 > [OpenCrane-Specific Direction](./architecture.md#opencrane-specific-direction).
 
-The plane-to-plane boundary is `apps/opencrane-infra/templates/networkpolicy-planes.yaml`: opencrane-api ingress is allowed only from ingress-nginx, the operator, Obot gateway, feat-skill-registry, and tenant pods (for contract re-pull); the OCI store accepts the opencrane-api only. Because `/api/internal/*` has no auth middleware, this NetworkPolicy is the **only** boundary protecting it — path-based filtering is impossible, so never widen these selectors casually.
+The plane-to-plane boundary is `apps/opencrane-infra/templates/networkpolicy-planes.yaml`: opencrane-server ingress is allowed only from ingress-nginx, the operator, Obot gateway, feat-skill-registry, and tenant pods (for contract re-pull); the OCI store accepts the opencrane-server only. Because `/api/internal/*` has no auth middleware, this NetworkPolicy is the **only** boundary protecting it — path-based filtering is impossible, so never widen these selectors casually.
 
 ## Workload Identity & Projected Tokens
 
 - **Cloud identity (GKE):** the operator stamps the KSA annotation `iam.gke.io/gcp-service-account: openclaw-{tenant}@{project}.iam.gserviceaccount.com` (`apps/fleet-operator/src/hosting/adapters/gcp/`). The GSA↔KSA IAM binding is set up outside the operator (Terraform). On-prem the annotation is empty and storage provisioning is a no-op.
-- **In-cluster identity:** UserTenant (OpenClaw) pods mount up to three audience-bound projected SA tokens read-only under `/var/run/opencrane/tokens/` — `obot-gateway.token`, `feat-skill-registry.token`, `opencrane-api.token`. TTL is `projectedTokenTtlSeconds` (env-driven); kubelet rotates them with no pod restart. These are real and actively consumed, not aspirational.
+- **In-cluster identity:** UserTenant (OpenClaw) pods mount up to three audience-bound projected SA tokens read-only under `/var/run/opencrane/tokens/` — `obot-gateway.token`, `feat-skill-registry.token`, `opencrane-ui.token`. TTL is `projectedTokenTtlSeconds` (env-driven); kubelet rotates them with no pod restart. These are real and actively consumed, not aspirational.
 - **`WATCH_NAMESPACE` fail-closed:** with `multiInstance.requireWatchNamespace=true` the operator refuses to start if `WATCH_NAMESPACE` is unset — prevents one instance from reconciling another's UserTenants. Empty means watch-all (legacy single-install only).

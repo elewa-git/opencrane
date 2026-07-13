@@ -10,7 +10,7 @@ fleet chart already creates the Issuer, so this release's install/upgrade does n
 with the fleet's release for ownership of the same object.
 
 Every Certificate that will reference this Issuer in THIS chart is a SINGLE, non-wildcard
-hostname (see docs/agents/cluster-architecture.md → "Tenancy Model"): the opencrane-ui's own
+hostname (see docs/agents/cluster-architecture.md → "Tenancy Model"): the opencrane-server's own
 host (clustertenant-manager-certificate.yaml) and the operator's optional per-org vanity
 Certificate (libs/backend/cluster-tenants/main/src/core/org-domain.provisioner.ts). Neither
 needs a wildcard SAN, so — unlike the old fleet-wide platform-wildcard Issuer this was ported
