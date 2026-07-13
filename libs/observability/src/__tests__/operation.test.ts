@@ -1,4 +1,4 @@
-import { SpanStatusCode } from "@opentelemetry/api";
+import { SpanStatusCode, trace } from "@opentelemetry/api";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
@@ -13,7 +13,7 @@ beforeAll(function _registerProvider()
   // Register an in-memory tracer so trace.getTracer in operation.ts produces
   // real spans we can inspect, without a live collector.
   const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(_exporter)] });
-  provider.register();
+  trace.setGlobalTracerProvider(provider);
 });
 
 afterAll(async function _shutdown()
