@@ -6,17 +6,18 @@ This plan replaces the execution guidance in `ui_implementation_plan.md` without
 original file. It turns the Session and Settings design handoff into a repository-aware Angular
 delivery plan.
 
-The target is a high-fidelity implementation of the supplied design, integrated with the existing
-OpenCrane application rather than a parallel prototype. Existing session transport, API clients,
-authentication, state adapters, rendering, and security behavior must be preserved or deliberately
-migrated; they must not be replaced with fixture-only component state.
+The target is a high-fidelity UI-only implementation of the supplied design inside the existing
+Angular application. All reads, mutations, streaming, failures, permission variants, and persistence
+illusions for this handoff use deterministic in-browser mocks behind typed facades. Backend routes,
+generated API contracts, CLI commands, OIDC, live Gateway transport, deployment, and server security
+are outside this delivery.
 
 ## Authority and conflict resolution
 
 Apply sources in this order:
 
-1. `docs/agents/angular.md` for frontend architecture, Angular patterns, PrimeNG use, layering, and
-   API integration.
+1. `docs/agents/angular.md` for frontend architecture, Angular patterns, PrimeNG use, and layering.
+   Its backend-first integration rule is explicitly replaced by this mock-only handoff scope.
 2. `docs/agents/typescript.md` for all TypeScript structure, documentation, imports, naming, and
    style requirements.
 3. This revised plan for implementation scope, file ownership, sequencing, responsive behavior,
@@ -25,8 +26,9 @@ Apply sources in this order:
 5. `screenshots/01-session.png` and `OpenCrane.html` for rendered appearance.
 6. `App.dc.html` and `MessageList.jsx` for prototype behavior and message/citation intent only.
 
-The HTML and JSX files are design references. Do not copy their React, inline-style, fixture, or
-clickable-`div` implementation into production Angular code.
+The HTML and JSX files are design references. Do not copy their React, inline-style, or
+clickable-`div` implementation into Angular code. Fixture content is normalized into typed shared
+mock services rather than copied into components.
 
 ### Canonical color and component decisions
 
@@ -49,21 +51,22 @@ The README contains conflicts between its token table, prose, and prototype. Res
 
 - Deliver the Session and Settings views with the README's visual fidelity and complete screen
   inventory.
-- Preserve live conversation transport, history, streaming, tool/A2UI rendering, reconnection,
-  cancellation, caching, authentication, and authorization.
+- Reproduce conversation history, streaming, tool/A2UI presentation, reconnection, cancellation,
+  and permission variants through deterministic mock scenarios.
 - Make every settings page and sub-page deep-linkable and browser-history aware.
 - Use one semantic token system and reusable, accessible components.
-- Implement only API-supported behavior. Any missing management capability requires an API endpoint,
-  generated contract, and matching `oc` command before the UI mutation is enabled.
+- Implement every documented interaction through the shared typed mock provider without network
+  calls or component-local fixture state.
 - Meet the responsive, accessibility, state, test, TypeScript, and independent-review gates below.
 
 ## Non-goals
 
 - Shipping the React/design-canvas artifacts.
-- Maintaining a second session store or component-local production message history.
-- Hand-rolling request or response DTOs already available from `@opencrane/contracts`.
-- Adding UI-only platform behavior that is unavailable to the API and CLI.
-- Exposing stored provider/channel secrets. Credential fields are write-only.
+- Backend/API/CLI/OIDC/Gateway implementation or verification.
+- Component-local fixture arrays, nondeterministic timers, or duplicate mock stores.
+- Treating mock permission states as server-security validation.
+- Persisting secret-shaped provider/channel/token values. Credential fields and one-time token values
+  remain transient mock state.
 - Preserving superseded frontend compatibility paths after migration is complete.
 
 ## Target Angular architecture
@@ -73,15 +76,21 @@ The README contains conflicts between its token table, prose, and prototype. Res
 ```text
 apps/opencrane-ui/src/app/
 ├── core/
-│   ├── api/
-│   │   ├── session-api.service.ts
-│   │   ├── settings-api.service.ts
-│   │   ├── members-api.service.ts
-│   │   ├── budgets-api.service.ts
-│   │   ├── skills-api.service.ts
-│   │   ├── channels-api.service.ts
-│   │   ├── data-network-api.service.ts
-│   │   └── credentials-api.service.ts
+│   ├── mocks/
+│   │   ├── mock-session.service.ts
+│   │   ├── mock-identity.service.ts
+│   │   ├── mock-access.guard.ts
+│   │   ├── mock-first-run.guard.ts
+│   │   ├── provide-ui-mocks.ts
+│   │   ├── mock-settings.service.ts
+│   │   ├── mock-organization.service.ts
+│   │   ├── mock-budget.service.ts
+│   │   ├── mock-skill.service.ts
+│   │   ├── mock-channel.service.ts
+│   │   ├── mock-data-network.service.ts
+│   │   ├── mock-credential.service.ts
+│   │   ├── fixtures/
+│   │   └── testing/
 │   ├── models/
 │   │   ├── session.types.ts
 │   │   ├── citation.types.ts
@@ -138,15 +147,15 @@ apps/opencrane-ui/src/app/
 Before creating a file, inspect and reuse the behavior already present in:
 
 - `libs/frontend/features/workspace` for the shell, sidebar, routing, and new-session relay.
-- `libs/frontend/features/conversation` and `libs/frontend/state/conversation/*` for the live gateway,
-  history, reconnect, abort, stream blocks, Markdown, tools, A2UI, caching, and composer behavior.
+- `libs/frontend/features/conversation` and `libs/frontend/state/conversation/render` for presentation,
+  Markdown, tools, A2UI, composer, and state-shape behavior worth reusing without live transport.
 - `libs/frontend/features/context` for scope and citation presentation.
 - `libs/frontend/features/settings` for current settings sections and resource patterns.
 - `libs/frontend/elements/ui` for settings rows, avatars, headings, scope chips, ledger cards, and save
   actions.
 - `libs/frontend/features/tools` for marketplace/catalogue and provider-key administration behavior.
-- `libs/frontend/state/{settings,provider-key,mcp,tenant}/adapter` and `libs/frontend/state/gateways`
-  for current API ownership.
+- existing state types and mappers for reusable UI concepts only; do not change backend-facing
+  adapters or gateway registration in this mock-only delivery.
 
 Migrate or compose these capabilities into the authoritative app-level `core/shared/features`
 layers. Do not copy the same behavior into parallel stores. Once each migrated slice reaches parity,
@@ -154,8 +163,9 @@ remove superseded imports and dead compatibility code in the same track.
 
 ### Layer responsibilities
 
-- `core/api`: injectable services using the generated OpenCrane client; no component contains URLs,
-  HTTP verbs, or hand-written wire types.
+- `core/mocks`: injectable typed services owning deterministic in-memory state, scenarios, seeded
+  time/IDs, identity/tenant/role/first-run state, build-explicit guard overrides, and reset behavior;
+  no component owns fixtures or makes network calls. Production guard implementations remain intact.
 - `core/models`: app-wide enums and view-facing types. Exported interfaces and aliases live in
   dedicated `*.types.ts` files.
 - `core/state`: orchestration facades that expose resources, computed state, and mutation commands.
@@ -229,35 +239,34 @@ than opening the documented sub-pages as modal overlays.
 
 ## Delivery tracks
 
-### Track 0 — Contract and migration inventory
+### Track 0 — Mock scenario and migration inventory
 
 Complete before parallel visual work begins.
 
 1. Inventory every existing component/service/store listed in the migration rule and classify it as
    reuse, migrate, restyle, replace, or remove.
-2. For every visible capability, record the endpoint or gateway method, generated contract type,
-   owning core service/facade, required role/capability, supported mutation, and error states.
-3. Confirm matching `oc` CLI support for management mutations. Missing API/CLI work is a prerequisite,
-   not a frontend mock.
-4. Distinguish personal API access tokens from organization provider credentials; they must not share
-   models, storage, or permissions merely because both screens say “keys”.
-5. Confirm which channel/provider integrations are actually supported. Unsupported fixture cards are
-   disabled with an explanation or omitted.
-6. Confirm avatar upload, notifications, storage, auto-update, egress mutation, billing limits, and
-   organization-structure contracts before promising functional controls.
-7. Produce the route-to-capability matrix and migration deletion list before implementation starts.
+2. For every visible capability, record its typed mock service/facade owner, reads, mutations,
+   permission presentation, loading/empty/error states, deterministic timing, and reset behavior.
+3. Define `default`, `empty`, `loading`, `error`, `permission`, `limits`, `offline`, and
+   `long-content` modes shared by unit, E2E, accessibility, and visual tests.
+4. Add an explicit mock build configuration that replaces the existing access/first-run guard tokens
+   with deterministic mock guards and supplies identity, active tenant, role, and first-run state.
+   The production build must not register these providers.
+5. Keep personal API-token mock models separate from organization provider-credential mock models.
+6. Represent every documented channel/provider/member/settings interaction through mocks; do not add
+   backend routes, generated contracts, CLI commands, OIDC, or Gateway work.
+7. Produce the route-to-scenario matrix and frontend migration deletion list before implementation.
 8. Add `lint` and `test` targets to `apps/opencrane-ui/project.json` before app-local feature code is
    migrated. The app-local target architecture may not depend on tests owned only by libraries that
    are scheduled for removal.
-9. Add an `opencrane-ui-e2e` Nx project using Playwright and `@axe-core/playwright`. Define `e2e`,
-   `visual`, and `live` configurations; check approved screenshots into
+9. Add an `opencrane-ui-e2e` Nx project using Playwright and `@axe-core/playwright`. Define `e2e`
+   and `visual` configurations; check approved screenshots into
    `apps/opencrane-ui-e2e/src/visual-baselines/`; and publish diffs/reports as CI artifacts.
-10. Document the E2E browser matrix, zero-unexplained-diff policy, local/CI commands, test identities,
-    and environment variables. The live configuration requires a real OIDC session and Gateway; it
-    must not silently fall back to fixtures.
+10. Document the E2E browser matrix, zero-unexplained-diff policy, local/CI commands, mock scenario
+    selection, deterministic clock, and fixture reset contract.
 
-**Gate:** no screen enters implementation with an unknown data owner or an enabled fixture-only
-mutation.
+**Gate:** no screen enters implementation without a typed mock owner and deterministic coverage for
+its documented states and interactions.
 
 ### Track 1 — Foundation, theme, and shared components
 
@@ -323,12 +332,12 @@ content, and all visual variants before feature pages compose them.
 
 - Implement the 48px header with session title and department/scope badge on the left.
 - Place active model and Share action on the right.
-- Define disabled, pending, forbidden, and success/error feedback for Share. If no supported sharing
-  contract exists, show a disabled control with explanation rather than an inert button.
+- Implement disabled, pending, permission, success, and error feedback for Share through the mock
+  scenario service.
 
 #### Message list and citations
 
-- Preserve the existing conversation gateway and rendering pipeline.
+- Reuse the existing rendering pipeline where useful; replace transport with `MockSessionService`.
 - Assistant messages are unbubbled, 15px with 1.7 line-height and 32px bottom spacing.
 - User messages are right-aligned near-black bubbles, white 14.5px text, maximum 72% width,
   `14px 14px 3px 14px` radius, `11px 16px` padding, and 28px bottom spacing.
@@ -347,7 +356,7 @@ content, and all visual variants before feature pages compose them.
   keyboard.
 - Enter sends, Shift+Enter inserts a newline, whitespace-only input does not send, and accepted send
   clears the draft.
-- Send through the existing gateway. Do not append production messages to a local component array.
+- Send through `SessionFacade` into `MockSessionService`; do not append messages in the component.
 - Preserve the reader's position when they are reviewing older history; auto-scroll only when already
   near the bottom or when the current user sends.
 - Render the active awareness-contract summary below the composer, with version and ordered scopes;
@@ -355,7 +364,7 @@ content, and all visual variants before feature pages compose them.
 - Define attachment type, size, upload progress, cancellation, failure, removal, and unsupported states
   before enabling Attach.
 
-**Gate:** live/mock gateway tests prove history, send, stream, cancel, retry, reconnect, tools/A2UI,
+**Gate:** deterministic mock tests prove history, send, stream, cancel, retry, reconnect, tools/A2UI,
 citations, attachment states, and reader-safe scrolling.
 
 ### Track 3 — Settings shell and common form behavior
@@ -381,7 +390,7 @@ citations, attachment states, and reader-safe scrolling.
 - OpenCrane version with latest-version label.
 - Storage address and Used/Quota/Encrypted statistics.
 - Auto-update toggle with Enabled/Disabled label.
-- Save action, role gating, loading/unavailable states, and contract-backed validation.
+- Save action, mock role variants, loading/unavailable states, and typed mock validation.
 
 #### Members — People
 
@@ -409,7 +418,7 @@ citations, attachment states, and reader-safe scrolling.
 #### Skills
 
 - Installed list `1fr 80px 64px 52px`: name, category, version, and enabled toggle.
-- Category and lifecycle values come from enums/contracts, not display strings.
+- Category and lifecycle values come from enums and typed mock models, not display strings.
 - Browse Marketplace routes to its sub-page.
 - Enable/disable/install/uninstall actions show pending, success, and rollback/error feedback.
 
@@ -424,14 +433,13 @@ citations, attachment states, and reader-safe scrolling.
 - Dark Data Sovereignty banner with status and current scope.
 - Dataset rows with name, graph/node/scope metadata, and Active state.
 - Egress rows with mono domain, category, and Add Domain action.
-- Render read-only data when mutation contracts are absent; never imply an inert edit succeeded.
+- Exercise successful and failed Add Domain mutations through the shared mock service.
 
 #### AI Provider Keys
 
 - Provider cards show provider, connection status, supported models, created/updated or last-used safe
   metadata, and Remove action.
-- Do not display masked stored key material unless the server explicitly returns a safe non-secret
-  fingerprint. Stored secrets are write-only.
+- Display only seeded safe fingerprint metadata. Secret-shaped input remains transient mock state.
 - Include the encrypted-storage note and Add Provider Key route.
 - Remove/revoke requires destructive confirmation and capability checks.
 
@@ -442,12 +450,11 @@ citations, attachment states, and reader-safe scrolling.
 - 44px avatar and Change Photo action.
 - Display name, read-only email with identity-provider explanation, role badge, notification controls,
   and Save.
-- If avatar upload or notifications lack contracts, render the values read-only or disable controls
-  with explanation.
+- Exercise avatar and notification updates through deterministic mock mutations.
 
 #### Awareness
 
-- Fallback Behavior select with contract-supported options.
+- Fallback Behavior select with typed mock options.
 - Citation Mode toggle and Enabled/Disabled status.
 - Read-only mono scope order `personal → project → dept → org`.
 - Save, validation, permission, unavailable, and conflict states.
@@ -463,9 +470,8 @@ citations, attachment states, and reader-safe scrolling.
 
 - Page-level Create Key action.
 - Empty state with explanation and “Create your first key” CTA.
-- Confirm whether these are OpenCrane access tokens; do not reuse provider-key handling.
-- If creation is supported, define one-time reveal, copy, acknowledgement, revoke, and non-recoverable
-  dismissal behavior.
+- Model these separately from provider keys and implement mock one-time reveal, copy, acknowledgement,
+  revoke, and non-recoverable dismissal behavior.
 
 ### Track 6 — Settings sub-pages
 
@@ -499,7 +505,7 @@ pending/success/error states, unsaved-navigation protection, and destructive con
 
 #### Configure Channel
 
-- Safe masked/fingerprint credential metadata only when contract-supported.
+- Seeded safe fingerprint metadata only; never place secret-shaped values in reusable fixtures.
 - Webhook URL with accessible Copy action.
 - Test, Disconnect, and Save actions with connection progress and error feedback.
 
@@ -620,20 +626,18 @@ hard limits.
   sub-page returns.
 - Session tests cover new/select/shared navigation, history, Enter/Shift+Enter, whitespace rejection,
   draft clearing, streaming, tool/A2UI blocks, citations, cancel/retry/reconnect, and safe scrolling.
-- Settings resource tests cover loading, empty, populated, stale, forbidden, and failure states.
+- Settings mock-resource tests cover loading, empty, populated, stale, permission, and failure states.
 - Form tests cover validation, dirty state, pending, duplicate prevention, success, conflict, retained
   values after recoverable failure, and unsaved-navigation confirmation.
 - Destructive-action tests cover impact confirmation, pending/disabled state, failure recovery,
   success feedback, and focus restoration.
-- API tests cover success, validation, 401, 403, 404, conflict, rate limiting, 5xx, timeout/offline,
-  and cancellation where relevant.
-- Authorization tests prove hidden/disabled controls cannot substitute for server enforcement.
+- Mock-service tests cover success, validation, permission, not-found, conflict, rate-limit,
+  recoverable failure, timeout/offline, and cancellation scenarios where relevant.
+- Permission tests verify UI presentation only and make no server-security claim.
 - Secret tests prove credential values never enter URLs, persistent browser storage, logs, telemetry,
   DOM attributes, snapshots, or reusable fixtures.
-- `opencrane-ui-e2e:live` runs against a real deployment and proves OIDC login/logout/session recovery,
-  member versus organization-admin authorization, Gateway WebSocket upgrade, history, send, streamed
-  output, cancel, transport-loss reconnect, refusal, and terminal failure. Mock tests remain necessary
-  for deterministic state coverage but cannot satisfy this live gate.
+- E2E runs only against the deterministic mock provider and covers scenario reset, history, send,
+  streamed output, cancel, reconnect presentation, refusal, and terminal failure.
 
 ### Visual acceptance
 
@@ -677,7 +681,7 @@ hard limits.
 2. Track 1 foundation completes before feature styling branches consume tokens/primitives.
 3. Track 2 Session and Tracks 3–5 Settings may proceed in parallel after Track 1, provided they do
    not duplicate migration ownership.
-4. Track 6 sub-pages begins after the Settings shell and relevant parent data contracts are stable.
+4. Track 6 sub-pages begins after the Settings shell and relevant typed mock models are stable.
 5. Responsive/accessibility work is part of each track, followed by a cross-screen consistency pass.
 6. Run the full verification and independent-review gates before removing superseded frontend paths.
 
@@ -687,18 +691,15 @@ The handoff is complete only when:
 
 - Session and every Workspace/Personal Settings section and sub-page are implemented.
 - The canonical design decisions and all README geometry/content requirements are represented.
-- Existing live conversation, authentication, API, state, rendering, and security behavior remains
-  intact.
-- Every visible mutation has a generated contract, core service/gateway owner, authorization rule,
-  and matching CLI capability.
+- Every visible read and mutation is implemented through the shared typed mock provider.
+- No backend, generated-contract, CLI, OIDC, live-Gateway, deployment, or server-security work is
+  included or implied.
 - All required loading, empty, permission, validation, pending, success, conflict, retry, terminal,
   and destructive states are implemented.
 - Responsive baselines pass at all named viewports.
 - WCAG 2.2 AA, keyboard, focus, screen-reader, contrast, reduced-motion, zoom, and touch requirements
   pass.
-- Production build, affected lint/test/build, boundary, TypeScript style, visual, API, authorization,
-  and secret-handling gates pass.
-- Live OIDC/Gateway E2E passes with member and organization-admin identities; fixture/mock coverage is
-  not accepted as a substitute.
+- Production build, affected lint/test/build, boundary, TypeScript style, visual, accessibility,
+  deterministic mock-state, and transient secret-handling gates pass.
 - Independent review has no unresolved Critical or High findings.
 - Superseded duplicate frontend code and migration shims are removed.

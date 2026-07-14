@@ -61,20 +61,20 @@ moves out to weownai.
 | [#152](https://github.com/italanta/opencrane/issues/152) — **Receive opencrane-ui frontend + org libs from weownai, relicense AGPL** | Land `apps/opencrane-ui` + org feature/state libs, fork shared foundation libs, chart-native frontend deploy, drop the opencrane-api OpenAPI pin | Lockstep with [weownai#38](https://github.com/italanta/WeOwnAI/issues/38); after weownai #41 lands so rendering ports wholesale. |
 | [#153](https://github.com/italanta/opencrane/issues/153) — **Adopt NX + diffuse opencrane-api into libs** | NX adoption, extract `src/core/` (40k LOC) into `libs/features/*`, per-feature migration ownership convention | After #151/#152 settle — don't refactor code mid-relocation. |
 | [#154](https://github.com/italanta/opencrane/issues/154) — **Plugin system research spike** | Plugin shape (backend module + frontend element + chart + manifest), install procedure, customisation line, hooks inventory, prove-the-seam plugins (skills, MCP, #129 harvesting, #130 awareness, billing, metrics) | Research anytime; design after #153. #129/#130 become prove-the-seam candidates. |
-| [PR #3](https://github.com/josphat-otieno/opencrane/pull/3) — **Session + Settings design handoff** | Implement the approved Angular handoff: shared readiness → concurrent Workspace/Session and Settings lanes → combined responsive/WCAG/live acceptance → legacy cleanup | Depends on #152 frontend receipt; both lanes start at one reviewed `UI_SHARED_READY_SHA`; no fixture-only mutations |
+| [PR #3](https://github.com/josphat-otieno/opencrane/pull/3) — **Session + Settings mock UI handoff** | Implement the approved Angular UI against deterministic mocks: shared foundation → concurrent Workspace/Session and Settings lanes → combined responsive/WCAG/visual acceptance → frontend cleanup | UI-only; no backend/API/CLI/OIDC/live-Gateway work; both lanes start at one reviewed `UI_SHARED_READY_SHA` |
 
 #### Session + Settings handoff execution ledger
 
 - Parent status: `in progress`
 - Integration branch: `codex/ui-handoff-integration`
-- Current readiness PR branch: `codex/ui-handoff-readiness`
+- Current scope branch: `codex/ui-mock-scope`
 - Readiness SHA: `unset until G1`
-- Evidence: [draft PR #3](https://github.com/josphat-otieno/opencrane/pull/3)
-- Blocker: `Track 0 is conditional/not ready pending authorization repairs, live Gateway proof, CLI parity, and product-scope decisions`
+- Evidence: [approved and merged PR #3](https://github.com/josphat-otieno/opencrane/pull/3) plus the mock-scope review branch
+- Blocker: `mock-scope branch requires review and merge before G1 implementation starts`
 
 | Wave | Owner | Branch | Allowed paths | Depends on | Status | Evidence | Blocker |
 |---|---|---|---|---|---|---|---|
-| Shared readiness (G0–G1) | Coordinator | `codex/ui-handoff-integration` | Coordinator manifest paths | #152 + approved handoff | blocked | capability/migration inventories and ownership manifest | authz repairs, live Gateway proof, CLI parity, product-scope decisions |
+| Mock foundation (G1) | Coordinator | `codex/ui-handoff-integration` | Coordinator manifest paths | approved mock scope | pending | mock scenario matrix, migration inventory, ownership manifest | blocked on scope review |
 | Workspace + Session (A1–A4) | Workflow A | `codex/ui-session` | Workflow A manifest paths | `UI_SHARED_READY_SHA` | pending | — | blocked on G1 |
 | Settings + sub-pages (B1–B5) | Workflow B | `codex/ui-settings` | Workflow B manifest paths | `UI_SHARED_READY_SHA` | pending | — | blocked on G1 |
 | Integration + cleanup (G2–G5) | Coordinator | `codex/ui-handoff-integration` | Coordinator paths + approved G4 deletions | A and B reviewed | pending | — | blocked on lanes |

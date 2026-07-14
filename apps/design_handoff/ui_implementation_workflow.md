@@ -1,87 +1,55 @@
-# OpenCrane UI — Concurrent Implementation Workflow
+# OpenCrane UI — two-machine mock implementation workflow
 
-## Purpose
+## Purpose and scope
 
-This document defines how to execute `ui_implementation_plan_revised.md` as two concurrent delivery
-workflows while following `docs/agents/workflow.md`.
+This workflow executes `ui_implementation_plan_revised.md` as a UI-only handoff using deterministic
+in-browser mocks. It owns sequencing, mock ownership, branches, commits, review gates, integration,
+and rollback for two developers working on separate machines.
 
-It does not modify or replace the revised implementation plan. The plan remains the source for scope,
-architecture, design, TypeScript, responsive, accessibility, security, and acceptance requirements;
-this document owns sequencing, file ownership, commits, review gates, integration, and rollback.
+Backend routes, generated API contracts, CLI commands, OIDC, live Gateway transport, persistence,
+deployment, and server authorization are outside this delivery. Mock permission and failure states
+exist to exercise the design; they are not security or integration proof.
 
-## Workflow rules inherited from `docs/agents/workflow.md`
+## Repository workflow rules
 
-- `plan.md` is the live backlog and must be updated in the same work cycle whenever a wave changes
-  status or discovers a blocker.
-- A fully completed track moves to `plan-done.md`; `plan.md` retains a one-line
-  `✅ COMPLETE (see plan-done.md)` pointer.
-- A completed track updates `CHANGELOG.md` in the same cycle with capability-first wording.
-- Every work cycle ends with a suggested emoji-leading, imperative commit subject under 72 characters.
-- Run `scripts/agent-style-check.sh` before independent review whenever TypeScript changes.
-- The TypeScript self-review table is required but does not replace independent review.
-- Resolve every Critical and High review finding before a wave or integration gate completes.
-- Use the `review` agent for a small slice and `review-loop` for multi-file or risky slices.
-
-## Preflight condition — resolved
-
-At initial authoring, `apps/design_handoff/` was untracked, so a second worktree would not have
-contained the revised plan or this workflow. The coordinator therefore could not launch concurrent
-worktrees from that local-only state.
-
-That stop condition is now resolved: the approved handoff sources were committed in
-`f07d74a790557955f9b70ae804a9120a1db2b08f` and are available from the remote branches. G0 is being
-reviewed through `codex/ui-handoff-readiness`; after merge, G0/G1 continue on
-`codex/ui-handoff-integration` as defined below. Concurrent lanes remain blocked until G1 records a
-reviewed `UI_SHARED_READY_SHA`.
+- `plan.md` is updated in the same work cycle as status, evidence, or blocker changes.
+- The parent UI track moves to `plan-done.md` only after both lanes and combined acceptance pass.
+- `CHANGELOG.md` is updated only when the complete parent track ships.
+- Every TypeScript slice follows `docs/agents/typescript.md` and runs the style checker.
+- Angular work follows `docs/agents/angular.md` except for its backend-first integration rule, which
+  the user has explicitly replaced with this mock-only handoff scope.
+- Resolve every Critical and High independent-review finding before a gate completes.
 
 ## Concurrency model
 
-There are two implementation workflows:
-
-- **Workflow A — Workspace and Session:** persistent shell, primary sidebar, session routes, live
-  conversation presentation, citations, composer, contract summary, and Session acceptance.
-- **Workflow B — Settings:** Settings shell and navigation, Workspace and Personal sections, routed
-  management sub-pages, forms, credentials, and Settings acceptance.
-
-They run concurrently only after a shared coordinator-owned readiness gate.
-
 ```mermaid
 flowchart TD
-    G0["G0: Track the approved plan and create roadmap entries"] --> G1["G1: Shared readiness\ncontracts, tokens, primitives, route seams, test harness"]
-    G1 --> A["Workflow A\nWorkspace and Session"]
-    G1 --> B["Workflow B\nSettings and sub-pages"]
-    A --> AR["A lane review and evidence gate"]
-    B --> BR["B lane review and evidence gate"]
-    AR --> G2["G2: Merge and combined integration"]
+    G1["G1: Mock foundation and shared UI"] --> A["Workflow A: Workspace and Session"]
+    G1 --> B["Workflow B: Settings and sub-pages"]
+    A --> AR["A review and evidence"]
+    B --> BR["B review and evidence"]
+    AR --> G2["Combined integration"]
     BR --> G2
-    G2 --> G3["G3: Visual, accessibility, security, live OIDC/Gateway"]
-    G3 --> G4["G4: Remove superseded paths and rerun gates"]
-    G4 --> G5["G5: Final review, plan history, changelog"]
+    G2 --> G3["Visual, responsive, accessibility, mock-state acceptance"]
+    G3 --> G4["Coordinator cleanup"]
+    G4 --> G5["Final review, plan history, changelog"]
 ```
 
-G0 and G1 are hard predecessors, not a third feature workflow. Both lanes start from the exact same
-reviewed G1 commit.
+Both feature lanes start from the exact reviewed `UI_SHARED_READY_SHA` produced by G1.
 
-## Coordinator and branch model
+## Branches
 
-### Branches and worktrees
-
-1. Create `codex/ui-handoff-integration` from the approved tracked handoff commit.
-2. Complete G0 and G1 on that branch.
-3. Record the immutable readiness commit as `UI_SHARED_READY_SHA` in `plan.md`.
-4. Create sibling worktrees from that exact SHA:
+1. The coordinator completes G1 on `codex/ui-handoff-integration` through reviewed commits.
+2. Record the immutable passing commit as `UI_SHARED_READY_SHA` in `plan.md`.
+3. Create and push:
    - `codex/ui-session`
    - `codex/ui-settings`
-5. Each lane commits only files assigned to it by the ownership manifest.
-6. Merge reviewed lanes into `codex/ui-handoff-integration` with non-fast-forward merges so lane
-   history and review boundaries remain visible.
-7. Merge the first completed lane. Before merging the second, merge the updated integration branch
-   into that lane and rerun its gate against the combined public seams.
-8. Do not squash or cherry-pick overlapping partial waves before combined verification.
+4. Each developer checks out only their assigned branch on their own machine.
+5. Each lane edits only its manifest paths and opens a PR into `codex/ui-handoff-integration`.
+6. Merge the first reviewed lane. The second lane synchronizes the updated integration branch,
+   reruns its gate, and then merges.
 
-### Single-writer files
-
-Only the coordinator edits these files during parallel execution:
+## Coordinator-owned paths
 
 ```text
 plan.md
@@ -91,101 +59,108 @@ package.json
 package-lock.json
 nx.json
 tsconfig*.json
+apps/design_handoff/**
 apps/opencrane-ui/project.json
 apps/opencrane-ui/src/styles.scss
 apps/opencrane-ui/public/fonts/**
 apps/opencrane-ui/src/app/app.config.ts
 apps/opencrane-ui/src/app/app.routes.ts
+apps/opencrane-ui/src/app/core/models/**
+apps/opencrane-ui/src/app/core/mocks/**
+apps/opencrane-ui/src/app/core/state/**
 apps/opencrane-ui/src/app/core/theme/**
 apps/opencrane-ui/src/app/shared/components/**
+apps/opencrane-ui/src/app/features/workspace/workspace.routes.ts
+apps/opencrane-ui/src/app/features/settings/settings.routes.ts
 apps/opencrane-ui-e2e/project.json
 apps/opencrane-ui-e2e/playwright.config.ts
 apps/opencrane-ui-e2e/src/support/**
-libs/frontend/core/**
-libs/frontend/elements/ui/**
-libs/frontend/features/tools/**
-libs/frontend/state/gateways/**
-libs/frontend/state/mcp/**
-libs/frontend/state/tenant/**
-libs/contracts/**
 ```
 
-The coordinator owns shared barrels, generated contracts, provider registration, global tokens,
-shared component APIs, and route composition. A lane needing one of these changes submits a minimal
-change request instead of editing the file.
+The coordinator owns the typed mock provider surface, scenario selection, mock clock/reset behavior,
+shared barrels, global theme, shared components, root routes, and test harness. Lanes request changes
+to these frozen seams rather than editing them.
 
-### Ownership manifest
+## G1 — Mock foundation and shared UI
 
-G1 creates a checked ownership manifest. Each entry records:
+### G1.1 — Project targets and test harness
 
-- path glob;
-- owner: coordinator, Workflow A, or Workflow B;
-- public exports and consumers;
-- API/state owner;
-- migration source;
-- deletion owner;
-- planned completion wave.
+Create:
 
-Before every lane commit, compare the changed paths to the manifest. An overlap is a stop condition,
-not a merge conflict to postpone.
+- app-local lint and unit-test targets;
+- Playwright `e2e` and `visual` targets with `@axe-core/playwright`;
+- deterministic scenario selection and fixture reset;
+- desktop, tablet, and mobile projects;
+- screenshot actual/diff artifact output;
+- a zero-unexplained-diff policy.
 
-Ownership checks apply to lane-authored commits, not to a coordinator-approved merge that synchronizes
-the integration branch into a lane. Before synchronization, record the lane tip SHA and audit
-`<UI_SHARED_READY_SHA>..<LANE_TIP_SHA>`. Record the synchronization merge SHA; any subsequent lane
-fixes are audited over `<SYNC_MERGE_SHA>..HEAD`. The evidence bundle lists the lane-authored range and
-the exempt coordinator merge separately.
+There is no `live` target in this mock-only delivery.
 
-## Shared gates
+### G1.2 — Typed mock provider
 
-### G0 — Approved source and active-roadmap setup
-
-The coordinator:
-
-1. Tracks the approved revised plan, this workflow, and required handoff references.
-2. Adds one parent UI handoff track to `plan.md` with:
-   - Shared Readiness;
-   - Workflow A — Workspace and Session;
-   - Workflow B — Settings;
-   - Combined Integration and Cleanup.
-3. Records owner, branch, allowed paths, dependencies, status, evidence location, and blocker field for
-   every item.
-4. Creates the route-to-capability matrix and migration inventory required by Track 0 of the revised
-   plan.
-5. Confirms API/generated-type/CLI parity, roles, and data ownership for every enabled mutation.
-
-Stop G0 if a visible mutation has no supported contract, authorization is unknown, or a fixture-only
-action would appear functional. Unsupported controls remain disabled/read-only or leave the release
-scope explicitly.
-
-For repository-state purposes, the parent UI handoff is the only roadmap **track**. G0–G4, A1–A4,
-and B1–B5 are waves/sub-items, even where the revised implementation plan calls them tracks. A wave
-passing does not trigger `plan-done.md` or `CHANGELOG.md`; the parent track completes only at G5 after
-both lanes, integration, live acceptance, and cleanup pass. This avoids declaring a foundation or
-single lane shipped before the combined capability is complete.
-
-Suggested commits:
+Create under `apps/opencrane-ui/src/app/core/`:
 
 ```text
-🏡 track the OpenCrane UI handoff workflow
-🏡 define UI contract and migration ownership
+models/**
+mocks/
+├── mock-clock.service.ts
+├── mock-scenario.service.ts
+├── mock-identity.service.ts
+├── mock-access.guard.ts
+├── mock-first-run.guard.ts
+├── provide-ui-mocks.ts
+├── mock-session.service.ts
+├── mock-settings.service.ts
+├── mock-organization.service.ts
+├── mock-budget.service.ts
+├── mock-skill.service.ts
+├── mock-channel.service.ts
+├── mock-data-network.service.ts
+├── mock-credential.service.ts
+├── fixtures/**
+└── testing/**
+state/
+├── session.facade.ts
+└── settings.facade.ts
 ```
 
-### G1 — Shared readiness
+Freeze the public facade and model APIs after tests cover:
 
-The coordinator completes the plan's foundation before forking lanes:
+- default, empty, loading, error, permission, limits, offline, and long-content modes;
+- identity, active tenant, member/admin, no-tenant, and first-run route states;
+- mutation pending/success/failure/cancel/reset;
+- seeded IDs, time, stream chunks, progress, and latency;
+- isolation between tests and route reloads;
+- secret-shaped values never entering persistence, URLs, logs, or snapshots.
 
-- app-local lint/test targets;
-- Playwright/axe `e2e`, `visual`, and `live` targets;
-- accessible semantic tokens, fonts, PrimeNG preset, contrast table, focus and motion rules;
-- tested shared components and frozen signal input/output APIs;
-- persistent workspace outlet and one lazy `/settings` mount;
-- route ownership seam: Workflow A owns Workspace/Session routes; Workflow B owns nested Settings
-  routes;
-- baseline bundle/style sizes;
-- ownership manifest and deletion list;
-- empty smoke pass for app and E2E targets.
+Add a named mock build/serve configuration that registers `provideUiMocks()`. It overrides the
+existing access and first-run guard tokens with deterministic mock implementations and supplies mock
+identity/tenant state. The default production configuration does not register these providers, and
+the production guard source files remain unchanged.
 
-Validation:
+### G1.3 — Theme and shared components
+
+Implement the semantic tokens, DM Sans/DM Mono, PrimeNG preset, contrast table, focus/reduced-motion
+rules, and shared components required by the revised plan. Shared components are presentational and
+consume frozen signal inputs/outputs only.
+
+### G1.4 — Route seams
+
+Preserve existing out-of-scope top-level routes. The coordinator creates buildable placeholder route
+arrays in `features/workspace/workspace.routes.ts` and `features/settings/settings.routes.ts`, mounted
+through a coordinator-owned shared route-placeholder component. At `UI_SHARED_READY_SHA`, ownership
+of those two files transfers to Workflow A and Workflow B respectively.
+
+The frozen seam provides:
+
+- Workflow A route array for `/` and `/session/:sessionId`;
+- one lazy `/settings` mount owned internally by Workflow B;
+- existing `/tools` and `/admin` routes left intact.
+
+The G1 production build validates that production guard providers remain selected; mock E2E/visual
+targets use the explicit mock build and validate direct workspace navigation without OIDC.
+
+### G1 validation
 
 ```bash
 npx nx show project opencrane-ui
@@ -196,444 +171,122 @@ npx nx run opencrane-ui:build:production
 npx nx run opencrane-ui-e2e:e2e
 npx nx run opencrane-ui-e2e:visual
 npm run lint:boundaries
-scripts/agent-style-check.sh --diff <G0_SHA>
+scripts/agent-style-check.sh --diff <G1_BASE_SHA>
 ```
 
-Run `review-loop` because the foundation crosses configuration, routing, shared components, and test
-infrastructure. Resolve all Critical/High findings and rerun the gate.
+Run independent review, resolve Critical/High findings, update `plan.md`, and record
+`UI_SHARED_READY_SHA`. Only then create the two feature branches.
 
-The coordinator then updates `plan.md`, records `UI_SHARED_READY_SHA`, marks both workflows unblocked,
-and commits:
+Suggested commit:
 
 ```text
-✨ deliver the shared accessible UI foundation
+✨ deliver the shared mock UI foundation
 ```
-
-Do not start either lane before this commit exists and passes review.
 
 ## Workflow A — Workspace and Session
 
-### Exclusive ownership
+### Ownership
 
 ```text
-apps/opencrane-ui/src/app/core/api/session-api.service.ts
-apps/opencrane-ui/src/app/core/models/session.types.ts
-apps/opencrane-ui/src/app/core/models/citation.types.ts
-apps/opencrane-ui/src/app/core/state/session.facade.ts
 apps/opencrane-ui/src/app/features/workspace/**
 apps/opencrane-ui/src/app/features/session/**
 apps/opencrane-ui-e2e/src/session/**
 apps/opencrane-ui-e2e/src/visual-baselines/session/**
-libs/frontend/features/workspace/**
-libs/frontend/features/conversation/**
-libs/frontend/features/context/**
-libs/frontend/state/conversation/**
 ```
 
-Workflow A treats coordinator-owned shared components and configuration as read-only.
+### A1 — Shell and sidebar
 
-### A1 — Workspace shell and sidebar
+- Persistent shell, 192px desktop sidebar, mobile drawer, routes, identity footer.
+- New/select/shared sessions and active/unread/activity states through `SessionFacade`.
+- Loading, empty, error, long-content, keyboard, and focus-restoration coverage.
 
-- Migrate the persistent shell without duplicating session state.
-- Wire `/` and `/session/:sessionId` through Workflow A's route array.
-- Connect the frozen app sidebar to identity/session facades.
-- Preserve new-session relay, owned/shared lists, active/unread/activity state, and identity footer.
-- Add loading, empty, error, responsive drawer, keyboard, and focus-restoration behavior.
-- Keep existing workspace exports until parity is proven.
+### A2 — Header, stream, citations, and tools
 
-Required evidence:
+- Session header, scope badge, model, Share states.
+- User/assistant/tool messages, Markdown, code, stream chunks, A2UI presentation, citations.
+- Pending/final/cancelled/retry/offline/reconnected/refusal/terminal mock sequences.
 
-- route/deep-link/invalid-ID/history tests;
-- 192px desktop and mobile drawer visual results;
-- focused app plus existing workspace-library tests while it remains an owner;
-- boundary and TypeScript style checks;
-- independent review with all Critical/High findings resolved.
+### A3 — Composer and actions
 
-Commit:
+- Growing textarea, Enter/Shift+Enter, whitespace rejection, draft clearing, reader-safe scrolling.
+- Attach, Share, copy, cancel, retry, and contract-summary behavior through the mock facade.
+
+### A4 — Lane gate
+
+- Unit, route, interaction, axe, responsive, and visual coverage for all Session mock modes.
+- TypeScript style check, boundary check, production build, and independent review.
+
+## Workflow B — Settings and sub-pages
+
+### Ownership
 
 ```text
-🚚 migrate the workspace shell and sidebar
-```
-
-### A2 — Session header, message stream, citations, and tools
-
-- Add the Session facade over the existing gateway; do not create another message store.
-- Migrate/restyle the header, Markdown, stream blocks, tool groups, A2UI, and message roles.
-- Render citation strips for every type/scope/status combination.
-- Preserve history loading, reconnect, refusal, retry, cancellation, and terminal failure.
-- Implement Share states; unsupported sharing remains disabled with explanation.
-
-Required evidence:
-
-- conversation/render/context unit and integration tests;
-- all message, citation, tool, A2UI, empty, history, streaming, and failure variants;
-- 924x540 reference comparison and all responsive Session widths;
-- style, boundary, security, accessibility, and independent review results.
-
-Commit:
-
-```text
-🎨 restyle the live session stream and citations
-```
-
-### A3 — Composer, scrolling, and live behavior
-
-- Implement the growing composer and awareness-contract summary.
-- Preserve gateway send and new-session creation.
-- Enter sends; Shift+Enter creates a newline; whitespace does not send.
-- Clear drafts only after accepted sends.
-- Preserve reader position and use near-bottom/current-user scrolling rules.
-- Cover connecting, disconnected, reconnecting, abort, retry, and terminal states.
-- Keep Attach disabled until upload contracts and failure/cancel states exist.
-
-Required evidence:
-
-- composer, cache, adapter, scrolling, and failure tests;
-- Session visual/accessibility suite at all five viewports;
-- live OIDC/Gateway test for history, send, stream, tools/A2UI, cancel, transport-loss reconnect,
-  refusal, and terminal error;
-- style, boundaries, bundle budgets, and independent review.
-
-Commit:
-
-```text
-⚡ complete safe live session interactions
-```
-
-### A4 — Lane closure
-
-- Finish responsive, keyboard, screen-reader, reduced-motion, zoom/reflow, and touch verification.
-- Prove app-local parity and report, but do not perform coordinator-owned cross-cutting cleanup.
-- Produce the lane evidence bundle and full TypeScript compliance table.
-- Run `review-loop` over the complete Workflow A diff.
-
-Full lane gate:
-
-```bash
-npx nx run opencrane-ui:lint
-npx nx run opencrane-ui:test
-npx nx run opencrane-ui:build:production
-npx nx run opencrane-ui-e2e:e2e --grep session
-npx nx run opencrane-ui-e2e:visual --grep session
-npx nx run opencrane-ui-e2e:live --grep session
-npm run lint:boundaries
-scripts/agent-style-check.sh --diff <UI_SHARED_READY_SHA>
-```
-
-Add all still-owning conversation/workspace/context/state projects to the lane gate. Workflow A is
-mergeable only with zero unexplained visual diffs, zero unresolved WCAG A/AA violations, and no
-unresolved Critical/High findings.
-
-Commit:
-
-```text
-🧪 close Session acceptance gates
-```
-
-## Workflow B — Settings
-
-### Exclusive ownership
-
-```text
-apps/opencrane-ui/src/app/core/api/settings-api.service.ts
-apps/opencrane-ui/src/app/core/api/members-api.service.ts
-apps/opencrane-ui/src/app/core/api/budgets-api.service.ts
-apps/opencrane-ui/src/app/core/api/skills-api.service.ts
-apps/opencrane-ui/src/app/core/api/channels-api.service.ts
-apps/opencrane-ui/src/app/core/api/data-network-api.service.ts
-apps/opencrane-ui/src/app/core/api/credentials-api.service.ts
-apps/opencrane-ui/src/app/core/models/settings.types.ts
-apps/opencrane-ui/src/app/core/models/organization.types.ts
-apps/opencrane-ui/src/app/core/models/budget.types.ts
-apps/opencrane-ui/src/app/core/models/skill.types.ts
-apps/opencrane-ui/src/app/core/models/channel.types.ts
-apps/opencrane-ui/src/app/core/state/settings.facade.ts
 apps/opencrane-ui/src/app/features/settings/**
 apps/opencrane-ui-e2e/src/settings/**
 apps/opencrane-ui-e2e/src/visual-baselines/settings/**
-libs/frontend/features/settings/**
-libs/frontend/state/settings/**
-libs/frontend/state/provider-key/**
 ```
 
-Workflow B treats root routing, shared components, global theme, and existing shared gateways as
-read-only. It also treats `libs/frontend/features/tools/**`, `libs/frontend/state/mcp/**`, and
-`libs/frontend/state/tenant/**` as coordinator-owned/read-only because they serve existing `/tools`
-and `/admin` surfaces. Track 0 may assign a narrower subpath to Workflow B only after the consumer
-inventory proves it is Settings-only and adds the affected `/tools` and `/admin` regression gates.
+### B1 — Settings shell
 
-### B1 — Routed Settings shell and data boundary
+- Three-column desktop layout, mobile drawers, nested routes, scope switch, shared form behavior.
+- Compose only the frozen `SettingsFacade` and shared components.
 
-- Build the three-column shell, 200px Settings nav, Workspace/Personal switch, footer badge, and
-  responsive drawers.
-- Own all nested Settings routes beneath the coordinator's frozen `/settings` mount.
-- Implement dedicated core API services and a Settings facade using generated contracts/resources.
-- Implement loading, empty, stale, forbidden, error, dirty, pending, conflict, cancel, and unsaved
-  navigation patterns.
-- Keep unsupported mutations disabled/read-only.
+### B2 — Workspace Settings
 
-Required evidence:
+- Pod, Members/organization, Budgets, Skills, Channels, Data & Network, Provider Keys.
+- All documented loading, empty, validation, pending, success, permission, limit, and failure states.
 
-- every Settings deep link, redirect, invalid ID, refresh, and browser-history test;
-- API/facade coverage for success, validation, 401/403/404/409/429/5xx, timeout/offline;
-- keyboard, focus, responsive, visual, style, boundary, and independent review results.
+### B3 — Personal Settings
 
-Commit:
+- Account, Awareness, My Budget, My API Keys.
+- Mock avatar/notification updates, contract preferences, budget states, one-time token reveal/revoke.
 
-```text
-✨ add routed Settings shell and state boundary
-```
+### B4 — Routed sub-pages
 
-### B2 — Workspace Settings sections
+- Department, Team, Project, Skills Marketplace, Configure/Add Channel, Add Provider Key.
+- Back navigation, invalid IDs, Save/Cancel, unsaved changes, destructive confirmation.
 
-Deliver these disjoint feature groups after B1 freezes facade/service APIs:
+### B5 — Lane gate
 
-- Pod and Members;
-- Budgets and Skills;
-- Channels, Data & Network, and AI Provider Keys.
+- Unit, route, form, axe, responsive, and visual coverage for every Settings scenario and sub-page.
+- TypeScript style check, boundary check, production build, and independent review.
 
-The groups may execute concurrently inside Workflow B only when they edit separate feature
-directories and do not change routes, shared components, core models, services, or the facade. A
-contract change returns to a serialized B1 follow-up.
+## Combined integration
 
-Required evidence:
+After both lanes merge:
 
-- exact README geometry and every documented state;
-- member capacity and budget threshold cases;
-- connected/disconnected/invalid channel and provider cases;
-- write-only credential and no-secret-leakage tests;
-- component/resource/form/authorization tests;
-- all Settings Workspace baselines and accessibility checks;
-- combined B2 review after subgroups merge.
-
-Commit:
-
-```text
-✨ add Workspace Settings sections
-```
-
-### B3 — Personal Settings sections
-
-- Account with contract-gated avatar and notification controls.
-- Awareness fallback, citation mode, scope order, and save states.
-- Personal budget zero/normal/warning/exceeded/unavailable states.
-- Personal access-token empty/create/reveal/copy/acknowledge/revoke lifecycle, separate from provider
-  credentials.
-
-B3 may run beside B2 after B1 because it owns disjoint directories and frozen API methods.
-
-Required evidence:
-
-- resource/form/role/state coverage;
-- one-time-token tests proving no secret enters storage, logs, URLs, DOM attributes, snapshots, or
-  reusable fixtures;
-- deep links, reset behavior, responsive baselines, accessibility, boundaries, style, and review.
-
-Commit:
-
-```text
-✨ add Personal Settings sections
-```
-
-### B4 — Routed Settings management flows
-
-Begin only after the relevant B2 parent contracts are stable:
-
-- Edit Department, Team, and Project;
-- Skills Marketplace;
-- Configure and Add Channel;
-- Add Provider Key.
-
-Subgroups may run concurrently by directory. All flows include routed back navigation, validation,
-dirty-state protection, pending/success/error/conflict, destructive confirmation, and focus
-restoration.
-
-Required evidence:
-
-- route parameter/invalid-ID/back-forward tests;
-- retained dirty values and navigation confirmation;
-- install rollback and connection-test progress/failure;
-- destructive-action recovery and focus;
-- write-only secret non-retention;
-- sub-page responsive/visual/accessibility suite;
-- combined B4 review.
-
-Commit:
-
-```text
-✨ add routed Settings management flows
-```
-
-### B5 — Lane closure
-
-- Run every Settings section/sub-page through the full UX state matrix.
-- Complete all five viewports, zoom/reflow, reduced-motion, touch, keyboard, and screen-reader checks.
-- Prove app-local parity and report proposed legacy deletions; do not delete shared paths.
-- Produce the lane evidence bundle and TypeScript compliance table.
-- Run `review-loop` over the complete Workflow B diff.
-
-Full lane gate:
-
-```bash
-npx nx run opencrane-ui:lint
-npx nx run opencrane-ui:test
-npx nx run opencrane-ui:build:production
-npx nx run opencrane-ui-e2e:e2e --grep settings
-npx nx run opencrane-ui-e2e:visual --grep settings
-npm run lint:boundaries
-scripts/agent-style-check.sh --diff <UI_SHARED_READY_SHA>
-```
-
-Add every still-owning Settings/tools/adapter project to the gate. Workflow B is mergeable only with
-zero unexplained Settings diffs, zero unresolved WCAG A/AA violations, no secret leakage, and no
-unresolved Critical/High findings.
-
-Commit:
-
-```text
-🧪 close Settings acceptance gates
-```
-
-## Lane evidence and progress protocol
-
-After every wave, the lane sends the coordinator a structured status payload:
-
-```text
-Workflow / wave:
-Status: pending | in progress | blocked | complete
-Commit SHA:
-Owned paths changed:
-Contracts/APIs used:
-Tests and commands:
-Visual/a11y evidence:
-TypeScript compliance table:
-Independent-review result:
-Migration/deletion status:
-Blockers or shared-change requests:
-Suggested commit message:
-```
-
-The coordinator updates `plan.md` in that same work cycle. Lanes never edit `plan.md`,
-`plan-done.md`, or `CHANGELOG.md` from their worktrees.
-
-## Integration and completion gates
-
-### G2 — Merge and combined integration
-
-1. Verify both lane evidence bundles and ownership-manifest compliance.
-2. Merge the first reviewed lane.
-3. Record the second lane tip SHA, audit its lane-authored range, and merge integration into it using
-   a coordinator-approved synchronization merge. Record the sync merge SHA, exempt only that merge
-   from path ownership, rerun the lane gate, audit any post-sync lane fixes from the sync SHA, then
-   merge the lane.
-4. Complete coordinator-owned route composition, shared barrels/provider registration, and only the
-   minimal shared fixes required by integration.
-5. Reject duplicate stores, types, tokens, components, routes, or compatibility branches.
-
-If a semantic conflict occurs, return it to the path owner. The coordinator does not invent a
-behavioral resolution in unfamiliar feature code.
-
-### G3 — Combined acceptance
-
-Run:
-
-```bash
-npm run build:opencrane-ui
-npx nx run opencrane-ui:build:production
-npx nx run opencrane-ui:lint
-npx nx run opencrane-ui:test
-npx nx run opencrane-ui-e2e:e2e
-npx nx run opencrane-ui-e2e:visual
-npx nx run opencrane-ui-e2e:live
-npm run lint:boundaries
-scripts/agent-style-check.sh --diff <G1_SHA>
-npx nx affected -t test build lint --base=<G1_SHA>
-```
-
-Also require:
-
-- combined root/session/settings routing, guards, refresh, history, and lazy loading;
-- `/tools` and `/admin` routing, authorization, and package tests whenever a shared tools, MCP,
-  provider, tenant, gateway, or route dependency changed;
-- all five visual viewports with zero unexplained diffs;
-- zero unresolved confirmed WCAG 2.2 A/AA violations plus manual keyboard/screen-reader evidence;
-- member/admin authorization, API/CLI parity, secret non-persistence, and destructive-action checks;
-- real OIDC/Gateway history/send/stream/tool/A2UI/cancel/reconnect/refusal tests;
-- production bundle and component-style budgets.
-
-Run independent `review-loop` over the combined diff and resolve every Critical/High finding.
-
-### G4 — Migration cleanup
-
-Only after G3 passes:
-
-1. Delete paths named in the approved migration deletion list when repository search proves no
-   consumer remains.
-2. Preserve gateway/render/cache/state behavior still serving the app even if its former view moved.
-3. Remove obsolete aliases, barrels, targets, and compatibility branches only with consumer evidence.
-4. Keep cleanup in separately revertible commits.
-5. Rerun the full G3 gate and independent review after deletion.
-
-Suggested commit:
-
-```text
-🔥 remove superseded frontend UI paths
-```
-
-### G5 — Planning history and changelog
-
-After both lanes, combined acceptance, and cleanup complete:
-
-1. Move completed track details from `plan.md` to `plan-done.md`.
-2. Leave the required one-line completion pointer in `plan.md`.
-3. Invoke the `changelog` agent/skill and add a functional `## [Unreleased]` entry describing what
-   members and organization admins can now do.
-4. Record validation, review, live E2E, visual, accessibility, and migration evidence.
-5. Commit the synchronized documentation in the same cycle.
-
-Suggested commit:
-
-```text
-📝 record the completed OpenCrane UI handoff
-```
+1. Run the full app/E2E suite from a clean checkout.
+2. Verify browser history, direct links, invalid IDs, drawer/focus behavior, 200% zoom, reduced motion,
+   keyboard operation, and screen-reader labels.
+3. Capture all approved viewports and mock-state variants.
+4. Confirm mock reset and scenario selection are deterministic across the combined app.
+5. Remove only superseded frontend paths proven unused by consumer search and replacement tests.
+6. Run independent review after cleanup and rerun the full gate.
 
 ## Stop conditions
 
-Stop the affected lane immediately when:
+Stop a lane when:
 
-- a mutation lacks API/generated-type/CLI parity;
-- data ownership or authorization is unknown;
-- the lane changes another owner's path;
-- a frozen shared seam must change;
-- live gateway behavior is replaced by fixtures/local message state;
-- a secret enters storage, logs, URLs, snapshots, DOM attributes, or fixtures;
-- the visual baseline authority is ambiguous;
-- a required command or gate fails;
-- Critical/High review findings remain unresolved;
-- the lane base diverges from a changed foundation;
-- unrelated dirty work overlaps the owned paths.
+- it edits coordinator or other-lane paths;
+- it adds component-local fixture arrays or a second mutable store;
+- it bypasses a facade or changes a frozen mock/model API;
+- it makes network calls or adds backend/API/CLI/deployment work;
+- mock time, IDs, streams, or delays are nondeterministic;
+- secret-shaped data enters persistence, URLs, logs, DOM attributes, or snapshots;
+- lint, test, build, boundary, style, visual, accessibility, or review gates fail.
 
-The lane reports the blocker. The coordinator updates `plan.md` in the same work cycle and decides
-whether to issue a shared patch, narrow scope, or resume from a new readiness SHA.
+The two coordinator-authored route stub files transfer at `UI_SHARED_READY_SHA`; replacing their
+placeholder arrays is the only pre-authorized lane edit to a G1-created file.
 
-## Rollback policy
+## Two-machine synchronization audit
 
-- Keep G1, each lane merge, integration fixes, and cleanup as independently revertible commits.
-- If a lane merge breaks integration, revert that merge on the integration branch and preserve the
-  lane branch/worktree for repair. Do not reset shared history.
-- If the immutable G1 foundation is defective, stop both lanes and repair forward on the integration
-  branch. Review the repair, publish a replacement readiness SHA in `plan.md`, merge that repair into
-  both lanes, and rerun their gates. Revert propagation is allowed only for a post-G1 shared patch
-  whose removal leaves the recorded G1 contract intact.
-- Do not delete legacy paths before G3 passes.
-- If cleanup fails, revert only the cleanup commit; retain the validated implementation while removal
-  is repaired.
-- Every rollback updates `plan.md` in the same cycle. A rolled-back capability cannot move to
-  `plan-done.md` or appear as shipped in `CHANGELOG.md`.
+Before the second lane synchronizes, record its `PRE_SYNC_TIP` and audit
+`UI_SHARED_READY_SHA..PRE_SYNC_TIP`. Merge the updated integration branch, record `SYNC_SHA`, and
+audit later lane fixes as `SYNC_SHA..HEAD`. The coordinator integration merge is the sole ownership
+exception and is listed separately in evidence; its lane-one paths are not lane-two authorship.
 
-## Overall definition of done
+## Completion
 
-The concurrent workflow is complete only when both lanes are merged, combined routing and live
-behavior pass, visual/accessibility/security gates pass, cleanup passes a second full review, roadmap
-state is synchronized, and the changelog describes the delivered user capability rather than the
-underlying commits.
+The parent UI track completes when both lanes, combined routing, every named mock scenario,
+responsive/visual acceptance, WCAG 2.2 AA checks, frontend cleanup, independent review, roadmap
+history, and capability-first changelog are complete. Backend integration is a separate future track.
