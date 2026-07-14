@@ -1,0 +1,12 @@
+<div class="settings-row__label">
+	<strong [id]="labelId()">{{ label() }}</strong>
+	@if (description()) {
+		<p [id]="descriptionId()">{{ description() }}</p>
+	}
+</div>
+<div class="settings-row__control">
+	<ng-content />
+	@if (message()) {
+		<p [id]="messageId()" class="settings-row__message" [class.settings-row__message--error]="invalid()" [attr.role]="invalid() ? 'alert' : null">{{ message() }}</p>
+	}
+</div>

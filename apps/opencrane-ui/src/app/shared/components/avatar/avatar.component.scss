@@ -1,0 +1,17 @@
+:host {
+	display: inline-flex;
+}
+
+:host ::ng-deep .avatar {
+	width: var(--avatar-size);
+	height: var(--avatar-size);
+	background: #2a5c9a;
+	color: #fff;
+	font-size: calc(var(--avatar-size) * 0.36);
+	font-weight: 600;
+}
+
+:host ::ng-deep .avatar[data-palette="1"] { background: var(--accent-green); }
+:host ::ng-deep .avatar[data-palette="2"] { background: var(--accent-red); }
+:host ::ng-deep .avatar[data-palette="3"] { background: var(--accent-amber); }
+:host ::ng-deep .avatar[data-palette="4"] { background: #6a2a9a; }

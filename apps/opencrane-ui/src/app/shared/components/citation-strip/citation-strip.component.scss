@@ -1,0 +1,25 @@
+.citation {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 6px;
+	padding: 8px 10px;
+	border: 1px solid var(--border-subtle);
+	border-radius: 7px;
+	background: var(--surface-card);
+	color: var(--text-secondary);
+	font-size: 0.75rem;
+
+	&__type,
+	&__status {
+		padding: 2px 5px;
+		border-radius: 4px;
+		background: var(--tag-retrieval-bg);
+		color: #08798d;
+		font-weight: 600;
+	}
+
+	code {
+		font-family: var(--font-mono);
+	}
+}

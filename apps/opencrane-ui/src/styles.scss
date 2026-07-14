@@ -2,15 +2,21 @@
  * (Usability design guides). PrimeNG theming is provided through the Aura
  * preset in app.config.ts; these tokens drive the editorial "paper" look. */
 
-@import "./fonts/opencrane-fonts.css";
+@import "@fontsource/dm-sans/300.css";
+@import "@fontsource/dm-sans/400.css";
+@import "@fontsource/dm-sans/500.css";
+@import "@fontsource/dm-sans/600.css";
+@import "@fontsource/dm-sans/700.css";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
 @import "primeicons/primeicons.css";
 
 :root {
 	/* Typography */
 	--font-size: 15px;
-	--font-sans: "Inter", system-ui, sans-serif;
-	--font-serif: "Lora", Georgia, serif;
-	--font-mono: "Geist Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--font-sans: "DM Sans", system-ui, sans-serif;
+	--font-serif: "DM Sans", system-ui, sans-serif;
+	--font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 	--font-weight-normal: 400;
 	--font-weight-medium: 500;
 
@@ -36,6 +42,60 @@
 	--switch-background: #c5c1b8;
 	--ring: #c84b31;
 	--radius: 0.25rem;
+	--surface-app: #1a1918;
+	--surface-sidebar-secondary: #2a2826;
+	--surface-content: #f3f0ea;
+	--surface-card: #ffffff;
+	--surface-row-alt: #f8f5ef;
+	--surface-panel: var(--surface-card);
+	--surface-settings-nav: #ebe8e2;
+	--surface-sidebar: var(--surface-app);
+	--border-default: #dedad2;
+	--border-subtle: #e8e5de;
+	--text-primary: #1a1918;
+	--text-secondary: #6a6660;
+	--text-muted: #9a9690;
+	--text-faint: #b0ada8;
+	--text-sidebar-active: #ffffff;
+	--text-sidebar-inactive: #938f8b;
+	--text-sidebar-meta: #938f8b;
+	--text-sidebar-section: #938f8b;
+	--text-sidebar-footer: #cccccc;
+	--accent-teal: #0db5cc;
+	--accent-teal-hover: #08798d;
+	--accent-orange: #f47920;
+	--accent-red: #c1392b;
+	--accent-blue: #2a5c9a;
+	--accent-green: #2a7d4f;
+	--accent-amber: #9a6b2a;
+	--action-primary: var(--accent-teal);
+	--action-primary-hover: var(--accent-teal-hover);
+	--activity: var(--accent-orange);
+	--danger: var(--accent-red);
+	--danger-on-dark: #ff8d82;
+	--success: var(--accent-green);
+	--warning: var(--accent-amber);
+	--scope-org-bg: #e8e8e4;
+	--scope-dept-bg: #fef0d0;
+	--scope-project-bg: #e0f0e8;
+	--scope-personal-bg: #fce8e4;
+	--tag-retrieval-bg: #ddeeff;
+	--tag-policy-bg: #fef0d0;
+	--tag-action-bg: #d8f0e4;
+	--role-admin-bg: #ddeeff;
+	--role-member-bg: #d8f0e4;
+	--role-viewer-bg: #f0e8d0;
+	--status-connected: #22c55e;
+	--status-disconnected: #77736f;
+	--toggle-on: var(--accent-teal);
+	--toggle-off: #cec9c3;
+	--scrollbar-thumb: #d0cdc8;
+	--focus-ring: 0 0 0 3px rgba(13, 181, 204, 0.35);
+	--app-sidebar-width: 192px;
+	--settings-nav-width: 200px;
+	--chat-max-width: 700px;
+	--toggle-width: 44px;
+	--toggle-height: 24px;
 
 	/* Dark sidebar rail */
 	--wo-sidebar-bg: #1e1c19;
@@ -71,6 +131,23 @@ body {
 	font-size: var(--font-size);
 	background: var(--background);
 	color: var(--foreground);
+}
+
+:focus-visible {
+	outline: 2px solid var(--action-primary);
+	outline-offset: 2px;
+	box-shadow: var(--focus-ring);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+	}
 }
 
 * {

@@ -1,0 +1,20 @@
+.section-header {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 24px;
+	margin-bottom: 28px;
+
+	h1 {
+		margin: 0;
+		font-size: 1.625rem;
+		font-weight: 600;
+		letter-spacing: -0.5px;
+	}
+
+	p {
+		margin: 6px 0 0;
+		color: var(--text-muted);
+		font-size: 0.875rem;
+	}
+}

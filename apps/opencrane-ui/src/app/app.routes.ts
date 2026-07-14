@@ -1,7 +1,19 @@
-import { Routes } from "@angular/router";
+import { inject } from "@angular/core";
+import { ActivatedRouteSnapshot, CanActivateFn, GuardResult, MaybeAsync, RouterStateSnapshot, Routes } from "@angular/router";
 
-import { ___FirstRunGuard } from "./first-run.guard";
-import { ___OperatorAccessGuard } from "./operator-access.guard";
+import { UI_ACCESS_GUARD, UI_FIRST_RUN_GUARD } from "./core/state/ui-data-source.tokens.js";
+
+/** Delegates authenticated tenant access to the currently registered provider token. */
+const _accessGuard: CanActivateFn = function _AccessGuard(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): MaybeAsync<GuardResult>
+{
+	return inject(UI_ACCESS_GUARD)(route, state);
+};
+
+/** Delegates first-run access to the currently registered provider token. */
+const _firstRunGuard: CanActivateFn = function _FirstRunGuard(route: ActivatedRouteSnapshot, state: RouterStateSnapshot): MaybeAsync<GuardResult>
+{
+	return inject(UI_FIRST_RUN_GUARD)(route, state);
+};
 
 /** Top-level route table; feature pages are lazy-loaded route containers. */
 export const APP_ROUTES: Routes =
@@ -33,7 +45,7 @@ export const APP_ROUTES: Routes =
 	{
 		// First-run onboarding (OPS.1). Reached directly or via the first-run guard.
 		path: "welcome",
-		canActivate: [___OperatorAccessGuard],
+		canActivate: [_accessGuard],
 		loadChildren: function loadWelcomeRoutes()
 		{
 			return import("@opencrane/features/welcome").then(function pickWelcomeRoutes(m)
@@ -45,7 +57,7 @@ export const APP_ROUTES: Routes =
 	{
 		// Customer-admin console (OPS.4) — gated in-component on the customerAdmin capability.
 		path: "customer-admin",
-		canActivate: [___OperatorAccessGuard],
+		canActivate: [_accessGuard],
 		loadChildren: function loadCustomerAdminRoutes()
 		{
 			return import("@opencrane/features/customer-admin").then(function pickCustomerAdminRoutes(m)
@@ -58,7 +70,7 @@ export const APP_ROUTES: Routes =
 		// MCP admin console (catalogue governance + access policy). Each screen
 		// gates in-component on the customerAdmin capability.
 		path: "admin",
-		canActivate: [___OperatorAccessGuard],
+		canActivate: [_accessGuard],
 		loadChildren: function loadMcpAdminRoutes()
 		{
 			return import("@opencrane/features/tools").then(function pickMcpAdminRoutes(m)
@@ -72,10 +84,10 @@ export const APP_ROUTES: Routes =
 		// (session / settings) in its router-outlet. Gated by the access guard
 		// (auth + tenant present), then the first-run guard.
 		path: "",
-		canActivate: [___OperatorAccessGuard, ___FirstRunGuard],
+		canActivate: [_accessGuard, _firstRunGuard],
 		loadChildren: function loadWorkspaceRoutes()
 		{
-			return import("@opencrane/features/workspace").then(function pickWorkspaceRoutes(m)
+			return import("./features/workspace/workspace.routes.js").then(function pickWorkspaceRoutes(m)
 			{
 				return m.WORKSPACE_ROUTES;
 			});

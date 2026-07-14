@@ -8,6 +8,11 @@
 		"scope:app",
 		"type:app"
 	],
+	"cli": {
+		"cache": {
+			"enabled": false
+		}
+	},
 	"targets": {
 		"build": {
 			"executor": "@angular-devkit/build-angular:application",
@@ -36,6 +41,17 @@
 				]
 			},
 			"configurations": {
+				"mock": {
+					"optimization": false,
+					"extractLicenses": false,
+					"sourceMap": true,
+					"fileReplacements": [
+						{
+							"replace": "apps/opencrane-ui/src/app/core/state/ui-data.providers.ts",
+							"with": "apps/opencrane-ui/src/app/core/state/ui-data.providers.mock.ts"
+						}
+					]
+				},
 				"production": {
 					"budgets": [
 						{
@@ -86,6 +102,9 @@
 				]
 			},
 			"configurations": {
+				"mock": {
+					"buildTarget": "opencrane-ui:build:mock"
+				},
 				"production": {
 					"buildTarget": "opencrane-ui:build:production"
 				},
@@ -98,6 +117,18 @@
 				}
 			},
 			"defaultConfiguration": "development"
+		},
+		"lint": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "ngc -p apps/opencrane-ui/tsconfig.lint.json"
+			}
+		},
+		"test": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "vitest run --config apps/opencrane-ui/vitest.config.ts"
+			}
 		}
 	}
 }

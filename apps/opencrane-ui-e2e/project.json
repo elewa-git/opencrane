@@ -1,0 +1,23 @@
+{
+	"name": "opencrane-ui-e2e",
+	"$schema": "../../node_modules/nx/schemas/project-schema.json",
+	"projectType": "application",
+	"sourceRoot": "apps/opencrane-ui-e2e/src",
+	"tags": ["scope:app", "type:e2e"],
+	"targets": {
+		"e2e": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "playwright test --grep-invert @visual",
+				"cwd": "apps/opencrane-ui-e2e"
+			}
+		},
+		"visual": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "playwright test --grep @visual",
+				"cwd": "apps/opencrane-ui-e2e"
+			}
+		}
+	}
+}

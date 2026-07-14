@@ -1,0 +1,9 @@
+<aside class="citation" [attr.aria-label]="'Citation: ' + citation().title">
+	<span class="citation__type">{{ citation().type }}</span>
+	<strong>{{ citation().title }}</strong>
+	<span>{{ citation().scope }}</span>
+	<code>{{ citation().source }}</code>
+	@if (citation().status) {
+		<span class="citation__status">{{ citation().status }}</span>
+	}
+</aside>

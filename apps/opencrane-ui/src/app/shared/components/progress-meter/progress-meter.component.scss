@@ -1,0 +1,19 @@
+.meter {
+	display: grid;
+	gap: 5px;
+	color: var(--text-secondary);
+	font-size: 0.75rem;
+
+	::ng-deep .p-progressbar {
+		height: var(--meter-height);
+		background: #e9e6df;
+	}
+
+	::ng-deep .p-progressbar-value {
+		background: var(--success);
+	}
+
+	&--warning ::ng-deep .p-progressbar-value {
+		background: var(--danger);
+	}
+}

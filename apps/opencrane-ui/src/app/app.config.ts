@@ -4,7 +4,6 @@ import { provideAnimationsAsync } from "@angular/platform-browser/animations/asy
 import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
-import { WeOwnAiPreset } from "@opencrane/core";
 import { CONVERSATION_CACHE, PLATFORM_SURFACE } from "@opencrane/state/core";
 import { IndexedDbConversationCache } from "@opencrane/state/conversation/cache";
 import { UserTenantStore } from "@opencrane/state/tenant/adapter";
@@ -12,8 +11,9 @@ import { LOCAL_STORAGE_GATEWAY, SESSION_STORAGE_GATEWAY, WebLocalStorageAdapter,
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
 import { provideWebPlatform } from "@opencrane/platform";
 
-import { environment } from "../environments/environment";
-import { APP_ROUTES } from "./app.routes";
+import { APP_ROUTES } from "./app.routes.js";
+import { UI_DATA_PROVIDERS } from "./core/state/ui-data.providers.js";
+import { OpenCranePreset } from "./core/theme/opencrane-preset.js";
 
 /**
  * Root application configuration for the WeOwnAI frontend.
@@ -31,7 +31,8 @@ export const appConfig: ApplicationConfig =
 		provideRouter(APP_ROUTES, withComponentInputBinding()),
 		provideHttpClient(withFetch()),
 		provideAnimationsAsync(),
-		providePrimeNG({ theme: { preset: WeOwnAiPreset } }),
+		providePrimeNG({ theme: { preset: OpenCranePreset } }),
+		...UI_DATA_PROVIDERS,
 		provideWebPlatform(),
 		{ provide: LOCAL_STORAGE_GATEWAY, useClass: WebLocalStorageAdapter },
 		{ provide: SESSION_STORAGE_GATEWAY, useClass: WebSessionStorageAdapter },

@@ -1,0 +1,11 @@
+<header class="section-header">
+	<div>
+		<h1>{{ title() }}</h1>
+		@if (subtitle() || count()) {
+			<p>{{ subtitle() }} @if (count()) { <span>{{ count() }}</span> }</p>
+		}
+	</div>
+	@if (actionLabel()) {
+		<p-button [label]="actionLabel()" [disabled]="actionDisabled()" (onClick)="action.emit()" />
+	}
+</header>

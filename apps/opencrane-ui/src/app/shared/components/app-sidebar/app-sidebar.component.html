@@ -1,0 +1,82 @@
+<aside class="app-sidebar" aria-label="Application navigation">
+	<header class="app-sidebar__header">
+		<span class="app-sidebar__wordmark">Open<span>Crane</span></span>
+		<button type="button" class="app-sidebar__new" (click)="newSessionRequested.emit()">
+			<span aria-hidden="true">＋</span> New session
+		</button>
+	</header>
+
+	<nav class="app-sidebar__navigation" aria-label="Sessions">
+		@if (loading())
+		{
+			<p class="app-sidebar__status" role="status">Loading sessions…</p>
+		}
+		@else if (error())
+		{
+			<p class="app-sidebar__status app-sidebar__status--error" role="alert">{{ error() }}</p>
+		}
+		@else
+		{
+			<section aria-labelledby="owned-session-heading">
+				<h2 id="owned-session-heading">My sessions</h2>
+				@if (ownedSessions().length === 0)
+				{
+					<p class="app-sidebar__status">No sessions yet</p>
+				}
+				@for (session of ownedSessions(); track session.id)
+				{
+					<button
+						type="button"
+						class="app-sidebar__session"
+						[class.app-sidebar__session--selected]="selectedSessionId() === session.id"
+						[attr.aria-current]="selectedSessionId() === session.id ? 'page' : null"
+						(click)="sessionSelected.emit(session.id)"
+					>
+						<span class="app-sidebar__session-copy">
+							<strong>{{ session.title }}</strong>
+							<small>{{ session.scope }}</small>
+						</span>
+						@if (session.active) { <span class="app-sidebar__activity" aria-label="Active"></span> }
+						@if (session.unread) { <span class="app-sidebar__unread" [attr.aria-label]="session.unread + ' unread'">{{ session.unread }}</span> }
+					</button>
+				}
+			</section>
+
+			<section aria-labelledby="shared-session-heading">
+				<h2 id="shared-session-heading">Shared</h2>
+				@if (sharedSessions().length === 0)
+				{
+					<p class="app-sidebar__status">No shared sessions</p>
+				}
+				@for (session of sharedSessions(); track session.id)
+				{
+					<button type="button" class="app-sidebar__session" (click)="sessionSelected.emit(session.id)">
+						<span class="app-sidebar__session-copy">
+							<strong>{{ session.title }}</strong>
+							<small>{{ session.scope }}</small>
+						</span>
+						@if (session.unread) { <span class="app-sidebar__unread" [attr.aria-label]="session.unread + ' unread'">{{ session.unread }}</span> }
+					</button>
+				}
+			</section>
+		}
+	</nav>
+
+	<button
+		type="button"
+		class="app-sidebar__settings"
+		[class.app-sidebar__settings--active]="settingsActive()"
+		[attr.aria-current]="settingsActive() ? 'page' : null"
+		(click)="settingsRequested.emit()"
+	>
+		<span aria-hidden="true">⚙</span> Settings
+	</button>
+
+	<footer class="app-sidebar__footer">
+		<oc-avatar [initials]="identity().initials" [label]="identity().name" [size]="28" />
+		<span>
+			<strong>{{ identity().name }}</strong>
+			<small>{{ identity().handle }} · {{ identity().department }}</small>
+		</span>
+	</footer>
+</aside>

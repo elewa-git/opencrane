@@ -1,0 +1,17 @@
+<div class="toggle-field">
+	<div>
+		<label [id]="labelId()" [for]="fieldId()"><strong>{{ label() }}</strong></label>
+		@if (description()) { <p>{{ description() }}</p> }
+	</div>
+	<label class="toggle-field__control" [for]="fieldId()">
+		<p-toggleswitch
+			[ngModel]="checked()"
+			[inputId]="fieldId()"
+			[ariaLabelledBy]="labelId()"
+			[pt]="inputAttributes()"
+			[disabled]="disabled() || pending()"
+			(ngModelChange)="checkedChange.emit($event)"
+		/>
+	</label>
+</div>
+@if (error()) { <p class="toggle-field__error" [id]="errorId()" role="alert">{{ error() }}</p> }

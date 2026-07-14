@@ -1,0 +1,37 @@
+.toggle-field {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 16px;
+
+	strong {
+		font-size: 0.875rem;
+		font-weight: 500;
+	}
+
+	p {
+		margin: 3px 0 0;
+		color: var(--text-muted);
+		font-size: 0.78rem;
+	}
+
+}
+
+.toggle-field__control {
+	display: flex;
+	align-items: center;
+	min-width: 44px;
+	min-height: 44px;
+	cursor: pointer;
+
+	::ng-deep .p-toggleswitch {
+		width: 44px;
+		height: 24px;
+	}
+}
+
+.toggle-field__error {
+	margin: 6px 0 0;
+	color: var(--danger);
+	font-size: 0.75rem;
+}

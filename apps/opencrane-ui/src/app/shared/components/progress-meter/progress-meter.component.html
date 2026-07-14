@@ -1,0 +1,4 @@
+<div class="meter" [class.meter--warning]="percentage() >= warningThreshold()" [style.--meter-height.px]="height()">
+	<p-progressbar [value]="percentage()" [showValue]="false" [attr.aria-label]="label()" />
+	<span>{{ used() }} of {{ limit() }} · {{ percentage() | number: '1.0-0' }}% @if (status()) { · {{ status() }} }</span>
+</div>
