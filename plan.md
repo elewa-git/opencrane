@@ -61,7 +61,7 @@ moves out to weownai.
 | [#152](https://github.com/italanta/opencrane/issues/152) — **Receive opencrane-ui frontend + org libs from weownai, relicense AGPL** | Land `apps/opencrane-ui` + org feature/state libs, fork shared foundation libs, chart-native frontend deploy, drop the opencrane-api OpenAPI pin | Lockstep with [weownai#38](https://github.com/italanta/WeOwnAI/issues/38); after weownai #41 lands so rendering ports wholesale. |
 | [#153](https://github.com/italanta/opencrane/issues/153) — **Adopt NX + diffuse opencrane-api into libs** | NX adoption, extract `src/core/` (40k LOC) into `libs/features/*`, per-feature migration ownership convention | After #151/#152 settle — don't refactor code mid-relocation. |
 | [#154](https://github.com/italanta/opencrane/issues/154) — **Plugin system research spike** | Plugin shape (backend module + frontend element + chart + manifest), install procedure, customisation line, hooks inventory, prove-the-seam plugins (skills, MCP, #129 harvesting, #130 awareness, billing, metrics) | Research anytime; design after #153. #129/#130 become prove-the-seam candidates. |
-| **Session + Settings design handoff** — issue pending | Implement the approved Angular handoff: shared readiness → concurrent Workspace/Session and Settings lanes → combined responsive/WCAG/live acceptance → legacy cleanup | Depends on #152 frontend receipt; both lanes start at one reviewed `UI_SHARED_READY_SHA`; no fixture-only mutations |
+| [PR #3](https://github.com/josphat-otieno/opencrane/pull/3) — **Session + Settings design handoff** | Implement the approved Angular handoff: shared readiness → concurrent Workspace/Session and Settings lanes → combined responsive/WCAG/live acceptance → legacy cleanup | Depends on #152 frontend receipt; both lanes start at one reviewed `UI_SHARED_READY_SHA`; no fixture-only mutations |
 
 #### Session + Settings handoff execution ledger
 
@@ -69,8 +69,8 @@ moves out to weownai.
 - Integration branch: `codex/ui-handoff-integration`
 - Current readiness PR branch: `codex/ui-handoff-readiness`
 - Readiness SHA: `unset until G1`
-- Evidence: `staged readiness artifacts; draft PR not yet created`
-- Blocker: `Track 0 is conditional/not ready; GitHub issue/PR creation also waits for coordinator CLI re-authentication`
+- Evidence: [draft PR #3](https://github.com/josphat-otieno/opencrane/pull/3)
+- Blocker: `Track 0 is conditional/not ready pending authorization repairs, live Gateway proof, CLI parity, and product-scope decisions`
 
 | Wave | Owner | Branch | Allowed paths | Depends on | Status | Evidence | Blocker |
 |---|---|---|---|---|---|---|---|
