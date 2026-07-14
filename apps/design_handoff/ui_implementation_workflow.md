@@ -22,14 +22,17 @@ this document owns sequencing, file ownership, commits, review gates, integratio
 - Resolve every Critical and High review finding before a wave or integration gate completes.
 - Use the `review` agent for a small slice and `review-loop` for multi-file or risky slices.
 
-## Current preflight condition
+## Preflight condition — resolved
 
-`apps/design_handoff/` is currently untracked. A second worktree created now would not contain the
-revised plan or this workflow.
+At initial authoring, `apps/design_handoff/` was untracked, so a second worktree would not have
+contained the revised plan or this workflow. The coordinator therefore could not launch concurrent
+worktrees from that local-only state.
 
-Before implementation begins, the coordinator must obtain approval for the handoff artifacts, commit
-the intended source-of-truth files on a `codex/` integration branch, and record that commit. Do not
-launch the concurrent worktrees from untracked local files.
+That stop condition is now resolved: the approved handoff sources were committed in
+`f07d74a790557955f9b70ae804a9120a1db2b08f` and are available from the remote branches. G0 is being
+reviewed through `codex/ui-handoff-readiness`; after merge, G0/G1 continue on
+`codex/ui-handoff-integration` as defined below. Concurrent lanes remain blocked until G1 records a
+reviewed `UI_SHARED_READY_SHA`.
 
 ## Concurrency model
 
