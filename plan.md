@@ -69,8 +69,8 @@ moves out to weownai.
 - Integration branch: `codex/ui-handoff-integration`
 - Current scope branch: `codex/ui-mock-scope`
 - Readiness SHA: `unset until G1`
-- Evidence: [approved and merged PR #3](https://github.com/josphat-otieno/opencrane/pull/3) plus the mock-scope review branch
-- Blocker: `mock-scope branch requires review and merge before G1 implementation starts`
+- Evidence: [approved and merged PR #3](https://github.com/josphat-otieno/opencrane/pull/3) and [mock-scope PR #4](https://github.com/josphat-otieno/opencrane/pull/4)
+- Blocker: `mock-scope PR #4 requires review and merge before G1 implementation starts`
 
 | Wave | Owner | Branch | Allowed paths | Depends on | Status | Evidence | Blocker |
 |---|---|---|---|---|---|---|---|
