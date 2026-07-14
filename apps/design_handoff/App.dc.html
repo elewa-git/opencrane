@@ -1,0 +1,984 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<template id="__bundler_thumbnail" data-bg-color="#1a1918">
+  <svg viewBox="0 0 120 80" xmlns="http://www.w3.org/2000/svg">
+    <rect width="120" height="80" fill="#1a1918"/>
+    <rect x="0" y="0" width="26" height="80" fill="#141312"/>
+    <rect x="30" y="10" width="84" height="60" rx="3" fill="#f5f2ec"/>
+    <rect x="36" y="18" width="52" height="4" rx="2" fill="#1a1918" opacity=".7"/>
+    <rect x="36" y="26" width="68" height="3" rx="1.5" fill="#1a1918" opacity=".2"/>
+    <rect x="36" y="32" width="62" height="3" rx="1.5" fill="#1a1918" opacity=".2"/>
+    <rect x="60" y="54" width="32" height="8" rx="3" fill="#1a1918" opacity=".8"/>
+    <circle cx="9" cy="70" r="5" fill="#2a5c9a"/>
+  </svg>
+</template>
+
+<helmet>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'DM Sans', system-ui, sans-serif; background: #1a1918; height: 100vh; overflow: hidden; color: #1a1918; }
+    input, select, button, textarea { font-family: inherit; }
+    textarea { resize: none; }
+    input[type=number]::-webkit-inner-spin-button { opacity: 1; }
+    ::placeholder { color: #b0ada8; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #d0cdc8; border-radius: 2px; }
+  </style>
+</helmet>
+
+<div style="display:flex;height:100vh;overflow:hidden">
+
+  <!-- ═══ SHARED SIDEBAR ═══ -->
+  <div style="width:192px;flex-shrink:0;background:#1a1918;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,.06)">
+    <div style="padding:14px 16px 12px;border-bottom:1px solid rgba(255,255,255,.05)">
+      <span style="font-size:14.5px;font-weight:600;color:#fff;letter-spacing:-.2px">Open<span style="color:#0db5cc">Crane</span></span>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:8px 6px">
+      <div style="padding:6px 10px;margin-bottom:2px;font-size:13px;color:#f47920;cursor:pointer;border-radius:5px;display:flex;align-items:center;gap:7px" onClick="{{ goToSession }}">
+        <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6 2v8M2 6h8"></path></svg>
+        New session
+      </div>
+      <div style="padding:5px 10px 3px;font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#3a3835;margin-top:6px">My Sessions</div>
+      <div style="padding:7px 10px;border-radius:6px;background:{{ activeSessionBg }};cursor:pointer;margin:1px 0" onClick="{{ goToSession }}">
+        <div style="display:flex;align-items:center;gap:7px">
+          <div style="width:6px;height:6px;border-radius:50%;background:#f47920;flex-shrink:0"></div>
+          <span style="font-size:13px;font-weight:500;color:#fff;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Q3 strategy draft</span>
+          <span style="font-size:10px;background:#f47920;color:#fff;padding:1px 5px;border-radius:3px;font-weight:600">2</span>
+        </div>
+        <div style="font-size:11px;color:#5a5855;margin-top:2px;padding-left:13px">Product</div>
+      </div>
+      <div style="padding:7px 10px;border-radius:5px;cursor:pointer;margin:1px 0" onClick="{{ goToSession }}">
+        <div style="font-size:13px;color:#7a7673;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">swift-harbour</div>
+        <div style="font-size:11px;color:#4a4845;margin-top:1px">Engineering</div>
+      </div>
+      <div style="padding:7px 10px;border-radius:5px;cursor:pointer;margin:1px 0" onClick="{{ goToSession }}">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <span style="font-size:13px;color:#7a7673">frame-orchard</span>
+          <span style="font-size:10px;background:#3a3835;color:#8a8682;padding:1px 5px;border-radius:3px">5</span>
+        </div>
+        <div style="font-size:11px;color:#4a4845;margin-top:1px">Product</div>
+      </div>
+      <div style="padding:5px 10px 3px;font-size:10px;font-weight:600;letter-spacing:.09em;text-transform:uppercase;color:#3a3835;margin-top:8px">Shared</div>
+      <div style="padding:7px 10px;border-radius:5px;cursor:pointer;margin:1px 0">
+        <div style="font-size:13px;color:#7a7673">weekly-tide</div>
+        <div style="font-size:11px;color:#4a4845;margin-top:1px">Marketing</div>
+      </div>
+      <div style="padding:7px 10px;border-radius:5px;cursor:pointer;margin:1px 0">
+        <div style="font-size:13px;color:#7a7673">lend-meadow</div>
+        <div style="font-size:11px;color:#4a4845;margin-top:1px">Finance</div>
+      </div>
+    </div>
+
+    <div style="border-top:1px solid rgba(255,255,255,.05)">
+      <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;color:{{ settingsLinkColor }};cursor:pointer" onClick="{{ goToSettings }}">
+        <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="7" cy="7" r="2"></circle><path d="M7 1v1.5M7 11.5V13M1 7h1.5M11.5 7H13M2.9 2.9l1.1 1.1M10 10l1.1 1.1M2.9 11.1L4 10M10 4l1.1-1.1"></path></svg>
+        <span style="font-size:13px">Settings</span>
+      </div>
+      <div style="padding:10px 12px;display:flex;align-items:center;gap:8px;border-top:1px solid rgba(255,255,255,.05)">
+        <div style="width:28px;height:28px;border-radius:50%;background:#2a5c9a;flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff">AK</div>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:12px;font-weight:500;color:#ccc;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Alex Kim</div>
+          <div style="font-size:10.5px;color:#4a4845">alex.oc · Product</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══ SESSION VIEW ═══ -->
+  <sc-if value="{{ isSession }}" hint-placeholder-val="{{ true }}">
+    <div style="flex:1;display:flex;flex-direction:column;background:#f5f2ec;overflow:hidden">
+      <div style="height:48px;padding:0 24px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e0ddd6;flex-shrink:0">
+        <div style="display:flex;align-items:center;gap:9px">
+          <span style="font-size:15px;font-weight:600;letter-spacing:-.2px">Q3 strategy draft</span>
+          <span style="font-size:11.5px;padding:2px 8px;border-radius:4px;background:#e8f0f8;color:#1d4d8a;font-weight:500">Product</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px">
+          <span style="font-size:12px;color:#9a9690;padding:3px 9px;border:1px solid #dedad2;border-radius:5px">sonnet-4-6</span>
+          <button style="background:transparent;border:1px solid #dedad2;border-radius:5px;padding:4px 10px;font-size:12.5px;color:#6a6660;cursor:pointer">Share</button>
+        </div>
+      </div>
+      <div id="oc-chat" style="flex:1;overflow-y:auto;padding:32px 0 12px">
+        <div style="max-width:700px;margin:0 auto;padding:0 24px">
+          <x-import component-from-global-scope="MessageList" from="./MessageList.jsx" messages="{{ messages }}" hint-size="100%,200px"></x-import>
+        </div>
+      </div>
+      <div style="padding:0 24px 20px;flex-shrink:0">
+        <div style="max-width:700px;margin:0 auto">
+          <div style="display:flex;align-items:flex-end;gap:10px;background:#fff;border:1px solid #d8d4cd;border-radius:12px;padding:10px 12px;box-shadow:0 1px 4px rgba(0,0,0,.06)">
+            <button style="background:transparent;border:none;padding:2px 3px;cursor:pointer;color:#b0ada8;flex-shrink:0;margin-bottom:1px">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M13.5 8a5.5 5.5 0 1 1-11 0 5.5 5.5 0 0 1 11 0z"></path><path d="M8 5.5v5M5.5 8h5"></path></svg>
+            </button>
+            <textarea id="oc-input" rows="1" placeholder="Message this session…" onKeyDown="{{ onKeyDown }}" style="flex:1;border:none;outline:none;font-size:14.5px;color:#1a1918;background:transparent;line-height:1.55;max-height:140px;overflow-y:auto;padding:1px 0"></textarea>
+            <button style="background:#0db5cc;border:none;border-radius:7px;padding:6px 9px;cursor:pointer;flex-shrink:0;margin-bottom:1px" onClick="{{ send }}">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 7H2M8 3l4 4-4 4"></path></svg>
+            </button>
+          </div>
+          <div style="text-align:center;margin-top:7px;font-size:11.5px;color:#b0ada8">contract v2.3.1 · org · dept · project · <span style="color:#f47920;font-weight:600">personal</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ═══ SETTINGS VIEW ═══ -->
+  <sc-if value="{{ isSettings }}" hint-placeholder-val="{{ false }}">
+    <div style="flex:1;display:flex;overflow:hidden">
+
+      <!-- Settings Nav -->
+      <div style="width:200px;flex-shrink:0;background:#ebe8e2;border-right:1px solid #dedad2;display:flex;flex-direction:column">
+        <div style="padding:16px 16px 10px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:#9a9690">Settings</div>
+        <div style="margin:0 10px 12px;display:flex;background:#dedad3;border-radius:7px;padding:3px;gap:2px">
+          <div style="flex:1;text-align:center;padding:5px 6px;font-size:12px;font-weight:{{ wsTabWeight }};border-radius:5px;cursor:pointer;background:{{ wsTabBg }};color:{{ wsTabColor }};box-shadow:{{ wsTabShadow }}" onClick="{{ setWsTab }}">Workspace</div>
+          <div style="flex:1;text-align:center;padding:5px 6px;font-size:12px;font-weight:{{ pTabWeight }};border-radius:5px;cursor:pointer;background:{{ pTabBg }};color:{{ pTabColor }};box-shadow:{{ pTabShadow }}" onClick="{{ setPersonalTab }}">Personal</div>
+        </div>
+        <div style="flex:1;overflow-y:auto;padding:0 8px 12px;display:flex;flex-direction:column;gap:1px">
+          <sc-for list="{{ nav }}" as="item" hint-placeholder-count="6">
+            <div style="display:flex;align-items:center;gap:9px;padding:7px 10px;border-radius:6px;cursor:pointer;font-size:13.5px;background:{{ item.bg }};color:{{ item.color }};font-weight:{{ item.fw }};box-shadow:{{ item.shadow }}" onClick="{{ item.onClick }}">
+              {{ item.iconEl }}
+              <span>{{ item.label }}</span>
+            </div>
+          </sc-for>
+        </div>
+        <div style="margin:0 10px 12px;padding:7px 10px;background:rgba(0,0,0,.05);border-radius:6px">
+          <div style="font-size:10.5px;color:#8a8682">♾ self-hosted · data sovereign</div>
+        </div>
+      </div>
+
+      <!-- Settings Content -->
+      <div style="flex:1;overflow-y:auto;background:#f3f0ea;padding:40px 52px 72px">
+
+        <!-- POD -->
+        <sc-if value="{{ showPod }}" hint-placeholder-val="{{ true }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">Pod</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:32px">Your isolated OpenCrane instance.</div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:start">
+              <div><div style="font-size:14px;font-weight:500">Pod ID</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Read-only. Assigned by operator.</div></div>
+              <div style="font-family:'DM Mono',monospace;font-size:13px;color:#6a6660;padding-top:2px">elewa-default</div>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div style="font-size:14px;font-weight:500">Display name</div>
+              <input type="text" value="Elewa Group workspace" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;color:#1a1918;outline:none;width:100%;max-width:340px" />
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:start">
+              <div><div style="font-size:14px;font-weight:500">OpenCrane version</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Pin to a version or track latest.</div></div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <input type="text" value="2026.3.15" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13px;font-family:'DM Mono',monospace;background:#fff;color:#1a1918;outline:none;width:130px" />
+                <span style="font-size:12.5px;color:#9a9690">latest: 2026.5.28</span>
+              </div>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:start">
+              <div><div style="font-size:14px;font-weight:500">Storage</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Encrypted GCS. Operator cannot read.</div></div>
+              <div>
+                <div style="font-family:'DM Mono',monospace;font-size:12px;color:#6a6660;margin-bottom:10px">alex-oc-storage.elewa.ke.internal</div>
+                <div style="display:flex;gap:24px">
+                  <div><div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Used</div><div style="font-size:16px;font-weight:600">2.3 GB</div></div>
+                  <div><div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Quota</div><div style="font-size:16px;font-weight:600">20 GB</div></div>
+                  <div><div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.07em;font-weight:600;margin-bottom:3px">Encrypted</div><div style="font-size:16px;font-weight:600">AES-256</div></div>
+                </div>
+              </div>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div><div style="font-size:14px;font-weight:500">Auto-update</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Apply patch updates automatically.</div></div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:44px;height:24px;border-radius:12px;cursor:pointer;position:relative;background:{{ auBg }};flex-shrink:0" onClick="{{ toggleAu }}">
+                  <div style="width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:2px;left:{{ auX }};box-shadow:0 1px 3px rgba(0,0,0,.18)"></div>
+                </div>
+                <span style="font-size:13.5px;color:#6a6660">{{ auLabel }}</span>
+              </div>
+            </div>
+            <div style="margin-top:28px;display:flex;justify-content:flex-end">
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- MEMBERS -->
+        <sc-if value="{{ showMembers }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+              <div>
+                <div style="font-size:26px;font-weight:600;letter-spacing:-.5px">Members</div>
+                <div style="font-size:14px;color:#8a8682;margin-top:4px">Workspace access. <span style="color:{{ memberCountColor }};font-weight:500">{{ memberCount }} of {{ memberLimit }}</span> seats used.</div>
+              </div>
+              <button style="background:{{ inviteBg }};color:{{ inviteColor }};border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:{{ inviteCursor }};margin-top:4px;flex-shrink:0">+ Invite member</button>
+            </div>
+            <div style="display:flex;border-bottom:1px solid #dedad2;margin:20px 0 24px">
+              <div style="padding:8px 0;margin-right:22px;font-size:13.5px;font-weight:{{ peopleTabWeight }};color:{{ peopleTabColor }};border-bottom:{{ peopleTabBorder }};cursor:pointer" onClick="{{ setSubTabPeople }}">People</div>
+              <div style="padding:8px 0;margin-right:22px;font-size:13.5px;font-weight:{{ structureTabWeight }};color:{{ structureTabColor }};border-bottom:{{ structureTabBorder }};cursor:pointer" onClick="{{ setSubTabStructure }}">Teams &amp; Org</div>
+            </div>
+            <sc-if value="{{ showPeopleTab }}" hint-placeholder-val="{{ true }}">
+              <div>
+                <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+                  <div style="display:grid;grid-template-columns:32px 1fr 90px 200px 72px;align-items:center;gap:14px;padding:12px 0;border-bottom:1px solid #e8e5de">
+                    <div style="width:32px;height:32px;border-radius:50%;background:{{ m.avatarBg }};display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;flex-shrink:0">{{ m.avatar }}</div>
+                    <div>
+                      <div style="font-size:13.5px;font-weight:500">{{ m.name }}</div>
+                      <div style="font-size:12px;color:#9a9690;margin-top:1px">{{ m.email }}</div>
+                    </div>
+                    <div><span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:{{ m.roleBg }};color:{{ m.roleColor }};font-weight:500">{{ m.role }}</span></div>
+                    <div>
+                      <div style="display:flex;justify-content:space-between;margin-bottom:5px">
+                        <span style="font-size:12px;color:#6a6660">${{ m.used }} used</span>
+                        <span style="font-size:12px;color:#9a9690">of ${{ m.budget }}</span>
+                      </div>
+                      <div style="height:4px;background:#dedad2;border-radius:2px;overflow:hidden">
+                        <div style="height:100%;width:{{ m.barW }};background:{{ m.barColor }};border-radius:2px"></div>
+                      </div>
+                    </div>
+                    <div style="display:flex;justify-content:flex-end">
+                      <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:4px 10px;font-size:12px;color:#6a6660;cursor:pointer">Edit</button>
+                    </div>
+                  </div>
+                </sc-for>
+              </div>
+            </sc-if>
+            <sc-if value="{{ showStructureTab }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                  <div style="font-size:14.5px;font-weight:600">Departments &amp; Teams</div>
+                  <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:5px 12px;font-size:12.5px;color:#1a1918;cursor:pointer">+ New department</button>
+                </div>
+                <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden;margin-bottom:28px">
+                  <div style="display:grid;grid-template-columns:1fr 72px 80px 72px;gap:12px;padding:10px 16px;border-bottom:1px solid #e8e5de;background:#f8f5ef">
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Name</div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Teams</div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Members</div>
+                    <div></div>
+                  </div>
+                  <sc-for list="{{ orgRows }}" as="row" hint-placeholder-count="7">
+                    <sc-if value="{{ row.isDept }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;grid-template-columns:1fr 72px 80px 72px;gap:12px;align-items:center;padding:11px 16px;border-bottom:1px solid #e8e5de;background:#fdfcfa">
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="#9a9690" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 4l4 4 4-4"></path></svg>
+                          <span style="font-size:13.5px;font-weight:600">{{ row.name }}</span>
+                        </div>
+                        <div style="font-size:13px;color:#6a6660">{{ row.teamCount }}</div>
+                        <div style="font-size:13px;color:#6a6660">{{ row.memberCount }}</div>
+                        <div style="display:flex;justify-content:flex-end">
+                          <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:3px 9px;font-size:12px;color:#6a6660;cursor:pointer" onClick="{{ row.onEdit }}">Edit</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                    <sc-if value="{{ row.isTeam }}" hint-placeholder-val="{{ false }}">
+                      <div style="display:grid;grid-template-columns:1fr 72px 80px 72px;gap:12px;align-items:center;padding:9px 16px 9px 40px;border-bottom:1px solid #f0ede8">
+                        <div style="display:flex;align-items:center;gap:8px">
+                          <svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M2 5h6M5 2l3 3-3 3"></path></svg>
+                          <span style="font-size:13px;color:#3a3835">{{ row.name }}</span>
+                        </div>
+                        <div style="font-size:12.5px;color:#ccc">—</div>
+                        <div style="font-size:12.5px;color:#9a9690">{{ row.memberCount }}</div>
+                        <div style="display:flex;justify-content:flex-end">
+                          <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:3px 9px;font-size:12px;color:#6a6660;cursor:pointer" onClick="{{ row.onEdit }}">Edit</button>
+                        </div>
+                      </div>
+                    </sc-if>
+                  </sc-for>
+                  <div style="padding:10px 16px 10px 40px;border-top:1px solid #f0ede8">
+                    <button style="background:transparent;border:none;font-size:13px;color:#0db5cc;cursor:pointer;padding:0">+ New team</button>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+                  <div>
+                    <div style="font-size:14.5px;font-weight:600">Projects</div>
+                    <div style="font-size:12.5px;color:#9a9690;margin-top:2px">Independent of departments. Can span multiple teams.</div>
+                  </div>
+                  <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:5px 12px;font-size:12.5px;color:#1a1918;cursor:pointer;flex-shrink:0;margin-left:16px">+ New project</button>
+                </div>
+                <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+                  <div style="display:grid;grid-template-columns:1fr 72px 80px 88px 72px;gap:12px;padding:10px 16px;border-bottom:1px solid #e8e5de;background:#f8f5ef">
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Project</div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Teams</div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Members</div>
+                    <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Status</div>
+                    <div></div>
+                  </div>
+                  <sc-for list="{{ projects }}" as="proj" hint-placeholder-count="3">
+                    <div style="display:grid;grid-template-columns:1fr 72px 80px 88px 72px;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid #f0ede8">
+                      <div style="font-size:13.5px;font-weight:500">{{ proj.name }}</div>
+                      <div style="font-size:13px;color:#6a6660">{{ proj.teamCount }}</div>
+                      <div style="font-size:13px;color:#6a6660">{{ proj.memberCount }}</div>
+                      <div><span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:{{ proj.statusBg }};color:{{ proj.statusColor }};font-weight:500">{{ proj.statusLabel }}</span></div>
+                      <div style="display:flex;justify-content:flex-end">
+                        <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:3px 9px;font-size:12px;color:#6a6660;cursor:pointer" onClick="{{ proj.onOpen }}">Open</button>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+        <!-- BUDGETS -->
+        <sc-if value="{{ showBudgets }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">Budgets</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:28px">Monthly spend limits and model routing strategy.</div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;padding:20px 24px;margin-bottom:28px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:24px">
+              <div>
+                <div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px">Org monthly spend</div>
+                <div style="font-size:28px;font-weight:600;letter-spacing:-.6px">${{ orgTotal }}</div>
+                <div style="font-size:12px;color:#9a9690;margin-top:3px">of ${{ orgBudget }} allocated</div>
+              </div>
+              <div>
+                <div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:8px">Routing strategy</div>
+                <select style="border:1px solid #d0cdc6;border-radius:6px;padding:7px 10px;font-size:13.5px;background:#fff;color:#1a1918;outline:none;width:100%;cursor:pointer">
+                  <option>Cost-optimised</option><option>Quality-first</option><option>Balanced</option>
+                </select>
+              </div>
+              <div>
+                <div style="font-size:10.5px;color:#9a9690;text-transform:uppercase;letter-spacing:.08em;font-weight:600;margin-bottom:6px">Resets</div>
+                <div style="font-size:15px;font-weight:500">Jul 1, 2026</div>
+                <div style="font-size:12px;color:#9a9690;margin-top:2px">Tracked via LiteLLM</div>
+              </div>
+            </div>
+            <div style="font-size:14.5px;font-weight:600;margin-bottom:12px">Per-member limits</div>
+            <div style="display:grid;grid-template-columns:1fr 130px 110px 110px 72px;gap:12px;padding:0 0 8px;border-bottom:1px solid #dedad2">
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Member</div>
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Monthly limit</div>
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Spent</div>
+              <div style="font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:#9a9690">Usage</div>
+              <div></div>
+            </div>
+            <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+              <div style="display:grid;grid-template-columns:1fr 130px 110px 110px 72px;gap:12px;align-items:center;padding:11px 0;border-bottom:1px solid #e8e5de">
+                <div style="display:flex;align-items:center;gap:9px">
+                  <div style="width:26px;height:26px;border-radius:50%;background:{{ m.avatarBg }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">{{ m.avatar }}</div>
+                  <div><div style="font-size:13.5px;font-weight:500">{{ m.name }}</div><div style="font-size:11.5px;color:#9a9690">{{ m.role }}</div></div>
+                </div>
+                <div style="display:flex;align-items:center;gap:4px">
+                  <span style="font-size:13px;color:#6a6660">$</span>
+                  <input type="number" value="{{ m.budget }}" style="border:1px solid #d0cdc6;border-radius:5px;padding:5px 8px;font-size:13px;background:#fff;color:#1a1918;outline:none;width:74px" />
+                </div>
+                <div style="font-size:13.5px;color:#6a6660">${{ m.used }}</div>
+                <div>
+                  <div style="height:4px;background:#dedad2;border-radius:2px;overflow:hidden;margin-bottom:4px">
+                    <div style="height:100%;width:{{ m.barW }};background:{{ m.barColor }};border-radius:2px"></div>
+                  </div>
+                  <div style="font-size:11.5px;color:#9a9690">{{ m.usedPct }}%</div>
+                </div>
+                <div style="text-align:right;font-size:12px;color:{{ m.statusColor }}">{{ m.statusLabel }}</div>
+              </div>
+            </sc-for>
+            <div style="margin-top:24px;display:flex;justify-content:flex-end">
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- SKILLS -->
+        <sc-if value="{{ showSkills }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px">
+              <div>
+                <div style="font-size:26px;font-weight:600;letter-spacing:-.5px">Skills</div>
+                <div style="font-size:14px;color:#8a8682;margin-top:4px">Install and configure workspace capabilities.</div>
+              </div>
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:4px;flex-shrink:0" onClick="{{ openMarketplace }}">Browse marketplace</button>
+            </div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+              <sc-for list="{{ skills }}" as="sk" hint-placeholder-count="4">
+                <div style="display:grid;grid-template-columns:1fr 80px 64px 52px;align-items:center;gap:14px;padding:14px 18px;border-bottom:{{ sk.rowBorder }}">
+                  <div><div style="font-size:14px;font-weight:500">{{ sk.name }}</div><div style="font-size:12px;color:#9a9690;margin-top:2px">{{ sk.category }} · v{{ sk.version }}</div></div>
+                  <span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:#f0ede8;color:#6a6660">{{ sk.category }}</span>
+                  <span style="font-family:'DM Mono',monospace;font-size:12px;color:#9a9690">{{ sk.version }}</span>
+                  <div style="width:44px;height:24px;border-radius:12px;cursor:pointer;position:relative;background:{{ sk.toggleBg }}" onClick="{{ sk.onToggle }}">
+                    <div style="width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:2px;left:{{ sk.toggleX }};box-shadow:0 1px 3px rgba(0,0,0,.15)"></div>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- CHANNELS -->
+        <sc-if value="{{ showChannels }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px">
+              <div>
+                <div style="font-size:26px;font-weight:600;letter-spacing:-.5px">Channels</div>
+                <div style="font-size:14px;color:#8a8682;margin-top:4px">Messaging surfaces your agents are reachable on.</div>
+              </div>
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:4px;flex-shrink:0" onClick="{{ openAddChannel }}">Add channel</button>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <sc-for list="{{ channels }}" as="ch" hint-placeholder-count="3">
+                <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;padding:16px 20px;display:grid;grid-template-columns:38px 1fr 140px 88px;align-items:center;gap:14px">
+                  <div style="width:36px;height:36px;border-radius:8px;background:#f0ede8;display:flex;align-items:center;justify-content:center;font-size:16px">{{ ch.icon }}</div>
+                  <div>
+                    <div style="font-size:14px;font-weight:500">{{ ch.name }}</div>
+                    <div style="font-size:12.5px;color:#9a9690;margin-top:2px;font-family:'DM Mono',monospace">{{ ch.handle }}</div>
+                  </div>
+                  <div style="display:flex;align-items:center;gap:7px">
+                    <div style="width:7px;height:7px;border-radius:50%;background:{{ ch.dotColor }};flex-shrink:0"></div>
+                    <span style="font-size:13px;color:#6a6660">{{ ch.statusLabel }}</span>
+                  </div>
+                  <div style="display:flex;justify-content:flex-end">
+                    <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:6px 13px;font-size:12.5px;color:#6a6660;cursor:pointer" onClick="{{ ch.onConfigure }}">Configure</button>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- DATA & NETWORK -->
+        <sc-if value="{{ showDatanet }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">Data &amp; Network</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:28px">Access controls, data governance, and egress rules.</div>
+            <div style="background:#1a1918;border-radius:10px;padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between">
+              <div>
+                <div style="font-size:14px;font-weight:500;color:#fff;margin-bottom:3px">Data sovereignty</div>
+                <div style="font-size:12.5px;color:#7a7672">All data processed and stored within your infrastructure boundary.</div>
+              </div>
+              <div style="display:flex;align-items:center;gap:7px;flex-shrink:0">
+                <div style="width:7px;height:7px;border-radius:50%;background:#22c55e"></div>
+                <span style="font-size:12.5px;color:#7a7672">self-hosted · AES-256</span>
+              </div>
+            </div>
+            <div style="font-size:14.5px;font-weight:600;margin-bottom:12px">Scope datasets</div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden;margin-bottom:24px">
+              <div style="padding:14px 18px;border-bottom:1px solid #e8e5de;display:flex;align-items:center;justify-content:space-between">
+                <div><div style="font-size:13.5px;font-weight:500">Company knowledge base</div><div style="font-size:12px;color:#9a9690;margin-top:2px">Cognee graph · 1,240 nodes · org scope</div></div>
+                <span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:#d8f0e4;color:#1a5c38;font-weight:500">Active</span>
+              </div>
+              <div style="padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+                <div><div style="font-size:13.5px;font-weight:500">Team playbooks</div><div style="font-size:12px;color:#9a9690;margin-top:2px">Cognee graph · 340 nodes · dept scope</div></div>
+                <span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:#d8f0e4;color:#1a5c38;font-weight:500">Active</span>
+              </div>
+            </div>
+            <div style="font-size:14.5px;font-weight:600;margin-bottom:6px">Egress allowlist</div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+              <div style="padding:12px 18px;border-bottom:1px solid #e8e5de;display:flex;align-items:center;justify-content:space-between"><code style="font-family:'DM Mono',monospace;font-size:13px">*.anthropic.com</code><span style="font-size:12px;color:#9a9690">AI provider</span></div>
+              <div style="padding:12px 18px;border-bottom:1px solid #e8e5de;display:flex;align-items:center;justify-content:space-between"><code style="font-family:'DM Mono',monospace;font-size:13px">*.googleapis.com</code><span style="font-size:12px;color:#9a9690">AI provider</span></div>
+              <div style="padding:12px 18px;border-bottom:1px solid #e8e5de;display:flex;align-items:center;justify-content:space-between"><code style="font-family:'DM Mono',monospace;font-size:13px">api.github.com</code><span style="font-size:12px;color:#9a9690">Skill: GitHub</span></div>
+              <div style="padding:12px 18px"><button style="background:transparent;border:none;font-size:13px;color:#0db5cc;cursor:pointer;padding:0">+ Add domain</button></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- AI PROVIDER KEYS -->
+        <sc-if value="{{ showApiKeys }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:28px">
+              <div>
+                <div style="font-size:26px;font-weight:600;letter-spacing:-.5px">AI Provider Keys</div>
+                <div style="font-size:14px;color:#8a8682;margin-top:4px">API keys for the model providers powering your workspace routing.</div>
+              </div>
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:4px;flex-shrink:0" onClick="{{ openAddProviderKey }}">Add provider key</button>
+            </div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+              <sc-for list="{{ apiKeys }}" as="k" hint-placeholder-count="3">
+                <div style="padding:16px 20px;border-bottom:{{ k.rowBorder }}">
+                  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+                    <div style="display:flex;align-items:center;gap:10px">
+                      <div style="font-size:14px;font-weight:600">{{ k.provider }}</div>
+                      <div style="width:7px;height:7px;border-radius:50%;background:#22c55e;flex-shrink:0"></div>
+                    </div>
+                    <button style="background:transparent;border:1px solid #f9c7b4;border-radius:5px;padding:4px 10px;font-size:12px;color:#c1392b;cursor:pointer">Remove</button>
+                  </div>
+                  <div style="font-size:12px;color:#9a9690;margin-bottom:8px">{{ k.models }}</div>
+                  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+                    <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:#6a6660;background:#f0ede8;padding:3px 8px;border-radius:4px">{{ k.key }}</code>
+                    <span style="font-size:12px;color:#9a9690">Added {{ k.added }}</span>
+                    <span style="font-size:12px;color:#9a9690">Used {{ k.lastUsed }}</span>
+                  </div>
+                </div>
+              </sc-for>
+            </div>
+            <div style="margin-top:14px;padding:12px 16px;background:#f8f5ef;border:1px solid #dedad2;border-radius:8px">
+              <div style="font-size:12.5px;color:#8a8682">Keys are stored encrypted and passed to LiteLLM at routing time. OpenCrane operators cannot read your keys.</div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- ACCOUNT -->
+        <sc-if value="{{ showAccount }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">Account</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:32px">Your personal profile and workspace preferences.</div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div style="font-size:14px;font-weight:500">Profile picture</div>
+              <div style="display:flex;align-items:center;gap:12px">
+                <div style="width:44px;height:44px;border-radius:50%;background:#2a5c9a;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:700;color:#fff">AK</div>
+                <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:7px 13px;font-size:13px;color:#1a1918;cursor:pointer">Change photo</button>
+              </div>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div style="font-size:14px;font-weight:500">Display name</div>
+              <input type="text" value="Alex Kim" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;color:#1a1918;outline:none;width:100%;max-width:340px" />
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:start">
+              <div><div style="font-size:14px;font-weight:500">Email</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Managed by ZITADEL IdP.</div></div>
+              <div style="padding-top:2px;font-size:13.5px;color:#6a6660">alex@elewa.ke</div>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div style="font-size:14px;font-weight:500">Role</div>
+              <span style="font-size:11.5px;padding:4px 10px;border-radius:4px;background:#e0f0e8;color:#1a5c38;font-weight:500;display:inline-block">member</span>
+            </div>
+            <div style="margin-top:24px;display:flex;justify-content:flex-end">
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- AWARENESS -->
+        <sc-if value="{{ showAwareness }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">Awareness</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:24px">How your pod queries Cognee knowledge datasets during the agentic loop.</div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div><div style="font-size:14px;font-weight:500">Fallback behaviour</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">When Cognee is unreachable mid-loop.</div></div>
+              <select style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;color:#1a1918;outline:none;max-width:280px;cursor:pointer">
+                <option>Proceed without context</option><option>Pause and notify</option><option>Abort session</option>
+              </select>
+            </div>
+            <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div><div style="font-size:14px;font-weight:500">Citation mode</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Require Cognee citations on grounded responses.</div></div>
+              <div style="display:flex;align-items:center;gap:10px">
+                <div style="width:44px;height:24px;border-radius:12px;cursor:pointer;position:relative;background:{{ ctBg }};flex-shrink:0" onClick="{{ toggleCt }}">
+                  <div style="width:20px;height:20px;background:#fff;border-radius:50%;position:absolute;top:2px;left:{{ ctX }};box-shadow:0 1px 3px rgba(0,0,0,.18)"></div>
+                </div>
+                <span style="font-size:13.5px;color:#6a6660">{{ ctLabel }}</span>
+              </div>
+            </div>
+            <div style="padding:17px 0;display:grid;grid-template-columns:260px 1fr;gap:24px;align-items:center">
+              <div><div style="font-size:14px;font-weight:500">Scope query order</div></div>
+              <code style="font-family:'DM Mono',monospace;font-size:13px;color:#6a6660">personal → project → dept → org</code>
+            </div>
+            <div style="margin-top:16px;border-top:1px solid #dedad2;padding-top:20px;display:flex;justify-content:flex-end">
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- MY BUDGET -->
+        <sc-if value="{{ showMyBudget }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="font-size:26px;font-weight:600;letter-spacing:-.5px;margin-bottom:4px">My Budget</div>
+            <div style="font-size:14px;color:#8a8682;margin-bottom:28px">Your personal AI spend this month.</div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;padding:20px 24px;margin-bottom:24px">
+              <div style="display:flex;align-items:flex-end;justify-content:space-between;margin-bottom:14px">
+                <div>
+                  <div style="font-size:32px;font-weight:600;letter-spacing:-.7px">$124 <span style="font-size:17px;font-weight:400;color:#9a9690">of $150</span></div>
+                  <div style="font-size:13px;color:#9a9690;margin-top:4px">Resets Jul 1 · 82% used</div>
+                </div>
+                <div style="font-size:32px;font-weight:700;color:#c1392b;letter-spacing:-.5px">82%</div>
+              </div>
+              <div style="height:7px;background:#e8e5de;border-radius:4px;overflow:hidden">
+                <div style="height:100%;width:82%;background:#c1392b;border-radius:4px"></div>
+              </div>
+            </div>
+            <div style="font-size:14.5px;font-weight:600;margin-bottom:12px">By model class</div>
+            <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+              <div style="padding:14px 18px;border-bottom:1px solid #e8e5de;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13.5px;font-weight:500">Writing</div><div style="font-size:12px;color:#9a9690;margin-top:1px">claude-sonnet-4-6</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:600">$48</div><div style="font-size:11.5px;color:#9a9690">39%</div></div></div>
+              <div style="padding:14px 18px;border-bottom:1px solid #e8e5de;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13.5px;font-weight:500">Reasoning</div><div style="font-size:12px;color:#9a9690;margin-top:1px">claude-sonnet-4-6</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:600">$38</div><div style="font-size:11.5px;color:#9a9690">31%</div></div></div>
+              <div style="padding:14px 18px;display:flex;justify-content:space-between;align-items:center"><div><div style="font-size:13.5px;font-weight:500">Routing &amp; Retrieval</div><div style="font-size:12px;color:#9a9690;margin-top:1px">haiku · gemini-flash</div></div><div style="text-align:right"><div style="font-size:14px;font-weight:600">$10</div><div style="font-size:11.5px;color:#9a9690">7%</div></div></div>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- MY API KEYS -->
+        <sc-if value="{{ showMyKeys }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+              <div>
+                <div style="font-size:26px;font-weight:600;letter-spacing:-.5px">My API Keys</div>
+                <div style="font-size:14px;color:#8a8682;margin-top:4px">Personal keys scoped to your account only.</div>
+              </div>
+              <button style="background:#1a1918;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer;margin-top:4px;flex-shrink:0">Create key</button>
+            </div>
+            <div style="margin-top:24px;background:#f8f5ef;border:1px solid #dedad2;border-radius:10px;padding:48px 24px;text-align:center">
+              <div style="font-size:14px;color:#9a9690;margin-bottom:14px">No personal API keys yet.</div>
+              <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer">Create your first key</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <!-- SUB-PAGES -->
+        <sc-if value="{{ showSubPage }}" hint-placeholder-val="{{ false }}">
+          <div>
+            <div style="margin-bottom:24px">
+              <button style="background:transparent;border:none;padding:0;font-size:13.5px;color:#6a6660;cursor:pointer;display:flex;align-items:center;gap:6px;font-family:inherit" onClick="{{ goBack }}">
+                <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 2L4 7l5 5"></path></svg>
+                {{ backLabel }}
+              </button>
+            </div>
+
+            <sc-if value="{{ isEditDept }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:28px">Edit Department</div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center">
+                  <div style="font-size:14px;font-weight:500">Department name</div>
+                  <input type="text" value="{{ subPageItem.name }}" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:320px;width:100%" />
+                </div>
+                <div style="margin-top:28px;margin-bottom:12px;font-size:14.5px;font-weight:600">Teams in this department</div>
+                <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden;margin-bottom:28px">
+                  <sc-for list="{{ editDeptTeams }}" as="dt" hint-placeholder-count="2">
+                    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid #f0ede8">
+                      <div><div style="font-size:13.5px;font-weight:500">{{ dt.name }}</div><div style="font-size:12px;color:#9a9690;margin-top:1px">{{ dt.memberCount }} members</div></div>
+                      <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:4px 10px;font-size:12px;color:#6a6660;cursor:pointer" onClick="{{ dt.onEdit }}">Edit team →</button>
+                    </div>
+                  </sc-for>
+                  <div style="padding:10px 18px"><button style="background:transparent;border:none;font-size:13px;color:#0db5cc;cursor:pointer;padding:0">+ New team in this department</button></div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between">
+                  <button style="background:transparent;border:1px solid #f9c7b4;border-radius:6px;padding:8px 16px;font-size:13px;color:#c1392b;cursor:pointer">Delete department</button>
+                  <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isEditTeam }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:28px">Edit Team</div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center">
+                  <div style="font-size:14px;font-weight:500">Team name</div>
+                  <input type="text" value="{{ subPageItem.name }}" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:320px;width:100%" />
+                </div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center">
+                  <div style="font-size:14px;font-weight:500">Department</div>
+                  <select style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:280px;cursor:pointer"><option>Engineering</option><option>Operations</option><option>Growth</option></select>
+                </div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2">
+                  <div style="font-size:14px;font-weight:500;margin-bottom:14px">Members</div>
+                  <sc-for list="{{ members }}" as="m" hint-placeholder-count="4">
+                    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;padding:6px 0">
+                      <input type="checkbox" style="width:15px;height:15px;accent-color:#1a1918;cursor:pointer" />
+                      <div style="width:26px;height:26px;border-radius:50%;background:{{ m.avatarBg }};display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:700;color:#fff;flex-shrink:0">{{ m.avatar }}</div>
+                      <div><div style="font-size:13.5px;font-weight:500">{{ m.name }}</div><div style="font-size:12px;color:#9a9690">{{ m.email }}</div></div>
+                    </label>
+                  </sc-for>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:24px">
+                  <button style="background:transparent;border:1px solid #f9c7b4;border-radius:6px;padding:8px 16px;font-size:13px;color:#c1392b;cursor:pointer">Delete team</button>
+                  <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isEditProject }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:28px">Edit Project</div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center">
+                  <div style="font-size:14px;font-weight:500">Project name</div>
+                  <input type="text" value="{{ subPageItem.name }}" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:320px;width:100%" />
+                </div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:center">
+                  <div style="font-size:14px;font-weight:500">Status</div>
+                  <select style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:200px;cursor:pointer"><option>Active</option><option>Draft</option><option>Archived</option></select>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:24px">
+                  <button style="background:transparent;border:1px solid #f9c7b4;border-radius:6px;padding:8px 16px;font-size:13px;color:#c1392b;cursor:pointer">Delete project</button>
+                  <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isMarketplace }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:4px">Skills Marketplace</div>
+                <div style="font-size:14px;color:#8a8682;margin-bottom:20px">Discover and install capabilities for your workspace.</div>
+                <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:20px">
+                  <sc-for list="{{ mktCategoryTabs }}" as="cat" hint-placeholder-count="7">
+                    <button style="padding:5px 12px;border-radius:20px;border:none;font-size:12.5px;font-weight:500;cursor:pointer;background:{{ cat.bg }};color:{{ cat.color }};font-family:inherit" onClick="{{ cat.onClick }}">{{ cat.label }}</button>
+                  </sc-for>
+                </div>
+                <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;overflow:hidden">
+                  <sc-for list="{{ mktSkills }}" as="sk" hint-placeholder-count="6">
+                    <div style="display:grid;grid-template-columns:1fr 80px 80px 84px;align-items:center;gap:14px;padding:14px 18px;border-bottom:{{ sk.rowBorder }}">
+                      <div>
+                        <div style="font-size:14px;font-weight:500;margin-bottom:2px">{{ sk.name }}</div>
+                        <div style="font-size:12.5px;color:#9a9690">{{ sk.desc }}</div>
+                      </div>
+                      <span style="font-size:11.5px;padding:3px 8px;border-radius:4px;background:#f0ede8;color:#6a6660">{{ sk.category }}</span>
+                      <span style="font-family:'DM Mono',monospace;font-size:11.5px;color:#9a9690">{{ sk.version }}</span>
+                      <div style="display:flex;justify-content:flex-end">
+                        <button style="background:transparent;border:{{ sk.btnBorder }};border-radius:5px;padding:5px 12px;font-size:12.5px;color:{{ sk.btnColor }};cursor:pointer;font-family:inherit">{{ sk.btnLabel }}</button>
+                      </div>
+                    </div>
+                  </sc-for>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isConfigureChannel }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:28px">{{ subPageTitle }}</div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start">
+                  <div><div style="font-size:14px;font-weight:500">Bot token</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Keep this secret.</div></div>
+                  <input type="password" value="••••••••••••••••••••••••" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:360px;width:100%" />
+                </div>
+                <div style="padding:17px 0;border-bottom:1px solid #dedad2;display:grid;grid-template-columns:240px 1fr;gap:24px;align-items:start">
+                  <div><div style="font-size:14px;font-weight:500">Webhook URL</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Point your bot here.</div></div>
+                  <div style="display:flex;align-items:center;gap:10px">
+                    <code style="font-family:'DM Mono',monospace;font-size:12.5px;color:#6a6660;background:#f0ede8;padding:6px 10px;border-radius:5px">https://pod.elewa.ke/webhook/{{ subPageItem.id }}</code>
+                    <button style="background:transparent;border:1px solid #d0cdc6;border-radius:5px;padding:5px 10px;font-size:12px;color:#6a6660;cursor:pointer">Copy</button>
+                  </div>
+                </div>
+                <div style="display:flex;align-items:center;justify-content:space-between;margin-top:24px">
+                  <button style="background:transparent;border:1px solid #f9c7b4;border-radius:6px;padding:8px 16px;font-size:13px;color:#c1392b;cursor:pointer">Disconnect</button>
+                  <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:10px 20px;font-size:14px;font-weight:500;cursor:pointer">Save changes</button>
+                </div>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isAddChannel }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:24px">Add Channel</div>
+                <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px">
+                  <sc-for list="{{ channelTypes }}" as="ct" hint-placeholder-count="6">
+                    <div style="background:{{ ct.bg }};border:{{ ct.border }};border-radius:10px;padding:16px;cursor:pointer" onClick="{{ ct.onSelect }}">
+                      <div style="font-size:22px;margin-bottom:8px">{{ ct.icon }}</div>
+                      <div style="font-size:14px;font-weight:600;color:{{ ct.color }}">{{ ct.name }}</div>
+                      <div style="font-size:12px;color:{{ ct.subColor }};margin-top:3px">{{ ct.desc }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ selChannelType }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;padding:20px 24px">
+                    <div style="font-size:15px;font-weight:600;margin-bottom:16px">Configure {{ selChannelType.name }}</div>
+                    <div style="display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:center;padding:12px 0;border-bottom:1px solid #f0ede8">
+                      <div style="font-size:14px;font-weight:500">{{ selChannelType.fieldLabel }}</div>
+                      <input type="text" placeholder="{{ selChannelType.fieldPlaceholder }}" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:360px;width:100%" />
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                      <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:8px 16px;font-size:13px;color:#1a1918;cursor:pointer">Test connection</button>
+                      <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer">Add channel</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+
+            <sc-if value="{{ isAddProviderKey }}" hint-placeholder-val="{{ false }}">
+              <div>
+                <div style="font-size:24px;font-weight:600;letter-spacing:-.4px;margin-bottom:24px">Add Provider Key</div>
+                <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:24px">
+                  <sc-for list="{{ providerTypes }}" as="pt" hint-placeholder-count="7">
+                    <div style="background:{{ pt.bg }};border:{{ pt.border }};border-radius:9px;padding:13px 14px;cursor:pointer" onClick="{{ pt.onSelect }}">
+                      <div style="font-size:13.5px;font-weight:600;color:{{ pt.color }};margin-bottom:4px">{{ pt.name }}</div>
+                      <div style="font-size:11px;color:{{ pt.subColor }};line-height:1.4">{{ pt.models }}</div>
+                    </div>
+                  </sc-for>
+                </div>
+                <sc-if value="{{ selProvider }}" hint-placeholder-val="{{ false }}">
+                  <div style="background:#fff;border:1px solid #dedad2;border-radius:10px;padding:20px 24px">
+                    <div style="font-size:15px;font-weight:600;margin-bottom:4px">{{ selProvider.name }}</div>
+                    <div style="font-size:12.5px;color:#9a9690;font-family:'DM Mono',monospace;margin-bottom:18px">{{ selProvider.models }}</div>
+                    <div style="display:grid;grid-template-columns:200px 1fr;gap:24px;align-items:start;padding:12px 0;border-top:1px solid #f0ede8">
+                      <div><div style="font-size:14px;font-weight:500">API key</div><div style="font-size:12.5px;color:#9a9690;margin-top:3px">Stored encrypted at rest.</div></div>
+                      <input type="password" placeholder="{{ selProvider.placeholder }}" style="border:1px solid #d0cdc6;border-radius:6px;padding:8px 11px;font-size:13.5px;background:#fff;outline:none;max-width:380px;width:100%;font-family:'DM Mono',monospace" />
+                    </div>
+                    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+                      <button style="background:transparent;border:1px solid #d0cdc6;border-radius:6px;padding:8px 16px;font-size:13px;color:#1a1918;cursor:pointer">Test connection</button>
+                      <button style="background:#0db5cc;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-size:13.5px;font-weight:500;cursor:pointer">Save key</button>
+                    </div>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
+          </div>
+        </sc-if>
+
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    page: 'session',
+    // Session
+    messages: [
+      { id: 1, role: 'assistant', text: "Here's an outline for your Q3 2026 Strategy document:\n\n1. Executive Summary — the strategic narrative and key OKRs\n2. Growth Targets — ARR, new logos, NRR, trial conversion\n3. Key Initiatives — ranked by expected impact with owner and timeline\n4. Resourcing — headcount plan, contractor budget, cross-team dependencies\n5. Risks & Mitigations — top 3 execution risks\n\nWant me to draft any of these in full? I'd suggest starting with section 3 since that's where the trade-offs are.", citations: [{ id: 'R1', type: 'R', scope: 'dept', source: 'product-strategy-q3.md', title: 'ARR target implies 18% QoQ growth' }, { id: 'P1', type: 'P', scope: 'org', source: 'org_policy.v2.1', title: 'Resourcing decisions require VP sign-off', status: 'applied' }] },
+      { id: 2, role: 'user', text: 'Draft section 3 — PLG expansion, enterprise pilot, data export, and mobile beta.', citations: [] },
+      { id: 3, role: 'assistant', text: "Here's section 3. I've ordered by expected ARR impact rather than effort — Data Export above Mobile Beta despite mobile being further along, because the enterprise unblock is too valuable.\n\nEnterprise Pilot is flagged at-risk: it depends on Data Export hitting Aug 30. If that slips, the pilot timeline collapses. Worth surfacing to VP now.", citations: [{ id: 'A1', type: 'A', scope: 'personal', source: 'q3-strategy.canvas', title: 'Initiatives table drafted in canvas', status: 'done' }] },
+    ],
+    // Settings
+    tab: 'workspace', section: 'pod', subPage: null, subPageItem: null,
+    selectedProvider: null, selectedChannelType: null, marketplaceCategory: 'All',
+    memberSubTab: 'people', autoUpdate: true, citationMode: true,
+    members: [
+      { id: 1, name: 'Alex Kim', email: 'alex@elewa.ke', role: 'member', budget: 150, used: 124, avatar: 'AK' },
+      { id: 2, name: 'Sarah Odhiambo', email: 'sarah@elewa.ke', role: 'member', budget: 50, used: 32, avatar: 'SO' },
+      { id: 3, name: 'David Kimani', email: 'david@elewa.ke', role: 'member', budget: 50, used: 48, avatar: 'DK' },
+      { id: 4, name: 'Amara Osei', email: 'amara@elewa.ke', role: 'viewer', budget: 25, used: 8, avatar: 'AO' },
+      { id: 5, name: 'Liam van der Berg', email: 'liam@elewa.ke', role: 'admin', budget: 75, used: 61, avatar: 'LB' },
+    ],
+    memberLimit: 10,
+    departments: [{ id: 'eng', name: 'Engineering', memberCount: 8 }, { id: 'ops', name: 'Operations', memberCount: 4 }, { id: 'growth', name: 'Growth', memberCount: 3 }],
+    teams: [{ id: 'fe', name: 'Frontend', deptId: 'eng', memberCount: 3 }, { id: 'be', name: 'Backend', deptId: 'eng', memberCount: 5 }, { id: 'opst', name: 'Ops Core', deptId: 'ops', memberCount: 4 }, { id: 'mktg', name: 'Marketing', deptId: 'growth', memberCount: 3 }],
+    projects: [{ id: 'p1', name: 'Customer Portal', teamCount: 2, memberCount: 6, status: 'active' }, { id: 'p2', name: 'Internal Automation', teamCount: 1, memberCount: 3, status: 'active' }, { id: 'p3', name: 'Data Pipeline', teamCount: 2, memberCount: 4, status: 'draft' }],
+    skills: [{ id: 'cognee', name: 'Cognee Search', category: 'Memory', enabled: true, version: '2.4.1' }, { id: 'github', name: 'GitHub', category: 'Dev', enabled: true, version: '1.2.0' }, { id: 'gcal', name: 'Google Calendar', category: 'Productivity', enabled: true, version: '3.0.0' }, { id: 'slack', name: 'Slack', category: 'Comms', enabled: false, version: '2.1.0' }, { id: 'browser', name: 'Web Browser', category: 'Research', enabled: true, version: '1.5.2' }],
+    marketplaceSkills: [{ id: 'gl', name: 'GitLab', category: 'Dev', desc: 'Read repos, open MRs, trigger CI pipelines.', version: '1.0.0' }, { id: 'linear', name: 'Linear', category: 'Dev', desc: 'Manage issues, projects, and cycles.', version: '0.9.2' }, { id: 'notion', name: 'Notion', category: 'Productivity', desc: 'Read and write Notion pages and databases.', version: '2.0.1' }, { id: 'perplexity', name: 'Perplexity', category: 'Research', desc: 'Real-time web research with citations.', version: '1.1.0' }, { id: 'sql', name: 'SQL Query', category: 'Data', desc: 'Run read-only queries against connected databases.', version: '1.3.0' }],
+    channels: [{ id: 'tg', name: 'Telegram', handle: '@elewa_crane_bot', status: 'active', icon: '✈' }, { id: 'sl', name: 'Slack', handle: '#opencrane', status: 'active', icon: '◈' }, { id: 'wa', name: 'WhatsApp', handle: '+254 700 XXX XXX', status: 'inactive', icon: '◎' }],
+    channelTypes: [{ id: 'telegram', name: 'Telegram', desc: 'Bot API', icon: '✈', fieldLabel: 'Bot token', fieldPlaceholder: '1234567890:ABCDef...' }, { id: 'slack', name: 'Slack', desc: 'Slash commands', icon: '◈', fieldLabel: 'Bot OAuth token', fieldPlaceholder: 'xoxb-...' }, { id: 'whatsapp', name: 'WhatsApp', desc: 'Business Cloud API', icon: '◎', fieldLabel: 'Phone number ID', fieldPlaceholder: '+254 700 000 000' }, { id: 'email', name: 'Email', desc: 'SMTP / IMAP', icon: '✉', fieldLabel: 'IMAP address', fieldPlaceholder: 'user@company.com' }, { id: 'msteams', name: 'MS Teams', desc: 'Teams bot connector', icon: '⊞', fieldLabel: 'App ID', fieldPlaceholder: 'xxxxxxxx-xxxx-...' }, { id: 'discord', name: 'Discord', desc: 'Discord bot', icon: '◆', fieldLabel: 'Bot token', fieldPlaceholder: 'MTAx...' }],
+    apiKeys: [{ id: 'k1', provider: 'Anthropic', models: 'claude-opus-4-7 · claude-sonnet-4-6 · claude-haiku-4-5', key: 'sk-ant-****...a3f2', added: 'Jun 1, 2026', lastUsed: '2 min ago' }, { id: 'k2', provider: 'Google AI', models: 'gemini-2.0-flash · gemini-1.5-pro', key: 'AIza****...7b91', added: 'May 15, 2026', lastUsed: '4h ago' }, { id: 'k3', provider: 'OpenAI', models: 'gpt-4o · gpt-4o-mini', key: 'sk-proj-****...c22d', added: 'Apr 3, 2026', lastUsed: '2d ago' }],
+    providerTypes: [{ id: 'anthropic', name: 'Anthropic', models: 'claude-opus-4-7 · claude-sonnet-4-6 · claude-haiku-4-5', placeholder: 'sk-ant-api03-...' }, { id: 'openai', name: 'OpenAI', models: 'gpt-4o · gpt-4o-mini · gpt-4-turbo', placeholder: 'sk-proj-...' }, { id: 'google', name: 'Google AI', models: 'gemini-2.0-flash · gemini-1.5-pro', placeholder: 'AIzaSy...' }, { id: 'azure', name: 'Azure OpenAI', models: 'gpt-4o · gpt-4-turbo (your deployment)', placeholder: 'Your Azure API key' }, { id: 'mistral', name: 'Mistral AI', models: 'mistral-large-2 · mistral-small', placeholder: 'your-api-key' }, { id: 'cohere', name: 'Cohere', models: 'command-r-plus · command-r', placeholder: 'your-api-key' }, { id: 'bedrock', name: 'AWS Bedrock', models: 'Claude 3 · Llama 3 (via AWS)', placeholder: 'AKIAIOSFODNN7EXAMPLE' }],
+  };
+
+  componentDidUpdate(pp, ps) {
+    if (ps.messages.length !== this.state.messages.length) {
+      setTimeout(() => { const el = document.getElementById('oc-chat'); if (el) el.scrollTop = el.scrollHeight; }, 60);
+    }
+  }
+
+  sendMessage() {
+    const el = document.getElementById('oc-input');
+    const val = el && el.value.trim();
+    if (!val) return;
+    el.value = '';
+    this.setState(s => ({ messages: [...s.messages, { id: Date.now(), role: 'user', text: val, citations: [] }] }));
+  }
+
+  renderVals() {
+    const s = this.state;
+    const T = (v) => ({ bg: v ? '#0db5cc' : '#cec9c3', x: v ? '22px' : '2px', label: v ? 'Enabled' : 'Disabled' });
+    const avatarBgs = ['#2a5c9a', '#2a7d4f', '#c1392b', '#9a6b2a', '#6a2a9a'];
+
+    // Navigation
+    const goToSession = () => this.setState({ page: 'session' });
+    const goToSettings = () => this.setState({ page: 'settings', section: 'pod', subPage: null, subPageItem: null, selectedProvider: null, selectedChannelType: null });
+    const setSection = (sec) => this.setState({ section: sec, subPage: null, subPageItem: null, selectedProvider: null, selectedChannelType: null });
+    const goBack = () => this.setState({ subPage: null, subPageItem: null, selectedProvider: null, selectedChannelType: null });
+    const openMarketplace = () => this.setState({ subPage: 'marketplace', section: 'skills' });
+    const openAddChannel = () => this.setState({ subPage: 'add-channel', section: 'channels' });
+    const openAddProviderKey = () => this.setState({ subPage: 'add-provider-key', section: 'apikeys' });
+    const selectProvider = (id) => this.setState({ selectedProvider: id });
+    const selectChannelType = (id) => this.setState({ selectedChannelType: id });
+    const setMktCategory = (c) => this.setState({ marketplaceCategory: c });
+
+    // Settings nav icons
+    const ic = (d) => React.createElement('svg', { width: 13, height: 13, viewBox: '0 0 16 16', fill: 'none', stroke: 'currentColor', strokeWidth: '1.5', strokeLinecap: 'round', strokeLinejoin: 'round', style: { flexShrink: 0, opacity: 0.65 } }, React.createElement('path', { d }));
+    const ICONS = { pod: ic('M3 4h10v8H3zm0 3.5h10M6 4v3.5M10 4v3.5'), members: ic('M8 8a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5zM3.5 13c0-2.485 2.015-4.5 4.5-4.5s4.5 2.015 4.5 4.5'), budgets: ic('M8 3v10M5.5 5.5h3.5a2 2 0 0 1 0 4H5.5'), skills: ic('M9.5 2.5L6 9.5h4.5L7 14 13 7h-4.5z'), channels: ic('M8 8.5a.5.5 0 1 0 0-1 .5.5 0 0 0 0 1zM6 7.5a2.5 2.5 0 0 1 4 0M3.5 5.5a6.5 6.5 0 0 1 9 0'), datanet: ic('M8 2l-6 3.5v5L8 14l6-3.5v-5zm0 0v12M2 5.5l6 3.5 6-3.5'), apikeys: ic('M6.5 9.5a4 4 0 1 0 0-8 4 4 0 0 0 0 8zm3.5-.5 5 5'), account: ic('M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm-5 6c0-2.761 2.239-5 5-5s5 2.239 5 5'), awareness: ic('M2 6.5h12v6a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1zm4-3v3M8 3.5v3M12 3.5v3M8 10v2') };
+    const wsNavDefs = [{ id: 'pod', label: 'Pod', icon: ICONS.pod }, { id: 'members', label: 'Members', icon: ICONS.members }, { id: 'budgets', label: 'Budgets', icon: ICONS.budgets }, { id: 'skills', label: 'Skills', icon: ICONS.skills }, { id: 'channels', label: 'Channels', icon: ICONS.channels }, { id: 'datanet', label: 'Data & Network', icon: ICONS.datanet }, { id: 'apikeys', label: 'API Keys', icon: ICONS.apikeys }];
+    const personalNavDefs = [{ id: 'account', label: 'Account', icon: ICONS.account }, { id: 'awareness', label: 'Awareness', icon: ICONS.awareness }, { id: 'mybudget', label: 'My Budget', icon: ICONS.budgets }, { id: 'mykeys', label: 'API Keys', icon: ICONS.apikeys }];
+    const rawNav = s.tab === 'workspace' ? wsNavDefs : personalNavDefs;
+    const nav = rawNav.map(item => ({ ...item, iconEl: item.icon, bg: s.section === item.id ? '#e6f8fc' : 'transparent', color: s.section === item.id ? '#0994a8' : '#6a6660', fw: s.section === item.id ? '600' : '400', shadow: s.section === item.id ? '0 1px 3px rgba(13,181,204,.12)' : 'none', onClick: () => setSection(item.id) }));
+
+    // Tab switcher
+    const wt = s.tab === 'workspace';
+    const wsTabBg = wt ? '#fff' : 'transparent'; const wsTabColor = wt ? '#1a1918' : '#8a8682'; const wsTabWeight = wt ? '500' : '400'; const wsTabShadow = wt ? '0 1px 2px rgba(0,0,0,.08)' : 'none';
+    const pTabBg = !wt ? '#fff' : 'transparent'; const pTabColor = !wt ? '#1a1918' : '#8a8682'; const pTabWeight = !wt ? '500' : '400'; const pTabShadow = !wt ? '0 1px 2px rgba(0,0,0,.08)' : 'none';
+
+    // Toggles
+    const auT = T(s.autoUpdate); const ctT = T(s.citationMode);
+
+    // Members
+    const members = s.members.map((m, i) => {
+      const pct = Math.round(m.used / m.budget * 100);
+      const isHigh = pct >= 80;
+      return { ...m, avatarBg: avatarBgs[i % avatarBgs.length], usedPct: pct, barW: Math.min(100, pct) + '%', barColor: isHigh ? '#c1392b' : '#4a9e6b', roleColor: m.role === 'admin' ? '#1d4d8a' : m.role === 'member' ? '#1a5c38' : '#7a5c1a', roleBg: m.role === 'admin' ? '#ddeeff' : m.role === 'member' ? '#d8f0e4' : '#f0e8d0', statusLabel: isHigh ? 'Near limit' : 'On track', statusColor: isHigh ? '#c1392b' : '#4a9e6b' };
+    });
+    const memberCount = s.members.length; const atLimit = memberCount >= s.memberLimit;
+
+    // Org rows
+    const orgRows = [];
+    s.departments.forEach(dept => {
+      const deptTeams = s.teams.filter(t => t.deptId === dept.id); const d = dept;
+      orgRows.push({ isDept: true, isTeam: false, id: dept.id, name: dept.name, teamCount: deptTeams.length, memberCount: dept.memberCount, onEdit: () => this.setState({ subPage: 'edit-dept', subPageItem: d }) });
+      deptTeams.forEach(team => { const t2 = team; orgRows.push({ isDept: false, isTeam: true, id: team.id, name: team.name, memberCount: team.memberCount, onEdit: () => this.setState({ subPage: 'edit-team', subPageItem: t2 }) }); });
+    });
+
+    // Projects
+    const projects = s.projects.map(p => { const proj = p; return { ...p, statusBg: p.status === 'active' ? '#d8f0e4' : '#f0ede8', statusColor: p.status === 'active' ? '#1a5c38' : '#6a6660', statusLabel: p.status === 'active' ? 'Active' : 'Draft', onOpen: () => this.setState({ subPage: 'edit-project', subPageItem: proj }) }; });
+
+    // Skills
+    const skills = s.skills.map((sk, i) => { const t = T(sk.enabled); return { ...sk, toggleBg: t.bg, toggleX: t.x, rowBorder: i < s.skills.length - 1 ? '1px solid #f0ede8' : 'none', onToggle: () => { const updated = s.skills.map(x => x.id === sk.id ? { ...x, enabled: !x.enabled } : x); this.setState({ skills: updated }); } }; });
+
+    // Channels
+    const channels = s.channels.map(ch => { const c = ch; return { ...ch, dotColor: ch.status === 'active' ? '#22c55e' : '#cec9c3', statusLabel: ch.status === 'active' ? 'Connected' : 'Not connected', onConfigure: () => this.setState({ subPage: 'configure-channel', subPageItem: c }) }; });
+
+    // API keys
+    const apiKeys = s.apiKeys.map((k, i) => ({ ...k, rowBorder: i < s.apiKeys.length - 1 ? '1px solid #f0ede8' : 'none' }));
+
+    // Marketplace
+    const allSkillIds = new Set(s.skills.map(sk => sk.id));
+    const mktAllSkills = [...s.skills.map(sk => ({ ...sk, installed: true })), ...s.marketplaceSkills.map(sk => ({ ...sk, installed: false }))].filter(sk => s.marketplaceCategory === 'All' || sk.category === s.marketplaceCategory);
+    const mktCategories = ['All', 'Memory', 'Dev', 'Productivity', 'Comms', 'Research', 'Data'];
+    const mktCategoryTabs = mktCategories.map(c => ({ label: c, isActive: s.marketplaceCategory === c, bg: s.marketplaceCategory === c ? '#0db5cc' : '#f0ede8', color: s.marketplaceCategory === c ? '#fff' : '#6a6660', onClick: () => setMktCategory(c) }));
+    const mktSkills = mktAllSkills.map((sk, i) => ({ ...sk, rowBorder: i < mktAllSkills.length - 1 ? '1px solid #f0ede8' : 'none', btnLabel: sk.installed ? 'Uninstall' : 'Install', btnBorder: sk.installed ? '1px solid #f9c7b4' : '1px solid #d0cdc6', btnColor: sk.installed ? '#c1392b' : '#1a1918' }));
+
+    // Provider/channel types
+    const providerTypes = s.providerTypes.map(p => ({ ...p, isSelected: s.selectedProvider === p.id, bg: s.selectedProvider === p.id ? '#0db5cc' : '#fff', color: s.selectedProvider === p.id ? '#fff' : '#1a1918', subColor: s.selectedProvider === p.id ? 'rgba(255,255,255,.7)' : '#9a9690', border: s.selectedProvider === p.id ? '2px solid #0db5cc' : '1px solid #dedad2', onSelect: () => selectProvider(p.id) }));
+    const selProvider = s.selectedProvider ? s.providerTypes.find(p => p.id === s.selectedProvider) : null;
+    const channelTypes = s.channelTypes.map(ct => ({ ...ct, isSelected: s.selectedChannelType === ct.id, bg: s.selectedChannelType === ct.id ? '#0db5cc' : '#fff', color: s.selectedChannelType === ct.id ? '#fff' : '#1a1918', subColor: s.selectedChannelType === ct.id ? 'rgba(255,255,255,.7)' : '#9a9690', border: s.selectedChannelType === ct.id ? '2px solid #0db5cc' : '1px solid #dedad2', onSelect: () => selectChannelType(ct.id) }));
+    const selChannelType = s.selectedChannelType ? s.channelTypes.find(ct => ct.id === s.selectedChannelType) : null;
+
+    // Sub-page back labels
+    const backLabelMap = { 'edit-dept': '← Members', 'edit-team': '← Members', 'edit-project': '← Members', 'marketplace': '← Skills', 'configure-channel': '← Channels', 'add-channel': '← Channels', 'add-provider-key': '← AI Provider Keys' };
+    const backLabel = s.subPage ? (backLabelMap[s.subPage] || '← Back') : '';
+    const subPageTitle = s.subPage === 'configure-channel' ? 'Configure ' + (s.subPageItem ? s.subPageItem.name : '') : '';
+    const editDeptTeams = s.subPage === 'edit-dept' && s.subPageItem ? s.teams.filter(t => t.deptId === s.subPageItem.id).map(t => { const t2 = t; return { ...t, onEdit: () => this.setState({ subPage: 'edit-team', subPageItem: t2 }) }; }) : [];
+    const editProjectTeams = s.subPage === 'edit-project' ? s.teams.map(t => ({ ...t, linked: false })) : [];
+
+    return {
+      // Page state
+      isSession: s.page === 'session',
+      isSettings: s.page === 'settings',
+      goToSession, goToSettings,
+      activeSessionBg: s.page === 'session' ? 'rgba(255,255,255,.07)' : 'transparent',
+      settingsLinkColor: s.page === 'settings' ? '#0db5cc' : '#6a6663',
+      // Session
+      messages: s.messages,
+      send: () => this.sendMessage(),
+      onKeyDown: (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); this.sendMessage(); } },
+      // Settings tabs
+      wsTabBg, wsTabColor, wsTabWeight, wsTabShadow,
+      pTabBg, pTabColor, pTabWeight, pTabShadow,
+      setWsTab: () => this.setState({ tab: 'workspace', section: 'pod', subPage: null }),
+      setPersonalTab: () => this.setState({ tab: 'personal', section: 'account', subPage: null }),
+      nav,
+      // Section visibility
+      showPod: s.section === 'pod' && !s.subPage && s.page === 'settings',
+      showMembers: s.section === 'members' && !s.subPage && s.page === 'settings',
+      showBudgets: s.section === 'budgets' && !s.subPage && s.page === 'settings',
+      showSkills: s.section === 'skills' && !s.subPage && s.page === 'settings',
+      showChannels: s.section === 'channels' && !s.subPage && s.page === 'settings',
+      showDatanet: s.section === 'datanet' && !s.subPage && s.page === 'settings',
+      showApiKeys: s.section === 'apikeys' && !s.subPage && s.page === 'settings',
+      showAccount: s.section === 'account' && !s.subPage && s.page === 'settings',
+      showAwareness: s.section === 'awareness' && !s.subPage && s.page === 'settings',
+      showMyBudget: s.section === 'mybudget' && !s.subPage && s.page === 'settings',
+      showMyKeys: s.section === 'mykeys' && !s.subPage && s.page === 'settings',
+      showSubPage: !!s.subPage && s.page === 'settings',
+      // Sub-pages
+      isEditDept: s.subPage === 'edit-dept', isEditTeam: s.subPage === 'edit-team',
+      isEditProject: s.subPage === 'edit-project', isMarketplace: s.subPage === 'marketplace',
+      isConfigureChannel: s.subPage === 'configure-channel', isAddChannel: s.subPage === 'add-channel',
+      isAddProviderKey: s.subPage === 'add-provider-key',
+      goBack, backLabel, subPageTitle, subPageItem: s.subPageItem || {},
+      openMarketplace, openAddChannel, openAddProviderKey,
+      // Toggles
+      auBg: auT.bg, auX: auT.x, auLabel: auT.label, toggleAu: () => this.setState({ autoUpdate: !s.autoUpdate }),
+      ctBg: ctT.bg, ctX: ctT.x, ctLabel: ctT.label, toggleCt: () => this.setState({ citationMode: !s.citationMode }),
+      // Data
+      members, memberCount, memberLimit: s.memberLimit,
+      memberCountColor: memberCount / s.memberLimit >= 0.8 ? '#c1392b' : '#1a1918',
+      atLimit, inviteBg: atLimit ? '#e8e5df' : '#0db5cc', inviteColor: atLimit ? '#9a9690' : '#fff', inviteCursor: atLimit ? 'not-allowed' : 'pointer',
+      orgTotal: s.members.reduce((a, m) => a + m.used, 0), orgBudget: s.members.reduce((a, m) => a + m.budget, 0),
+      showPeopleTab: s.memberSubTab === 'people', showStructureTab: s.memberSubTab === 'structure',
+      setSubTabPeople: () => this.setState({ memberSubTab: 'people' }), setSubTabStructure: () => this.setState({ memberSubTab: 'structure' }),
+      peopleTabColor: s.memberSubTab === 'people' ? '#1a1918' : '#9a9690', peopleTabWeight: s.memberSubTab === 'people' ? '500' : '400', peopleTabBorder: s.memberSubTab === 'people' ? '2px solid #1a1918' : '2px solid transparent',
+      structureTabColor: s.memberSubTab === 'structure' ? '#1a1918' : '#9a9690', structureTabWeight: s.memberSubTab === 'structure' ? '500' : '400', structureTabBorder: s.memberSubTab === 'structure' ? '2px solid #1a1918' : '2px solid transparent',
+      orgRows, projects, skills, channels, apiKeys, mktSkills, mktCategoryTabs, providerTypes, selProvider, channelTypes, selChannelType, editDeptTeams, editProjectTeams,
+    };
+  }
+}
+</script>
+</body>
+</html>
