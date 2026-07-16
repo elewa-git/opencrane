@@ -1,6 +1,7 @@
 import { GrantAccess, GrantScope, GrantSubjectType, type Grant, type Group } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 import { ___SortBy } from "@opencrane/util";
+import { _AssertUnreservedGrantSubjectId } from "@opencrane/backend/grants";
 
 import type {
   GroupGrantInput,
@@ -363,5 +364,9 @@ function _MapGrantCreateInput(groupId: string, grant: GroupGrantInput): Prisma.G
  */
 function _ResolveGrantSubjectId(grant: GroupGrantInput): string
 {
-  return grant.subjectId ?? grant.subjectName;
+  const subjectId = grant.subjectId ?? grant.subjectName;
+  // Reject the reserved org-everyone sentinel so a raw awareness grant can't silently
+  // become an org-wide Awareness entitlement (the compiler matches "*").
+  _AssertUnreservedGrantSubjectId(subjectId);
+  return subjectId;
 }
