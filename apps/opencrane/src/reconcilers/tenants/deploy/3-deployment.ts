@@ -7,6 +7,13 @@ import type { ClusterTenantComputeView } from "@opencrane/infra/api";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 import { _BuildClusterTenantScheduling } from "./cluster-tenant-scheduling.js";
 import { _CredentialsSecretName } from "../internal/cognee-tenant-identity.js";
+import { _ObotClientTokenSecretName } from "../internal/tenant-obot-token.js";
+
+/** Directory the per-tenant Obot client token is mounted into (replaces the retired `obot-gateway` SA token). */
+const _OBOT_CLIENT_TOKEN_DIR = "/var/run/opencrane/obot";
+
+/** In-pod file path the runtime reads the per-tenant Obot client token from. */
+const _OBOT_CLIENT_TOKEN_PATH = `${_OBOT_CLIENT_TOKEN_DIR}/token`;
 
 /**
  * Build the tenant Deployment that runs a single OpenClaw gateway pod.
@@ -37,9 +44,16 @@ import { _CredentialsSecretName } from "../internal/cognee-tenant-identity.js";
  *   re-registered + re-joined) rolls the pod: it reads its Cognee credentials once at start and
  *   does NOT re-login on a 401, so it otherwise never picks up the healed identity. Omitted/empty ⇒
  *   no annotation (Cognee-less deploys + suspend path unchanged).
+ * @param obotClientTokenReady - Whether the per-tenant Obot client-token Secret
+ *   (`_ObotClientTokenSecretName`) has been minted and is mountable (issue #128: replaces the
+ *   retired, non-functional `obot-gateway` projected SA token). When true the pod mounts that
+ *   token at {@link _OBOT_CLIENT_TOKEN_PATH} and gets `OPENCRANE_MCP_GATEWAY_TOKEN_PATH`; when
+ *   false (fail-closed — Obot management not yet wired) both the mount and the env are omitted so
+ *   the runtime has no MCP-gateway credential rather than a fake one. Defaults false (suspend path).
  */
 export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolume: TenantStateVolume, tenant: Tenant,
-                                 namespace: string, compute?: ClusterTenantComputeView, configChecksum?: string, cogneeIdentityStamp?: string): k8s.V1Deployment
+                                 namespace: string, compute?: ClusterTenantComputeView, configChecksum?: string, cogneeIdentityStamp?: string,
+                                 obotClientTokenReady: boolean = false): k8s.V1Deployment
 {
   const name = tenant.metadata!.name!;
   const image = tenant.spec.openclawImage ?? config.tenantDefaultImage;
@@ -66,7 +80,10 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     { name: "OPENCRANE_RUNTIME_CONTRACT_PATH", value: "/config/opencrane-managed-runtime.json" },
     { name: "OPENCRANE_MCP_GATEWAY_URL", value: config.mcpGatewayUrl },
     { name: "OPENCRANE_SKILL_REGISTRY_URL", value: config.skillRegistryUrl },
-    { name: "OPENCRANE_MCP_GATEWAY_TOKEN_PATH", value: "/var/run/opencrane/tokens/obot-gateway.token" },
+    // The MCP-gateway credential is a per-tenant Obot API token (issue #128), not the retired
+    // `obot-gateway` projected SA token (Obot v0.23.1 never validated k8s tokens). Injected only
+    // when the token Secret has been minted; omitted fail-closed while Obot management is unwired.
+    ...(obotClientTokenReady ? [{ name: "OPENCRANE_MCP_GATEWAY_TOKEN_PATH", value: _OBOT_CLIENT_TOKEN_PATH }] : []),
     { name: "OPENCRANE_SKILL_REGISTRY_TOKEN_PATH", value: "/var/run/opencrane/tokens/feat-skill-registry.token" },
     // The tenant pod reaches /api/internal/contract on the opencrane-server's INTERNAL listener
     // via the Service DNS (a pod's own localhost is itself — controlPlaneInternalUrl is the
@@ -156,14 +173,11 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     {
       name: "projected-identity",
       projected: {
+        // No `obot-gateway` audience token here: Obot v0.23.1 does not validate k8s TokenReview
+        // tokens, so it was never a working credential (issue #128). The MCP-gateway credential is
+        // now a per-tenant Obot API token mounted from its own Secret (see below), not a projected
+        // SA token. feat-skill-registry + opencrane-server remain real, audience-bound SA tokens.
         sources: [
-          {
-            serviceAccountToken: {
-              path: "obot-gateway.token",
-              expirationSeconds: config.projectedTokenTtlSeconds,
-              audience: "obot-gateway",
-            },
-          },
           {
             serviceAccountToken: {
               path: "feat-skill-registry.token",
@@ -183,6 +197,20 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     },
     { name: "tmp", emptyDir: {} },
   ];
+
+  // 3b. Obot client token — mount the per-tenant Obot API token (issue #128) as a read-only file
+  //     only when it has been minted. Projected via `items` so ONLY the write-only `token` value
+  //     reaches the pod (the revocable `tokenId` stays in the Secret, never mounted). Omitted
+  //     fail-closed when Obot management is unwired, keeping the runtime credential-less rather
+  //     than handing it a fake token.
+  if (obotClientTokenReady)
+  {
+    volumeMounts.push({ name: "obot-client-token", mountPath: _OBOT_CLIENT_TOKEN_DIR, readOnly: true });
+    volumes.push({
+      name: "obot-client-token",
+      secret: { secretName: _ObotClientTokenSecretName(name), items: [{ key: "token", path: "token" }] },
+    });
+  }
 
   return {
     apiVersion: "apps/v1",

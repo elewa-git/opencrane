@@ -434,7 +434,8 @@ describe("TenantResourceBuilder", () =>
     expect(envVars.OPENCRANE_RUNTIME_CONTRACT_PATH).toBe("/config/opencrane-managed-runtime.json");
     expect(envVars.OPENCRANE_MCP_GATEWAY_URL).toBe(defaultConfig.mcpGatewayUrl);
     expect(envVars.OPENCRANE_SKILL_REGISTRY_URL).toBe(defaultConfig.skillRegistryUrl);
-    expect(envVars.OPENCRANE_MCP_GATEWAY_TOKEN_PATH).toBe("/var/run/opencrane/tokens/obot-gateway.token");
+    // #128: no MCP-gateway token path when the per-tenant Obot token isn't minted (fail-closed default).
+    expect(envVars.OPENCRANE_MCP_GATEWAY_TOKEN_PATH).toBeUndefined();
     expect(envVars.OPENCRANE_SKILL_REGISTRY_TOKEN_PATH).toBe("/var/run/opencrane/tokens/feat-skill-registry.token");
     expect(envVars.OPENCRANE_POLICY_REF).toBe("restricted-mcp");
     expect(envVars.HOME).toBe("/tmp/opencrane-home");
@@ -447,9 +448,53 @@ describe("TenantResourceBuilder", () =>
     expect(volumes.some((volume) => volume.name === "tmp" && volume.emptyDir !== undefined)).toBe(true);
     expect(volumes.some((volume) =>
       volume.name === "projected-identity"
-      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "obot-gateway")
-      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "feat-skill-registry"),
+      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "feat-skill-registry")
+      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "opencrane-server"),
     )).toBe(true);
+  });
+
+  it("no longer projects an obot-gateway SA token (Obot v0.23.1 never validated k8s tokens — #128)", () =>
+  {
+    const tenant = _makeTenant("no-obot-sa");
+    const stateVolume = onPremAdapter.buildStateVolume("no-obot-sa");
+    const deployment = _BuildDeployment(defaultConfig, stateVolume, tenant, "default");
+    const podSpec = deployment.spec?.template?.spec;
+    const volumes = podSpec?.volumes ?? [];
+
+    // The projected-identity volume carries feat-skill-registry + opencrane-server only.
+    const projected = volumes.find((volume) => volume.name === "projected-identity");
+    const audiences = (projected?.projected?.sources ?? []).map((source) => source.serviceAccountToken?.audience);
+    expect(audiences).not.toContain("obot-gateway");
+    expect(audiences).toEqual(expect.arrayContaining(["feat-skill-registry", "opencrane-server"]));
+  });
+
+  it("mounts the per-tenant Obot client token only when it has been minted (#128)", () =>
+  {
+    const tenant = _makeTenant("obot-user");
+    const stateVolume = onPremAdapter.buildStateVolume("obot-user");
+
+    // Not ready (fail-closed default) — no mount, no volume, no token-path env.
+    const withoutToken = _BuildDeployment(defaultConfig, stateVolume, tenant, "default", undefined, undefined, undefined, false);
+    const specWithout = withoutToken.spec?.template?.spec;
+    const containerWithout = specWithout?.containers?.[0];
+    const envWithout = Object.fromEntries((containerWithout?.env ?? []).map((entry) => [entry.name ?? "", entry.value ?? ""]));
+    expect(specWithout?.volumes?.some((volume) => volume.name === "obot-client-token")).toBe(false);
+    expect(containerWithout?.volumeMounts?.some((mount) => mount.name === "obot-client-token")).toBe(false);
+    expect(envWithout.OPENCRANE_MCP_GATEWAY_TOKEN_PATH).toBeUndefined();
+
+    // Ready — the token Secret is mounted read-only as a file and the runtime env points at it.
+    const withToken = _BuildDeployment(defaultConfig, stateVolume, tenant, "default", undefined, undefined, undefined, true);
+    const specWith = withToken.spec?.template?.spec;
+    const containerWith = specWith?.containers?.[0];
+    const envWith = Object.fromEntries((containerWith?.env ?? []).map((entry) => [entry.name ?? "", entry.value ?? ""]));
+    const tokenVolume = specWith?.volumes?.find((volume) => volume.name === "obot-client-token");
+    expect(tokenVolume?.secret?.secretName).toBe("openclaw-obot-user-obot-client-token");
+    // Only the write-only `token` key is projected into the pod — the revocable tokenId stays behind.
+    expect(tokenVolume?.secret?.items).toEqual([{ key: "token", path: "token" }]);
+    const tokenMount = containerWith?.volumeMounts?.find((mount) => mount.name === "obot-client-token");
+    expect(tokenMount?.mountPath).toBe("/var/run/opencrane/obot");
+    expect(tokenMount?.readOnly).toBe(true);
+    expect(envWith.OPENCRANE_MCP_GATEWAY_TOKEN_PATH).toBe("/var/run/opencrane/obot/token");
   });
 
   it("builds a NetworkPolicy locking the gateway port to the in-operator proxy (CONN.4)", () =>

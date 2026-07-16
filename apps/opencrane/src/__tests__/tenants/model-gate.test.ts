@@ -154,13 +154,19 @@ function _buildHarness(options: { existingConfigMap?: k8s.V1ConfigMap | null })
     ensureTenantCogneeIdentity: vi.fn(async () => {}),
     ensureTenantJoinedToSiloTenant: vi.fn(async () => {}),
   } as unknown as import("../../reconcilers/tenants/internal/cognee-tenant-identity.js").CogneeTenantIdentity;
+  // Obot token minted successfully (ready) so this harness exercises the model gate, not the
+  // fail-closed Obot path (#128).
+  const obotToken = {
+    ensureObotClientTokenSecret: vi.fn(async () => true),
+    revokeAndDeleteObotClientToken: vi.fn(async () => {}),
+  } as unknown as import("../../reconcilers/tenants/internal/tenant-obot-token.js").TenantObotToken;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const stub = {} as any;
   const config = { ...defaultConfig, liteLlmEnabled: true };
   const op = new TenantOperator(
     stub, customApi, coreApi, appsApi, networkingApi, _log, config,
-    onPremAdapter, stub, statusWriter, encryptionKeys, liteLlmKeys, cogneeTenantIdentity, stub,
+    onPremAdapter, stub, statusWriter, encryptionKeys, liteLlmKeys, cogneeTenantIdentity, obotToken, stub,
   );
 
   return { op, coreApi, appsApi, statusPatches, applied };

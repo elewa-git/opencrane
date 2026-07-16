@@ -16,6 +16,7 @@ import { LinkerdIdentityClient } from "./internal/linkerd-identity.client.js";
 import { TenantEncryptionKeys } from "./internal/tenant-encryption-keys.js";
 import { TenantLiteLlmKeys } from "./internal/tenant-litellm-keys.js";
 import { CogneeTenantIdentity } from "./internal/cognee-tenant-identity.js";
+import { TenantObotToken } from "./internal/tenant-obot-token.js";
 import { _ResolveTenantPolicy } from "./internal/policy-resolution.js";
 import { _FetchTenantModels } from "./internal/tenant-models.js";
 import { _ResolveClusterTenant } from "./internal/cluster-tenant-resolution.js";
@@ -71,6 +72,9 @@ export class TenantOperator
   /** Helper for provisioning a real, per-tenant Cognee login (never a shared default). */
   private cogneeTenantIdentity: CogneeTenantIdentity;
 
+  /** Helper for minting/revoking the per-tenant Obot API token mounted into the pod (issue #128). */
+  private obotToken: TenantObotToken;
+
   /**
    * Per-org DNS/vanity-TLS provisioner (#151 item 2). Invoked from
    * {@link enforceClusterTenantIsolation} ONLY when `config.manageOwnDomain` is true
@@ -124,6 +128,7 @@ export class TenantOperator
               encryptionKeys: TenantEncryptionKeys,
               liteLlmKeys: TenantLiteLlmKeys,
               cogneeTenantIdentity: CogneeTenantIdentity,
+              obotToken: TenantObotToken,
               domainProvisioner: OrgDomainProvisioner,
               initialReplayRetryDelayMs = 5000)
   {
@@ -140,6 +145,7 @@ export class TenantOperator
     this.encryptionKeys = encryptionKeys;
     this.liteLlmKeys = liteLlmKeys;
     this.cogneeTenantIdentity = cogneeTenantIdentity;
+    this.obotToken = obotToken;
     this.domainProvisioner = domainProvisioner;
     this.configChecksum = _OperatorConfigChecksum(config);
     this.initialReplayRetryDelayMs = initialReplayRetryDelayMs;
@@ -499,6 +505,14 @@ export class TenantOperator
         }
       }
 
+      // 5d. Obot client token (#128) — mint a per-tenant Obot API token and store its write-only
+      //     secret in a per-tenant Secret the pod mounts, replacing the retired, non-functional
+      //     `obot-gateway` projected SA token (Obot v0.23.1 never validated k8s tokens). Fail-closed
+      //     until live Obot management is wired (Wave 3): the mint throws and this returns not-ready,
+      //     so step 8 omits the credential mount (the pod runs without an MCP-gateway credential
+      //     rather than a fake one). A warning is logged inside the helper; not fatal to reconcile.
+      const obotTokenReady = await this.obotToken.ensureObotClientTokenSecret(effectiveTenant, namespace);
+
       // 6. ConfigMap — serialises the base OpenClaw JSON config merged with any
       //    spec.configOverrides the tenant author provided. Capture it so its
       //    checksum can roll the pod when the config changes (step 7).
@@ -551,8 +565,9 @@ export class TenantOperator
       }
 
       // 8. Deployment — single-replica pod running the tenant's OpenClaw gateway.
-      //    Mounts the ConfigMap, encryption key, state volume, and projected identity tokens.
-      await __K8sApplyResource(this.appsApi, _BuildDeployment(this.config, stateVolume, effectiveTenant, namespace, compute, configChecksum, cogneeIdentityStamp), this.log);
+      //    Mounts the ConfigMap, encryption key, state volume, projected identity tokens, and —
+      //    when minted (step 5d) — the per-tenant Obot client token.
+      await __K8sApplyResource(this.appsApi, _BuildDeployment(this.config, stateVolume, effectiveTenant, namespace, compute, configChecksum, cogneeIdentityStamp, obotTokenReady), this.log);
 
       // 9. Service — ClusterIP that makes the gateway reachable inside the cluster
       //    on the configured gateway port.
@@ -832,6 +847,20 @@ export class TenantOperator
 
     this.log.info({ name }, "cleaning up tenant resources");
 
+    // 1. Obot client token (#128) — revoke it Obot-side (best-effort) and delete its Secret. Unlike
+    //    the encryption-key Secret (retained for data recovery), this carries a revocable credential
+    //    that must not outlive the tenant. Wrapped so a revoke/delete hiccup never blocks the rest of
+    //    cleanup below.
+    try
+    {
+      await this.obotToken.revokeAndDeleteObotClientToken(name, namespace);
+    }
+    catch (err)
+    {
+      this.log.warn({ err, name }, "obot client token teardown failed; continuing cleanup");
+    }
+
+    // 2. Remaining child resources (Deployment/Service/ConfigMap/ServiceAccount/Ingress).
     await this.cleanup.cleanupTenant(name, namespace);
 
     this.log.info({ name }, "tenant cleanup complete (storage + encryption key retained)");
@@ -873,6 +902,10 @@ export function _CreateTenantOperator(kc: k8s.KubeConfig, config: OpenClawTenant
   const encryptionKeys = new TenantEncryptionKeys(coreApi, objectApi, log);
   const liteLlmKeys = new TenantLiteLlmKeys(config, coreApi, objectApi, log);
   const cogneeTenantIdentity = new CogneeTenantIdentity(config, coreApi, objectApi, log);
+  // 4b. Obot token helper (#128) — mints/revokes the per-tenant Obot API token that replaces the
+  //     retired `obot-gateway` SA token. Its Obot adapter defaults to the fail-closed no-op until
+  //     live Obot management is wired (Wave 3).
+  const obotToken = new TenantObotToken(coreApi, objectApi, log);
   // 5. Org domain provisioner (#151 item 2) — always wired (cheap; each client fails closed
   //    on an absent CRD at call time), but only ever invoked when config.manageOwnDomain is
   //    true (standalone). Issuer name/kind come straight from this silo's own cert-manager
@@ -882,5 +915,5 @@ export function _CreateTenantOperator(kc: k8s.KubeConfig, config: OpenClawTenant
     issuerKind: config.certManagerIssuerKind,
   });
 
-  return new TenantOperator(watch, customApi, coreApi, appsApi, networkingApi, log, config, hosting, cleanup, statusWriter, encryptionKeys, liteLlmKeys, cogneeTenantIdentity, domainProvisioner);
+  return new TenantOperator(watch, customApi, coreApi, appsApi, networkingApi, log, config, hosting, cleanup, statusWriter, encryptionKeys, liteLlmKeys, cogneeTenantIdentity, obotToken, domainProvisioner);
 }

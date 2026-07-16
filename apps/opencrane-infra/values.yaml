@@ -1114,7 +1114,10 @@ gatewayProxy:
   # -- Max gateway sockets one identity may open per minute (per operator replica).
   rateLimitPerMinute: 60
 
-# -- Audience-bound projected token settings for tenant access into ingress planes
+# -- Audience-bound projected SA-token settings for tenant access into ingress planes.
+#    Covers the feat-skill-registry and opencrane-server audiences only. The Obot MCP gateway
+#    is NOT covered: Obot v0.23.1 does not validate k8s TokenReview tokens, so the pod instead
+#    mounts a per-tenant Obot API token minted by the operator into its own Secret (issue #128).
 projectedIdentity:
   ttlSeconds: 600
 

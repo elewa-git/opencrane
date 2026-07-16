@@ -102,7 +102,7 @@ describe("TenantOperator reconcile guard + coalescing", () =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stub = {} as any;
     const op = new TenantOperator(stub, stub, stub, stub, stub, pino({ level: "silent" }),
-      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub);
+      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub, stub);
     return { op, patch };
   }
 
@@ -201,7 +201,7 @@ describe("TenantOperator startup replay", () =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stub = {} as any;
     const op = new TenantOperator(watch as any, customApi as any, stub, stub, stub, pino({ level: "silent" }),
-      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub);
+      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub, stub);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (op as any).reconcileTenant = async function _reconcile(existing: Tenant)
@@ -237,7 +237,7 @@ describe("TenantOperator startup replay", () =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stub = {} as any;
     const op = new TenantOperator(stub, customApi as any, stub, stub, stub, pino({ level: "silent" }),
-      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub);
+      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub, stub);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (op as any).reconcileTenant = async function _reconcile(existing: Tenant)
@@ -286,7 +286,7 @@ describe("TenantOperator startup replay", () =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stub = {} as any;
     const op = new TenantOperator(watch as any, customApi as any, stub, stub, stub, pino({ level: "silent" }),
-      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub, 0);
+      defaultConfig, stub, stub, statusWriter, stub, stub, stub, stub, stub, 0);
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     (op as any).reconcileTenant = async function _reconcile(existing: Tenant)
@@ -320,7 +320,7 @@ describe("TenantOperator suspend self-loop guard", () =>
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const appsApi = driveBody ? ({ createNamespacedDeployment: async () => ({}) } as any) : stub;
     const op = new TenantOperator(stub, stub, stub, appsApi, stub, pino({ level: "silent" }),
-      defaultConfig, hosting, stub, statusWriter, stub, stub, stub, stub);
+      defaultConfig, hosting, stub, statusWriter, stub, stub, stub, stub, stub);
     return { op, patch };
   }
 

@@ -139,6 +139,10 @@ function _makeOperator(core: RecordingClient, apps: RecordingClient, networking:
     async ensureTenantCogneeIdentity(): Promise<void> {},
     async ensureTenantJoinedToSiloTenant(): Promise<void> {},
   } as never;
+  const obotToken = {
+    async ensureObotClientTokenSecret(): Promise<boolean> { return true; },
+    async revokeAndDeleteObotClientToken(): Promise<void> {},
+  } as never;
   const cleanup = { async cleanupTenant(): Promise<void> {} } as never;
 
   return new TenantOperator(
@@ -155,6 +159,7 @@ function _makeOperator(core: RecordingClient, apps: RecordingClient, networking:
     encryptionKeys,
     liteLlmKeys,
     cogneeTenantIdentity,
+    obotToken,
     domainProvisioner ?? _makeRecordingDomainProvisioner(),
   );
 }
