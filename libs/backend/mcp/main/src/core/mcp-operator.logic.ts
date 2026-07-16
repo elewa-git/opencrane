@@ -149,31 +149,46 @@ export async function listInstalled(prisma: PrismaClient, userId: string): Promi
  * @param serverId - Catalogue server identifier to install.
  * @returns The install row, or null when the server does not exist.
  */
-export async function installServer(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export async function installServer(prisma: PrismaClient, caller: McpOperatorCaller, serverId: string): Promise<McpInstalled | null>
 {
   // 1. Confirm the server exists so a bad identifier reads as 404 rather than a
   //    dangling install row pointing at nothing.
-  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { serverType: true } });
+  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { serverType: true, approvalStatus: true } });
   if (!server)
   {
     return null;
   }
 
-  // 2. Multi-user servers are brokered by an org-wide shared key, so the install
+  // 2. AUTHORIZE the install: catalogue filtering is NOT authorization. Re-check that
+  //    the caller currently holds an effective Allow on a PUBLISHED server, so a
+  //    guessed / previously-visible id can't be installed after access is denied or
+  //    revoked. A non-entitled server reads as 404 — never leaking its existence.
+  //    Dev-open mirrors the catalogue's fail-open local-dev posture.
+  if (!caller.devOpen)
+  {
+    const published = server.approvalStatus === _PRISMA_APPROVAL_STATUS.Published;
+    const entitled = published && (await _CompileEntitledMcpServerIds(prisma, caller)).has(serverId);
+    if (!entitled)
+    {
+      return null;
+    }
+  }
+
+  // 3. Multi-user servers are brokered by an org-wide shared key, so the install
   //    is connected on creation; every other type must author a credential first.
   const initialStatus = server.serverType === _PRISMA_SERVER_TYPE.MultiUser
     ? _PRISMA_CONNECTION_STATUS.SharedKey
     : _PRISMA_CONNECTION_STATUS.NeedsCredential;
 
-  // 3. Upsert so a repeated install is idempotent and never duplicates the row,
+  // 4. Upsert so a repeated install is idempotent and never duplicates the row,
   //    leaving an already-connected install untouched.
   const install = await prisma.mcpServerInstall.upsert({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    create: { mcpServerId: serverId, userId, connectionStatus: initialStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] },
+    where: { mcpServerId_userId: { mcpServerId: serverId, userId: caller.userId } },
+    create: { mcpServerId: serverId, userId: caller.userId, connectionStatus: initialStatus as Prisma.McpServerInstallCreateInput["connectionStatus"] },
     update: {},
   });
 
-  await _AuditInstall(prisma, "Created", serverId, userId, `MCP server ${serverId} installed for ${userId}`);
+  await _AuditInstall(prisma, "Created", serverId, caller.userId, `MCP server ${serverId} installed for ${caller.userId}`);
   return _MapInstalled(install);
 }
 

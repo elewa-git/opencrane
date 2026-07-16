@@ -251,7 +251,7 @@ describe("mcp-operator router", function _suite()
     {
       const store: { install: Record<string, unknown> | null } = { install: null };
       const overrides: Record<string, (...args: unknown[]) => unknown> = {
-        "mcpServer.findUnique": function _serverFind() { return Promise.resolve({ serverType }); },
+        "mcpServer.findUnique": function _serverFind() { return Promise.resolve({ serverType, approvalStatus: "Published" }); },
         "mcpServerInstall.findUnique": function _installFind() { return Promise.resolve(store.install); },
         "mcpServerInstall.upsert": function _upsert(arg: unknown) {
           const create = (arg as { create: Record<string, unknown> }).create;
@@ -271,6 +271,7 @@ describe("mcp-operator router", function _suite()
 
     it("installs a single-user server as needs-credential", async function _install()
     {
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([{ payloadId: "srv-1", access: GrantCompilerAccess.Allow }]));
       const { prisma } = _statefulPrisma("SingleUser");
       const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
 
@@ -280,11 +281,38 @@ describe("mcp-operator router", function _suite()
 
     it("installs a multi-user server as shared-key", async function _installShared()
     {
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([{ payloadId: "srv-1", access: GrantCompilerAccess.Allow }]));
       const { prisma } = _statefulPrisma("MultiUser");
       const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
 
       expect(res.status).toBe(201);
       expect(res.body.connectionStatus).toBe("shared-key");
+    });
+
+    it("refuses to install a server the caller is not entitled to (404, no row written)", async function _installDenied()
+    {
+      // Catalogue filtering is not authorization: even a valid, published server id
+      // cannot be installed without a current effective Allow.
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([]));
+      const { prisma, store } = _statefulPrisma("SingleUser");
+      const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+      expect(res.status).toBe(404);
+      expect(store.install).toBeNull();
+    });
+
+    it("refuses to install an unpublished server even with an Allow (404)", async function _installUnpublished()
+    {
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([{ payloadId: "srv-1", access: GrantCompilerAccess.Allow }]));
+      const store: { install: Record<string, unknown> | null } = { install: null };
+      const { prisma } = _mockPrisma({
+        "mcpServer.findUnique": function _find() { return Promise.resolve({ serverType: "SingleUser", approvalStatus: "PendingReview" }); },
+        "mcpServerInstall.upsert": function _up(arg: unknown) { store.install = (arg as { create: Record<string, unknown> }).create; return Promise.resolve(store.install); },
+      });
+      const res = await request(_buildApp(prisma, { sub: "user-1" })).post("/api/v1/mcp/installed").send({ serverId: "srv-1" });
+
+      expect(res.status).toBe(404);
+      expect(store.install).toBeNull();
     });
 
     it("transitions to connected when Obot reports the configured server", async function _connect()

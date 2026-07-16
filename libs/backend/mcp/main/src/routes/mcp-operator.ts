@@ -58,9 +58,10 @@ export function mcpOperatorRouter(prisma: PrismaClient, obot: ObotManagementClie
       return;
     }
 
-    const installed = await installServer(prisma, _ResolveCaller(req).userId, body.serverId.trim());
+    const installed = await installServer(prisma, _ResolveCaller(req), body.serverId.trim());
     if (!installed)
     {
+      // 404 covers both "no such server" and "not entitled" — never leak existence.
       res.status(404).json({ error: "MCP server not found", code: "MCP_SERVER_NOT_FOUND" });
       return;
     }
