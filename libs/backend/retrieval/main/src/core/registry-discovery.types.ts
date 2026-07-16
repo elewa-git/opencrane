@@ -6,6 +6,8 @@
  * admin can browse before an explicit curated import (italanta/opencrane#128, #218).
  */
 
+import type { HostLookup } from "./ssrf.types.js";
+
 /** Minimal `fetch` surface the discovery client depends on (injectable for tests). */
 export type RegistryFetch = (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string> }) => Promise<RegistryFetchResponse>;
 
@@ -95,6 +97,8 @@ export interface DiscoverRegistryParams
   limit?: number;
   /** Injected fetch implementation; defaults to the global `fetch`. */
   fetchFn?: RegistryFetch;
+  /** Injected DNS resolver (real-fetch path only); defaults to the system resolver. */
+  lookupFn?: HostLookup;
   /** Abort signal to bound the request, when the caller enforces a timeout. */
   signal?: AbortSignal;
 }
@@ -110,6 +114,8 @@ export interface DiscoverServerDetailParams
   version?: string;
   /** Injected fetch implementation; defaults to the global `fetch`. */
   fetchFn?: RegistryFetch;
+  /** Injected DNS resolver (real-fetch path only); defaults to the system resolver. */
+  lookupFn?: HostLookup;
   /** Abort signal to bound the request. */
   signal?: AbortSignal;
 }

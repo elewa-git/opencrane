@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { UnsafeRemoteUrlError, _AssertSafeRemoteUrl } from "../core/ssrf.js";
+import { UnsafeRemoteUrlError, _AssertResolvedHostSafe, _AssertSafeRemoteUrl } from "../core/ssrf.js";
+import type { HostLookup } from "../core/ssrf.types.js";
 
 /**
  * SSRF / unsafe-network guard (italanta/opencrane#128, folded #218). Every remote
@@ -70,5 +71,32 @@ describe("_AssertSafeRemoteUrl", function _suite()
     {
       expect(() => _AssertSafeRemoteUrl(`https://${host}/x`), host).toThrow(UnsafeRemoteUrlError);
     }
+  });
+});
+
+describe("_AssertResolvedHostSafe — DNS-resolution guard (rebinding / private-resolving names)", function _resolveSuite()
+{
+  /** A lookup stub returning fixed addresses for the tested host. */
+  function _lookup(addresses: string[]): HostLookup
+  {
+    return async function _l() { return addresses.map(function _m(address) { return { address }; }); };
+  }
+
+  it("passes when every resolved address is public", async function _public()
+  {
+    await expect(_AssertResolvedHostSafe("registry.example.com", _lookup(["93.184.216.34"]))).resolves.toBeUndefined();
+  });
+
+  it("rejects a public-looking host that resolves to a private/loopback/metadata address", async function _private()
+  {
+    for (const addr of ["127.0.0.1", "10.0.0.5", "192.168.1.1", "169.254.169.254", "::1", "fd00::1"])
+    {
+      await expect(_AssertResolvedHostSafe("sneaky.example.com", _lookup([addr])), addr).rejects.toBeInstanceOf(UnsafeRemoteUrlError);
+    }
+  });
+
+  it("rejects when ANY resolved address is unsafe (mixed public + private)", async function _mixed()
+  {
+    await expect(_AssertResolvedHostSafe("rebind.example.com", _lookup(["93.184.216.34", "169.254.169.254"]))).rejects.toBeInstanceOf(UnsafeRemoteUrlError);
   });
 });

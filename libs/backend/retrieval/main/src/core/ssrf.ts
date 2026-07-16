@@ -7,6 +7,16 @@
  * non-private, non-loopback, non-link-local, non-metadata host passes.
  */
 
+import { lookup as _dnsLookup } from "node:dns/promises";
+
+import type { HostLookup } from "./ssrf.types.js";
+
+/** Default resolver: every A/AAAA address a hostname resolves to. */
+const _DEFAULT_LOOKUP: HostLookup = function _lookup(hostname: string): Promise<Array<{ address: string }>>
+{
+  return _dnsLookup(hostname, { all: true });
+};
+
 /**
  * Thrown when a remote URL is rejected as unsafe to dial. Carries an actionable
  * reason so an import endpoint can surface WHY without leaking probe results.
@@ -97,6 +107,39 @@ export function _AssertSafeRemoteUrl(rawUrl: string): URL
  * @param hostname - `URL.hostname` (IPv6 hosts arrive bracket-stripped already).
  * @returns Normalised host string.
  */
+/**
+ * Resolve a hostname's A/AAAA addresses and reject if ANY resolves to a private,
+ * loopback, link-local, CGNAT, or metadata address.
+ *
+ * `_AssertSafeRemoteUrl` only classifies the host TEXT, so a public-looking name
+ * whose DNS points at (or later rebinds to) an internal address would slip past it.
+ * Call this immediately before dialing. IP-literal hosts are already fully validated
+ * by `_AssertSafeRemoteUrl`, so DNS is skipped for them.
+ *
+ * @param hostname - The host to resolve (from an already URL-validated remote).
+ * @param lookupFn - DNS resolver; defaults to the real resolver, injectable in tests.
+ * @throws {UnsafeRemoteUrlError} When any resolved address is private/reserved.
+ */
+export async function _AssertResolvedHostSafe(hostname: string, lookupFn: HostLookup = _DEFAULT_LOOKUP): Promise<void>
+{
+  const host = _normalizeHost(hostname);
+  // An IP literal carries no DNS indirection — already validated at the URL layer.
+  if (_parseIpv4(host) !== undefined || host.includes(":"))
+  {
+    return;
+  }
+
+  const addresses = await lookupFn(hostname);
+  for (const { address } of addresses)
+  {
+    const reason = _classifyUnsafeHost(_normalizeHost(address));
+    if (reason !== undefined)
+    {
+      throw new UnsafeRemoteUrlError(`host '${hostname}' resolves to an unsafe address — ${reason}`);
+    }
+  }
+}
+
 function _normalizeHost(hostname: string): string
 {
   const unwrapped = hostname.startsWith("[") && hostname.endsWith("]") ? hostname.slice(1, -1) : hostname;

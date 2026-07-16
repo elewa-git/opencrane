@@ -1,4 +1,6 @@
-import type { DiscoverRegistryParams, DiscoverServerDetailParams, DiscoveredMcpServer, RegistryFetch, RegistryListResult, RegistryRemote, RegistryRepository } from "./registry-discovery.types.js";
+import type { DiscoverRegistryParams, DiscoverServerDetailParams, DiscoveredMcpServer, RegistryFetch, RegistryFetchResponse, RegistryListResult, RegistryRemote, RegistryRepository } from "./registry-discovery.types.js";
+import { _AssertResolvedHostSafe, _AssertSafeRemoteUrl } from "./ssrf.js";
+import type { HostLookup } from "./ssrf.types.js";
 
 /**
  * Read-only discovery client for a standard MCP registry API
@@ -41,7 +43,7 @@ export async function _DiscoverRegistryServers(params: DiscoverRegistryParams): 
 {
   // 1. Resolve the fetch impl — injectable so unit tests never hit the network
   //    and can assert discovery touches no Obot adapter.
-  const fetchFn: RegistryFetch = params.fetchFn ?? _globalFetch();
+  const fetchFn: RegistryFetch = params.fetchFn ?? _safeGlobalFetch(params.lookupFn);
 
   // 2. Build the list URL with pagination params preserved verbatim.
   const url = new URL("v0/servers", _ensureTrailingSlash(params.baseUrl));
@@ -87,7 +89,7 @@ export async function _DiscoverRegistryServers(params: DiscoverRegistryParams): 
 export async function _GetRegistryServerDetail(params: DiscoverServerDetailParams): Promise<DiscoveredMcpServer>
 {
   // 1. Resolve the fetch impl (injectable, read-only).
-  const fetchFn: RegistryFetch = params.fetchFn ?? _globalFetch();
+  const fetchFn: RegistryFetch = params.fetchFn ?? _safeGlobalFetch(params.lookupFn);
 
   // 2. Build the detail URL, pinning a specific version when one is requested.
   const url = new URL(`v0/servers/${encodeURIComponent(params.upstreamName)}`, _ensureTrailingSlash(params.baseUrl));
@@ -106,19 +108,34 @@ export async function _GetRegistryServerDetail(params: DiscoverServerDetailParam
   return server;
 }
 
-/**
- * Resolve the global `fetch` as the discovery client's default transport.
- *
- * @returns The global fetch, narrowed to the {@link RegistryFetch} surface.
- */
-function _globalFetch(): RegistryFetch
+/** Widened global-fetch surface that also carries the `redirect` option (call signature avoids an inline arrow type). */
+interface _RawFetch
 {
-  const candidate = (globalThis as { fetch?: unknown }).fetch;
-  if (typeof candidate !== "function")
+  (input: string, init?: { signal?: AbortSignal; headers?: Record<string, string>; redirect?: "error" }): Promise<RegistryFetchResponse>;
+}
+
+/**
+ * The real global fetch wrapped with SSRF protection: validate the URL text and its
+ * RESOLVED addresses before dialing, and DISABLE redirects (a registry that 30x-es
+ * could otherwise send us to a private/metadata host that skipped the pre-dial check).
+ * Only used on the real-network path; tests inject `fetchFn` and bypass this.
+ *
+ * @param lookupFn - DNS resolver (injectable), defaults to the system resolver.
+ * @returns A {@link RegistryFetch} that fails closed on unsafe targets/redirects.
+ */
+function _safeGlobalFetch(lookupFn?: HostLookup): RegistryFetch
+{
+  const raw = (globalThis as { fetch?: _RawFetch }).fetch;
+  if (typeof raw !== "function")
   {
     throw new RegistryUnavailableError("no global fetch available; inject fetchFn");
   }
-  return candidate as unknown as RegistryFetch;
+  return async function _safeFetch(input, init)
+  {
+    _AssertSafeRemoteUrl(input);
+    await _AssertResolvedHostSafe(new URL(input).hostname, lookupFn);
+    return raw(input, { ...init, redirect: "error" });
+  };
 }
 
 /**
