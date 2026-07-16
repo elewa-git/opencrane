@@ -476,6 +476,12 @@ async function _WriteMcpServerChildren(prisma: PrismaClient, serverId: string, b
     return;
   }
 
+  // The generic Grant row is the AUTHORITY — the sole source of truth read for MCP
+  // authorization (catalogue entitlement + the tenant effective contract). The
+  // McpServerGrant row written alongside it is a DEMOTED read-only projection kept
+  // for display back-compat only; nothing reads it to make an authorization
+  // decision. TODO(reaper #128 W1.D): drop McpServerGrant + this scoped write once
+  // no consumer projects off it.
   const scopedGrantRows: Prisma.McpServerGrantCreateManyInput[] = [];
   for (const grant of body.grants)
   {

@@ -1,12 +1,20 @@
 import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { GrantAccess, GrantPayloadType, GrantScope, GrantSubjectType, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___SortBy } from "@opencrane/util";
 import type { McpAccessPolicyRequest } from "../routes/mcp-operator.types.js";
 import type { ObotManagementClient, ObotServerMode, ObotServerReadiness, ObotServerRef } from "./obot-client.types.js";
 
-/** MCP server row joined with the access policy + entitled users used for filtering. */
-type _McpServerWithPolicyRow = Prisma.McpServerGetPayload<{ include: { accessPolicy: { include: { users: true } } } }>;
+/**
+ * Reserved subject id an org-wide MCP entitlement grant targets in the generic
+ * `Grant` table. An `everyoneInOrg` policy authors a single Allow grant on this
+ * sentinel Group subject, and every caller's subject-id universe includes it, so
+ * an org-wide grant matches everyone without an "everyone" subject type.
+ */
+const _ORG_EVERYONE_SUBJECT_ID = "*";
+
+/** Minimal generic-`Grant` projection used to resolve MCP catalogue entitlement. */
+type _McpEntitlementGrantRow = { payloadId: string; access: GrantAccess; priority: number; subjectId: string; createdAt: Date };
 
 /** Per-user install row returned by the install/connect mutations. */
 type _McpInstallRow = Prisma.McpServerInstallGetPayload<object>;
@@ -91,17 +99,26 @@ const _AVATAR_COLORS = ["#1F3B6E", "#2E7D32", "#6A1B9A", "#C62828", "#00838F", "
 export async function listEntitledCatalog(prisma: PrismaClient, caller: McpOperatorCaller): Promise<McpCatalogServer[]>
 {
   // 1. Narrow to published servers in the database so disabled/pending rows never
-  //    leave the governance boundary, then load each server's access policy.
+  //    leave the governance boundary. Entitlement is NOT read from the demoted
+  //    McpServerAccessPolicy table anymore, so no access-policy include is loaded.
   const servers = await prisma.mcpServer.findMany({
     where: { approvalStatus: _PRISMA_APPROVAL_STATUS.Published as Prisma.McpServerWhereInput["approvalStatus"] },
-    include: { accessPolicy: { include: { users: true } } },
     orderBy: { createdAt: "desc" },
   });
 
-  // 2. Apply the per-caller entitlement filter (everyone-in-org / user / group),
-  //    bypassed only under the dev-open posture, then map to the wire shape.
+  // 2. Dev-open posture bypasses entitlement so a fresh local install / the OPEN
+  //    dev backend sees the full published catalogue and isn't locked out.
+  if (caller.devOpen)
+  {
+    return servers.map(function _map(server) { return _MapCatalogServer(server); });
+  }
+
+  // 3. Derive the entitled server-id set from the generic Grant table — the SOLE
+  //    authority for MCP authorization — then keep only the servers the caller
+  //    holds an effective Allow on (no grant ⇒ absent ⇒ default-deny).
+  const entitledIds = await _CompileEntitledMcpServerIds(prisma, caller);
   return servers
-    .filter(function _entitled(server) { return _IsEntitled(server, caller); })
+    .filter(function _entitled(server) { return entitledIds.has(server.id); })
     .map(function _map(server) { return _MapCatalogServer(server); });
 }
 
@@ -562,8 +579,23 @@ export async function setAccessPolicy(prisma: PrismaClient, serverId: string, bo
   const groups = _NormalizeIds(body.groups);
   const userIds = _NormalizeIds(body.users);
 
-  // 3. Upsert the policy parent, then replace its user rows wholesale because the
-  //    submitted payload is treated as authoritative.
+  // 3. AUTHORITY WRITE — replace this server's admin-authored entitlement in the
+  //    generic Grant table, the SOLE source of truth for MCP authorization. Only
+  //    admin-authored rows (sharedBy = null) are cleared, so per-user shares
+  //    (Grant.sharedBy != null, S4) survive an access-policy rewrite, then the new
+  //    Allow grants are written from the authoritative payload.
+  await prisma.grant.deleteMany({ where: { mcpServerId: serverId, payloadType: GrantPayloadType.McpServer, sharedBy: null } });
+  const grantRows = _BuildEntitlementGrantRows(serverId, body.everyoneInOrg, groups, userIds);
+  if (grantRows.length > 0)
+  {
+    await prisma.grant.createMany({ data: grantRows });
+  }
+
+  // 4. PROJECTION WRITE (display back-compat only) — McpServerAccessPolicy /
+  //    McpServerAccessUser are DEMOTED to a read-only display projection powering
+  //    the admin editor (getAccessPolicy / getDirectory). They are NEVER read to
+  //    make an authorization decision. TODO(reaper #128 W1.D): drop these tables +
+  //    this write once the editor display is derived from the generic Grant table.
   const policy = await prisma.mcpServerAccessPolicy.upsert({
     where: { mcpServerId: serverId },
     create: { mcpServerId: serverId, everyoneInOrg: body.everyoneInOrg, groups },
@@ -577,7 +609,7 @@ export async function setAccessPolicy(prisma: PrismaClient, serverId: string, bo
     });
   }
 
-  // 4. Record an audit entry so access changes stay traceable.
+  // 5. Record an audit entry so access changes stay traceable.
   await prisma.auditEntry.create({ data: { action: "Updated", resource: `McpServer/${serverId}`, message: `MCP server ${serverId} access policy updated` } });
 
   return _MapAccessPolicy(serverId, { everyoneInOrg: body.everyoneInOrg, groups, users: userIds.map(function _u(userId) { return { userId }; }) });
@@ -664,40 +696,108 @@ async function _AuditInstall(prisma: PrismaClient, action: string, serverId: str
 }
 
 /**
- * Decide whether a caller is entitled to a published server.
+ * Compile the set of MCP server ids the caller holds an effective Allow on,
+ * reading the generic `Grant` table (payloadType `McpServer`) as the SOLE
+ * authorization authority. The demoted McpServerAccessPolicy / McpServerGrant
+ * tables are never consulted.
  *
- * @param server - Server row with its access policy + entitled users loaded.
+ * Precedence mirrors the grant compiler exactly (highest priority wins; a Deny
+ * beats an Allow at equal priority; newest `createdAt` breaks the remaining tie),
+ * so a server is entitled only when its winning grant resolves to Allow. A server
+ * with no matching grant never enters the map, which is the default-deny path.
+ *
+ * @param prisma - Prisma client used for persistence.
  * @param caller - Identity + entitlement context of the calling user.
- * @returns True when the caller may see / install the server.
+ * @returns The set of server ids the caller may see / install.
  */
-function _IsEntitled(server: _McpServerWithPolicyRow, caller: McpOperatorCaller): boolean
+async function _CompileEntitledMcpServerIds(prisma: PrismaClient, caller: McpOperatorCaller): Promise<Set<string>>
 {
-  // 1. Dev-open posture bypasses entitlement so a local install isn't locked out.
-  if (caller.devOpen)
+  // 1. Build the caller's stable subject-id universe: the user id, every IdP group
+  //    claim, and the org-everyone sentinel that an org-wide grant targets.
+  const subjectIds = _CallerSubjectIds(caller);
+
+  // 2. Load every generic MCP grant addressed to one of those subjects; matching by
+  //    subjectId keeps group entitlement claim-based (the caller's own group claims).
+  const grants = await prisma.grant.findMany({
+    where: { payloadType: GrantPayloadType.McpServer, subjectId: { in: subjectIds } },
+    select: { payloadId: true, access: true, priority: true, subjectId: true, createdAt: true },
+  });
+
+  // 3. Resolve the single winning grant per server via the shared precedence rule.
+  const winnerByServer = new Map<string, _McpEntitlementGrantRow>();
+  for (const grant of grants)
   {
-    return true;
+    const current = winnerByServer.get(grant.payloadId);
+    if (!current || _GrantOutranks(grant, current))
+    {
+      winnerByServer.set(grant.payloadId, grant);
+    }
   }
 
-  // 2. No policy authored → fail closed; an admin must grant access explicitly.
-  const policy = server.accessPolicy;
-  if (!policy)
+  // 4. Entitled iff the winner is an Allow; a winning Deny (or no grant) excludes it.
+  const entitled = new Set<string>();
+  for (const [serverId, winner] of winnerByServer)
   {
-    return false;
+    if (winner.access === GrantAccess.Allow)
+    {
+      entitled.add(serverId);
+    }
   }
 
-  // 3. Org-wide grant short-circuits the per-user / per-group lists.
-  if (policy.everyoneInOrg)
+  return entitled;
+}
+
+/**
+ * Build the caller's stable subject-id universe used to match generic grants.
+ *
+ * @param caller - Identity + entitlement context of the calling user.
+ * @returns Distinct, non-empty subject ids: user id + group claims + org sentinel.
+ */
+function _CallerSubjectIds(caller: McpOperatorCaller): string[]
+{
+  const subjectIds = new Set<string>([_ORG_EVERYONE_SUBJECT_ID]);
+  if (caller.userId)
   {
-    return true;
+    subjectIds.add(caller.userId);
+  }
+  for (const group of caller.groups)
+  {
+    if (group)
+    {
+      subjectIds.add(group);
+    }
   }
 
-  // 4. Direct user grant, then group-claim intersection.
-  if (policy.users.some(function _u(user) { return user.userId === caller.userId; }))
+  return Array.from(subjectIds);
+}
+
+/**
+ * Decide whether a candidate grant outranks the current winner for a server.
+ *
+ * Mirrors the grant compiler's precedence so catalogue entitlement and the tenant
+ * effective contract agree: priority first, then Deny over Allow at equal priority,
+ * then the newer `createdAt`.
+ *
+ * @param candidate - Grant being considered.
+ * @param current - Current winning grant for the same server.
+ * @returns True when the candidate should replace the current winner.
+ */
+function _GrantOutranks(candidate: _McpEntitlementGrantRow, current: _McpEntitlementGrantRow): boolean
+{
+  // 1. Higher priority always wins regardless of allow/deny.
+  if (candidate.priority !== current.priority)
   {
-    return true;
+    return candidate.priority > current.priority;
   }
 
-  return policy.groups.some(function _g(group) { return caller.groups.includes(group); });
+  // 2. At equal priority a Deny beats an Allow (fail-closed precedence).
+  if (candidate.access !== current.access)
+  {
+    return candidate.access === GrantAccess.Deny;
+  }
+
+  // 3. Same priority and access — the newer grant wins the tie deterministically.
+  return candidate.createdAt.getTime() > current.createdAt.getTime();
 }
 
 /**
@@ -820,6 +920,71 @@ function _NormalizeCredentialSchema(value: Prisma.JsonValue): CredentialField[]
   }
 
   return fields;
+}
+
+/**
+ * Build the authoritative generic-`Grant` rows for an access-policy write.
+ *
+ * Every entitlement becomes an Allow grant on the generic Grant table (the sole
+ * authorization authority): org-wide targets the org-everyone sentinel subject,
+ * each group targets its group subject, and each user targets its user subject.
+ *
+ * @param serverId - Governed MCP server identifier.
+ * @param everyoneInOrg - Whether the policy entitles the whole org.
+ * @param groups - Normalised entitled group identifiers.
+ * @param userIds - Normalised entitled user identifiers.
+ * @returns Prisma createMany input rows for the generic Grant table.
+ */
+function _BuildEntitlementGrantRows(serverId: string, everyoneInOrg: boolean, groups: string[], userIds: string[]): Prisma.GrantCreateManyInput[]
+{
+  const rows: Prisma.GrantCreateManyInput[] = [];
+
+  // 1. Org-wide entitlement → a single Allow grant on the org-everyone sentinel,
+  //    which every caller's subject-id universe matches.
+  if (everyoneInOrg)
+  {
+    rows.push(_EntitlementGrantRow(serverId, GrantSubjectType.Group, _ORG_EVERYONE_SUBJECT_ID));
+  }
+
+  // 2. Each entitled group → an Allow grant on that group subject.
+  for (const group of groups)
+  {
+    rows.push(_EntitlementGrantRow(serverId, GrantSubjectType.Group, group));
+  }
+
+  // 3. Each entitled user → an Allow grant on that user subject.
+  for (const userId of userIds)
+  {
+    rows.push(_EntitlementGrantRow(serverId, GrantSubjectType.User, userId));
+  }
+
+  return rows;
+}
+
+/**
+ * Build one authoritative Allow grant row for an access-policy subject.
+ *
+ * `groupId` (the Group FK) is intentionally left null even for group subjects: an
+ * access-policy group is an opaque claim/name, not guaranteed to be a local Group
+ * row, and the catalogue read matches on `subjectId` directly.
+ *
+ * @param serverId - Governed MCP server identifier (payload + cascade relation).
+ * @param subjectType - Grant subject family (Group or User).
+ * @param subjectId - Concrete subject identifier the grant addresses.
+ * @returns Prisma createMany input for a single generic Grant row.
+ */
+function _EntitlementGrantRow(serverId: string, subjectType: GrantSubjectType, subjectId: string): Prisma.GrantCreateManyInput
+{
+  return {
+    payloadType: GrantPayloadType.McpServer,
+    payloadId: serverId,
+    scope: GrantScope.Org,
+    subjectType,
+    subjectId,
+    access: GrantAccess.Allow,
+    priority: 0,
+    mcpServerId: serverId,
+  };
 }
 
 /**

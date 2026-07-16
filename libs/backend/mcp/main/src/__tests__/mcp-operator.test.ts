@@ -162,33 +162,113 @@ describe("mcp-operator router", function _suite()
     });
   });
 
-  describe("GET /catalog — published + entitled filtering", function _catalog()
+  describe("GET /catalog — entitlement derived from the generic Grant table (authority)", function _catalog()
   {
-    /** Two published servers: one org-wide entitled, one only for another user. */
+    /**
+     * Two published servers. Crucially the rows carry NO `accessPolicy` include:
+     * the decision is derived solely from `grant.findMany`, proving the demoted
+     * McpServerAccessPolicy table is no longer the read authority.
+     */
     const _servers = [
-      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date(), accessPolicy: { everyoneInOrg: true, groups: [], users: [] } },
-      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date(), accessPolicy: { everyoneInOrg: false, groups: ["other-group"], users: [{ userId: "someone-else" }] } },
+      { id: "srv-open", name: "Open", description: "", publisher: null, glyph: null, serverType: "MultiUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
+      { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
     ];
 
-    it("returns only the servers the caller is entitled to", async function _filters()
+    /** A generic MCP Grant row in the shape `_CompileEntitledMcpServerIds` selects. */
+    function _grant(overrides: Partial<{ payloadId: string; access: string; priority: number; subjectId: string; createdAt: Date }>): Record<string, unknown>
+    {
+      return { payloadId: "srv-open", access: "Allow", priority: 0, subjectId: "", createdAt: new Date(), ...overrides };
+    }
+
+    /**
+     * Stub `grant.findMany` so it honours the `where.subjectId.in` filter the read
+     * path builds — this is what makes claim-based group / org-wide matching real
+     * rather than "any row present wins".
+     */
+    function _grantsFindMany(rows: Record<string, unknown>[]): (arg: unknown) => Promise<Record<string, unknown>[]>
+    {
+      return function _find(arg: unknown)
+      {
+        const inSet = ((arg as { where?: { subjectId?: { in?: string[] } } })?.where?.subjectId?.in) ?? [];
+        return Promise.resolve(rows.filter(function _match(row) { return inSet.includes(row.subjectId as string); }));
+      };
+    }
+
+    it("default-deny: an ungranted caller sees nothing", async function _deny()
     {
       process.env.OPENCRANE_API_TOKEN = "ci-token";
       const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
       const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
+      expect(res.body).toEqual([]);
+    });
+
+    it("an org-wide Grant entitles every caller", async function _orgWide()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma } = _mockPrisma({
+        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
+        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-open", subjectId: "*" })]),
+      });
+      const res = await request(_buildApp(prisma, { sub: "nobody-in-particular", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+
+      expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
       expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", approvalStatus: "published" });
+    });
+
+    it("a direct user Grant entitles that caller only", async function _user()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma } = _mockPrisma({
+        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
+        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-open", subjectId: "user-1" })]),
+      });
+      const entitled = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const other = await request(_buildApp(prisma, { sub: "user-2", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+
+      expect(entitled.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
+      expect(other.body).toEqual([]);
     });
 
     it("entitles a caller via a matching group claim", async function _group()
     {
       process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma, { sub: "user-2", groups: ["other-group"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const { prisma } = _mockPrisma({
+        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
+        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-closed", subjectId: "other-group" })]),
+      });
+      const member = await request(_buildApp(prisma, { sub: "user-2", groups: ["other-group"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      const nonMember = await request(_buildApp(prisma, { sub: "user-3", groups: ["some-other"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+
+      expect(member.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-closed"]);
+      expect(nonMember.body).toEqual([]);
+    });
+
+    it("a Deny beats an Allow at equal priority (fail-closed precedence)", async function _deniedWins()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma } = _mockPrisma({
+        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
+        "grant.findMany": _grantsFindMany([
+          _grant({ payloadId: "srv-open", access: "Allow", subjectId: "user-1" }),
+          _grant({ payloadId: "srv-open", access: "Deny", subjectId: "user-1" }),
+        ]),
+      });
+      const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+
+      expect(res.body).toEqual([]);
+    });
+
+    it("dev-open bypass returns the full published catalogue without consulting grants", async function _devOpen()
+    {
+      const { prisma, spies } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
+      const res = await request(_buildApp(prisma)).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; }).sort()).toEqual(["srv-closed", "srv-open"]);
+      expect(spies["grant.findMany"]).toBeUndefined();
     });
   });
 
@@ -258,6 +338,52 @@ describe("mcp-operator router", function _suite()
         .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "x" } });
 
       expect(res.status).toBe(404);
+    });
+  });
+
+  describe("PUT /servers/:id/access — authors entitlement into the generic Grant table", function _authoring()
+  {
+    /** Base overrides so the access-policy write path resolves without touching a real DB. */
+    function _authoringPrisma(): { prisma: PrismaClient; spies: Record<string, ReturnType<typeof vi.fn>> }
+    {
+      return _mockPrisma({
+        "mcpServer.findUnique": function _find() { return Promise.resolve({ id: "srv-1" }); },
+        "grant.deleteMany": function _del() { return Promise.resolve({ count: 0 }); },
+        "grant.createMany": function _create() { return Promise.resolve({ count: 0 }); },
+        "mcpServerAccessPolicy.upsert": function _upsert() { return Promise.resolve({ id: "pol-1" }); },
+        "mcpServerAccessUser.deleteMany": function _delUsers() { return Promise.resolve({ count: 0 }); },
+        "mcpServerAccessUser.createMany": function _createUsers() { return Promise.resolve({ count: 0 }); },
+        "auditEntry.create": function _audit() { return Promise.resolve({}); },
+      });
+    }
+
+    it("writes Allow grants for each group and user, clearing only admin-authored rows", async function _writesGrants()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma, spies } = _authoringPrisma();
+      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }))
+        .put("/api/v1/mcp/servers/srv-1/access").send({ everyoneInOrg: false, groups: ["g1"], users: ["u1"] });
+
+      expect(res.status).toBe(200);
+      // Clears only admin-authored (sharedBy: null) MCP grants so S4 shares survive.
+      expect(spies["grant.deleteMany"]).toHaveBeenCalledWith({ where: { mcpServerId: "srv-1", payloadType: "McpServer", sharedBy: null } });
+      const rows = spies["grant.createMany"].mock.calls[0][0].data as Array<{ subjectType: string; subjectId: string; access: string; payloadId: string }>;
+      expect(rows).toEqual(expect.arrayContaining([
+        expect.objectContaining({ subjectType: "Group", subjectId: "g1", access: "Allow", payloadId: "srv-1" }),
+        expect.objectContaining({ subjectType: "User", subjectId: "u1", access: "Allow", payloadId: "srv-1" }),
+      ]));
+    });
+
+    it("writes a single org-everyone sentinel grant when everyoneInOrg is set", async function _writesOrgWide()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma, spies } = _authoringPrisma();
+      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }))
+        .put("/api/v1/mcp/servers/srv-1/access").send({ everyoneInOrg: true, groups: [], users: [] });
+
+      expect(res.status).toBe(200);
+      const rows = spies["grant.createMany"].mock.calls[0][0].data as Array<{ subjectType: string; subjectId: string; access: string }>;
+      expect(rows).toEqual([expect.objectContaining({ subjectType: "Group", subjectId: "*", access: "Allow" })]);
     });
   });
 
