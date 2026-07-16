@@ -52,10 +52,13 @@ fleet-profile default · GCP installer smoke on a fresh project · live ACME DNS
 `dangerouslyDisableDeviceAuth` (currently device-less **by design**, not a dev-only flag). Run
 these via `/deploy-loop` when a cluster is available.
 
-### Phase B — Frontend launch cutover (weownai)
+### Phase B — Frontend launch cutover (weownai) — ✅ gate satisfied
 
 No opencrane issues. Cross-repo gate: weownai [#28](https://github.com/italanta/WeOwnAI/issues/28)
-(live workspace) needs the stabilised cluster; weownai #30 pairs with the completed #126. See weownai's plan.
+(live workspace) and [#30](https://github.com/italanta/WeOwnAI/issues/30) (member management UI,
+paired with the completed #126) are **both CLOSED** as of 2026-07-16 — the frontend launch
+cutover shipped on the WeOwnAI side. Nothing to implement in this repo. See weownai's plan for
+any residual hardening.
 
 ### Phase C — Capability completion (overlaps Phase B's tail)
 
