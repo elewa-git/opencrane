@@ -1,4 +1,4 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import { _BuildObotClient, ObotClientNotConfiguredError } from "@opencrane/backend/mcp";
 import type { ObotManagementClient } from "@opencrane/backend/mcp";
 import type { ThirdPartySource, ThirdPartySourceItem } from "@opencrane/contracts";
@@ -7,6 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { RegistryUnavailableError, _DiscoverRegistryServers, _GetRegistryServerDetail } from "../core/registry-discovery.js";
 import { RegistryImportValidationError, _ComputeImportSyncState, _ImportRegistryServer } from "../core/registry-import.js";
 import { UnsafeRemoteUrlError, _AssertSafeRemoteUrl } from "../core/ssrf.js";
+import { _RequireOrgAdmin } from "@opencrane/infra/auth";
 import type { ImportPersistencePort, ImportRegistryServerParams, ImportedItemMetadata } from "../core/registry-import.types.js";
 import type { ThirdPartySourceWriteRequest } from "./third-party-sources.types.js";
 
@@ -62,7 +63,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
   });
 
   /** Create a new third-party source and its discovered item inventory. */
-  router.post("/", async function _createThirdPartySource(req, res)
+  router.post("/", _RequireOrgAdmin(), async function _createThirdPartySource(req, res)
   {
     const body = req.body as ThirdPartySourceWriteRequest;
     const createdSource = await (prisma as unknown as {
@@ -124,7 +125,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
   });
 
   /** Update a third-party source and fully replace its discovered item inventory. */
-  router.put("/:id", async function _updateThirdPartySource(req, res)
+  router.put("/:id", _RequireOrgAdmin(), async function _updateThirdPartySource(req: Request<{ id: string }>, res)
   {
     const body = req.body as Partial<ThirdPartySourceWriteRequest>;
     await (prisma as unknown as {
@@ -195,7 +196,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
   });
 
   /** Delete a third-party source and its discovered items. */
-  router.delete("/:id", async function _deleteThirdPartySource(req, res)
+  router.delete("/:id", _RequireOrgAdmin(), async function _deleteThirdPartySource(req: Request<{ id: string }>, res)
   {
     await (prisma as unknown as {
       thirdPartySourceItem: { deleteMany: (args: { where: { sourceId: string } }) => Promise<unknown> };
@@ -221,7 +222,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
    * Discover (list, paginated) MCP servers from the source's external registry.
    * Read-only: performs NO Obot mutation and NO local activation.
    */
-  router.get("/:id/discover", async function _discoverRegistryServers(req, res)
+  router.get("/:id/discover", _RequireOrgAdmin(), async function _discoverRegistryServers(req: Request<{ id: string }>, res)
   {
     // 1. Resolve the registry base URL from the source and confirm it is safe to dial.
     const source = await _loadSourceRegistryUrl(prisma, req.params.id, res);
@@ -247,7 +248,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
   });
 
   /** Fetch one server's pinned version detail from the source's external registry (read-only). */
-  router.get("/:id/discover/detail", async function _discoverServerDetail(req, res)
+  router.get("/:id/discover/detail", _RequireOrgAdmin(), async function _discoverServerDetail(req: Request<{ id: string }>, res)
   {
     // 1. Resolve + validate the registry base URL.
     const source = await _loadSourceRegistryUrl(prisma, req.params.id, res);
@@ -285,7 +286,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
    * The only mutation in this flow. SSRF-validated, fail-closed on an unconfigured
    * Obot adapter, and never auto-activating or granting access.
    */
-  router.post("/:id/import", async function _importRegistryServer(req, res)
+  router.post("/:id/import", _RequireOrgAdmin(), async function _importRegistryServer(req: Request<{ id: string }>, res)
   {
     const body = req.body as Partial<ImportRegistryServerParams>;
 
@@ -293,6 +294,15 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
     const source = await _loadSourceRegistryUrl(prisma, req.params.id, res);
     if (source === undefined)
     {
+      return;
+    }
+
+    // 1b. Import requires an APPROVED source: a source still pending admin approval may
+    //     be browsed (discovery is read-only) but nothing may be imported/activated from
+    //     it until an admin has reviewed and approved it.
+    if (source.status === "pending-approval")
+    {
+      res.status(409).json({ error: "Source is pending approval — approve it before importing.", code: "SOURCE_PENDING_APPROVAL" });
       return;
     }
 
@@ -344,7 +354,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
    * update is available or the upstream was removed. NEVER upgrades, deletes,
    * grants, or activates — it only records an observed state for an admin to act on.
    */
-  router.post("/:id/items/:itemId/check-updates", async function _checkItemUpdates(req, res)
+  router.post("/:id/items/:itemId/check-updates", _RequireOrgAdmin(), async function _checkItemUpdates(req: Request<{ id: string; itemId: string }>, res)
   {
     // 1. Load the item and confirm it is an imported Obot catalog entry.
     const item = await (prisma as unknown as {
@@ -427,7 +437,7 @@ export function thirdPartySourcesRouter(prisma: PrismaClient, obotClient: ObotMa
  * @param res - Express response used to emit an error when validation fails.
  * @returns The source with a safe `originUrl`, or `undefined` when handled.
  */
-async function _loadSourceRegistryUrl(prisma: PrismaClient, id: string, res: { status: (code: number) => { json: (body: unknown) => void } }): Promise<{ originUrl: string } | undefined>
+async function _loadSourceRegistryUrl(prisma: PrismaClient, id: string, res: { status: (code: number) => { json: (body: unknown) => void } }): Promise<{ originUrl: string; status: string } | undefined>
 {
   // 1. Fetch the source; a missing source is a 404.
   const source = await (prisma as unknown as {
@@ -462,7 +472,7 @@ async function _loadSourceRegistryUrl(prisma: PrismaClient, id: string, res: { s
     throw err;
   }
 
-  return { originUrl };
+  return { originUrl, status: String(source.status) };
 }
 
 /**
