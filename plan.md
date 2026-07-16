@@ -77,10 +77,15 @@ MCP app plane is Prisma-only simulation (fake `cred_*`/`oauth_*`); no Obot manag
 per-tenant **Obot API token** minted/rotated/revoked via the adapter. ③ mode mapping → Personal=`singleUser`,
 Shared=`multiUser`. ④ adapter lives in `libs/backend/mcp/main` (interface+logic), factory/wiring in `apps/opencrane`.
 **Deferred (W3, live-Obot-gated):** enable-auth-by-default rollout + OIDC federation bootstrap, real custody /
-`tools/list` / invocation / encryption verification, re-recording fixtures from a live server. Waves: W0 keystone
-(adapter interface+noop+factory, Prisma Obot-ID/connectURL/observed-state columns, contract DTOs, fixture harness)
-→ W1 (adapter HTTP impl, operator/servers logic rewrite, authz collapse, #218 discovery, credential replacement)
-→ W2 (native `mcp.servers` activation, reconcile loop, CLI) → W3 (live verification).
+`tools/list` / invocation / encryption verification, re-recording fixtures from a live server.
+
+**Progress (2026-07-16, branch `feat/isolation-domaining-defaults`):**
+- ✅ **W0 keystone** — Obot adapter seam (interface+fail-closed noop+factory) + `0033_mcp_obot_lifecycle` migration (Obot-ID/connectURL/observed-state columns). Reviewed clean.
+- ✅ **W1.B (mcp-core)** — MCP credential/OAuth driven through the adapter; fake `cred_*`/`oauth_*` minting removed; endpoints fail closed (no "connected" without a real Obot op). 32/32 mcp tests.
+- ✅ **W1.E (retrieval)** — SSRF-guarded read-only registry discovery + curated pinned import → Obot entry (fail-closed 503 when Obot absent) + sync reconciliation. 24/24 tests. Security review clean.
+- ✅ **W1.F (app+infra)** — the dead `obot-gateway` k8s SA token replaced by a per-tenant Obot API token (mint→Secret→mount→revoke via the adapter), fail-closed to "credential mount absent" (avoids a `Degraded` reconcile hot-loop). 102 tenant tests.
+- ⏳ **Remaining:** **W1.A** live Obot HTTP client impl (deferred with W3 — unverifiable without a live Obot to record fixtures) · **W1.C** servers-logic rewrite (create real Obot catalog entries/servers on install; stop returning `secretRef`) · **W1.D** authz collapse (generic `Grant` sole authority; demote `McpServerAccessPolicy`+`McpServerGrant` to read-only) · **W2** native `mcp.servers` activation + reconcile loop + CLI.
+- 📝 **Doc/residue follow-ups:** purge stale `obot-gateway.token` refs in `website/integrators/mcp-gateway.md`, `docs/agents/k8s.md`, and the `audiences:["obot-gateway"]` in `apps/feat-skill-registry/.../token-review.test.ts`; add `oc third-party-sources discover/import/check-updates` CLI + OpenAPI for the W1.E routes; consider first-class `ThirdPartySourceItem` Obot-id/syncState columns (currently in `metadata` JSON); pre-existing `McpOperatorCaller` type-in-impl.
 | [#129](https://github.com/italanta/opencrane/issues/129) — **Central agents** | Managed org/silo-owned agents: definition CRUD + versioned revisions · triggers (manual + cron) · model policy via LiteLLM · capability grants (skills + imported Obot MCP) · scope-attachment knowledge read/write · scheduler + executor · scoped awareness advertisement | Large epic; reworks `apps/feat-central-agents` from the Slack harvester into the general model. Credentialed MCP capabilities lean on #128. |
 | ~~#130 — Cognee OpenClaw plugin adoption~~ | — | **DONE** (closed). |
 | ~~#138 — ClusterTenant teardown~~ | — | **DONE** (closed). |
