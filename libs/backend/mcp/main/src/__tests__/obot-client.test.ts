@@ -5,7 +5,7 @@ import {
   _NoopObotClient,
   ObotClientNotConfiguredError,
 } from "../core/obot-client.js";
-import type { ObotManagementClient } from "../core/obot-client.js";
+import type { ObotManagementClient } from "../core/obot-client.types.js";
 
 /**
  * The Obot management seam (italanta/opencrane#128, Wave 0 keystone). Until the live

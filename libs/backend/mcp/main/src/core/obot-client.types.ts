@@ -179,3 +179,79 @@ export interface ObotMintTokenParams
   /** Tenant the token is minted for (audit/label context). */
   tenant: string;
 }
+
+/**
+ * Authenticated Obot v0.23.1 management + runtime client (italanta/opencrane#128).
+ *
+ * Every method maps to a real Obot route, so an OpenCrane endpoint can never report
+ * "connected"/"configured" without a successful Obot operation. The live HTTP
+ * implementation (timeouts, retries, tracing, redaction, contract tests pinned to
+ * recorded v0.23.1 fixtures) lands in Wave 1.A behind this interface; the operator
+ * and servers logic drive it through the mockable seam in `obot-client.ts`.
+ */
+export interface ObotManagementClient
+{
+  /**
+   * Import/create a pinned catalog entry (folded #218 curated import). Idempotent
+   * on (catalogId, remoteUrl, pinnedVersion) so a retried import repairs rather than
+   * duplicates. Discovery is read-only elsewhere; this is the only import mutation.
+   * @param params - Catalog, name, pinned remote URL + version, and provenance.
+   */
+  upsertCatalogEntry(params: ObotUpsertCatalogEntryParams): Promise<ObotCatalogEntryRef>;
+
+  /**
+   * Deploy a server for a catalog entry in personal (singleUser) or shared
+   * (multiUser) mode. Idempotent per (entry, mode, owner) and repairable after a
+   * partial failure.
+   * @param params - Entry ref, deployment mode, and owning Obot user for singleUser.
+   */
+  createServer(params: ObotCreateServerParams): Promise<ObotServerRef>;
+
+  /**
+   * Configure write-only credential material on a server. The material is streamed
+   * straight to Obot and never returned; readiness comes back derived from Obot.
+   * @param params - The server ref and the write-only secret map.
+   */
+  configureServer(params: ObotConfigureServerParams): Promise<ObotServerState>;
+
+  /**
+   * Fetch Obot's live state for a server/instance (readiness, connect URL,
+   * transport, missing headers, error) for projection into OpenCrane.
+   * @param server - The server/instance to read.
+   */
+  getServerState(server: ObotServerRef): Promise<ObotServerState>;
+
+  /**
+   * Reconcile the FULL desired access-rule set for a resource so OpenCrane intent is
+   * the single authority and Obot is the enforcement point. Empty desired set ⇒
+   * default-deny.
+   * @param params - Catalog, resource id, and the complete desired rule set.
+   */
+  reconcileAccess(params: ObotReconcileAccessParams): Promise<void>;
+
+  /**
+   * List the tools Obot advertises for a configured server (runtime `tools/list`).
+   * @param server - The configured server to enumerate.
+   */
+  listTools(server: ObotServerRef): Promise<ObotToolDescriptor[]>;
+
+  /**
+   * Delete/deconfigure a server and clear its credential custody in Obot.
+   * @param server - The server/instance to remove.
+   */
+  deleteServer(server: ObotServerRef): Promise<void>;
+
+  /**
+   * Mint a per-tenant Obot client token for an OpenClaw identity (#128 decision:
+   * replaces the unused projected `obot-gateway` k8s SA token). The secret is
+   * write-only — handed to the pod provisioning path, never persisted or logged.
+   * @param params - Owning Obot user id and tenant context.
+   */
+  mintClientToken(params: ObotMintTokenParams): Promise<ObotClientToken>;
+
+  /**
+   * Revoke a previously minted per-tenant Obot client token.
+   * @param tokenId - The `ObotClientToken.tokenId` to revoke.
+   */
+  revokeClientToken(tokenId: string): Promise<void>;
+}
