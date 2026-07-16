@@ -36,6 +36,22 @@ done; what remains there has no launch dependency.
 |-------|-------|-----------|
 | [#127](https://github.com/italanta/opencrane/issues/127) — **Isolation & domaining production defaults** | Default-deny mandatory for multi-CT (ex-#105) · per-ClusterTenant hosts default-ON + purge per-usertenant domains · encrypted tenant storage (CMEK + preflight) · GCP smoke + live ACME e2e | Shipped defaults must match the documented security model before any multi-org production install. Last launch-critical backend item. |
 
+**Chart/code floor DONE** (branch `feat/isolation-domaining-defaults`). The #151 cutover already
+landed most of #127; a 2026-07-16 audit found only one code gap, now closed:
+
+- ✅ Default-deny mandatory for multi-CT — Helm `fail` guards on `mainNetworkDefaultDeny` + `multiInstance`.
+- ✅ `--preflight` FATAL under `--multi-ct` when no NetworkPolicy-enforcing CNI; storage-class encryption ADVISORY warn (`libs/k8s-platform/k8s-deploy.sh`).
+- ✅ Per-usertenant domaining gone: `sameOrigin` is the only hosting mode; docs (`website/security/*`, `website/operators/*`) explicitly deny per-user subdomains.
+- ✅ Encrypted tenant storage seam: `tenant.storage.storageClassName` → operator `TENANT_STORAGE_CLASS` → state PVC (tested).
+- ✅ **gatewayProxy default-ON for the fleet profile** — added the missing `multiCt ⇒ gatewayProxy.enabled` Helm `fail` guard + schema note, matching the default-deny pattern (prereqs `ingress.externalIp` + `tenant.gateway.trustedProxies` already enforced by the schema `allOf`). `sameOrigin` half was already unconditional.
+
+**Remaining = infra / live-cluster only** (needs a cluster + deploy scripts, not code): GKE
+Dataplane V2 + Workload Identity via Terraform · Terraform CMEK-encrypted StorageClass as the
+fleet-profile default · GCP installer smoke on a fresh project · live ACME DNS-01 e2e (platform
++ per-org) · live verify non-proxy pod can't reach `openclaw-<tenant>:18789` then re-assess
+`dangerouslyDisableDeviceAuth` (currently device-less **by design**, not a dev-only flag). Run
+these via `/deploy-loop` when a cluster is available.
+
 ### Phase B — Frontend launch cutover (weownai)
 
 No opencrane issues. Cross-repo gate: weownai [#28](https://github.com/italanta/WeOwnAI/issues/28)
