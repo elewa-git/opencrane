@@ -62,12 +62,16 @@ any residual hardening.
 
 ### Phase C — Capability completion (overlaps Phase B's tail)
 
+Two of the four original items are **done**: #130 (adopted the official Cognee OpenClaw plugin,
+replacing bespoke org-memory-mcp) and #138 (ClusterTenant teardown) are both CLOSED. The two
+remaining are large epics — decompose into waves before executing.
+
 | Issue | Scope | Dependency |
 |-------|-------|------------|
-| [#128](https://github.com/italanta/opencrane/issues/128) — **Obot live integration** | Verify mgmt-API/enc-at-rest knob against the live Obot · OBO push path · per-user RFC-8693 round-trip · pod-can't-reach-token-store assertion | None — unblocked by the live Obot. |
-| [#129](https://github.com/italanta/opencrane/issues/129) — **Central harvesting harness over Obot MCP** | Declarative harvest jobs · executor as privileged Obot client · Slack connector re-expressed as an MCP-backed job · Teams/email/tickets = config, not code | Credentialed sources need #128; harness can start against credential-free MCP servers. |
-| [#130](https://github.com/italanta/opencrane/issues/130) — **Scope-aware retrieval + per-scope memory partitioning** (S4e + P4B.7.2/.3) | ScopeContext in `@opencrane/awareness` · cascade retrieval plugin · `node_set` ingestion tagging · written-memory partitioning | Plugin can land against manual groups; full value after #126's S4b. |
-| [#138](https://github.com/italanta/opencrane/issues/138) — **ClusterTenant teardown** | Finalizer-driven silo deprovision · CR-delete + DB-row in one transaction · data-retention policy | Pairs with #126's lifecycle; align teardown semantics with #150's contract. |
+| [#128](https://github.com/italanta/opencrane/issues/128) — **MCP/Obot lifecycle** | Authenticated Obot v0.23.1 mgmt+runtime adapter · real credential custody (singleUser/multiUser) · one authorization authority (reconcile intent → Obot access-control rules) · native OpenClaw `mcp.servers` activation via Obot `connectURL` · encryption/audit | Large epic; several sub-parts need a **live Obot** for verification. Replaces simulated MCP install/credential states. |
+| [#129](https://github.com/italanta/opencrane/issues/129) — **Central agents** | Managed org/silo-owned agents: definition CRUD + versioned revisions · triggers (manual + cron) · model policy via LiteLLM · capability grants (skills + imported Obot MCP) · scope-attachment knowledge read/write · scheduler + executor · scoped awareness advertisement | Large epic; reworks `apps/feat-central-agents` from the Slack harvester into the general model. Credentialed MCP capabilities lean on #128. |
+| ~~#130 — Cognee OpenClaw plugin adoption~~ | — | **DONE** (closed). |
+| ~~#138 — ClusterTenant teardown~~ | — | **DONE** (closed). |
 
 ### Phase D — Phase 3 cutover close-out & plugin seam (no launch dependency)
 
