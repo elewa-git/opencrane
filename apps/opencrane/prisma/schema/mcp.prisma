@@ -55,6 +55,17 @@ model McpServer {
   entitlementSummary String?                @map("entitlement_summary")
   sourceId           String?                @map("source_id")
   lastSyncedAt       DateTime?              @map("last_synced_at")
+  // Obot v0.23.1 projection (#128): OpenCrane persists the Obot IDs it created/imported,
+  // the pinned-version provenance (#218 curated import), and the last observed reconcile
+  // state — the authoritative config/credentials/access always live in Obot, never here.
+  obotCatalogId           String?           @map("obot_catalog_id")
+  obotCatalogEntryId      String?           @map("obot_catalog_entry_id")
+  obotServerId            String?           @map("obot_server_id")
+  obotPinnedVersion       String?           @map("obot_pinned_version")
+  obotDigest              String?           @map("obot_digest")
+  obotObservedState       String?           @map("obot_observed_state")
+  obotReconcileGeneration Int               @default(0) @map("obot_reconcile_generation")
+  obotLastError           String?           @map("obot_last_error")
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
   grants             Grant[]
@@ -80,6 +91,15 @@ model McpServerInstall {
   credentialRef    String?             @map("credential_ref")
   connectedAccount String?             @map("connected_account")
   lastUsedAt       DateTime?           @map("last_used_at")
+  // Obot v0.23.1 per-user (singleUser) instance projection (#128): the Obot instance id,
+  // the connect URL Obot returned (consumed verbatim by the OpenClaw mcp.servers render —
+  // never rebuilt), and the last observed reconcile state. connectionStatus is derived
+  // from observedState, never from a locally minted handle.
+  obotInstanceId      String?         @map("obot_instance_id")
+  connectUrl          String?         @map("connect_url")
+  observedState       String?         @map("observed_state")
+  reconcileGeneration Int             @default(0) @map("reconcile_generation")
+  lastError           String?         @map("last_error")
   createdAt        DateTime            @default(now()) @map("created_at")
   updatedAt        DateTime            @updatedAt @map("updated_at")
   mcpServer        McpServer           @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
