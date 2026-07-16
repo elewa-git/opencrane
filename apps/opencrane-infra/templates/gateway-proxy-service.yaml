@@ -4,6 +4,9 @@
        fleetManager.enabled, so a per-silo install (fleetManager.enabled=false) still exposes
        it. The wildcard Ingress routes the gateway WS upgrade to this Service; it forwards to
        each user's pod by resolved identity. */ -}}
+{{- if and .Values.multiCt.enabled (not .Values.gatewayProxy.enabled) }}
+{{- fail "multiCt.enabled=true requires gatewayProxy.enabled=true: the per-ClusterTenant host model serves every org at a single host <org>.<domain> and the operator's in-process gateway proxy is what fans that one host out to each user's pod — a multi-org install with the proxy off has no way to reach tenant pods (the ingress /gateway route is not rendered). Set gatewayProxy.enabled=true (and, per values.schema.json, ingress.externalIp + tenant.gateway.trustedProxies), or drop the --multi-ct profile for a single-tenant box." }}
+{{- end }}
 {{- if .Values.gatewayProxy.enabled }}
 apiVersion: v1
 kind: Service

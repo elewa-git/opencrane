@@ -17,6 +17,7 @@
     },
     "gatewayProxy": {
       "type": "object",
+      "description": "Per-org gateway proxy (DOMAIN.T4). When enabled, the allOf below requires ingress.externalIp + tenant.gateway.trustedProxies. Mandatory (enforced by a Helm fail guard) when multiCt.enabled=true — the per-ClusterTenant host model cannot reach tenant pods without it.",
       "properties": {
         "enabled": { "type": "boolean" }
       }

@@ -1094,6 +1094,14 @@ skillRegistry:
 # and reverse-proxies to the user's pod. OFF by default — enabling it makes the operator
 # pod internet-facing (via the wildcard Ingress), a deliberate interim trade-off.
 gatewayProxy:
+  # -- MANDATORY under the `--multi-ct` profile (`multiCt.enabled`): a Helm `fail` REJECTS the
+  #    render if this is left false there, so a multi-CT install can never ship without the
+  #    per-org gateway proxy. The per-ClusterTenant host model routes every user's gateway WS
+  #    upgrade through the SINGLE org host `<org>.<domain>`; the operator's in-process proxy is
+  #    what fans that one host out to each user's pod, so without it a multi-org install has no
+  #    way to reach tenant pods (the ingress `/gateway` route isn't even rendered). This false
+  #    default is the SINGLE-CT opt-out only. When enabled, values.schema.json additionally
+  #    requires ingress.externalIp + tenant.gateway.trustedProxies (the resolve/DNS prereqs).
   enabled: false
   # -- TCP port the operator's proxy server listens on (distinct from the gateway port).
   port: 8090
