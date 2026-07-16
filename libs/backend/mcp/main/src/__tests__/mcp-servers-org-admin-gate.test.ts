@@ -87,6 +87,21 @@ describe("mcp-servers router — _RequireOrgAdmin gate (P0.5)", function _suite(
     expect(spies["mcpServer.create"]).toBeUndefined();
   });
 
+  it("rejects an org-admin create that authors the reserved org-everyone sentinel, before any write", async function _rejectsSentinel()
+  {
+    process.env.OPENCRANE_API_TOKEN = "ci-token";
+    const { prisma, spies } = _mockPrisma();
+    const res = await request(_buildApp(prisma, { isOrgAdmin: true }))
+      .post("/api/v1/mcp-servers")
+      .send({ name: "x", endpoint: "https://e", transport: "streamable-http", grants: [{ scope: "org", subjectType: "group", subjectName: "*", subjectId: "*", access: "allow" }] });
+
+    // Fail-closed: not created (any non-success), and the parent row is never written —
+    // up-front validation rejects the "*" grant before mcpServer.create (no partial write).
+    expect(res.status).not.toBe(201);
+    expect(spies["mcpServer.create"]).toBeUndefined();
+    expect(spies["grant.create"]).toBeUndefined();
+  });
+
   it("denies update for a non-admin session and never reaches the handler", async function _denyUpdate()
   {
     const { prisma, spies } = _mockPrisma();

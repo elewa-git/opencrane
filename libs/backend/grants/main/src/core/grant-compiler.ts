@@ -83,6 +83,36 @@ const _DIRECT_SUBJECT_TYPES = [_PRISMA_GRANT_SUBJECT_TYPE.Tenant, _PRISMA_GRANT_
  */
 export const GRANT_ORG_EVERYONE_SUBJECT_ID = "*";
 
+/** Thrown when a grant-authoring path is handed the reserved org-everyone subject id. */
+export class ReservedGrantSubjectError extends Error
+{
+  constructor()
+  {
+    super(`"${GRANT_ORG_EVERYONE_SUBJECT_ID}" is the reserved org-everyone grant subject and cannot be authored as a literal group/user id.`);
+    this.name = "ReservedGrantSubjectError";
+  }
+}
+
+/**
+ * Reject the reserved org-everyone sentinel at every grant-authoring choke point.
+ *
+ * The org-everyone primitive ({@link GRANT_ORG_EVERYONE_SUBJECT_ID}) is honoured by
+ * the compiler for ALL payload types, so a `"*"` grant authored via any raw-subject
+ * path would silently become an org-wide entitlement. Authoring paths that accept a
+ * caller-supplied `subjectId` MUST call this so the only way to author org-wide stays
+ * the dedicated, intentional path (e.g. MCP `everyoneInOrg`).
+ *
+ * @param subjectId - The caller-supplied subject identifier about to be persisted.
+ * @throws {ReservedGrantSubjectError} When `subjectId` is the reserved sentinel.
+ */
+export function _AssertUnreservedGrantSubjectId(subjectId: string): void
+{
+  if (subjectId === GRANT_ORG_EVERYONE_SUBJECT_ID)
+  {
+    throw new ReservedGrantSubjectError();
+  }
+}
+
 /** Compiler-facing access enum lookup keyed by Prisma enum values. */
 const _COMPILER_ACCESS_BY_PRISMA_ACCESS = {
   [_PRISMA_GRANT_ACCESS.Allow]: GrantCompilerAccess.Allow,

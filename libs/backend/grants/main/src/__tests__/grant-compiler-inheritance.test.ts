@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
-import { compile, compileForPrincipals } from "../core/grant-compiler.js";
+import { compile, compileForPrincipals, _AssertUnreservedGrantSubjectId, GRANT_ORG_EVERYONE_SUBJECT_ID, ReservedGrantSubjectError } from "../core/grant-compiler.js";
 import { GrantCompilerAccess, GrantCompilerPayloadType } from "../core/grant-compiler.types.js";
 
 /** A grant row in the shape the compiler selects (Prisma enum string values). */
@@ -143,5 +143,19 @@ describe("grant compiler — org-everyone primitive (GRANT_ORG_EVERYONE_SUBJECT_
   it("an empty principal set never picks up the org-everyone grant", async function _noLeak()
   {
     expect(await compileForPrincipals([], GrantCompilerPayloadType.McpServer, _prismaStub([], grants))).toEqual([]);
+  });
+});
+
+describe("_AssertUnreservedGrantSubjectId — reserve the sentinel at every authoring path", function _guardSuite()
+{
+  it("throws on the reserved org-everyone sentinel", function _rejects()
+  {
+    expect(function _call() { _AssertUnreservedGrantSubjectId(GRANT_ORG_EVERYONE_SUBJECT_ID); }).toThrow(ReservedGrantSubjectError);
+  });
+
+  it("accepts any ordinary group/user id", function _accepts()
+  {
+    expect(function _g() { _AssertUnreservedGrantSubjectId("grp-eng"); }).not.toThrow();
+    expect(function _u() { _AssertUnreservedGrantSubjectId("user-sub"); }).not.toThrow();
   });
 });

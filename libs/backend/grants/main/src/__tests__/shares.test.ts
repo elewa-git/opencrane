@@ -10,9 +10,13 @@ import { GrantCompilerAccess } from "../core/grant-compiler.types.js";
 
 // Drive the least-privilege gate directly: the route calls compile(caller, …) to decide
 // what the caller holds. Default = holds nothing, so the gate denies unless a test allows.
-vi.mock("../core/grant-compiler.js", () => ({
-  compile: vi.fn().mockResolvedValue([]),
-}));
+// Preserve the rest of the module (e.g. `_AssertUnreservedGrantSubjectId`, which the
+// share route also calls) and override only `compile`.
+vi.mock("../core/grant-compiler.js", async function _m(importOriginal)
+{
+  const actual = await importOriginal<typeof import("../core/grant-compiler.js")>();
+  return { ...actual, compile: vi.fn().mockResolvedValue([]) };
+});
 
 /** A captured grant.create call's data, for assertions. */
 let _lastCreate: Record<string, unknown> | null = null;

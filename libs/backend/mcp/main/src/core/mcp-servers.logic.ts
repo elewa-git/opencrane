@@ -1,6 +1,7 @@
 import { GrantAccess, GrantScope, GrantSubjectType, McpCredentialBrokeringMode, McpServerStatus, McpServerTransport, type Grant, type McpServer, type McpServerCredential } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
+import { _AssertUnreservedGrantSubjectId } from "@opencrane/backend/grants";
 import type { McpServerCredentialInput, McpServerGrantInput, McpServerRouteAccess, McpServerRouteScope, McpServerRouteStatus, McpServerRouteSubjectType, McpServerRouteTransport, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
 
 type _McpServerRow = Prisma.McpServerGetPayload<{ include: { scopedGrants: true; credentials: true; source: true } }>;
@@ -196,6 +197,10 @@ export async function getMcpServer(prisma: PrismaClient, serverId: string): Prom
  */
 export async function createMcpServer(prisma: PrismaClient, body: McpServerWriteRequest): Promise<McpServerMutationResponse>
 {
+  // 0. Reject reserved grant subjects before any write, so a "*" grant can never be
+  //    authored here (org-wide entitlement is the dedicated everyoneInOrg path only).
+  _AssertGrantsUnreserved(body.grants);
+
   // 1. Persist the parent server first so child grants and credentials can reference the generated identifier.
   const createdServer = await prisma.mcpServer.create({
     data: {
@@ -236,6 +241,9 @@ export async function createMcpServer(prisma: PrismaClient, body: McpServerWrite
  */
 export async function updateMcpServer(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<McpServerMutationResponse>
 {
+  // 0. Reject reserved grant subjects before any write (see createMcpServer).
+  _AssertGrantsUnreserved(body.grants);
+
   // 1. Update the parent row first so the server metadata reflects the latest operator input before children are replaced.
   await prisma.mcpServer.update({
     where: { id: serverId },
@@ -650,4 +658,21 @@ function _MapScopedGrantCreateInput(serverId: string, grantId: string, grant: Mc
 function _ResolveGrantSubjectId(grant: McpServerGrantInput): string
 {
   return grant.subjectId ?? grant.subjectName;
+}
+
+/**
+ * Reject the reserved org-everyone sentinel across a grant list BEFORE any write.
+ *
+ * Validating up front (rather than inside the row mapper) means a reserved subject
+ * fails the whole request before the parent server row is created — no partial write,
+ * and this raw-grant path can never be a second way to mint an org-wide grant.
+ *
+ * @param grants - The submitted grant inputs, if any.
+ */
+function _AssertGrantsUnreserved(grants: McpServerGrantInput[] | undefined): void
+{
+  for (const grant of grants ?? [])
+  {
+    _AssertUnreservedGrantSubjectId(_ResolveGrantSubjectId(grant));
+  }
 }

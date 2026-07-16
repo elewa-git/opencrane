@@ -7,6 +7,7 @@ import { _ScanBundleContent } from "../core/scan-bundle.js";
 import { _BackfillBundlesToOci } from "../core/oci-backfill.js";
 import type { OciBundleStore } from "../core/oci-bundle-store.js";
 import type { SkillBundleWriteRequest, SkillEntitlementInput } from "./skill-catalog.types.js";
+import { _AssertUnreservedGrantSubjectId } from "@opencrane/backend/grants";
 
 /**
  * Best-effort push of a published bundle's content to the OCI store (P4D.2 dual-write).
@@ -511,5 +512,9 @@ function _NormalizeStringArray(values: string[] | undefined): string[]
  */
 function _ResolveGrantSubjectId(grant: SkillEntitlementInput): string
 {
-  return grant.subjectId ?? grant.subjectName;
+  const subjectId = grant.subjectId ?? grant.subjectName;
+  // Reject the reserved org-everyone sentinel so a raw skill-entitlement grant can't
+  // silently become an org-wide SkillBundle entitlement (the compiler matches "*").
+  _AssertUnreservedGrantSubjectId(subjectId);
+  return subjectId;
 }

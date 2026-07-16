@@ -1,7 +1,7 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import { GrantAccess, GrantPayloadType, GrantScope, GrantSubjectType, type PrismaClient } from "@prisma/client";
 
-import { compile } from "../core/grant-compiler.js";
+import { compile, _AssertUnreservedGrantSubjectId } from "../core/grant-compiler.js";
 import { GrantCompilerAccess, GrantCompilerPayloadType } from "../core/grant-compiler.types.js";
 import { _log } from "../log.js";
 import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
@@ -136,7 +136,11 @@ export function sharesRouter(prisma: PrismaClient): Router
         return;
       }
 
-      // 6. Idempotent on (sharedBy, payloadType, payloadId, subjectType, subjectId, scope):
+      // 6. Reject the reserved org-everyone sentinel: a share must never be a way to mint
+      //    an org-wide grant by naming the recipient "*".
+      _AssertUnreservedGrantSubjectId(recipientId);
+
+      // 7. Idempotent on (sharedBy, payloadType, payloadId, subjectType, subjectId, scope):
       //    re-sharing the same payload to the same recipient at the same scope returns the
       //    existing grant. A different scope is a distinct share and creates a new row.
       const subjectType = recipientType === "group" ? GrantSubjectType.Group : GrantSubjectType.User;
@@ -149,7 +153,7 @@ export function sharesRouter(prisma: PrismaClient): Router
         return;
       }
 
-      // 7. Write the share as an Allow Grant on the recipient, stamping the sharer and the
+      // 8. Write the share as an Allow Grant on the recipient, stamping the sharer and the
       //    cascade relation id so the row is reaped if the payload is deleted.
       const created = await prisma.grant.create({
         data: {
