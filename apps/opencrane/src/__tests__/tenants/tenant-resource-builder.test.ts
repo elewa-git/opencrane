@@ -265,10 +265,7 @@ describe("TenantResourceBuilder", () =>
     const configMap = _BuildConfigMap(cogneeConfig, tenant, "default");
     const runtimeContract = JSON.parse(configMap.data?.["opencrane-managed-runtime.json"] ?? "{}");
 
-    expect(runtimeContract.memory.backend).toBe("cognee");
-    expect(runtimeContract.memory.endpoint).toBe("http://cognee:8000");
-    // Stamped so the pod's awareness client can reason about contract skew.
-    expect(typeof runtimeContract.memory.contractVersion).toBe("string");
+    expect(runtimeContract.memory).toEqual({ backend: "cognee", endpoint: "http://cognee:8000" });
   });
 
   it("runs the Cognee memory plugin only when Cognee is configured", () =>

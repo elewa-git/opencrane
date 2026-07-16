@@ -9,6 +9,12 @@
 		"type:app"
 	],
 	"targets": {
+		"container": {
+			"executor": "nx:run-commands",
+			"options": {
+				"command": "docker build -f apps/opencrane-ui/deploy/Dockerfile ."
+			}
+		},
 		"build": {
 			"executor": "@angular-devkit/build-angular:application",
 			"outputs": [

@@ -1,8 +1,7 @@
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
-import { AWARENESS_CONTRACT_VERSION } from "@opencrane/awareness";
 
-import { ___DEFAULT_AWARENESS_WAVES, _NextWave, _NormalizeRollout, _PromoteNextWave, _PromoteToWave, _ResolveAwarenessVersion, _Rollback } from "../core/rollout.js";
+import { ___DEFAULT_AWARENESS_CONTRACT_VERSION, ___DEFAULT_AWARENESS_WAVES, _NextWave, _NormalizeRollout, _PromoteNextWave, _PromoteToWave, _ResolveAwarenessVersion, _Rollback } from "../core/rollout.js";
 import { _LoadAwarenessRollout, _SaveAwarenessRollout } from "../core/rollout-store.js";
 import type { AwarenessRolloutState } from "../core/rollout.types.js";
 import type { PromoteRolloutRequest, SetRolloutRequest } from "./awareness-rollout.types.js";
@@ -50,7 +49,7 @@ export function awarenessRolloutRouter(prisma: PrismaClient): Router
       //    waves promoted yet) and normalise/validate it before persisting.
       const candidate: AwarenessRolloutState = {
         targetVersion: body.targetVersion.trim(),
-        stableVersion: (typeof body.stableVersion === "string" && body.stableVersion.trim().length > 0 ? body.stableVersion.trim() : AWARENESS_CONTRACT_VERSION),
+        stableVersion: (typeof body.stableVersion === "string" && body.stableVersion.trim().length > 0 ? body.stableVersion.trim() : ___DEFAULT_AWARENESS_CONTRACT_VERSION),
         waves: Array.isArray(body.waves) && body.waves.length > 0 ? body.waves.map(String) : ___DEFAULT_AWARENESS_WAVES,
         promotedWaves: [],
         shadowMode: body.shadowMode === true,

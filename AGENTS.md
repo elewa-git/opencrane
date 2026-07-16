@@ -19,6 +19,7 @@ This file is the canonical agent instruction file for the repository.
 | **Kubernetes** | [`docs/agents/k8s.md`](docs/agents/k8s.md) | touching service accounts, RBAC, NetworkPolicy, or routes excluded from auth middleware. |
 | **Prisma & migrations** | [`docs/agents/prisma.md`](docs/agents/prisma.md) | adding/altering database models or writing a migration — per-domain schema files under `prisma/schema/`, migration naming. |
 | **Cluster topology** | [`docs/agents/cluster-architecture.md`](docs/agents/cluster-architecture.md) | you need the whole-cluster picture — planes, namespaces, Helm templates, isolation tiers, multi-instance, Workload Identity. |
+| **Monorepo boundaries** | [`docs/agents/monorepo.md`](docs/agents/monorepo.md) | creating/moving an app or library, adding a deployable workload, or changing NX tags/dependency direction. |
 | **Build, Test & Infra** | [`docs/agents/infra.md`](docs/agents/infra.md) | building/testing, or editing Terraform/Helm/deploy under `platform/`. |
 | **Workflow & Review Gate** | [`docs/agents/workflow.md`](docs/agents/workflow.md) | planning (`plan.md`/`CHANGELOG.md`), writing commit messages, or hitting the review gate. |
 | **App-Specific** | [`docs/agents/app-specific.md`](docs/agents/app-specific.md) | working inside a specific `apps/*` or `libs/*` package; per-package map + API/CLI-first rule. |
@@ -33,6 +34,7 @@ message) wherever the work has no dependency between them.
 
 | Agent | Model | Use it for |
 |-------|-------|-----------|
+| `architecture` | Sonnet | Required preflight + post-diff architecture gate for roadmap slices that add/move apps, libraries, cluster workloads, identity boundaries, or rewrite-freeze green code. Enforces one `apps/<name>` owner per deployable, thin app roots, functional-first `libs/*` placement, NX dependency direction, IAM-first trust boundaries, and zero legacy compatibility in green. Read-only; returns `PASS`/`BLOCK` with exact moves/deletions. |
 | `review` | Haiku | Independent, fresh-context code review of a changed slice — correctness bugs, regressions, security/IAM-policy drift, missing tests. Accepts `DIMENSION: correctness\|security\|residue` for a single-concern pass; mechanical style comes from `scripts/agent-style-check.sh`, never from eyeballing. Read-only; severity-first. **Required by the review gate before a turn ends** (see [Mandatory Independent Review](docs/agents/workflow.md#mandatory-independent-review-policy-driven-gate)); for larger diffs prefer the `/review-loop` skill, which satisfies the same gate. |
 | `review-verifier` | Haiku | Adversarially verifies ONE candidate review finding — default stance: refute it. Returns `CONFIRMED / REFUTED / UNCERTAIN` with a concrete evidence walk. Spawned per-candidate by `/review-loop` (sonnet override for Critical/High candidates); also useful standalone before acting on any single risky claim. |
 | `changelog` | Sonnet | Maintain `CHANGELOG.md` in functional, capability-first terms when a phase/track completes or a tag is cut. Reads `plan.md`/`plan-done.md` + git range; writes capability, not commit history. |
@@ -40,10 +42,12 @@ message) wherever the work has no dependency between them.
 | `observability` | Sonnet | Telemetry + logging in one (they share the `@opencrane/observability` lib and trace-wrap seam). Audits or wires a slice so external-I/O paths are traced (`___DoWithTrace` spans) and output is structured (no raw `console.*`, secrets redacted, errors under `err`), plus per-app `instrument.ts`/shutdown-flush/Helm env. Reads the lib barrel each run for current API names. |
 | `deploy` | Sonnet | Deploy executor + diagnostician for dev/staging clusters. Mutates the cluster ONLY via the deploy scripts (`apps/*/deploy.sh` → `libs/k8s-platform/k8s-deploy.sh`); reads freely for diagnosis (kubectl read verbs, helm status, read-only SQL through the cnpg primary). Reads `docs/agents/deploy-ledger.md` before every run; returns a structured run report (findings classed `chart`/`script`/`config`/`codebase`/`data`/`infra`/`flake`) for `/deploy-loop` to triage. Never edits code. |
 | `memory-engineer` | Sonnet | Memory-layer specialist — OpenClaw workspace memory (`MEMORY.md`, `memory/*.md`, seeded workspace files) AND the Cognee org-memory plugin integration (operator wiring/identity/persistence + LLM/embedding routing through LiteLLM, the plugin render in `2-config-map.ts`, the `TOOLS.md` contract). Use when changing/auditing anything memory-related or when memory isn't recalling/persisting. Grounds every claim in the pinned plugin's ACTUAL behaviour + the live render (never a stale doc/assumption); enforces the "Cognee is the authoritative durable store, MEMORY.md is transient" policy. Audits by default; applies when asked. |
+| `reaper` | Sonnet | Deletion gate for rewrite/refactor slices. Runs before implementation to classify survivor/stabilize/migrate/drop paths and after implementation to remove superseded code, exports, contracts, config, tests, deployment wiring, and docs. No green compatibility shims or deprecation periods; read-only verdicts with evidence. |
 
 **Roadmap execution** is the `/execute-plan` **skill** (`.claude/commands/execute-plan.md`), not an
 agent — it runs in the main session, parallelises via a dependency DAG + waves (one `general-purpose`
-subagent per lane), commits at each gate, and delegates the review gate to the `review` subagent above.
+subagent per lane), uses `architecture` before/after structural waves and `reaper` before/after every
+rewrite slice, commits at each gate, and delegates the final review gate to `review` above.
 
 **Cost-tiered review** is the `/review-loop` **skill** (`.claude/commands/review-loop.md`): free
 style script → parallel single-dimension `review` finders → a `review-verifier` per candidate

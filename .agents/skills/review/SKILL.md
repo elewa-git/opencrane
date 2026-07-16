@@ -49,7 +49,9 @@ scope, review those.
 
 1. **Correctness and behaviour changes**
    - Logic bugs, edge-case failures, off-by-one, unhandled null/undefined.
-   - Backward-incompatible behaviour changes.
+   - Unintended violations of the declared target contract. In rewrite-freeze GREEN mode, legacy
+     incompatibility is intentional and compatibility shims are defects; frozen-blue exceptions
+     still preserve the signed support contract.
 2. **Reliability and operations**
    - Failure handling, retry/timeout behaviour, resource cleanup.
    - Observability: are failures logged with enough structured context?

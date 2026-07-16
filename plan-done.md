@@ -845,6 +845,11 @@ Already complete from previous cycle. Key generation, budget enforcement, spend 
 
 ### P4B.0–P4B.6 done items
 
+> **Superseded 2026-07-16:** the official `@cognee/cognee-openclaw` plugin replaced the bespoke
+> `@opencrane/awareness` tenant SDK, retrieval client, citation builder, compatibility check, and
+> golden-suite implementation. The entries below remain as the historical record of what originally
+> shipped; the standalone package and its dead runtime version stamp have since been removed.
+
 - [x] **P4B.0 Lock Phase 4 awareness decisions.** (2026-06-13) All "Phase 4 Decisions" below are
   now resolved (explicit) or defaulted — Track B is **decision-unblocked**. Key locks: single
   shared `libs/awareness` SDK · tenant-cohort canary rollout · citation = title+URI+timestamp ·

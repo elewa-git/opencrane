@@ -1,5 +1,8 @@
 import type { AwarenessRolloutState, ResolvedAwarenessVersion } from "./rollout.types.js";
 
+/** Default awareness label used when no rollout has been configured. */
+export const ___DEFAULT_AWARENESS_CONTRACT_VERSION = "awareness/v1alpha1";
+
 /**
  * Default canary waves, narrow→wide (the locked P4B.0 order). A rollout promotes
  * the target version one wave at a time so blast radius widens gradually.

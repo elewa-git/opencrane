@@ -7,7 +7,7 @@
 
 Facts that make these rules concrete (verified against the tree, June 2026):
 
-- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: NodeNext`, `target: es2023`, `strict`. Source-only libs (no package.json); apps in `apps/*` with their own package.json; shared infra/util libs and domain packages under `libs/`, compiled to dist/ via esbuild. NX coordinates task dependencies and caching via `nx.json`. There are 5 apps (`apps/*`), domain packages (`libs/backend/*/main`), shared infra/util libs (`libs/awareness`, `libs/contracts`, `libs/infra-*`, `libs/k8s-platform`, `libs/observability`, `libs/util`); see [`app-specific.md`](./app-specific.md) for the map.
+- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: NodeNext`, `target: es2023`, `strict`. Source-only libs (no package.json); apps in `apps/*` with their own package.json; shared infra/util libs and domain packages under `libs/`, compiled to dist/ via esbuild. NX coordinates task dependencies and caching via `nx.json`. There are 5 apps (`apps/*`), domain packages (`libs/backend/*/main`), shared infra/util libs (`libs/contracts`, `libs/infra-*`, `libs/k8s-platform`, `libs/observability`, `libs/util`); see [`app-specific.md`](./app-specific.md) for the map.
 - **Import extensions follow NodeNext, and this is the most common mistake:** *relative* imports MUST end in `.js` (`import { x } from "./config.js"`), but *package* specifiers MUST NOT (`import { ClusterTenant } from "@opencrane/contracts"` — never `@opencrane/contracts.js`).
 - **`@opencrane/contracts` is the keystone.** All cross-package types, enums, CRD DTOs, and the generated typed API client (`___CreateControlPlaneClient`, plus the `paths` map emitted from the opencrane-api OpenAPI spec) live there and are re-exported from one barrel (`libs/contracts/src/index.ts`). New shared types go in a domain `*.types.ts` there, not duplicated per app.
 - **The underscore naming convention is real and enforced repo-wide** — `___CreateControlPlaneClient`, `___AuthMiddleware`, `_RegisterTenants`, `_NamespaceFor` are all live examples. Match it; the [self-review table](#self-review-before-finishing) checks it.
@@ -307,7 +307,7 @@ import type { CreateTenantRequest } from "../types.js";
 | 1 | Node builtins | `node:fs`, `node:path`, `node:crypto` |
 | 2 | External - Utils | `date-fns`, `lodash` |
 | 3 | External - Framework | `express`, `@kubernetes/client-node`, `pino`, `@prisma/client` |
-| 4 | Local packages | `@opencrane/contracts`, `@opencrane/awareness` |
+| 4 | Local packages | `@opencrane/contracts`, `@opencrane/observability` |
 | 5 | Local file imports | `./reconciler.js`, `../types.js` |
 
 ## Single-Line Imports

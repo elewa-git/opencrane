@@ -3,7 +3,8 @@
 > Deep-dive for `libs/contracts`. Index: [`../app-specific.md`](../app-specific.md). Verified June 2026.
 
 **The keystone.** Single source of truth for cross-package types and the typed opencrane-api client.
-Consumed by the CLI, opencrane-api, operator, and awareness SDK. Import from the barrel only.
+Consumed by the CLI, opencrane-server, fleet operator, frontend, and backend domain packages. Import
+from the barrel only.
 
 ## What's in `src/`
 

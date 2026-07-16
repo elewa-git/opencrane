@@ -1,7 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
-import { AWARENESS_CONTRACT_VERSION } from "@opencrane/awareness";
 
-import { ___DEFAULT_AWARENESS_WAVES } from "./rollout.js";
+import { ___DEFAULT_AWARENESS_CONTRACT_VERSION, ___DEFAULT_AWARENESS_WAVES } from "./rollout.js";
 import type { AwarenessRolloutState } from "./rollout.types.js";
 
 /** Singleton row id for the fleet awareness rollout. */
@@ -19,7 +18,7 @@ export async function _LoadAwarenessRollout(prisma: PrismaClient): Promise<Aware
   const row = await prisma.awarenessRollout.findUnique({ where: { id: _ROLLOUT_ID } });
   if (!row)
   {
-    return { targetVersion: AWARENESS_CONTRACT_VERSION, stableVersion: AWARENESS_CONTRACT_VERSION, waves: ___DEFAULT_AWARENESS_WAVES, promotedWaves: [], shadowMode: false };
+    return { targetVersion: ___DEFAULT_AWARENESS_CONTRACT_VERSION, stableVersion: ___DEFAULT_AWARENESS_CONTRACT_VERSION, waves: ___DEFAULT_AWARENESS_WAVES, promotedWaves: [], shadowMode: false };
   }
   return {
     targetVersion: row.targetVersion,

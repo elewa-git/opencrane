@@ -23,6 +23,23 @@ Since the rebase, three tranches have completed and dropped out of the active se
 - **Member onboarding & user lifecycle** ([#126](https://github.com/italanta/opencrane/issues/126)) — signup → invite → membership → seeded workspace → offboard.
 - **Phase 3 repo cutover (bulk)** — standalone-capable silo ([#151](https://github.com/italanta/opencrane/issues/151)), frontend + org-libs receive/relicense ([#152](https://github.com/italanta/opencrane/issues/152)), NX adoption ([#153](https://github.com/italanta/opencrane/issues/153)). Landed on the `phase3-cutover` branch — **pending merge to `main`** (merge gated on the e2e-k3d design call + the k8s-platform subchart vendor-vs-publish decision).
 
+## Architecture review gate — personal-agent platform
+
+The proposed [personal-agent platform architecture](docs/design/personal-agent-platform-architecture.md)
+defines one lean OpenCrane-owned, OpenClaw-free end state. Two delivery strategies are under
+review: the
+[deletion-gated strangler](docs/design/personal-agent-platform-simplification-plan.md) and the
+[rewrite freeze with whole-silo blue/green replacement](docs/design/personal-agent-platform-rewrite-freeze-plan.md).
+Both keep Postgres/OpenCrane as the authority for silo-owned business state and fleet
+membership/lifecycle as explicit upstream contracts; they differ in when legacy changes stop, when
+users see value, how state is migrated, and where cutover/rollback risk sits.
+The focused [OpenClaw loop investigation](docs/design/openclaw-agent-loop-replacement-plan.md)
+traces the pinned runtime and defines the toolkit bake-off and parity gates shared by either route.
+
+These documents are **under review and do not yet resequence the phases below**. Their Gate 0 or R0
+first records the accepted decisions and then rebases the live GitHub issue inventory; this avoids
+rewriting implementation issues around an architecture that has not been accepted.
+
 ## Execution order
 
 The roadmap is sequenced into cross-repo phases (shared with [weownai's plan](https://github.com/italanta/WeOwnAI/blob/main/plan.md)).

@@ -40,7 +40,9 @@ fresh context — do not assume the author's intent was correct.
 
 ### DIMENSION: correctness
 - Logic bugs, edge cases, off-by-one, unhandled null/undefined.
-- Backward-incompatible behaviour changes.
+- Unintended violations of the declared target contract. In rewrite-freeze GREEN mode, legacy
+  incompatibility is intentional and compatibility shims are defects; frozen-blue exceptions still
+  preserve the signed support contract.
 - Failure handling: retries, timeouts, resource cleanup.
 - **Silent failures are a defect**: a bare `catch {}` or fail-closed
   `return null`/`continue` on an anomalous path with no structured log line

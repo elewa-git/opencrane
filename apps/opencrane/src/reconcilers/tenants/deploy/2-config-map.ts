@@ -8,7 +8,6 @@ import type { OpenClawTenantOperatorConfig } from "../../../app/config.js";
 import type { AccessPolicy } from "../../policies/types.js";
 import type { Tenant } from "../models/tenant.interface.js";
 import type { TenantModelSet } from "@opencrane/contracts";
-import { AWARENESS_CONTRACT_VERSION } from "@opencrane/awareness";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 
 /** Directory containing the workspace template files shipped with the operator. */
@@ -249,9 +248,8 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
           backend: "cognee",
           // Per-tenant Cognee base URL the plugin retrieves from (also injected as COGNEE_ENDPOINT).
           // Datasets are scope-partitioned (company / user / agent) by the plugin config below;
-          // access is enforced by the Cognee-side grants the opencrane-ui syncs.
+          // access is enforced by the Cognee-side grants the control plane syncs.
           endpoint: config.cogneeEndpoint,
-          contractVersion: AWARENESS_CONTRACT_VERSION,
         }
       : {
           backend: "workspace",
@@ -458,4 +456,3 @@ function _ReadWorkspaceTemplate(filename: string): string
 {
   return readFileSync(join(_WORKSPACE_TEMPLATES_DIR, filename), "utf-8");
 }
-

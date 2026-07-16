@@ -1,32 +1,37 @@
-name: Build and push Docker images
+name: Validate and publish affected deployables
 
 on:
   push:
     branches:
       - main
+      - feat/agent-platform-v2
   pull_request:
     branches:
       - main
+      - feat/agent-platform-v2
 
-# Least-privilege default for every job (read-only). The build-and-push job overrides this
-# with its own `packages: write` to publish images to GHCR.
 permissions:
+  actions: read
   contents: read
 
 env:
   REGISTRY: ghcr.io
-  OPENCRANE_SERVER_IMAGE: ghcr.io/${{ github.repository_owner }}/opencrane-server
-  TENANT_IMAGE: ghcr.io/${{ github.repository_owner }}/opencrane-openclaw-tenant
-  SKILL_REGISTRY_IMAGE: ghcr.io/${{ github.repository_owner }}/opencrane-skills-registry
-  OPENCRANE_UI_IMAGE: ghcr.io/${{ github.repository_owner }}/opencrane-ui
 
 jobs:
-  test:
-    name: Test
+  prepare:
+    name: Calculate affected work
     runs-on: ubuntu-latest
+    outputs:
+      nx_base: ${{ steps.affected.outputs.nx_base }}
+      nx_head: ${{ steps.affected.outputs.nx_head }}
+      deployables: ${{ steps.affected.outputs.deployables }}
+      has_deployables: ${{ steps.affected.outputs.has_deployables }}
+      api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
+      e2e_required: ${{ steps.affected.outputs.e2e_required }}
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-node@v6
         with:
@@ -36,42 +41,55 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # NX Cloud remote caching & distributed task execution
-      # Uncomment to enable after running `npx nx connect` locally (writes nxCloudId to nx.json).
-      # For PR events, this runs `npx nx affected` to test only changed packages.
-      # - name: Initialize NX Cloud CI
-      #   run: npx nx-cloud start-ci-run --distribute-on="3 linux-medium-js"
+      - name: Select the last successful base
+        uses: nrwl/nx-set-shas@v5
+        with:
+          main-branch-name: ${{ github.base_ref || (github.ref_name == 'feat/agent-platform-v2' && 'feat/agent-platform-v2' || 'main') }}
 
-      - name: Build
-        run: npm run build
+      - name: Emit affected deployable matrix
+        id: affected
+        run: node scripts/affected-deployables.mjs
 
-      - name: Verify API reference snapshot is up to date
-        # The server build above generated the source spec. Keep this contract
-        # check in API CI so the Pages deployment can remain entirely static.
+  test:
+    name: Build, test, and lint affected projects
+    runs-on: ubuntu-latest
+    needs: prepare
+    env:
+      NX_BASE: ${{ needs.prepare.outputs.nx_base }}
+      NX_HEAD: ${{ needs.prepare.outputs.nx_head }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build, test, and lint affected projects
+        run: npx nx affected -t build test lint
+
+      - name: Enforce monorepo dependency boundaries
+        run: npm run lint:boundaries
+
+      - name: Verify API reference and generated client when affected
+        if: needs.prepare.outputs.api_contract_changed == 'true'
         run: |
+          npx nx run opencrane:build
           npm run sync-openapi -w @opencrane/website
           git diff --exit-code -- website/public/openapi.json
-
-      # Regenerate the typed client from the freshly emitted OpenAPI dist
-      # artifact, then diff the committed generated client to catch drift.
-      - name: Verify generated client is up to date
-        run: |
           npx nx run contracts:generate
-          git diff --exit-code -- \
-            libs/contracts/src/generated/api.ts \
-          || { echo "::error::Generated OpenAPI client is stale. Run 'npx nx run contracts:generate' and commit the result."; exit 1; }
-
-      - name: Test all projects
-        run: npx nx run-many -t test lint
-
+          git diff --exit-code -- libs/contracts/src/generated/api.ts
 
   e2e-k3d:
-    # Standalone-silo smoke test: installs apps/opencrane-infra alone (deploymentMode=standalone)
-    # and asserts the operator self-seeds its own ClusterTenant + default Tenant. The fleet+silo
-    # integration test moved to WeOwnAI with the fleet artifacts (italanta/opencrane#150).
     name: k3d standalone-silo e2e smoke test
     runs-on: ubuntu-latest
-    needs: test
+    needs: [prepare, test]
+    if: needs.prepare.outputs.e2e_required == 'true'
     steps:
       - uses: actions/checkout@v6
 
@@ -88,13 +106,22 @@ jobs:
           TIMEOUT_SECONDS: "300"
 
   build-and-push:
-    name: Build and push images
+    name: Build and publish affected images
     runs-on: ubuntu-latest
-    # Only push on commits to main; require both unit tests and e2e to pass
-    needs: [test, e2e-k3d]
+    needs: [prepare, test, e2e-k3d]
+    if: >-
+      ${{
+        always() &&
+        needs.prepare.outputs.has_deployables == 'true' &&
+        needs.test.result == 'success' &&
+        (needs.e2e-k3d.result == 'success' || needs.e2e-k3d.result == 'skipped')
+      }}
     permissions:
       contents: read
       packages: write
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.prepare.outputs.deployables) }}
     steps:
       - uses: actions/checkout@v6
 
@@ -109,82 +136,22 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Extract image metadata (opencrane-server)
-        id: meta-opencrane-server
+      - name: Extract image metadata
+        id: metadata
         uses: docker/metadata-action@v6
         with:
-          images: ${{ env.OPENCRANE_SERVER_IMAGE }}
+          images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ matrix.image }}
           tags: |
             type=sha,prefix=sha-
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: Build and push opencrane-server
+      - name: Build and publish ${{ matrix.project }}
         uses: docker/build-push-action@v7
         with:
           context: .
-          file: apps/opencrane/deploy/Dockerfile
+          file: ${{ matrix.dockerfile }}
           push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-opencrane-server.outputs.tags }}
-          labels: ${{ steps.meta-opencrane-server.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract image metadata (opencrane-openclaw-tenant)
-        id: meta-opencrane-openclaw-tenant
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.TENANT_IMAGE }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push opencrane-openclaw-tenant
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/feat-openclaw-tenant/deploy/Dockerfile
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-opencrane-openclaw-tenant.outputs.tags }}
-          labels: ${{ steps.meta-opencrane-openclaw-tenant.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract image metadata (opencrane-skills-registry)
-        id: meta-opencrane-skills-registry
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.SKILL_REGISTRY_IMAGE }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push opencrane-skills-registry
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/feat-skill-registry/deploy/Dockerfile
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-opencrane-skills-registry.outputs.tags }}
-          labels: ${{ steps.meta-opencrane-skills-registry.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Extract image metadata (opencrane-ui)
-        id: meta-opencrane-ui
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.OPENCRANE_UI_IMAGE }}
-          tags: |
-            type=sha,prefix=sha-
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build and push opencrane-ui
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: apps/opencrane-ui/deploy/Dockerfile
-          push: ${{ github.event_name == 'push' }}
-          tags: ${{ steps.meta-opencrane-ui.outputs.tags }}
-          labels: ${{ steps.meta-opencrane-ui.outputs.labels }}
+          tags: ${{ steps.metadata.outputs.tags }}
+          labels: ${{ steps.metadata.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max

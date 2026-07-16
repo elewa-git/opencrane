@@ -4,7 +4,7 @@
 
 A standalone **background ingestion worker** (not API-first) that pulls external documents, normalises
 them to the org-index schema, and pushes them into Cognee so tenant pods can query org context via
-[`@opencrane/awareness`](../libs/awareness.md). Currently one connector: **Slack**.
+the official `@cognee/cognee-openclaw` plugin. Currently one connector: **Slack**.
 
 ## Loop (`src/index.ts`)
 

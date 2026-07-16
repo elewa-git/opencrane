@@ -76,9 +76,6 @@
       "@opencrane/contracts": [
         "./libs/contracts/src/index.ts"
       ],
-      "@opencrane/awareness": [
-        "./libs/awareness/src/index.ts"
-      ],
       "@opencrane/observability": [
         "./libs/observability/src/index.ts"
       ],

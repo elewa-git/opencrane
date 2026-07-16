@@ -1,5 +1,5 @@
 ---
-description: Execute scoped roadmap items from plan.md into validated, committed changes while keeping plan.md accurate.
+description: Execute accepted roadmap slices through architecture, implementation, deletion, validation, and review gates.
 argument-hint: "[target plan section / phase] [constraints]"
 ---
 
@@ -14,10 +14,16 @@ Target / constraints from the caller: **$ARGUMENTS**
 Read `AGENTS.md` at the repository root before writing any code. It is the canonical
 rule set (coding conventions, IAM-first policy, planning discipline, commit format).
 
+## Read the target once, completely
+
+- Read `plan.md` once at loop start to confirm current sequencing and whether the target is accepted.
+- Read the selected phase/item, every linked implementation issue, and its controlling design/ADR
+  completely. `plan.md` is the sequencing index; linked issues/designs carry acceptance detail.
+- Do not repeatedly re-read unchanged planning files inside a slice; pass their exact constraints to
+  every lane.
+
 ## Efficiency rules (follow these to avoid slow sessions)
 
-- **Do not re-read the full plan.md.** Read only the "Open Backlog (Execute Next)"
-  section (grep for the section header, then read that block). The rest is history.
 - **Act at the first clear signal.** Do not spend multiple rounds investigating before
   touching files. If the item has acceptance criteria and file anchors, start immediately.
 - **One build + test cycle per slice.** Do not run redundant validation rounds.
@@ -32,6 +38,36 @@ rule set (coding conventions, IAM-first policy, planning discipline, commit form
 - Default to completing all unchecked items in the selected target phase, unless an
   item is blocked by a missing decision or external dependency.
 - Update `plan.md` status/checklists in the **same cycle** as the code and validation.
+
+## Architecture and deletion preflight
+
+Before building the dependency DAG:
+
+1. Delegate the target to the `architecture` agent. For every proposed cluster workload require the
+   inventory `workload/kind -> image/entrypoint -> apps/<root> -> NX project -> deployment wiring ->
+   libs -> KSA/RBAC -> network boundary -> state/PVC`.
+   Any pod-bearing workload in the OpenCrane release without an `apps/<name>` root is a blocker.
+2. Place reusable logic under a functional-first library root (`libs/models`, `libs/util`,
+   `libs/backend`, `libs/frontend`, `libs/infra`) and then its bounded capability. Apps contain only
+   entrypoint/composition/configuration/build/deployment wiring. Models remain dependency-light and
+   cannot import databases, HTTP, Kubernetes, filesystems, frameworks, or apps.
+3. Require reuse discovery before adding a new app, library, route, event/topic, chart template, or
+   adapter. Record exact search terms, candidates, and the reuse/extend/new decision; frozen-blue
+   drop/archive paths are not green reuse candidates.
+4. Require a communication matrix for every cross-process edge: public ingress, internal
+   request/response, or internal message bus. Record contract, identity/authorization, NetworkPolicy,
+   and failure semantics; do not expose an internal app merely for service-to-service calls.
+5. Require NX registration plus distinct `type:app|lib`, functional `layer:*`, and bounded-capability
+   `scope:*` tags with machine-enforced dependency direction. Apps never import apps; libraries
+   never import apps; frontend never imports backend implementations; models are the bottom layer;
+   cross-project imports use public barrels. The first R2 structure gate migrates the current
+   layer-shaped scope tags before other green packages rely on them.
+6. Delegate `PRE-SLICE` plus the applicable phase mode (`GREEN-SLICE`, `BLUE-EXCEPTION`,
+   `MIGRATION`, or `R10-DECOMMISSION`) to the `reaper`. Remove `DROP/ARCHIVE` work from the
+   implementation scope; do not repair or refactor code that the target architecture retires.
+
+Resolve every architecture BLOCK before implementation. An unresolved product decision remains a
+blocker; do not hide it behind an interface.
 
 ## Parallelisation (maximise it)
 
@@ -57,6 +93,23 @@ rule set (coding conventions, IAM-first policy, planning discipline, commit form
 - Never rewrite shared history.
 - Never revert unrelated user changes.
 
+## Rewrite-freeze constraints (R0-R10)
+
+- The route is not executable until R0 records acceptance, estate classification, data disposition,
+  rollback truth, owners, and accepted ADRs. Do not infer those decisions from preference for a
+  rewrite.
+- Do not start green construction until the R1 stabilization/freeze gate it depends on is evidenced.
+- Green is direct target architecture: no OpenClaw/retired imports, backwards-compatibility shims,
+  deprecated aliases, dual writes, legacy fallbacks, or reverse bridge.
+- One-way read-only blue exporters and idempotent green importers live in migration tooling; green
+  runtime code cannot call them.
+- Before touching blue, identify the exact R1 blocker or allowed post-freeze break-fix class. Do not
+  fix, rename, abstract, add tests to, or otherwise improve a legacy path classified for drop unless
+  the minimum change is required for safe export/cutover.
+- Implement capabilities once in green. Do not create a temporary blue version.
+- Every replacement slice carries its own same-slice deletion set or a named later deletion gate
+  tied to a concrete cutover/retention condition.
+
 ## Commit cadence (commit at every gate)
 
 - A *gate* is any checkpoint the work clears: the per-slice/per-wave **build + test** gate and the
@@ -70,28 +123,47 @@ rule set (coding conventions, IAM-first policy, planning discipline, commit form
 
 ## Procedure
 
-1. Read only the "Open Backlog (Execute Next)" section of `plan.md`. Extract the
-   first N unblocked items with clear acceptance criteria.
-2. Pick the smallest high-impact slice. State what you are going to implement in
-   one sentence, then implement it without further discussion.
-3. Implement the selected slice(s), including tests and any required docs/config
+1. Read `plan.md` once, then read the selected entry, linked implementation issue, and controlling
+   design/ADR completely. Extract only accepted, unblocked acceptance criteria.
+2. Run the architecture and reaper preflight above. Build the deployable/dependency ledger and the
+   survivor/stabilize/migrate/drop classification; stop on any BLOCK.
+3. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
+   one sentence, record `WAVE_BASE=$(git rev-parse HEAD)`, then implement it without compatibility
+   scaffolding. Also record the intended integration target: `origin/main` normally or the protected
+   green integration branch for rewrite-freeze work.
+4. Implement the selected slice(s), including tests and any required docs/config
    updates, following AGENTS.md conventions as you write — not as a cleanup pass.
-4. Run `pnpm build` and the relevant test filter(s). One cycle. Summarise pass/fail.
-5. If a blocker is hit, record it in plan.md and move to the next unblocked item.
-6. Update the `plan.md` checklist/state to reflect exactly what changed this cycle.
-7. **Commit each slice once its build + test gate is green** — feature branch only, gitmoji +
+5. **Reap before validation or commit.** Delegate `POST-SLICE` with the same phase mode, apply every
+   proven DELETE/REWRITE and resolve every FORBIDDEN-GREEN/MIGRATION-EXPIRY item. Run the resulting
+   diff through `architecture` and resolve every BLOCK.
+6. Run `scripts/agent-style-check.sh`, the relevant NX project build/test/lint targets, and any
+   manifest-rendering ownership/security checks. Use `npm run build|test -w <package>` or
+   `npx nx run <project>:<target>` for a slice, then `npm run lint:boundaries` and
+   `npx nx affected -t build test lint --base="$WAVE_BASE"` at the wave gate. Omitting `--head`
+   includes the wave's uncommitted changes without revalidating all accumulated green history. One
+   cycle per gate.
+7. If a blocker is hit, record it in plan.md and move to the next unblocked item.
+8. Update the `plan.md` checklist/state to reflect exactly what changed this cycle.
+9. **Commit each slice only after reaper PASS, architecture PASS, and validation are green** —
+   feature branch only, gitmoji +
    imperative subject, **no Claude/AI co-author trailer** (see Commit cadence).
-8. **Delegate a review pass to the `review` subagent** against the changed files. Resolve
-   Critical/High findings, then **commit the resolution as a separate post-gate checkpoint**.
+10. **Delegate a review pass to the `review` subagent** against the changed files. Resolve
+   Critical/High findings. If review fixes change replacement/deletion boundaries, rerun reaper and
+   architecture, then revalidate and **commit the resolution as a separate post-gate checkpoint**.
    Do not push or open a PR unless explicitly asked.
+
+At R10, run `R10-DECOMMISSION` against the whole repository after the last retention window; a
+diff-local clean result is insufficient.
 
 ## Output (return in this order)
 
 1. **Implemented items** — one bullet per completed item with acceptance criterion met
-2. **Validation** — build and test pass/fail evidence (commands + result)
-3. **plan.md updates** — exactly which items changed state
-4. **Blockers** — items skipped and why (BLOCKED annotation, missing tooling, etc.)
-5. **Review findings summary** — from the review subagent, with resolution status
-6. **Commits** — the gate commits made this cycle (branch + subject line per commit)
+2. **Architecture gate** — deployable inventory, library boundaries, PASS/BLOCK
+3. **Reaper gate** — preflight classification and post-slice deletions
+4. **Validation** — build, test, lint, boundary, and relevant render/security evidence
+5. **plan.md updates** — exactly which items changed state
+6. **Blockers** — items skipped and why (BLOCKED annotation, missing decision/tooling, etc.)
+7. **Review findings summary** — from the review subagent, with resolution status
+8. **Commits** — the gate commits made this cycle (branch + subject line per commit)
 
 If fully blocked: **Blocker**, **Evidence**, **Proposed unblocking options**, **Minimal fallback slice**.

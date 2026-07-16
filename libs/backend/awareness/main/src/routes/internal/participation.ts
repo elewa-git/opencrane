@@ -29,10 +29,10 @@ function _ParseTenantNameFromSubject(subject: string): string | null
 /**
  * Internal endpoint for fleet participation events (P4B.5).
  *
- * Claws POST participation events (Agent Card advertisement, skill-execution
- * outcomes, heartbeats) from the `libs/awareness` SDK using the `opencrane-server`
- * projected ServiceAccount token. Transport is at-least-once with an
- * idempotency key (no new bus); duplicates are deduped server-side.
+ * Accepts tenant participation events (Agent Card advertisement, skill-execution
+ * outcomes, heartbeats) using the `opencrane-server` projected ServiceAccount token.
+ * Transport is at-least-once with an idempotency key (no new bus); duplicates are
+ * deduped server-side. No current tenant-runtime code emits these events.
  *
  * **Identity:** the emitting tenant is taken from the TokenReview-validated
  * ServiceAccount identity — never from the request body — so a claw cannot

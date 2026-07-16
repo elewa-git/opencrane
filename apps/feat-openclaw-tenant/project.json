@@ -1,0 +1,17 @@
+{
+  "name": "feat-openclaw-tenant",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": [
+    "scope:app",
+    "type:app"
+  ],
+  "targets": {
+    "container": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "docker build -f apps/feat-openclaw-tenant/deploy/Dockerfile ."
+      }
+    }
+  }
+}

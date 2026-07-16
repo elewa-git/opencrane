@@ -65,6 +65,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
+- **Tenant-runtime org memory now has one implementation and ownership boundary.** The official
+  Cognee OpenClaw plugin exclusively owns retrieval and capture; the retired bespoke awareness SDK
+  and its dead bootstrap version marker are removed. Existing server-side rollout controls are
+  unchanged pending a separate retirement or migration to real plugin deployment versions.
+
 - **The identity and mesh substrate decision has moved from Linkerd to Cilium + SPIFFE.**
   ADR 0003 — Cilium + SPIFFE identity substrate — supersedes ADR 0001 (Linkerd). The chosen model
   gives every silo workload a SPIFFE SVID (`spiffe://opencrane/ct/<org>/<workload>`) derived from

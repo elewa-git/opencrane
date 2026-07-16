@@ -58,7 +58,7 @@ Each employee gets their own **private AI assistant**—an isolated OpenClaw ins
 
 - **Knows who you are**: Holds your personal access tokens and can read and write data across the organization's platforms *as you*
 - **Stays private**: Your conversations with the AI are stored locally in your pod's encrypted storage. OpenCrane enforces network-level policies and budget controls, but does not log or inspect conversation contents.
-- **Accesses organizational knowledge directly**: Queries Cognee from the OpenClaw/Clawdbot runtime during the agentic loop, with policy-compatible dataset scope selection and citations.
+- **Accesses organizational knowledge directly**: Uses the official Cognee memory plugin during the agentic loop, with company, user, and agent scopes bound to the tenant identity.
 
 OpenCrane also runs **company-wide information gathering agents** (dedicated tenant deployments with elevated permissions) that:
 - Continuously harvest organizational knowledge, starting with Slack, with further sources (Teams, email, ticketing systems) connecting through the MCP gateway as they land
@@ -68,7 +68,7 @@ OpenCrane also runs **company-wide information gathering agents** (dedicated ten
 OpenCrane orchestrates all of this by:
 - **Infrastructure Management**: Deploying and managing assistants for each employee. Supporting local or remote LLM models. Setting token budgets and cost limits per employee, enforced by the org's LLM proxy and metered by the control plane.
 - **Permissions Control Plane**: Managing dataset memberships and permissions in Cognee (for org/team/project/personal scopes) without sitting in the retrieval request path.
-- **Uniform Awareness Runtime**: Enforcing a common awareness contract across tenant runtimes (query rewrite rules, scope selection, citations, fallback, freshness behavior).
+- **Managed organizational memory**: Wiring each tenant runtime to its entitled Cognee scopes through the official OpenClaw memory plugin.
 - **Organizational Knowledge**: Company-wide agents harvest and index org data; direct tenant retrieval runtimes make it accessible based on role and dataset scope.
 - **Scalable architecture**: The same multi-tenant, Kubernetes-native design works from 10 to 10,000 employees.
 - **Skill sharing**: Managing skill updates and deployments across the organization.
