@@ -69,6 +69,18 @@ remaining are large epics — decompose into waves before executing.
 | Issue | Scope | Dependency |
 |-------|-------|------------|
 | [#128](https://github.com/italanta/opencrane/issues/128) — **MCP/Obot lifecycle** | Authenticated Obot v0.23.1 mgmt+runtime adapter · real credential custody (singleUser/multiUser) · one authorization authority (reconcile intent → Obot access-control rules) · native OpenClaw `mcp.servers` activation via Obot `connectURL` · encryption/audit | Large epic; several sub-parts need a **live Obot** for verification. Replaces simulated MCP install/credential states. |
+
+**#128 decomposed 2026-07-16** (DAG + waves; execution on `feat/isolation-domaining-defaults`). The whole
+MCP app plane is Prisma-only simulation (fake `cred_*`/`oauth_*`); no Obot management client exists.
+**Resolved decisions:** ① authz collapse → generic `Grant` is sole authority, `McpServerAccessPolicy`
++ `McpServerGrant` demote to read-only projections. ② obot-gateway k8s SA token → replaced by a
+per-tenant **Obot API token** minted/rotated/revoked via the adapter. ③ mode mapping → Personal=`singleUser`,
+Shared=`multiUser`. ④ adapter lives in `libs/backend/mcp/main` (interface+logic), factory/wiring in `apps/opencrane`.
+**Deferred (W3, live-Obot-gated):** enable-auth-by-default rollout + OIDC federation bootstrap, real custody /
+`tools/list` / invocation / encryption verification, re-recording fixtures from a live server. Waves: W0 keystone
+(adapter interface+noop+factory, Prisma Obot-ID/connectURL/observed-state columns, contract DTOs, fixture harness)
+→ W1 (adapter HTTP impl, operator/servers logic rewrite, authz collapse, #218 discovery, credential replacement)
+→ W2 (native `mcp.servers` activation, reconcile loop, CLI) → W3 (live verification).
 | [#129](https://github.com/italanta/opencrane/issues/129) — **Central agents** | Managed org/silo-owned agents: definition CRUD + versioned revisions · triggers (manual + cron) · model policy via LiteLLM · capability grants (skills + imported Obot MCP) · scope-attachment knowledge read/write · scheduler + executor · scoped awareness advertisement | Large epic; reworks `apps/feat-central-agents` from the Slack harvester into the general model. Credentialed MCP capabilities lean on #128. |
 | ~~#130 — Cognee OpenClaw plugin adoption~~ | — | **DONE** (closed). |
 | ~~#138 — ClusterTenant teardown~~ | — | **DONE** (closed). |
