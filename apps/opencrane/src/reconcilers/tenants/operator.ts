@@ -593,6 +593,9 @@ export class TenantOperator
         message: degradedMessage,
         degradedReason,
         podName: `openclaw-${name}`,
+        // Record the RESOLVED deployment namespace so cleanup revokes/deletes in the same
+        //    place creation wrote (a clusterTenantRef openclaw lives in the parent's ns).
+        namespace,
         // Served at the ORG host (`<org>.<base>` or vanity) via the proxy — no per-user subdomain.
         ingressHost: ingressDomain,
         effectivePolicyRef,
@@ -843,9 +846,14 @@ export class TenantOperator
   private async cleanupTenant(tenant: Tenant): Promise<void>
   {
     const name = tenant.metadata!.name!;
-    const namespace = tenant.metadata!.namespace ?? "default";
+    // Delete/revoke in the namespace creation actually deployed into. The operator records
+    //    that resolved namespace in status; a clusterTenantRef openclaw lives in the parent's
+    //    bound namespace, NOT the Tenant CR namespace, so falling back to the CR namespace
+    //    (only for legacy tenants reconciled before this field existed) would orphan its
+    //    resources — including the revocable Obot token Secret.
+    const namespace = tenant.status?.namespace ?? tenant.metadata!.namespace ?? "default";
 
-    this.log.info({ name }, "cleaning up tenant resources");
+    this.log.info({ name, namespace }, "cleaning up tenant resources");
 
     // 1. Obot client token (#128) — revoke it Obot-side (best-effort) and delete its Secret. Unlike
     //    the encryption-key Secret (retained for data recovery), this carries a revocable credential

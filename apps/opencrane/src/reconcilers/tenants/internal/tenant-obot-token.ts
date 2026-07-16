@@ -3,7 +3,7 @@ import { Buffer } from "node:buffer";
 import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
 
-import { __K8sApplyResource, _K8sDeleteResource } from "@opencrane/infra/api";
+import { __K8sApplyResource, _K8sDeleteResource, _IsNotFound } from "@opencrane/infra/api";
 import { _BuildObotClient, ObotClientNotConfiguredError, type ObotManagementClient } from "@opencrane/backend/mcp";
 import { _BuildTenantLabels } from "../deploy/tenant-labels.js";
 import type { Tenant } from "../models/tenant.interface.js";
@@ -88,11 +88,14 @@ export class TenantObotToken
     const name = tenant.metadata!.name!;
     const secretName = _ObotClientTokenSecretName(name);
 
-    // 1. Idempotency — the token is minted once and never rotated automatically (mirrors
-    //    TenantEncryptionKeys), so a present Secret is authoritative and re-mint is skipped.
-    if (await this._tokenSecretExists(namespace, name))
+    // 1. Read the existing token Secret. A 404 means "mint one"; any OTHER k8s error
+    //    (authorization failure, timeout) MUST NOT be mistaken for absence — that would
+    //    mint a duplicate token — so `_readTokenSecret` rethrows it and the reconcile
+    //    retries. An unexpired token is authoritative (mint-once); an expired one rotates.
+    const existing = await this._readTokenSecret(namespace, name);
+    if (existing && existing.token && !_IsExpired(existing.expiresAt))
     {
-      this.log.debug({ name, secretName }, "obot client token secret already exists");
+      this.log.debug({ name, secretName }, "obot client token secret already exists and is unexpired");
       return true;
     }
 
@@ -121,9 +124,26 @@ export class TenantObotToken
       throw err;
     }
 
-    // 4. Persist — store the write-only bearer secret (mounted into the pod) and the
-    //    revocable tokenId (used only for teardown/rotation, never mounted) in one Secret.
-    await this._writeTokenSecret(namespace, name, minted.tokenId, minted.secret);
+    // 4. Persist — store the write-only bearer secret (mounted into the pod), the revocable
+    //    tokenId, and the expiry. If persistence FAILS the freshly-minted token would remain
+    //    active with no stored revocation handle, so revoke it (best-effort) before rethrowing.
+    try
+    {
+      await this._writeTokenSecret(namespace, name, minted.tokenId, minted.secret, minted.expiresAt);
+    }
+    catch (err)
+    {
+      await this._revokeQuietly(minted.tokenId, name, "compensating for token-secret persistence failure");
+      throw err;
+    }
+
+    // 5. Rotation cleanup — if we replaced an expired token, revoke the old one Obot-side
+    //    (best-effort; its Secret entry has already been overwritten).
+    if (existing?.tokenId)
+    {
+      await this._revokeQuietly(existing.tokenId, name, "rotating expired obot client token");
+    }
+
     this.log.info({ name, secretName }, "minted per-tenant obot client token");
     return true;
   }
@@ -142,32 +162,39 @@ export class TenantObotToken
    */
   async revokeAndDeleteObotClientToken(name: string, namespace: string): Promise<void>
   {
-    // 1. Revoke — read the persisted tokenId (never the secret) and invalidate it Obot-side.
-    //    Best-effort: a not-yet-wired adapter or a transient revoke failure must not block the
-    //    Secret deletion below, so both are logged and swallowed.
-    const tokenId = await this._readTokenId(namespace, name);
-    if (tokenId)
+    // 1. Read the persisted tokenId (never the secret). A 404 means the Secret is already
+    //    gone (nothing to do); any OTHER read error is rethrown so cleanup retries rather
+    //    than deleting blindly.
+    const existing = await this._readTokenSecret(namespace, name);
+    if (!existing)
+    {
+      return;
+    }
+
+    // 2. Revoke Obot-side. If the adapter isn't wired (NotConfigured) there is nothing to
+    //    revoke, so proceed to delete. On any OTHER revoke failure, DO NOT delete the Secret:
+    //    it holds the only revocation handle, so we retain it and rethrow so a later reconcile
+    //    retries — the token id is never discarded until revocation succeeds.
+    if (existing.tokenId)
     {
       try
       {
-        await this.client.revokeClientToken(tokenId);
+        await this.client.revokeClientToken(existing.tokenId);
         this.log.info({ name }, "revoked per-tenant obot client token");
       }
       catch (err)
       {
-        if (err instanceof ObotClientNotConfiguredError)
+        if (!(err instanceof ObotClientNotConfiguredError))
         {
-          this.log.debug({ name }, "obot client token revoke skipped: obot management not configured");
+          this.log.warn({ err, name }, "obot client token revoke failed; retaining secret (revocation-pending) for retry");
+          throw err;
         }
-        else
-        {
-          this.log.warn({ err, name }, "obot client token revoke failed; deleting secret anyway");
-        }
+        this.log.debug({ name }, "obot client token revoke skipped: obot management not configured");
       }
     }
 
-    // 2. Delete — remove the per-tenant token Secret (it holds a revocable credential, so it
-    //    is not retained the way the encryption-key Secret is).
+    // 3. Delete — only after a successful (or nothing-to-revoke) revocation. The Secret holds
+    //    a revocable credential, so it is not retained the way the encryption-key Secret is.
     await _K8sDeleteResource(this.objectApi, {
       apiVersion: "v1",
       kind: "Secret",
@@ -175,37 +202,54 @@ export class TenantObotToken
     }, this.log);
   }
 
-  /** True when the tenant's token Secret exists and carries a mountable `token` value. */
-  private async _tokenSecretExists(namespace: string, tenantName: string): Promise<boolean>
+  /**
+   * Read the token Secret's decoded fields, or `null` when it genuinely does not exist.
+   *
+   * Only a 404 is treated as absent; every other error (authorization, timeout) is rethrown
+   * so a transient read failure is never mistaken for "no token" (which would mint a duplicate
+   * or delete without revoking).
+   *
+   * @param namespace - Namespace the Secret lives in.
+   * @param tenantName - The tenant CR name.
+   * @returns The decoded `{ token, tokenId, expiresAt }`, or null on 404.
+   */
+  private async _readTokenSecret(namespace: string, tenantName: string): Promise<{ token: string; tokenId: string; expiresAt: string } | null>
   {
     try
     {
       const secret = await this.coreApi.readNamespacedSecret({ name: _ObotClientTokenSecretName(tenantName), namespace });
-      return Boolean(secret.data?.["token"]);
+      const decode = function _decode(key: string): string { const v = secret.data?.[key]; return v ? Buffer.from(v, "base64").toString("utf8") : ""; };
+      return { token: decode("token"), tokenId: decode("tokenId"), expiresAt: decode("expiresAt") };
     }
-    catch
+    catch (err)
     {
-      return false;
+      if (_IsNotFound(err))
+      {
+        return null;
+      }
+      throw err;
     }
   }
 
-  /** Read the persisted, revocable Obot tokenId from the token Secret, or `""` if absent. */
-  private async _readTokenId(namespace: string, tenantName: string): Promise<string>
+  /** Revoke a token Obot-side, swallowing errors — for compensation + rotation cleanup. */
+  private async _revokeQuietly(tokenId: string, name: string, reason: string): Promise<void>
   {
     try
     {
-      const secret = await this.coreApi.readNamespacedSecret({ name: _ObotClientTokenSecretName(tenantName), namespace });
-      const encoded = secret.data?.["tokenId"];
-      return encoded ? Buffer.from(encoded, "base64").toString("utf8") : "";
+      await this.client.revokeClientToken(tokenId);
+      this.log.info({ name }, `revoked obot client token: ${reason}`);
     }
-    catch
+    catch (err)
     {
-      return "";
+      if (!(err instanceof ObotClientNotConfiguredError))
+      {
+        this.log.warn({ err, name }, `obot client token revoke failed: ${reason}`);
+      }
     }
   }
 
-  /** Write the per-tenant token Secret (create-or-replace): write-only secret + revocable tokenId. */
-  private async _writeTokenSecret(namespace: string, tenantName: string, tokenId: string, secret: string): Promise<void>
+  /** Write the per-tenant token Secret (create-or-replace): write-only secret + tokenId + expiry. */
+  private async _writeTokenSecret(namespace: string, tenantName: string, tokenId: string, secret: string, expiresAt?: string): Promise<void>
   {
     const body: k8s.V1Secret = {
       apiVersion: "v1",
@@ -219,11 +263,30 @@ export class TenantObotToken
       data: {
         token: Buffer.from(secret).toString("base64"),
         tokenId: Buffer.from(tokenId).toString("base64"),
+        ...(expiresAt ? { expiresAt: Buffer.from(expiresAt).toString("base64") } : {}),
       },
     };
 
     await __K8sApplyResource(this.objectApi, body, this.log);
   }
+}
+
+/**
+ * Whether a stored token expiry has passed. An empty/absent expiry means a non-expiring
+ * token (ready indefinitely); a malformed value is treated as non-expiring rather than
+ * forcing a rotation storm.
+ *
+ * @param expiresAt - The stored ISO expiry string (or "" when none).
+ * @returns True only when a parseable expiry is in the past.
+ */
+function _IsExpired(expiresAt: string): boolean
+{
+  if (!expiresAt)
+  {
+    return false;
+  }
+  const at = Date.parse(expiresAt);
+  return Number.isFinite(at) && at <= Date.now();
 }
 
 /**

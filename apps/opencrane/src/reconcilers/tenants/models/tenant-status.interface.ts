@@ -76,6 +76,15 @@ export interface TenantStatus
   /** Name of the tenant pod managed by the deployment. */
   podName?: string;
 
+  /**
+   * The namespace this tenant's child resources (pod, Secrets, ConfigMap, Service) were
+   * last deployed into. This is the RESOLVED deployment target — for a `clusterTenantRef`
+   * openclaw it is the parent's bound namespace, which differs from the Tenant CR's own
+   * namespace. Cleanup reads this so revoke/delete target the same namespace creation used,
+   * rather than assuming the CR namespace (which would orphan a ref'd tenant's resources).
+   */
+  namespace?: string;
+
   /** Hostname assigned to the tenant ingress. */
   ingressHost?: string;
 
