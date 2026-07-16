@@ -1009,7 +1009,10 @@ function _NormalizeIds(values: string[] | undefined): string[]
     }
 
     const trimmed = value.trim();
-    if (trimmed.length > 0)
+    // Reserve the org-everyone sentinel: it must never be authorable as a literal
+    // group/user id, or an admin could grant everyone by naming a group `*` while
+    // `everyoneInOrg` is false. Only the everyoneInOrg path may write the sentinel.
+    if (trimmed.length > 0 && trimmed !== _ORG_EVERYONE_SUBJECT_ID)
     {
       unique.add(trimmed);
     }

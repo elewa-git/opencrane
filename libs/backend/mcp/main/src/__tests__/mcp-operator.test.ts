@@ -385,6 +385,21 @@ describe("mcp-operator router", function _suite()
       const rows = spies["grant.createMany"].mock.calls[0][0].data as Array<{ subjectType: string; subjectId: string; access: string }>;
       expect(rows).toEqual([expect.objectContaining({ subjectType: "Group", subjectId: "*", access: "Allow" })]);
     });
+
+    it("refuses to author the org-everyone sentinel via a literal group id (no spoofing)", async function _rejectsSentinelSpoof()
+    {
+      process.env.OPENCRANE_API_TOKEN = "ci-token";
+      const { prisma, spies } = _authoringPrisma();
+      // everyoneInOrg is FALSE but an admin tries to grant everyone by naming a group "*".
+      const res = await request(_buildApp(prisma, { sub: "admin", isOrgAdmin: true }))
+        .put("/api/v1/mcp/servers/srv-1/access").send({ everyoneInOrg: false, groups: ["*", "g1"], users: [] });
+
+      expect(res.status).toBe(200);
+      const rows = spies["grant.createMany"].mock.calls[0][0].data as Array<{ subjectType: string; subjectId: string }>;
+      // The reserved sentinel is dropped; only the real group is authored.
+      expect(rows.some(function _isSentinel(r) { return r.subjectId === "*"; })).toBe(false);
+      expect(rows).toEqual([expect.objectContaining({ subjectType: "Group", subjectId: "g1" })]);
+    });
   });
 
   describe("user-scoping — a caller only sees / acts on their own installs", function _scoping()
