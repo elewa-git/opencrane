@@ -69,6 +69,20 @@ const _PRISMA_GRANT_SUBJECT_TYPE = {
 /** Principal subject types that resolve directly against the caller identifier. */
 const _DIRECT_SUBJECT_TYPES = [_PRISMA_GRANT_SUBJECT_TYPE.Tenant, _PRISMA_GRANT_SUBJECT_TYPE.User];
 
+/**
+ * Reserved Group `subjectId` that matches EVERY principal — the org-everyone
+ * primitive. An Allow grant on `{ subjectType: Group, subjectId: "*" }` applies
+ * org-wide (e.g. an `everyoneInOrg` MCP entitlement), resolved identically by the
+ * tenant effective contract and any other consumer of this compiler.
+ *
+ * It is a RESERVED sentinel: authoring paths must never write it as a literal group
+ * id (see the MCP `_NormalizeIds` guard), so the only `"*"` grants that exist are
+ * intentional org-wide ones. Precedence (priority → Deny-beats-Allow → newest) is
+ * unchanged — an org-everyone Allow can still be overridden by a higher-priority or
+ * equal-priority Deny on a group/user the caller belongs to.
+ */
+export const GRANT_ORG_EVERYONE_SUBJECT_ID = "*";
+
 /** Compiler-facing access enum lookup keyed by Prisma enum values. */
 const _COMPILER_ACCESS_BY_PRISMA_ACCESS = {
   [_PRISMA_GRANT_ACCESS.Allow]: GrantCompilerAccess.Allow,
@@ -230,6 +244,16 @@ async function _compileForResolvedPrincipals(
               },
             ]
           : []),
+        // Org-everyone primitive: an Allow on the reserved "*" Group subject applies
+        // to every principal, so an everyoneInOrg entitlement reaches the effective
+        // contract without enumerating members. Safe because "*" is never authorable
+        // as a literal group id (reserved at authoring time).
+        {
+          subjectType: _PRISMA_GRANT_SUBJECT_TYPE.Group,
+          subjectId: {
+            in: [GRANT_ORG_EVERYONE_SUBJECT_ID],
+          },
+        },
       ],
     },
   });

@@ -116,3 +116,32 @@ describe("grant compiler — openclaw Tenant inherits its user's rights (S4)", f
     expect(await compileForPrincipals(["", ""], GrantCompilerPayloadType.McpServer, _prismaStub(groups, grants))).toEqual([]);
   });
 });
+
+describe("grant compiler — org-everyone primitive (GRANT_ORG_EVERYONE_SUBJECT_ID)", function _orgEveryoneSuite()
+{
+  // An Allow on the reserved "*" Group subject, plus a per-user Deny on the same
+  // payload to prove precedence still applies to the org-wide grant.
+  const grants: _GrantRow[] = [
+    _grant("g-all",  "mcp-orgwide", "Allow", "Group", "*",        "2026-01-01T00:00:00Z"),
+    _grant("g-deny", "mcp-orgwide", "Deny",  "User",  "denied-u", "2026-01-02T00:00:00Z"),
+  ];
+
+  it("reaches any principal with no group membership at all", async function _reachesEveryone()
+  {
+    const decisions = await compileForPrincipals(["a-random-user"], GrantCompilerPayloadType.McpServer, _prismaStub([], grants));
+    expect(decisions.map(d => d.payloadId)).toEqual(["mcp-orgwide"]);
+    expect(decisions[0].access).toBe(GrantCompilerAccess.Allow);
+  });
+
+  it("is still overridden by a higher-precedence Deny on the caller (fail-closed)", async function _denyWins()
+  {
+    const byId = new Map((await compileForPrincipals(["denied-u"], GrantCompilerPayloadType.McpServer, _prismaStub([], grants))).map(d => [d.payloadId, d.access]));
+    // Deny beats the org-wide Allow at equal priority (newer + Deny-beats-Allow).
+    expect(byId.get("mcp-orgwide")).toBe(GrantCompilerAccess.Deny);
+  });
+
+  it("an empty principal set never picks up the org-everyone grant", async function _noLeak()
+  {
+    expect(await compileForPrincipals([], GrantCompilerPayloadType.McpServer, _prismaStub([], grants))).toEqual([]);
+  });
+});

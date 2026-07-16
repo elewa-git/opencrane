@@ -6,6 +6,24 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mcpOperatorRouter } from "../routes/mcp-operator.js";
 import type { ObotManagementClient } from "../core/obot-client.types.js";
+import { compileForPrincipals, GrantCompilerAccess } from "@opencrane/backend/grants";
+
+// The catalogue read delegates entitlement to the shared grant compiler (the same
+// authority the tenant effective contract uses). Mock only that function so these
+// tests exercise the catalogue's filtering; the compiler's own semantics
+// (org-everyone sentinel, Group.members resolution, precedence) are covered in the
+// grants lib's suite.
+vi.mock("@opencrane/backend/grants", async function _mockGrants(importOriginal)
+{
+  const actual = await importOriginal<typeof import("@opencrane/backend/grants")>();
+  return { ...actual, compileForPrincipals: vi.fn() };
+});
+
+/** Build a compiler decision list from `{payloadId: access}` pairs for the mock. */
+function _decisions(pairs: Array<{ payloadId: string; access: GrantCompilerAccess }>): Awaited<ReturnType<typeof compileForPrincipals>>
+{
+  return pairs as unknown as Awaited<ReturnType<typeof compileForPrincipals>>;
+}
 
 /**
  * Operator-API coverage (`/api/v1/mcp/*`): the org-admin gate on the governance
@@ -162,11 +180,11 @@ describe("mcp-operator router", function _suite()
     });
   });
 
-  describe("GET /catalog — entitlement derived from the generic Grant table (authority)", function _catalog()
+  describe("GET /catalog — entitlement delegated to the shared grant compiler (authority)", function _catalog()
   {
     /**
-     * Two published servers. Crucially the rows carry NO `accessPolicy` include:
-     * the decision is derived solely from `grant.findMany`, proving the demoted
+     * Two published servers. The rows carry NO `accessPolicy` include: entitlement
+     * is decided solely by the compiler's decisions, proving the demoted
      * McpServerAccessPolicy table is no longer the read authority.
      */
     const _servers = [
@@ -174,101 +192,52 @@ describe("mcp-operator router", function _suite()
       { id: "srv-closed", name: "Closed", description: "", publisher: null, glyph: null, serverType: "SingleUser", approvalStatus: "Published", credentialSchema: [], entitlementSummary: null, createdAt: new Date() },
     ];
 
-    /** A generic MCP Grant row in the shape `_CompileEntitledMcpServerIds` selects. */
-    function _grant(overrides: Partial<{ payloadId: string; access: string; priority: number; subjectId: string; createdAt: Date }>): Record<string, unknown>
+    /** Prisma with the two published servers; the compiler is mocked separately. */
+    function _catalogPrisma(): PrismaClient
     {
-      return { payloadId: "srv-open", access: "Allow", priority: 0, subjectId: "", createdAt: new Date(), ...overrides };
+      return _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } }).prisma;
     }
 
-    /**
-     * Stub `grant.findMany` so it honours the `where.subjectId.in` filter the read
-     * path builds — this is what makes claim-based group / org-wide matching real
-     * rather than "any row present wins".
-     */
-    function _grantsFindMany(rows: Record<string, unknown>[]): (arg: unknown) => Promise<Record<string, unknown>[]>
-    {
-      return function _find(arg: unknown)
-      {
-        const inSet = ((arg as { where?: { subjectId?: { in?: string[] } } })?.where?.subjectId?.in) ?? [];
-        return Promise.resolve(rows.filter(function _match(row) { return inSet.includes(row.subjectId as string); }));
-      };
-    }
-
-    it("default-deny: an ungranted caller sees nothing", async function _deny()
+    it("default-deny: no Allow decision ⇒ the caller sees nothing", async function _deny()
     {
       process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([]));
+      const res = await request(_buildApp(_catalogPrisma(), { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
+      // The caller's own principal is what the compiler is asked to resolve.
+      expect(vi.mocked(compileForPrincipals)).toHaveBeenCalledWith(["user-1"], expect.anything(), expect.anything());
     });
 
-    it("an org-wide Grant entitles every caller", async function _orgWide()
+    it("an Allow decision from the compiler entitles that server", async function _allow()
     {
       process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({
-        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
-        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-open", subjectId: "*" })]),
-      });
-      const res = await request(_buildApp(prisma, { sub: "nobody-in-particular", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([{ payloadId: "srv-open", access: GrantCompilerAccess.Allow }]));
+      const res = await request(_buildApp(_catalogPrisma(), { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
       expect(res.body[0]).toMatchObject({ id: "srv-open", type: "multi-user", approvalStatus: "published" });
     });
 
-    it("a direct user Grant entitles that caller only", async function _user()
+    it("a Deny decision excludes the server (fail-closed)", async function _deniedWins()
     {
       process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({
-        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
-        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-open", subjectId: "user-1" })]),
-      });
-      const entitled = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
-      const other = await request(_buildApp(prisma, { sub: "user-2", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
-
-      expect(entitled.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-open"]);
-      expect(other.body).toEqual([]);
-    });
-
-    it("entitles a caller via a matching group claim", async function _group()
-    {
-      process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({
-        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
-        "grant.findMany": _grantsFindMany([_grant({ payloadId: "srv-closed", subjectId: "other-group" })]),
-      });
-      const member = await request(_buildApp(prisma, { sub: "user-2", groups: ["other-group"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
-      const nonMember = await request(_buildApp(prisma, { sub: "user-3", groups: ["some-other"], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
-
-      expect(member.body.map(function _id(s: { id: string }) { return s.id; })).toEqual(["srv-closed"]);
-      expect(nonMember.body).toEqual([]);
-    });
-
-    it("a Deny beats an Allow at equal priority (fail-closed precedence)", async function _deniedWins()
-    {
-      process.env.OPENCRANE_API_TOKEN = "ci-token";
-      const { prisma } = _mockPrisma({
-        "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); },
-        "grant.findMany": _grantsFindMany([
-          _grant({ payloadId: "srv-open", access: "Allow", subjectId: "user-1" }),
-          _grant({ payloadId: "srv-open", access: "Deny", subjectId: "user-1" }),
-        ]),
-      });
-      const res = await request(_buildApp(prisma, { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
+      vi.mocked(compileForPrincipals).mockResolvedValue(_decisions([{ payloadId: "srv-open", access: GrantCompilerAccess.Deny }]));
+      const res = await request(_buildApp(_catalogPrisma(), { sub: "user-1", groups: [], isOrgAdmin: false })).get("/api/v1/mcp/catalog");
 
       expect(res.body).toEqual([]);
     });
 
-    it("dev-open bypass returns the full published catalogue without consulting grants", async function _devOpen()
+    it("dev-open bypass returns the full published catalogue without consulting the compiler", async function _devOpen()
     {
-      const { prisma, spies } = _mockPrisma({ "mcpServer.findMany": function _findMany() { return Promise.resolve(_servers); } });
-      const res = await request(_buildApp(prisma)).get("/api/v1/mcp/catalog");
+      vi.mocked(compileForPrincipals).mockClear();
+      const res = await request(_buildApp(_catalogPrisma())).get("/api/v1/mcp/catalog");
 
       expect(res.status).toBe(200);
       expect(res.body.map(function _id(s: { id: string }) { return s.id; }).sort()).toEqual(["srv-closed", "srv-open"]);
-      expect(spies["grant.findMany"]).toBeUndefined();
+      expect(vi.mocked(compileForPrincipals)).not.toHaveBeenCalled();
     });
   });
 
