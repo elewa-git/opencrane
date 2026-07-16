@@ -1,10 +1,9 @@
-import { randomBytes } from "node:crypto";
-
 import { McpApprovalStatus, McpConnectionStatus, McpServerType, type CredentialField, type Directory, type EntitledUser, type McpAccessPolicy, type McpCatalogServer, type McpInstalled } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___SortBy } from "@opencrane/util";
 import type { McpAccessPolicyRequest } from "../routes/mcp-operator.types.js";
+import type { ObotManagementClient, ObotServerMode, ObotServerReadiness, ObotServerRef } from "./obot-client.types.js";
 
 /** MCP server row joined with the access policy + entitled users used for filtering. */
 type _McpServerWithPolicyRow = Prisma.McpServerGetPayload<{ include: { accessPolicy: { include: { users: true } } } }>;
@@ -195,40 +194,169 @@ export async function uninstallServer(prisma: PrismaClient, userId: string, serv
   return true;
 }
 
+/** Install row joined with the Obot ids its credential flow needs. */
+type _McpInstallObotRow = Prisma.McpServerInstallGetPayload<{ select: { id: true, obotInstanceId: true, mcpServer: { select: { serverType: true, obotServerId: true } } } }>;
+
+/** Map a Prisma `McpServerType` to the Obot deployment model. */
+function _ModeFromServerType(serverType: string): ObotServerMode
+{
+  // Multi-user is the only shared (multiUser) model; single-user AND remote-OAuth
+  // are per-user (singleUser) Obot deployments.
+  return serverType === _PRISMA_SERVER_TYPE.MultiUser ? "multiUser" : "singleUser";
+}
+
 /**
- * Store a per-user credential (WRITE-ONLY) and mark the install connected.
+ * Resolve the Obot server reference to operate on for an install, or null when the
+ * server/instance has not been provisioned in Obot yet.
  *
- * The submitted `values` are never persisted as plaintext and never returned: a
- * minted opaque `credentialRef` is the only thing kept, standing in for the secret
- * the gateway plane (Obot) brokers. No response serialises credential material.
+ * A null result is the fail-closed signal: OpenCrane cannot configure credentials or
+ * reconcile OAuth for a server Obot does not yet know about, so the caller marks the
+ * install `activation-failed` instead of minting a local handle.
+ *
+ * @param install - Install row joined with its server's Obot ids.
+ * @returns The Obot server ref, or null when not provisioned.
+ */
+function _ObotServerRefFromInstall(install: _McpInstallObotRow): ObotServerRef | null
+{
+  const mode = _ModeFromServerType(install.mcpServer.serverType);
+  if (mode === "singleUser")
+  {
+    // A per-user singleUser deployment needs its own Obot instance (created when the
+    // install is provisioned in Obot); without it there is nothing to configure.
+    if (!install.obotInstanceId)
+    {
+      return null;
+    }
+    return { serverId: install.mcpServer.obotServerId ?? "", instanceId: install.obotInstanceId, mode };
+  }
+
+  // A shared multiUser server is configured once by an admin; a per-user credential
+  // flow only reaches it once the shared server exists in Obot.
+  if (!install.mcpServer.obotServerId)
+  {
+    return null;
+  }
+  return { serverId: install.mcpServer.obotServerId, mode };
+}
+
+/**
+ * Map Obot-derived readiness to a per-user install connection status.
+ *
+ * @param readiness - Readiness Obot reported for the server/instance.
+ * @param configuredStatus - The status to use when Obot reports `configured`
+ *   (`Connected` for a credential flow, `OauthConnected` for an OAuth flow).
+ * @returns The Prisma connection-status value to persist.
+ */
+function _MapReadinessToStatus(readiness: ObotServerReadiness, configuredStatus: string): string
+{
+  switch (readiness)
+  {
+    case "configured":
+      return configuredStatus;
+    case "deploying":
+      return _PRISMA_CONNECTION_STATUS.Activating;
+    case "needs-oauth":
+    case "missing-headers":
+      return _PRISMA_CONNECTION_STATUS.NeedsCredential;
+    case "error":
+    default:
+      return _PRISMA_CONNECTION_STATUS.ActivationFailed;
+  }
+}
+
+/**
+ * Mark an install `activation-failed` and record why, without minting any handle.
+ *
+ * This is the fail-closed path for every case where OpenCrane cannot obtain a real
+ * Obot result (server not provisioned, or the Obot operation threw). It guarantees
+ * the #128 invariant: no endpoint reports connected without a successful Obot op.
  *
  * @param prisma - Prisma client used for persistence.
  * @param userId - Stable caller identifier.
  * @param serverId - Installed server identifier.
+ * @param reason - Actionable reason persisted to `lastError` and audited.
+ * @returns The updated install row in wire shape.
+ */
+async function _FailInstallClosed(prisma: PrismaClient, userId: string, serverId: string, reason: string): Promise<McpInstalled>
+{
+  const install = await prisma.mcpServerInstall.update({
+    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
+    data: { connectionStatus: _PRISMA_CONNECTION_STATUS.ActivationFailed as Prisma.McpServerInstallUpdateInput["connectionStatus"], observedState: "error", lastError: reason, credentialRef: null },
+  });
+  await _AuditInstall(prisma, "Updated", serverId, userId, `MCP credential failed closed for ${userId} on server ${serverId}: ${reason}`);
+  return _MapInstalled(install);
+}
+
+/** Extract a human-readable message from a thrown value for `lastError`. */
+function _ErrMessage(err: unknown): string
+{
+  return err instanceof Error ? err.message : String(err);
+}
+
+/**
+ * Configure a per-user credential by sending the WRITE-ONLY material straight to
+ * Obot and deriving the connection state from Obot's response.
+ *
+ * The submitted `secrets` are streamed to Obot and never persisted, logged, or
+ * returned. There is no locally minted `cred_*` handle: the install is only marked
+ * connected when Obot reports the server `configured`; every other outcome (server
+ * not provisioned, Obot error) fails closed to `activation-failed`.
+ *
+ * @param prisma - Prisma client used for persistence.
+ * @param obot - Obot management client (the real HTTP client in production; a mock
+ *   in tests; the fail-closed no-op until a live Obot is wired).
+ * @param userId - Stable caller identifier.
+ * @param serverId - Installed server identifier.
+ * @param secrets - Write-only header/API-key material to hand to Obot.
  * @returns The updated install row, or null when no install exists for the caller.
  */
-export async function setCredential(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export async function setCredential(prisma: PrismaClient, obot: ObotManagementClient, userId: string, serverId: string, secrets: Record<string, string>): Promise<McpInstalled | null>
 {
   // 1. Require an existing install so credential authoring follows install; a
   //    missing install reads as 404 rather than silently creating one.
-  const existing = await prisma.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId } }, select: { id: true } });
-  if (!existing)
+  const install = await prisma.mcpServerInstall.findUnique({
+    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
+    select: { id: true, obotInstanceId: true, mcpServer: { select: { serverType: true, obotServerId: true } } },
+  });
+  if (!install)
   {
     return null;
   }
 
-  // 2. Mint an opaque custody handle; the raw values are discarded here and the
-  //    secret is brokered by the gateway plane, so nothing secret touches the DB.
-  const credentialRef = `cred_${randomBytes(18).toString("hex")}`;
+  // 2. Fail closed when Obot does not yet know about this server/instance — we
+  //    cannot configure a credential against a server that was never provisioned.
+  const serverRef = _ObotServerRefFromInstall(install);
+  if (!serverRef)
+  {
+    return _FailInstallClosed(prisma, userId, serverId, "server is not provisioned in Obot yet — cannot configure credentials");
+  }
 
-  // 3. Flip the install to connected and attach the handle.
-  const install = await prisma.mcpServerInstall.update({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    data: { credentialRef, connectionStatus: _PRISMA_CONNECTION_STATUS.Connected as Prisma.McpServerInstallUpdateInput["connectionStatus"] },
-  });
-
-  await _AuditInstall(prisma, "Updated", serverId, userId, `MCP credential connected for ${userId} on server ${serverId}`);
-  return _MapInstalled(install);
+  // 3. Stream the write-only material to Obot and derive the status from its
+  //    response. Nothing secret is persisted, and the install is connected only if
+  //    Obot itself reports the server configured.
+  try
+  {
+    const state = await obot.configureServer({ server: serverRef, secrets });
+    const status = _MapReadinessToStatus(state.readiness, _PRISMA_CONNECTION_STATUS.Connected);
+    const updated = await prisma.mcpServerInstall.update({
+      where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
+      data: {
+        connectionStatus: status as Prisma.McpServerInstallUpdateInput["connectionStatus"],
+        observedState: state.readiness,
+        connectUrl: state.connectUrl ?? null,
+        lastError: state.error ?? null,
+        credentialRef: null,
+      },
+    });
+    await _AuditInstall(prisma, "Updated", serverId, userId, `MCP credential configured in Obot for ${userId} on server ${serverId} (state: ${state.readiness})`);
+    return _MapInstalled(updated);
+  }
+  catch (err)
+  {
+    // 4. A thrown Obot op (including the fail-closed no-op) must never leave the
+    //    install looking connected — record the failure and stay activation-failed.
+    return _FailInstallClosed(prisma, userId, serverId, `Obot could not configure credentials: ${_ErrMessage(err)}`);
+  }
 }
 
 /**
@@ -252,25 +380,49 @@ export async function clearCredential(prisma: PrismaClient, userId: string, serv
  * @param serverId - Installed server identifier.
  * @returns The updated install row, or null when no install exists for the caller.
  */
-export async function connectOauth(prisma: PrismaClient, userId: string, serverId: string): Promise<McpInstalled | null>
+export async function connectOauth(prisma: PrismaClient, obot: ObotManagementClient, userId: string, serverId: string): Promise<McpInstalled | null>
 {
   // 1. Require an existing install so the OAuth callback targets a real row.
-  const existing = await prisma.mcpServerInstall.findUnique({ where: { mcpServerId_userId: { mcpServerId: serverId, userId } }, select: { id: true } });
-  if (!existing)
+  const install = await prisma.mcpServerInstall.findUnique({
+    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
+    select: { id: true, obotInstanceId: true, mcpServer: { select: { serverType: true, obotServerId: true } } },
+  });
+  if (!install)
   {
     return null;
   }
 
-  // 2. Mint a custody handle for the brokered OAuth grant and flip to connected;
-  //    the grant material lives in the gateway plane, not here.
-  const credentialRef = `oauth_${randomBytes(18).toString("hex")}`;
-  const install = await prisma.mcpServerInstall.update({
-    where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
-    data: { credentialRef, connectionStatus: _PRISMA_CONNECTION_STATUS.OauthConnected as Prisma.McpServerInstallUpdateInput["connectionStatus"] },
-  });
+  // 2. Fail closed when Obot does not yet know about this server/instance.
+  const serverRef = _ObotServerRefFromInstall(install);
+  if (!serverRef)
+  {
+    return _FailInstallClosed(prisma, userId, serverId, "server is not provisioned in Obot yet — cannot complete OAuth");
+  }
 
-  await _AuditInstall(prisma, "Updated", serverId, userId, `MCP OAuth connected for ${userId} on server ${serverId}`);
-  return _MapInstalled(install);
+  // 3. Reconcile the OAuth outcome from Obot's live state — there is no locally
+  //    minted `oauth_*` handle; the install is oauth-connected only when Obot
+  //    reports the server configured after its own handshake.
+  try
+  {
+    const state = await obot.getServerState(serverRef);
+    const status = _MapReadinessToStatus(state.readiness, _PRISMA_CONNECTION_STATUS.OauthConnected);
+    const updated = await prisma.mcpServerInstall.update({
+      where: { mcpServerId_userId: { mcpServerId: serverId, userId } },
+      data: {
+        connectionStatus: status as Prisma.McpServerInstallUpdateInput["connectionStatus"],
+        observedState: state.readiness,
+        connectUrl: state.connectUrl ?? null,
+        lastError: state.error ?? null,
+        credentialRef: null,
+      },
+    });
+    await _AuditInstall(prisma, "Updated", serverId, userId, `MCP OAuth reconciled from Obot for ${userId} on server ${serverId} (state: ${state.readiness})`);
+    return _MapInstalled(updated);
+  }
+  catch (err)
+  {
+    return _FailInstallClosed(prisma, userId, serverId, `Obot could not confirm OAuth: ${_ErrMessage(err)}`);
+  }
 }
 
 /**

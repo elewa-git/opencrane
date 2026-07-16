@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer, type McpOperatorCaller } from "../core/mcp-operator.logic.js";
+import { _BuildObotClient } from "../core/obot-client.js";
+import type { ObotManagementClient } from "../core/obot-client.types.js";
 import { _IsDevAuthMode, _RequireOrgAdmin } from "@opencrane/infra/auth";
 import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types.js";
 
@@ -21,9 +23,12 @@ import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } fro
  * install reports only its connection status (the secret is brokered by the gateway plane).
  *
  * @param prisma - Prisma client used for persistence.
+ * @param obot - Obot management client the credential/OAuth routes drive. Defaults
+ *   to {@link _BuildObotClient} (the fail-closed no-op until a live Obot is wired);
+ *   tests inject a mock.
  * @returns Configured Express router.
  */
-export function mcpOperatorRouter(prisma: PrismaClient): Router
+export function mcpOperatorRouter(prisma: PrismaClient, obot: ObotManagementClient = _BuildObotClient()): Router
 {
   const router = Router();
 
@@ -76,12 +81,13 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
     res.status(204).end();
   });
 
-  /** Author a per-user credential (WRITE-ONLY) and mark the install connected. */
+  /** Author a per-user credential (WRITE-ONLY): stream it to Obot, report the state. */
   router.put("/installed/:serverId/credential", async function _setCredential(req: Request<{ serverId: string }>, res)
   {
-    // The submitted `values` are accepted but never persisted as plaintext nor
-    // returned — setCredential mints an opaque custody handle in their place.
-    const installed = await setCredential(prisma, _ResolveCaller(req).userId, req.params.serverId);
+    // The submitted `values` are streamed straight to Obot and never persisted or
+    // returned; the connection status comes back derived from Obot's response.
+    const values = (req.body as { values?: Record<string, string> } | undefined)?.values ?? {};
+    const installed = await setCredential(prisma, obot, _ResolveCaller(req).userId, req.params.serverId, values);
     _sendInstallOrNotFound(res, installed);
   });
 
@@ -95,7 +101,7 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
   /** Mark a remote-OAuth install connected after a successful handshake. */
   router.post("/installed/:serverId/oauth", async function _connectOauth(req: Request<{ serverId: string }>, res)
   {
-    const installed = await connectOauth(prisma, _ResolveCaller(req).userId, req.params.serverId);
+    const installed = await connectOauth(prisma, obot, _ResolveCaller(req).userId, req.params.serverId);
     _sendInstallOrNotFound(res, installed);
   });
 

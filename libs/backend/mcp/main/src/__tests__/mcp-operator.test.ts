@@ -5,6 +5,7 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { mcpOperatorRouter } from "../routes/mcp-operator.js";
+import type { ObotManagementClient } from "../core/obot-client.types.js";
 
 /**
  * Operator-API coverage (`/api/v1/mcp/*`): the org-admin gate on the governance
@@ -59,7 +60,7 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
 }
 
 /** Mount the operator router, optionally seeding a session user. */
-function _buildApp(prisma: PrismaClient, user?: _SessionUser): Express
+function _buildApp(prisma: PrismaClient, user?: _SessionUser, obot?: ObotManagementClient): Express
 {
   const app = express();
   app.use(express.json());
@@ -67,8 +68,30 @@ function _buildApp(prisma: PrismaClient, user?: _SessionUser): Express
   {
     app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: _SessionUser } }).session = { authUser: user }; next(); });
   }
-  app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
+  app.use("/api/v1/mcp", obot ? mcpOperatorRouter(prisma, obot) : mcpOperatorRouter(prisma));
   return app;
+}
+
+/**
+ * A mock Obot management client that reports every server `configured` — the happy
+ * path where a real credential configure/OAuth reconcile succeeds. Only the two
+ * methods the credential routes call are implemented; the rest throw so an
+ * unexpected call is loud.
+ */
+function _stubObotConfigured(): ObotManagementClient
+{
+  const _notCalled = function _n(): never { throw new Error("unexpected Obot call in this test"); };
+  return {
+    configureServer: async function _c() { return { readiness: "configured", connectUrl: "https://obot.example/connect/abc", transport: "streamable-http" }; },
+    getServerState: async function _g() { return { readiness: "configured", connectUrl: "https://obot.example/connect/abc", transport: "streamable-http" }; },
+    upsertCatalogEntry: _notCalled,
+    createServer: _notCalled,
+    reconcileAccess: _notCalled,
+    listTools: _notCalled,
+    deleteServer: _notCalled,
+    mintClientToken: _notCalled,
+    revokeClientToken: _notCalled,
+  };
 }
 
 describe("mcp-operator router", function _suite()
@@ -215,11 +238,13 @@ describe("mcp-operator router", function _suite()
       expect(res.body.connectionStatus).toBe("shared-key");
     });
 
-    it("transitions to connected when a credential is authored", async function _connect()
+    it("transitions to connected when Obot reports the configured server", async function _connect()
     {
       const { prisma, store } = _statefulPrisma("SingleUser");
-      store.install = { mcpServerId: "srv-1", userId: "user-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null };
-      const res = await request(_buildApp(prisma, { sub: "user-1" }))
+      // A provisioned install (its Obot instance exists) whose credential configure
+      // succeeds in Obot — the only path to `connected`.
+      store.install = { id: "inst-1", mcpServerId: "srv-1", userId: "user-1", obotInstanceId: "obot-inst-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null, mcpServer: { serverType: "SingleUser", obotServerId: "obot-srv-1" } };
+      const res = await request(_buildApp(prisma, { sub: "user-1" }, _stubObotConfigured()))
         .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "SUPER-SECRET-123" } });
 
       expect(res.status).toBe(200);
@@ -261,24 +286,67 @@ describe("mcp-operator router", function _suite()
 
   describe("credential custody — no response serialises secret material", function _custody()
   {
-    it("never echoes the submitted credential values or the credentialRef", async function _writeOnly()
+    /** Install row shape the credential flow now selects (joined with its server's Obot ids). */
+    function _provisionedInstall(): Record<string, unknown>
     {
-      const store: { install: Record<string, unknown> | null } = { install: { mcpServerId: "srv-1", userId: "user-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null } };
+      return { id: "inst-1", mcpServerId: "srv-1", userId: "user-1", obotInstanceId: "obot-inst-1", connectionStatus: "NeedsCredential", credentialRef: null, connectedAccount: null, lastUsedAt: null, mcpServer: { serverType: "SingleUser", obotServerId: "obot-srv-1" } };
+    }
+
+    it("streams the submitted values to Obot and never echoes them or the credentialRef", async function _writeOnly()
+    {
+      const store: { install: Record<string, unknown> | null } = { install: _provisionedInstall() };
       const { prisma } = _mockPrisma({
         "mcpServerInstall.findUnique": function _f() { return Promise.resolve(store.install); },
         "mcpServerInstall.update": function _u(arg: unknown) { store.install = { ...(store.install ?? {}), ...(arg as { data: Record<string, unknown> }).data }; return Promise.resolve(store.install); },
         "auditEntry.create": function _a() { return Promise.resolve({}); },
       });
-      const res = await request(_buildApp(prisma, { sub: "user-1" }))
+      const res = await request(_buildApp(prisma, { sub: "user-1" }, _stubObotConfigured()))
         .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "SUPER-SECRET-123", token: "t0ps3cret" } });
 
       expect(res.status).toBe(200);
+      expect(res.body.connectionStatus).toBe("connected");
       const serialised = JSON.stringify(res.body);
       expect(serialised).not.toContain("SUPER-SECRET-123");
       expect(serialised).not.toContain("t0ps3cret");
       expect(serialised).not.toContain("credentialRef");
       expect(serialised).not.toContain("cred_");
+      expect(serialised).not.toContain("connect/abc");
       expect(Object.keys(res.body).sort()).toEqual(["connectionStatus", "lastUsed", "serverId"]);
+    });
+
+    it("fails closed (never 'connected', no cred_ handle) when the Obot op throws", async function _failClosed()
+    {
+      const store: { install: Record<string, unknown> | null } = { install: _provisionedInstall() };
+      const { prisma } = _mockPrisma({
+        "mcpServerInstall.findUnique": function _f() { return Promise.resolve(store.install); },
+        "mcpServerInstall.update": function _u(arg: unknown) { store.install = { ...(store.install ?? {}), ...(arg as { data: Record<string, unknown> }).data }; return Promise.resolve(store.install); },
+        "auditEntry.create": function _a() { return Promise.resolve({}); },
+      });
+      // Default router client is the fail-closed no-op, which throws on configureServer.
+      const res = await request(_buildApp(prisma, { sub: "user-1" }))
+        .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "SUPER-SECRET-123" } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.connectionStatus).toBe("activation-failed");
+      const serialised = JSON.stringify(res.body);
+      expect(serialised).not.toContain("SUPER-SECRET-123");
+      expect(serialised).not.toContain("cred_");
+    });
+
+    it("fails closed when the server is not provisioned in Obot yet", async function _notProvisioned()
+    {
+      const install = { ..._provisionedInstall(), obotInstanceId: null };
+      const store: { install: Record<string, unknown> | null } = { install };
+      const { prisma } = _mockPrisma({
+        "mcpServerInstall.findUnique": function _f() { return Promise.resolve(store.install); },
+        "mcpServerInstall.update": function _u(arg: unknown) { store.install = { ...(store.install ?? {}), ...(arg as { data: Record<string, unknown> }).data }; return Promise.resolve(store.install); },
+        "auditEntry.create": function _a() { return Promise.resolve({}); },
+      });
+      const res = await request(_buildApp(prisma, { sub: "user-1" }, _stubObotConfigured()))
+        .put("/api/v1/mcp/installed/srv-1/credential").send({ values: { apiKey: "x" } });
+
+      expect(res.status).toBe(200);
+      expect(res.body.connectionStatus).toBe("activation-failed");
     });
   });
 });
