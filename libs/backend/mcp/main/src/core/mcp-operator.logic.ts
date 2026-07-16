@@ -584,38 +584,44 @@ export async function setAccessPolicy(prisma: PrismaClient, serverId: string, bo
   const groups = _NormalizeIds(body.groups);
   const userIds = _NormalizeIds(body.users);
 
-  // 3. AUTHORITY WRITE — replace this server's admin-authored entitlement in the
-  //    generic Grant table, the SOLE source of truth for MCP authorization. Only
-  //    admin-authored rows (sharedBy = null) are cleared, so per-user shares
-  //    (Grant.sharedBy != null, S4) survive an access-policy rewrite, then the new
-  //    Allow grants are written from the authoritative payload.
-  await prisma.grant.deleteMany({ where: { mcpServerId: serverId, payloadType: GrantPayloadType.McpServer, sharedBy: null } });
+  // 3. Apply the whole replacement ATOMICALLY: clearing the old grants, writing the
+  //    new authority grants, refreshing the display projection, and auditing all
+  //    commit together or not at all — a mid-way failure must never leave the server
+  //    with access erased or the projection disagreeing with the authority.
   const grantRows = _BuildEntitlementGrantRows(serverId, body.everyoneInOrg, groups, userIds);
-  if (grantRows.length > 0)
+  await prisma.$transaction(async function _tx(tx)
   {
-    await prisma.grant.createMany({ data: grantRows });
-  }
+    // 3a. AUTHORITY WRITE — replace this server's admin-authored entitlement in the
+    //     generic Grant table, the SOLE source of truth for MCP authorization. Only
+    //     admin-authored rows (sharedBy = null) are cleared, so per-user shares
+    //     (Grant.sharedBy != null, S4) survive an access-policy rewrite.
+    await tx.grant.deleteMany({ where: { mcpServerId: serverId, payloadType: GrantPayloadType.McpServer, sharedBy: null } });
+    if (grantRows.length > 0)
+    {
+      await tx.grant.createMany({ data: grantRows });
+    }
 
-  // 4. PROJECTION WRITE (display back-compat only) — McpServerAccessPolicy /
-  //    McpServerAccessUser are DEMOTED to a read-only display projection powering
-  //    the admin editor (getAccessPolicy / getDirectory). They are NEVER read to
-  //    make an authorization decision. TODO(reaper #128 W1.D): drop these tables +
-  //    this write once the editor display is derived from the generic Grant table.
-  const policy = await prisma.mcpServerAccessPolicy.upsert({
-    where: { mcpServerId: serverId },
-    create: { mcpServerId: serverId, everyoneInOrg: body.everyoneInOrg, groups },
-    update: { everyoneInOrg: body.everyoneInOrg, groups },
-  });
-  await prisma.mcpServerAccessUser.deleteMany({ where: { accessPolicyId: policy.id } });
-  if (userIds.length > 0)
-  {
-    await prisma.mcpServerAccessUser.createMany({
-      data: userIds.map(function _row(userId) { return { accessPolicyId: policy.id, userId }; }),
+    // 3b. PROJECTION WRITE (display back-compat only) — McpServerAccessPolicy /
+    //     McpServerAccessUser are DEMOTED to a read-only display projection powering
+    //     the admin editor (getAccessPolicy / getDirectory). They are NEVER read to
+    //     make an authorization decision. TODO(reaper #128 W1.D): drop these tables +
+    //     this write once the editor display is derived from the generic Grant table.
+    const policy = await tx.mcpServerAccessPolicy.upsert({
+      where: { mcpServerId: serverId },
+      create: { mcpServerId: serverId, everyoneInOrg: body.everyoneInOrg, groups },
+      update: { everyoneInOrg: body.everyoneInOrg, groups },
     });
-  }
+    await tx.mcpServerAccessUser.deleteMany({ where: { accessPolicyId: policy.id } });
+    if (userIds.length > 0)
+    {
+      await tx.mcpServerAccessUser.createMany({
+        data: userIds.map(function _row(userId) { return { accessPolicyId: policy.id, userId }; }),
+      });
+    }
 
-  // 5. Record an audit entry so access changes stay traceable.
-  await prisma.auditEntry.create({ data: { action: "Updated", resource: `McpServer/${serverId}`, message: `MCP server ${serverId} access policy updated` } });
+    // 3c. Record an audit entry so access changes stay traceable.
+    await tx.auditEntry.create({ data: { action: "Updated", resource: `McpServer/${serverId}`, message: `MCP server ${serverId} access policy updated` } });
+  });
 
   return _MapAccessPolicy(serverId, { everyoneInOrg: body.everyoneInOrg, groups, users: userIds.map(function _u(userId) { return { userId }; }) });
 }

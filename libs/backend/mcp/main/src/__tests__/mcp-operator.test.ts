@@ -61,6 +61,12 @@ function _mockPrisma(overrides: Record<string, (...args: unknown[]) => unknown> 
   const prisma = new Proxy({}, {
     get(_t, model)
     {
+      // $transaction runs the interactive callback against the same mock client, so
+      // writes inside a tx hit the same spies a caller asserts on.
+      if (model === "$transaction")
+      {
+        return function _tx(arg: unknown) { return typeof arg === "function" ? (arg as (c: unknown) => unknown)(prisma) : Promise.all(arg as unknown[]); };
+      }
       return new Proxy({}, {
         get(_t2, method)
         {
