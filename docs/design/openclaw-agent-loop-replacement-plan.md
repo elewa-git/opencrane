@@ -239,6 +239,8 @@ Replicate the product behavior that OpenCrane currently relies on:
 - per-thread serialization, duplicate-send suppression and safe abort;
 - tool argument validation, authorization, approvals and model-visible failures;
 - sequential and parallel tool execution with deterministic transcript ordering;
+- mid-run steering: durably queued user messages absorbed at the next turn boundary without
+  aborting the run;
 - context-window management, semantic compaction and intact tool pairs;
 - bounded provider/auth/model recovery and one terminal outcome;
 - reconnect/replay, usage accounting, trace correlation and crash reconciliation;
@@ -278,7 +280,12 @@ Introduce a transport-neutral backend contract before selecting the final toolki
 ```ts
 interface AgentLoopDriver
 {
-  run(request: LoopRequest, sink: LoopEventSink, signal: AbortSignal): Promise<LoopOutcome>;
+  run(request: LoopRequest, sink: LoopEventSink, steering: LoopSteeringSource, signal: AbortSignal): Promise<LoopOutcome>;
+}
+
+interface LoopSteeringSource
+{
+  drain(): Promise<ModelMessage[]>;
 }
 
 type LoopRequest =
@@ -335,6 +342,16 @@ resume from normalized OpenCrane state only when it can prove that no visible ou
 will be replayed. SDK types must not enter public APIs, frontend state, tool policy, or Cognee/Obot
 contracts.
 
+Steering is pull-based. The shell owns a durable queue of mid-run user messages (canonical
+`Message` records on the thread); the driver must call `drain()` at every turn boundary — after
+tool results are appended and before the next model call — and place any returned messages into the
+model context ahead of that call. An empty result proceeds unchanged. Absorption is observed by the
+shell at the drain point, which emits the corresponding `steering.absorbed` event; drivers never
+emit steering events and never mutate already-persisted history. If a run reaches its terminal
+outcome with messages still queued, the shell starts the next run from them. A later mid-turn
+upgrade may reuse the `paused` checkpoint machinery to absorb steering inside a turn; that changes
+no part of this contract.
+
 ### Canonical run model
 
 At minimum, define:
@@ -368,6 +385,8 @@ tool.progress
 tool.completed
 context.compaction_started
 context.compaction_completed
+steering.queued
+steering.absorbed
 run.usage
 run.completed | run.failed | run.cancelled
 ```
@@ -386,8 +405,8 @@ conformance run instead of treating an investigation-day "latest" number as an a
 
 | Candidate | Strengths for this seam | Main risk/overlap | Decision |
 |---|---|---|---|
-| `@openai/agents` | TypeScript; streaming; custom `Session`; serializable approval interruptions; abort; MCP; `maxTurns`; custom OpenAI-compatible base URL and Chat Completions/Responses modes | OpenAI-shaped semantics; default tracing and internal retries need control; provider-neutral compaction remains ours | **Primary spike** |
-| `ai` / `ToolLoopAgent` | Thin TypeScript loop; strong OpenAI-compatible/LiteLLM fit; stop conditions, per-step preparation, streaming, abort and approvals; application naturally owns persistence | More session, recovery, resume and event semantics must be implemented by OpenCrane | **Control and fallback** |
+| `@openai/agents` | TypeScript; streaming; custom `Session`; serializable approval interruptions; abort; MCP; `maxTurns`; custom OpenAI-compatible base URL and Chat Completions/Responses modes | OpenAI-shaped semantics; default tracing and internal retries need control; provider-neutral compaction remains ours; no first-class between-turn input hook, so the steering drain relies on run segmentation or session re-entry | **Primary spike** |
+| `ai` / `ToolLoopAgent` | Thin TypeScript loop; strong OpenAI-compatible/LiteLLM fit; stop conditions, per-step preparation (a natural between-turn steering drain seam), streaming, abort and approvals; application naturally owns persistence | More session, recovery, resume and event semantics must be implemented by OpenCrane | **Control and fallback** |
 | OpenAI Agents SDK Python | Mature equivalent primitives and sessions | Adds a second language/service/runtime without a demonstrated loop advantage; Python tools are isolated Jobs anyway | Reject unless JS fails a hard gate that Python passes |
 | `@langchain/langgraph` | Excellent checkpoints, replay, interrupts and deterministic graph workflows | Its thread/checkpoint runtime competes with OpenCrane's canonical run/event authority; too much machinery for a bounded loop | Reject unless long-lived deterministic graphs become a product requirement |
 | `@mastra/core` | Broad agent, workflow, memory, storage, MCP and observability platform | High overlap with nearly every OpenCrane authority this design is trying to simplify | Reject as the loop substrate |
@@ -484,7 +503,8 @@ Deliverables:
 Exit gate:
 
 - duplicate sends return the same run;
-- concurrent sends have an explicit queue/reject policy and never interleave one thread context;
+- concurrent sends follow the steering contract — durably queued, absorbed at the next turn
+  boundary or started as the next run — and never interleave one thread context;
 - reconnect from any persisted cursor produces no duplicate or missing normalized event;
 - process death cannot leave two writers owning the same run/thread.
 
@@ -527,7 +547,11 @@ Run both against the actual per-silo LiteLLM endpoint and all required model ali
 9. token, cost, wall-clock, turn, tool-call, per-tool and child-agent budgets;
 10. OpenCrane trace export with sensitive payload recording disabled by default;
 11. pod eviction, LiteLLM outage, Obot outage, Cognee degradation, duplicate send and concurrent
-    send.
+    send;
+12. steering: a message queued mid-run is drained at the next turn boundary without abort or
+    restart — during tool execution, across an approval pause/resume, and after finalization has
+    begun (it must start the next run); record added latency and any state-fidelity loss per
+    candidate.
 
 Exit gate:
 
@@ -628,8 +652,12 @@ Exit gate:
 
 Gate L0 should record these explicitly:
 
-1. whether a second user message during a run queues, steers the active run, or is rejected—the
-   default recommendation is queue as the next run, with steering deferred until a proven need;
+1. **resolved 2026-07-18 — steer.** A second user message during a run is durably queued and
+   absorbed at the next turn boundary (the `LoopSteeringSource` drain point) before the next model
+   call; if the run finalizes first, it starts the next run. The client learns which happened via
+   `steering.queued`/`steering.absorbed`. Rejection is never the default. Mid-turn absorption
+   (reusing the approval checkpoint pause/resume machinery) is deferred until between-turn latency
+   is proven insufficient;
 2. which tools require durable human approval and which can ever execute in parallel;
 3. the permitted model fallback set and whether fallback after visible output is forbidden;
 4. quantitative per-run token, cost, time, tool and child-agent budgets;

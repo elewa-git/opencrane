@@ -11,7 +11,7 @@ to the target architecture.
 | Capability | Target contract |
 |------------|-----------------|
 | Organization identity and membership | Use OIDC and fleet lifecycle/membership as live external authorities. A cached membership revision is trusted only when its issuer signature verifies, its revision is the newest observed for that silo, and its bounded freshness has not expired. Fail closed after expiry. |
-| Personal agent conversation | Provide streaming messages, ordered history, tool events, abort, retry/recovery, and stable thread ownership through the Thread, Run, and RunEvent contracts. |
+| Personal agent conversation | Provide streaming messages, ordered history, tool events, abort, retry/recovery, and stable thread ownership through the Thread, Run, and RunEvent contracts. A user message sent while a run is active is durably queued and considered before the agent's next action; if the run reaches its final response first, the message starts the next run. The user is always shown which of the two happened, and queued input survives reconnect, Pod replacement, and recovery. |
 | Persona and preferences | Require an onboarding interview before the first personal-agent session. Key answers select a versioned `SOUL.md` template and infuse a small set of explicit interview insights into a reviewable first PersonaRevision. The user approves, edits, or retakes it and may replace it later. |
 | Personal and agent memory | Store durable organization memory in Cognee with explicit dataset identity, scope, and provenance. |
 | Company, document, and artifact knowledge | Keep canonical bytes and versions in ArtifactStore and index derived knowledge in Cognee. |
