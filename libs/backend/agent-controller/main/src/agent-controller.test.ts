@@ -43,11 +43,11 @@ describe("agent workload controller", function _describeController()
 		expect(fixture.calls).toEqual(["get", "create", "job:job-uid", "unsuspend:job-uid", "pod", "pod:pod-uid"]);
 	});
 
-	it("is idempotent when the exact suspended Job already exists", async function _doesNotCreateAgain()
+	it("recovers a matching running Job only after authority re-confirms bootstrap readiness", async function _doesNotCreateAgain()
 	{
-		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: true });
+		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false });
 		await __ReconcileAgentJob(fixture.dependencies);
-		expect(fixture.calls).toEqual(["get", "job:job-uid", "unsuspend:job-uid", "pod", "pod:pod-uid"]);
+		expect(fixture.calls).toEqual(["get", "job:job-uid", "pod", "pod:pod-uid"]);
 	});
 
 	it("rejects a desired Job that widens the approved image boundary", async function _rejectsImage()
@@ -69,7 +69,7 @@ describe("agent workload controller", function _describeController()
 	{
 		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false }, false);
 		await expect(__ReconcileAgentJob(fixture.dependencies)).resolves.toEqual({ outcome: "rejected", reason: "unsafe_existing_job", runId: "run-123", attempt: 1 });
-		expect(fixture.calls).toEqual(["get", "delete:job-uid", "reject:unsafe_existing_job"]);
+		expect(fixture.calls).toEqual(["get", "job:job-uid", "delete:job-uid", "reject:unsafe_existing_job"]);
 	});
 
 	it("deletes a creation result that violates the initial suspended invariant", async function _rejectsUnexpectedCreation()
