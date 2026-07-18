@@ -1,4 +1,9 @@
+import type { JudgeClient, ModelRunner } from "../core/shadow-measure.types.js";
+
 export type { ValidationFailure } from "./model-routing-defaults.types.js";
+
+/** Factory producing the configured shadow-measurement seams; null seams mean unconfigured. */
+export type ShadowSeamsFactory = () => { judge: JudgeClient | null; runner: ModelRunner | null };
 
 /**
  * Route-local types for the routing measurements API (AIR.6). The `RoutingMeasurement` DTO is owned
@@ -19,4 +24,3 @@ export interface RunMeasurementBody
   /** The current/default model to use as the baseline; resolved by the caller (optional). */
   currentModel?: string | null;
 }
-

@@ -42,7 +42,7 @@ BLOCK when any rendered Pod, Deployment, StatefulSet, DaemonSet, CronJob, or Job
 the release still get deployment-only app roots owning their pin, configuration, identity, state,
 network policy, wiring, and smoke contract. A distinct image/process role needs a distinct root; a
 Job may share an owner only when it uses that app's exact image, entrypoint, trust boundary, and
-lifecycle. CLI and browser entrypoints also remain apps.
+lifecycle. Browser entrypoints also remain apps; the retired command-line product has no app root.
 
 Apps are thin composition/deployment roots. BLOCK business rules, reusable adapters, calculations,
 domain models, shared UI components, or generic Kubernetes builders added under an app. Require them

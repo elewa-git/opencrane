@@ -3,7 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "pino";
 
 import { _EnsureMemberTenant } from "@opencrane/backend/cluster-tenants";
-import type { FleetMembershipWriter } from "../projection/membership-projection-repairer.js";
+import type { FleetMembershipWriter } from "../projection/membership-projection-repairer.types.js";
 import { _ResolvePerOrgClient } from "./per-org-client.js";
 
 /**

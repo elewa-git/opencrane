@@ -13,10 +13,9 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 | Package | Deep-dive | One-liner |
 |---------|-----------|-----------|
 | `@opencrane/server` | [apps/opencrane.md](./apps/opencrane.md) | API-first hub (**Express 5** + Prisma + K8s client). Since #153 the app is **composition + reconciler wiring only** — every HTTP domain lives in `libs/backend/*` (below); the app mounts routers (`src/routes.ts`), brokers OIDC, owns the Prisma schema + reconcilers. Listens `:8080`. |
-| `@opencrane/cli` | [apps/cli.md](./apps/cli.md) | The `oc` CLI — a **thin typed wrapper** over the contracts client, no business logic. OIDC device-flow login; `--output table|json`. |
 | `@opencrane/feat-skill-registry` | [apps/feat-skill-registry.md](./apps/feat-skill-registry.md) | Entitlement-gated skill delivery (`:5000`). TokenReview (`aud=feat-skill-registry`) → proxy to opencrane-api; non-entitled **and** non-existent → `404` (existence-hiding). |
 | `@opencrane/feat-central-agents` | [apps/feat-central-agents.md](./apps/feat-central-agents.md) | Background ingestion worker (not API-first). Slack → normalise → Cognee; cursor in Postgres. `/healthz`, `/metrics`. |
-| _(apps/opencrane-ui)_ | — | Org-admin Angular SPA, ported in from WeOwnAI (#152). PrimeNG, zoneless/signals, standalone components — see [`angular.md`](./angular.md). Just another client of the opencrane-api (API-First / CLI-First Rule below). `npx nx build\|serve opencrane-ui`. |
+| _(apps/opencrane-ui)_ | — | Org-admin Angular SPA, ported in from WeOwnAI (#152). PrimeNG, zoneless/signals, standalone components — see [`angular.md`](./angular.md). Just another client of the opencrane-api (API-First Rule below). `npx nx build\|serve opencrane-ui`. |
 | _(apps/opencrane-infra)_ | — | Current silo umbrella Helm chart and deploy entrypoint. Under the rewrite-freeze target it composes app-owned deployment units; it must not become the anonymous owner of independent green workloads. |
 | _(apps/feat-openclaw-tenant)_ | — | Tenant-side assets / templates (not a workspace package). |
 
@@ -52,11 +51,11 @@ module/decorator settings layered over the shared `tsconfig.json` — never edit
 fleet-only `provideFleetGateways` wiring (cluster-tenant/billing/onboarding gateways) stays in WeOwnAI,
 not ported. See [`angular.md`](./angular.md) for layering/style rules.
 
-## API-First / CLI-First Rule
+## API-first rule
 
-Every opencrane-api capability must be **API-first** and expose a matching `oc` CLI command in
-`apps/cli`. No opencrane-api behaviour should be reachable only through a frontend — a UI is just
-another client of the management API, never a privileged path.
+Every opencrane-api capability must be **API-first**. No opencrane-api behaviour should be
+reachable only through a frontend — the OpenCrane UI, generated clients, and custom integrations
+are peers over the same management API, never privileged paths.
 
 ## Nested AGENTS.md
 

@@ -3,7 +3,7 @@ import type { OrgMemberStatus, PrismaClient } from "@prisma/client";
 
 import { _CutTenant } from "@opencrane/backend/connections";
 import { _SetTenantSuspended } from "@opencrane/backend/tenants";
-import type { FleetMembershipReader, FleetMembershipRow, MembershipEnforcementDeps } from "./membership-projection-repairer.types.js";
+import type { FleetMembershipReader, FleetMembershipRow, FleetMembershipWriter, MembershipEnforcementDeps } from "./membership-projection-repairer.types.js";
 
 /** Default interval (seconds) between membership-projection sweeps. */
 const _DEFAULT_INTERVAL_SECONDS = 60;
@@ -99,17 +99,6 @@ export function _BuildHttpFleetMembershipReader(fleetInternalUrl: string, token:
       }
     },
   };
-}
-
-/** Writes member adoptions through to the fleet — the authoritative `OrgMembership` store (S4). */
-export interface FleetMembershipWriter
-{
-  /**
-   * Adopt a member into the org at the fleet (create-if-absent, never downgrade). Returns true
-   * when the fleet accepted the write, false on any transport error or non-OK status (the login
-   * proceeds regardless — the next login and the projection sweep are the backstops).
-   */
-  adopt(clusterTenant: string, subject: string): Promise<boolean>;
 }
 
 /**
@@ -360,7 +349,7 @@ export class MembershipProjectionRepairer
 
   /**
    * Enforce each member's projected lifecycle status (#126). For a SUSPENDED member: cut their
-   * live sessions/devices (per-subject `_CutTenant`) and suspend their workspace pod (patch the
+   * single-user runtime pod and persist suspension (patch the
    * member's Tenant CR `spec.suspended: true` — the TenantOperator scales suspended→0). For an
    * ACTIVE member: clear `spec.suspended` so a reactivated member's pod comes back. Idempotent and
    * best-effort per member — a failure on one member is logged, not thrown, so the sweep and the
@@ -406,12 +395,11 @@ export class MembershipProjectionRepairer
       {
         if (suspended)
         {
-          // 2a. Sever the member's live sessions/devices (per-subject scope — does NOT delete the
-          //     shared pod), then suspend their workspace pod via the Tenant CR flag.
-          await _CutTenant(enforcement.coreApi, this._prisma, enforcement.gatewayAdmin, {
+          // 2a. Delete the member's single-user runtime pod, then persist suspension on the
+          //     Tenant CR so the reconciler keeps it scaled down.
+          await _CutTenant(enforcement.coreApi, {
             tenant: tenantName,
             namespace: enforcement.namespace,
-            subject: row.subject,
             reason: "membership suspended (#126 license lifecycle)",
           });
           await _SetTenantSuspended(enforcement.customApi, enforcement.namespace, tenantName, true);

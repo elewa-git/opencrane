@@ -25,8 +25,9 @@ default for that scope. Pin when you want predictability; use auto when you'd ra
 the choice in one place. When a skill is on auto, the choice comes from a default you set
 once — for the whole company, or per customer.
 
-Manage this from the command line — see [CLI reference → `oc skill-posture`](/reference/cli#oc-skill-posture)
-and [`oc model`](/reference/cli#oc-model).
+Manage the registered models through `/api/v1/models`, and each skill's posture through
+`/api/v1/skills/posture/skill`. Use the generated contracts client or the
+[interactive API reference](/reference/api) for the current payload types.
 
 ## Keep each customer to their allowed models
 
@@ -47,7 +48,8 @@ This is the part that protects quality. Instead of guessing whether a cheaper mo
 3. **Nothing changes.** A good result becomes a *suggestion* waiting for your approval — live
    traffic is never touched during a measurement.
 
-Manage this from the command line — see [CLI reference → `oc routing`](/reference/cli#oc-routing).
+Create examples through `/api/v1/model-routing/eval-cases`, then start a run with
+`POST /api/v1/model-routing/measurements/run`. All of these routes require authentication.
 
 ## Approve or reject — you decide
 
@@ -57,9 +59,9 @@ decision in the [audit log](/guide/audit); rejecting changes nothing.
 
 ## See cost & quality at a glance
 
-`oc routing metrics` shows the fleet's cost and quality trend at a glance — see the
-[CLI reference](/reference/cli#oc-routing). Operators see the whole fleet; everyone else
-sees only their own usage. Credentials stay on the server — the browser never holds them.
+`GET /api/v1/model-routing/metrics` returns the fleet's cost and quality trend.
+Operators see the whole fleet; everyone else sees only their own usage. Credentials
+stay on the server — the browser never holds them.
 
 ## Going deeper
 

@@ -20,13 +20,13 @@ author/promote ──▶ Control plane (SkillBundle rows, scan, grants)
    aud=feat-skill-registry projected token ─────────────────────────────┘
 ```
 
-The agent pulls **only entitled, scan-passed** bundle content over HTTP, per read.
-There is no shared-skills volume and no list/search verb for pods — delivery is
-existence-hiding (a non-entitled or unknown digest returns `404`, never `403`).
+The agent pulls **only entitled, scan-passed** bundle content over HTTP, one digest
+per request. Pods have no list/search verb: delivery is existence-hiding (a
+non-entitled or unknown digest returns `404`, never `403`).
 
 ## The catalog (control plane)
 
-`SkillBundle` Prisma model (`apps/opencrane-api/prisma/schema.prisma`): `id`, `name`,
+`SkillBundle` Prisma model (`apps/opencrane/prisma/schema/skills.prisma`): `id`, `name`,
 `description`, `version`, `digest` (unique on `name+version+digest`), `content` (the
 raw skill markdown), `scope` (org/department/project/personal), `status`
 (Draft/Review/Published), `tags`, optional `sourceId`, and the scan fields
@@ -34,8 +34,7 @@ raw skill markdown), `scope` (org/department/project/personal), `status`
 (grant-backed access), `SkillPromotion` (scope-transition history).
 
 CRUD + lifecycle live at `/api/v1/skills/catalog`
-([skill-catalog.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/skills/main/src/routes/skill-catalog.ts)) and via
-`oc skills …`.
+([skill-catalog.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/skills/main/src/routes/skill-catalog.ts)); use the generated contracts client or authenticated REST requests.
 
 ## Lifecycle: scan → validate → register → entitle → promote
 
@@ -62,9 +61,9 @@ CRUD + lifecycle live at `/api/v1/skills/catalog`
 1. The operator injects a projected token with **audience `feat-skill-registry`** at
    `/var/run/opencrane/tokens/feat-skill-registry.token`, plus
    `OPENCRANE_SKILL_REGISTRY_URL`
-   ([3-deployment.ts](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/3-deployment.ts)). **There is
-   no shared-skills volume** — the entrypoint's old `_link_shared_skills` symlink path
-   is inert legacy; the live mechanism is the per-entitlement HTTP pull below.
+   ([3-deployment.ts](https://github.com/italanta/opencrane/blob/main/apps/opencrane/src/reconcilers/tenants/deploy/3-deployment.ts)).
+   No shared storage volume is mounted for skill delivery; the live mechanism is the
+   per-entitlement HTTP pull below.
 2. The pod calls **`GET /bundles/:digest`** on the Skill Registry service with that
    token ([apps/feat-skill-registry/src](https://github.com/italanta/opencrane/blob/main/apps/feat-skill-registry/src)).
 3. The Skill Registry validates the token via Kubernetes **TokenReview** (audience
@@ -85,9 +84,8 @@ next pull.
 
 The effective contract (re-pulled by the pod) lists entitled bundle ids under
 `skills.entitled`. This is advisory for the pod; the authoritative gate is the live
-per-request entitlement check at delivery time. (The MCP `skills` server toggle in the
-runtime contract governs whether the skill mechanism is active at all — see
-[obot.md](/integrators/mcp-gateway).)
+per-request entitlement check at delivery time. The list is compiled from the same
+AccessPolicy and grant decisions used to render the agent's platform-owned `TOOLS.md`.
 
 ## Current state & gaps
 

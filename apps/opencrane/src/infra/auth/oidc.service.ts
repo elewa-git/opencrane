@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OidcAuthServiceBase, _RequestHost, type AuthUser, type LoginClient } from "@opencrane/infra/auth";
 
-import type { FleetMembershipWriter } from "../projection/membership-projection-repairer.js";
+import type { FleetMembershipWriter } from "../projection/membership-projection-repairer.types.js";
 import { _AdoptMemberOnLogin } from "./adopt-member.js";
 import { _MirrorGroupsOnLogin } from "./mirror-groups.js";
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/cluster-tenants";

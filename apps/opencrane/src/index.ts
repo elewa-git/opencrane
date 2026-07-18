@@ -16,7 +16,6 @@ import { ___AuthMiddleware } from "@opencrane/infra/auth";
 import { _ErrorHandler, _RateLimit } from "@opencrane/infra/http";
 
 import { ___AuthRouter } from "./infra/auth/auth.router.js";
-import { _BuildGatewayAdmin } from "@opencrane/backend/connections";
 import { ___CreateOidcAuthService } from "./infra/auth/oidc.service.js";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _TransportSecurity } from "./infra/middleware/transport-security.middleware.js";
@@ -35,9 +34,7 @@ import { _LoadOperatorConfig, type OpenClawTenantOperatorConfig } from "./app/co
 import { _ProvisionByokKey } from "@opencrane/backend/model-routing";
 import { _CreateTenantOperator, IdleChecker } from "./reconcilers/tenants/index.js";
 import { PolicyOperator } from "./reconcilers/policies/operator.js";
-import { _ReadTenantRolloutConfig, TenantUpdateWithCanaryStrategyController } from "./reconcilers/tenant-rollout/tenant-update-with-canary-strategy.controller.js";
 import { GatewayProxyServer } from "./gateways/gateway-proxy/server.js";
-import { ObotHealthChecker } from "./gateways/mcp-gateway/obot-health-checker.js";
 
 // Route any stray console.* call (first-party or third-party) through the
 // structured logger so nothing reaches stdout unstructured / uncorrelated.
@@ -85,7 +82,7 @@ export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi,
   // Auth router is mounted before the auth middleware so its endpoints are
   // inherently public — the device-flow activate handler enforces its own
   // session check internally.
-  app.use("/api/v1/auth", ___AuthRouter(authService, prisma, coreApi, _BuildGatewayAdmin()));
+  app.use("/api/v1/auth", ___AuthRouter(authService, prisma));
 
   // NOTE: `/api/internal/*` is NOT on this public listener — it is served by the
   // separate internal app (see `createInternalApp`) on its own port, which the public
@@ -93,8 +90,8 @@ export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi,
   // listener is what stops them being reachable from the internet under the org
   // ingress's `/api` path (they take no auth by design — NetworkPolicy is their gate).
 
-  // Pass prisma so DB-issued access tokens (from `oc auth login` and
-  // POST /access-tokens) are validated in addition to the env-var token.
+  // Pass prisma so DB-issued access tokens from POST /access-tokens are validated
+  // in addition to the env-var token.
   app.use(___AuthMiddleware(prisma));
 
   // Register API routes
@@ -203,10 +200,10 @@ void (async function _startMembershipRepairer()
   const fleetInternalUrl = process.env.FLEET_INTERNAL_URL?.trim() ?? "";
   const fleetInternalToken = process.env.OPENCRANE_API_TOKEN?.trim() ?? "";
   const reader = _BuildHttpFleetMembershipReader(fleetInternalUrl, fleetInternalToken, log);
-  // Suspension ENFORCEMENT (#126): the sweep cuts a Suspended member's sessions/devices and
-  // suspends their workspace pod. Thread the k8s clients + gateway admin + this silo's namespace so
+  // Suspension ENFORCEMENT (#126): the sweep cuts a Suspended member's runtime pod and
+  // suspends the workspace. Thread the Kubernetes clients + this silo's namespace so
   // the repairer can drive `_CutTenant` and the Tenant `spec.suspended` patch.
-  const enforcement = { customApi, coreApi, gatewayAdmin: _BuildGatewayAdmin(), namespace: _projectionRepairNamespace };
+  const enforcement = { customApi, coreApi, namespace: _projectionRepairNamespace };
   const repairer = new MembershipProjectionRepairer(prisma, reader, clusterTenant, log, _projectionRepairIntervalMs, enforcement);
   repairer.start();
   _membershipRepairerRef = repairer;
@@ -227,8 +224,8 @@ let _gatewayProxyRef: GatewayProxyServer | null = null;
  * The fleet-manager stops at ClusterTenant lifecycle; the silo owns the tenant runtime:
  * the TenantOperator (openclaw pods/ConfigMaps/Services + LiteLLM keys), the PolicyOperator
  * (AccessPolicy → NetworkPolicy), the idle-suspend checker, the runtime-plane drift repairer,
- * the rollout canary controller, the Obot health checker, and the identity-routing gateway
- * proxy — all scoped to `config.watchNamespace` (this silo's namespace). Because the operator
+ * and the identity-routing gateway proxy — all scoped to `config.watchNamespace` (this silo's
+ * namespace). Because the operator
  * is DB-less, its internal-API calls hit the silo's OWN API (its own Service), so a silo is
  * self-contained.
  *
@@ -409,42 +406,6 @@ async function _startInSiloControllers(): Promise<void>
     const idleChecker = new IdleChecker(kc, config, log);
     _idleCheckerRef = idleChecker;
     idleChecker.start();
-
-    const appsApi = kc.makeApiClient(k8s.AppsV1Api);
-
-    // Tenant rollout canary release polling (only when auto-update is enabled).
-    const tenantRolloutConfig = _ReadTenantRolloutConfig();
-    if (tenantRolloutConfig.autoUpdateEnabled)
-    {
-      const rolloutCustomApi = kc.makeApiClient(k8s.CustomObjectsApi);
-      const rolloutController = new TenantUpdateWithCanaryStrategyController(rolloutCustomApi, appsApi, log, config.watchNamespace, tenantRolloutConfig);
-      log.info({ releaseTag: tenantRolloutConfig.releaseTag }, "tenant rollout canary controller enabled");
-      setInterval(function _pollRelease()
-      {
-        void ___DoWithTrace("tenant.rollout.poll", { releaseTag: tenantRolloutConfig.releaseTag }, async function _poll()
-        {
-          try
-          {
-            const latest = await rolloutController.getLatestRelease();
-            if (latest !== null) log.debug({ latest }, "tenant rollout release poll");
-          }
-          catch (err)
-          {
-            log.warn({ err }, "tenant rollout release poll failed; will retry next interval");
-          }
-        });
-      }, 15 * 60 * 1000);
-    }
-    else
-    {
-      log.info("tenant rollout auto-update disabled (OPENCRANE_AUTO_UPDATE_ENABLED not set to true)");
-    }
-
-    // Obot MCP gateway health checker (Obot self-syncs its catalog; this only monitors reachability).
-    if (config.mcpGatewayUrl)
-    {
-      new ObotHealthChecker(config.mcpGatewayUrl, log).start();
-    }
 
     // In-process identity-routing gateway proxy (DOMAIN.T4): serves the gateway WebSocket,
     // delegates auth to the silo control plane, injects X-Forwarded-User, reverse-proxies to

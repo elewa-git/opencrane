@@ -1260,3 +1260,32 @@ standing per-frame audit choke point are **not** in scope → that is the proxy
 - [x] **Per-org OIDC hardened at deploy time.** When `OIDC_ISSUER_URL` is set, deploy requires this
   org's `OIDC_CLIENT_ID` and derives the per-org callback `https://<org>.<base>/api/v1/auth/callback`
   when unset. Commit `54e80a7` (`apps/clustertenant-platform/deploy.sh`).
+
+## Personal-agent program Phase A — deletion debt (complete 2026-07-17)
+
+Phase A closed [#245](https://github.com/italanta/opencrane/issues/245)'s rewrite-residue runway
+and [#248](https://github.com/italanta/opencrane/issues/248)'s command-line client retirement before
+the blue runtime freeze. The resulting blue surface is smaller, deterministic, and explicitly
+bounded for later per-silo replacement.
+
+- [x] **Tenant runtime code is image-owned and immutable.** OpenClaw and the Cognee memory plugin
+  are exact build-time inputs; startup no longer installs or updates executable code on tenant
+  state volumes. Static cold-start and previous-image rollback gates protect the contract.
+- [x] **Shadow runtime configuration is gone.** Shared-skill mounts, Tenant-CRD MCP/channel
+  controls, free-form config overrides, runtime version selection, and canary self-update were
+  deleted. AccessPolicy plus the rendered effective contract remains the MCP authority.
+- [x] **Legacy connection and session state is no longer live.** Pairing/BrokeredDevice storage,
+  gateway-admin revocation, and SessionScope API/client/runtime code were removed. SessionScope
+  database rows remain read-only migration input for R3; the no-token pod connection preflight
+  remains a named R9-expiring blue boundary.
+- [x] **The dead Obot registry path and duplicate checker are gone.** The supported local MCP
+  catalogue input remains; documentation no longer describes the upstream no-op polling route.
+- [x] **The frozen blue identity seam is auditable.** Existing service-mesh references are captured in
+  an exact inventory and CI rejects new ones while ADR 0003 records Cilium plus SPIFFE as green's
+  target. ADR 0005 records OpenCrane runtime ownership; ADR 0006 records whole-silo cutover.
+- [x] **The repository has no bundled command-line product.** `apps/cli`, its generated/package
+  wiring, and active command documentation were removed. Reader-facing workflows now use the
+  authenticated REST API, generated clients, or product UI.
+- [x] **Deletion remains deleted.** `scripts/phase-a-forbidden-references.sh`, wired into CI,
+  rejects the retired runtime, session, pairing, Obot-poll, and command-line surfaces while
+  allowing only exact decision history, migration evidence, tests, and named R9 blue contracts.

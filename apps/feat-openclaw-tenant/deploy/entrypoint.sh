@@ -2,23 +2,14 @@
 set -euo pipefail
 
 STATE_DIR="${OPENCLAW_STATE_DIR:-/data/openclaw}"
-RUNTIME_DIR="$STATE_DIR/runtime"
 # Persistent workspace dir — must match agents.defaults.workspace in openclaw.json.
 WORKSPACE_DIR="${OPENCLAW_WORKSPACE_DIR:-$STATE_DIR/workspace}"
 SECRETS_DIR="${OPENCLAW_SECRETS_DIR:-/data/secrets}"
-SHARED_SKILLS="${OPENCRANE_SHARED_SKILLS_DIR:-/shared-skills}"
 CONFIG_SOURCE="${OPENCRANE_CONFIG_SOURCE_PATH:-/config/openclaw.json}"
 RUNTIME_CONTRACT_PATH="${OPENCRANE_RUNTIME_CONTRACT_PATH:-/config/opencrane-managed-runtime.json}"
 # Writable copy of the contract — the polling loop writes here; entrypoint reads from here.
 RUNTIME_CONTRACT_WRITABLE="${OPENCRANE_RUNTIME_CONTRACT_WRITABLE:-/tmp/opencrane-managed-runtime.json}"
 SKILLS_DIR="$STATE_DIR/agents/main/skills"
-# Pinned default (not `latest`) so a pod whose operator didn't inject OPENCLAW_VERSION
-# still installs a known-good OpenClaw; the operator normally sets this from
-# tenant.defaultOpenclawVersion (or a Tenant CR's spec.openclawVersion).
-OPENCLAW_VERSION="${OPENCLAW_VERSION:-2026.6.11}"
-# Pinned default for the official Cognee memory plugin (npm @cognee/cognee-openclaw). Installed at
-# boot when Cognee is wired; the operator renders its config into openclaw.json (plugins.entries).
-COGNEE_PLUGIN_VERSION="${COGNEE_PLUGIN_VERSION:-2026.7.9}"
 # Control-plane re-pull configuration (injected by operator into every tenant Deployment).
 OPENCRANE_CONTROL_PLANE_URL="${OPENCRANE_CONTROL_PLANE_URL:-}"
 OPENCRANE_CONTRACT_TOKEN_PATH="${OPENCRANE_CONTRACT_TOKEN_PATH:-/var/run/opencrane/tokens/opencrane-server.token}"
@@ -29,9 +20,6 @@ CONTRACT_POLL_INTERVAL="${OPENCRANE_CONTRACT_POLL_INTERVAL:-30}"
 OPENCRANE_ALLOWED_MCP_SERVERS="${OPENCRANE_ALLOWED_MCP_SERVERS:-}"
 OPENCRANE_DENIED_MCP_SERVERS="${OPENCRANE_DENIED_MCP_SERVERS:-}"
 OPENCRANE_MCP_POLICY_ENFORCED="${OPENCRANE_MCP_POLICY_ENFORCED:-false}"
-# MCP policy from Tenant CRD spec (tenant-level governance override, injected by operator)
-OPENCRANE_TENANT_MCP_ALLOW="${OPENCRANE_TENANT_MCP_ALLOW:-}"
-OPENCRANE_TENANT_MCP_DENY="${OPENCRANE_TENANT_MCP_DENY:-}"
 # Skill-registry delivery: pull entitled skill bundles by digest from the in-cluster
 # feat-skill-registry, authenticating with the audience-bound projected SA token.
 OPENCRANE_SKILL_REGISTRY_URL="${OPENCRANE_SKILL_REGISTRY_URL:-}"
@@ -43,17 +31,6 @@ OPENCRANE_SKILL_REGISTRY_TOKEN_PATH="${OPENCRANE_SKILL_REGISTRY_TOKEN_PATH:-/var
 OPENCRANE_MEMORY_BACKEND="${OPENCRANE_MEMORY_BACKEND:-}"
 COGNEE_ENDPOINT="${COGNEE_ENDPOINT:-}"
 LITELLM_ENDPOINT="${LITELLM_ENDPOINT:-}"
-
-function _csv_contains()
-{
-  local values="$1"
-  local candidate="$2"
-
-  case ",${values}," in
-    *",${candidate},"*) return 0 ;;
-    *) return 1 ;;
-  esac
-}
 
 function _load_mcp_policy()
 {
@@ -244,69 +221,6 @@ _pull().catch(() => process.exit(0));
 EOF
 }
 
-function _mcp_server_is_enabled()
-{
-  local server_name="$1"
-
-  # 1. Check tenant-level CRD deny list first — tenant-level deny always wins.
-  if [ -n "$OPENCRANE_TENANT_MCP_DENY" ] && _csv_contains "$OPENCRANE_TENANT_MCP_DENY" "$server_name"; then
-    echo "[opencrane] MCP server '$server_name' denied by tenant CRD mcpPolicy.deny" >&2
-    return 1
-  fi
-
-  # 2. Check tenant-level CRD allow list — if present and does not include the server, deny.
-  if [ -n "$OPENCRANE_TENANT_MCP_ALLOW" ] && ! _csv_contains "$OPENCRANE_TENANT_MCP_ALLOW" "$server_name"; then
-    echo "[opencrane] MCP server '$server_name' not in tenant CRD mcpPolicy.allow" >&2
-    return 1
-  fi
-
-  # 3. Check AccessPolicy-level enforcement when the runtime contract is loaded.
-  if [ "$OPENCRANE_MCP_POLICY_ENFORCED" != "true" ]; then
-    return 0
-  fi
-
-  if [ -n "$OPENCRANE_DENIED_MCP_SERVERS" ] && _csv_contains "$OPENCRANE_DENIED_MCP_SERVERS" "$server_name"; then
-    echo "[opencrane] MCP server '$server_name' denied by AccessPolicy" >&2
-    return 1
-  fi
-
-  if [ -n "$OPENCRANE_ALLOWED_MCP_SERVERS" ] && ! _csv_contains "$OPENCRANE_ALLOWED_MCP_SERVERS" "$server_name"; then
-    echo "[opencrane] MCP server '$server_name' not in AccessPolicy allow list" >&2
-    return 1
-  fi
-
-  return 0
-}
-
-function _link_shared_skills()
-{
-  local source_dir="$1"
-  local success_message="$2"
-  local block_message="$3"
-  local skill_dir
-  local skill_name
-  local target
-
-  if ! _mcp_server_is_enabled "skills"; then
-    echo "$block_message"
-    return 0
-  fi
-
-  if [ ! -d "$source_dir" ]; then
-    return 0
-  fi
-
-  for skill_dir in "$source_dir"/*/; do
-    skill_name=$(basename "$skill_dir")
-    target="$SKILLS_DIR/$skill_name"
-    if [ ! -e "$target" ]; then
-      ln -sf "$skill_dir" "$target"
-    fi
-  done
-
-  echo "$success_message"
-}
-
 # Fingerprint the CONTRACT fields whose change a hot-reload actually propagates to the
 # running agent: the workspace docs (consumed by _apply_workspace_docs) and the entitled
 # skills (consumed by _pull_entitled_skills). openclaw.json's mcp.servers are static —
@@ -462,7 +376,7 @@ function _main()
   # Ensure GCS-backed directory structure
   mkdir -p "$STATE_DIR/agents/main/agent" "$SKILLS_DIR" \
            "$STATE_DIR/sessions" "$STATE_DIR/uploads" "$STATE_DIR/knowledge" \
-           "$RUNTIME_DIR" "$WORKSPACE_DIR"
+           "$WORKSPACE_DIR"
 
   # Ensure pod-local secrets dir (emptyDir, Memory-backed)
   mkdir -p "$SECRETS_DIR"
@@ -470,58 +384,9 @@ function _main()
   # Ensure temporary writable paths exist when the root filesystem is read-only.
   mkdir -p /tmp/opencrane-home /tmp/npm-cache
 
-  # Install or UPGRADE the OpenClaw runtime on persistent storage. The runtime lives on the
-  # pod's PVC and survives restarts, so a pinned-version bump only takes effect if we compare
-  # the INSTALLED version to $OPENCLAW_VERSION and reinstall on mismatch — an existence-only
-  # check (the previous behaviour) left already-provisioned tenants stuck on their first-boot
-  # version forever, silently ignoring every subsequent pin bump.
-  OPENCLAW_BIN="$RUNTIME_DIR/node_modules/.bin/openclaw"
-  OPENCLAW_PKG="$RUNTIME_DIR/node_modules/openclaw/package.json"
-  installed_version=""
-  if [ -x "$OPENCLAW_BIN" ] && [ -f "$OPENCLAW_PKG" ]; then
-    installed_version="$(node -p "require('$OPENCLAW_PKG').version" 2>/dev/null || echo "")"
-  fi
-  if [ "$installed_version" != "$OPENCLAW_VERSION" ]; then
-    if [ -n "$installed_version" ]; then
-      echo "[opencrane] OpenClaw ${installed_version} installed but ${OPENCLAW_VERSION} is pinned — upgrading..."
-    else
-      echo "[opencrane] Installing OpenClaw@${OPENCLAW_VERSION} to persistent storage..."
-    fi
-    npm install --prefix "$RUNTIME_DIR" "openclaw@${OPENCLAW_VERSION}" --omit=dev
-    echo "[opencrane] OpenClaw@${OPENCLAW_VERSION} installed successfully"
-  else
-    echo "[opencrane] OpenClaw@${installed_version} runtime found at $OPENCLAW_BIN (matches pin)"
-  fi
-
-  # Add runtime bin to PATH
-  export PATH="$RUNTIME_DIR/node_modules/.bin:$PATH"
-
-  # Install / upgrade the official Cognee memory plugin — ONLY when Cognee is wired. OpenClaw installs
-  # plugins under $OPENCLAW_STATE_DIR/extensions (the PVC), so they survive restarts like the runtime;
-  # gate the (re)install on a version marker and only run on a pin change. The operator renders
-  # plugins.allow/slots/entries into openclaw.json to give this plugin exclusive ownership of the
-  # memory slot (and to disable the built-in memory-core). Without Cognee, no plugin is installed and
-  # org memory is deliberately unavailable (a misconfiguration the entrypoint warns about below).
-  if [ -n "$COGNEE_ENDPOINT" ]; then
-    COGNEE_PLUGIN_MARKER="$RUNTIME_DIR/.cognee-plugin-version"
-    installed_plugin_version=""
-    [ -f "$COGNEE_PLUGIN_MARKER" ] && installed_plugin_version="$(cat "$COGNEE_PLUGIN_MARKER" 2>/dev/null || echo "")"
-    if [ "$installed_plugin_version" != "$COGNEE_PLUGIN_VERSION" ]; then
-      echo "[opencrane] Installing Cognee memory plugin @cognee/cognee-openclaw@${COGNEE_PLUGIN_VERSION}..."
-      openclaw plugins install "@cognee/cognee-openclaw@${COGNEE_PLUGIN_VERSION}" --force
-      echo "$COGNEE_PLUGIN_VERSION" > "$COGNEE_PLUGIN_MARKER"
-      echo "[opencrane] Cognee memory plugin @${COGNEE_PLUGIN_VERSION} installed"
-    else
-      echo "[opencrane] Cognee memory plugin @${installed_plugin_version} present (matches pin)"
-    fi
-  else
-    echo "[opencrane] COGNEE_ENDPOINT not set — skipping Cognee memory plugin install (org memory unavailable)"
-  fi
-
   # Always apply the operator-managed config on boot — the configmap is the
   # authoritative source for platform settings (auth, port, bind, MCP servers).
-  # Tenant customisations arrive via spec.configOverrides, which the operator
-  # merges before mounting, so the mounted file is always the fully-merged config.
+  # The mounted file is the fully platform-rendered config.
   # Skipping this copy was the original design intent (to "preserve customisations")
   # but it caused operator config updates (e.g. auth-mode changes) to be silently
   # ignored on pod restart when the state-volume file already existed.
@@ -547,20 +412,6 @@ function _main()
       echo "[opencrane] Seeded workspace file: ${_seed_file}"
     fi
   done
-
-  # Symlink shared org skills
-  _link_shared_skills \
-    "$SHARED_SKILLS/org" \
-    "[opencrane] Linked org skills" \
-    "[opencrane] Skipping org skills; MCP policy blocks the 'skills' server"
-
-  # Symlink shared team skills (OPENCRANE_TEAM env var selects the team)
-  if [ -n "${OPENCRANE_TEAM:-}" ]; then
-    _link_shared_skills \
-      "$SHARED_SKILLS/teams/$OPENCRANE_TEAM" \
-      "[opencrane] Linked team skills for $OPENCRANE_TEAM" \
-      "[opencrane] Skipping team skills for $OPENCRANE_TEAM; MCP policy blocks the 'skills' server"
-  fi
 
   # Copy the initial contract to the writable path so the polling loop can update it.
   if [ -f "$RUNTIME_CONTRACT_PATH" ] && [ ! -f "$RUNTIME_CONTRACT_WRITABLE" ]; then

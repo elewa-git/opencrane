@@ -1,6 +1,7 @@
 # Stage 5 — silo-autonomous controllers
 
-Status: **planned, not started.** Architectural correction (Jente, 2026-06-28): the **fleet-manager
+Status: **historical implementation record; completed and superseded by the personal-agent rewrite
+freeze.** Architectural correction (Jente, 2026-06-28): the **fleet-manager
 stops at ClusterTenant lifecycle** and must watch **nothing inside** a silo; each
 **clustertenant-manager runs its own in-silo controllers** over its **own namespace**, so a silo
 stands on its own. This fixes the single-fleet-endpoint bug (the central operator injected one
@@ -11,7 +12,7 @@ fleet-namespace plane endpoint into every tenant) — a silo-local controller in
 | | fleet-manager (cluster-wide singleton) | clustertenant-manager (per silo) |
 |---|---|---|
 | Watches | the cluster-scoped **ClusterTenant** CR only | **Tenant** + **AccessPolicy** CRs in **its own namespace** |
-| Reconciles | CT lifecycle: namespace + quota/LimitRange + per-org domain/TLS + Zitadel org + registry/billing | the tenant runtime: openclaw pods/ConfigMaps/Services, LiteLLM keys, idle-suspend, plane drift-repair, rollout canary, Obot health, gateway-proxy |
+| Reconciles | CT lifecycle: namespace + quota/LimitRange + per-org domain/TLS + Zitadel org + registry/billing | the then-current tenant runtime, including controllers later retired by Phase A |
 | RBAC | cluster-scoped (namespaces/clustertenants/quota) | **namespaced** Role over its own ns (tenants/accesspolicies + pods/configmaps/services/deployments/secrets) |
 | Runs | ClusterTenantOperator + fleet API/registry/Zitadel | the API **+ all the in-silo controllers in one process** |
 

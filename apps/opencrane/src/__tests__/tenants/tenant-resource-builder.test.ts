@@ -13,6 +13,7 @@ describe("TenantResourceBuilder", () =>
 
     expect(sa.metadata?.name).toBe("openclaw-jente");
     expect(sa.metadata?.annotations).toEqual({});
+    expect(sa.automountServiceAccountToken).toBe(false);
   });
 
   it("builds ServiceAccount with Workload Identity annotation on GCP", () =>
@@ -26,13 +27,9 @@ describe("TenantResourceBuilder", () =>
       .toBe("openclaw-jente@my-gcp-project.iam.gserviceaccount.com");
   });
 
-  it("builds ConfigMap with merged override config", () =>
+  it("builds a platform-owned ConfigMap", () =>
   {
-    const tenant = _makeTenant("cfg", {
-      configOverrides: {
-        agents: { defaults: { model: "gpt-4o" } },
-      },
-    });
+    const tenant = _makeTenant("cfg");
 
     const configMap = _BuildConfigMap(defaultConfig, tenant, "default");
     const payload = JSON.parse(configMap.data?.["openclaw.json"] ?? "{}");
@@ -50,7 +47,6 @@ describe("TenantResourceBuilder", () =>
     // The rendered trustedProxy block must contain ONLY keys OpenClaw's strict
     // schema accepts (userHeader, allowUsers); an unknown key crashes the gateway.
     expect(Object.keys(payload.gateway.auth.trustedProxy).sort()).toEqual(["allowUsers", "userHeader"]);
-    expect(payload.agents.defaults.model).toBe("gpt-4o");
     expect(runtimeContract.mode).toBe("managed");
     expect(runtimeContract.tenant.name).toBe("cfg");
     expect(runtimeContract.contractVersion).toBe("2.1.0");
@@ -86,9 +82,9 @@ describe("TenantResourceBuilder", () =>
     expect(noModels.models.providers["litellm-proxy"].models).toEqual([]);
   });
 
-  it("normalises the gateway owner allowlist (trim + lowercase) to match gateway-verify", () =>
+  it("normalises the gateway owner allowlist (trim + lowercase) to match gateway-resolve", () =>
   {
-    // gateway-verify injects email.trim().toLowerCase(); a mixed-case / padded owner
+    // gateway-resolve injects email.trim().toLowerCase(); a mixed-case / padded owner
     // email must normalise to the SAME value or the allowlist would lock the owner out.
     const tenant = _makeTenant("mixed");
     tenant.spec.email = "  Mike.Owner@EXAMPLE.com  ";
@@ -177,22 +173,15 @@ describe("TenantResourceBuilder", () =>
     expect(nullPayload.models.providers["litellm-proxy"].models).toEqual([]);
   });
 
-  it("pins workspace path and disables bootstrap even when agents block is overridden", () =>
+  it("pins workspace path and disables bootstrap", () =>
   {
-    const tenant = _makeTenant("ws", {
-      configOverrides: {
-        // Override the entire agents key — platform workspace settings must still survive.
-        agents: { defaults: { model: "claude-opus-4-8" } },
-      },
-    });
+    const tenant = _makeTenant("ws");
 
     const configMap = _BuildConfigMap(defaultConfig, tenant, "default");
     const payload = JSON.parse(configMap.data?.["openclaw.json"] ?? "{}");
 
     expect(payload.agents.defaults.workspace).toBe("/data/openclaw/workspace");
     expect(payload.agents.defaults.skipBootstrap).toBe(true);
-    // Tenant override must still be present alongside the platform settings.
-    expect(payload.agents.defaults.model).toBe("claude-opus-4-8");
   });
 
   it("emits L0 and L2 workspace file keys in the ConfigMap", () =>
@@ -284,21 +273,6 @@ describe("TenantResourceBuilder", () =>
     expect(wired.plugins.entries["cognee-openclaw"].enabled).toBe(true);
     expect(wired.plugins.entries["memory-core"].enabled).toBe(false);
     expect(wired.plugins.entries["cognee-openclaw"].config.baseUrl).toBe("http://cognee:8000");
-  });
-
-  it("preserves a tenant's own plugins while forcing the Cognee memory plugin in", () =>
-  {
-    const cogneeConfig = { ...defaultConfig, cogneeEndpoint: "http://cognee:8000" };
-    const tenant = _makeTenant("plugins-merge", {
-      configOverrides: { plugins: { entries: { "my-plugin": { enabled: true } } } },
-    });
-    const cfg = JSON.parse(_BuildConfigMap(cogneeConfig, tenant, "default").data?.["openclaw.json"] ?? "{}");
-
-    // Tenant plugin entry survives; the platform forces the Cognee memory plugin, slot + allowlist on top.
-    expect(cfg.plugins.entries["my-plugin"]).toEqual({ enabled: true });
-    expect(cfg.plugins.entries["cognee-openclaw"].enabled).toBe(true);
-    expect(cfg.plugins.slots.memory).toBe("cognee-openclaw");
-    expect(cfg.plugins.allow).toEqual(["cognee-openclaw"]);
   });
 
   it("injects the Cognee org-memory env only when configured", () =>
@@ -421,12 +395,13 @@ describe("TenantResourceBuilder", () =>
     const volumes = podSpec?.volumes ?? [];
 
     expect(podSpec?.securityContext?.runAsNonRoot).toBe(true);
+    expect(podSpec?.automountServiceAccountToken).toBe(false);
     expect(podSpec?.securityContext?.runAsUser).toBe(1000);
     expect(podSpec?.securityContext?.fsGroup).toBe(1000);
     expect(container?.securityContext?.allowPrivilegeEscalation).toBe(false);
     expect(container?.securityContext?.readOnlyRootFilesystem).toBe(true);
     expect(container?.securityContext?.capabilities?.drop).toEqual(["ALL"]);
-    expect(envVars.OPENCLAW_VERSION).toBe(defaultConfig.defaultOpenclawVersion);
+    expect(envVars.OPENCLAW_VERSION).toBeUndefined();
     expect(envVars.OPENCRANE_RUNTIME_MODE).toBe("managed");
     expect(envVars.OPENCRANE_RUNTIME_CONTRACT_PATH).toBe("/config/opencrane-managed-runtime.json");
     expect(envVars.OPENCRANE_MCP_GATEWAY_URL).toBe(defaultConfig.mcpGatewayUrl);

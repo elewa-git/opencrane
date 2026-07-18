@@ -4,11 +4,9 @@
 
 import type * as k8s from "@kubernetes/client-node";
 
-import type { OpenClawGatewayAdmin } from "@opencrane/backend/connections";
-
 /**
- * The Kubernetes + gateway clients the repairer needs to ENFORCE a suspension (#126): cut the
- * member's live sessions/devices and suspend their workspace pod. Grouped so the DI wiring in
+ * The Kubernetes clients the repairer needs to ENFORCE a suspension (#126): cut the
+ * member's runtime pod and suspend their workspace. Grouped so the DI wiring in
  * index.ts passes one object and standalone/no-op paths can omit it cleanly.
  */
 export interface MembershipEnforcementDeps
@@ -17,8 +15,6 @@ export interface MembershipEnforcementDeps
   customApi: k8s.CustomObjectsApi;
   /** Core V1 API client — force-deletes pods on a cut (via `_CutTenant`). */
   coreApi: k8s.CoreV1Api;
-  /** Gateway admin — revokes brokered device tokens/pairings on a cut. */
-  gatewayAdmin: OpenClawGatewayAdmin;
   /** Namespace this silo's Tenant CRs live in (the projection-repair namespace). */
   namespace: string;
 }
@@ -50,4 +46,17 @@ export interface FleetMembershipReader
    * @param clusterTenant - The org (ClusterTenant) whose membership to read.
    */
   read(clusterTenant: string): Promise<FleetMembershipRow[] | null>;
+}
+
+/** Writes member adoptions through to the fleet authority. */
+export interface FleetMembershipWriter
+{
+  /**
+   * Adopt a member into the org without downgrading an existing membership.
+   *
+   * @param clusterTenant - The org receiving the member.
+   * @param subject - The identity-provider subject to adopt.
+   * @returns True when the fleet accepted the write.
+   */
+  adopt(clusterTenant: string, subject: string): Promise<boolean>;
 }

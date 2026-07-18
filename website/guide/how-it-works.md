@@ -6,7 +6,7 @@ the docs are easy.
 ## The big picture
 
 You run one **control plane** — the place you manage everything from (through the
-`oc` command-line tool or the API). From there you hand out assistants to people and
+OpenCrane UI or management API). From there you hand out assistants to people and
 decide what each one can do.
 
 ```
@@ -18,7 +18,7 @@ decide what each one can do.
 
 ### Employee assistant
 A private AI coworker for **one person**. It has its own secure storage and its own
-web address, and it acts on that person's behalf. (In the API and CLI this is called
+web address, and it acts on that person's behalf. (In the API this is called
 a *tenant* — same thing.) → [Create one](/guide/first-tenant)
 
 ### Skill

@@ -28,7 +28,7 @@ Authorization: Bearer <token>
 ```
 
 **Current paths:**
-- **Bearer token** — set `OPENCRANE_TOKEN` or pass `--token` to the CLI. This is the automation and break-glass path.
+- **Bearer token** — send `Authorization: Bearer <token>` from automation or a generated client. This is the automation and break-glass path.
 - **OIDC** — human operators authenticate via `GET /api/v1/auth/login` → callback → session cookie. See the [Auth](#auth) section below.
 
 Projected ServiceAccount tokens are the current in-cluster authentication mechanism for pod-to-opencrane-api calls. Each tenant pod presents an audience-bound projected token that is validated via the Kubernetes TokenReview API (`/api/internal/contract`, `/api/internal/awareness/participation`). Static bearer tokens remain the automation and break-glass path for operators outside the cluster.

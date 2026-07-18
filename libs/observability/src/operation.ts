@@ -1,11 +1,3 @@
-/**
- * Wrapper that turns any background unit of work (operator reconcile, CLI
- * command, harvesting cycle) into a traced, context-scoped operation.
- *
- * It opens an OpenTelemetry span, seeds the {@link RequestContext} so log lines
- * within the work inherit `requestId` + `operation`, and records the outcome,
- * duration, and any error on both the span and the logs.
- */
 import { randomUUID } from "node:crypto";
 
 import { SpanStatusCode, trace } from "@opentelemetry/api";
@@ -16,18 +8,6 @@ import { ___RunWithContext } from "./context.js";
 const _tracer = trace.getTracer("@opencrane/observability");
 
 /**
- * Execute `fn` as a named, traced operation.
- *
- * A `requestId` is taken from `fields.requestId` when supplied (so an operation
- * can inherit a caller's correlation id) or minted otherwise. The span is
- * always ended and the error always re-thrown, so callers see normal control
- * flow while telemetry is captured transparently.
- * @param name   - Span / operation name (e.g. `"tenant.reconcile"`).
- * @param fields - Structured attributes attached to the span and context.
- * @param fn     - The work to run inside the operation scope.
- * @returns Whatever `fn` resolves to.
- */
-/**
  * Return the currently active OpenTelemetry span, or `undefined` when no span
  * is active. Use this instead of importing `@opentelemetry/api` directly so
  * the dep stays contained inside the observability package.
@@ -37,6 +17,18 @@ export function ___GetActiveSpan()
   return trace.getActiveSpan();
 }
 
+/**
+ * Execute `fn` as a named, traced background operation.
+ *
+ * A `requestId` is taken from `fields.requestId` when supplied (so an operation
+ * can inherit a caller's correlation id) or minted otherwise. The span is
+ * always ended and the error always re-thrown, so callers see normal control
+ * flow while telemetry is captured transparently.
+ * @param name - Span or operation name, for example `tenant.reconcile`.
+ * @param fields - Structured attributes attached to the span and context.
+ * @param fn - The work to run inside the operation scope.
+ * @returns Whatever `fn` resolves to.
+ */
 export async function ___DoWithTrace<T>(
   name: string,
   fields: Record<string, unknown>,

@@ -45,9 +45,8 @@ replaced only after the candidate key passes both of the following checks:
    `IAM_OWNER` scope the platform depends on (verified by a non-destructive probe
    against the Zitadel instance API).
 
-If either check fails, the API returns `422`, the old key stays active, and no change
-is made. The CLI exits non-zero and prints which check failed so the operator can
-diagnose before retrying.
+If either check fails, the API returns `422` with the failed validation check, the old
+key stays active, and no change is made.
 
 Persistence is also required before the in-memory swap. The control plane writes the
 validated key to the `ZITADEL_MGMT_SECRET_NAME` Kubernetes Secret first. If the
@@ -95,36 +94,42 @@ In the Zitadel console, navigate to the service account that the control plane u
 
 Do **not** revoke the old key yet. Both keys are valid at this point.
 
-### Step 2 — rotate via the API or CLI
+### Step 2 — rotate through the API
 
-::: tip Prefer --key-file
-Pass the key JSON via `--key-file` so the key material stays off your shell history
-and process arguments. Inline `--key` is available for scripting but should be
-avoided in production.
+::: tip Keep the key out of arguments
+Construct the request body from the downloaded file. Do not paste private key material
+into shell history or a process argument.
 :::
 
 ```bash
-# Using the CLI (recommended)
-oc admin zitadel rotate-key --key-file /path/to/new-key.json
+jq -n --slurpfile key /path/to/new-key.json \
+  '{serviceAccountKey: $key[0]}' > zitadel-key-rotation.json
 
-# Using the API directly
-curl -X POST \
-  -H "Authorization: Bearer $OPENCRANE_API_TOKEN" \
-  -H "Content-Type: application/json" \
-  https://control.example.com/api/v1/admin/zitadel/sa-key:rotate \
-  --data-raw "{ \"serviceAccountKey\": $(cat /path/to/new-key.json | jq -c .) }"
+curl --fail-with-body \
+  --request POST "$OPENCRANE_FLEET_URL/api/v1/admin/zitadel/sa-key:rotate" \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data-binary @zitadel-key-rotation.json
 ```
 
-On success the CLI prints:
+Delete `zitadel-key-rotation.json` immediately after the request. On success the API returns:
 
-```
-✓ Zitadel SA key rotated successfully.
-  newKeyId      : <new-key-id>
-  previousKeyId : <old-key-id>
+```json
+{
+  "rotated": true,
+  "keyId": "<new-key-id>",
+  "previousKeyId": "<old-key-id>",
+  "validation": {
+    "tokenExchangeOk": true,
+    "instanceScopeOk": true,
+    "keyId": "<new-key-id>",
+    "detail": "candidate key validated"
+  }
+}
 ```
 
-On validation failure it prints which check failed and exits non-zero — the old key
-remains active. Diagnose the failure before retrying.
+On validation failure the request returns `422` — the old key remains active. Diagnose
+the reported check before retrying.
 
 ### Step 3 — verify the new key is working
 
@@ -212,5 +217,6 @@ plane loses the ability to manage Zitadel. Restore access by:
    ```bash
    kubectl rollout restart deployment/opencrane-fleet-manager -n opencrane-system
    ```
-4. Then running `oc admin zitadel rotate-key` normally to register the key in
-   persistence, ready for the next rotation.
+4. Confirm `GET /api/v1/auth/me` and the fleet-manager logs are healthy. Because the
+   replacement was written directly to the configured Secret, it is already the
+   persisted key used on subsequent restarts.

@@ -1,6 +1,6 @@
 # ClusterTenant member management
 
-Managing who can administer a ClusterTenant (organisation) — the roles, the API + CLI surface, and the guardrail that prevents an org from losing all its owners.
+Managing who can administer a ClusterTenant (organisation) — the roles, the authenticated API surface, and the guardrail that prevents an org from losing all its owners.
 
 > See also:
 > [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how org membership feeds grant compilation and dataset-scope derivation for the agents inside a silo.
@@ -101,44 +101,43 @@ Source: [`apps/fleet-operator/src/routes/cluster-tenant-members.ts`](https://git
 
 ---
 
-## CLI reference
+## API examples
 
-The `oc cluster-tenant members` sub-group mirrors the API exactly. Output defaults to table mode; pass `--output json` for machine-readable results.
+Set `OPENCRANE_FLEET_URL` to the Fleet Manager origin and authenticate as a platform
+operator or an Owner/Admin of the named organisation.
 
 ### List members
 
 ```bash
-oc cluster-tenant members list <org-name>
-oc cluster-tenant members list <org-name> --output json
+curl --fail-with-body \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants/<org-name>/members"
 ```
 
-Prints the `subject` and `role` columns for every member of the named org.
+The response contains the `subject` and `role` for every member of the named org.
 
 ### Add or update a member
 
 ```bash
-# Add a new owner
-oc cluster-tenant members add <org-name> \
-  --subject auth0|abc123 \
-  --role Owner
-
-# Promote an existing member to admin
-oc cluster-tenant members add <org-name> \
-  --subject auth0|def456 \
-  --role Admin
+curl --fail-with-body \
+  --request POST "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants/<org-name>/members" \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"subject":"auth0|abc123","role":"Owner"}'
 ```
 
-`add` is an upsert: if the subject already has a row, only the role is changed. The last-owner guardrail applies — demoting the sole Owner returns a 409.
+The operation is an upsert: if the subject already has a row, only the role is changed. The last-owner guardrail applies — demoting the sole Owner returns a 409.
 
 ### Remove a member
 
 ```bash
-oc cluster-tenant members remove <org-name> <subject>
+curl --fail-with-body \
+  --request DELETE \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants/<org-name>/members/<url-encoded-subject>"
 ```
 
-Prints a confirmation on success. The sole Owner cannot be removed (409).
-
-Source: [`apps/cli/src/commands/cluster-tenants.ts`](https://github.com/italanta/opencrane/blob/main/apps/cli/src/commands/cluster-tenants.ts)
+The endpoint returns a confirmation on success. The sole Owner cannot be removed (409).
 
 ---
 
@@ -176,9 +175,11 @@ Source: [`libs/infra-auth/src/cluster-tenant-org-admin.ts`](https://github.com/i
 **Finding a user's OIDC subject.** The `subject` field is the OIDC `sub` claim from the user's identity provider (Zitadel in the default setup). It is stored on the user's `Tenant` row when an assistant is created. You can retrieve it with:
 
 ```bash
-oc tenants show <tenant-name> --output json | jq '.subject'
+curl --fail-with-body \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_URL/api/v1/tenants/<tenant-name>" | jq -r '.subject'
 ```
 
-**Bootstrapping the first owner.** When a ClusterTenant is first created, it has no OrgMembership rows. A platform operator must add the first `Owner` via the API or CLI before an org admin can manage the org through their own session.
+**Bootstrapping the first owner.** `POST /api/v1/cluster-tenants` records the authenticated creator as the organisation's Owner transactionally. Add further owners before attempting to remove or demote the creator.
 
 **Membership is not IdP group membership.** A user may be a member of a Zitadel group without appearing in `OrgMembership`, and vice versa. The org-manager gate reads only `OrgMembership`. The grant/policy system that governs what the user's _agent_ can access reads the Zitadel group projection — both systems are independent.

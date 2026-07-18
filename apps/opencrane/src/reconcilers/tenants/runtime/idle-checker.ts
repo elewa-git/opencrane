@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import type { OpenClawTenantOperatorConfig } from "../../../app/config.js";
 import { OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL } from "@opencrane/infra/api";
 import { _ComputeLastActivityMs, _ListIdleCandidates, _ShouldSuspend } from "./idle-policy.js";
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 
 /**
  * Periodically checks running tenant deployments for inactivity and

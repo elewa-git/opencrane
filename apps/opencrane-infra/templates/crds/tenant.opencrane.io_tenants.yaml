@@ -59,12 +59,6 @@ spec:
                 team:
                   type: string
                   description: Team the tenant belongs to
-                openclawImage:
-                  type: string
-                  description: Override the default OpenClaw container image
-                openclawVersion:
-                  type: string
-                  description: OpenClaw version to install (e.g. latest, 2026.3.15). Defaults to latest.
                 monthlyBudgetUsd:
                   type: number
                   minimum: 0
@@ -76,44 +70,6 @@ spec:
                       type: string
                     memory:
                       type: string
-                mcpPolicy:
-                  type: object
-                  description: >-
-                    Per-tenant MCP server allow/deny policy applied at invocation level.
-                    This is the durable MCP policy surface consumed by tenant runtimes.
-                  properties:
-                    allow:
-                      type: array
-                      items:
-                        type: string
-                      description: MCP server names explicitly allowed for this tenant.
-                    deny:
-                      type: array
-                      items:
-                        type: string
-                      description: MCP server names explicitly denied for this tenant.
-                channels:
-                  type: array
-                  description: Adapter-oriented channel integration configuration.
-                  items:
-                    type: object
-                    required:
-                      - adapter
-                    properties:
-                      adapter:
-                        type: string
-                        description: Adapter identifier (e.g. slack, whatsapp, teams, sharepoint).
-                      config:
-                        type: object
-                        x-kubernetes-preserve-unknown-fields: true
-                        description: Adapter-specific configuration payload.
-                      credentialsSecretName:
-                        type: string
-                        description: Kubernetes Secret name containing adapter credentials.
-                configOverrides:
-                  type: object
-                  x-kubernetes-preserve-unknown-fields: true
-                  description: OpenClaw config values merged into base config
                 policyRef:
                   type: string
                   description: Name of the AccessPolicy CR to apply

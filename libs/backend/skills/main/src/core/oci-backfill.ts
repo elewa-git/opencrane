@@ -104,7 +104,7 @@ export async function _BackfillBundlesToOci(prisma: PrismaClient, ociStore: OciB
     results.push(await _backfillOne(ociStore, row));
   }
 
-  // 3. Tally the outcomes into an aggregate summary for the API/CLI report.
+  // 3. Tally the outcomes into an aggregate summary for the API response.
   return {
     total: results.length,
     pushed: results.filter(function _isPushed(r) { return r.outcome === "pushed"; }).length,

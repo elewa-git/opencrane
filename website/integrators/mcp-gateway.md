@@ -1,108 +1,108 @@
-# Obot MCP Gateway
+# Obot MCP gateway
 
-How OpenCrane runs and governs **MCP (Model Context Protocol) servers** for tenant
-agents. Obot is the in-cluster **runtime gateway**; the control plane is the
-**source of truth** for the catalog and per-tenant entitlements.
+OpenCrane runs **Obot** as the in-cluster gateway for MCP (Model Context Protocol)
+tools. This page separates Obot's runtime catalogue from OpenCrane's API-first
+governance and per-tenant access decisions.
 
-> See also: [skills-registry.md](/integrators/skill-registry) (the sibling delivery plane),
-> [agent-workspace.md](/integrators/agent-workspace) (how the agent learns and is governed),
-> [auth.md](/security/identity) (token audiences), and [hosting-architecture.md](/operators/hosting).
+> See also: [Skill registry and delivery](/integrators/skill-registry) (the sibling
+> delivery plane), [Agent workspace and control](/integrators/agent-workspace) (how
+> allowed tools appear to an agent), [Control access](/guide/permissions) (the admin
+> workflow), and [Identity and connection auth](/security/identity) (human and workload identity).
 
-## What Obot is
+## What Obot owns
 
 Obot is the upstream [`obot-platform/obot`](https://github.com/obot-platform/obot)
-MCP gateway, deployed as a managed in-cluster plane. Tenant agents (OpenClaw) reach
-their MCP tools *through* Obot rather than connecting to each MCP server directly;
-Obot holds the live server connections and routes calls.
+runtime gateway. It holds MCP server connections and starts container-backed MCP
+servers in the silo namespace.
 
-Crucially, Obot does **not** own the list of servers. It is **config-slaved** to the
-control plane: it polls the opencrane-api registry and serves whatever the control
-plane has published. The direction of truth is always **control plane → Obot**.
+Obot loads its default catalogue from the local directory configured by
+`mcpGateway.catalog.path`. Operators populate that directory through a deployment
+mechanism such as a catalogue volume or git-sync sidecar. When Obot authentication is
+enabled, an administrator can also add Git Source URLs through Obot Admin.
+
+Obot does not poll the OpenCrane control plane for catalogue entries. Publishing an
+OpenCrane `McpServer` record therefore governs what OpenCrane advertises and entitles;
+it does not silently install that server into Obot. Keep the Obot catalogue source and
+the OpenCrane governance record aligned as one operator workflow.
 
 ```
-oc CLI / API ──▶ Control plane (McpServer rows + grants)
-                      │  GET /api/internal/obot-registry   ◀── Obot polls (OBOT_SERVER_PROVIDER_REGISTRIES)
-                      ▼
-                 Obot MCP Gateway ──routes──▶ MCP servers
-                      ▲
-   tenant pod (OpenClaw) ──aud=obot-gateway projected token──┘   (in-cluster only)
+catalogue volume / Git Source URL ──▶ Obot catalogue ──▶ MCP runtime pods
+                                           ▲
+                                           │ tool calls
+tenant agent ──────────────────────────────┘
+     ▲
+     │ effective AccessPolicy + grants + TOOLS.md
+     │
+OpenCrane UI / API ──▶ control-plane governance records
 ```
 
-## Deployment & network posture
+## API-first governance
 
-- **Workload:** `apps/opencrane-infra/templates/obot-mcp-gateway-deployment.yaml` +
-  `mcp-gateway-service.yaml`; configured by the `mcpGateway` block in
-  `apps/opencrane-infra/values.yaml` (image `ghcr.io/obot-platform/obot`, 1 replica, port
-  8080). Requires a per-instance, release-prefixed `<release>-obot` Secret (resolved by
-  the `opencrane.obotSecretName` Helm helper) with key `dsn` for Obot's own Postgres.
-- **Auth disabled, network-gated.** `OBOT_SERVER_ENABLE_AUTHENTICATION=false` — Obot
-  itself runs no auth. Access is enforced at the network layer: the
-  `mcp-gateway-ingress` policy in `apps/opencrane-infra/templates/networkpolicy-planes.yaml`
-  admits port 8080 **only** from tenant, opencrane-api, and operator pods. There is
-  no external ingress; the browser never reaches Obot.
-- **Kubernetes runtime backend.** `OBOT_SERVER_MCPRUNTIME_BACKEND=kubernetes` — Obot
-  spawns MCP servers as in-cluster pods.
+The authenticated OpenCrane API owns the product-facing catalogue, installation and
+access workflows:
 
-## Catalog sync (control plane → Obot)
+| Audience | Endpoint | Purpose |
+|----------|----------|---------|
+| User | `GET /api/v1/mcp/catalog` | List published servers the caller is entitled to see |
+| User | `/api/v1/mcp/installed` | Install, remove and inspect the caller's tools |
+| User | `/api/v1/mcp/installed/{serverId}/credential` | Connect or clear a write-only credential |
+| Org admin | `/api/v1/mcp/servers` | Review, approve, publish, disable and reject servers |
+| Org admin | `/api/v1/mcp/servers/{id}/access` | Read or replace server access rules |
+| Platform admin | `/api/v1/mcp-servers` | Manage the underlying server registry and scoped grants |
+| Org admin | `/api/v1/policies` | Manage AccessPolicies, including MCP allow/deny sets |
 
-- The control plane owns the `McpServer` table (Prisma model in
-  `apps/opencrane-api/prisma/schema.prisma`): `id`, `name` (unique), `description`,
-  `endpoint`, `transport`, `scope`, `status`, `capabilities`, plus optional
-  `sourceId` linking to a `ThirdPartySource` (MCP registry / git / manual upload).
-- It exposes the Obot-wire catalog at **`GET /api/internal/obot-registry`**
-  (serves only `status = Active` servers, ordered by name). The endpoint is **not**
-  behind `___AuthMiddleware`; NetworkPolicy is its access control.
-- Obot is pointed at it via `OBOT_SERVER_PROVIDER_REGISTRIES` and polls to sync.
-- **Management surface:** CRUD lives at `/api/v1/mcp-servers`
-  ([mcp-servers.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/mcp/main/src/routes/mcp-servers.ts)) and via
-  `oc mcp …`. Third-party sources are ingested through the
-  fetch → scan → validate → register → entitle pipeline.
+The routes are mounted in
+[`libs/backend/mcp/main/src/routes`](https://github.com/italanta/opencrane/blob/main/libs/backend/mcp/main/src/routes)
+and use the same authentication and authorisation gates as the OpenCrane UI. Custom
+integrations should use these routes or the generated contracts client rather than
+writing control-plane tables directly.
 
-## How a tenant pod reaches Obot
+## Per-tenant access
 
-The operator injects a **projected ServiceAccount token with audience
-`obot-gateway`** into every tenant pod at
-`/var/run/opencrane/tokens/obot-gateway.token`, alongside `OPENCRANE_MCP_GATEWAY_URL`
-([3-deployment.ts](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/3-deployment.ts)). The pod
-(OpenClaw) calls Obot server-side with that token. This token is **workload
-identity** — it is never handed to a browser. (The browser's path to the pod is the
-identity-routing proxy, which replays the OIDC session and holds no browser token; see
-[Identity & connection auth](/security/identity).)
+A tenant receives an effective `AccessPolicy` through its explicit `policyRef`, a
+matching selector, or the operator default. The control plane combines that policy
+with user, group and tenant grants, then exposes the resulting MCP allow/deny decision
+in the tenant's effective contract.
 
-## MCP policy: three enforcement points, one decision
+The same compiled decision determines which tools are rendered into the
+platform-owned `TOOLS.md`. An agent therefore sees only tools that its identity and
+policy permit. There is no separate tool-policy field on the Tenant resource.
 
-A grant decision in the control plane fans out to three consumers, all derived from
-the same grant-compiler output — so they cannot disagree by construction:
+::: warning Catalogue presence is not entitlement
+A server can exist in Obot without being visible to a tenant. Conversely, an
+OpenCrane governance record is not usable until the corresponding catalogue entry is
+available in Obot. Treat runtime installation and API governance as two required
+halves of one change.
+:::
 
-1. **Obot catalog** — synced from the registry; determines which servers the gateway
-   will route at all.
-2. **Runtime contract policy** — `policy.mcpServers.allow/deny` in the effective
-   contract, re-pulled by the pod
-   ([tenant-contract.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/contract/main/src/routes/internal/tenant-contract.ts)).
-3. **In-pod enforcement** — `entrypoint.sh` `_load_mcp_policy` / `_mcp_server_is_enabled`
-   evaluate, in precedence order: tenant-CRD `mcpPolicy.deny` (always wins) → tenant-CRD
-   `mcpPolicy.allow` → AccessPolicy deny → AccessPolicy allow.
+## Deployment and network posture
 
-The agent's **awareness** of its tools (`TOOLS.md`, see
-[skills-registry.md](/integrators/skill-registry) and the contract's `workspace` block) is
-derived from the same allow-set — so what the agent *thinks* it can use stays aligned
-with what IAM *lets* it use. Awareness is descriptive; Obot + the runtime policy are
-the enforcement boundary.
+- The silo chart renders the Obot Deployment and Service from
+  `apps/opencrane-infra/templates/obot-mcp-gateway-deployment.yaml` and
+  `mcp-gateway-service.yaml`.
+- `OBOT_SERVER_MCPRUNTIME_BACKEND=kubernetes` makes Obot start MCP servers as pods in
+  the silo namespace.
+- There is no external Obot ingress. NetworkPolicy admits the gateway only from the
+  tenant, control-plane and operator workloads.
+- Authentication is disabled by default and must be enabled before using per-user
+  credentials or Obot access policies. Enabling it requires the documented one-time
+  OIDC bootstrap in the `mcpGateway.auth` Helm values.
+- Credential encryption at rest is separately gated by
+  `mcpGateway.encryptionAtRest.enabled`; production deployments that store credentials
+  should enable it with a dedicated key Secret.
 
-## Keeping Obot from drifting
+## Operating the catalogue
 
-The operator's runtime-plane drift repairer
-([drift-repairer.ts](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/runtime-planes/drift-repairer.ts)) runs on a
-~60s interval and re-patches Obot's critical env (`OBOT_SERVER_PROVIDER_REGISTRIES`,
-`OBOT_SERVER_ENABLE_AUTHENTICATION`, `OBOT_SERVER_MCPRUNTIME_BACKEND`) in place if it
-drifts from opencrane-api intent — without a pod restart, preserving `valueFrom`
-references. Image/replica/resource changes are **not** reconciled here; use Helm.
+1. Put a reviewed MCP catalogue entry in the directory mounted at
+   `mcpGateway.catalog.path`, or add its Git Source URL in authenticated Obot Admin.
+2. Create or update the corresponding OpenCrane governance record through the
+   authenticated API.
+3. Approve and publish the server, then assign its access rules or grants.
+4. Confirm the intended user can see it through `GET /api/v1/mcp/catalog` and that an
+   unintended user cannot.
+5. Verify the tenant's platform-owned `TOOLS.md` reflects the same decision after the
+   effective-contract refresh.
 
-## Current state & gaps
-
-- ✅ Obot deployed as a config-slaved plane; catalog sync + drift repair live.
-- ✅ Control-plane `McpServer` CRUD + grants; per-tenant allow/deny compiled into the
-  contract and enforced in-pod.
-- 🔶 Credential brokering for downstream MCP auth (per-user creds, encryption at rest)
-  is **not** in this phase — `OBOT_SERVER_ENCRYPTION_PROVIDER=none`. The earlier
-  "RFC 8693 credential shim" remains a target, not current behaviour.
+The chart deliberately leaves `mcpGateway.catalog.path` empty unless the operator
+provides a catalogue source. An empty source means Obot has no default managed tools;
+it is not repaired by a background control-plane sync.

@@ -219,11 +219,12 @@ OIDC_ALLOWED_EMAIL_DOMAINS=local.test
 The same model works with Dex or Authentik as long as the issuer supports
 standard OpenID Connect discovery.
 
-### CLI and automation
+### Generated clients and automation
 
-- **CLI** uses the OIDC device authorization grant (`POST /auth/device` →
-  `/auth/device/activate` in a browser → poll `/auth/device/token`).
-- **Automation / CI** uses a static bearer token (`Authorization: Bearer …`).
+- **Human operators** authenticate through the browser OIDC flow and use the resulting
+  session with the OpenCrane UI or another browser client.
+- **Automation / CI** uses a static bearer token (`Authorization: Bearer …`) with the
+  REST API or generated contracts client.
   Treat this as a migration target; prefer OIDC/IAM where possible.
 
 ## UserTenant pod access (identity-routing proxy)
@@ -270,9 +271,8 @@ Authentication establishes *who*; authorization is split across the two planes:
 - **Data plane** — what a pod may retrieve/act on is governed by `AccessPolicy`,
   `Group` awareness grants, and tenant dataset memberships, compiled per tenant
   into the **effective contract** (`GET /tenants/{name}/effective-contract`).
-  The OpenClaw pairing profile also grants the device a bounded role/scopes on the
-  pod gateway (`node` role + `operator.read/write/approvals`; `operator.admin` /
-  `operator.pairing` require separate approval).
+  The OpenClaw gateway accepts only the proxy-injected owner identity; the browser
+  receives no pod credential.
 
 ## Kubernetes and IAM split
 

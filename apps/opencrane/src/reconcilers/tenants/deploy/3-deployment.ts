@@ -2,7 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 
 import type { TenantStateVolume } from "../../../hosting/index.js";
 import type { OpenClawTenantOperatorConfig } from "../../../app/config.js";
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 import type { ClusterTenantComputeView } from "@opencrane/infra/api";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 import { _BuildClusterTenantScheduling } from "./cluster-tenant-scheduling.js";
@@ -42,9 +42,8 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
                                  namespace: string, compute?: ClusterTenantComputeView, configChecksum?: string, cogneeIdentityStamp?: string): k8s.V1Deployment
 {
   const name = tenant.metadata!.name!;
-  const image = tenant.spec.openclawImage ?? config.tenantDefaultImage;
+  const image = config.tenantDefaultImage;
   const resources = tenant.spec.resources;
-  const openclawVersion = tenant.spec.openclawVersion ?? config.defaultOpenclawVersion;
 
   // 0. Scheduling — derive nodeSelector/tolerations from the parent ClusterTenant's
   //    compute mode. Empty for shared/ref-less openclaws, so the pod spec below is
@@ -61,7 +60,6 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     { name: "OPENCLAW_SECRETS_DIR", value: "/data/secrets" },
     { name: "OPENCLAW_ENCRYPTION_KEY_PATH", value: "/etc/openclaw/encryption-key/key" },
     { name: "OPENCLAW_TENANT_NAME", value: name },
-    { name: "OPENCLAW_VERSION", value: openclawVersion },
     { name: "OPENCRANE_RUNTIME_MODE", value: "managed" },
     { name: "OPENCRANE_RUNTIME_CONTRACT_PATH", value: "/config/opencrane-managed-runtime.json" },
     { name: "OPENCRANE_MCP_GATEWAY_URL", value: config.mcpGatewayUrl },
@@ -137,7 +135,7 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
   // 2. Volume mounts — the state volume mount comes from the adapter;
   //    everything else is provider-agnostic and stays read-only where possible.
   //    Skills are now pulled per-entitlement from the Skill Registry via
-  //    projected token; there is no shared-skills PVC mount.
+  //    projected token; no shared filesystem delivery path exists.
   const volumeMounts: k8s.V1VolumeMount[] = [
     stateVolume.volumeMount,
     { name: "config", mountPath: "/config", readOnly: true },
@@ -222,6 +220,9 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
             : {}),
         },
         spec: {
+          // Tenant workloads receive only explicit, narrow-audience projected tokens.
+          // Never mount the broad Kubernetes API token automatically.
+          automountServiceAccountToken: false,
           // 4. Pod defaults — enforce the baseline runtime hardening profile
           //    without changing the existing service-account or storage model.
           //    Scheduling keys are spread in only when the parent ClusterTenant
@@ -245,9 +246,6 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
               image,
               ports: [{ name: "gateway", containerPort: config.gatewayPort }],
               env: envVars,
-              envFrom: [
-                { secretRef: { name: "org-shared-secrets", optional: true } },
-              ],
               volumeMounts,
               securityContext: {
                 allowPrivilegeEscalation: false,

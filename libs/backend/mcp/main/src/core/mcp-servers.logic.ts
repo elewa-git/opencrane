@@ -6,16 +6,16 @@ import type { McpServerCredentialInput, McpServerGrantInput, McpServerRouteAcces
 type _McpServerRow = Prisma.McpServerGetPayload<{ include: { scopedGrants: true; credentials: true; source: true } }>;
 
 /** Shared response contract returned by the MCP server routes. */
-export type McpServerResponse = McpServer;
+type McpServerResponse = McpServer;
 
 /** Shared grant contract returned for normalized MCP server grants. */
-export type McpServerGrantResponse = Grant;
+type McpServerGrantResponse = Grant;
 
 /** Shared credential contract returned for normalized credential rows. */
-export type McpServerCredentialResponse = McpServerCredential;
+type McpServerCredentialResponse = McpServerCredential;
 
 /** Persist response shape returned after create/update/delete mutations. */
-export interface McpServerMutationResponse
+interface McpServerMutationResponse
 {
   /** Stable server identifier. */
   id: string;
@@ -326,7 +326,7 @@ export async function listMcpServerCredentials(prisma: PrismaClient, serverId: s
  * Add a single brokered credential to an MCP server without disturbing grants.
  *
  * Unlike the full PUT path (which replaces all children), this is an additive
- * mutation so operators can author one credential at a time via the CLI.
+ * mutation so operators can author one credential at a time through the API or UI.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - Server identifier from the route.

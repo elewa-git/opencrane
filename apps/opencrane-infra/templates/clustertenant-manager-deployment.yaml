@@ -71,12 +71,12 @@ spec:
             - name: PLATFORM_BASE_DOMAIN
               value: {{ .Values.ingress.domain | quote }}
             {{- if .Values.certManager.enabled }}
-            # cert-manager namespace the `oc platform dns set` endpoint writes the
+            # cert-manager namespace `PUT /api/v1/platform/dns` writes the
             # DNS-01 credentials Secret into (must match the namespaced RBAC Role).
             - name: CERT_MANAGER_NAMESPACE
               value: {{ default "cert-manager" .Values.certManager.namespace | quote }}
             {{- if eq (include "opencrane.namespacedCertIssuer" .) "true" }}
-            # MI.4 namespaced cert-issuer mode: `oc platform dns set` upserts a
+            # MI.4 namespaced cert-issuer mode: `PUT /api/v1/platform/dns` upserts a
             # per-instance *Issuer* and writes the DNS-01 Secret INTO this pod's own
             # namespace (NAMESPACE, above), not a cluster-wide ClusterIssuer + shared
             # cert-manager ns — so two instances never collide. The namespace is left
@@ -236,8 +236,8 @@ spec:
             # ============================================================================
             # In-silo controllers (Stage 5). The opencrane-server runs every in-silo
             # reconcile loop over its OWN namespace — TenantOperator, PolicyOperator,
-            # idle-suspend, runtime-plane drift repair, rollout canary, Obot health, and the
-            # in-process gateway proxy — so a silo stands on its own. The fleet-manager
+            # idle-suspend, projection repair, and the in-process gateway proxy — so a
+            # silo stands on its own. The fleet-manager
             # watches only the cluster-scoped ClusterTenant CR. All of the env below is what
             # `_LoadOperatorConfig` reads; it moved here from the fleet-manager deployment.
             # ============================================================================
@@ -263,8 +263,6 @@ spec:
               value: {{ (.Values.multiInstance).requireWatchNamespace | quote }}
             - name: TENANT_DEFAULT_IMAGE
               value: "{{ .Values.tenant.defaultImage.repository }}:{{ .Values.tenant.defaultImage.tag }}"
-            - name: DEFAULT_OPENCLAW_VERSION
-              value: {{ .Values.tenant.defaultOpenclawVersion | quote }}
             # -- Per-org domain provisioning inputs (also consumed by the tenant runtime).
             - name: INGRESS_IP
               value: {{ .Values.ingress.externalIp | quote }}

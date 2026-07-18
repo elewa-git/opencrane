@@ -23,7 +23,7 @@ let _sdk: NodeSDK | null = null;
  * Start the OpenTelemetry SDK.
  *
  * No-op (returns immediately) when disabled — by default that is whenever no
- * `OTEL_EXPORTER_OTLP_ENDPOINT` is configured, which keeps the CLI and local
+ * `OTEL_EXPORTER_OTLP_ENDPOINT` is configured, which keeps local
  * runs silent without a collector.
  * @param opts - Service identity and an explicit enable override.
  */
@@ -62,7 +62,7 @@ export async function ___StartTelemetry(opts: TelemetryOptions): Promise<void>
 /**
  * Flush and stop the OpenTelemetry SDK.
  *
- * Must be awaited during graceful shutdown (and after a CLI command resolves)
+ * Must be awaited during graceful shutdown (and after a short-lived command resolves)
  * so batched spans are exported before the process exits. No-op when telemetry
  * was never started.
  */

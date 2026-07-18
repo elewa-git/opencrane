@@ -2,14 +2,16 @@ import { createHash } from "node:crypto";
 
 import { HostingProvider, type GcpHostingConfig } from "../hosting/hosting-adapter.types.js";
 import { _ParseTrustedProxies, _DeriveTrustedProxyCidr, _AUTO_TRUSTED_PROXY_TOKEN, _DEFAULT_AUTO_TRUSTED_PROXY_MASK } from "./trusted-proxies.js";
+import { _log } from "./log.js";
 
 export type { GcpHostingConfig };
+export type { OpenClawTenantOperatorConfig } from "./config.types.js";
 export { HostingProvider };
 
 /**
  * Runtime configuration for the operator, loaded from environment variables.
  */
-export interface OpenClawTenantOperatorConfig
+interface OpenClawTenantOperatorConfig
 {
   /** Namespace to watch for CRDs (empty string watches all namespaces). */
   watchNamespace: string;
@@ -23,13 +25,6 @@ export interface OpenClawTenantOperatorConfig
 
   /** Default container image used for tenant deployments. */
   tenantDefaultImage: string;
-
-  /**
-   * Default OpenClaw npm package version installed into tenant pods when a Tenant
-   * CR does not set `spec.openclawVersion`. Pinned (not `latest`) so the gateway
-   * never silently rolls across a breaking OpenClaw release.
-   */
-  defaultOpenclawVersion: string;
 
   /** Base domain for tenant ingress hostnames. */
   ingressDomain: string;
@@ -327,7 +322,6 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
     watchNamespace: _readEnvValue<string>("WATCH_NAMESPACE", "string"),
     requireWatchNamespace: _readEnvValue<boolean>("REQUIRE_WATCH_NAMESPACE", "boolean", false, false),
     tenantDefaultImage: _readEnvValue<string>("TENANT_DEFAULT_IMAGE", "string"),
-    defaultOpenclawVersion: _readEnvValue<string>("DEFAULT_OPENCLAW_VERSION", "string", false, "2026.6.11"),
     ingressDomain: _readEnvValue<string>("INGRESS_DOMAIN", "string"),
     ingressIp: _readEnvValue<string>("INGRESS_IP", "string", false, ""),
     certManagerIssuerName: _readEnvValue<string>("CERT_MANAGER_ISSUER_NAME", "string", false, "opencrane-issuer"),
@@ -392,7 +386,7 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
   if (config.requireWatchNamespace && config.watchNamespace.trim().length === 0)
   {
     const message = "REQUIRE_WATCH_NAMESPACE is set but WATCH_NAMESPACE is empty; refusing to watch all namespaces in multi-instance mode";
-    console.error(message);
+    _log.error({ configField: "WATCH_NAMESPACE" }, message);
     throw new Error(message);
   }
 
@@ -490,13 +484,13 @@ function _resolveTrustedProxiesInput(raw: string): string[]
       // Degraded-but-handled: the operator asked for `auto` but POD_IP is unusable, so the
       // token is dropped and the gateway stays fail-closed. A warning (not an error — the
       // process continues correctly), but one an operator must see to fix the missing POD_IP.
-      console.warn(`GATEWAY_TRUSTED_PROXIES="auto" but POD_IP "${podIp}" is missing/invalid; dropping the token (staying fail-closed)`);
+      _log.warn({ podIp }, "GATEWAY_TRUSTED_PROXIES auto mode could not derive a trusted-proxy CIDR; dropping the token");
       return [];
     }
     // Routine on every auto-mode boot, but it widens the trust boundary to the whole pod
     // range, so it is logged at warn (not error) — error-level would pollute the error log
     // on normal startup while still deserving operator visibility.
-    console.warn(`GATEWAY_TRUSTED_PROXIES="auto" derived trusted-proxy CIDR ${derived} from POD_IP ${podIp} (/${maskBits}); this trusts the whole pod range`);
+    _log.warn({ podIp, maskBits, derivedCidr: derived }, "GATEWAY_TRUSTED_PROXIES auto mode trusts the derived pod range");
     return [derived];
   });
 }
@@ -551,7 +545,7 @@ function _readEnvValue<T>(
     }
 
     const message = `${envName} is required`;
-    console.error(message);
+    _log.error({ configField: envName }, message);
     throw new Error(message);
   }
 
@@ -579,7 +573,7 @@ function _readEnvValue<T>(
   catch (err)
   {
     const message = err instanceof Error ? err.message : "invalid value";
-    console.error(`${envName} ${message}`);
+    _log.error({ err, configField: envName }, "invalid environment configuration");
     throw new Error(`${envName} ${message}`);
   }
 }

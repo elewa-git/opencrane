@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 import { _OperatorConfigChecksum, type OpenClawTenantOperatorConfig } from "../../app/config.js";
 import { _BuildHostingAdapter, type HostingAdapter } from "../../hosting/index.js";
 
-import type { Tenant } from "./models/tenant.interface.js";
+import type { Tenant } from "./models/tenant.types.js";
 import { TenantPolicyResolutionState, TenantStatusPhase, type TenantDegradedReason } from "./models/tenant-status.interface.js";
 
 import { __K8sApplyResource, _IsK8sNotFound, _RunWatchLoop, K8sWatchEventType, OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL, type ClusterTenantResource } from "@opencrane/infra/api";
@@ -499,8 +499,7 @@ export class TenantOperator
         }
       }
 
-      // 6. ConfigMap — serialises the base OpenClaw JSON config merged with any
-      //    spec.configOverrides the tenant author provided. Capture it so its
+      // 6. ConfigMap — serialises the platform-owned OpenClaw JSON config. Capture it so its
       //    checksum can roll the pod when the config changes (step 7).
       //
       //    FAIL-SAFE (issue #144): when LiteLLM is enabled the config's model set comes

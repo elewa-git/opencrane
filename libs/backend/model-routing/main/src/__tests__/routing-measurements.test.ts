@@ -4,7 +4,8 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import { routingMeasurementsRouter, type ShadowSeamsFactory } from "../routes/routing-measurements.js";
+import { routingMeasurementsRouter } from "../routes/routing-measurements.js";
+import type { ShadowSeamsFactory } from "../routes/routing-measurements.types.js";
 
 /** In-memory measurement row. */
 type Row = Record<string, unknown>;

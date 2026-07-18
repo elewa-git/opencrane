@@ -5,7 +5,7 @@ import { Router } from "express";
 import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { compile, compileForPrincipals, GrantCompilerAccess, GrantCompilerPayloadType, _DeriveTenantDatasetMembership } from "@opencrane/backend/grants";
-import { _CutTenant, type OpenClawGatewayAdmin } from "@opencrane/backend/connections";
+import { _CutTenant } from "@opencrane/backend/connections";
 import { _SetTenantSuspended } from "../core/tenant-suspension.js";
 import { _deleteLiteLlmKey } from "@opencrane/backend/spend";
 import { _log } from "../log.js";
@@ -26,10 +26,9 @@ const DEFAULT_COGNEE_PERMISSIONS_TIMEOUT_MS = 5000;
  * @param customApi - Kubernetes custom objects API client
  * @param prisma - Prisma ORM client
  * @param coreApi - Kubernetes Core V1 API client (pod force-disconnect for the kill-switch)
- * @param gatewayAdmin - OpenClaw gateway revoke client for the connection kill-switch (CONN.5)
  * @returns Configured Express Router
  */
-export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaClient, coreApi: k8s.CoreV1Api, gatewayAdmin: OpenClawGatewayAdmin): Router
+export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaClient, coreApi: k8s.CoreV1Api): Router
 {
   const router = Router();
   const namespace = process.env.NAMESPACE ?? "default";
@@ -568,15 +567,14 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
     {
       const name = req.params.name;
 
-      // Offboarding teardown (#126). Order matters: revoke access on the LIVE pod first, then
+      // Offboarding teardown (#126). Order matters: cut the LIVE pod first, then
       // tear the pod down, then clean local metadata — while RETAINING harvested data.
       //
-      // 1. Revoke sessions + brokered devices (gateway revoke + registry mark) and force-delete
-      //    the pod so live WebSockets are severed immediately — same kill-switch as POST /cut.
-      //    Best-effort: a gateway/pod hiccup must not strand the delete.
+      // 1. Force-delete the pod so live WebSockets are severed immediately. Best-effort:
+      //    a Kubernetes hiccup must not strand the tenant teardown.
       try
       {
-        await _CutTenant(coreApi, prisma, gatewayAdmin, { tenant: name, namespace, reason: "tenant deleted (offboarding)" });
+        await _CutTenant(coreApi, { tenant: name, namespace, reason: "tenant deleted (offboarding)" });
       }
       catch (err)
       {
@@ -614,8 +612,8 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
       //    otherwise block the tenant delete below (FK), and they carry no data worth keeping.
       await prisma.tenantLiteLlmKey.deleteMany({ where: { tenant: name } });
 
-      // 5. Delete the projection row. Cascades take the per-tenant pointer rows (audit, brokered
-      //    devices, dataset MEMBERSHIPS, docs). NOTE: this is deliberately NOT a Cognee delete —
+      // 5. Delete the projection row. Cascades take the per-tenant pointer rows (audit,
+      //    dataset memberships, docs). NOTE: this is deliberately NOT a Cognee delete —
       //    offboarding RETAINS the org's harvested datasets in Cognee (decision 2026-07-05); only
       //    this tenant's local access pointers go, never the collected organisational data.
       await prisma.tenant.delete({ where: { name } });
@@ -677,79 +675,11 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
   });
 
   /**
-   * Set a tenant's OpenClaw gateway URL override (CONN.3).
-   *
-   * The provisioner (or an admin) writes the pod's `wss://` gateway URL into
-   * `configOverrides.openclaw`; `_ResolveOpenClawPairing` reads it back when the
-   * browser brokers a connection (otherwise the URL is derived from the ingress
-   * host). Under trusted-proxy gateway auth (CONN.4) the gateway needs no bootstrap
-   * token, so none is accepted or stored — only the connection URL.
-   *
-   * Security: only ever stores a `wss://` gateway URL (never downgrades the transport).
-   */
-  router.put("/:name/pairing", async function _setTenantPairing(req, res, next)
-  {
-    try
-    {
-      const name = req.params.name;
-      const gatewayUrl = typeof req.body?.gatewayUrl === "string" ? req.body.gatewayUrl.trim() : "";
-
-      // 1. Validate inputs — a `wss://` gateway URL is required so we never persist
-      //    a transport downgrade (trusted-proxy auth needs no bootstrap token).
-      if (gatewayUrl.length === 0)
-      {
-        res.status(400).json({ error: "gatewayUrl is required", code: "VALIDATION_ERROR" });
-        return;
-      }
-      if (!gatewayUrl.startsWith("wss://"))
-      {
-        res.status(400).json({ error: "gatewayUrl must be a wss:// URL", code: "VALIDATION_ERROR" });
-        return;
-      }
-
-      // 2. Merge into the existing configOverrides.openclaw block so unrelated
-      //    overrides are preserved.
-      const tenant = await prisma.tenant.findUnique({ where: { name }, select: { configOverrides: true } });
-      if (!tenant)
-      {
-        res.status(404).json({ error: "Not found", code: "NOT_FOUND" });
-        return;
-      }
-
-      const existing = (tenant.configOverrides ?? {}) as Record<string, unknown>;
-      const existingOpenclaw = (typeof existing.openclaw === "object" && existing.openclaw !== null ? { ...existing.openclaw } : {}) as Record<string, unknown>;
-      const mergedOpenclaw: Record<string, unknown> = { ...existingOpenclaw, gatewayUrl };
-
-      // 3. Persist the gateway URL and audit the change.
-      await prisma.tenant.update({
-        where: { name },
-        data: { configOverrides: { ...existing, openclaw: mergedOpenclaw } as Prisma.InputJsonValue },
-      });
-
-      await prisma.auditEntry.create({
-        data: {
-          tenant: name,
-          action: "GatewayUrlSet",
-          resource: `Tenant/${name}`,
-          message: `OpenClaw gateway URL set for ${name} (${gatewayUrl})`,
-        },
-      });
-
-      res.json({ name, gatewayUrl });
-    }
-    catch (err)
-    {
-      next(err);
-    }
-  });
-
-  /**
    * Cut a tenant — the admin connection kill-switch (CONN.5).
    *
-   * Revokes every brokered OpenClaw connection for the tenant (gateway revoke +
-   * registry mark) and force-deletes the pod so live WebSockets are severed
-   * immediately. Distinct from suspend: suspend scales to zero for cost/idle,
-   * cut is a security action that also blocks re-auth of the cut credentials.
+   * Force-deletes the pod so live WebSockets are severed immediately. Distinct
+   * from suspend: suspend scales to zero for cost/idle, while cut immediately
+   * terminates the current runtime process.
    */
   router.post("/:name/cut", async function _cutTenant(req, res, next)
   {
@@ -758,9 +688,8 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
       const name = req.params.name;
       const reason = typeof req.body?.reason === "string" ? req.body.reason : undefined;
 
-      // 1. Run the kill-switch: gateway revoke (best-effort) + registry revoke +
-      //    pod force-delete. No subject → full-tenant cut.
-      const result = await _CutTenant(coreApi, prisma, gatewayAdmin, { tenant: name, namespace, reason });
+      // 1. Force-delete the single-user tenant pod.
+      const result = await _CutTenant(coreApi, { tenant: name, namespace, reason });
 
       // 2. Audit the security action so the cut is attributable after the fact.
       await prisma.auditEntry.create({
@@ -768,7 +697,7 @@ export function tenantsRouter(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
           tenant: name,
           action: "Cut",
           resource: `Tenant/${name}`,
-          message: `Tenant ${name} cut: ${result.revokedDevices} connection(s) revoked, pod force-deleted=${result.podForceDeleted}${reason ? ` (${reason})` : ""}`,
+          message: `Tenant ${name} cut: pod force-deleted=${result.podForceDeleted}${reason ? ` (${reason})` : ""}`,
         },
       });
 

@@ -197,8 +197,12 @@ kubectl logs -n opencrane-system deployment/opencrane-fleet-manager --tail 50
 curl -H "Authorization: Bearer $OPENCRANE_TOKEN" \
   https://<fleet-host>/api/v1/cluster-tenants
 
-# Zitadel SA key probe (platform-operator gated)
-oc --fleet-url https://<fleet-host> admin zitadel rotate-key --key-file /dev/null 2>&1 | head -5
+# Zitadel SA key probe with a deliberately invalid candidate (platform-operator gated)
+curl --silent --output /dev/null --write-out '%{http_code}\n' \
+  --request POST https://<fleet-host>/api/v1/admin/zitadel/sa-key:rotate \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{"serviceAccountKey":{"keyId":"invalid","key":"invalid","userId":"invalid"}}'
 # Should fail with validation error (422), not auth error (403)
 ```
 

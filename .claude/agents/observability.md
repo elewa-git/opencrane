@@ -48,7 +48,6 @@ GCP Cloud Logging + Cloud Trace (Helm `observability.otel`, default off), contex
   case is `debug`, not `warn`.
 - The console seam: the lib's `bindConsole`-equivalent is the safety net for stray/3rd-party
   output — but first-party code should call the real logger so fields are typed.
-  **The CLI must never bind console** — its `console.log` is the `--output json` channel.
 - **Secrets never reach logs or spans.** Any new credential-bearing field (tokens, keys,
   master keys, client secrets, DB URLs, auth headers) must be covered by the lib's redaction
   paths (`redact.ts`). When code introduces a new such field, add its path.
@@ -69,7 +68,7 @@ GCP Cloud Logging + Cloud Trace (Helm `observability.otel`, default off), contex
   `startTelemetry`-equivalent before any instrumented module loads (ESM ordering). It is a
   no-op without an OTLP endpoint, so it is always safe to add.
 - Lifecycle: long-running services flush on `SIGTERM`/`SIGINT` via the lib's shutdown
-  function before exit; short-lived processes (CLI, migrate) flush after their work resolves.
+  function before exit; short-lived migration processes flush after their work resolves.
 
 ### Infra wiring (when a new deployable app appears)
 - Add the `@opencrane/observability` workspace dep, the `instrument.ts`, and (for servers)

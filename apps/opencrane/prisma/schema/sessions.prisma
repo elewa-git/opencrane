@@ -1,19 +1,15 @@
-/// A session→scope binding that restricts an OpenClaw chat window's awareness
-/// retrieval to a specific scope set (P4B.7, anti-spill).
+/// Legacy session-to-scope rows retained read-only as R3 migration input.
 ///
-/// A chat window is a `sessionKey` multiplexed over one wss connection / device /
-/// pod principal, so nothing in the transport distinguishes windows. Binding scope
-/// at the `sessionKey` level is what stops one project's context from spilling into
-/// another window. `scopes` holds only the *authorised* set: the control plane
-/// intersects the client-proposed scope with the principal's compiled awareness
-/// entitlements before persisting, so a binding can never exceed what grants allow.
-/// `principal` may be a tenant or user, so there is no Tenant foreign key.
+/// Phase A removed every writer, API, client, and runtime consumer. These rows have no current
+/// authorization or anti-spill effect; green migration may inspect them when reconstructing
+/// historical scope intent, then R10 deletes the model. There is no Tenant foreign key because
+/// the historical principal could be either a tenant or a user.
 model SessionScope {
   /// OpenClaw chat-window session key (the binding's identity).
   sessionKey String   @id @map("session_key")
-  /// Tenant/user that owns the session; entitlements are compiled against this.
+  /// Historical tenant/user principal recorded by the retired writer.
   principal  String
-  /// The authorised (post-intersection) scope selectors: [{ scope, payloadId }].
+  /// Historical scope selectors recorded by the retired writer.
   scopes     Json
   /// When the binding was first created.
   createdAt  DateTime @default(now()) @map("created_at")

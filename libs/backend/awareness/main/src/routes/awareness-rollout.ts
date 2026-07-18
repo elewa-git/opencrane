@@ -11,8 +11,8 @@ import type { PromoteRolloutRequest, SetRolloutRequest } from "./awareness-rollo
  *
  * Manages promoting an awareness `targetVersion` across canary waves
  * (personal→project→department→org) with a one-step rollback, so the fleet
- * upgrades without downtime. CLI-first: `oc awareness rollout …` and the WeOwnAI
- * frontend are both clients of these endpoints. Mounted under
+ * upgrades without downtime. The REST API and WeOwnAI frontend are the supported
+ * clients of these endpoints. Mounted under
  * `/api/v1/awareness/rollout` behind `___AuthMiddleware`.
  *
  * @param prisma - Prisma client for the singleton rollout row + tenant lookups.

@@ -34,8 +34,8 @@ composes app-owned deployment units and release values; it does not become the a
 their Pods. A distinct image or process role always gets a distinct app root. A Job using the exact
 same image, entrypoint, trust boundary, and lifecycle as an existing app may remain owned by it.
 
-CLI packages and browser applications also live in `apps/` even though they do not create cluster
-Pods, because they are independently built/shipped entrypoints.
+Browser applications also live in `apps/` even though they do not create cluster Pods, because
+they are independently built/shipped entrypoints.
 
 ## Reuse before creation
 

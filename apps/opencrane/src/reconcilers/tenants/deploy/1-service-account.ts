@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 
 import type { HostingAdapter } from "../../../hosting/index.js";
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 
 /**
@@ -16,6 +16,7 @@ export function _BuildServiceAccount(hosting: HostingAdapter, tenant: Tenant, na
   return {
     apiVersion: "v1",
     kind: "ServiceAccount",
+    automountServiceAccountToken: false,
     metadata: {
       name: `openclaw-${name}`,
       namespace,

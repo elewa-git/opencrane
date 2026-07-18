@@ -17,7 +17,7 @@ k3d cluster create opencrane --agents 1 --port "8080:80@loadbalancer"
 libs/k8s-platform/tests/k3d-local.sh
 ```
 
-That's enough to create assistants and explore the `oc` CLI. Tear it down anytime;
+That's enough to create assistants through the UI or management API. Tear it down anytime;
 nothing leaves your machine.
 
 ## On a VM or VPS

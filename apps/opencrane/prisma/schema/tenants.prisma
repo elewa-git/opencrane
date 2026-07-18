@@ -11,14 +11,12 @@ model Tenant {
   /// the contact `email`) is what lets the contract compiler inherit that user's
   /// rights (S4). Nullable for legacy/imported tenants created before the binding.
   subject            String?
-  configOverrides    Json?                     @map("config_overrides")
   awarenessWave      String?                   @map("awareness_wave")
   createdAt          DateTime                  @default(now()) @map("created_at")
   updatedAt          DateTime                  @updatedAt @map("updated_at")
   auditEntries       AuditEntry[]
   litellmKeys        TenantLiteLlmKey[]
   datasetMemberships TenantDatasetMembership[]
-  brokeredDevices    BrokeredDevice[]
   workspaceDocs      TenantWorkspaceDoc[]
   docMergeProposals  DocMergeProposal[]
   participationEvents ParticipationEvent[]

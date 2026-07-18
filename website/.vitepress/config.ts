@@ -45,7 +45,6 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'CLI', link: '/reference/cli' },
           { text: 'API (interactive)', link: '/reference/api' },
           { text: 'API overview', link: '/reference/api-overview' },
         ],
@@ -94,7 +93,6 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'CLI reference', link: '/reference/cli' },
           { text: 'API reference (interactive)', link: '/reference/api' },
           { text: 'API overview', link: '/reference/api-overview' },
           { text: 'Contracts SDK', link: '/integrators/contracts-sdk' },

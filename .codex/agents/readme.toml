@@ -20,7 +20,7 @@ or phase/roadmap history. Those have homes elsewhere — send them there.
   per-user kill-switch… the Envoy proxy is a deferred, contingent vision."
 
 The first is *what it does*; the second is a *decision with its trade-offs*. Keep the
-first. A mechanism (a flag, endpoint, CLI command, file path) earns a mention only when it
+first. A mechanism (a flag, endpoint, generated-client call, file path) earns a mention only when it
 helps the reader **use or locate** something — never to explain how a choice was reached.
 
 ## Where content belongs (redirect, don't delete knowledge)
@@ -48,7 +48,7 @@ A scannable front door, roughly:
   page on the docs site. No internal topology diagrams or protocol flows here.
 - **Components** — the repo map (path → one-line "what it is").
 - **Documentation** — pointer to the docs site + AGENTS.md.
-- **Quick Start** — install, deploy, create a tenant, CLI basics.
+- **Quick Start** — install, deploy, create a tenant, and use the UI or REST API.
 - **License.**
 
 Keep prose plain and audience-first. Define jargon or avoid it; prefer "employee

@@ -6,14 +6,13 @@ import { describe, expect, it, vi } from "vitest";
 
 import { tenantsRouter } from "@opencrane/backend/tenants";
 import { policiesRouter } from "@opencrane/backend/policies";
-import { _NoopGatewayAdmin } from "@opencrane/backend/connections";
 
 /** Build a test app that mounts the tenants router with mocked dependencies. */
 function _BuildTenantRepairApp(customApi: k8s.CustomObjectsApi, prisma: PrismaClient)
 {
   const app = express();
   app.use(express.json());
-  app.use("/", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api, new _NoopGatewayAdmin()));
+  app.use("/", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api));
   return app;
 }
 

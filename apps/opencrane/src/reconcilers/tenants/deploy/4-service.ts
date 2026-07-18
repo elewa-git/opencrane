@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 
 import type { OpenClawTenantOperatorConfig } from "../../../app/config.js";
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 
 /**

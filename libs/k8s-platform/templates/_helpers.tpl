@@ -120,9 +120,8 @@ and is folded into the per-namespace Role by MI.4's namespaced cert Issuer.
 - apiGroups: [""]
   resources: ["serviceaccounts"]
   verbs: ["get", "list", "create", "update", "patch"]
-# Mint short-lived, audience-bound tokens for a tenant's pod ServiceAccount via the
-# TokenRequest subresource (POST /api/v1/auth/pod-token — SSO across the control plane and
-# the tenant pod, see docs/auth.md).
+# Mint short-lived, audience-bound tokens for tenant ServiceAccounts. The operator projects
+# only the named runtime-plane audiences; default ServiceAccount-token automount is disabled.
 - apiGroups: [""]
   resources: ["serviceaccounts/token"]
   verbs: ["create"]

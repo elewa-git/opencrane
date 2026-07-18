@@ -6,14 +6,13 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { tenantsRouter } from "@opencrane/backend/tenants";
-import { _NoopGatewayAdmin } from "@opencrane/backend/connections";
 
 /** Build an Express app containing only the tenants router. */
 function _buildTenantsApp(customApi: k8s.CustomObjectsApi, prisma: PrismaClient): Express
 {
   const app = express();
   app.use(express.json());
-  app.use("/api/tenants", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api, new _NoopGatewayAdmin()));
+  app.use("/api/tenants", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api));
   return app;
 }
 
@@ -389,7 +388,7 @@ describe("tenantsRouter create endpoint — Tenant CR appearance validation", ()
 
 describe("tenantsRouter delete — offboarding teardown (#126)", () =>
 {
-  it("cuts sessions, deletes the LiteLLM key metadata, deletes the tenant, and RETAINS datasets", async () =>
+  it("cuts the pod, deletes the LiteLLM key metadata, deletes the tenant, and RETAINS datasets", async () =>
   {
     const customApi = {
       deleteNamespacedCustomObject: vi.fn().mockResolvedValue({}),
@@ -404,8 +403,6 @@ describe("tenantsRouter delete — offboarding teardown (#126)", () =>
         findFirst: vi.fn().mockResolvedValue({ keyAlias: "alias-acme" }),
         deleteMany: litellmDeleteManySpy,
       },
-      // _CutTenant reads/marks brokered devices; empty set keeps it a clean no-op path.
-      brokeredDevice: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       tenantDatasetMembership: { deleteMany: datasetDeleteManySpy },
       auditEntry: { create: vi.fn().mockResolvedValue({}) },
     } as unknown as PrismaClient;

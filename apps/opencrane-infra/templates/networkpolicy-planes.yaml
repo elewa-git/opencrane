@@ -8,7 +8,6 @@
 #     relies EXCLUSIVELY on this policy. Crucially the ingress controller is NOT permitted
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
-#       - Obot / mcp-gateway pod: /api/internal/obot-registry (MCP catalogue sync).
 #       - Skill-registry pod: /api/internal/bundles (skill content delivery).
 #       - Tenant pods: /api/internal/contract/:name (runtime-contract re-pull; TokenReview
 #         inside the handler is the identity check, this is defence-in-depth).
@@ -40,15 +39,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
-    # Allow Obot (mcp-gateway) to poll /api/internal/obot-registry on the INTERNAL port.
-    - from:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: mcp-gateway
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
     # Allow the feat-skill-registry to call /api/internal/bundles on the INTERNAL port.
     - from:
         - podSelector:

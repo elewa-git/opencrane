@@ -65,6 +65,15 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Changed
 
+- **Tenant runtime upgrades and rollbacks are now image operations, not startup-time mutations.**
+  OpenClaw and its Cognee memory plugin are pinned in the tenant image, and an empty state volume
+  can start either the current or previous image without downloading executable code. Operators
+  can now qualify and roll back the exact runtime artifact they deploy.
+
+- **Tenant MCP access now has one effective authority path.** AccessPolicy and the rendered runtime
+  contract determine which servers are available; retired Tenant-CRD allow/deny fields, shared-skill
+  mounts, and free-form runtime overrides can no longer shadow that decision.
+
 - **Tenant-runtime org memory now has one implementation and ownership boundary.** The official
   Cognee OpenClaw plugin exclusively owns retrieval and capture; the retired bespoke awareness SDK
   and its dead bootstrap version marker are removed. Existing server-side rollout controls are
@@ -104,6 +113,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Security
 
+- **Tenant pods can no longer self-install or self-update their agent runtime.** Runtime code is
+  owned by the signed image lifecycle, closing the path where a restart or mutable state volume
+  could silently select a different OpenClaw or memory-plugin build.
+
 - **The Control-UI can authenticate users over trusted-proxy without requiring device pairing.**
   Setting `dangerouslyDisableDeviceAuth: true` on a gateway lets a Control-UI connection that
   arrives over the OIDC-verifying ingress proxy retain full operator scopes — without the
@@ -113,6 +126,17 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   `allowUsers` pin on the gateway restricts it to the tenant owner's email. Device auth is
   redundant in this topology; the flag makes that explicit rather than leaving it as a silent
   gap.
+
+### Removed
+
+- **OpenCrane now has one supported product surface: authenticated APIs, generated clients, and
+  the UI.** The bundled `oc` command-line app and its active documentation are removed, eliminating
+  a second client that had to duplicate every API and workflow change.
+
+- **Legacy pairing, brokered-device, and live SessionScope contracts are retired.** Tenant cuts now
+  terminate the single-user runtime pod directly, and the obsolete session-scope CRUD/API/client
+  surface is gone. Historical SessionScope rows remain only as migration input for the green
+  platform cutover.
 
 ## [0.6.1] — 2026-06-29
 

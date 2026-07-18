@@ -1,6 +1,6 @@
 import type { AccessPolicy } from "../reconcilers/policies/types.js";
 import { type OpenClawTenantOperatorConfig, HostingProvider } from "../app/config.js";
-import type { Tenant } from "../reconcilers/tenants/models/tenant.interface.js";
+import type { Tenant } from "../reconcilers/tenants/models/tenant.types.js";
 import { TenantStatusPhase } from "../reconcilers/tenants/models/tenant-status.interface.js";
 import type { ClusterTenantResource } from "@opencrane/infra/api";
 import { OnPremHostingAdapter } from "../hosting/adapters/onprem/onprem-hosting.adapter.js";
@@ -13,8 +13,7 @@ import type { GcsBucketOperations } from "../hosting/adapters/gcp/gcp-bucket.cli
 export const defaultConfig: OpenClawTenantOperatorConfig = {
   watchNamespace: "default",
   requireWatchNamespace: false,
-  tenantDefaultImage: "ghcr.io/opencrane/tenant:latest",
-  defaultOpenclawVersion: "2026.6.11",
+  tenantDefaultImage: "ghcr.io/opencrane/tenant:openclaw-2026.6.11-cognee-2026.7.9",
   ingressDomain: "opencrane.local",
   ingressIp: "",
   certManagerIssuerName: "opencrane-issuer",

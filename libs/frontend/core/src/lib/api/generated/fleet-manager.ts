@@ -1058,20 +1058,6 @@ export interface components {
             shadowMode?: boolean;
             nextWave?: string | null;
         };
-        ScopeSelector: {
-            /** @enum {string} */
-            scope: "org" | "department" | "project" | "personal";
-            payloadId: string;
-        };
-        SessionScope: {
-            sessionKey?: string;
-            principal?: string;
-            scopes?: components["schemas"]["ScopeSelector"][];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
         DatasetMembership: {
             org: string[];
             team: string[];
@@ -1117,18 +1103,6 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
-        };
-        DeviceGrant: {
-            /** @description Secret code used by the CLI to poll for the token. */
-            deviceCode: string;
-            /** @description Short code (XXXX-XXXX) the operator sees. */
-            userCode: string;
-            /** @description Relative URL the operator should open in a browser. */
-            verificationUri: string;
-            /** @description Seconds until the grant expires (300). */
-            expiresIn: number;
-            /** @description Minimum polling interval in seconds (5). */
-            interval: number;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */

@@ -118,10 +118,10 @@ OpenCrane already generates `openclaw.json`. Activation = the operator writing e
 - **Audit** every publish/access-change/install/credential/brokered call; never the secret value.
 - **Remove the default "everyone" access** so nothing is open by default.
 
-## 8. API / CLI surface (API/CLI-first; frontend is just another client)
+## 8. API surface (API-first; frontend is just another client)
 - **Discovery** is documented: Obot **MCP Registry API** `/v0.1/servers` (Auth mode → per-user). The Claw / frontend can list entitled servers here.
 - **Management** (publish, access policies, credentials) is via Obot's admin UI + its broader API (see the repo `apiclient/`). **Corrected in P0:** `OBOT_SERVER_DEFAULT_MCPCATALOG_PATH` is a **local filesystem directory**, NOT a git URL. GitOps is done by adding **Git Source URLs at runtime** (Admin → MCP Servers → Git Source URLs) and/or syncing a catalogue git repo into that path. ⚠️ The programmatic **management API** surface (publish / access-policies / credentials) + the per-user **connection-URL** shape still need a live Obot v0.23.1 to confirm (P0.6 gap) — lean GitOps until then.
-- OpenCrane wraps these as `oc mcp …` + `/api/v1/mcp/…`; WeOwnAI views: **Catalogue** (browse + admin publish), **My Tools** (install + status), **Connect** (set token / OAuth).
+- OpenCrane exposes these through `/api/v1/mcp/…`; WeOwnAI views are **Catalogue** (browse + admin publish), **My Tools** (install + status), and **Connect** (set token / OAuth).
 
 ## 9. Dependencies & phasing
 - **P0 — Keep-Obot-and-fix — ✅ DONE in PR #40:** (a) catalogue sync fixed — dropped the mis-wired

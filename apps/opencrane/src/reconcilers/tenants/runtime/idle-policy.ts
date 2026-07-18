@@ -1,17 +1,8 @@
 import type * as k8s from "@kubernetes/client-node";
 
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 import { TenantStatusPhase } from "../models/tenant-status.interface.js";
-
-/** Candidate tenant for idle-suspend evaluation. */
-export interface IdleCandidate
-{
-  /** Tenant resource name. */
-  name: string;
-
-  /** Tenant namespace. */
-  namespace: string;
-}
+import type { IdleCandidate } from "./idle-policy.types.js";
 
 /**
  * Return only running, non-suspended tenants that can be evaluated for idleness.

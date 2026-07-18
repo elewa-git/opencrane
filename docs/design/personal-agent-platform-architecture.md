@@ -1,14 +1,14 @@
 # Personal-agent platform architecture
 
-Status: **proposed for review — 2026-07-16.** This is a decision document, not an accepted
-ADR. If the runtime and authority decisions below are accepted, record them in new ADRs and use
-either the companion [strangler migration plan](personal-agent-platform-simplification-plan.md) or
-the alternative [rewrite-freeze plan](personal-agent-platform-rewrite-freeze-plan.md) as the
-accepted execution sequence. The
+Status: **adopted — 2026-07-16.** [ADR 0005](../adr/0005-opencrane-owned-agent-runtime.md)
+records the OpenCrane-owned runtime end state and [ADR 0006](../adr/0006-rewrite-freeze-whole-silo-cutover.md)
+selects the [rewrite-freeze plan](personal-agent-platform-rewrite-freeze-plan.md) as the execution
+sequence. The companion [strangler migration plan](personal-agent-platform-simplification-plan.md)
+is retained as the R0 escape route if mandatory post-write rollback invalidates the freeze. The
 [OpenClaw loop investigation](openclaw-agent-loop-replacement-plan.md) provides the pinned source
 trace, toolkit decision gate, and conformance plan for the runtime slice.
 
-## Decision requested
+## Decision
 
 Adopt a personal-agent platform in which the user's own assistant is the primary product and the
 same assistant is the front door to company AI assets. Use one per-ClusterTenant OpenCrane API as
@@ -16,7 +16,7 @@ the authority for silo-owned agents, assets, grants, persona, schedules, and run
 fleet-managed membership/lifecycle as explicit upstream contracts. Use one runtime contract, one
 artifact authority, one scheduler/controller, and one management console.
 
-The recommended end state is an OpenCrane-owned, OpenClaw-free TypeScript runtime with one
+The adopted end state is an OpenCrane-owned, OpenClaw-free TypeScript runtime with one
 conformance-selected `AgentLoopDriver`. The
 [OpenAI Agents SDK](https://openai.github.io/openai-agents-js/) is the leading candidate; Vercel AI
 SDK's `ToolLoopAgent` is the control and fallback.
@@ -43,8 +43,8 @@ The target can be summarized as five rules:
 4. **One agent-workload controller:** the only application identity allowed to create OpenCrane
    agent Deployments, CronJobs, and Jobs. Obot's separately confined upstream controller is the
    narrow exception for MCP-server workloads in its own namespace.
-5. **One management path:** OpenCrane API first, OpenCrane UI for people, and only a thin generated
-   automation client where a CLI is still justified.
+5. **One management path:** OpenCrane API first, OpenCrane UI for people, and generated clients
+   for automation. There is no separately maintained command-line product.
 
 ## Why this is the right boundary
 
@@ -600,10 +600,8 @@ The UI needs six coherent views:
 6. **Security and operations:** effective access explorer, audit decisions, denied calls, component
    health, queue/index lag, runtime versions, and links to cluster telemetry.
 
-API endpoints remain authoritative. The frontend and any CLI use the same generated client. Issue
-[#216](https://github.com/italanta/opencrane/issues/216) should remove duplicated CLI business
-logic: retain only bootstrap, automation, and break-glass commands with proven users; otherwise
-retire the CLI after equivalent API/UI/runbook coverage exists.
+API endpoints remain authoritative. The frontend and automation use generated clients. Phase A
+retired the command-line app after equivalent API, UI, and runbook coverage was established.
 
 ## Observability and operational records
 
@@ -809,9 +807,9 @@ deletion gates, a time-bounded dual-run window, and an explicit stop/go conforma
 rewrite-freeze plan instead uses a frozen blue release, isolated green construction, deterministic
 migration rehearsals, and atomic whole-silo cutovers.
 
-## Proposed decision gates
+## Accepted decision gates
 
-The following decisions should be accepted together before implementation issues are rewritten:
+The following decisions are accepted together and bind the implementation issues:
 
 1. The end state is one OpenCrane-owned, OpenClaw-free runtime with a conformance-selected loop
    driver; choose one delivery strategy. Lean OpenClaw is a temporary bridge only in the strangler.

@@ -5,7 +5,6 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { MembershipProjectionRepairer, _BuildHttpFleetMembershipReader } from "../../infra/projection/membership-projection-repairer.js";
 import type { FleetMembershipReader, FleetMembershipRow, MembershipEnforcementDeps } from "../../infra/projection/membership-projection-repairer.types.js";
-import type { OpenClawGatewayAdmin } from "@opencrane/backend/connections";
 
 const _log = pino({ enabled: false });
 
@@ -16,9 +15,8 @@ interface Row { clusterTenant: string; subject: string; role: string; status?: s
 interface TenantFixture { name: string; clusterTenantRef: string; subject: string }
 
 /**
- * Build a Prisma stub over an in-memory OrgMembership table (+ optional tenant + brokeredDevice
- * fixtures for enforcement). Implements the surface the repairer touches:
- * orgMembership.{findMany,upsert,delete}, tenant.findFirst, brokeredDevice.{findMany,updateMany}.
+ * Build a Prisma stub over an in-memory OrgMembership table plus optional tenant fixtures.
+ * Implements orgMembership.{findMany,upsert,delete} and tenant.findFirst.
  */
 function _mockPrisma(seed: Row[] = [], tenants: TenantFixture[] = []): { prisma: PrismaClient; rows: Row[] }
 {
@@ -51,10 +49,6 @@ function _mockPrisma(seed: Row[] = [], tenants: TenantFixture[] = []): { prisma:
         return t ? { name: t.name } : null;
       }),
     },
-    brokeredDevice: {
-      findMany: vi.fn(async function _bdFindMany() { return []; }),
-      updateMany: vi.fn(async function _bdUpdateMany() { return { count: 0 }; }),
-    },
   } as unknown as PrismaClient;
   return { prisma, rows };
 }
@@ -62,19 +56,16 @@ function _mockPrisma(seed: Row[] = [], tenants: TenantFixture[] = []): { prisma:
 /** A Tenant CR suspend/resume patch recorded by the fake CustomObjectsApi. */
 interface SuspendPatch { name: string; suspended: boolean }
 
-/** A per-subject cut recorded by the fake CoreV1 pod deletion (subject scope ⇒ no pod delete). */
+/** A runtime cut recorded by the fake CoreV1 pod deletion. */
 interface PodDelete { namespace: string; labelSelector: string }
 
 /**
- * Build enforcement deps whose k8s/gateway clients record what the repairer drives:
- * `patches` (Tenant CR spec.suspended flips) and `podDeletes` (full-tenant cuts — none expected on
- * a per-subject membership cut). `throwOnPatch` forces the Tenant patch to reject.
+ * Build enforcement deps whose Kubernetes clients record Tenant suspension patches and pod cuts.
  */
-function _mockEnforcement(opts: { throwOnPatch?: boolean } = {}): { deps: MembershipEnforcementDeps; patches: SuspendPatch[]; podDeletes: PodDelete[]; cuts: string[] }
+function _mockEnforcement(opts: { throwOnPatch?: boolean } = {}): { deps: MembershipEnforcementDeps; patches: SuspendPatch[]; podDeletes: PodDelete[] }
 {
   const patches: SuspendPatch[] = [];
   const podDeletes: PodDelete[] = [];
-  const cuts: string[] = [];
   const customApi = {
     patchNamespacedCustomObject: vi.fn(async function _patch(args: { name: string; body: { spec: { suspended: boolean } } })
     {
@@ -90,14 +81,7 @@ function _mockEnforcement(opts: { throwOnPatch?: boolean } = {}): { deps: Member
       return {};
     }),
   } as unknown as k8s.CoreV1Api;
-  const gatewayAdmin: OpenClawGatewayAdmin = {
-    async revokeConnections(params: { tenant: string })
-    {
-      cuts.push(params.tenant);
-      return { ok: true, revokedCount: 0, message: "ok" };
-    },
-  };
-  return { deps: { customApi, coreApi, gatewayAdmin, namespace: "opencrane-acme" }, patches, podDeletes, cuts };
+  return { deps: { customApi, coreApi, namespace: "opencrane-acme" }, patches, podDeletes };
 }
 
 /** A reader that returns a fixed set (or null to signal source-unavailable). */
@@ -225,16 +209,14 @@ describe("MembershipProjectionRepairer._enforceStatuses — suspension enforceme
     expect(patches).toContainEqual({ name: "ws-user2", suspended: true });
   });
 
-  it("cuts the Suspended member per-subject (does NOT force-delete the shared pod)", async function _cuts()
+  it("cuts the Suspended member's single-user runtime pod", async function _cuts()
   {
     const { prisma } = _mockPrisma([], [{ name: "ws-user2", clusterTenantRef: "acme", subject: "user-2" }]);
     const reader = _fixedReader([{ subject: "user-2", role: "Member", status: "Suspended" }]);
     const { deps, podDeletes } = _mockEnforcement();
     await _sweepOnce(new MembershipProjectionRepairer(prisma, reader, "acme", _log, 60_000, deps));
 
-    // A per-subject cut severs the member's sessions/devices but never force-deletes the pod
-    // (that would sign out everyone on the shared per-tenant pod).
-    expect(podDeletes).toHaveLength(0);
+    expect(podDeletes).toEqual([{ namespace: "opencrane-acme", labelSelector: "opencrane.io/tenant=ws-user2" }]);
   });
 
   it("clears the suspension for an Active member (patch spec.suspended: false)", async function _resumes()

@@ -24,7 +24,10 @@ network — which external sites it can call, and which connected tools are off-
 It's your safety net, and its safest starting point is "block everything except what's
 explicitly listed."
 
-Manage this from the command line — see [CLI reference → `oc policies`](/reference/cli#oc-policies).
+Manage policies through the authenticated `/api/v1/policies` endpoints. Use
+`GET /api/v1/policies/drift` to inspect projection drift and
+`POST /api/v1/policies/repair` to repair it; see the
+[API overview → Access policies](/reference/api-overview#access-policies).
 
 ## Putting it together
 

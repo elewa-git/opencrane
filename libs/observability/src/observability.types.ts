@@ -30,7 +30,7 @@ export interface LoggerOptions
   level?: string;
   /** Pretty-print to a human-readable transport (dev only); defaults to off in production. */
   pretty?: boolean;
-  /** Destination file descriptor: 1 = stdout (default), 2 = stderr (used by the CLI). */
+  /** Destination file descriptor: 1 = stdout (default), 2 = stderr for interactive commands. */
   destination?: 1 | 2;
 }
 
@@ -46,7 +46,7 @@ export interface TelemetryOptions
   /**
    * Whether to start the OpenTelemetry SDK at all.
    * Defaults to `true` only when `OTEL_EXPORTER_OTLP_ENDPOINT` is set, so the
-   * CLI and local runs without a collector are silent by default.
+   * Local runs without a collector are silent by default.
    */
   enabled?: boolean;
 }

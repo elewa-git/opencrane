@@ -7,8 +7,8 @@ import { _BuildFleetParticipationReport } from "../core/participation.js";
  * Fleet participation monitoring router (P4B.5).
  *
  * Reports per-tenant participation, version drift, and policy-violation severity
- * across the fleet (the locked `violation=page / drift=warn` model). CLI-first:
- * `oc awareness participation` and the WeOwnAI frontend are both clients.
+ * across the fleet (the locked `violation=page / drift=warn` model). The REST API
+ * and the WeOwnAI frontend are the supported clients.
  * Mounted under `/api/v1/awareness/participation` behind `___AuthMiddleware`.
  *
  * @param prisma - Prisma client.

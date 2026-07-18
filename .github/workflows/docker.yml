@@ -70,6 +70,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Generate the database client
+        run: npm run db:generate -w @opencrane/server
+
+      - name: Enforce Phase A retired-reference and frozen-blue guards
+        run: ./scripts/phase-a-forbidden-references.sh
+
+      - name: Enforce Phase A runtime contracts
+        run: |
+          ./libs/k8s-platform/tests/tenant-entrypoint-contract-policy.sh
+          ./libs/k8s-platform/tests/tenant-image-immutability.sh
+
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
 
@@ -105,15 +116,40 @@ jobs:
           KEEP_CLUSTER: "0"
           TIMEOUT_SECONDS: "300"
 
+  tenant-image-rollback:
+    name: Tenant image cold-start and previous-version rollback
+    runs-on: ubuntu-latest
+    needs: test
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build current immutable tenant image
+        run: docker build -f apps/feat-openclaw-tenant/deploy/Dockerfile -t opencrane-tenant:current .
+
+      - name: Build previous-version immutable tenant image
+        run: >-
+          docker build
+          --build-arg OPENCLAW_VERSION=2026.6.9
+          -f apps/feat-openclaw-tenant/deploy/Dockerfile
+          -t opencrane-tenant:previous .
+
+      - name: Exercise cold-empty start and rollback on one state volume
+        run: ./libs/k8s-platform/tests/tenant-image-immutability.sh
+        env:
+          CURRENT_IMAGE: opencrane-tenant:current
+          PREVIOUS_IMAGE: opencrane-tenant:previous
+
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test, e2e-k3d]
+    needs: [prepare, test, e2e-k3d, tenant-image-rollback]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
         needs.test.result == 'success' &&
+        needs.tenant-image-rollback.result == 'success' &&
         (needs.e2e-k3d.result == 'success' || needs.e2e-k3d.result == 'skipped')
       }}
     permissions:

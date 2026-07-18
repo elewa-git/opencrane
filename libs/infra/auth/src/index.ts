@@ -31,7 +31,7 @@ export type { OrgMembershipFacts, OrgMembershipReader, OrgMembershipRow, OwnedOr
 export { OidcAuthServiceBase } from "./oidc-service.js";
 export type { AuthStatus, AuthStatusUser, LoginClient, ManagerAuthMode } from "./oidc-service.js";
 export { ___AuthMiddleware } from "./auth-middleware.js";
-export type { AccessTokenReader } from "./auth-middleware.js";
+export type { AccessTokenReader } from "./auth-middleware.types.js";
 export { _RequirePlatformOperator } from "./require-platform-operator.js";
 export { _RequireOrgAdmin } from "./require-org-admin.js";
 export {

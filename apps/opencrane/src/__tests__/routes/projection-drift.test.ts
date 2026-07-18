@@ -6,7 +6,6 @@ import { describe, expect, it, vi } from "vitest";
 
 import { policiesRouter } from "@opencrane/backend/policies";
 import { tenantsRouter } from "@opencrane/backend/tenants";
-import { _NoopGatewayAdmin } from "@opencrane/backend/connections";
 
 /**
  * Build a test app that mounts the tenant drift route with mocked dependencies.
@@ -15,7 +14,7 @@ function _BuildTenantDriftApp(customApi: k8s.CustomObjectsApi, prisma: PrismaCli
 {
   const app = express();
   app.use(express.json());
-  app.use("/", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api, new _NoopGatewayAdmin()));
+  app.use("/", tenantsRouter(customApi, prisma, {} as k8s.CoreV1Api));
   return app;
 }
 

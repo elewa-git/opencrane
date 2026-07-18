@@ -48,7 +48,7 @@ with `--skip-crds`.
 > single `opencrane.io` API group and one served CRD bundle version. Instances are isolated
 > by **namespace + RBAC + `WATCH_NAMESPACE`**, never by forking the schema. Per-instancing
 > the group would multiply the schema surface by the fleet size and break shared tooling
-> (the `oc` CLI, opencrane-api, awareness layer) that targets one group.
+> (opencrane-api, generated clients, awareness layer) that targets one group.
 
 ---
 
@@ -310,16 +310,27 @@ is needed to enforce this.
 
 ### 5.3 Managing cluster tenants (API-first)
 
-Everything is on the opencrane-api (`/api/v1/cluster-tenants`) and mirrored by the CLI —
-the frontend is just another client, never a privileged path:
+ClusterTenant lifecycle is on the Fleet Manager API (`/api/v1/cluster-tenants`). The
+frontend and custom integrations are clients of the same authenticated routes, never
+privileged paths:
 
 ```bash
-oc cluster-tenant create acme --display-name "Acme Corp" \
-  --tier dedicatedNodes --compute dedicated --node-pool acme-pool \
-  --quota-cpu 8 --quota-memory 16Gi --quota-pods 40
-oc cluster-tenant list
-oc cluster-tenant show acme
-oc cluster-tenant status acme
+curl --fail-with-body \
+  --request POST "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants" \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "name":"acme",
+    "displayName":"Acme Corp",
+    "isolationTier":"dedicatedNodes",
+    "compute":{"mode":"dedicated","nodePool":"acme-pool"},
+    "resources":{"quota":{"cpu":"8","memory":"16Gi","pods":40}}
+  }'
+
+curl --fail-with-body --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants/acme"
+curl --fail-with-body --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_FLEET_URL/api/v1/cluster-tenants/acme/status"
 ```
 
 ### 5.4 Plugging in a `dedicatedCluster` backend without forking (AGPL-clean)

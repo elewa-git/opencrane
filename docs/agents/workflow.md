@@ -17,7 +17,7 @@ Three files track work, each with a distinct role — keep them from drifting:
 - Do not leave completed or partially implemented backlog items stale in `plan.md` after landing the corresponding code.
 - When a track or phase is **fully complete**, move it out of `plan.md` into `plan-done.md` (the historical record) and leave a one-line `✅ COMPLETE (see plan-done.md)` pointer in its place.
 - **When a phase or track completes, update `CHANGELOG.md` in the same work cycle**, version by version (sections map to git tags; in-progress work goes under `## [Unreleased]`). Never let a release/tag land without a corresponding changelog entry.
-  - Write entries in **functional, capability-first terms** — *what an operator/tenant/integrator can now do, or do differently, that they couldn't before* — never a restatement of commits. Name a mechanism (flag, endpoint, `oc` command) only when it helps the reader use the feature. Collapse many commits into the single capability they deliver.
+  - Write entries in **functional, capability-first terms** — *what an operator/tenant/integrator can now do, or do differently, that they couldn't before* — never a restatement of commits. Name a mechanism (flag or endpoint) only when it helps the reader use the feature. Collapse many commits into the single capability they deliver.
   - Delegate this to the **`changelog` agent** (`.claude/agents/changelog.md`, runs on Sonnet), which encodes this style; or follow that file's rules if writing the entry inline.
 
 ## Commit Messages
@@ -38,7 +38,7 @@ Emoji convention (derived from commit history; the count is how often it already
 | Intent | Emoji | Notes / what it has marked here |
 |--------|-------|----------------------------------|
 | Configuration / tooling / infra wiring (most common) | 🔧 | Helm scaffold, cluster/scope config, deploy plumbing (45×) |
-| New feature / capability | ✨ | A new subsystem or API/CLI surface (19×) |
+| New feature / capability | ✨ | A new subsystem or API surface (19×) |
 | Enhancement / extend an existing capability | ⚡ | Increment to a shipped capability — metrics, versioning, bindings (5×) |
 | Bug fix / typing fix / address review findings | 🐛 | (7×) |
 | Refactor — no behaviour change | ♻️ | Move shared code, align typing/signals (7×) |

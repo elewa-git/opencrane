@@ -1,7 +1,7 @@
 # DNS configuration
 
 This is the operator-facing companion to **[Set up your domain](/guide/dns)**. The guide
-walks an admin through the happy path; this page documents the model, the full API/CLI
+walks an admin through the happy path; this page documents the model, the full API
 surface, the cert-manager resources OpenCrane creates, and the per-provider and
 multi-instance options.
 
@@ -86,8 +86,8 @@ their org host:
 ai.client-company.com.   CNAME   acme.weownai.eu.
 ```
 
-Then set the org's `vanityDomain` (`oc cluster-tenant update acme --vanity-domain
-ai.client-company.com`, or the `vanityDomain` field on the API). OpenCrane adds the vanity
+Then set the org's `vanityDomain` with `PUT /api/v1/cluster-tenants/acme` and the body
+`{"vanityDomain":"ai.client-company.com"}`. OpenCrane adds the vanity
 name to a per-org TLS certificate (an HTTP-01 cert whose SAN is the vanity host) so it is
 browser-trusted. The vanity domain is an **overlay**: the org is always also reachable at
 its canonical `<org>.<base>` host.
@@ -104,47 +104,56 @@ credential. Per-org vanity certs use HTTP-01 — no provider token needed for th
 
 ## Configure it
 
-### CLI
+### Authenticated API
 
 ```bash
-oc platform dns set \
-  --provider cloudflare \
-  --zone ai.example.com \
-  --email you@example.com \
-  --token-file ./cloudflare-token.txt
+jq -n --rawfile token ./cloudflare-token.txt '{
+  provider: "cloudflare",
+  zone: "ai.example.com",
+  email: "you@example.com",
+  apiToken: ($token | rtrimstr("\n"))
+}' > dns-configuration.json
+
+curl --fail-with-body \
+  --request PUT "$OPENCRANE_FLEET_URL/api/v1/platform/dns" \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data-binary @dns-configuration.json
 ```
 
-| Flag | Required | Meaning |
-|------|----------|---------|
-| `--provider` | yes | DNS-01 solver provider key (`cloudflare`, `digitalocean`, `route53`, `rfc2136`, …) |
-| `--zone` | yes | The platform wildcard **base** the cert covers (e.g. `weownai.eu`) — org hosts are `<org>.<base>` |
-| `--email` | yes | ACME account contact address (renewal notices) |
-| `--server` | no | ACME directory URL (defaults to Let's Encrypt production) |
-| `--issuer-name` | no | Issuer name to create/update (defaults to `opencrane-issuer`) |
-| `--token-file` | no | File holding the provider API token, for token-based providers |
-| `--solver-config-file` | no | JSON file with a raw provider solver block, for non-token providers |
+| Field | Required | Meaning |
+|-------|----------|---------|
+| `provider` | yes | DNS-01 solver provider key (`cloudflare`, `digitalocean`, `route53`, `rfc2136`, …) |
+| `zone` | yes | The platform wildcard **base** the cert covers (e.g. `weownai.eu`) — org hosts are `<org>.<base>` |
+| `email` | yes | ACME account contact address (renewal notices) |
+| `server` | no | ACME directory URL (defaults to Let's Encrypt production) |
+| `issuerName` | no | Issuer name to create/update (defaults to `opencrane-issuer`) |
+| `apiToken` | token providers | Provider API token |
+| `solverConfig` | other providers | Raw provider solver object |
 
-The token and solver config are read from **files**, never passed as arguments, so
-secrets never land in shell history or process listings.
+Build the request body from a protected file, as above, so the token never lands in
+shell history or process arguments. Delete `dns-configuration.json` after the request.
 
 Inspect the current configuration at any time:
 
 ```bash
-oc platform dns show
+curl --fail-with-body \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  "$OPENCRANE_FLEET_URL/api/v1/platform/dns"
 ```
 
 ### Providers
 
 | Provider | Credential | How to supply |
 |----------|-----------|---------------|
-| `cloudflare` | scoped API token | `--token-file` |
-| `digitalocean` | API token | `--token-file` |
-| `route53` | IAM keys / role | `--solver-config-file` |
-| `rfc2136` | TSIG key | `--solver-config-file` |
+| `cloudflare` | scoped API token | `apiToken` |
+| `digitalocean` | API token | `apiToken` |
+| `route53` | IAM keys / role | `solverConfig` |
+| `rfc2136` | TSIG key | `solverConfig` |
 
 Token-based providers (`cloudflare`, `digitalocean`) store the token in a Secret the
-solver references. Any other provider supplies its solver block verbatim via
-`--solver-config-file` — a JSON object rendered under the provider key. For example, an
+solver references. Any other provider supplies its solver block verbatim in
+`solverConfig` — a JSON object rendered under the provider key. For example, an
 `rfc2136` solver config:
 
 ```json
@@ -161,9 +170,9 @@ than creating and removing `TXT` records in that zone.
 
 ## API surface
 
-The CLI is a thin client over a platform-admin endpoint mounted at
-`/api/v1/platform/dns` (behind the auth middleware). It is API-first: the CLI is one
-client, not a privileged path.
+The Fleet Manager exposes the platform-admin endpoint at `/api/v1/platform/dns`, behind
+its authentication and platform-operator gate. The OpenCrane UI and custom clients use
+the same route.
 
 ### `PUT /api/v1/platform/dns`
 
@@ -265,4 +274,4 @@ certificates, and dev uses `sslip.io`-style hosts that resolve without a provide
 - [Hosting & deployment](/operators/hosting) — ingress class, providers, the external-dns decision
 - [Networking & isolation](/operators/networking) — how DNS and TLS fit into the two-plane model; per-org A record lifecycle and the internal ClusterIP network
 - [Running multiple instances](/advanced/multi-instance) — namespaced issuers
-- [CLI reference](/reference/cli) · [API overview](/reference/api-overview)
+- [API overview](/reference/api-overview) · [Interactive API reference](/reference/api)

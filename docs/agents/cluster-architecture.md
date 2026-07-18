@@ -123,7 +123,9 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
 
 - **operator** → Kubernetes API only. Watches Tenant/AccessPolicy/ClusterTenant CRs; injects the other planes' URLs into tenant pods. Deep-dive: [`apps/fleet-operator.md`](./apps/fleet-operator.md).
 - **opencrane-api** (`:8080`) → Postgres + K8s API + Cognee + LiteLLM. The hub everything else talks to. Deep-dive: [`apps/opencrane.md`](./apps/opencrane.md).
-- **mcp-gateway / Obot** (`:8080`) → polls opencrane-api `GET /api/internal/obot-registry`; tenant pods reach MCP servers through it (projected token `aud=obot-gateway`).
+- **mcp-gateway / Obot** (`:8080`) → holds downstream MCP credentials and executes MCP tools;
+  tenant pods reach MCP servers through it (projected token `aud=obot-gateway`). OpenCrane remains
+  the catalog/grant authority; the removed registry-poll route is not a synchronization mechanism.
 - **feat-skill-registry** (`:5000`) → validates tenant projected token (`aud=feat-skill-registry`) via TokenReview, proxies to opencrane-api internal bundle endpoint. Deep-dive: [`apps/feat-skill-registry.md`](./apps/feat-skill-registry.md).
 - **litellm** (`:4000`) → the only LLM egress path for tenant pods; operator mints a per-tenant virtual key Secret; enforces budget.
 
@@ -204,15 +206,12 @@ The provisioner seam is a registry (`libs/backend/cluster-tenants/main/src/core/
 
 ## CRDs
 
-Six CRDs in `apps/fleet-platform/crds/`, across **two API groups**:
+Three CRDs are rendered from `apps/opencrane-infra/templates/crds/`, all in `opencrane.io`:
 
 | CRD | Group | Scope |
 |-----|-------|-------|
-| `Tenant` (the **UserTenant**) | `tenant.opencrane.io` | Namespaced — the per-user OpenClaw agent-gateway. "UserTenant" is the canonical name; the CRD kind is still `Tenant`. |
-| `AccessPolicy` | `tenant.opencrane.io` | Namespaced — egress/MCP/dataset policy. |
+| `Tenant` (the **UserTenant**) | `opencrane.io` | Namespaced — the per-user OpenClaw agent-gateway. "UserTenant" is the canonical name; the CRD kind is still `Tenant`. |
+| `AccessPolicy` | `opencrane.io` | Namespaced — egress/MCP/dataset policy. |
 | `ClusterTenant` | `opencrane.io` | **Cluster-scoped** — the customer/isolation unit. |
-| `MCPServer` | `opencrane.io` | Namespaced — MCP server registration. |
-| `Schedule` | `opencrane.io` | Namespaced — recurring task schedule. |
-| `SkillRegistry` | `opencrane.io` | Namespaced — skill registry catalog. |
 
 All use `spec`/`status` subresources: spec is user/opencrane-api-owned, status is operator-owned.

@@ -37,8 +37,8 @@ interface TenantCrd
     /**
      * Org host the tenant's OpenClaw pod is served at (`<org>.<base>` or vanity),
      * set by the operator at step 10 of reconcile. Projected into the DB row so the
-     * `/auth/pod-token` broker — which reads `tenant.ingressHost`, not the CR — can
-     * resolve the gateway URL without a manual `PUT /pairing`.
+     * `/auth/pod-token` preflight — which reads `tenant.ingressHost`, not the CR — can
+     * resolve the gateway URL without an additional control-plane override.
      */
     ingressHost?: string;
   };

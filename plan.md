@@ -46,8 +46,8 @@ Toolkit choice is **not** pre-decided — Gate L4's conformance run decides it (
 The silo program (S1–S6) is merged: fleet/silo split, Zitadel as PDP system-of-record with
 per-org OIDC login, member API, S4 inheritance + scope vocabularies + dataset-membership sync,
 BYOK provider keys, same-origin org ingress + gateway proxy (built, gated), org-memory (Cognee)
-wired into tenant pods. Launch stabilisation (#144, #134), member onboarding (#126), and the bulk
-of the Phase 3 repo cutover (#151, #152, #153 — on `phase3-cutover`, **pending merge**) are done.
+wired into tenant pods. Launch stabilisation (#144, #134), member onboarding (#126), and the
+Phase 3 repo cutover (#151, #152, #153; merged through PR #212) are done.
 
 Retired from the morning plan: #130 (scope-aware retrieval), #138 (teardown), #141 (devops-agents
 spike), #131 (CLI polish) — closed; their residue pointers live in the issues themselves.
@@ -62,7 +62,7 @@ declared** until the pre-freeze runway blockers are done. They execute inside R1
 | [#127](https://github.com/italanta/opencrane/issues/127) — **Isolation & domaining production defaults** | Mandatory default-deny (multi-CT) · per-CT hosts · encrypted tenant storage · GCP smoke + ACME e2e | **Freeze-gating** (pre-freeze runway condition). |
 | [#174](https://github.com/italanta/opencrane/issues/174) — **LiteLLM Team provisioning bug** | team_id 404s on /key/update, unthrottled reconcile | **Freeze-gating** (reconcile storms must be fixed pre-freeze). |
 | [#162](https://github.com/italanta/opencrane/issues/162) — **Chart-native OpenCrane UI rollout** | Enablement, migration, status, live verification | **Freeze-gating** (one supportable UI version required). |
-| `phase3-cutover` merge + [#150](https://github.com/italanta/opencrane/issues/150) close-out | Merge gated on e2e-k3d design call + subchart vendor-vs-publish decision | **Freeze-gating** (one supportable fleet/silo contract version). |
+| [#150](https://github.com/italanta/opencrane/issues/150) close-out | Phase 3 cutover merged; finish the remaining e2e-k3d and subchart decision work | **Freeze-gating** (one supportable fleet/silo contract version). |
 | Frontend launch cutover (weownai) | weownai [#28](https://github.com/italanta/WeOwnAI/issues/28) + #30 | Cross-repo; see weownai's plan — resequence against the freeze at R0. |
 
 ## Program — personal-agent platform
@@ -73,12 +73,7 @@ for a gate are cut when it opens; issue dispositions from the
 [strangler table](docs/design/personal-agent-platform-simplification-plan.md#live-github-issue-disposition)
 still apply where noted, re-read through the freeze route.
 
-### Phase A — deletion debt (current front)
-
-| Issue | Scope | Exit |
-|-------|-------|------|
-| [#245](https://github.com/italanta/opencrane/issues/245) — **W1 residue + docs drift + decision ADRs** | Dead shared-skills · CSV mcpPolicy/channels · configOverrides · canary/self-update · **immutable pinned bridge image** (= first Gate L0 deliverable) · pairing/BrokeredDevice · SessionScope · Obot-poll residue · Linkerd freeze+inventory · six-CRDs docs fix · ADR 0005/0006 + ADR 0003 correction | Forbidden-reference CI test; immutable-image cold-start/rollback green; no fallback without named expiry. |
-| [#248](https://github.com/italanta/opencrane/issues/248) — **Delete the `oc` CLI** | `apps/cli` (~2.9k lines) + docs/website/scripts references; API/UI are the only clients (supersedes #216, closed) | No `oc` invocation documented anywhere; runbooks carry API/UI equivalents. |
+### Phase A — deletion debt — ✅ COMPLETE (see `plan-done.md`)
 
 Adjacent: [#135](https://github.com/italanta/opencrane/issues/135) stays blocked (external half);
 [#227](https://github.com/italanta/opencrane/issues/227) fires after Phase A + rollback windows.

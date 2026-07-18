@@ -21,7 +21,11 @@
 
 How the operator actually shapes the cluster (verified June 2026):
 
-- **Six CRDs** in `apps/fleet-platform/crds/`: `Tenant`, `ClusterTenant` (cluster-scoped), `AccessPolicy`, `MCPServer`, `SkillRegistry`, `Schedule`. CRDs use `spec`/`status` subresources — spec is user-owned, status is operator-owned (patched via `*StatusWriter` / `patchNamespacedCustomObjectStatus`).
+- **Three CRDs** in `apps/opencrane-infra/templates/crds/`: `Tenant`, `ClusterTenant`
+  (cluster-scoped), and `AccessPolicy`. CRDs use `spec`/`status` subresources — spec is
+  user/opencrane-api-owned and status is operator-owned (patched via `*StatusWriter` /
+  `patchNamespacedCustomObjectStatus`). MCP servers, skills, and schedules are API/Postgres domains,
+  not CRDs.
 - **Operator reconcile is an idempotent ~10-step sequence per UserTenant** (`Tenant` CR, `apps/opencrane-api/src/tenants/operator.ts` — the in-silo controller runs in each silo over its OWN namespace): resolve parent ClusterTenant → enforce isolation (PSA labels + ResourceQuota + LimitRange) → resolve effective AccessPolicy (precedence: explicit `policyRef` > selector > default > none) → ServiceAccount (+ Workload Identity annotation on GKE) → external storage → per-UserTenant AES-256 key Secret → LiteLLM virtual key (best-effort) → ConfigMap → state volume → single-replica Deployment + Service + Ingress → patch status. **All applies are server-side (fieldManager `openclane-operator`)** so re-runs are safe.
 - **Watch loop auto-reconnects** with 5s backoff (`shared/watch-runner.ts`); the K8s API closes streams every ~5–10 min — treat reconnects as normal, never as an error path.
 - **Namespace isolation is enforced per-ClusterTenant**: PSA *baseline* profile labels (not *restricted* — silos run 3rd-party planes like Obot's embedded root Postgres, Cognee-as-root, and Langfuse subcharts that can't meet *restricted*; *baseline* still blocks privileged containers, host namespaces, `hostPath`, and host ports; tightening is a tracked security follow-up), a `ResourceQuota` (cpu/mem/pods/storage/gpu), and a `LimitRange` (per-container defaults — required because the quota constrains `requests.*`). Pod placement: `nodeSelector` + `tolerations` are stamped only when the parent's `compute.mode = dedicated`; shared mode is left unconstrained (byte-for-byte baseline preserved).

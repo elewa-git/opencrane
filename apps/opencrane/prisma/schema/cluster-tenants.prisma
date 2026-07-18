@@ -10,7 +10,7 @@ enum OrgRole {
 
 /// Lifecycle status of an org membership, projected from the fleet (#126). A Suspended
 /// member has had their license disabled: the connect path fails closed and the repairer
-/// sweep cuts their sessions/devices and suspends their workspace pod.
+/// sweep cuts and suspends their single-user runtime pod.
 enum OrgMemberStatus {
   Active    @map("active")
   Suspended @map("suspended")

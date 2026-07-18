@@ -6,7 +6,7 @@ import type * as k8s from "@kubernetes/client-node";
 
 import type { OpenClawTenantOperatorConfig } from "../../../app/config.js";
 import type { AccessPolicy } from "../../policies/types.js";
-import type { Tenant } from "../models/tenant.interface.js";
+import type { Tenant } from "../models/tenant.types.js";
 import type { TenantModelSet } from "@opencrane/contracts";
 import { _BuildTenantLabels } from "./tenant-labels.js";
 
@@ -30,10 +30,7 @@ const _WORKSPACE_PATH = "/data/openclaw/workspace";
  *  - `thinkingDefault: "medium"` — a middle thinking level so reasoning-capable
  *    models actually produce a trace (with `"off"` there is nothing to show).
  *
- * These are DEFAULTS, not platform-pinned: they are spread BEFORE the tenant's
- * merged `agents.defaults`, so a tenant can dial either down via
- * `spec.configOverrides.agents.defaults` (e.g. `reasoningDefault: "off"` to save
- * tokens/latency). NOTE: enabling reasoning has a real token-cost/latency cost.
+ * These are platform defaults. Enabling reasoning has a real token-cost/latency cost.
  */
 const _REASONING_DEFAULT = "stream";
 const _THINKING_DEFAULT = "medium";
@@ -55,7 +52,7 @@ const _LITELLM_PROVIDER_ID = "litellm-proxy";
 
 /**
  * The official Cognee OpenClaw memory plugin id (npm `@cognee/cognee-openclaw`,
- * installed into the tenant runtime by `entrypoint.sh`). The operator gives it
+ * baked into the immutable tenant image). The operator gives it
  * exclusive ownership of OpenClaw's memory slot and renders its multi-scope config.
  */
 const _COGNEE_PLUGIN_ID = "cognee-openclaw";
@@ -75,7 +72,7 @@ function _toModelRef(publicModelName: string): string
  *
  * The generated ConfigMap serves three purposes:
  * - `openclaw.json` provides the effective OpenClaw gateway/runtime config
- *   after OpenCrane defaults are merged with any tenant overrides.
+ *   from platform-owned typed inputs.
  * - `opencrane-managed-runtime.json` gives the tenant runtime an explicit
  *   description of the platform context it is running under.
  * - Workspace files (`AGENTS.md`, `TOOLS.md`, `SOUL.md.seed`, etc.) are
@@ -114,7 +111,7 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
   const allowedModels = modelSet && modelSet.models.length > 0 ? [...modelSet.models] : [];
   const defaultModel = modelSet?.defaultModel ?? null;
 
-  // Owner identity this pod is pinned to. The gateway-verify broker injects the
+  // Owner identity this pod is pinned to. The gateway-resolve delegate injects the
   // session's verified email trimmed + lowercased, so the allowlist MUST use the
   // same normalisation or it would lock the owner out.
   const ownerEmail = tenant.spec.email.trim().toLowerCase();
@@ -263,23 +260,7 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
     },
   };
 
-  // 3. Tenant overrides — shallow-merge tenant customization on top of the base config.
-  const tenantMerged: Record<string, unknown> = tenant.spec.configOverrides
-    ? { ...baseConfig, ...tenant.spec.configOverrides }
-    : { ...baseConfig };
-
-  // 3b. Re-pin the platform-owned `gateway` block (CONN.10) — applied AFTER the tenant
-  //     merge so `spec.configOverrides.gateway` can never clobber it. The shallow merge
-  //     in step 3 is top-level: a tenant `gateway` override REPLACES the whole block,
-  //     which would drop the owner-pin (auth.trustedProxy.allowUsers=[owner]) and could
-  //     inject a stray key that crashes the strict gateway schema on boot. Restoring
-  //     baseConfig.gateway verbatim keeps the security-critical block under platform
-  //     control while every non-gateway override still applies. This mirrors the
-  //     agents.defaults re-application in step 4. A fresh spread (not the baseConfig
-  //     reference) keeps `merged` free of aliasing into the local baseConfig object.
-  tenantMerged["gateway"] = { ...(baseConfig["gateway"] as Record<string, unknown>) };
-
-  // 3c. Platform-owned `meta` stub at the config root. This is NOT tenant-facing config; it
+  // 3. Platform-owned `meta` stub at the config root.
   //     exists solely to satisfy OpenClaw@2026.6.11's own config-integrity guard.
   //
   //     CORRECTED (see PR #171 — a first attempt at this, PR #170, rendered a bare `meta: {}`
@@ -300,32 +281,23 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
   //
   //     `lastTouchedVersion` is a static, deterministic string (not a live timestamp) so the
   //     rendered ConfigMap never churns between reconciles — a moving `lastTouchedAt` would
-  //     force a spurious redeploy/reload on every poll cycle. Re-pinned after the tenant merge
-  //     (like `gateway`) so a tenant override can never drop it and reintroduce the bug.
-  tenantMerged["meta"] = { lastTouchedVersion: "opencrane-operator" };
+  //     force a spurious redeploy/reload on every poll cycle.
 
-  // 4. Platform-owned agent workspace settings — applied after the tenant merge so
-  //    they cannot be overridden by spec.configOverrides.  The workspace path must
-  //    be pinned to the persistent volume; skipBootstrap prevents the interactive
-  //    Q&A ritual in the headless pod environment.
-  const existingAgents = tenantMerged["agents"] as Record<string, unknown> | undefined;
-  const existingDefaults = (existingAgents?.["defaults"] as Record<string, unknown> | undefined) ?? {};
+  // 4. Platform-owned agent workspace settings. The workspace path is pinned to the
+  //    persistent volume; skipBootstrap prevents interactive setup in the headless pod.
   const merged: Record<string, unknown> = {
-    ...tenantMerged,
+    ...baseConfig,
+    meta: { lastTouchedVersion: "opencrane-operator" },
     agents: {
-      ...(existingAgents ?? {}),
       defaults: {
-        // Reasoning-visibility DEFAULTS (overridable) — spread first so a tenant's
-        // `configOverrides.agents.defaults` wins. Makes the model's thinking stream
-        // live and persist into `chat.history` (see _REASONING_DEFAULT).
+        // Reasoning visibility is a typed platform default and persists into chat.history.
         reasoningDefault: _REASONING_DEFAULT,
         thinkingDefault: _THINKING_DEFAULT,
-        ...existingDefaults,
         workspace: _WORKSPACE_PATH,
         skipBootstrap: true,
         // Effective default model (from the tenant's model set). OpenClaw reads the default
         // from `agents.defaults.model`, NOT `models.default`. Applied platform-side so it
-        // can't be dropped by a tenant `configOverrides.agents` override. Omitted when no
+        // cannot be dropped by runtime input. Omitted when no
         // default resolves (then OpenClaw falls back to its own model selection).
         //
         // MUST be prefixed with the litellm-proxy provider id (`_toModelRef`): OpenClaw resolves
@@ -337,9 +309,8 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
     },
   };
 
-  // 5. Platform-owned memory plugin — applied after the tenant merge so a `spec.configOverrides`
-  //    can't drop or weaken it. When Cognee is wired, give the official `@cognee/cognee-openclaw`
-  //    plugin (installed into the runtime by entrypoint.sh) EXCLUSIVE ownership of OpenClaw's memory
+  // 5. Platform-owned memory plugin. When Cognee is wired, give the image-baked
+  //    `@cognee/cognee-openclaw` plugin EXCLUSIVE ownership of OpenClaw's memory
   //    slot and disable the built-in `memory-core`. OpenClaw registers the memory capability ONLY for
   //    the slot owner, so the built-in's embedding index — which self-disables with "index metadata is
   //    missing" on a provider/model mismatch and would otherwise shadow this — never surfaces. The
@@ -348,19 +319,15 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
   if (config.cogneeEndpoint)
   {
     const subject = tenant.spec.subject?.trim() || ownerEmail;
-    const existingPlugins = (merged["plugins"] as Record<string, unknown> | undefined) ?? {};
-    const existingSlots = (existingPlugins["slots"] as Record<string, unknown> | undefined) ?? {};
-    const existingEntries = (existingPlugins["entries"] as Record<string, unknown> | undefined) ?? {};
     merged["plugins"] = {
-      ...existingPlugins,
+      load: { paths: ["/opt/openclaw/node_modules/@cognee/cognee-openclaw"] },
       // Security allowlist — only platform-approved plugins load (MUST be an array; an object crashes
       // OpenClaw's config parse). Forced platform-side so a tenant can't allow arbitrary plugins.
       allow: [_COGNEE_PLUGIN_ID],
       // Exclusive memory slot: OpenClaw skips memory-capability registration for any non-slot plugin,
       // so the stale built-in memory is fully out of the picture.
-      slots: { ...existingSlots, memory: _COGNEE_PLUGIN_ID },
+      slots: { memory: _COGNEE_PLUGIN_ID },
       entries: {
-        ...existingEntries,
         // Retire the built-in memory provider (the source of the broken native `memory_search`).
         "memory-core": { enabled: false },
         [_COGNEE_PLUGIN_ID]: {

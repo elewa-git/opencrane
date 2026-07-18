@@ -4,8 +4,8 @@ import { z } from "zod";
  * Vendored zod schema for the `openclaw.json` the operator emits, used to
  * validate the rendered config in the contract test (task_d611ab4d).
  *
- * PINNED OpenClaw version: 2026.6.x (operator `config.ts` `defaultOpenclawVersion`
- * = "2026.6.11"). OpenClaw is shipped as a container image, not an npm dependency,
+ * PINNED OpenClaw version: 2026.6.11 (baked into the immutable tenant image).
+ * OpenClaw is shipped as a container image, not an npm dependency,
  * so its canonical schema is not importable; this file VENDORS a strict best-effort
  * mirror of the documented config schema for the subset of keys the operator emits.
  *
@@ -160,46 +160,11 @@ const _agentsDefaultsSchema = z
   })
   .passthrough();
 
-/**
- * Agents block. `.passthrough()` mirrors the gateway/agents asymmetry: tenants may
- * extend agents config, so only the platform-pinned `defaults` keys are asserted.
- */
+/** Agents block carrying platform-owned defaults. */
 const _agentsSchema = z
   .object({
     /** Default agent settings applied to every agent in the pod. */
     defaults: _agentsDefaultsSchema,
-  })
-  .passthrough();
-
-/**
- * A single `mcp.servers` entry. INFERRED shape (docs: configuration-reference): a LOCAL
- * server uses `command` + `args` (stdio transport); a REMOTE server uses `url` + `transport`
- * ("streamable-http"/"sse"). Common optional fields (headers, toolFilter, timeouts) are tolerated
- * via `.passthrough()` rather than pinned. The operator no longer emits any local server (memory
- * moved to the Cognee plugin); this remains only for tenant-declared `mcp.servers`.
- */
-const _mcpServerSchema = z
-  .object({
-    /** Executable to spawn for a local stdio server (e.g. `node`). */
-    command: z.string().optional(),
-    /** Arguments for the spawned local server. */
-    args: z.array(z.string()).optional(),
-    /** Endpoint URL for a remote server. */
-    url: z.string().optional(),
-    /** Remote transport kind. */
-    transport: z.enum(["streamable-http", "sse"]).optional(),
-  })
-  .passthrough();
-
-/**
- * MCP block. Optional — the operator no longer emits it (memory moved to the Cognee plugin), but a
- * tenant MAY declare its own `mcp.servers` via configOverrides, so the schema still admits it.
- * `.passthrough()` at the block level tolerates any sibling MCP keys OpenClaw accepts.
- */
-const _mcpSchema = z
-  .object({
-    /** Server id → server config map. */
-    servers: z.record(z.string(), _mcpServerSchema),
   })
   .passthrough();
 
@@ -212,6 +177,8 @@ const _mcpSchema = z
  */
 const _pluginsSchema = z
   .object({
+    /** Explicit image-baked plugin source paths. */
+    load: z.object({ paths: z.array(z.string()) }).strict().optional(),
     /** Security allowlist of plugin ids permitted to load (array form is required by OpenClaw). */
     allow: z.array(z.string()).optional(),
     /** Capability slot → owning plugin id (e.g. `{ memory: "cognee-openclaw" }`). */
@@ -237,10 +204,7 @@ const _pluginsSchema = z
   .passthrough();
 
 /**
- * Top-level `openclaw.json` schema for the operator-emitted config. `.passthrough()`
- * at the root tolerates tenant `configOverrides` adding non-platform top-level keys
- * (which is supported), while the nested `gateway` block stays `.strict()` — exactly
- * the override-can't-clobber-gateway contract C1 enforces.
+ * Top-level `openclaw.json` schema for the operator-emitted config.
  */
 export const _OpenclawConfigSchema = z
   .object({
@@ -252,8 +216,6 @@ export const _OpenclawConfigSchema = z
     agents: _agentsSchema,
     /** Platform-owned plugins block — runs the Cognee memory plugin as the memory-slot owner. */
     plugins: _pluginsSchema.optional(),
-    /** Optional MCP block (only when a tenant declares its own `mcp.servers`). */
-    mcp: _mcpSchema.optional(),
     /**
      * Platform-owned `meta` stub — satisfies OpenClaw@2026.6.11's config-integrity guard
      * (`hasConfigMeta$1` in `dist/io-*.js`, verified against the installed binary: requires
@@ -268,4 +230,4 @@ export const _OpenclawConfigSchema = z
       .passthrough()
       .optional(),
   })
-  .passthrough();
+  .strict();

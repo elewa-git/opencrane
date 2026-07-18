@@ -83,11 +83,6 @@ OTLP backend. Two modes:
 `debug` | `info` | `warn` | `error`. Pretty-printed logs are a dev-only convenience
 (`NODE_ENV` ≠ `production`) and never the default in a container.
 
-### The CLI is different on purpose
-
-The `oc` CLI logs to **stderr**, never stdout — stdout is reserved for `--output json`, so
-piping CLI output into other tools stays clean. The CLI also never binds `console`.
-
 ## See also
 
 - [Runbook](/operators/runbook) — operational procedures

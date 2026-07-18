@@ -142,86 +142,15 @@ describe("openclaw.json render contract — zod schema (task_d611ab4d)", functio
 });
 
 /**
- * C1 — a tenant `configOverrides.gateway` must NOT clobber the platform-owned
- * gateway block. Step 3b of `_BuildConfigMap` re-pins `baseConfig.gateway` after
- * the tenant merge, so a gateway override can never drop the owner-pin (CONN.10)
- * or inject a stray key that crashes the strict gateway schema.
- */
-describe("configOverrides cannot clobber the platform gateway (C1)", function _c1Suite()
-{
-  function _render(overrides: Record<string, unknown>): Record<string, unknown>
-  {
-    const tenant = _makeTenant("contract", { configOverrides: overrides });
-    const configMap = _BuildConfigMap(defaultConfig, tenant, "default");
-    return JSON.parse(configMap.data?.["openclaw.json"] ?? "{}") as Record<string, unknown>;
-  }
-
-  it("ignores a malicious gateway override (no stray key, owner-pin preserved)", function _gatewayOverride()
-  {
-    // A tenant tries to replace the gateway block: it drops allowUsers AND injects a
-    // stray key. After the re-pin, neither must survive.
-    const config = _render({
-      gateway: {
-        mode: "local",
-        port: 18789,
-        bind: "lan",
-        trustedProxies: ["0.0.0.0/0"],
-        auth: { mode: "trusted-proxy", trustedProxy: { userHeader: "X-Forwarded-User" } },
-        // Stray key + a malicious wide-open trustedProxies + missing allowUsers.
-        trustNothing: true,
-      },
-    });
-
-    const gateway = config["gateway"] as Record<string, unknown>;
-    const auth = gateway["auth"] as Record<string, unknown>;
-    const trustedProxy = auth["trustedProxy"] as { allowUsers: string[] };
-
-    // 1. Owner-pin survives — the override's missing allowUsers did not win.
-    expect(trustedProxy.allowUsers).toEqual(["contract@example.com"]);
-    // 2. The stray key is gone — the platform block was restored verbatim.
-    expect(gateway).not.toHaveProperty("trustNothing");
-    // 3. The platform trustedProxies (fixture default), not the wide-open override, applies.
-    expect(gateway["trustedProxies"]).toEqual(["10.0.0.0/8"]);
-    // 4. The result still validates against the strict OpenClaw schema.
-    expect(_OpenclawConfigSchema.safeParse(config).success).toBe(true);
-    // 5. `meta` survives too — a tenant can't drop it and reopen the config-integrity clobber.
-    expect(_satisfiesOpenClawConfigMetaGuard(config)).toBe(true);
-  });
-
-  it("ignores a tenant override of the platform-owned meta stub", function _metaOverride()
-  {
-    // A tenant tries to override `meta` with a value that would NOT satisfy OpenClaw's guard
-    // (a bare object, no string sub-field — exactly PR #170's mistake). The re-pin must restore
-    // the platform's own conforming value regardless of what the tenant supplied.
-    const config = _render({ meta: { lastTouchedVersion: 12345 } });
-    expect(_satisfiesOpenClawConfigMetaGuard(config)).toBe(true);
-    expect((config["meta"] as Record<string, unknown>)["lastTouchedVersion"]).toBe("opencrane-operator");
-  });
-
-  it("still applies a non-gateway override", function _nonGatewayOverride()
-  {
-    // A non-platform top-level override must pass through untouched.
-    const config = _render({ telemetry: { enabled: false } });
-    expect(config["telemetry"]).toEqual({ enabled: false });
-
-    // ...and the gateway block is still the platform-owned one.
-    const auth = (config["gateway"] as Record<string, unknown>)["auth"] as Record<string, unknown>;
-    const trustedProxy = auth["trustedProxy"] as { allowUsers: string[] };
-    expect(trustedProxy.allowUsers).toEqual(["contract@example.com"]);
-  });
-});
-
-/**
  * Reasoning visibility — `agents.defaults.reasoningDefault`/`thinkingDefault` make
  * the model's thinking stream live AND persist into `chat.history` (rendered as a
- * collapsible "Thinking" card in the org-admin SPA). They are DEFAULTS a tenant
- * can override, not platform-pinned like the gateway block.
+ * collapsible "Thinking" card in the org-admin SPA).
  */
 describe("reasoning visibility defaults", function _reasoningSuite()
 {
-  function _render(overrides?: Record<string, unknown>): Record<string, unknown>
+  function _render(): Record<string, unknown>
   {
-    const tenant = _makeTenant("contract", overrides ? { configOverrides: overrides } : undefined);
+    const tenant = _makeTenant("contract");
     return JSON.parse(_BuildConfigMap(defaultConfig, tenant, "default").data?.["openclaw.json"] ?? "{}") as Record<string, unknown>;
   }
 
@@ -238,12 +167,4 @@ describe("reasoning visibility defaults", function _reasoningSuite()
     expect(_OpenclawConfigSchema.safeParse(_render()).success).toBe(true);
   });
 
-  it("lets a tenant override reasoning off to save tokens", function _override()
-  {
-    const config = _render({ agents: { defaults: { reasoningDefault: "off" } } });
-    const defaults = _defaults(config);
-    expect(defaults["reasoningDefault"]).toBe("off"); // tenant wins over the platform default
-    expect(defaults["workspace"]).toBe("/data/openclaw/workspace"); // platform-pinned keys still applied
-    expect(_OpenclawConfigSchema.safeParse(config).success).toBe(true);
-  });
 });

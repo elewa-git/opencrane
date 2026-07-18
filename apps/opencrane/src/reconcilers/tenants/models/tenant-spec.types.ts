@@ -20,12 +20,6 @@ export interface TenantSpec
   /** Optional team identifier for grouping tenants. */
   team?: string;
 
-  /** Custom container image override for the tenant pod. */
-  openclawImage?: string;
-
-  /** OpenClaw version to install (e.g. "latest", "2026.3.15"). Defaults to "latest". */
-  openclawVersion?: string;
-
   /** Optional monthly budget for the tenant's LiteLLM virtual key (USD). */
   monthlyBudgetUsd?: number;
 
@@ -36,30 +30,6 @@ export interface TenantSpec
     /** Memory resource request (e.g. "256Mi"). */
     memory?: string;
   };
-
-  /**
-   * Per-tenant MCP server allow/deny policy applied at invocation level.
-   * Complements the AccessPolicy mcpServers field with tenant-specific overrides.
-   */
-  mcpPolicy?: {
-    /** MCP server names explicitly allowed for this tenant. */
-    allow?: string[];
-    /** MCP server names explicitly denied for this tenant. */
-    deny?: string[];
-  };
-
-  /** Channel adapter configuration for tenant communication integrations. */
-  channels?: Array<{
-    /** Adapter identifier (e.g. "slack", "whatsapp", "teams", "sharepoint"). */
-    adapter: string;
-    /** Adapter configuration payload understood by the selected adapter implementation. */
-    config?: Record<string, unknown>;
-    /** Optional Kubernetes Secret name containing adapter credentials. */
-    credentialsSecretName?: string;
-  }>;
-
-  /** Arbitrary OpenClaw config overrides merged into the base config. */
-  configOverrides?: Record<string, unknown>;
 
   /** Name of an AccessPolicy CR to bind to this tenant. */
   policyRef?: string;

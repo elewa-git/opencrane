@@ -1,4 +1,4 @@
-import { Injectable, Signal, computed, inject, signal } from "@angular/core";
+import { ErrorHandler, Injectable, Signal, computed, inject, signal } from "@angular/core";
 
 import { AgentOption, ControlPlaneApiService, MessageCardKind, MessageDelivery, ModelOption, SessionSummary, ThreadData, ThreadMessage } from "@opencrane/core";
 import { CONVERSATION_CACHE, ConnectionStatus, ConversationGateway, SessionStore } from "@opencrane/state/core";
@@ -63,6 +63,8 @@ export class OpenClawConversationGateway implements ConversationGateway
 {
 	private readonly _api = inject(ControlPlaneApiService);
 	private readonly _session = inject(SessionStore);
+	/** Angular's application error boundary for rejected gateway frames. */
+	private readonly _errorHandler = inject(ErrorHandler);
 	private readonly _cache = inject(CONVERSATION_CACHE, { optional: true });
 
 	private readonly _status = signal<ConnectionStatus>(ConnectionStatus.Idle);
@@ -539,7 +541,7 @@ export class OpenClawConversationGateway implements ConversationGateway
 	 * Contract (the live handler, `infra/auth/auth.router.ts`): the response is
 	 * `{ gatewayUrl, tenant, ingressHost }`. We prefer the explicit `gatewayUrl` and
 	 * fall back to `wss://<ingressHost>` (the same fallback OpenCrane uses in
-	 * `infra/auth/openclaw-pairing.ts`).
+	 * the control plane's ingress-host-derived connection broker).
 	 *
 	 * SECURITY: under trusted-proxy gateway auth (CONN.9/CONN.10) the browser holds no
 	 * credential — the identity-routing proxy authorises the socket against the OIDC
@@ -754,7 +756,7 @@ export class OpenClawConversationGateway implements ConversationGateway
 	/** Log validation failures without crashing the stream. */
 	private _onInvalid(raw: unknown, reason: string): void
 	{
-		console.warn(`[openclaw] dropped invalid frame: ${reason}`, raw);
+		this._errorHandler.handleError(new Error(`OpenClaw gateway dropped an invalid frame: ${reason}`, { cause: raw }));
 	}
 
 	/**

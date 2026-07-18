@@ -1,0 +1,34 @@
+# Frozen-blue Linkerd reference allowlist, captured for Phase A / issue #245.
+#
+# The Phase A guard permits Linkerd references only in these already-existing paths. Entries may
+# disappear as blue is replaced; adding a new path is forbidden. Historical ADR/design/website
+# references are included because they explain the superseded decision. Runtime/config paths are
+# frozen blue and are deleted only after the enforcing Cilium replacement passes R9/R10.
+
+apps/opencrane-infra/templates/clustertenant-manager-deployment.yaml
+apps/opencrane-infra/values.yaml
+apps/opencrane/src/__tests__/fixtures.ts
+apps/opencrane/src/__tests__/tenants/linkerd-identity.client.test.ts
+apps/opencrane/src/__tests__/tenants/tenant-resource-builder.test.ts
+apps/opencrane/src/app/config.ts
+apps/opencrane/src/reconcilers/tenants/deploy/index.ts
+apps/opencrane/src/reconcilers/tenants/deploy/silo-linkerd-identity.ts
+apps/opencrane/src/reconcilers/tenants/deploy/silo-linkerd-identity.types.ts
+apps/opencrane/src/reconcilers/tenants/internal/linkerd-identity.client.ts
+apps/opencrane/src/reconcilers/tenants/operator.ts
+CHANGELOG.md
+docs/adr/0001-cluster-tenant-virtual-network-isolation.md
+docs/adr/0002-per-clustertenant-silo-architecture.md
+docs/adr/0003-cilium-spiffe-identity-substrate.md
+docs/design/personal-agent-platform-architecture.md
+docs/design/personal-agent-platform-rewrite-freeze-plan.md
+docs/design/personal-agent-platform-simplification-plan.md
+docs/optimalisation-plan.md
+libs/infra/api/src/cluster-tenant-namespace.ts
+libs/infra/api/src/custom-object-apply.ts
+libs/infra/api/src/index.ts
+libs/infra/api/src/linkerd.ts
+libs/k8s-platform/templates/_helpers.tpl
+silo-multi-tenant-plan.md
+website/operators/cilium-spiffe-identity.md
+website/operators/networking.md

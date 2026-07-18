@@ -4,8 +4,8 @@
 control plane: a typed TypeScript client (`openapi-fetch`) plus DTOs generated
 from the OpenCrane OpenAPI 3.1 specification emitted during the build.
 
-It is the same contract the `oc` CLI consumes — and the recommended way for any
-external surface to talk to OpenCrane.
+It is the contract used by the OpenCrane UI and the recommended way for any external
+surface to talk to OpenCrane.
 
 ## Licensing — MIT, deliberately
 
@@ -36,9 +36,9 @@ pnpm exec openapi-typescript openapi/opencrane.json -o src/api/generated.ts
 
 ## The spec is the source of truth
 
-The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**, so
-the SDK, the CLI, and the [interactive API reference](/reference/api) on this site
-never drift from the implementation.
+The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**, so the
+SDK and the [interactive API reference](/reference/api) on this site never drift from
+the implementation.
 
 ## Related
 

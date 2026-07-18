@@ -13,7 +13,7 @@ person, and you configure the shared platform planes those assistants draw on.
 <defs><marker id="oc-ah" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="#8a94a6"/></marker></defs>
 <rect class="oc-cp" x="270" y="20" width="340" height="66" rx="12"/>
 <text x="440" y="48" text-anchor="middle" style="font:700 17px ui-sans-serif,system-ui;fill:#fff">Control plane</text>
-<text x="440" y="69" text-anchor="middle" style="font:400 12px ui-sans-serif,system-ui;fill:#e7fbff">oc CLI · REST API · OpenAPI</text>
+<text x="440" y="69" text-anchor="middle" style="font:400 12px ui-sans-serif,system-ui;fill:#e7fbff">OpenCrane UI · REST API · OpenAPI clients</text>
 <path class="oc-arr" d="M440,86 V148"/>
 <text class="oc-al" x="450" y="120">creates &amp; configures</text>
 <rect class="oc-op" x="28" y="150" width="92" height="262" rx="12"/>
@@ -40,7 +40,7 @@ person, and you configure the shared platform planes those assistants draw on.
 <text x="442" y="368" text-anchor="middle" class="oc-l">Skills</text>
 <rect class="oc-box" x="548" y="338" width="168" height="50" rx="9"/>
 <text x="632" y="368" text-anchor="middle" class="oc-l">Knowledge</text>
-<text x="440" y="440" text-anchor="middle" class="oc-s">Everything is API-first — the oc CLI and any custom UI are just clients.</text>
+<text x="440" y="440" text-anchor="middle" class="oc-s">Everything is API-first — the OpenCrane UI and custom integrations are peers.</text>
 </svg>
 </figure>
 

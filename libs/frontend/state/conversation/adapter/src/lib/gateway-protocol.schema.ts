@@ -61,8 +61,8 @@ export const GATEWAY_OPERATION_EVENT = "session.operation";
 
 /**
  * Gateway → client event frame. `event` is left open (`Type.String()`): the
- * protocol has many families (chat, session.*, presence, tick, pairing,
- * approvals, …) and a strict union would reject — and so silently drop — valid
+ * protocol has many families (chat, session.*, presence, tick, approvals,
+ * …) and a strict union would reject — and so silently drop — valid
  * frames we don't specifically handle.
  */
 export const EventFrameSchema = Type.Object({
@@ -77,7 +77,7 @@ export const EventFrameSchema = Type.Object({
 export const FrameSchema = Type.Union([ReqFrameSchema, ResFrameSchema, EventFrameSchema]);
 
 // ---------------------------------------------------------------------------
-// connect handshake (https://docs.openclaw.ai/channels/pairing)
+// connect handshake (https://docs.openclaw.ai/gateway/protocol)
 // ---------------------------------------------------------------------------
 
 /**

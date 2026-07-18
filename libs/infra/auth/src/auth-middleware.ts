@@ -4,20 +4,13 @@ import type { NextFunction, Request, RequestHandler, Response } from "express";
 
 import { ___LoadOidcAuthConfig } from "./oidc-config.js";
 import type { OidcAuthConfig } from "./oidc-config.types.js";
+import type { AccessTokenReader } from "./auth-middleware.types.js";
 
 /**
  * Minimal `AccessToken` read surface for per-user DB token validation. A manager that
- * issues `oc auth login` tokens (the clustertenant-manager) passes its client; one that
+ * issues device-flow access tokens (the clustertenant-manager) passes its client; one that
  * does not (the fleet-manager has no `AccessToken` model) omits it, skipping step 5.
  */
-export interface AccessTokenReader
-{
-  accessToken: {
-    findFirst(args: unknown): Promise<{ id: string } | null>;
-    update(args: unknown): Promise<unknown>;
-  };
-}
-
 /**
  * Express authentication middleware shared by both managers.
  *
@@ -25,7 +18,7 @@ export interface AccessTokenReader
  *   1. Public path bypass  — /healthz and /api/v1/auth/* never require a token.
  *   2. OIDC session        — a valid session cookie from the browser login flow.
  *   3. Env-var token       — OPENCRANE_API_TOKEN, for CI automation without a DB.
- *   4. DB access token      — per-user token created via `oc auth login` (when a reader is given).
+ *   4. DB access token      — per-user token created through the device flow or API.
  *   5. Dev-mode bypass     — when neither OIDC nor OPENCRANE_API_TOKEN is configured.
  *
  * The env-var token and OIDC config are snapshotted when the factory is called —

@@ -15,7 +15,8 @@ non-participation = warn**.
 A tenant reported a policy-violating skill execution. The locked SLO is a rate of
 **0**, so any non-zero value pages.
 
-1. Identify the tenant(s): `oc awareness participation --severity critical`.
+1. Identify the tenant(s) with authenticated
+   `GET /api/v1/awareness/participation?severity=critical`.
 2. Inspect the violating executions in the participation events / audit log for
    that tenant; determine which skill + scope was involved.
 3. Confirm the grant compiler + Cognee ACL (P4B.2) are correctly denying the
@@ -33,12 +34,12 @@ A tenant reported a policy-violating skill execution. The locked SLO is a rate o
 Tenants are running an awareness contract version different from the one their
 rollout wave expects. Usually transient during a canary promotion.
 
-1. `oc awareness participation --severity warning` to list drifted tenants;
-   `oc awareness rollout show` for the current target/frontier.
+1. Use authenticated `GET /api/v1/awareness/participation?severity=warning` to list
+   drifted tenants and `GET /api/v1/awareness/rollout` for the current target/frontier.
 2. If drift persists past a promotion, the tenant pod has not re-pulled the
    contract — check the pod's contract poll loop / connectivity.
 3. A drift that should not exist (tenant ahead/behind unexpectedly) may indicate a
-   failed rollback — consider `oc awareness rollout rollback`.
+   failed rollback — consider authenticated `POST /api/v1/awareness/rollout/rollback`.
 
 ## non-participation
 
@@ -46,7 +47,8 @@ rollout wave expects. Usually transient during a canary promotion.
 
 Tenants have not reported a participation event within the staleness window.
 
-1. `oc awareness participation --severity warning` to list non-participating tenants.
+1. Use authenticated `GET /api/v1/awareness/participation?severity=warning` to list
+   non-participating tenants.
 2. Confirm the tenant pod is running and can reach the opencrane-api internal
    participation endpoint (NetworkPolicy + projected `opencrane-server` token).
 3. A newly-provisioned tenant that has never emitted an event will show here until

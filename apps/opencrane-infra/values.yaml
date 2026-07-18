@@ -153,8 +153,9 @@ sharedPlatform:
   externalSecrets:
     # -- `instance` (default): render this release's own ClusterSecretStore +
     #    ExternalSecret. `shared`: reference an externally-managed ClusterSecretStore
-    #    by name at `shared.secretStoreName` and skip rendering the store here (the
-    #    per-instance ExternalSecret still targets this release's `orgSecrets.secretName`).
+    #    by name at `shared.secretStoreName` and skip rendering the store here. Workloads
+    #    bind only explicitly configured, scoped secrets; this chart does not broadcast one
+    #    org-wide Secret into tenant pods.
     mode: instance
     shared:
       # -- Name of the externally-provided ClusterSecretStore to bind ExternalSecrets to.
@@ -639,11 +640,11 @@ litellm:
     publicKeyKey: LANGFUSE_PUBLIC_KEY
     secretKeyKey: LANGFUSE_SECRET_KEY
 
-# -- Default tenant pod settings (can be overridden per Tenant CR)
+# -- Default tenant pod settings. Runtime code versions are baked into this image.
 tenant:
   defaultImage:
     repository: ghcr.io/italanta/opencrane-openclaw-tenant
-    tag: latest
+    tag: openclaw-2026.6.11-cognee-2026.7.9
     pullPolicy: IfNotPresent
   defaultResources:
     requests:
@@ -665,7 +666,7 @@ tenant:
   gateway:
     # -- CIDR(s)/IP(s) the gateway trusts the X-Forwarded-User identity header from
     #    — the ingress controller's pod source range. The opencrane-ui brokers every
-    #    gateway WebSocket upgrade (auth_request → /auth/gateway-verify → 204 +
+    #    gateway WebSocket upgrade (delegate auth → /auth/gateway-resolve +
     #    X-Forwarded-User), so the gateway honours that header only from a trusted source.
     #
     #    FAIL-CLOSED: an EMPTY list means **trust nothing** — the gateway honours no
@@ -684,11 +685,6 @@ tenant:
     # -- Prefix length `[auto]` masks POD_IP to (e.g. 14 → /14, the GKE pod range).
     #    Empty ⇒ operator default (/14). Only consulted when trustedProxies is `[auto]`.
     trustedProxiesAutoMask: ""
-  # -- OpenClaw npm package version installed into each tenant pod. Pinned (not `latest`)
-  # so the gateway can't silently roll across breaking changes; bump deliberately. A
-  # Tenant CR's `spec.openclawVersion` overrides this per-tenant.
-  defaultOpenclawVersion: "2026.6.11"
-
 # -- Hosting provider: onprem (default), gcp, azure, aws.
 # Override with values/gcp.yaml etc. for cloud installs.
 hosting:
@@ -915,7 +911,7 @@ certManager:
   includeApex: false
   # -- Name of the ClusterIssuer this chart creates and the Certificate references.
   issuerName: opencrane-issuer
-  # -- cert-manager controller namespace. The `oc platform dns set` endpoint writes
+  # -- cert-manager controller namespace. `PUT /api/v1/platform/dns` writes
   # the DNS-01 credentials Secret here (cert-manager reads ClusterIssuer solver
   # Secrets only from its own namespace), and the opencrane-ui gets a namespaced
   # Role here for that write (see opencrane-ui-rbac.yaml). Wired to the opencrane-ui
@@ -1168,15 +1164,6 @@ networkPolicy:
     #    Only needed when observability.otel.enabled=true AND the OTEL exporter sends
     #    to an external backend (e.g. GCP Cloud Trace). Ignored when the policy is not rendered.
     allowOtelEgress: false
-
-# -- Org-wide secrets injected into all tenant pods
-orgSecrets:
-  # -- Name of the Kubernetes Secret containing org-wide API keys
-  secretName: org-shared-secrets
-  # -- Keys to inject as env vars (key in Secret -> env var name)
-  envMappings: {}
-  #   openai-api-key: OPENAI_API_KEY
-  #   anthropic-api-key: ANTHROPIC_API_KEY
 
 # -- External Secrets Operator integration
 externalSecrets:

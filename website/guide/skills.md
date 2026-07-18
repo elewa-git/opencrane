@@ -15,7 +15,9 @@ Browse what's already there, or add a new one by name, version, and starting sco
 A skill is added in **draft** and must pass a **security scan** before it can go live —
 so an unsafe skill never reaches an assistant.
 
-Manage this from the command line — see [CLI reference → `oc skills`](/reference/cli#oc-skills).
+Use `GET /api/v1/skills/catalog` to browse the catalogue and
+`POST /api/v1/skills/catalog` to publish a bundle. Both require authentication; the
+[interactive API reference](/reference/api) carries the current payload schemas.
 
 ## Share it more widely (promotion)
 

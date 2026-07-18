@@ -22,7 +22,7 @@ The sidebar in `website/.vitepress/config.ts` is the source of truth. Sections a
 | Section | Dir | Audience & purpose |
 |---------|-----|--------------------|
 | Start here · Get set up · Guides | `guide/` | End users / admins. Plain language, task-first, minimal jargon. |
-| Reference | `reference/` (+ `integrators/contracts-sdk`) | CLI / API lookup. |
+| Reference | `reference/` (+ `integrators/contracts-sdk`) | REST API and generated-client lookup. |
 | Operating OpenCrane | `operators/`, `security/` | Operators. Hosting, DNS, identity, runbook, telemetry, SLOs. |
 | Deep dives | `integrators/` | Integrators/engineers. Runtime planes & governance (MCP gateway, skill registry, retrieval, agent workspace). |
 | Advanced | `advanced/` | Architecture & multi-instance — conceptual tours. |

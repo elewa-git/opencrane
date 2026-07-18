@@ -58,9 +58,6 @@
       "@opencrane/backend/retrieval": [
         "./libs/backend/retrieval/main/src/index.ts"
       ],
-      "@opencrane/backend/sessions": [
-        "./libs/backend/sessions/main/src/index.ts"
-      ],
       "@opencrane/backend/skills": [
         "./libs/backend/skills/main/src/index.ts"
       ],

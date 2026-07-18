@@ -24,15 +24,21 @@ The non-obvious shape of the system (verified June 2026). Read this before touch
 |-------|------|----------|
 | **opencrane-api** | API-first management surface (`/api/v1`), OIDC broker, source of truth for Tenants/AccessPolicies/Grants/MCP/Skills. Dual-writes CRDs + Postgres. | everything |
 | **operator** | Reconciles UserTenant (`Tenant`)/ClusterTenant/AccessPolicy CRs → namespaces, pods, Ingresses, NetworkPolicies, buckets. | Kubernetes API |
-| **Obot MCP gateway** | Config-slaved runtime gateway; **polls** opencrane-api `GET /api/internal/obot-registry`. Tenant pods reach MCP servers *through* Obot. | opencrane-api (poll), tenant pods |
+| **Obot MCP gateway** | MCP credential custody and tool-execution PEP. OpenCrane owns catalog and grants; tenant pods reach MCP servers *through* Obot. | tenant pods, MCP workloads |
 | **feat-skill-registry** | Entitlement-gated skill-bundle delivery; validates pod identity via TokenReview, proxies to opencrane-api. Non-entitled → **404** (existence-hiding). | opencrane-api, tenant pods |
 | **feat-central-agents** | Background ingestion worker (Slack connector → Postgres `OrgDocument`). Not API-first. | external sources, Postgres |
 
-**Identity is multi-credential** — five non-interchangeable types: (1) OIDC session cookie (human operators), (2) OpenClaw bootstrap token (short-lived, one-device pairing), (3) OpenClaw device token (gateway-issued), (4) **projected SA token** (audience-bound: `aud=obot-gateway|feat-skill-registry|opencrane-server`, ~600s rotated, in-cluster only, never handed to a browser), (5) static `OPENCRANE_API_TOKEN` (automation fallback, explicit migration target). One human OIDC login brokers the pod pairing — `POST /api/v1/auth/pod-token` resolves tenant **solely from the verified session email** (fail-closed `409 AMBIGUOUS_TENANT`), never from request input.
+**Identity is multi-credential**, with non-interchangeable purposes: (1) OIDC session cookie for
+human operators, (2) **projected SA tokens** for in-cluster workloads (audience-bound:
+`aud=obot-gateway|feat-skill-registry|opencrane-server`, short-lived and rotated, never handed to a
+browser), and (3) static `OPENCRANE_API_TOKEN` as an explicit automation/break-glass migration
+target. The temporary `POST /api/v1/auth/pod-token` connection-preflight route resolves the tenant
+**solely from the verified session email** (fail-closed `409 AMBIGUOUS_TENANT`) and returns connection
+coordinates, not a pod or gateway credential. It expires at that silo's R9 cutover.
 
 **Two facts that catch agents out:**
 
-- **`___AuthMiddleware` does NOT enforce per-route roles today** (`apps/opencrane-api/src/infra/middleware/auth.middleware.ts`). It's a fallback chain: public paths → OIDC cookie → env token → DB access token → dev bypass. Role/capability claims are a *planned* target — do not assume RBAC at the route layer.
+- **`___AuthMiddleware` does NOT enforce per-route roles today** (`libs/infra/auth/src/auth-middleware.ts`). It's a fallback chain: public paths → OIDC cookie → env token → DB access token → dev bypass. Role/capability claims are a *planned* target — do not assume RBAC at the route layer.
 - **State is dual-written: CRD is source of truth, Postgres is a projection.** Every Tenant/AccessPolicy mutation hits both. Drift between them is expected and has explicit tooling (`GET /tenants/drift`, `POST /tenants/repair`, projection-drift metrics). Don't "fix" a divergence by writing only one side.
 
 **Effective contract:** each tenant's entitlements compile into one SHA256-keyed JSON blob (`GET /:name/effective-contract`) covering awareness datasets + MCP servers + skill bundles. Tenant pods re-pull it on a ~30s loop; on `contractId` change the pod gets a SIGHUP + a re-rendered config. This is the runtime authorization mechanism — changing a grant is not effective until the contract recompiles and the pod re-pulls.

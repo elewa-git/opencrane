@@ -21,14 +21,16 @@ with citations**, instead of guessing.
 So every assistant behaves the same way when it looks things up — same rules for
 which sources to use, when to cite, and how fresh information must be — OpenCrane
 applies a shared set of rules across the fleet. You roll changes out gradually (to a
-few assistants first, then everyone) and can undo in one step. Manage this from the
-command line — see [CLI reference → `oc awareness`](/reference/cli#oc-awareness).
+few assistants first, then everyone) and can undo in one step. Inspect or change the
+rollout through the authenticated `/api/v1/awareness/rollout` endpoints; see
+[Awareness SLOs](/operators/awareness-slos) for the operational sequence.
 
-## Keep contexts from bleeding together
+## Keep access boundaries consistent
 
-To stop one project's context from leaking into an unrelated chat, you can pin a
-conversation to a scope. Manage this from the command line — see
-[CLI reference → `oc sessions`](/reference/cli#oc-sessions).
+Knowledge access follows the assistant owner's authenticated identity, group
+membership, and dataset grants. Starting a new conversation never widens those
+rights; change them through the same [access controls](/guide/permissions) used for
+skills and tools.
 
 ## Going deeper
 

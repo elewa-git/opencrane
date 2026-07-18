@@ -7,7 +7,7 @@ import { _OperatorConfigChecksum } from "../../app/config.js";
 import { TenantOperator } from "../../reconcilers/tenants/operator.js";
 import { TenantStatusPhase } from "../../reconcilers/tenants/models/tenant-status.interface.js";
 import type { TenantStatusWriter } from "../../reconcilers/tenants/internal/tenant-status-writer.js";
-import type { Tenant } from "../../reconcilers/tenants/models/tenant.interface.js";
+import type { Tenant } from "../../reconcilers/tenants/models/tenant.types.js";
 
 describe("TenantOperator", () =>
 {
@@ -30,22 +30,9 @@ describe("TenantOperator", () =>
     expect(_ResolveOrgServingDomain(undefined, undefined, defaultConfig.ingressDomain)).toBe("opencrane.local");
   });
 
-  it("respects custom image override", () =>
+  it("uses the immutable operator-selected tenant image", () =>
   {
-    const tenant = _makeTenant("mike", {
-      openclawImage: "custom-registry/openclaw:v2",
-    });
-
-    const image = tenant.spec.openclawImage ?? defaultConfig.tenantDefaultImage;
-    expect(image).toBe("custom-registry/openclaw:v2");
-  });
-
-  it("falls back to default image when no override", () =>
-  {
-    const tenant = _makeTenant("anna");
-
-    const image = tenant.spec.openclawImage ?? defaultConfig.tenantDefaultImage;
-    expect(image).toBe("ghcr.io/opencrane/tenant:latest");
+    expect(defaultConfig.tenantDefaultImage).toBe("ghcr.io/opencrane/tenant:openclaw-2026.6.11-cognee-2026.7.9");
   });
 
   it("detects suspended tenants", () =>
@@ -57,38 +44,6 @@ describe("TenantOperator", () =>
     expect(suspended.spec.suspended).toBe(true);
   });
 
-  it("merges config overrides", () =>
-  {
-    const tenant = _makeTenant("custom", {
-      configOverrides: {
-        agents: { defaults: { thinking: "high" } },
-      },
-    });
-
-    const baseConfig = {
-      gateway: { mode: "local", port: 18789, bind: "lan" },
-    };
-
-    const merged: Record<string, unknown> = tenant.spec.configOverrides
-      ? { ...baseConfig, ...tenant.spec.configOverrides }
-      : baseConfig;
-
-    expect(merged.agents).toEqual({ defaults: { thinking: "high" } });
-  });
-
-  it("supports openclawVersion on tenant spec", () =>
-  {
-    const tenant = _makeTenant("versioned", { openclawVersion: "2026.3.15" });
-    expect(tenant.spec.openclawVersion).toBe("2026.3.15");
-  });
-
-  it("defaults openclawVersion to the pinned operator default (not latest) when not set", () =>
-  {
-    const tenant = _makeTenant("default-version");
-    const version = tenant.spec.openclawVersion ?? defaultConfig.defaultOpenclawVersion;
-    expect(version).toBe("2026.6.11");
-    expect(version).not.toBe("latest");
-  });
 });
 
 describe("TenantOperator reconcile guard + coalescing", () =>

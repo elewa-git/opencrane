@@ -17,9 +17,7 @@ import { providerKeysRouter, providerCredentialsRouter, providerByokRouter, mode
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/grants";
 import { tenantsRouter } from "@opencrane/backend/tenants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/retrieval";
-import { _BuildGatewayAdmin } from "@opencrane/backend/connections";
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/company-docs";
-import { sessionsRouter } from "@opencrane/backend/sessions";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/infra/http";
 import { spec } from "../openapi/spec.js";
 
@@ -76,6 +74,16 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
   app.use("/api/internal/awareness/participation", _RegisterInternalParticipation(prisma, authApi));
 }
 
+/**
+ * Mount authenticated public API and infrastructure routes.
+ *
+ * @param app - Express application to register routes on.
+ * @param prisma - Prisma client used by route handlers.
+ * @param customApi - Kubernetes custom objects client.
+ * @param coreApi - Kubernetes core API client.
+ * @param authApi - Kubernetes authentication API client.
+ * @returns The configured Express application.
+ */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
 {
   // NOTE: the internal (`/api/internal/*`) routers are mounted separately by
@@ -85,13 +93,9 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   // Optional OCI store for skill-bundle content (P4D.2); null → DB-only delivery.
   const ociBundleStore = _BuildOciBundleStore();
 
-  // Gateway admin for the connection kill-switch (CONN.5); no-op until a
-  // opencrane-ui operator device is paired (CONN.4 — needs live infra).
-  const gatewayAdmin = _BuildGatewayAdmin();
-
   app.use("/api/v1/metrics", metricsRouter(customApi, prisma));
   app.use("/api/v1/audit", auditRouter(prisma));
-  app.use("/api/v1/tenants", tenantsRouter(customApi, prisma, coreApi, gatewayAdmin));
+  app.use("/api/v1/tenants", tenantsRouter(customApi, prisma, coreApi));
   app.use("/api/v1/policies", policiesRouter(customApi, prisma));
   app.use("/api/v1/ai-budget", aiBudgetRouter(coreApi, prisma));
   app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
@@ -116,7 +120,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   // (for per-org login + the org-admin gate) but no longer SERVES their management API.
   app.use("/api/v1/awareness/rollout", awarenessRolloutRouter(prisma));
   app.use("/api/v1/awareness/participation", awarenessParticipationRouter(prisma));
-  app.use("/api/v1/sessions", sessionsRouter(prisma));
   app.use("/api/v1/spend", spendRouter(prisma));
   app.use("/api/v1/access-tokens", accessTokensRouter(prisma));
   app.use("/api/v1/providers/keys", providerKeysRouter(prisma));

@@ -90,25 +90,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/sessions/{sessionKey}/scope": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Inspect a chat-window session's awareness scope binding */
-        get: operations["getSessionScope"];
-        /** Bind a session scope (CP intersects with the principal's entitlements) */
-        put: operations["setSessionScope"];
-        post?: never;
-        /** Clear a session's scope binding */
-        delete: operations["clearSessionScope"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/tenants": {
         parameters: {
             query?: never;
@@ -142,7 +123,7 @@ export interface paths {
         /** Update a tenant (dual-write: K8s CRD + database) */
         put: operations["updateTenant"];
         post?: never;
-        /** Delete a tenant (offboarding teardown: cut sessions/devices, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets) */
+        /** Delete a tenant (offboarding teardown: cut the runtime pod, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets) */
         delete: operations["deleteTenant"];
         options?: never;
         head?: never;
@@ -1447,7 +1428,7 @@ export interface paths {
         put?: never;
         /**
          * Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session
-         * @description Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised at the ingress against the live session (`/auth/gateway-verify`), so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.
+         * @description Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised against the live session through `/auth/gateway-resolve`, so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.
          */
         post: operations["getPodConnection"];
         delete?: never;
@@ -1510,66 +1491,6 @@ export interface paths {
          * @description Invalidates the server-side session. When OIDC is enabled and the identity provider advertises an `end_session_endpoint`, returns the URL the browser should navigate to so the upstream IdP session is also terminated (OIDC RP-Initiated Logout). The local session is always destroyed; `endSessionUrl` is null when no upstream logout is possible (OIDC disabled, IdP exposes no end-session endpoint, or the session captured no id_token). Non-browser callers may ignore the URL.
          */
         post: operations["logout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/device": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Initiate a CLI device authorization grant
-         * @description Returns a device code and short user code. The CLI prints the verificationUri for the operator to open in a browser. No credentials required.
-         */
-        post: operations["requestDeviceCode"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/device/activate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Activate a device grant in the browser (requires OIDC session)
-         * @description The operator opens this URL after a CLI login prompt. If no OIDC session is present the user is redirected to the identity provider first. On success an access token is created and the CLI poll endpoint unblocks.
-         */
-        get: operations["activateDeviceCode"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/device/token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Poll for the access token after browser activation
-         * @description Returns 202 while pending, 200 with token when authorized, 410 when the grant has expired. The token is delivered exactly once.
-         */
-        get: operations["pollDeviceToken"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2351,20 +2272,6 @@ export interface components {
             shadowMode?: boolean;
             nextWave?: string | null;
         };
-        ScopeSelector: {
-            /** @enum {string} */
-            scope: "org" | "department" | "project" | "personal";
-            payloadId: string;
-        };
-        SessionScope: {
-            sessionKey?: string;
-            principal?: string;
-            scopes?: components["schemas"]["ScopeSelector"][];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
         DatasetMembership: {
             org: string[];
             team: string[];
@@ -2410,18 +2317,6 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
-        };
-        DeviceGrant: {
-            /** @description Secret code used by the CLI to poll for the token. */
-            deviceCode: string;
-            /** @description Short code (XXXX-XXXX) the operator sees. */
-            userCode: string;
-            /** @description Relative URL the operator should open in a browser. */
-            verificationUri: string;
-            /** @description Seconds until the grant expires (300). */
-            expiresIn: number;
-            /** @description Minimum polling interval in seconds (5). */
-            interval: number;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -2642,120 +2537,6 @@ export interface operations {
                             severity?: "ok" | "warning" | "critical";
                         }[];
                     };
-                };
-            };
-        };
-    };
-    getSessionScope: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionKey: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current session scope binding. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionScope"];
-                };
-            };
-            /** @description Session scope not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    setSessionScope: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionKey: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    principal: string;
-                    scopes: components["schemas"]["ScopeSelector"][];
-                };
-            };
-        };
-        responses: {
-            /** @description Authorised binding; `rejected` lists any over-scope dropped. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SessionScope"] & {
-                        rejected?: components["schemas"]["ScopeSelector"][];
-                    };
-                };
-            };
-            /** @description Missing principal or empty scopes. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description None of the requested scopes are entitled (over-scope). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    clearSessionScope: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                sessionKey: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Binding cleared. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        sessionKey?: string;
-                        cleared?: boolean;
-                    };
-                };
-            };
-            /** @description Session scope not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -6879,121 +6660,6 @@ export interface operations {
                         /** @description Absolute URL the browser should navigate to in order to terminate the upstream IdP session. Null when no upstream logout is configured or possible. */
                         endSessionUrl: string | null;
                     };
-                };
-            };
-        };
-    };
-    requestDeviceCode: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Device grant created. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DeviceGrant"];
-                };
-            };
-        };
-    };
-    activateDeviceCode: {
-        parameters: {
-            query: {
-                /** @description Short user code from the CLI prompt (e.g. ABCD-1234). */
-                userCode: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant activated. HTML confirmation page returned. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Redirect to OIDC login (no active session). */
-            302: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User code not found or expired. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description OIDC not configured. */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    pollDeviceToken: {
-        parameters: {
-            query: {
-                /** @description Secret device code returned by POST /auth/device. */
-                deviceCode: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Grant authorized — token ready. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        status: "authorized";
-                        /** @description Plain-text access token. Store in ~/.config/opencrane/credentials.json. */
-                        token: string;
-                    };
-                };
-            };
-            /** @description Grant still pending — continue polling. */
-            202: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @enum {string} */
-                        status: "pending";
-                    };
-                };
-            };
-            /** @description Grant expired. Run `oc auth login` again. */
-            410: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

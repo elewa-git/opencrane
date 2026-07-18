@@ -1,18 +1,20 @@
 # Personal-agent platform rewrite-freeze plan
 
-Status: **alternative proposed for comparison — 2026-07-16.** This plan delivers the same target
-defined in the [personal-agent platform architecture](personal-agent-platform-architecture.md), but
-uses a production rewrite freeze and whole-silo blue/green replacement instead of the
-[strangler migration](personal-agent-platform-simplification-plan.md).
+Status: **adopted — 2026-07-16.** [ADR 0006](../adr/0006-rewrite-freeze-whole-silo-cutover.md)
+selects this production rewrite freeze and whole-silo blue/green replacement for the target in the
+[personal-agent platform architecture](personal-agent-platform-architecture.md), instead of the
+[strangler migration](personal-agent-platform-simplification-plan.md). The strangler remains the R0
+escape route if post-write rollback is mandatory.
 The pinned baseline and toolkit decision in the
 [OpenClaw loop investigation](openclaw-agent-loop-replacement-plan.md) apply to this route too: its
 L0 baseline is part of R1, and its L3–L5 bake-off/reliability gates are part of R4.
 
-It is not an accepted decision and does not change the live GitHub backlog.
+The active sequencing index is [`plan.md`](../../plan.md); implementation works from its linked
+GitHub issues.
 
 ## Executive conclusion
 
-The viable freeze alternative is:
+The adopted freeze route is:
 
 1. stabilize and tag one supportable OpenClaw-based release;
 2. freeze legacy product/schema development;
@@ -765,17 +767,12 @@ Recommended green staffing:
 
 Every item requires an automated preflight or an explicitly accepted, cutover-blocking exception.
 
-## Recommendation
+## Adopted route and R0 escape
 
-Keep this as a genuine comparison alternative, but make the estate audit—not preference for a clean
-rewrite—the deciding gate.
+The rewrite freeze is adopted, subject to the estate and rollback truth established at R0. R0 must
+stop this route and revert the program to the strangler/hybrid strategy if mandatory post-write
+rollback, estate fidelity, staffing, or operating constraints invalidate the decision test. It must
+not waive those facts to preserve a preferred implementation shape.
 
-- Choose the rewrite freeze if the estate is still internal/pilot, ClusterTenant count is small,
-  state is resettable or modest, requirements are stable, and four to five focused engineers plus
-  migration/SRE support are available.
-- Choose the strangler if personal history/memory/artifacts/credentials are already valuable, users
-  need ongoing product delivery, production feedback is important, the team is closer to three
-  engineers, or post-write rollback is required.
-
-Both routes can reach the same lean architecture. The rewrite freeze is cleaner while building; the
-strangler is usually safer while operating.
+Both routes can reach the same target. The accepted route stays a rewrite freeze only while green
+has no reverse bridge or permanent blue compatibility path and each ClusterTenant cuts atomically.

@@ -29,8 +29,8 @@ tenants/
     tenant-labels.ts
     readme.md
   models/          — tenant interfaces
-    tenant.interface.ts
-    tenant-spec.interface.ts
+    tenant.types.ts
+    tenant-spec.types.ts
     tenant-status.interface.ts
   runtime/         — runtime evaluators and long-running loops
     idle-checker.ts

@@ -2,7 +2,7 @@
  * Structured logger factory built on pino.
  *
  * Every app creates its root logger here so logging is consistent across the
- * fleet: JSON to stdout (or stderr for the CLI), context fields injected via a
+ * fleet: JSON to stdout (or an explicitly selected destination), context fields injected via a
  * mixin, secrets redacted, and — once {@link ___StartTelemetry} has run — every
  * record carries `trace_id`/`span_id` for correlation with Cloud Trace.
  */
@@ -25,7 +25,7 @@ import type { LoggerOptions } from "./observability.types.js";
  */
 export function ___CreateLogger(name: string, opts: LoggerOptions = {}): Logger
 {
-  // 1. Resolve the destination fd first — the CLI logs to stderr (2) to keep
+  // 1. Resolve the destination fd first — interactive commands may log to stderr (2) to keep
   //    stdout reserved for `--output json`; everything else logs to stdout (1).
   const fd = opts.destination ?? 1;
 

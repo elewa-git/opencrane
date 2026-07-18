@@ -194,9 +194,8 @@ spec:
             # GitOps: sync a catalogue git repo into this path (e.g. a git-sync sidecar), or —
             # once authentication is enabled — add Git Source URLs at runtime via Obot Admin.
             #
-            # OBOT_SERVER_PROVIDER_REGISTRIES was REMOVED here: upstream confirms it configures
-            # LLM model-provider *filesystem directories*, NOT MCP catalogues, so pointing it at
-            # the opencrane-ui was a silent no-op (Obot held none of OpenCrane's MCP servers).
+            # The retired provider-registry env was an LLM filesystem-directory setting, not an
+            # MCP-catalogue transport. The local catalogue path above is the supported input.
             - name: OBOT_SERVER_DEFAULT_MCPCATALOG_PATH
               value: {{ (.Values.mcpGateway.catalog).path | quote }}
             {{- end }}

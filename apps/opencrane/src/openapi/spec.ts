@@ -15,7 +15,6 @@
 // ---------------------------------------------------------------------------
 
 import { _AwarenessOpenapiPaths } from "@opencrane/backend/awareness";
-import { _SessionsOpenapiPaths } from "@opencrane/backend/sessions";
 import { _TenantsOpenapiPaths } from "@opencrane/backend/tenants";
 import { _ProjectionOpenapiPaths } from "@opencrane/backend/projection";
 import { _PoliciesOpenapiPaths } from "@opencrane/backend/policies";
@@ -696,18 +695,6 @@ const SavingsRecommendationSchema = {
   },
 };
 
-const DeviceGrantSchema = {
-  type: "object" as const,
-  required: ["deviceCode", "userCode", "verificationUri", "expiresIn", "interval"],
-  properties: {
-    deviceCode: { type: "string", description: "Secret code used by the CLI to poll for the token." },
-    userCode: { type: "string", description: "Short code (XXXX-XXXX) the operator sees." },
-    verificationUri: { type: "string", description: "Relative URL the operator should open in a browser." },
-    expiresIn: { type: "integer", description: "Seconds until the grant expires (300)." },
-    interval: { type: "integer", description: "Minimum polling interval in seconds (5)." },
-  },
-};
-
 const DatasetMembershipSchema = {
   type: "object" as const,
   required: ["org", "team", "department", "project", "personal"],
@@ -801,7 +788,7 @@ export const spec = {
   info: {
     title: "OpenCrane Control Plane API",
     version: "1.0.0",
-    description: "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- *CLI operators* — Device authorization grant via `POST /auth/device`. The CLI opens the returned `verificationUri` in the operator's browser, polls `GET /auth/device/token`, and persists the issued token in `~/.config/opencrane/credentials.json`.\n- *Automation / CI* — Bearer token via the `OPENCRANE_TOKEN` environment variable, validated against the `OPENCRANE_API_TOKEN` server-side env var.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials.",
+    description: "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- *API clients* — Bearer tokens created through the authenticated access-token API.\n- *Automation / CI* — Bearer token via the `OPENCRANE_TOKEN` environment variable, validated against the `OPENCRANE_API_TOKEN` server-side env var.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials.",
   },
   servers: [
     { url: "/api/v1", description: "Versioned API prefix" },
@@ -885,31 +872,12 @@ export const spec = {
           nextWave: { type: "string", nullable: true },
         },
       },
-      ScopeSelector: {
-        type: "object",
-        required: ["scope", "payloadId"],
-        properties: {
-          scope: { type: "string", enum: ["org", "department", "project", "personal"] },
-          payloadId: { type: "string" },
-        },
-      },
-      SessionScope: {
-        type: "object",
-        properties: {
-          sessionKey: { type: "string" },
-          principal: { type: "string" },
-          scopes: { type: "array", items: { $ref: "#/components/schemas/ScopeSelector" } },
-          createdAt: { type: "string", format: "date-time" },
-          updatedAt: { type: "string", format: "date-time" },
-        },
-      },
       DatasetMembership: DatasetMembershipSchema,
       EffectiveContract: EffectiveContractSchema,
       ProjectionDrift: ProjectionDriftSchema,
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
-      DeviceGrant: DeviceGrantSchema,
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -990,7 +958,6 @@ export const spec = {
   paths: {
     // Compose domain paths in order — order matters for JSON serialization byte-identity
     ..._AwarenessOpenapiPaths,
-    ..._SessionsOpenapiPaths,
     ..._TenantsOpenapiPaths,
     ..._ProjectionOpenapiPaths,
     ..._PoliciesOpenapiPaths,
@@ -1007,9 +974,8 @@ export const spec = {
     ..._MetricsOpenapiPaths,
 
     // ------------------------------------------------------------------
-    // Auth — OIDC browser flow, device authorization grant, session introspection
+    // Auth — OIDC browser flow and session introspection
     // Human operators: OIDC browser flow.
-    // CLI operators: device authorization grant (oc auth login).
     // CI / automation: OPENCRANE_TOKEN env var (static bearer, no UI needed).
     // ------------------------------------------------------------------
 
@@ -1076,7 +1042,7 @@ export const spec = {
       post: {
         operationId: "getPodConnection",
         summary: "Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session",
-        description: "Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised at the ingress against the live session (`/auth/gateway-verify`), so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.",
+        description: "Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised against the live session through `/auth/gateway-resolve`, so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.",
         tags: ["Auth"],
         security: [],
         responses: {
@@ -1159,71 +1125,6 @@ export const spec = {
               },
             },
           }),
-        },
-      },
-    },
-
-    // ------------------------------------------------------------------
-    // Device authorization grant (CLI login — RFC 8628-style)
-    // ------------------------------------------------------------------
-
-    "/auth/device": {
-      post: {
-        operationId: "requestDeviceCode",
-        summary: "Initiate a CLI device authorization grant",
-        description: "Returns a device code and short user code. The CLI prints the verificationUri for the operator to open in a browser. No credentials required.",
-        tags: ["Auth"],
-        security: [],
-        responses: {
-          200: ok("Device grant created.", { $ref: "#/components/schemas/DeviceGrant" }),
-        },
-      },
-    },
-
-    "/auth/device/activate": {
-      get: {
-        operationId: "activateDeviceCode",
-        summary: "Activate a device grant in the browser (requires OIDC session)",
-        description: "The operator opens this URL after a CLI login prompt. If no OIDC session is present the user is redirected to the identity provider first. On success an access token is created and the CLI poll endpoint unblocks.",
-        tags: ["Auth"],
-        security: [],
-        parameters: [
-          { name: "userCode", in: "query", required: true, schema: { type: "string" }, description: "Short user code from the CLI prompt (e.g. ABCD-1234)." },
-        ],
-        responses: {
-          200: { description: "Grant activated. HTML confirmation page returned." },
-          302: { description: "Redirect to OIDC login (no active session)." },
-          404: { description: "User code not found or expired.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-          503: { description: "OIDC not configured.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        },
-      },
-    },
-
-    "/auth/device/token": {
-      get: {
-        operationId: "pollDeviceToken",
-        summary: "Poll for the access token after browser activation",
-        description: "Returns 202 while pending, 200 with token when authorized, 410 when the grant has expired. The token is delivered exactly once.",
-        tags: ["Auth"],
-        security: [],
-        parameters: [
-          { name: "deviceCode", in: "query", required: true, schema: { type: "string" }, description: "Secret device code returned by POST /auth/device." },
-        ],
-        responses: {
-          200: ok("Grant authorized — token ready.", {
-            type: "object",
-            required: ["status", "token"],
-            properties: {
-              status: { type: "string", enum: ["authorized"] },
-              token: { type: "string", description: "Plain-text access token. Store in ~/.config/opencrane/credentials.json." },
-            },
-          }),
-          202: ok("Grant still pending — continue polling.", {
-            type: "object",
-            required: ["status"],
-            properties: { status: { type: "string", enum: ["pending"] } },
-          }),
-          410: { description: "Grant expired. Run `oc auth login` again.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
         },
       },
     },

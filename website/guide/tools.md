@@ -10,8 +10,9 @@ see "an MCP server," read it as "one connected tool."
 
 ## Connect a tool
 
-Register the tool once, by name and address. Manage this from the command line —
-see [CLI reference → `oc mcp`](/reference/cli#oc-mcp).
+Register the tool once, by name and address through `POST /api/v1/mcp-servers`, and
+list registrations with `GET /api/v1/mcp-servers`. These authenticated endpoints and
+their payload schemas are in the [interactive API reference](/reference/api).
 
 ## Give it credentials (safely)
 

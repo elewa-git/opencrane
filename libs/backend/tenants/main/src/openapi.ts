@@ -142,7 +142,7 @@ export const _TenantsOpenapiPaths = {
     },
     delete: {
       operationId: "deleteTenant",
-      summary: "Delete a tenant (offboarding teardown: cut sessions/devices, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets)",
+      summary: "Delete a tenant (offboarding teardown: cut the runtime pod, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets)",
       tags: ["Tenants"],
       parameters: [{ name: "name", in: "path", required: true, schema: { type: "string" } }],
       responses: {

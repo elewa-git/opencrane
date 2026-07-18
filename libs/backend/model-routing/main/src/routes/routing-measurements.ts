@@ -4,11 +4,7 @@ import type { PrismaClient, RoutingMeasurement as PrismaRoutingMeasurement } fro
 
 import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/cluster-tenants";
 import { _RunShadowMeasurement } from "../core/shadow-measure.js";
-import type { JudgeClient, ModelRunner } from "../core/shadow-measure.types.js";
-import type { RunMeasurementBody, ValidationFailure } from "./routing-measurements.types.js";
-
-/** Factory producing the configured shadow-measurement seams; null seams mean "unconfigured". */
-export type ShadowSeamsFactory = () => { judge: JudgeClient | null; runner: ModelRunner | null };
+import type { RunMeasurementBody, ShadowSeamsFactory, ValidationFailure } from "./routing-measurements.types.js";
 
 /**
  * Project a persisted `RoutingMeasurement` row into its read DTO.
@@ -71,7 +67,7 @@ function _validateRun(body: Record<string, unknown>): ValidationFailure | null
  */
 async function _resolveBaseline(prisma: PrismaClient, body: RunMeasurementBody, skillTeam: string): Promise<string | null>
 {
-  // 1. An explicit baseline from the caller (CLI resolves the precedence chain) always wins.
+  // 1. An explicit baseline from the API caller always wins.
   if (typeof body.currentModel === "string" && body.currentModel.trim())
   {
     return body.currentModel.trim();

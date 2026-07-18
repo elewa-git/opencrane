@@ -231,17 +231,24 @@ kubectl rollout restart deployment/opencrane-fleet-manager -n opencrane-system
 kubectl rollout status deployment/opencrane-fleet-manager -n opencrane-system --timeout 5m
 ```
 
-### OpenClaw Version Update for a Tenant
+### Tenant runtime image update
 
 ```bash
-# Pin a tenant to a specific OpenClaw version (replace <ct> with the ClusterTenant name)
-kubectl patch tenant acme -n opencrane-<ct> \
-  --type merge \
-  --patch '{"spec":{"openclawVersion":"2026.5.1"}}'
+# Upgrade the immutable OpenClaw + Cognee runtime pair for one silo.
+helm upgrade opencrane-<ct> apps/opencrane-infra \
+  --namespace opencrane-<ct> \
+  --reuse-values \
+  --set tenant.defaultImage.tag=<tested-runtime-tag> \
+  --wait --timeout 10m
 
-# The operator reconciles on next event or restart the pod to trigger immediately
-kubectl delete pod -n opencrane-<ct> -l opencrane.io/tenant=acme
+# Verify the operator-selected image reached the tenant workloads.
+kubectl get pods -n opencrane-<ct> \
+  -l opencrane.io/tenant \
+  -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.spec.containers[0].image}{"\n"}{end}'
 ```
+
+The image contains both executable components. Persistent tenant state is mounted
+separately and is never used as a runtime installation directory.
 
 ---
 
@@ -285,18 +292,16 @@ Prisma migrations do not have automatic down-migrations. For critical data rollb
    kubectl scale deployment/opencrane-clustertenant-manager -n opencrane-<ct> --replicas 1
    ```
 
-### Tenant Rollback (OpenClaw Version Pin)
+### Tenant runtime rollback
 
 ```bash
-# If a new OpenClaw version is causing failures, pin to the last known good version
-# (replace <ct> with the ClusterTenant name)
-kubectl patch tenant acme -n opencrane-<ct> \
-  --type merge \
-  --patch '{"spec":{"openclawVersion":"2026.4.15"}}'
-
-# Delete the pod to force an immediate restart with the pinned version
-kubectl delete pod -n opencrane-<ct> -l opencrane.io/tenant=acme
+# Roll back the silo release so the operator restores the previous immutable image.
+helm rollback opencrane-<ct> <previous-revision> \
+  --namespace opencrane-<ct> --wait --timeout 10m
 ```
+
+Confirm the tenant pods now reference the previous image tag or digest. The rollback
+restores OpenClaw and the Cognee plugin together.
 
 ---
 
@@ -511,13 +516,22 @@ curl -X DELETE \
 
 > **Note**: Deletion removes the Kubernetes deployment and service but retains the tenant's encryption key Secret for data recovery.
 
-### Apply MCP server restrictions to a tenant
+### Apply MCP server restrictions through an AccessPolicy
 
 ```bash
-kubectl patch tenant acme -n opencrane-<ct> \
-  --type merge \
-  --patch '{"spec":{"mcpPolicy":{"deny":["external-search"],"allow":["skills","retrieval"]}}}'
+curl --fail-with-body \
+  --request PUT "https://<silo-host>/api/v1/policies/restricted-tools" \
+  --header "Authorization: Bearer $OPENCRANE_TOKEN" \
+  --header "Content-Type: application/json" \
+  --data '{
+    "tenantSelector":{"matchLabels":{"opencrane.io/tenant":"acme"}},
+    "mcpServers":{"deny":["external-search"],"allow":["skills","retrieval"]}
+  }'
 ```
+
+If the policy does not exist yet, create it with `POST /api/v1/policies` and include
+`"name":"restricted-tools"` in the same body. The API persists and audits the
+policy; the effective contract carries the compiled tool decision to the tenant.
 
 ---
 
