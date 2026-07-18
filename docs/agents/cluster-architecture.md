@@ -26,8 +26,7 @@ strength is a per-customer choice (`isolationTier`).
 │  │   • opencrane-api :8080  API /api/v1 + internal /api/internal       │ │
 │  │   • litellm     :4000    LLM cost/budget proxy (egress for pods)    │ │
 │  │   • mcp-gateway :8080    Obot — MCP runtime, polls opencrane-api    │ │
-│  │   • feat-skill-registry :5000 entitlement-gated skill delivery          │ │
-│  │   • skill-oci-store :5000 Zot OCI registry (optional)              │ │
+│  │   • artifact-service :8080 canonical ArtifactStore CAS on PVC          │ │
 │  │                                                                     │ │
 │  │  USERTENANT WORKLOADS (operator-created, one set per Tenant CR)     │ │
 │  │   Deployment(OpenClaw, 1 replica) · Service · Ingress · ConfigMap   │ │
@@ -111,8 +110,7 @@ library units with the parent release context; shared labels and topology helper
 | `apps/_infra/litellm/helm` | LiteLLM Deployment, Service, credential Secret contract, and non-token identity |
 | `apps/_infra/obot/helm` | Obot gateway Deployment, Service, KSA/RBAC, and NetworkPolicy |
 | `apps/_infra/langfuse` | Pinned upstream chart ownership for web, worker, ClickHouse, ZooKeeper, Valkey, and MinIO workload classes |
-| `apps/_infra/deploy-k8s/templates/feat-skill-registry-*` | Skill-registry deletion target; remove with its direct replacement |
-| `apps/_infra/deploy-k8s/templates/skill-oci-store.yaml` | Default-off Zot deletion target; artifact bytes belong behind `ArtifactStore` |
+| `apps/artifact-service/helm` | Canonical ArtifactStore byte service: RWO expandable PVC, private service, and no catalog authority |
 | `apps/_infra/deploy-k8s/templates/{cluster-issuer,external-secrets-store,networkpolicy-*}.yaml` | Issuer/external-secret composition and cross-plane/default-deny policy |
 
 The machine-enforced inventory is `docs/agents/workload-ownership.json`; adding a pod class
@@ -127,7 +125,7 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
 - **mcp-gateway / Obot** (`:8080`) → holds downstream MCP credentials and executes MCP tools;
   tenant pods reach MCP servers through it (projected token `aud=obot-gateway`). OpenCrane remains
   the catalog/grant authority; the removed registry-poll route is not a synchronization mechanism.
-- **feat-skill-registry** (`:5000`) → validates tenant projected token (`aud=feat-skill-registry`) via TokenReview, proxies to opencrane-api internal bundle endpoint. Deep-dive: [`apps/feat-skill-registry.md`](./apps/feat-skill-registry.md).
+- **artifact-service** (`:8080`) → owns only content-addressed artifact bytes on its mounted PVC. It runs in the release's dedicated `<release>-artifacts` namespace with the receipt-signing key; OpenCrane remains the catalog and authorization authority in the control namespace, holds only the lease signer, and tenant/runtime pods never mount the volume.
 - **litellm** (`:4000`) → the only LLM egress path for tenant pods; operator mints a per-tenant virtual key Secret; enforces budget.
 
 ## Namespace Model
@@ -141,7 +139,7 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
 ## Network Topology
 
 - **Ingress:** GCE Ingress (GCP) or ingress-nginx (on-prem). The **control plane** is reached on the **fixed super-operator host** (`ingress.controlPlaneHost`, default `platform.<base>`); org hosts `<org>.<base>` are resolved by the platform wildcard `*.<base>` and routed via a single wildcard Ingress to the operator's identity-routing proxy (gateway WebSocket) and the control plane (API). There are no per-user Ingress objects. See [Tenancy Model](#tenancy-model--clustertenant-vs-usertenant).
-- **`networkpolicy-planes.yaml`** restricts opencrane-api ingress to: ingress controller, operator, mcp-gateway, feat-skill-registry, and tenant pods (contract re-pull). The Zot OCI store accepts the opencrane-api only. Because `/api/internal/*` has **no auth middleware**, this policy is its only boundary — see [`k8s.md`](./k8s.md#internal-routes-without-auth-middleware). Per-pod gateway NetworkPolicy admits the gateway port only from the operator pods (which host the proxy) in the operator's namespace.
+- **App-owned NetworkPolicies** restrict ArtifactStore ingress to the OpenCrane server only across the control-to-artifact namespace boundary; its PVC is mounted only in the artifact-service pod. Server RBAC is namespaced to its explicit control/tenant namespaces and cannot read the artifact namespace receipt signer. The server's `/api/internal/*` listener remains separately protected by its own policy and is never internet-routable.
 - **Tenant egress** is default-DNS + the CIDR/FQDN allow-lists compiled from the tenant's AccessPolicy (standard NetworkPolicy always; optional CiliumNetworkPolicy for FQDN filtering).
 - **TLS:** one **platform** cert (`*.<base>` + apex + opencrane-api host), issued via cert-manager DNS-01. It covers every org host `<org>.<base>`. A per-org HTTP-01 cert is issued only when a `vanityDomain` is set on the ClusterTenant. The platform cert is rendered by the chart; per-org vanity certs by the cluster-tenants operator. There are no per-org wildcard certs.
 

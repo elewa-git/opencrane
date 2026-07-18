@@ -91,8 +91,8 @@ export function _RegisterInternalWidgets(prisma: PrismaClient): Router { ... }
 
 The plane-to-plane boundary is split by owner: `apps/opencrane/helm/templates/_networkpolicy.tpl`
 protects the server's public and internal listeners; `apps/_infra/obot/helm/templates/_networkpolicy.tpl`
-protects the MCP gateway; the current skill-registry and Zot rules remain in
-`apps/_infra/deploy-k8s/templates/networkpolicy-planes.yaml`. Because `/api/internal/*` has no auth
+protects the MCP gateway; `apps/artifact-service/helm/templates/_resources.tpl` separately restricts
+the ArtifactStore byte service to the OpenCrane server across its dedicated sibling namespace. Because `/api/internal/*` has no auth
 middleware, the server NetworkPolicy is the **only** boundary protecting it — path-based filtering
 is impossible, so never widen these selectors casually.
 

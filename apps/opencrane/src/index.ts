@@ -17,6 +17,7 @@ import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/server
 
 import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/identity";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
+import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
 import { ProjectionLifecycle, _BuildHttpFleetMembershipWriter } from "@opencrane/backend/server/projection";
@@ -125,6 +126,10 @@ const port = Number(process.env.PORT ?? "8080");
 
 // Initialize Prisma
 const prisma = ___CreatePrismaClient(log);
+// The runtime proof boundary supplies only already-verified upload commands to this gateway.
+// Keeping the app composition here means no runtime pod, route adapter, or byte service can
+// construct its own catalog authority or key material.
+const artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 
 // Initialize Kubernetes client
 /** Kubernetes configuration loaded from the default context. */
@@ -142,6 +147,7 @@ const authApi = kc.makeApiClient(k8s.AuthenticationV1Api);
 
 // Build and start the PUBLIC app (ingress-facing: /api/v1/*, /auth — session-authed).
 const app = createApp(prisma, customApi, coreApi, authApi);
+app.locals.artifactUploadGateway = artifactUploadGateway;
 
 log.info({ port }, "starting opencrane control plane");
 

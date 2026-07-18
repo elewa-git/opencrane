@@ -31,6 +31,7 @@ spec:
       app.kubernetes.io/component: opencrane-server
   policyTypes:
     - Ingress
+    - Egress
   ingress:
     # Allow the cluster ingress controller to forward external API requests.
     - from:
@@ -68,6 +69,19 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+  egress:
+    # The only cross-namespace server call: the app-owned artifact byte plane.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ default (printf "%s-artifacts" .Release.Namespace) .Values.artifactService.namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-service
+      ports:
+        - protocol: TCP
+          port: {{ .Values.artifactService.service.port }}
 ---
 {{- end }}
 {{- end }}

@@ -154,6 +154,7 @@ TENANT_TAG=""           # empty → falls back to IMAGE_TAG
 # OPENCRANE_BASE_DOMAIN so the wizard / CI can supply it off the command line.
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
+ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
 VALUES_FILE=""
 REUSE_VALUES=""      # explicit "--reuse-values": inherit last release's values verbatim; add only overrides
 RESET_VALUES=""      # explicit "--reset-values": DROP prior values, start from chart defaults + this run's --set
@@ -513,6 +514,26 @@ if [[ "$PREFLIGHT" == "1" ]]; then
   exit 0
 fi
 
+# Canonical artifact bytes are retained indefinitely on a mounted PVC. Pinning the resolved
+# class makes the claim stable across default-class changes, and refuses a class that cannot
+# grow with a user's retained data.
+_require_expandable_artifact_storage() {
+  if [[ -n "$STORAGE_CLASS" ]]; then
+    ARTIFACT_STORAGE_CLASS="$STORAGE_CLASS"
+  else
+    ARTIFACT_STORAGE_CLASS="$(kubectl get storageclass -o jsonpath='{range .items[*]}{.metadata.name}{"\t"}{.metadata.annotations.storageclass\.kubernetes\.io/is-default-class}{"\n"}{end}' 2>/dev/null | awk '$2 == "true" { selected = $1 } END { print selected }')"
+  fi
+  if [[ -z "$ARTIFACT_STORAGE_CLASS" ]]; then
+    err "ArtifactStore requires a default StorageClass or --storage-class; its canonical mounted volume must be expandable."
+    exit 1
+  fi
+  if [[ "$(kubectl get storageclass "$ARTIFACT_STORAGE_CLASS" -o jsonpath='{.allowVolumeExpansion}' 2>/dev/null)" != "true" ]]; then
+    err "ArtifactStore StorageClass '$ARTIFACT_STORAGE_CLASS' does not allow volume expansion. Select a class with allowVolumeExpansion: true."
+    exit 1
+  fi
+}
+_require_expandable_artifact_storage
+
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
 if [[ -z "${LITELLM_MASTER_KEY:-}" ]]; then
@@ -689,6 +710,49 @@ OBOT_DSN_SECRET="${RELEASE}-obot"
 LITELLM_DATABASE_SECRET="${RELEASE}-litellm-db"
 _copy_cnpg_uri_secret "${OBOT_POSTGRES_RELEASE}-app" "$OBOT_DSN_SECRET" dsn
 _copy_cnpg_uri_secret "${LITELLM_POSTGRES_RELEASE}-app" "$LITELLM_DATABASE_SECRET" DATABASE_URL
+
+# ArtifactStore uses two distinct per-silo Ed25519 roles: the catalog signs bounded write leases
+# and verifies promotion receipts; artifact-service verifies leases and signs receipts. The two
+# two-key Secrets live in separate namespaces: no OpenCrane server RBAC reaches the service
+# namespace, so projected volumes are backed by a real Kubernetes authority boundary.
+ARTIFACT_NAMESPACE="${RELEASE}-artifacts"
+ARTIFACT_CATALOG_KEY_SECRET="${RELEASE}-artifact-catalog-keys"
+ARTIFACT_SERVICE_KEY_SECRET="${RELEASE}-artifact-service-keys"
+kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+_ensure_artifact_keys() {
+  local key_dir
+  local key
+  if kubectl get secret "$ARTIFACT_CATALOG_KEY_SECRET" -n "$NAMESPACE" >/dev/null 2>&1 || kubectl get secret "$ARTIFACT_SERVICE_KEY_SECRET" -n "$ARTIFACT_NAMESPACE" >/dev/null 2>&1; then
+    for key in lease-private.pem receipt-public.pem; do
+      if [[ -z "$(kubectl get secret "$ARTIFACT_CATALOG_KEY_SECRET" -n "$NAMESPACE" -o "jsonpath={.data.${key//./\\.}}" 2>/dev/null)" ]]; then
+        err "Artifact catalog key Secret '$ARTIFACT_CATALOG_KEY_SECRET' is missing '$key'. Recreate both artifact key Secrets only through this deploy engine."
+        exit 1
+      fi
+    done
+    for key in lease-public.pem receipt-private.pem; do
+      if [[ -z "$(kubectl get secret "$ARTIFACT_SERVICE_KEY_SECRET" -n "$ARTIFACT_NAMESPACE" -o "jsonpath={.data.${key//./\\.}}" 2>/dev/null)" ]]; then
+        err "Artifact service key Secret '$ARTIFACT_SERVICE_KEY_SECRET' is missing '$key'. Recreate both artifact key Secrets only through this deploy engine."
+        exit 1
+      fi
+    done
+    return
+  fi
+  key_dir="$(mktemp -d)"
+  trap 'rm -rf "$key_dir"' RETURN
+  openssl genpkey -algorithm ED25519 -out "$key_dir/lease-private.pem"
+  openssl pkey -in "$key_dir/lease-private.pem" -pubout -out "$key_dir/lease-public.pem"
+  openssl genpkey -algorithm ED25519 -out "$key_dir/receipt-private.pem"
+  openssl pkey -in "$key_dir/receipt-private.pem" -pubout -out "$key_dir/receipt-public.pem"
+  kubectl create secret generic "$ARTIFACT_CATALOG_KEY_SECRET" -n "$NAMESPACE" \
+    --from-file=lease-private.pem="$key_dir/lease-private.pem" \
+    --from-file=receipt-public.pem="$key_dir/receipt-public.pem" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl create secret generic "$ARTIFACT_SERVICE_KEY_SECRET" -n "$ARTIFACT_NAMESPACE" \
+    --from-file=lease-public.pem="$key_dir/lease-public.pem" \
+    --from-file=receipt-private.pem="$key_dir/receipt-private.pem" \
+    --dry-run=client -o yaml | kubectl apply -f -
+}
+_ensure_artifact_keys
 
 kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
@@ -1023,6 +1087,10 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"
   --set-string "litellm.databaseSecretKey=DATABASE_URL"
+  --set-string "artifactService.persistence.storageClass=$ARTIFACT_STORAGE_CLASS"
+  --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
+  --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
+  --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm")
 if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
   helm_args+=(

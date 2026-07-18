@@ -1,0 +1,1 @@
+{ "extends": "../../../../../tsconfig.json", "compilerOptions": { "outDir": "../../../../../dist/out-tsc/libs/backend/artifacts/authorization/main", "types": ["node", "vitest/globals"] }, "include": ["src/**/*.ts"] }

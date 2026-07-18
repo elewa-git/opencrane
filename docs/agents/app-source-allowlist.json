@@ -22,6 +22,8 @@
     { "path": "apps/opencrane/src/hosting/index.ts", "owner": "apps/opencrane", "classification": "hosting-composition" },
     { "path": "apps/opencrane/src/index.ts", "owner": "apps/opencrane", "classification": "process-entrypoint" },
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/scripts/migrate.ts", "owner": "apps/opencrane", "classification": "migration-entrypoint" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
@@ -43,6 +45,15 @@
     { "path": "apps/channel-proxy/src/instrument.ts", "owner": "apps/channel-proxy", "classification": "process-instrumentation" },
     { "path": "apps/channel-proxy/src/log.ts", "owner": "apps/channel-proxy", "classification": "process-logging" },
     { "path": "apps/channel-proxy/src/server.ts", "owner": "apps/channel-proxy", "classification": "route-composition" },
+
+    { "path": "apps/artifact-service/src/config.ts", "owner": "apps/artifact-service", "classification": "app-config" },
+    { "path": "apps/artifact-service/src/config.types.ts", "owner": "apps/artifact-service", "classification": "app-config" },
+    { "path": "apps/artifact-service/src/index.ts", "owner": "apps/artifact-service", "classification": "process-entrypoint" },
+    { "path": "apps/artifact-service/src/instrument.ts", "owner": "apps/artifact-service", "classification": "process-instrumentation" },
+    { "path": "apps/artifact-service/src/log.ts", "owner": "apps/artifact-service", "classification": "process-logging" },
+    { "path": "apps/artifact-service/src/server.ts", "owner": "apps/artifact-service", "classification": "route-composition" },
+    { "path": "apps/artifact-service/src/server.test.ts", "owner": "apps/artifact-service", "classification": "composition-test" },
+    { "path": "apps/artifact-service/vitest.config.ts", "owner": "apps/artifact-service", "classification": "test-config" },
 
     { "path": "apps/feat-central-agents/src/__tests__/connectors/slack.connector.test.ts", "owner": "apps/feat-central-agents", "classification": "delete" },
     { "path": "apps/feat-central-agents/src/__tests__/ingestion.test.ts", "owner": "apps/feat-central-agents", "classification": "delete" },
@@ -71,6 +82,7 @@
     "apps/_infra/litellm/project.json",
     "apps/_infra/obot/project.json",
     "apps/channel-proxy/project.json",
+    "apps/artifact-service/project.json",
     "apps/postgres/project.json",
     "apps/opencrane/package.json",
     "apps/_infra/deploy-k8s/project.json",
