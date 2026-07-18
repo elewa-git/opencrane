@@ -14,6 +14,7 @@ function _runRow()
 		threadId: null,
 		trigger: "Interactive",
 		delegatedUserId: "user-1",
+		executionSubjectId: "user-1",
 		requestIdempotencyKey: "request-1",
 		rootRunId: "run-1",
 		parentRunId: null,

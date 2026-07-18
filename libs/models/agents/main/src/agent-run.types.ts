@@ -35,6 +35,8 @@ export interface AgentRun
 	readonly trigger: AgentRunTrigger;
 	/** Delegated interactive user, or null when the service acts as itself. */
 	readonly delegatedUserId: UserId | null;
+	/** Immutable non-null subject whose authorization admitted this attempt. */
+	readonly executionSubjectId: UserId;
 	/** Idempotency key for the request that created the run. */
 	readonly requestIdempotencyKey: string;
 	/** Root and parent lineage for delegated or child work. */
