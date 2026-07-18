@@ -19,14 +19,15 @@ export async function __ReconcileAgentJob(dependencies: AgentControllerDependenc
 
 	// 2. Create only an inert projection and durably acknowledge its immutable Kubernetes UID.
 	const projection = _BuildJobProjection(desired);
-	const observed = await dependencies.jobs.get(projection) ?? await dependencies.jobs.createSuspended(projection);
+	const existing = await dependencies.jobs.get(projection);
+	const observed = existing ?? await dependencies.jobs.createSuspended(projection);
 	if (!_MatchesProjection(observed, projection))
 	{
 		return { outcome: "rejected", reason: "mismatched_existing_job", runId: desired.runId, attempt: desired.attempt };
 	}
-	if (!observed.suspended)
+	if (existing === null && !observed.suspended)
 	{
-		// 3. A Job active before acknowledgement could have executed without a UID-bound bootstrap.
+		// 3. A new Job active before acknowledgement could have executed without a UID-bound bootstrap.
 		await dependencies.jobs.delete(projection, observed.uid);
 		await dependencies.status.rejectDesired(desired, "unsafe_existing_job");
 		return { outcome: "rejected", reason: "unsafe_existing_job", runId: desired.runId, attempt: desired.attempt };
@@ -34,11 +35,20 @@ export async function __ReconcileAgentJob(dependencies: AgentControllerDependenc
 	const start = await dependencies.status.recordJob(desired, projection, observed.uid);
 	if (!start.bootstrapReady)
 	{
+		if (!observed.suspended)
+		{
+			await dependencies.jobs.delete(projection, observed.uid);
+			await dependencies.status.rejectDesired(desired, "unsafe_existing_job");
+			return { outcome: "rejected", reason: "unsafe_existing_job", runId: desired.runId, attempt: desired.attempt };
+		}
 		return { outcome: "prepared", runId: desired.runId, attempt: desired.attempt, workloadUid: observed.uid };
 	}
 
 	// 4. Permit execution only after OpenCrane proves UID-bound bootstrap delivery, then report Pod identity.
-	await dependencies.jobs.unsuspend(projection, observed.uid);
+	if (observed.suspended)
+	{
+		await dependencies.jobs.unsuspend(projection, observed.uid);
+	}
 	const podUid = await dependencies.jobs.firstPodUid(projection, observed.uid);
 	if (podUid !== null)
 	{
