@@ -10,7 +10,7 @@ function _Desired(): DesiredAgentJob
 }
 
 /** Construct isolated fake dependencies while recording the security-relevant call order. */
-function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJob | null = null, bootstrapReady = true): { readonly dependencies: AgentControllerDependencies; readonly calls: string[] }
+function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJob | null = null, bootstrapReady = true, createdSuspended = true): { readonly dependencies: AgentControllerDependencies; readonly calls: string[] }
 {
 	const calls: string[] = [];
 	return {
@@ -20,12 +20,13 @@ function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJ
 			desiredJobs: { async readNext() { return desired; } },
 			jobs: {
 				async get() { calls.push("get"); return observed; },
-				async createSuspended(projection: AgentJobProjection) { calls.push("create"); return { name: projection.name, labels: projection.labels, uid: "job-uid", suspended: true }; },
+				async createSuspended(projection: AgentJobProjection) { calls.push("create"); return { name: projection.name, labels: projection.labels, uid: "job-uid", suspended: createdSuspended }; },
+				async delete(_: AgentJobProjection, uid: string) { calls.push(`delete:${uid}`); },
 				async unsuspend(_: AgentJobProjection, uid: string) { calls.push(`unsuspend:${uid}`); },
 				async firstPodUid() { calls.push("pod"); return "pod-uid"; },
 			},
 			status: {
-				async rejectDesired(_: DesiredAgentJob, reason: "invalid_desired_job") { calls.push(`reject:${reason}`); },
+				async rejectDesired(_: DesiredAgentJob, reason: "invalid_desired_job" | "unsafe_existing_job") { calls.push(`reject:${reason}`); },
 				async recordJob(_: DesiredAgentJob, __: AgentJobProjection, uid: string) { calls.push(`job:${uid}`); return { bootstrapReady }; },
 				async recordPod(_: DesiredAgentJob, __: AgentJobProjection, ___: string, uid: string) { calls.push(`pod:${uid}`); },
 			},
@@ -42,11 +43,11 @@ describe("agent workload controller", function _describeController()
 		expect(fixture.calls).toEqual(["get", "create", "job:job-uid", "unsuspend:job-uid", "pod", "pod:pod-uid"]);
 	});
 
-	it("is idempotent when the exact Job already exists", async function _doesNotCreateAgain()
+	it("is idempotent when the exact suspended Job already exists", async function _doesNotCreateAgain()
 	{
-		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false });
+		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: true });
 		await __ReconcileAgentJob(fixture.dependencies);
-		expect(fixture.calls).toEqual(["get", "job:job-uid", "pod", "pod:pod-uid"]);
+		expect(fixture.calls).toEqual(["get", "job:job-uid", "unsuspend:job-uid", "pod", "pod:pod-uid"]);
 	});
 
 	it("rejects a desired Job that widens the approved image boundary", async function _rejectsImage()
@@ -64,11 +65,18 @@ describe("agent workload controller", function _describeController()
 		expect(fixture.calls).toEqual(["get", "create", "job:job-uid"]);
 	});
 
-	it("rejects an already-running Job when the authority cannot prove its bootstrap delivery", async function _rejectsUnsafeExistingJob()
+	it("deletes and rejects an already-running Job before it can run without bootstrap acknowledgement", async function _rejectsUnsafeExistingJob()
 	{
 		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false }, false);
 		await expect(__ReconcileAgentJob(fixture.dependencies)).resolves.toEqual({ outcome: "rejected", reason: "unsafe_existing_job", runId: "run-123", attempt: 1 });
-		expect(fixture.calls).toEqual(["get", "job:job-uid"]);
+		expect(fixture.calls).toEqual(["get", "delete:job-uid", "reject:unsafe_existing_job"]);
+	});
+
+	it("deletes a creation result that violates the initial suspended invariant", async function _rejectsUnexpectedCreation()
+	{
+		const fixture = _Dependencies(_Desired(), null, true, false);
+		await expect(__ReconcileAgentJob(fixture.dependencies)).resolves.toEqual({ outcome: "rejected", reason: "unsafe_existing_job", runId: "run-123", attempt: 1 });
+		expect(fixture.calls).toEqual(["get", "create", "delete:job-uid", "reject:unsafe_existing_job"]);
 	});
 
 	it("keeps the Kubernetes projection deterministic and retry-distinct", function _buildsProjection()

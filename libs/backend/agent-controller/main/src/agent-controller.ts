@@ -24,21 +24,21 @@ export async function __ReconcileAgentJob(dependencies: AgentControllerDependenc
 	{
 		return { outcome: "rejected", reason: "mismatched_existing_job", runId: desired.runId, attempt: desired.attempt };
 	}
+	if (!observed.suspended)
+	{
+		// 3. A Job active before acknowledgement could have executed without a UID-bound bootstrap.
+		await dependencies.jobs.delete(projection, observed.uid);
+		await dependencies.status.rejectDesired(desired, "unsafe_existing_job");
+		return { outcome: "rejected", reason: "unsafe_existing_job", runId: desired.runId, attempt: desired.attempt };
+	}
 	const start = await dependencies.status.recordJob(desired, projection, observed.uid);
 	if (!start.bootstrapReady)
 	{
-		if (!observed.suspended)
-		{
-			return { outcome: "rejected", reason: "unsafe_existing_job", runId: desired.runId, attempt: desired.attempt };
-		}
 		return { outcome: "prepared", runId: desired.runId, attempt: desired.attempt, workloadUid: observed.uid };
 	}
 
-	// 3. Permit execution only after OpenCrane proves UID-bound bootstrap delivery, then report Pod identity.
-	if (observed.suspended)
-	{
-		await dependencies.jobs.unsuspend(projection, observed.uid);
-	}
+	// 4. Permit execution only after OpenCrane proves UID-bound bootstrap delivery, then report Pod identity.
+	await dependencies.jobs.unsuspend(projection, observed.uid);
 	const podUid = await dependencies.jobs.firstPodUid(projection, observed.uid);
 	if (podUid !== null)
 	{

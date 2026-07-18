@@ -78,6 +78,8 @@ export interface AgentJobMutator
 	get(projection: AgentJobProjection): Promise<ObservedAgentJob | null>;
 	/** Create a suspended Job and return its immutable identity. */
 	createSuspended(projection: AgentJobProjection): Promise<ObservedAgentJob>;
+	/** Delete an unexpectedly active Job by its exact immutable UID. */
+	delete(projection: AgentJobProjection, workloadUid: string): Promise<void>;
 	/** Unsuspend only the exact Job whose identity was durably acknowledged. */
 	unsuspend(projection: AgentJobProjection, workloadUid: string): Promise<void>;
 	/** Return the first observed runtime Pod UID for the exact Job, if any. */
@@ -88,7 +90,7 @@ export interface AgentJobMutator
 export interface AgentJobStatusReporter
 {
 	/** Durably reject an invalid desired record so it cannot starve later work. */
-	rejectDesired(desired: DesiredAgentJob, reason: "invalid_desired_job"): Promise<void>;
+	rejectDesired(desired: DesiredAgentJob, reason: "invalid_desired_job" | "unsafe_existing_job"): Promise<void>;
 	/** Durably bind the immutable Job UID before it can start. */
 	recordJob(desired: DesiredAgentJob, projection: AgentJobProjection, workloadUid: string): Promise<AgentJobStartDecision>;
 	/** Durably bind the first runtime Pod UID after Kubernetes creates it. */
