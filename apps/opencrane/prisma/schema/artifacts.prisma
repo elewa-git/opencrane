@@ -31,6 +31,14 @@ enum ArtifactOutboxEventKind {
   DeletionRequested @map("artifact.deletion_requested")
 }
 
+enum ArtifactUploadLeaseState {
+  Active    @map("active")
+  Promoted  @map("promoted")
+  Finalized @map("finalized")
+  Expired   @map("expired")
+  Cancelled @map("cancelled")
+}
+
 model Artifact {
   id                String         @id @default(cuid())
   siloId            String         @map("silo_id")
@@ -43,12 +51,36 @@ model Artifact {
   updatedAt         DateTime       @updatedAt @map("updated_at")
   deletedAt         DateTime?      @map("deleted_at")
   revisions         ArtifactRevision[] @relation("ArtifactRevisions")
+  uploadLeases      ArtifactUploadLease[]
   currentRevision   ArtifactRevision?  @relation("CurrentArtifactRevision", fields: [id, currentRevisionId], references: [artifactId, id], onDelete: Restrict)
 
   @@unique([id, currentRevisionId])
   @@unique([id, siloId])
   @@index([siloId, ownerPrincipalId, state])
   @@map("artifacts")
+}
+
+model ArtifactUploadLease {
+  id                      String                   @id @default(cuid())
+  artifactId              String                   @map("artifact_id")
+  siloId                  String                   @map("silo_id")
+  capabilityJti           String                   @unique @map("capability_jti")
+  expectedContentAddress  String?                  @map("expected_content_address")
+  expectedByteLength      BigInt?                  @map("expected_byte_length")
+  mediaType               String                   @map("media_type")
+  state                   ArtifactUploadLeaseState @default(Active)
+  expiresAt               DateTime                 @map("expires_at")
+  promotionReceiptDigest  String?                  @unique @map("promotion_receipt_digest")
+  promotedContentAddress  String?                  @map("promoted_content_address")
+  promotedByteLength      BigInt?                  @map("promoted_byte_length")
+  promotedAt              DateTime?                @map("promoted_at")
+  finalizedAt             DateTime?                @map("finalized_at")
+  createdAt               DateTime                 @default(now()) @map("created_at")
+  artifact                Artifact                 @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+
+  @@index([artifactId, state, expiresAt])
+  @@index([siloId, state, expiresAt])
+  @@map("artifact_upload_leases")
 }
 
 model ArtifactRevision {

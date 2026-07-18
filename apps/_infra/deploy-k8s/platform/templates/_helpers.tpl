@@ -120,11 +120,6 @@ and is folded into the per-namespace Role by MI.4's namespaced cert Issuer.
 - apiGroups: [""]
   resources: ["serviceaccounts"]
   verbs: ["get", "list", "create", "update", "patch"]
-# Mint short-lived, audience-bound tokens for tenant ServiceAccounts. The operator projects
-# only the named runtime-plane audiences; default ServiceAccount-token automount is disabled.
-- apiGroups: [""]
-  resources: ["serviceaccounts/token"]
-  verbs: ["create"]
 # Secrets for tenant encryption keys + per-tenant LiteLLM keys.
 - apiGroups: [""]
   resources: ["secrets"]
@@ -239,11 +234,11 @@ Defaults to the release namespace when `multiInstance.instanceNamespaces` is emp
 {{- end }}
 
 {{/*
-Whether namespaced (per-instance) RBAC should be rendered instead of cluster-scoped.
+OpenCrane server RBAC is always namespaced. The clean target never grants this workload a
+cluster-wide Secret read path: artifact-service keeps its receipt signer in a sibling namespace.
 */}}
 {{- define "opencrane.namespacedRbac" -}}
-{{- $mi := .Values.multiInstance | default dict -}}
-{{- and $mi.enabled (eq (default "namespaced" $mi.rbac) "namespaced") -}}
+true
 {{- end }}
 
 {{/*

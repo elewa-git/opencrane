@@ -70,8 +70,8 @@ crds:
   install: true
 
 # -- Native multi-instance mode (run N strictly-isolated OpenCrane instances in
-#    one cluster). Off by default → the legacy single-install path is unchanged.
-#    When enabled, the chart flips the isolation-safe defaults below.
+#    one cluster). Server RBAC is namespaced in every topology; when enabled, this
+#    additionally flips the instance isolation defaults below.
 #    Per-instance releases must be installed with `--skip-crds`; the shared CRD
 #    bundle is installed once cluster-wide. See docs/multi-instance.md (CRD
 #    lifecycle + version compatibility contract, blocker B3).
@@ -84,10 +84,6 @@ multiInstance:
   # -- The namespace(s) this instance owns. Namespaced RBAC is rendered for each.
   #    Empty → defaults to the release namespace.
   instanceNamespaces: []
-  # -- Operator/opencrane-ui RBAC mode: `namespaced` (Role/RoleBinding, isolated)
-  #    or `cluster` (legacy ClusterRole/ClusterRoleBinding). Forced `namespaced`
-  #    semantics when `enabled` and `namespaced`.
-  rbac: namespaced
   # -- When true the operator fails closed (refuses to start) if WATCH_NAMESPACE is
   #    empty, so an instance can never reconcile another instance's Tenants (brief B2).
   #    Default false (single-instance installs watch all namespaces with an empty
@@ -262,6 +258,9 @@ channelProxy:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
+  # -- An absolute wall-clock cap, additionally bounded by each signed lease expiry. This is not
+  # an inactivity timeout: a client dripping bytes cannot hold a private PVC connection forever.
+  maxUploadDurationMilliseconds: 300000
   service:
     port: 8080
   # -- Empty derives the release-local OpenCrane internal Service URL.
@@ -290,6 +289,38 @@ channelProxy:
     limits:
       cpu: 250m
       memory: 256Mi
+
+# -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
+# release-local PVC; OpenCrane remains the catalog and authorization authority.
+artifactService:
+  enabled: true
+  # -- The isolated byte-plane namespace. It is never one of the server's RBAC-owned
+  # namespaces, so the server cannot read the service-only receipt signing key.
+  namespace: ""
+  image:
+    repository: ghcr.io/italanta/opencrane-artifact-service
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    port: 8080
+  persistence:
+    # -- A StorageClass permitting in-use volume expansion keeps canonical bytes durable while
+    # user needs grow. The release never mounts this volume into tenant/runtime pods.
+    storageClass: ""
+    size: 20Gi
+  keys:
+    # -- Distinct two-key Secrets on opposite namespace boundaries. The catalog Secret holds
+    # lease-private + receipt-public; the artifact namespace Secret holds lease-public + receipt-private.
+    catalogExistingSecret: opencrane-artifact-catalog-keys
+    serviceExistingSecret: opencrane-artifact-service-keys
+  resources:
+    requests:
+      cpu: 50m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi
 
 # -- Control plane settings
 clustertenantManager:

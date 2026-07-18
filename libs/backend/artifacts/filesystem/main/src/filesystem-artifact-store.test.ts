@@ -71,6 +71,20 @@ describe("filesystem ArtifactStore", function _suite()
 		}
 	});
 
+	it("stops consuming a stream as soon as it exceeds its signed byte allowance", async function _boundedStream()
+	{
+		const rootPath = await mkdtemp(join(tmpdir(), "opencrane-artifact-store-"));
+		try
+		{
+			const store = new __FilesystemArtifactStore({ rootPath });
+			await expect(store.stage({ lease: _lease("lease-1"), bytes: _bytes("allowed", "overflow"), expectedContentAddress: null, expectedByteLength: 7, mediaType: "text/plain" })).rejects.toThrow(/exceed the authorized byte length/);
+		}
+		finally
+		{
+			await rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
 	it("rejects a same-sized canonical pathname whose bytes no longer match its address", async function _tamperedCanonicalFile()
 	{
 		const rootPath = await mkdtemp(join(tmpdir(), "opencrane-artifact-store-"));

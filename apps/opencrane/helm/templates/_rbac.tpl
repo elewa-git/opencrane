@@ -5,11 +5,9 @@ metadata:
   name: {{ include "opencrane.fullname" . }}-opencrane-server
   labels:
     {{- include "opencrane.labels" . | nindent 4 }}
-{{- if eq (include "opencrane.namespacedRbac" .) "true" }}
 {{- /*
-  Multi-instance mode (brief B1): grant the opencrane-ui only over the namespace(s)
-  this instance owns, via Role + RoleBinding. Instance A's opencrane-ui SA therefore
-  cannot read/write instance B's Tenants, AccessPolicies, or pods.
+  Grant the OpenCrane server only over explicitly owned namespaces. A sibling artifact namespace
+  is deliberately never listed here, so the catalog process cannot read its receipt-signing key.
 */}}
 {{- $namespaces := include "opencrane.instanceNamespaces" . | fromJsonArray }}
 {{- range $ns := $namespaces }}
@@ -39,38 +37,6 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "opencrane.fullname" $ }}-opencrane-server
     namespace: {{ $.Release.Namespace }}
-{{- end }}
-{{- else }}
-{{- /*
-  Legacy single-install mode: cluster-wide ClusterRole + ClusterRoleBinding over the
-  (namespaced) opencrane-ui rules.
-*/}}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  # Cluster-scoped → name MUST be unique per silo, or a second silo's release can't import a
-  # ClusterRole the first already owns. Suffix with the release namespace (one silo per ns).
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-rules:
-{{ include "opencrane.clustertenantManagerRbacRules" . | nindent 2 }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-{{ .Release.Namespace }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "opencrane.fullname" . }}-opencrane-server
-    namespace: {{ .Release.Namespace }}
 {{- end }}
 ---
 {{- /*

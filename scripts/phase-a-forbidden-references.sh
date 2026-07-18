@@ -170,6 +170,12 @@ _check_pattern "SESSION-SCOPE" '(SessionScope|session-scope([^[:alnum:]]|$)|@ope
 # The Obot registry poll was a no-op. The spec is retained only as evidence explaining its removal.
 _check_pattern "OBOT-REGISTRY-POLL" '(obot-registry|OBOT_SERVER_PROVIDER_REGISTRIES)' "($TARGET_RECORDS|$RESEARCH_HISTORY|$HISTORICAL_RECORDS)"
 
+# Artifact bytes have one target owner: ArtifactStore on the artifact-service PVC. Keep retired
+# OCI/Zot vocabulary out of active guidance and the README so it cannot be mistaken for a usable
+# deployment option. Target decision records and applied history retain the deletion rationale.
+ARTIFACT_LEGACY_RECORDS="($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS|^docs/adr/0002-[^/]+\.md$|^\.agents/skills/observability/SKILL\.md$|^\.claude/agents/observability\.md$|^\.codex/agents/observability\.toml$)"
+_check_pattern "ARTIFACT-OCI-ZOT" '(skill-oci-store|SKILL_OCI_|[Zz]ot([[:space:]/[:punct:]]|$)|OCI/ORAS|OCI registry)' "$ARTIFACT_LEGACY_RECORDS"
+
 # CLI history is kept only in the accepted decision trail and the two named research/spec records.
 _check_pattern "OC-CLI-PACKAGE" '(@opencrane/cli|apps/cli)' "($TARGET_RECORDS|$RESEARCH_HISTORY|$HISTORICAL_RECORDS)"
 _check_pattern "OC-CLI-INVOCATION" '(^|[[:space:]`$])oc[[:space:]]+(auth|tenants|cluster-tenant|policies|mcp|skills|budget|audit|tokens|providers|model|routing|sessions|platform|awareness)([[:space:]`]|$)' "($TARGET_RECORDS|$RESEARCH_HISTORY|$HISTORICAL_RECORDS)"

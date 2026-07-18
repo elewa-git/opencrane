@@ -408,6 +408,16 @@ spec:
               value: {{ .Values.litellm.enabled | quote }}
             - name: LITELLM_DEFAULT_MONTHLY_BUDGET_USD
               value: {{ .Values.litellm.defaultMonthlyBudgetUsd | quote }}
+            - name: ARTIFACT_SERVICE_URL
+              value: {{ printf "http://%s-artifact-service.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) (default (printf "%s-artifacts" .Release.Namespace) .Values.artifactService.namespace) .Values.artifactService.service.port | quote }}
+            - name: ARTIFACT_LEASE_PRIVATE_KEY_PATH
+              value: /var/run/opencrane/artifact-keys/lease-private.pem
+            - name: ARTIFACT_RECEIPT_PUBLIC_KEY_PATH
+              value: /var/run/opencrane/artifact-keys/receipt-public.pem
+          volumeMounts:
+            - name: artifact-keys
+              mountPath: /var/run/opencrane/artifact-keys
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz
@@ -422,4 +432,14 @@ spec:
             periodSeconds: 5
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
+      volumes:
+        - name: artifact-keys
+          secret:
+            secretName: {{ required "artifactService.keys.catalogExistingSecret is required" .Values.artifactService.keys.catalogExistingSecret | quote }}
+            defaultMode: 0400
+            items:
+              - key: lease-private.pem
+                path: lease-private.pem
+              - key: receipt-public.pem
+                path: receipt-public.pem
 {{- end }}

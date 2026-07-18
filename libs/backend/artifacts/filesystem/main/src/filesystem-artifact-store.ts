@@ -48,6 +48,10 @@ export class __FilesystemArtifactStore implements ArtifactStore
 			{
 				const bytes = Buffer.from(chunk);
 				byteLength += bytes.byteLength;
+				if (command.expectedByteLength !== null && byteLength > command.expectedByteLength)
+				{
+					throw new RangeError("ArtifactStore staged bytes exceed the authorized byte length");
+				}
 				hash.update(bytes);
 				await this._writeAll(file, bytes);
 			}
