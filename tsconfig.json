@@ -19,6 +19,12 @@
       "@opencrane/backend/server/artifacts": [
         "./libs/backend/server/artifacts/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/store": [
+        "./libs/backend/artifacts/store/main/src/index.ts"
+      ],
+      "@opencrane/backend/artifacts/filesystem": [
+        "./libs/backend/artifacts/filesystem/main/src/index.ts"
+      ],
       "@opencrane/backend/server/api-spec": [
         "./libs/backend/server/api-spec/main/src/index.ts"
       ],
