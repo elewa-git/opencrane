@@ -51,6 +51,7 @@ model AgentRun {
   threadId                String?                  @map("thread_id")
   trigger                 AgentRunTrigger
   delegatedUserId         String?                  @map("delegated_user_id")
+  executionSubjectId      String                   @map("execution_subject_id")
   requestIdempotencyKey   String                   @map("request_idempotency_key")
   rootRunId               String                   @map("root_run_id")
   parentRunId             String?                  @map("parent_run_id")

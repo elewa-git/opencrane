@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ActionExecutionState, ActionReplayMode as PrismaActionReplayMode, Prisma, WorkloadKind, type PrismaClient } from "@prisma/client";
+import { ActionExecutionState, ActionReplayMode as PrismaActionReplayMode, AgentRunState, Prisma, WorkloadKind, type PrismaClient } from "@prisma/client";
 
 import type { JsonValue } from "@opencrane/util";
 
@@ -53,6 +53,15 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 				const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: claim.bootstrapId } });
 				if (bootstrap === null) return { status: "conflict" } as const;
 				if (bootstrap.consumedAt !== null) return { status: "already_consumed" } as const;
+				if (bootstrap.runId !== claim.runId || bootstrap.attempt !== claim.attempt || bootstrap.workloadUid !== claim.workloadUid || bootstrap.agentServiceId !== claim.agentServiceId || bootstrap.agentRevisionId !== claim.agentRevisionId)
+				{
+					return { status: "conflict" } as const;
+				}
+				const run = await transaction.agentRun.findUnique({ where: { id: claim.runId }, select: { attempt: true, state: true } });
+				if (run === null || run.attempt !== claim.attempt || run.state !== AgentRunState.Assigned)
+				{
+					return { status: "conflict" } as const;
+				}
 
 				// 2. Consume exact bootstrap coordinates; database triggers revalidate live assignment authority.
 				const receiptId = randomUUID();
@@ -76,6 +85,16 @@ export class PrismaRuntimeAuthorityRepository implements RuntimeBootstrapReposit
 						expiresAt: new Date(claim.expiresAtEpochMs),
 					},
 				});
+
+				// 4. Only a registered Pod that consumed its exact bootstrap may begin the durable run.
+				const transition = await transaction.agentRun.updateMany({
+					where: { id: claim.runId, attempt: claim.attempt, state: AgentRunState.Assigned },
+					data: { state: AgentRunState.Running, startedAt: new Date() },
+				});
+				if (transition.count !== 1)
+				{
+					throw new Error("run attempt changed while consuming bootstrap");
+				}
 				return { status: "consumed", receiptId } as const;
 			});
 		}
