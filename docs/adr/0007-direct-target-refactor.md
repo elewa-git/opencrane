@@ -3,8 +3,8 @@
 - **Status:** Accepted
 - **Date:** 2026-07-18
 - **Task:** `#252` — R0 decision-gate outcome
-- **Supersedes / superseded by:** supersedes [ADR 0006](0006-rewrite-freeze-whole-silo-cutover.md)
-  (rewrite freeze with whole-silo blue/green cutover); amends the migration-era consequences of
+- **Supersedes / superseded by:** supersedes ADR 0006 (rewrite freeze with whole-silo blue/green
+  cutover; deleted — see git history); amends the migration-era consequences of
   [ADR 0005](0005-opencrane-owned-agent-runtime.md)
 - **Related:**
   [`personal-agent-platform-direct-refactor-plan.md`](../design/personal-agent-platform-direct-refactor-plan.md) ·

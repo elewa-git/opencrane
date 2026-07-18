@@ -246,7 +246,7 @@ required once the CRD declares the field.
 ## Surface 4 — the dedicated-cluster provisioner webhook
 
 For the `dedicatedCluster` tier (own kube-apiserver per silo — vcluster/Kamaji), provisioning is
-**out-of-process** and arm's-length by design (ADR 0001/0002 call this the AGPL/WeOwnAI enterprise seam). The
+**out-of-process** and arm's-length by design (ADR 0002 calls this the AGPL/WeOwnAI enterprise seam). The
 fleet↔external-provisioner boundary is an HTTPS webhook, configured entirely from the environment
 (`_ReadExternalWebhookConfig` in `apps/fleet-operator/src/core/cluster-tenants/external-webhook.config.ts`):
 

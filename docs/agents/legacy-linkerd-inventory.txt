@@ -18,7 +18,6 @@ libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/silo-linke
 libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/internal/linkerd-identity.client.ts
 libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/operator.ts
 CHANGELOG.md
-docs/adr/0001-cluster-tenant-virtual-network-isolation.md
 docs/adr/0002-per-clustertenant-silo-architecture.md
 docs/adr/0003-cilium-spiffe-identity-substrate.md
 docs/design/personal-agent-platform-architecture.md

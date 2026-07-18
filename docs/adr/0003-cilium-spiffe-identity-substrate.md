@@ -3,8 +3,10 @@
 - **Status:** Accepted; corrected 2026-07-16
 - **Date:** 2026-07-02
 - **Correction:** `#245` — separates Cilium security identity from optional SPIFFE/SPIRE identity
-- **Supersedes / superseded by:** supersedes the Linkerd substrate decision in
-  [ADR 0001](0001-cluster-tenant-virtual-network-isolation.md)
+- **Supersedes / superseded by:** supersedes the Linkerd substrate decision in ADR 0001
+  (ClusterTenant-as-virtual-network strict isolation; deleted — see git history). Its portable
+  default-deny `NetworkPolicy`-floor reasoning is retained below; the AGPL/WeOwnAI provisioner
+  seam it mentioned is recorded in [ADR 0002](0002-per-clustertenant-silo-architecture.md)
 - **Related:** [ADR 0002](0002-per-clustertenant-silo-architecture.md) ·
   [`docs/agents/architecture.md`](../agents/architecture.md) ·
   [`docs/agents/k8s.md`](../agents/k8s.md)

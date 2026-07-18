@@ -3,7 +3,7 @@
 - **Status:** Accepted
 - **Date:** 2026-06-26
 - **Task:** `task_5164276f` (Phase 3 / S6 of the strict-multi-tenancy program)
-- **Supersedes / superseded by:** none — **refines** [ADR 0001](0001-cluster-tenant-virtual-network-isolation.md), which chose the isolation *substrate* (Linkerd + the NetworkPolicy floor) and explicitly deferred the *placement* decisions (which planes move into the silo, the per-CT operator design, per-CT API/DB) to Phase 3 / this ADR.
+- **Supersedes / superseded by:** none — **refines** ADR 0001 (ClusterTenant-as-virtual-network strict isolation; deleted — its Linkerd substrate choice is superseded by [ADR 0003](0003-cilium-spiffe-identity-substrate.md)), which chose the isolation *substrate* and explicitly deferred the *placement* decisions (which planes move into the silo, the per-CT operator design, per-CT API/DB) to Phase 3 / this ADR.
 - **Related:** [`silo-multi-tenant-plan.md`](../../silo-multi-tenant-plan.md) (§ Phase 3) · [`plan.md`](../../plan.md) (S6) · `platform/helm/values.yaml` (`multiInstance`, `sharedPlatform`)
 
 ## Context

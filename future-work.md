@@ -15,7 +15,7 @@ shared nodes**. The tiers that change the *underlying compute* are deferred:
   Pure scheduling change on top of the existing per-CT topology; no plane-architecture change.
 - **`dedicatedCluster`** — a separate Kubernetes control plane per silo via **vcluster / Kamaji**,
   provisioned by an **arm's-length `ClusterTenantProvisioner` backend** (kept out-of-process as
-  the **AGPL / WeOwnAI enterprise seam**, per ADR 0001).
+  the **AGPL / WeOwnAI enterprise seam**, per ADR 0002).
 - **Tier cost / footprint model (S7)** — map `ClusterTenant.spec.isolationTier`
   `shared → dedicatedNodes → dedicatedCluster` to a cost/footprint a customer can buy. Input =
   the per-CT bin-packing density on shared nodes (the S6 footprint).

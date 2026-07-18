@@ -49,7 +49,7 @@ sit on:
 |---|---|---|---|
 | Fleet manager — `apps/fleet-operator` provisioning/HTTP routes (cluster-tenants, billing, platform DNS, Zitadel admin) | `weownai` | **Proprietary** | The hosted multi-tenant value-add; the commercial product. |
 | `apps/fleet-platform` Helm chart | `weownai` | **Proprietary** | Deploys the proprietary fleet manager. |
-| Dedicated-cluster provisioner (behind the webhook seam) | `weownai` | **Proprietary** | The enterprise dedicated-tier backend (ADR 0001/0002's arm's-length seam). |
+| Dedicated-cluster provisioner (behind the webhook seam) | `weownai` | **Proprietary** | The enterprise dedicated-tier backend (ADR 0002's arm's-length seam). |
 | `apps/opencrane-api` (the silo control plane) | `opencrane-2` | **AGPL-3.0-or-later** | The self-hostable template. |
 | Silo planes, operator, per-org identity/tenant/model/skill surfaces | `opencrane-2` | **AGPL-3.0-or-later** | The template. |
 | Control-plane frontend (arriving from weownai) | `opencrane-2` | **AGPL-3.0-or-later** | Ships with the template as its UI. |

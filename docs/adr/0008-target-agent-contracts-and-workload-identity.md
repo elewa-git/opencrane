@@ -1,6 +1,7 @@
 # ADR 0008: Target agent contracts and workload identity
 
-**Status:** Accepted
+**Status:** Accepted; amended by [ADR 0009](0009-opensandbox-sandbox-job-substrate.md) for the
+confined OpenSandbox mutation and sandbox-job execution boundary
 **Origin:** [#245](https://github.com/italanta/opencrane/issues/245)
 
 ## Context
@@ -20,6 +21,16 @@ RunEvent, Approval, PersonaRevision, Artifact, SkillRevision, grants, audit, and
 fleet-membership projection. Canonical bytes live behind `ArtifactStore`; durable organization
 memory lives in Cognee. Runtime Pods consume immutable assignments and emit the canonical RunEvent
 protocol. They do not own product state or mutate their approved persona.
+
+A Message accepted while a run is active enters a canonical steering inbox. At a fenced,
+idempotent model-decision boundary, OpenCrane either records that the active run absorbed it or, when
+the terminal transition wins, defers it to an idempotent next run. Toolkit memory and notifications
+are never the authority for that outcome. Send, boundary claim, and termination share one row-locked
+serialization protocol. Absorption advances the run's input generation, and a terminal candidate
+from an older generation must continue rather than close the run. This guard applies only to
+model-derived completion or ordinary failure: abort, deadline, budget, security/policy revocation,
+and lease loss fence and terminate authoritatively regardless of generation while retaining a
+durable disposition for every queued or absorbed Message.
 
 Project is an authorization dimension independent of department and team. A project can include
 people from several departments and teams without copying those memberships. Grant evaluation uses
@@ -46,7 +57,7 @@ Runtime receives only the compiled approved revision; it cannot mutate durable `
 | `agent.run.start` | Start an immutable AgentRevision in an authorized thread | No |
 | `agent.run.cancel` | Fence and cancel an active run | No |
 | `thread.read` | Read ordered messages and RunEvents | No |
-| `thread.message.create` | Persist a user message and request a run | No |
+| `thread.message.create` | Persist a user message and start, steer, or queue its owning run | No |
 | `artifact.read` | Resolve authorized canonical bytes through ArtifactStore | No |
 | `artifact.write` | Lease, digest-verify, promote, and finalize canonical bytes | Policy-dependent |
 | `artifact.delete` | Perform reference-safe authorized deletion | Yes |
@@ -55,6 +66,7 @@ Runtime receives only the compiled approved revision; it cannot mutate durable `
 | `memory.correct` | Correct a durable memory fact with provenance | Policy-dependent |
 | `memory.forget` | Delete an authorized durable memory fact and projections | Yes |
 | `integration.invoke` | Invoke an Obot-custodied external integration | Action-dependent |
+| `sandbox.execute` | Delegate an attenuated subset of the agent/run/action authority to one sandbox attempt | Action-dependent |
 | `approval.decide` | Approve or deny one proof-bound action digest | No |
 
 ### Critical journeys
@@ -71,6 +83,12 @@ Runtime receives only the compiled approved revision; it cannot mutate durable `
    revision only within its configured freshness and hard-expiry bounds.
 6. Durable storage expands online before exhaustion; future application updates remount the same
    target volumes and return ready target Pods in strictly less than five minutes.
+7. A user sends input during a long-running tool. The Message is durable immediately and is either
+   absorbed once before the next model request or visibly deferred to the next run across reconnect,
+   terminal races, and Pod replacement.
+8. A sandbox can exercise the spawning agent's approved artifact and network rights for its exact
+   action, but cannot copy the agent credential, expand those rights, or reuse them for another
+   attempt.
 
 ### Application and workload identity matrix
 
@@ -82,16 +100,17 @@ omitted from the network column for brevity.
 |---|---|---|---|---|
 | `apps/opencrane` | Control API | `opencrane-api` | none | Postgres, artifact-service, memory-gateway, channel-proxy, agent-controller, Obot, LiteLLM |
 | `apps/opencrane-ui` | Browser bundle | none | none | public HTTPS to opencrane only |
-| `apps/channel-proxy` | Channel trust boundary | `channel-proxy` | none | opencrane, agent-runtime, managed-agent-runtime |
-| `apps/agent-controller` | Sole agent-workload mutator | `agent-controller` | bounded create/watch/patch/delete for target runtime Pods and Jobs only | Kubernetes API, opencrane |
+| `apps/channel-proxy` | Channel trust boundary | `channel-proxy` | none | opencrane only; it relays the authorised canonical stream, never a runtime-owned stream |
+| `apps/agent-controller` | Sole OpenCrane agent-workload mutator and OpenSandbox lifecycle caller | `agent-controller` | bounded create/watch/patch/delete for named target Deployments, CronJobs, Jobs, ServiceAccounts and workload network policies; read/watch target Pods for UID/status; no OpenSandbox namespace or object rights | Kubernetes API, opencrane, OpenSandbox lifecycle API |
 | `apps/artifact-service` | ArtifactStore CAS API and maintenance Jobs | `artifact-service` | none | Postgres and its mounted artifact volume |
 | `apps/memory-gateway` | Scoped memory API | `memory-gateway` | none | Cognee, opencrane |
 | `apps/cognee-indexer` | Artifact-to-memory indexing Job | `cognee-indexer` | none | artifact-service, memory-gateway, Cognee |
-| `apps/agent-runtime` | Personal agent Pods | per-workload projected `agent-runtime` identity | none | channel-proxy, artifact-service, memory-gateway, LiteLLM, Obot |
-| `apps/managed-agent-runtime` | Managed-agent Pods | per-workload projected `managed-agent-runtime` identity | none | channel-proxy, declared artifact inputs, memory-gateway, LiteLLM, Obot |
+| `apps/agent-runtime` | Personal agent Pods | per-workload projected `agent-runtime` identity | none | opencrane internal run API, artifact-service, memory-gateway, LiteLLM, Obot |
+| `apps/managed-agent-runtime` | Managed-agent Pods | per-workload projected `managed-agent-runtime` identity | none | opencrane internal run API, declared artifact inputs, memory-gateway, LiteLLM, Obot |
 | `apps/_infra/cognee` | Durable memory engine | `cognee` | none | its mounted stores, LiteLLM |
 | `apps/_infra/litellm` | Model gateway | `litellm` | none | approved model providers and its mounted store |
 | `apps/_infra/obot` | Integration gateway | `obot` | none | approved external integrations and its mounted store |
+| `apps/_infra/opensandbox` | Confined delegated sandbox mutator and execution data plane | `opensandbox` | bounded create/watch/patch/delete for sandbox-namespace workload types only | Kubernetes API and sandbox workloads; lifecycle ingress from agent-controller only |
 | `apps/postgres` | OpenCrane CNPG database Pods | `postgres` | none | in-silo database replication and approved backup destination |
 | `apps/skill-authoring` | Skill authoring Job | `skill-authoring` | none | artifact-service, LiteLLM |
 | `apps/tool-runner` | Sandboxed non-Obot tool Job | per-job projected `tool-runner` identity | none | only capability-declared destinations |
