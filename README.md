@@ -105,7 +105,7 @@ Legend:   [live] live today      [partial] partial / gated      [desired] desire
                            │ clustertenant-manager — THE control plane      [live]    │◄──►│ CNPG Postgres           [live] │
                            │ API + operator + gateway-proxy · one deployment          │    └────────────────────────────────┘
                            │ Obot config authority · MCP registry · contract API      │    ┌────────────────────────────────┐
-                           └──────────────────────────────────────────────────────────┘    │ Skill OCI store (Zot) [partial]│
+                           └──────────────────────────────────────────────────────────┘    │ ArtifactStore CAS (PVC) [target]│
                                              │                                             └────────────────────────────────┘
                                              │  (0) config · (1) grants · (2) effective-contract → pods
                                              ▼

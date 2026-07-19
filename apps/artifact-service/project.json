@@ -1,0 +1,18 @@
+{
+  "name": "artifact-service",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/artifact-service/src",
+  "tags": ["type:app", "layer:entrypoint", "scope:artifacts"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/artifact-service"],
+      "options": { "command": "rm -rf dist/apps/artifact-service && esbuild apps/artifact-service/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/artifact-service/index.js" }
+    },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/artifact-service" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "apps/artifact-service" } },
+    "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/artifact-service/helm" } },
+    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/artifact-service/deploy/Dockerfile ." } }
+  }
+}

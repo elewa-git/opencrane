@@ -25,6 +25,9 @@
       "@opencrane/backend/artifacts/filesystem": [
         "./libs/backend/artifacts/filesystem/main/src/index.ts"
       ],
+      "@opencrane/backend/artifacts/authorization": [
+        "./libs/backend/artifacts/authorization/main/src/index.ts"
+      ],
       "@opencrane/backend/server/api-spec": [
         "./libs/backend/server/api-spec/main/src/index.ts"
       ],

@@ -6,6 +6,7 @@
     "database-schema",
     "opencrane-ui",
     "channel-proxy",
+    "artifact-service",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -35,6 +36,7 @@
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
         "Deployment/opencrane-mcp-gateway",
@@ -55,6 +57,7 @@
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
         "Deployment/opencrane-mcp-gateway",
@@ -109,6 +112,7 @@
         "database-schema",
         "opencrane-ui",
         "channel-proxy",
+        "artifact-service",
         "cognee",
         "litellm",
         "obot-gateway-controller",
@@ -214,6 +218,16 @@
       "localOwner": true,
       "source": { "type": "file", "path": "apps/channel-proxy/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.channelProxy.resources\"" }
+    },
+    {
+      "id": "artifact-service",
+      "podClass": "Deployment/artifact-service",
+      "renderedPodClass": "Deployment/opencrane-artifact-service",
+      "image": "ghcr.io/italanta/opencrane-artifact-service:<release-tag>",
+      "owner": "apps/artifact-service",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/artifact-service/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactService.resources\"" }
     },
     {
       "id": "cognee",

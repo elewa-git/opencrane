@@ -1,0 +1,14 @@
+{
+  "name": "@opencrane/artifact-service",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "dependencies": {
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/auto-instrumentations-node": "^0.78.0",
+    "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
+    "@opentelemetry/sdk-node": "^0.220.0",
+    "pino": "^9.6.0"
+  }
+}

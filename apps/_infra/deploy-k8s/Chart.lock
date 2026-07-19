@@ -11,6 +11,9 @@ dependencies:
 - name: opencrane-channel-proxy
   repository: file://../../channel-proxy/helm
   version: 0.1.0
+- name: opencrane-artifact-service
+  repository: file://../../artifact-service/helm
+  version: 0.1.0
 - name: opencrane-database-schema
   repository: file://components/database-schema
   version: 0.1.0
@@ -26,5 +29,5 @@ dependencies:
 - name: langfuse
   repository: https://langfuse.github.io/langfuse-k8s
   version: 1.5.37
-digest: sha256:1beca3ab60cf1e3288713d7afe42974883ee8c94d64a0c3f0fb1dc3f9f65abd9
-generated: "2026-07-18T18:41:59.752789+03:00"
+digest: sha256:19198b06731155489b511eac7b5d60b82e171a1d1a6bafd36619dbb6ee2b16fe
+generated: "2026-07-19T01:04:56.38326+03:00"
