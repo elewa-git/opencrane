@@ -214,21 +214,49 @@ flowchart TD
 
   subgraph O["OpenCrane-owned reliability envelope"]
     K["Toolkit driver: bounded streamed model/tool loop"] --> Q{"Loop callback or outcome?"}
-    Q -- "final" --> F["Persist final message and terminal event"]
-    Q -- "governed tool callback" --> P["Validate policy, approval, budgets and idempotency"]
-    P --> X["Execute tools; persist ordered results"]
-    X --> K
+    Q -- "text, tool, approval, progress or usage event" --> V["Submit proof-bound candidate with fence and idempotency ID"]
+    V --> W["OpenCrane run-ingest API: validate and transactionally append RunEvent"]
+    W --> D["Wake live subscribers after commit"]
+    D --> K
+    Q -- "final" --> F["Submit final candidate through run-ingest API"]
+    Q -- "governed tool callback" --> P["OpenCrane validates policy, approval, budgets and idempotency"]
+    P --> X["Execute tool and submit ordered result candidate"]
+    X --> V
     Q -- "failure" --> E{"Recoverable failure?"}
     E -- "context pressure" --> M["Compact derived context; preserve canonical history"]
     M --> K
     E -- "safe transient before side effect" --> R["Bounded retry or model fallback"]
     R --> K
-    E -- "unsafe or exhausted" --> Z["Persist one terminal failure"]
+    E -- "unsafe or exhausted" --> Z["Submit terminal failure candidate through run-ingest API"]
   end
 
-  F --> U["Release lease and publish/replay RunEvents by cursor"]
-  Z --> U
+  F --> T["OpenCrane validates and atomically commits one terminal outcome"]
+  Z --> T
+  T --> U["Release lease; terminal event remains replayable by cursor"]
 ```
+
+The diagram is a logical envelope across the runtime and `apps/opencrane`; it does not imply runtime
+database access. The driver contract is live, not turn-buffered. `LoopEventSink` receives model
+deltas, tool lifecycle, approval, progress, usage, and child-run signals while the step that produced
+them is still executing. Raw toolkit callbacks are event candidates. The adapter may coalesce only
+high-frequency model deltas into one bounded `message.delta` candidate before persistence; tool,
+approval, artifact, usage, and terminal transitions keep their semantic boundaries. The reliability
+envelope then submits the candidate to the workload-authenticated internal run-ingest API with its
+run proof, attempt, fencing token and stable candidate ID. Model output and model-derived completion/
+ordinary-failure candidates also carry the input generation used for that model request. The
+OpenCrane writer validates it,
+transactionally assigns the next `(runId, sequence)`, persists it, and wakes SSE subscribers.
+Retrying `(runId, attempt, candidateId)` returns the same event. The UI may therefore render partial
+text, the active tool, elapsed time, progress, and approval state without waiting for the run to
+finish.
+
+Candidate formation may use a small bounded latency/size window, but it may not buffer an entire
+model turn or tool execution. Once formed, the canonical event is never delivery-only or
+re-coalesced into a different history. Long-running tools emit rate-bounded heartbeats or progress
+events even when they have no user-facing output. A disconnected client resumes after its last
+applied sequence and receives the same events from Postgres before rejoining the live tail. Abort
+and approval decisions remain authenticated HTTP commands, while SSE is the initial one-way event
+transport.
 
 ## What must be replicated—and what must not
 
@@ -239,6 +267,7 @@ Replicate the product behavior that OpenCrane currently relies on:
 - per-thread serialization, duplicate-send suppression and safe abort;
 - tool argument validation, authorization, approvals and model-visible failures;
 - sequential and parallel tool execution with deterministic transcript ordering;
+- mid-run steering through canonical user messages considered at the next model-decision boundary;
 - context-window management, semantic compaction and intact tool pairs;
 - bounded provider/auth/model recovery and one terminal outcome;
 - reconnect/replay, usage accounting, trace correlation and crash reconciliation;
@@ -278,7 +307,30 @@ Introduce a transport-neutral backend contract before selecting the final toolki
 ```ts
 interface AgentLoopDriver
 {
-  run(request: LoopRequest, sink: LoopEventSink, signal: AbortSignal): Promise<LoopOutcome>;
+  run(
+    request: LoopRequest,
+    sink: LoopEventSink,
+    steering: LoopSteeringSource,
+    signal: AbortSignal,
+  ): Promise<LoopOutcome>;
+}
+
+interface LoopSteeringSource
+{
+  claimAtBoundary(boundary: LoopSteeringBoundary): Promise<LoopSteeringBatch | null>;
+}
+
+interface LoopSteeringBoundary
+{
+  boundaryId: string;
+}
+
+interface LoopSteeringBatch
+{
+  absorptionId: string;
+  inputGeneration: number;
+  messageIds: string[];
+  messages: ModelMessage[];
 }
 
 type LoopRequest =
@@ -335,14 +387,64 @@ resume from normalized OpenCrane state only when it can prove that no visible ou
 will be replayed. SDK types must not enter public APIs, frontend state, tool policy, or Cognee/Obot
 contracts.
 
+Steering is pull-based at a safe model-decision boundary: after the current model response, ordered
+tool results, or approval outcome is durably represented and before the next model request. The
+runtime shell supplies `LoopSteeringSource`; it binds run proof, attempt, fence, current input
+generation, and acknowledged cursor internally. The toolkit adapter supplies only a neutral,
+deterministic boundary ID and inserts returned messages once; writer-authority data never enters the
+toolkit adapter. The shell's event sink associates later candidates with the returned generation.
+
+A message arriving during a tool or sandbox execution does not silently cancel that action. A
+message arriving while approval is pending does not change the exact approved tool call; it is
+eligible after the approval outcome and tool result have been recorded. Drivers never emit
+`steering.*` events; those are created only by OpenCrane's send, claim, and terminal transactions.
+
+`claimAtBoundary` is not an in-memory queue drain. The shell-owned source calls an authenticated
+OpenCrane endpoint with its bound run proof, attempt, fence, current generation, acknowledged cursor,
+and the adapter's stable boundary ID. The sole OpenCrane writer atomically claims
+all eligible canonical Messages in thread order, appends one `steering.absorbed` event containing
+only stable IDs, and returns the immutable batch. Repeating the same boundary returns the same batch
+and event. Recovery reconstructs context from the initial `RunInputSnapshot` plus canonical absorbed
+message IDs; a toolkit checkpoint is never the authority for whether input was consumed.
+
+The steering claim and terminal transition serialize on the active run. Each successful claim
+increments the canonical `inputGeneration` and returns it with the batch; model output and a
+model-derived completion or ordinary-failure candidate carry the generation used for their model
+request. If the claim commits first, a model-derived terminal candidate from the previous generation
+is rejected with a continue outcome and cannot close the run. Only such a candidate whose expected
+generation equals the row-locked current generation may commit. If the normal terminal transaction
+locks first, it appends `steering.deferred` immediately before the terminal event and creates or
+reuses the idempotent next run for still-queued Messages in the same transaction. A send that arrives
+after termination starts that next run directly.
+
+Abort/cancel, deadline, budget, security or policy revocation, and lease loss are authoritative stop
+transitions, not model-derived terminal candidates. Under the same row lock they fence execution and
+commit exactly one terminal event regardless of input generation. Unclaimed Messages receive a
+durable `steering.deferred` pending disposition and may enter a later run only through normal
+authorized admission; a policy or budget stop cannot be bypassed by automatic re-run. Messages
+already recorded as `steering.absorbed` remain attached to the stopped run and are not silently
+replayed. The UI shows that the run stopped before further model work; an explicit authorized retry
+may reference that input without creating another canonical Message.
+
+Enqueue uses the same thread/active-run serialization. The send transaction locks the thread's
+active-run pointer and target run before deciding its disposition. If enqueue wins, the Message and
+`steering.queued` belong to the active run and a later terminal transaction must absorb-or-defer it.
+If termination wins, send creates or reuses the next run directly. It never appends to a closed run
+or leaves a canonical Message without an owning disposition.
+
+This inbox is an ordered Postgres control-plane record, not the background provisioning/indexing
+work queue. `RunInputSnapshot` stays immutable; absorbed steering is an append-only input supplement.
+A repeated or stale-fenced claim cannot advance the generation, and recovery derives the current
+generation from canonical Run state and absorption events.
+
 ### Canonical run model
 
 At minimum, define:
 
 - `Thread`: silo, participants, current context-revision pointer and timestamps;
 - `Message`: immutable user/assistant/tool/system record, stable content blocks and provenance;
-- `Run`: request idempotency key, parent/root lineage, state, input snapshot, model route, budgets,
-  usage and terminal classification;
+- `Run`: request idempotency key, parent/root lineage, state, input snapshot, absorbed-input
+  generation, model route, budgets, usage and terminal classification;
 - `RunEvent`: `(runId, sequence)` ordered event log with a stable event vocabulary;
 - `ToolInvocation`: stable call id, policy decision, approval, dispatch idempotency key, side-effect
   state and result reference;
@@ -368,12 +470,20 @@ tool.progress
 tool.completed
 context.compaction_started
 context.compaction_completed
+steering.queued
+steering.absorbed
+steering.deferred
 run.usage
 run.completed | run.failed | run.cancelled
 ```
 
 Persist events before they are published. A client reconnects from the last sequence it has applied;
-live SSE or WebSocket delivery and history are two views over the same log.
+live SSE or WebSocket delivery and history are two views over the same log. Drivers that emit only a
+final buffered response fail conformance even if their final answer is correct.
+
+The accepted Phase C `RunEventType` currently predates these steering events. Phase D must extend
+that public vocabulary and define metadata-only payload schemas (`messageIds`, boundary/absorption
+ID, and next-run ID where applicable) before the new steering fixtures are considered implemented.
 
 ## Toolkit evaluation
 
@@ -386,8 +496,8 @@ conformance run instead of treating an investigation-day "latest" number as an a
 
 | Candidate | Strengths for this seam | Main risk/overlap | Decision |
 |---|---|---|---|
-| `@openai/agents` | TypeScript; streaming; custom `Session`; serializable approval interruptions; abort; MCP; `maxTurns`; custom OpenAI-compatible base URL and Chat Completions/Responses modes | OpenAI-shaped semantics; default tracing and internal retries need control; provider-neutral compaction remains ours | **Primary spike** |
-| `ai` / `ToolLoopAgent` | Thin TypeScript loop; strong OpenAI-compatible/LiteLLM fit; stop conditions, per-step preparation, streaming, abort and approvals; application naturally owns persistence | More session, recovery, resume and event semantics must be implemented by OpenCrane | **Control and fallback** |
+| `@openai/agents` | TypeScript; streaming; custom `Session`; serializable approval interruptions; abort; MCP; `maxTurns`; custom OpenAI-compatible base URL and Chat Completions/Responses modes | OpenAI-shaped semantics; default tracing and internal retries need control; provider-neutral compaction remains ours; no first-class between-turn input hook, so steering may require bounded run segmentation or session re-entry | **Primary spike** |
+| `ai` / `ToolLoopAgent` | Thin TypeScript loop; strong OpenAI-compatible/LiteLLM fit; stop conditions, per-step preparation (a natural steering-boundary seam), streaming, abort and approvals; application naturally owns persistence | More session, recovery, resume and event semantics must be implemented by OpenCrane | **Control and fallback** |
 | OpenAI Agents SDK Python | Mature equivalent primitives and sessions | Adds a second language/service/runtime without a demonstrated loop advantage; Python tools are isolated Jobs anyway | Reject unless JS fails a hard gate that Python passes |
 | `@langchain/langgraph` | Excellent checkpoints, replay, interrupts and deterministic graph workflows | Its thread/checkpoint runtime competes with OpenCrane's canonical run/event authority; too much machinery for a bounded loop | Reject unless long-lived deterministic graphs become a product requirement |
 | `@mastra/core` | Broad agent, workflow, memory, storage, MCP and observability platform | High overlap with nearly every OpenCrane authority this design is trying to simplify | Reject as the loop substrate |
@@ -424,6 +534,8 @@ it:
   authorization layer or server;
 - compaction destroys/replaces canonical history or requires OpenAI's hosted `responses.compact`;
 - retries can replay an externally visible token stream or a dispatched tool call;
+- a durable steering batch cannot be inserted exactly once before the next model request without
+  toolkit-owned transcript authority, loss, duplicate absorption, or mutation of a pending approval;
 - telemetry exports prompts/tool payloads externally and cannot be disabled;
 - SDK types must leak into the durable or product-facing contract to preserve correct behavior.
 
@@ -472,11 +584,30 @@ Deliverables:
 
 - Prisma schema definitions and empty-store initialization for the canonical model above;
 - append-only event writer with unique `(runId, sequence)` and one terminal-event constraint;
+- workload-authenticated internal run-ingest API with writer fencing, bounded candidates, and unique
+  `(runId, attempt, candidateId)` idempotency plus input-generation validation for model/terminal
+  candidates; runtimes have no Postgres network path;
 - one-active-run thread lease with fencing token and expiry/reconciliation;
 - idempotent send, abort, approval and tool-dispatch APIs;
+- a durable per-thread steering inbox plus an idempotent, fenced boundary-claim API; enqueueing the
+  canonical Message and `steering.queued` event is transactional, as are absorption or deferral;
+- one row-locked serialization protocol for send/enqueue, boundary claim, and terminal transition;
+  an enqueue/terminal race always assigns the Message to the active or idempotent next run;
+- canonical absorbed-input generation on each run; model output and model-derived completion/
+  ordinary-failure candidates name the generation they used, and a stale model-derived terminal
+  returns continue without closing the run;
+- authoritative abort/cancel, deadline, budget, security/policy-revocation, and lease-loss commands
+  fence and terminate regardless of generation, with queued and absorbed input durably accounted;
 - cursor-based message history and run-event replay;
 - SSE first for ordered server events unless bidirectional live requirements prove WebSocket is
   necessary; commands remain authenticated HTTP endpoints;
+- contiguous per-run sequence allocation under the fenced writer, committed atomically with the
+  related transcript, tool, approval, or terminal mutation;
+- post-commit SSE wake-up plus authorized cursor backfill from the same Postgres log; wake-ups are
+  hints, never event authority;
+- bounded coalescing for model deltas and rate/size limits for untrusted tool progress;
+- at-least-once delivery with client de-duplication by `(runId, sequence)` and slow-consumer
+  disconnect/resume rather than producer backpressure;
 - runtime-neutral client adapter implementing the current `ConversationGateway` plus explicit
   approval/attachment/run affordances;
 - target transcript retention/deletion policy; existing OpenClaw JSONL is not imported.
@@ -484,7 +615,13 @@ Deliverables:
 Exit gate:
 
 - duplicate sends return the same run;
-- concurrent sends have an explicit queue/reject policy and never interleave one thread context;
+- concurrent sends are ordered canonical Messages, then either absorbed once at a model-decision
+  boundary or deferred once to the next run; they never interleave one thread context;
+- a terminal/steering race produces exactly one durable `steering.absorbed` or
+  `steering.deferred` outcome and the UI can explain which run owns the input;
+- a claim-first race advances input generation and rejects the stale model-derived terminal
+  candidate; a stale attempt or fencing token cannot claim input or advance generation;
+- an enqueue/terminal race cannot append to a closed run or strand a Message without an owning run;
 - reconnect from any persisted cursor produces no duplicate or missing normalized event;
 - process death cannot leave two writers owning the same run/thread.
 
@@ -515,6 +652,7 @@ framework abstraction beyond what the two real adapters require.
 Run both against the actual per-silo LiteLLM endpoint and all required model aliases:
 
 1. text streaming and usage;
+   assert that the first persisted delta reaches the subscriber before the model turn completes;
 2. fragmented tool arguments and cumulative/delta event normalization;
 3. sequential and parallel tools with deterministic result ordering;
 4. malformed calls, unknown tools, tool exceptions, denial and model-visible error results;
@@ -522,12 +660,22 @@ Run both against the actual per-silo LiteLLM endpoint and all required model ali
    repeat across a pinned runtime upgrade or prove that deployments drain/expire pending approvals
    before the old serializer is removed;
 6. abort during model stream, tool execution and post-tool model call;
+   require bounded progress/heartbeat events during a deliberately slow tool and cursor replay after
+   disconnect;
 7. 429/5xx/network faults before first byte, after visible output and after tool dispatch;
 8. context pressure, provider-neutral compaction and intact tool-call/result pairs;
 9. token, cost, wall-clock, turn, tool-call, per-tool and child-agent budgets;
 10. OpenCrane trace export with sensitive payload recording disabled by default;
 11. pod eviction, LiteLLM outage, Obot outage, Cognee degradation, duplicate send and concurrent
-    send.
+    send;
+12. steering during model streaming, MCP or sandbox execution, and pending approval; verify ordered
+    absorption before the next model request, terminal-race deferral, duplicate-boundary replay,
+    claim-first rejection and retry of a stale-generation terminal, stale-fence denial,
+    enqueue-versus-terminal serialization, process death before and after claim acknowledgement, and
+    no mutation of the pending approval.
+13. authoritative stop after a steering claim: abort/deadline/budget/revocation/lease loss commits
+    one terminal outcome regardless of generation, launches no extra model/tool work, and leaves
+    queued/absorbed input in its documented canonical disposition.
 
 Exit gate:
 
@@ -536,11 +684,43 @@ Exit gate:
 - record conformance only against the independently approved target fixtures; do not compare with or
   update expectations from OpenClaw behavior.
 
+### L3b — qualify the bounded sandbox-job executor
+
+Define an OpenCrane-owned `SandboxJobExecutor` and qualify one exact-pinned OpenSandbox adapter in
+parallel with the loop bake-off. The adapter is implemented behind the controller/tool-runner
+boundary; `AgentLoopDriver` never imports an OpenSandbox client or dispatches lifecycle operations.
+
+Test controller-authenticated private ingress, namespace-confined RBAC, the approved gVisor or Kata
+runtime class, immutable default-deny egress, DNS and redirect resistance, image digest pinning,
+quotas, TTL, cancellation, lifecycle restart, dispatch idempotency, scratch destruction,
+ArtifactStore inputs/outputs, attenuated spawning-agent capability inheritance, privilege-expansion
+and credential-copy denials, old-attempt and cross-silo/workload replay denial, cancellation/expiry/
+revocation fencing, immutable in-flight assignments, event rate/size limits, and audit correlation.
+
+OpenSandbox passes only if runtimes cannot reach its control API, no shared upstream key is treated
+as tenant authorization, no broad Obot/provider credential enters the sandbox, and its MCP, vault,
+policy mutation, persistence, approval, retry, artifact, and run-state facilities remain unused. A
+failed adapter is removed without changing the `SandboxJobExecutor` contract. A passing adapter is
+the only production sandbox executor; delete the alternative path.
+
+Exit gate:
+
+- one canonical tool attempt maps to at most one sandbox and one terminal tool outcome;
+- cancellation, expiry, node loss, and controller restart destroy scratch and reconcile status;
+- retry or resume mints a new attempt capability; every prior, cross-silo, or wrong-workload proof
+  fails, and cancellation/expiry/revocation prevents further PEP use and triggers bounded cleanup;
+- steering cannot mutate an executing sandbox's action, arguments, egress, artifacts, or capability;
+- only authorized ArtifactVersions enter or leave the sandbox;
+- OpenSandbox can be replaced without changing Run, RunEvent, approval, artifact, or UI contracts.
+
 ### L4 — build the OpenCrane reliability envelope
 
 Deliverables:
 
 - explicit state machine for accepted, running, awaiting-approval, cancelling and terminal states;
+- canonical steering-inbox state and a serialized model-decision admission boundary, with the last
+  absorbed message IDs and input generation available to recovery independently of toolkit
+  continuation state;
 - runtime-version-tagged toolkit continuation state treated as a replaceable checkpoint, while the
   OpenCrane `Approval` and `ToolInvocation` records remain canonical;
 - transactional event/message append with an outbox for delivery/capture side effects;
@@ -606,7 +786,14 @@ Exit gate:
 | Scenario | Required invariant |
 |---|---|
 | Duplicate user request | One `Run`, one user `Message`, one set of side effects |
-| Two concurrent sends | Explicit order/rejection; never interleaved model context |
+| Two concurrent sends | Canonical thread order; each input is absorbed or deferred once and model context never interleaves |
+| Mid-run message | Canonical `steering.queued`, then exactly one ordered `steering.absorbed` before the next model request or `steering.deferred` to the next run |
+| Steering and terminal race | The serialized winner is durable; reconnect and recovery show the same owning run |
+| Steering claim wins | Input generation advances; a model-derived terminal from the older generation returns continue and cannot close the run |
+| Stale steering claim | Wrong attempt, fence, expected generation, or replay cannot claim input or advance generation |
+| Authoritative stop after steering | Abort/deadline/budget/revocation/lease loss fences and terminates once regardless of generation; no extra work starts and input remains canonically accounted |
+| Steering during approval | Pending tool identity, arguments and decision remain unchanged; accepted input is considered only after resume at the next model-decision boundary |
+| Steering recovery | Repeating a boundary or replacing the Pod neither loses nor duplicates an absorbed message |
 | Parallel tools | Concurrent where policy allows; result messages persist in call order |
 | Unknown/malformed tool | Model-visible governed error; loop remains bounded |
 | Tool policy denial | No dispatch; durable denial evidence; safe model-visible result |
@@ -618,6 +805,15 @@ Exit gate:
 | Context overflow | Derived compaction then bounded retry; canonical history unchanged |
 | Post-compaction loop | Repeated identical tool/args/result pattern terminates within budget |
 | Reconnect | Cursor replay has no gap or duplicate after client folding |
+| Live run | Committed text, tool, approval, progress, and usage events are visible before termination; no user-visible event exists only in memory |
+| Commit/wake-up crash | A committed event remains replayable when notification or live delivery fails |
+| Slow client | Execution continues; the client reconnects by cursor without a canonical event gap |
+| Sandbox attempt | One canonical attempt maps to at most one sandbox with immutable egress/resources and ArtifactStore-only durable output |
+| Sandbox delegated authority | Attempt rights are an expiring, proof-bound subset of the spawning agent/run/action; credential copying and privilege expansion fail closed |
+| Sandbox capability replay | Retry/resume uses a new capability; old-attempt, cross-silo, and wrong-workload proofs fail |
+| Sandbox revocation | Cancel, expiry, or authorization revocation fences further PEP use and triggers bounded workload/egress cleanup without mutating the recorded assignment |
+| Steering during sandbox execution | The Message queues for the next model decision and cannot mutate the in-flight action, arguments, egress, artifacts, or capability |
+| Sandbox cancellation/expiry | Execution stops within deadline, scratch is destroyed, and one durable terminal tool outcome remains |
 | Cognee unavailable | Declared degrade/fail policy; never cross-scope recall/capture |
 | Obot unavailable/denies | Fail closed for governed tools; no local policy bypass |
 | Budget exhaustion | Tool/model work stops; durable classified terminal outcome and usage |
@@ -628,8 +824,12 @@ Exit gate:
 
 Gate L0 should record these explicitly:
 
-1. whether a second user message during a run queues, steers the active run, or is rejected—the
-   default recommendation is queue as the next run, with steering deferred until a proven need;
+1. **Resolved 2026-07-18 — steer at the next model decision.** A second user message is a canonical
+   queued Message. A fenced, idempotent boundary claim absorbs it once before the next model request;
+   if the terminal transition wins, OpenCrane durably defers it to the next run. The UI observes
+   `steering.queued`, then `steering.absorbed` or `steering.deferred`. Mid-turn interruption remains
+   out of scope; users use explicit abort/reject commands when they need to stop an executing or
+   approval-pending action;
 2. which tools require durable human approval and which can ever execute in parallel;
 3. the permitted model fallback set and whether fallback after visible output is forbidden;
 4. quantitative per-run token, cost, time, tool and child-agent budgets;

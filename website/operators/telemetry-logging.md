@@ -85,6 +85,7 @@ OTLP backend. Two modes:
 
 ## See also
 
+- [Runs & streaming](/integrators/agents/runs-streaming) — durable RunEvents versus operational telemetry
 - [Runbook](/operators/runbook) — operational procedures
 - [Awareness SLOs](/operators/awareness-slos) — what the platform watches
 - [Model routing](/guide/model-routing) — cost & quality metrics built on this pipeline

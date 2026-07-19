@@ -33,6 +33,18 @@ the target, refined by the
    Kubernetes mutation RBAC; Cilium/default-deny enforces workload isolation; Python Jobs are
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
+5. **Sandbox jobs:** OpenSandbox is scheduled as the exact-pinned execution substrate for
+   non-Obot sandbox Jobs, behind an OpenCrane-owned adapter. OpenCrane still owns authorization,
+   identity, scheduling, canonical events, artifacts, and recovery; Obot still owns MCP credential
+   custody. Each attempt receives only an expiring, proof-bound subset of the spawning agent's
+   effective rights for the approved action—never copied credentials or broader ambient authority.
+   The upstream lifecycle API is internal-only and its Kubernetes rights are confined to the
+   sandbox namespace and workload profile (see
+   [ADR 0009](docs/adr/0009-opensandbox-sandbox-job-substrate.md)).
+6. **Live runs and steering:** every visible callback is committed as an ordered `RunEvent` before
+   cursor-based SSE delivery. Mid-run input is a canonical Message, absorbed once at the next
+   model-decision boundary or durably deferred when the terminal transition wins; the UI observes
+   the same result after reconnect or recovery.
 
 Toolkit selection remains evidence-driven: the Phase E conformance run chooses one exact-pinned
 driver (→ [#246](https://github.com/italanta/opencrane/issues/246)).
@@ -80,10 +92,14 @@ path and ownership refactor; it adds no compatibility aliases and changes no run
 
 Build the target Postgres models for AgentService/Revision/Run, Thread/Message/RunEvent, Approval,
 Persona, Artifact, SkillRevision, audit, and membership projection. Build the authorization facade,
-proof-bound capabilities, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
-Cognee/Obot adapters, default-deny Cilium profiles, workload identities, and deterministic creation
-of fresh application stores and credentials. Every durable store uses an expandable mounted volume;
-agent-runtime storage is mounted scratch and never the long-term home for user data.
+proof-bound capabilities, the workload-authenticated fenced run-ingest API and post-commit SSE
+projection, the durable steering inbox, model-decision boundary claim, and input-generation terminal
+guard for model-derived outcomes plus generation-independent authoritative stops, channel proxy,
+agent controller, ArtifactStore CAS, outbox, app-owned
+Cognee/Obot adapters, the OpenSandbox adapter and confined deployment boundary, default-deny Cilium
+profiles, workload identities, and deterministic creation of fresh application stores and
+credentials. Every durable store uses an expandable mounted volume; agent-runtime and sandbox-job
+storage is mounted scratch and never the long-term home for user data.
 
 Delete replaced legacy schemas, Tenant/AccessPolicy authority, OpenClaw imports, static agent-token
 paths, broad secret broadcasts, obsolete topology switches, and unowned deployables in the same
@@ -103,7 +119,13 @@ tests fail closed; backup/restore reconstructs target-owned stores; no legacy co
 `RunInputSnapshot`, the prompt compiler, independently authored target fixtures, toolkit conformance
 against the target LiteLLM matrix, one exact-pinned driver, the reliability envelope,
 interview-generated PersonaRevision and PreferenceFact learning, multimodal and document authoring,
-and governed Python skill Jobs
+and governed Python skill Jobs on an exact-pinned OpenSandbox runtime. The driver must emit live
+model, tool, approval, progress, usage, and terminal callbacks; OpenCrane persists each normalized
+`RunEvent` before streaming it to the UI by cursor so long tasks remain visibly active and reconnect
+without gaps. Mid-run user input remains a canonical Message: a fenced, idempotent boundary claim
+absorbs it once before the next model request, or the terminal transition durably defers it to the
+next run. A sandbox attempt receives only an expiring, proof-bound subset of the spawning agent's
+effective rights for the exact approved action; no agent credential or ambient authority is copied
 ([#222](https://github.com/italanta/opencrane/issues/222),
 [#243](https://github.com/italanta/opencrane/issues/243)).
 
@@ -114,7 +136,13 @@ useful Slack behavior only as schedule + MCP + skill + checkpoint; delete the in
 direct Cognee writes.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
-isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
+isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface. Every
+user-visible event is committed before delivery, cursor replay is gapless after disconnect or
+process death, slow clients cannot block execution, and sandbox attempts pass idempotency, egress,
+cancellation, ArtifactStore publication, expiry, deletion, inherited-rights, and privilege-expansion
+negative tests. Old-attempt, cross-silo, wrong-workload, expired, cancelled, and revoked proofs fail;
+steering cannot mutate an in-flight assignment. Steering survives retries, terminal races, and Pod
+replacement with one visible `steering.absorbed` or `steering.deferred` outcome.
 
 ### Phase F — product and operator surfaces
 

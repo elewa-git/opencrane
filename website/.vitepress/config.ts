@@ -122,7 +122,18 @@ export default defineConfig({
         text: 'Deep dives',
         collapsed: true,
         items: [
-          { text: 'Agent workspace & control', link: '/integrators/agent-workspace' },
+          {
+            text: 'Agents',
+            collapsed: false,
+            items: [
+              { text: 'Overview', link: '/integrators/agents/' },
+              { text: 'Personality', link: '/integrators/agents/personality' },
+              { text: 'MCP calling', link: '/integrators/agents/mcp-calling' },
+              { text: 'Authentication', link: '/integrators/agents/authentication' },
+              { text: 'Sandbox jobs', link: '/integrators/agents/sandbox-jobs' },
+              { text: 'Runs & streaming', link: '/integrators/agents/runs-streaming' },
+            ],
+          },
           { text: 'MCP gateway (Obot)', link: '/integrators/mcp-gateway' },
           { text: 'Retrieval & memory (Cognee)', link: '/integrators/retrieval-memory' },
           { text: 'Silo IAM: inheritance & sharing', link: '/integrators/silo-iam' },

@@ -9,6 +9,8 @@ isolation, AccessPolicy mapping, and freshness controls.
 > memberships, resource share-groups, and the retrieval scope precedence cascade.
 > [MCP gateway (Obot)](/integrators/mcp-gateway) — the runtime plane that routes agent tool calls,
 > and where workspace layering (MEMORY.md, TOOLS.md) sits.
+> [Agent personality](/integrators/agents/personality) — the target boundary between an immutable
+> PersonaRevision, recalled memory, and runtime scratch.
 
 ::: info Not the same as the agent's own workspace memory
 The per-agent `MEMORY.md` file seeded into each tenant pod is an L2 scratch document —

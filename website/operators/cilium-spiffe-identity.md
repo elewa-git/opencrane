@@ -163,6 +163,7 @@ relax it.
 
 ## See also
 
+- [Agent authentication](/integrators/agents/authentication) — how workload identity is narrowed into run and action capabilities
 - [Networking & isolation](/operators/networking) — the public edge, the two planes, and how the silo baseline composes with these identity rules
 - [Identity & connection auth](/security/identity) — how a person authenticates (Zitadel OIDC) and reaches their own assistant with no browser-held pod credential
 - [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how a person's org-scoped identity flows into what their assistant may retrieve and act on

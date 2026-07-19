@@ -11,7 +11,7 @@ to the target architecture.
 | Capability | Target contract |
 |------------|-----------------|
 | Organization identity and membership | Use OIDC and fleet lifecycle/membership as live external authorities. A cached membership revision is trusted only when its issuer signature verifies, its revision is the newest observed for that silo, and its bounded freshness has not expired. Fail closed after expiry. |
-| Personal agent conversation | Provide streaming messages, ordered history, tool events, abort, retry/recovery, and stable thread ownership through the Thread, Run, and RunEvent contracts. |
+| Personal agent conversation | Provide streaming messages, ordered history, tool events, abort, retry/recovery, and stable thread ownership through the Thread, Run, and RunEvent contracts. A user message sent while a run is active becomes a canonical queued Message. At the next model-decision boundary OpenCrane atomically either absorbs it into that run or, when the terminal transition wins the race, defers it to the next run. The user sees the durable outcome, and the input survives reconnect, Pod replacement, and recovery without duplicate absorption. |
 | Persona and preferences | Require an onboarding interview before the first personal-agent session. Key answers select a versioned `SOUL.md` template and infuse a small set of explicit interview insights into a reviewable first PersonaRevision. The user approves, edits, or retakes it and may replace it later. |
 | Personal and agent memory | Store durable organization memory in Cognee with explicit dataset identity, scope, and provenance. |
 | Company, document, and artifact knowledge | Keep canonical bytes and versions in ArtifactStore and index derived knowledge in Cognee. |
@@ -41,6 +41,23 @@ OpenCrane defines authorization directly:
 
 Department membership neither grants nor prevents project membership. Project grants are explicit
 and combine with the other grants through the priority and Deny-at-equal-priority rules.
+
+### Delegated sandbox authority
+
+A sandbox attempt inherits only the part of the spawning agent's effective authority needed for its
+approved action. OpenCrane derives a short-lived capability as the intersection of the initiating
+agent and actor grants, immutable run and AgentRevision, exact action and arguments, authorized
+ArtifactVersions and egress, and the sandbox profile ceiling. The capability is proof-bound to one
+silo, run, attempt, sandbox workload identity, expiry, and replay record.
+
+The sandbox cannot receive a right the agent lacked, expand the delegated scope, or reuse it for a
+different attempt. OpenCrane does not copy the agent's workload credential, provider key, Obot key,
+or other ambient credential into the sandbox. Revocation-sensitive operations perform the required
+online authorization check before capability issue or use. Retry or resume creates a new attempt
+capability; an old-attempt, cross-silo, or wrong-workload proof fails. Cancellation, expiry, or
+relevant authorization revocation fences further PEP use and triggers bounded sandbox/egress cleanup.
+The recorded assignment is immutable: steering cannot rewrite its action, arguments, artifacts,
+egress, resources, or capability.
 
 ## Identity and membership failure behavior
 

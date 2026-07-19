@@ -42,7 +42,8 @@ The target can be summarized as five rules:
    Postgres and Cognee as a downstream index.
 4. **One agent-workload controller:** the only application identity allowed to create OpenCrane
    agent Deployments, CronJobs, and Jobs. Obot's separately confined upstream controller is the
-   narrow exception for MCP-server workloads in its own namespace.
+   narrow exception for MCP-server workloads in its own namespace; OpenSandbox is the separately
+   confined delegated mutator for sandbox workloads in its sandbox namespace.
 5. **One management path:** OpenCrane API first, OpenCrane UI for people, and generated clients
    for automation. There is no separately maintained command-line product.
 
@@ -188,7 +189,8 @@ The diagram separates authority from enforcement:
 - The channel proxy, artifact service, memory gateway, Obot adapter, and runtime are enforcement
   points. They do not invent grants.
 - The agent controller is the only general OpenCrane agent-workload mutator. Obot's controller has
-  a separate, constrained role for MCP-server workloads in its isolated namespace.
+  a separate, constrained role for MCP-server workloads in its isolated namespace; OpenSandbox has
+  a separate, constrained role for sandbox workloads in its sandbox namespace.
 - Cilium limits which workload identities can reach each enforcement point.
 - Kubernetes RBAC controls Kubernetes API access only.
 
@@ -203,15 +205,17 @@ a logical module in the OpenCrane API.
 | `apps/opencrane` | Per-silo management API, identity binding, agent/persona/skill/artifact metadata, business authorization, approvals, audit | Sole authority for silo-owned business state; fleet membership/lifecycle is an upstream contract; no broad Kubernetes mutation | Keep and narrow |
 | `apps/opencrane-ui` | Agent, asset, schedule, run, approval, access, and operations console | Client of the API only | Keep and complete |
 | `apps/channel-proxy` | Same-origin ingress, origin checks, delegated OpenCrane session/OIDC resolution, stream relay, rate limits | Internet-facing PEP; no session/policy storage or K8s mutation | Extract the existing gateway proxy without duplicating auth logic |
-| `apps/agent-controller` | Consume desired state through an authenticated OpenCrane internal API; reconcile AgentService records into Deployments/CronJobs/Jobs/KSAs/policies; report execution status | Sole general agent-workload K8s mutator; no direct business-policy writes | Extract controller/scheduler responsibility from the API process |
+| `apps/agent-controller` | Consume desired state through an authenticated OpenCrane internal API; reconcile AgentService records into Deployments/CronJobs/Jobs/KSAs/policies; delegate approved sandbox creation to OpenSandbox; report execution status | Sole OpenCrane agent-workload K8s mutator; no direct business-policy writes | Extract controller/scheduler responsibility from the API process |
 | `apps/agent-runtime` | Pinned TypeScript image with the selected toolkit loop, normalized events, MCP and trusted tool adapters | Zero K8s API rights; per-run capability only | Create; delete the superseded OpenClaw runtime in the same replacement slice |
 | `apps/managed-agent-runtime` | Execute first-party and tenant-created managed AgentService revisions as controller-assigned Jobs or bounded Deployments | Zero K8s API rights; declared managed-agent capability only | Create one runtime owner; agents remain records, not nested app roots |
+| `apps/tool-runner` | Own sandbox workload images and approved execution profiles for non-Obot code, document, and tenant-authored skill Jobs | Zero K8s API rights; per-job capability and scratch workspace only | Create; execute through the OpenSandbox adapter, never as an in-process runtime tool |
 | `apps/artifact-service` | Stage/scan/hash/stream canonical bytes, content-addressed versions, workspace leases, retention | Owns its PVC and enforces artifact capabilities; no policy store | Create; absorbs skill delivery bytes |
 | `apps/memory-gateway` | Authorize and execute online recall/capture against Cognee | Memory PEP; no business-policy store | Create as a distinct online trust and scaling boundary |
 | `apps/cognee-indexer` | Consume the artifact outbox and project canonical content into Cognee | Derived index writer; no user-facing ingress | Create as a distinct asynchronous lifecycle |
 | `apps/_infra/cognee` | Pinned upstream deployment, PVC, SA, probes, backup, and upgrade tests | Derived memory/index data only | Promote embedded Helm templates to an app-owned unit |
 | `apps/postgres` | Own the target CNPG Cluster resource, storage profile, backup, and readiness contract | Product database deployment owner; BYO CNPG remains the narrow owner of its generated instance ServiceAccount and Role | Create; replaces script-owned database provisioning |
 | `apps/_infra/obot` | Pinned upstream gateway/controller, credential custody, tool execution, constrained runtime namespace | MCP PEP; privileged controller isolated from callers | Promote embedded Helm templates and narrow RBAC |
+| `apps/_infra/opensandbox` | Pinned OpenSandbox lifecycle service, Kubernetes provider, `execd`, and egress components for sandbox Jobs | Confined delegated mutator for sandbox workloads only; internal lifecycle API; no product authority | Create an app-owned upstream unit with exact version/image pins and conformance gates |
 | `apps/_infra/deploy-k8s` | Per-silo umbrella composition and a small deployment profile | No feature ownership | Keep, but consume app-owned deploy units |
 | LiteLLM | Model routing, provider keys, aliases, budgets, capability matrix | Model/provider PEP | Keep pinned and per silo |
 
@@ -221,7 +225,10 @@ Logical modules that should **not** become separate applications initially:
 - agent, revision, run, trigger, persona, skill-catalog, and sharing domains;
 - transactional outbox and audit ledger;
 - approval and run-coordination state;
-- model-policy compilation.
+- model-policy compilation;
+- `libs/backend/agents/sandbox-execution/main` owns the `SandboxJobExecutor` port, proof-bound
+  assignment mapping, and substrate-neutral conformance contract; app roots only compose it with
+  the pinned OpenSandbox client and deployment units.
 
 An independently deployed authorization service is justified only if the API cannot meet decision
 latency/availability or several independently deployed PEPs require online checks that signed
@@ -243,7 +250,7 @@ open-source systems remain replaceable modules, not mandatory core dependencies:
 | Memory/index | Cognee behind an OpenCrane gateway | Replaceable through the memory adapter; never the artifact authority |
 | MCP runtime | Obot behind a validating gateway | Replaceable through the MCP adapter; never the grant authority |
 | Operational telemetry | Existing OpenTelemetry pipeline and OpenCrane run ledger | Langfuse for optional prompt evaluation/annotation, not required platform operation |
-| Skill/document execution | Isolated Kubernetes Jobs with explicit profiles | A sandbox/workflow product only after the Job boundary fails measured isolation or throughput needs |
+| Skill/document execution | OpenSandbox-backed isolated Kubernetes Jobs with explicit OpenCrane profiles | Replace OpenSandbox only through the sandbox adapter; do not adopt its MCP, vault, session, or workflow authorities |
 
 This modularity is intentionally asymmetric: adding a module is allowed behind a contract; adding a
 second authority, scheduler, transcript, or agent loop is not.
@@ -407,8 +414,9 @@ unless an independent GitOps author must own them. The OpenCrane API is the only
   only when it needs distinct cloud IAM or network reachability. Large fleets of short jobs use a
   bounded executor KSA pool plus unique short-lived capabilities. Never create a unique
   ServiceAccount or Cilium identity for every run or encode user/team scope in identity labels.
-- Runtime pods have zero Kubernetes API RBAC. Only `apps/agent-controller` creates or patches agent
-  workloads. The privileged Obot runtime controller is separately confined to its own namespace.
+- Runtime pods have zero Kubernetes API RBAC. Only `apps/agent-controller` creates or patches general
+  agent workloads. The privileged Obot runtime controller is separately confined to MCP workloads
+  in its namespace, and OpenSandbox is separately confined to sandbox workloads in its namespace.
 
 ## The personal assistant and its “soul”
 
@@ -556,6 +564,55 @@ The current Postgres/OCI/Zot/runtime-file delivery paths collapse into the artif
 logical skill catalog. OCI becomes an optional export adapter only if cross-cluster or third-party
 distribution is proven necessary.
 
+### OpenSandbox-backed sandbox jobs
+
+OpenSandbox is the selected execution substrate for non-Obot sandbox Jobs. It contributes a pinned
+lifecycle API, Kubernetes provider, in-sandbox `execd` command/file/code stream, resource and TTL
+controls, and an egress sidecar. It does **not** become an agent runtime, scheduler, identity
+provider, transcript, credential vault, artifact store, or policy authority.
+
+The boundary is deliberately asymmetric:
+
+1. The agent loop emits a governed tool request. OpenCrane authorizes it, records any approval, and
+   creates a sandbox assignment containing an immutable image digest, resource/egress/runtime
+   profile, input ArtifactVersions, deadline, and output lease.
+2. `apps/agent-controller` is the only OpenCrane caller of the internal OpenSandbox lifecycle API.
+   The upstream API has no public ingress and is not reachable from agent or tool-runner workloads.
+3. OpenSandbox creates only sandbox workloads in its isolated namespace. Its API key authenticates
+   this internal controller hop; it is not tenant identity or authorization. Its Kubernetes RBAC,
+   CRDs, admission rules, and namespace selectors cannot create or mutate general agent workloads.
+   The key exists only because the upstream server does not validate OpenCrane projected identity;
+   rotate it as an app-owned Secret and remove it when a workload-identity or mTLS front door can
+   authenticate that hop directly.
+4. The workload runs as `apps/tool-runner` with no Kubernetes RBAC, no service-account token
+   automount, a read-only root where possible, mounted scratch, resource/deadline limits, and a
+   qualified gVisor or Kata RuntimeClass. Production fails closed instead of falling back to `runc`
+   when the class is unavailable; an ordinary-container profile is local-test-only and receives no
+   tenant inputs or production credentials.
+5. OpenCrane renders egress policy from the approved action capability before creation. The sandbox
+   cannot call the mutable egress-policy endpoint, lifecycle API, or arbitrary cluster services.
+6. `execd` output is normalized into durable `tool.started`, `tool.progress`, artifact, and terminal
+   RunEvents. Durable outputs are finalized through `ArtifactStore`; sandbox files and snapshots
+   are not canonical state.
+7. Completion, cancellation, expiry, and crash reconciliation all verify workload deletion. A retry
+   or approval resume creates a new recorded attempt rather than reusing an ambiguous sandbox.
+
+Sandbox authority is an attenuated delegation, not credential inheritance. OpenCrane intersects the
+initiating actor and AgentService rights with the immutable run/revision, exact approved action and
+arguments, ArtifactVersion and egress grants, and sandbox profile ceiling. It issues only a
+short-lived capability proof-bound to the silo, run, attempt, sandbox workload identity, expiry, and
+replay record. The sandbox can exercise the relevant rights of the spawning agent but cannot gain a
+right the agent lacked, copy the agent/provider/Obot credential, or expand its own policy. Retry or
+resume mints a new attempt capability; old-attempt, cross-silo, and wrong-workload proofs fail.
+Cancellation, expiry, or relevant revocation fences further PEP use and triggers bounded sandbox and
+egress cleanup. The assignment stays immutable while it executes; steering can request an explicit
+cancel or later attempt but cannot rewrite action, arguments, artifacts, egress, resources, or proof.
+
+The initial profile disables OpenSandbox's CLI/MCP exposure, credential vault, host volumes,
+persistent volumes, pause/resume, and reusable snapshots. Obot remains the credential custodian and
+PEP for MCP integrations. Any later OpenSandbox feature is admitted individually through the same
+authority, identity, network, persistence, and replay review.
+
 ## MCP and Obot boundary
 
 Obot remains credential custodian and MCP execution PEP. OpenCrane owns the catalog, assignment,
@@ -604,8 +661,8 @@ retention-governed.
 
 ## Consoles and operations
 
-The OpenCrane UI is the normal management surface. Upstream Cognee, Obot, Langfuse, and Kubernetes
-consoles are operator diagnostics, not parallel sources of configuration.
+The OpenCrane UI is the normal management surface. Upstream Cognee, Obot, OpenSandbox, Langfuse,
+and Kubernetes consoles are operator diagnostics, not parallel sources of configuration.
 
 The UI needs six coherent views:
 
@@ -651,6 +708,8 @@ small:
 - list/open threads and cursor-paged history;
 - send a multimodal message by artifact reference;
 - stream ordered run, text, tool, approval, artifact, usage, and terminal events;
+- queue a canonical Message during an active run and show whether it was absorbed before the next
+  model decision or deferred to the next run;
 - reconnect from an event cursor;
 - abort a run and observe terminal reconciliation;
 - submit an approval decision;
@@ -663,6 +722,67 @@ provenance while retaining the immutable transcript under retention policy. Prov
 compaction may be used when supported, but a provider-neutral fallback is required behind LiteLLM.
 Do not add a second transcript writer or an OpenClaw adapter to the target path.
 
+### Internal run-ingest and live delivery path
+
+`apps/opencrane` is the sole fenced writer of Thread, Message, ToolInvocation, ApprovalRequest, and
+RunEvent records. Agent runtimes never connect to Postgres. `apps/agent-runtime` and
+`apps/managed-agent-runtime` submit event candidates to one authenticated internal run-ingest API;
+`apps/agent-controller` uses the same API for assignment status and for progress candidates relayed
+from OpenSandbox. Cilium policy admits that listener only from these named workload identities.
+
+Every request carries the projected workload identity, proof-bound run context, attempt, writer
+fencing token, stable candidate ID, event type, and bounded payload. The projected token audience is
+`opencrane`. OpenCrane verifies the silo, ServiceAccount, Pod/Job assignment, run, revision, attempt,
+proof, fence, vocabulary, payload size, and rate before accepting it.
+`(runId, attempt, candidateId)` is unique: retrying the same candidate returns its already assigned
+sequence instead of appending a duplicate. OpenSandbox output is untrusted; the controller derives
+the candidate ID from the tool attempt and substrate stream offset before submission.
+
+Model-output and model-derived completion/ordinary-failure candidates additionally carry the
+canonical input generation used by that model request. The writer rejects a stale-generation
+model-derived terminal with a continue response; it never turns that conflict into a terminal
+RunEvent.
+
+The run writer commits the normalized RunEvent and any related Message, ToolInvocation, Approval,
+usage, or terminal mutation in one Postgres transaction, then emits a wake-up hint. SSE authorizes
+the thread/run and re-queries `sequence > after`; neither the notification nor channel proxy is an
+event authority. A submitter retries a timed-out request with the same candidate ID. It may not
+dispatch a tool or expose a transition until the required canonical event is acknowledged. If the
+ingest API remains unavailable, the runtime stops within its deadline and recovery either resumes
+from a replay-safe checkpoint or records one deterministic terminal outcome; it never writes the
+database directly or silently drops a user-visible event.
+
+Mid-run input uses that same authority. The authenticated send endpoint locks the thread's active-run
+pointer and target run, then transactionally creates the canonical user Message and appends
+`steering.queued` when that run is still active. If termination already won, the same serialization
+creates or reuses the next run directly; a Message is never appended to a closed run or stranded
+without a disposition. At the safe boundary after the current model/tool/approval result is durable
+and before the next model request, the runtime shell calls a fenced endpoint with its bound proof,
+attempt, fence, cursor, current input generation, and the driver's stable neutral boundary ID.
+OpenCrane atomically claims queued Messages in thread order, advances the input generation, appends
+one metadata-only `steering.absorbed`, and returns the immutable batch. Repeating the boundary returns
+the same batch.
+
+Send/enqueue, claim, and terminal transition use one row-locked serialization protocol. A terminal
+candidate derived from model completion or ordinary model failure must name the input generation
+used by its request. A newer claim makes an older candidate return continue instead of closing the
+run. When normal termination wins, OpenCrane appends `steering.deferred` before the terminal event
+and creates or reuses the next idempotent run in the same transaction.
+
+Abort/cancel, deadline, budget, security/policy revocation, and lease loss are authoritative
+row-locked stop transitions. They fence work and commit one terminal outcome regardless of input
+generation. Unclaimed input is durably deferred as pending and must pass ordinary authorization and
+budget admission before a later run; it cannot auto-bypass the stop. Already absorbed input remains
+attached to the stopped run and is not replayed automatically. The UI exposes that disposition and
+an explicit authorized retry may reference it without creating another Message. This is a Postgres
+steering inbox, not the asynchronous provisioning/indexing worker queue.
+
+The initial `RunInputSnapshot` remains immutable. Steering is an append-only input supplement whose
+message IDs and absorption boundary are canonical, so recovery does not depend on toolkit memory.
+Input queued during a tool or OpenSandbox execution waits for the next model-decision boundary; it
+does not cancel the action. Input queued during approval does not change the pending tool or
+arguments and is eligible only after the approval outcome and tool result are recorded.
+
 ## OpenCrane-owned toolkit loop
 
 Keep the product conversation interface, OIDC proxy, controller,
@@ -674,7 +794,7 @@ Build:
   Agents SDK `Agent`/`Runner` path is the leading candidate and AI SDK is the control;
 - an explicit OpenCrane context projection, plus a toolkit-specific session adapter only when the
   selected driver requires it; a transcript/event adapter, run lock, idempotency, abort/recovery,
-  and compaction policy;
+  compaction policy, and fenced steering-boundary source;
 - direct Obot MCP and Cognee memory adapters;
 - normalized multimodal/artifact events;
 - persisted approvals and resume;
@@ -812,7 +932,16 @@ The following decisions are accepted together and bind the implementation issues
 8. New Python code executes only through an isolated authoring/tool Job and immutable publication.
 9. OpenClaw and the selected replacement loop are not supported as permanent parallel product
    runtimes.
-10. Future application updates roll the one supported target version to ready Pods in under five
+10. Live conversation delivery is an authorized projection of committed canonical `RunEvent`s; no
+    toolkit, proxy, notification channel, or in-memory stream is a second event authority.
+11. OpenSandbox implements sandbox execution only behind the OpenCrane adapter; it is never a
+    scheduler, policy engine, credential custodian, artifact store, retry authority, or tenant-facing
+    control plane.
+12. Mid-run input is a canonical Message resolved exactly once at a fenced model-decision boundary:
+    absorbed into the active run or durably deferred when its terminal transition wins.
+13. Each sandbox receives only an expiring, proof-bound subset of the spawning agent/run/action
+    authority; broad credentials and privilege expansion are prohibited.
+14. Future application updates roll the one supported target version to ready Pods in under five
     minutes per silo, remounting existing durable volumes and resuming from canonical state without
     a parallel product runtime.
 
@@ -838,6 +967,9 @@ Upstream evidence:
   [MCP](https://openai.github.io/openai-agents-js/guides/mcp/),
   [approvals](https://openai.github.io/openai-agents-js/guides/human-in-the-loop/), and
   [tracing](https://openai.github.io/openai-agents-js/guides/tracing/)
+- OpenSandbox: [architecture](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/architecture.md),
+  [server authentication](https://github.com/opensandbox-group/OpenSandbox/blob/main/server/README.md),
+  and [secure runtime classes](https://github.com/opensandbox-group/OpenSandbox/blob/main/docs/secure-container.md)
 - OpenClaw: [gateway protocol](https://docs.openclaw.ai/gateway/protocol),
   [sessions](https://docs.openclaw.ai/session),
   [compaction](https://docs.openclaw.ai/compaction),

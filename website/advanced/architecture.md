@@ -122,3 +122,8 @@ one customer's silo can never reach another's. See
 rules. If you ever need to run **completely separate OpenCrane instances** in one
 cluster (say, several customers side by side), see
 [Running multiple instances](/advanced/multi-instance) — most deployments never need it.
+
+## See also
+
+- [Agents](/integrators/agents/) — the target agent subsystem, canonical records and execution boundaries
+- [Sandbox jobs](/integrators/agents/sandbox-jobs) — OpenSandbox's bounded role inside that subsystem

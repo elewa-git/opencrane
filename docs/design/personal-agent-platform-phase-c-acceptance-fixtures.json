@@ -73,6 +73,114 @@
       "given": ["existing-target-volumes", "new-supported-target-image"],
       "when": "application-update-runs",
       "expect": ["ready-in-less-than-300-seconds", "existing-volumes-remounted", "canonical-state-resumed", "no-predecessor-runtime", "no-data-transformation"]
+    },
+    {
+      "id": "steering-absorbed-before-next-model-decision",
+      "given": ["active-run", "canonical-user-message-queued-mid-run"],
+      "when": "next-model-decision-boundary-is-claimed",
+      "expect": ["steering-queued-persisted", "steering-absorbed-persisted", "message-ordered-before-next-model-request", "no-run-abort", "client-sees-owning-run"]
+    },
+    {
+      "id": "steering-during-tool-or-sandbox-execution",
+      "given": ["active-run", "tool-or-sandbox-executing", "canonical-user-message-queued-mid-run"],
+      "when": "execution-result-is-persisted",
+      "expect": ["in-flight-action-not-silently-cancelled", "result-preserved", "message-eligible-at-next-model-decision-boundary"]
+    },
+    {
+      "id": "steering-during-pending-approval",
+      "given": ["run-awaiting-approval", "canonical-user-message-queued"],
+      "when": "approval-outcome-and-tool-result-are-persisted",
+      "expect": ["pending-tool-and-arguments-unchanged", "message-eligible-at-next-model-decision-boundary"]
+    },
+    {
+      "id": "steering-terminal-race-defers-to-next-run",
+      "given": ["active-run-finalizing", "canonical-user-message-queued-mid-run"],
+      "when": "terminal-transition-commits-before-boundary-claim",
+      "expect": ["steering-deferred-persisted", "message-starts-idempotent-next-run", "client-sees-next-run-id"]
+    },
+    {
+      "id": "steering-claim-wins-over-stale-terminal",
+      "given": ["active-run", "queued-steering-message", "terminal-candidate-built-from-older-input-generation"],
+      "when": "boundary-claim-commits-before-terminal-candidate",
+      "expect": ["input-generation-advanced", "steering-absorbed-persisted", "stale-terminal-rejected-with-continue", "next-model-request-includes-message"]
+    },
+    {
+      "id": "steering-terminal-retry-after-generation-conflict",
+      "given": ["stale-terminal-rejected-with-continue", "absorbed-steering-message", "next-model-request-completed"],
+      "when": "terminal-candidate-retries-with-current-input-generation",
+      "expect": ["single-terminal-event", "absorbed-message-considered", "no-duplicate-output"]
+    },
+    {
+      "id": "steering-enqueue-terminal-race",
+      "given": ["active-run-finalizing", "authenticated-user-send"],
+      "when": "send-and-terminal-transactions-contend-for-active-run",
+      "expect": ["message-owned-by-active-or-idempotent-next-run", "no-append-to-closed-run", "no-stranded-message"]
+    },
+    {
+      "id": "steering-stale-fence-cannot-claim",
+      "given": ["queued-steering-message", "expired-attempt-or-fencing-token"],
+      "when": "model-decision-boundary-is-claimed",
+      "expect": ["deny", "input-generation-unchanged", "message-remains-unclaimed"]
+    },
+    {
+      "id": "steering-cannot-defeat-authoritative-stop",
+      "given": ["steering-claim-advanced-input-generation", "abort-or-deadline-or-budget-or-revocation-or-lease-loss"],
+      "when": "authoritative-stop-transition-commits",
+      "expect": ["single-terminal-event", "no-extra-model-or-tool-work", "steering-cannot-bypass-stop", "unclaimed-input-durably-pending", "absorbed-input-remains-attributed-to-stopped-run"]
+    },
+    {
+      "id": "steering-boundary-idempotent-across-pod-replacement",
+      "given": ["queued-steering-message", "stable-boundary-id", "pod-replaced-before-or-after-claim-acknowledgement"],
+      "when": "run-recovers-and-repeats-boundary",
+      "expect": ["same-absorption-batch-returned", "no-message-loss", "no-duplicate-absorption"]
+    },
+    {
+      "id": "steering-duplicate-send-idempotent",
+      "given": ["queued-steering-message", "duplicate-idempotency-key-resend"],
+      "when": "steering-inbox-is-evaluated",
+      "expect": ["single-canonical-message", "single-queued-instance"]
+    },
+    {
+      "id": "sandbox-inherits-attenuated-agent-rights",
+      "given": ["agent-effective-artifact-read", "approved-action-needs-that-artifact", "sandbox-profile-allows-read"],
+      "when": "sandbox-attempt-capability-is-issued",
+      "expect": ["attempt-can-read-authorized-artifact", "capability-bound-to-agent-run-action-attempt-and-workload", "agent-credential-not-copied"]
+    },
+    {
+      "id": "sandbox-cannot-expand-agent-rights",
+      "given": ["agent-lacks-destination-or-artifact-right", "sandbox-profile-would-otherwise-allow-it"],
+      "when": "sandbox-attempt-requests-that-right",
+      "expect": ["deny", "no-ambient-credential", "no-policy-mutation"]
+    },
+    {
+      "id": "sandbox-attempt-capability-replay-denied",
+      "given": ["completed-or-retried-sandbox-attempt", "old-attempt-capability"],
+      "when": "old-capability-is-used-by-new-attempt-or-other-silo-or-other-workload",
+      "expect": ["deny", "new-attempt-uses-new-capability", "replay-audited"]
+    },
+    {
+      "id": "sandbox-revocation-fences-further-use",
+      "given": ["running-sandbox", "attempt-cancelled-or-expired-or-agent-right-revoked"],
+      "when": "sandbox-uses-artifact-or-action-capability-again",
+      "expect": ["deny", "bounded-sandbox-and-egress-cleanup-triggered", "recorded-assignment-unchanged"]
+    },
+    {
+      "id": "steering-cannot-mutate-running-sandbox",
+      "given": ["running-sandbox-with-immutable-assignment", "canonical-user-message-queued-mid-run"],
+      "when": "steering-message-requests-different-action-or-arguments-or-egress",
+      "expect": ["running-assignment-unchanged", "message-waits-for-next-model-decision", "explicit-cancel-or-new-attempt-required"]
+    },
+    {
+      "id": "sandbox-trigger-actor-cannot-expand-rights",
+      "given": ["agent-has-artifact-right", "trigger-actor-lacks-required-use-or-delegation-right"],
+      "when": "sandbox-attempt-capability-is-requested",
+      "expect": ["deny", "agent-ceiling-does-not-bypass-actor", "no-sandbox-created"]
+    },
+    {
+      "id": "sandbox-receives-no-ambient-credentials",
+      "given": ["approved-sandbox-attempt", "spawning-agent-has-workload-provider-and-obot-credentials"],
+      "when": "sandbox-assignment-and-pod-are-inspected",
+      "expect": ["no-agent-workload-token", "no-provider-key", "no-obot-credential", "only-proof-bound-attempt-capabilities"]
     }
   ]
 }

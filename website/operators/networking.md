@@ -210,6 +210,7 @@ The following gaps are honest assessments verified against the live codebase. Th
 
 ## See also
 
+- [Sandbox jobs](/integrators/agents/sandbox-jobs) — the OpenSandbox workload and immutable egress profile
 - [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) — the identity-keyed layer on top of this L3/4 baseline: the principals, the who-can-talk-to-whom rules, SPIFFE SVIDs, and FQDN egress
 - [ClusterTenant members](/operators/cluster-tenant-members) — managing who can administrate an org (Owner/Admin/Member roles) and the last-owner guardrail
 - [Identity & connection auth](/security/identity) — credential types, OIDC session, projected-identity tokens, and the identity-routing proxy flow

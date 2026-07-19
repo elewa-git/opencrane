@@ -18,6 +18,9 @@ access to **both** the opencrane-api and the user's own OpenClaw pod.
 > security posture is adopted — **trusted-proxy + per-pod owner pinning (CONN.9/10)**;
 > see [`claw-security-considerations.md`](/security/connection-security).
 
+> See also: [Agent authentication](/integrators/agents/authentication) for the target chain from
+> workload bootstrap to proof-bound run and action capabilities.
+
 ## Two planes, one identity
 
 OpenCrane has two backends a user touches, and they must not require two logins:

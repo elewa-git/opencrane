@@ -19,7 +19,8 @@ is not itself published.
 | [0005](0005-opencrane-owned-agent-runtime.md) | OpenCrane-owned agent runtime | Accepted; amended 2026-07-18 |
 | [0006](0006-rewrite-freeze-whole-silo-cutover.md) | Rewrite freeze with whole-silo blue/green cutover | Superseded by 0007 |
 | [0007](0007-direct-target-refactor.md) | Direct target refactor without an estate migration | Accepted |
-| [0008](0008-target-agent-contracts-and-workload-identity.md) | Target agent contracts and workload identity | Accepted |
+| [0008](0008-target-agent-contracts-and-workload-identity.md) | Target agent contracts and workload identity | Accepted; amended by 0009 |
+| [0009](0009-opensandbox-sandbox-job-substrate.md) | OpenSandbox as the sandbox-job execution substrate | Accepted |
 
 ## Writing a new ADR
 

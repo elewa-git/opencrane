@@ -36,3 +36,5 @@ Manage policies through the authenticated `/api/v1/policies` endpoints. Use
 > owner needs — and nothing more.
 
 Every change here is recorded in the [audit log](/guide/audit).
+
+For the target per-run enforcement path, see [Agent MCP calling](/integrators/agents/mcp-calling).

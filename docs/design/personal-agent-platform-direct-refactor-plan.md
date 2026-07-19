@@ -108,22 +108,29 @@ deployables.
 | Channel trust boundary | `apps/channel-proxy` |
 | Kubernetes mutation boundary | `apps/agent-controller` |
 | Artifact bytes and CAS API | `apps/artifact-service` |
-| Cognee, LiteLLM, Obot | `apps/_infra/cognee`, `apps/_infra/litellm`, `apps/_infra/obot` |
+| Cognee, LiteLLM, Obot, OpenSandbox | `apps/_infra/cognee`, `apps/_infra/litellm`, `apps/_infra/obot`, `apps/_infra/opensandbox` |
 | Memory gateway and Cognee indexer | `apps/memory-gateway`, `apps/cognee-indexer` |
 | Personal agent pods | `apps/agent-runtime` |
 | OpenCrane Postgres cluster | `apps/postgres` over a BYO CNPG operator |
 | First-party and user-created managed-agent pods | `apps/managed-agent-runtime`; individual agents are AgentService records, not app roots |
-| Skill authoring, sandboxed tool, and fresh provisioning Jobs | `apps/skill-authoring`, `apps/tool-runner`, and `apps/silo-provisioner` respectively |
+| Skill authoring, sandboxed tool, and fresh provisioning Jobs | `apps/skill-authoring`, `apps/tool-runner`, and `apps/silo-provisioner` respectively; OpenSandbox supplies the confined sandbox lifecycle and data plane for `apps/tool-runner` |
 
 Ingress, DNS, certificate, CNI, and CNPG controllers are cluster prerequisites, not product-release
 workloads. Existing installer-script ownership and its transient database-auth Pod are deleted as
 the app-owned and BYO target topology lands.
 
+The substrate-neutral `SandboxJobExecutor`, proof-bound assignment mapping, and conformance harness
+belong in `libs/backend/agents/sandbox-execution/main` (`type:lib`, `layer:backend`,
+`scope:agents`). `apps/agent-controller`, `apps/tool-runner`, and `apps/_infra/opensandbox` remain
+composition-only owners of their process, workload-image, and upstream-deployment boundaries.
+
 ## Identity and authorization invariants
 
 - Postgres/OpenCrane authorities decide product access; Kubernetes RBAC does not.
 - Runtime Pods and Jobs have no Kubernetes mutation permissions.
-- `apps/agent-controller` is the sole OpenCrane agent-workload Kubernetes mutator.
+- `apps/agent-controller` is the sole OpenCrane agent-workload Kubernetes mutator. It may delegate
+  sandbox creation to the pinned OpenSandbox lifecycle service, whose Kubernetes rights are
+  separately confined to sandbox workloads in its namespace.
 - Every app maps explicitly to KSA, projected token audience, Kubernetes/cloud role, namespace, and
   network profile. Default service-account token automount is disabled.
 - Cloud KSA trust bindings are Terraform-owned.
@@ -177,8 +184,18 @@ Deliver:
 - authorization facade, proof-of-possession, action-token replay/idempotency, and effective-access
   explanations;
 - channel proxy delegating session and membership decisions to OpenCrane;
-- agent controller as the only agent-workload Kubernetes mutator;
+- agent controller as the only general OpenCrane agent-workload Kubernetes mutator, with Obot and
+  OpenSandbox confined to their named MCP and sandbox workload namespaces respectively;
 - bounded workload KSAs, projected tokens, Cilium policies, Obot isolation, and zero runtime RBAC;
+- the OpenSandbox adapter contract, isolated namespace, bounded controller/RBAC, admission policy,
+  immutable egress profiles, scratch-only volumes, and controller-only lifecycle API reachability;
+- one workload-authenticated internal run-ingest path through which runtimes and the controller send
+  fenced, idempotent event candidates to the OpenCrane-owned Postgres writer; no runtime database
+  access;
+- the canonical steering inbox and fenced, idempotent model-decision boundary claim, including
+  `steering.queued`, `steering.absorbed`, and terminal-race `steering.deferred` event contracts,
+  row-locked send/claim/terminal serialization, an input-generation guard on model-derived terminals,
+  and generation-independent authoritative stop transitions;
 - ArtifactStore CAS lease/promote/finalize, digest-reference GC, outbox, snapshots, and restore;
 - app-owned Cognee, LiteLLM, and Obot packaging plus adapters;
 - deterministic creation of fresh Postgres, ArtifactStore, Cognee, Obot, LiteLLM, cache, telemetry,
@@ -205,18 +222,38 @@ Deliver:
 - both candidate TypeScript toolkit adapters against the same independent fixtures and target
   LiteLLM matrix;
 - one exact-pinned selected driver and its reliability envelope;
-- canonical Thread/Message/RunEvent protocol behind the frontend gateway;
+- canonical Thread/Message/RunEvent protocol behind the frontend gateway, with driver callbacks
+  normalized, persisted, and streamed by cursor while the run is still executing;
+- mid-run steering that claims canonical queued Messages exactly once before the next model request,
+  preserves pending approvals and in-flight tools, and durably defers input when termination wins;
 - memory, artifact, session, approval, tracing, cancellation, retry, compaction, and budget adapters;
 - required onboarding interview, versioned questions, `SOUL.md` template selection, user-approved
   first PersonaRevision, persona compilation, and transparent PreferenceFact learning/correction/
   forgetting;
 - multimodal upload/preprocessing and artifact-reference inputs;
 - rendered and verified document-authoring ArtifactVersions;
-- scanned, signed, authorized, revocable Python skills executed in isolated Jobs;
+- one exact-pinned OpenSandbox deployment and SDK adapter for sandbox Jobs, with streamed execution
+  output, resource/TTL enforcement, runtime-class isolation, and deletion verification;
+- attempt-scoped sandbox capability delegation equal to the intersection of spawning-agent rights,
+  run/revision, approved action and arguments, ArtifactVersion/egress grants, and profile ceiling;
+- scanned, signed, authorized, revocable Python skills executed through those isolated sandbox Jobs;
 - provider-neutral model capability/failover matrix.
 
 There is no OpenClaw compatibility adapter, transcript mirror, workspace renderer, plugin hook, or
 gateway-v4 schema.
+
+Validation:
+
+- the first committed message delta reaches a live subscriber before the model turn completes;
+- long-running MCP and sandbox tools emit bounded progress while executing;
+- disconnect/reconnect replays every committed event once after client folding by
+  `(runId, sequence)`, and a slow client cannot backpressure execution;
+- duplicate sends, repeated steering-boundary claims, terminal races, pending approvals, and Pod
+  replacement produce no lost or duplicate input and expose the owning run to the client;
+- OpenSandbox attempts pass private-ingress, confined-RBAC, runtime-class, egress, TTL, cancellation,
+  scratch-deletion, ArtifactStore, inherited-rights, privilege-expansion, credential-copy, and
+  no-credential-authority negative tests; old-attempt/cross-silo/wrong-workload replay, revocation,
+  and attempted steering mutation of an in-flight assignment also fail closed.
 
 ## Phase E2 — AgentService, scopes, scheduling, and operations
 
