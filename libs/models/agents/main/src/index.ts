@@ -1,4 +1,4 @@
-export type { AgentBudget, AgentRevision, AgentRevisionState, McpAssignmentReference, SkillRevisionReference } from "./agent-revision.types.js";
+export type { AgentBudget, AgentRevision, AgentRevisionState, IntegrationAssignmentReference, SkillRevisionReference } from "./agent-revision.types.js";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types.js";
 export type { AgentOwner, AgentOwnerScope, AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types.js";
 export type { AgentRevisionId, AgentRunId, AgentServiceId, MessageId, PersonaProfileId, PersonaRevisionId, SiloId, ThreadId, UserId } from "./identifiers.types.js";

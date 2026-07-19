@@ -33,7 +33,8 @@ flattening unrelated responsibilities together.
 - Tenant and runtime lifecycle: tenants, connections, effective contracts, and projection repair.
 - Models and economics: providers, model routing, spend, and budgets.
 - Knowledge and memory: awareness, retrieval sources, and company documents.
-- Tools and integrations: skills and MCP servers.
+- Tools and integrations: skills and silo-scoped integrations; the legacy MCP catalogue remains
+  isolated until a target browser/runtime integration path replaces it.
 - Operations and API composition: audit, metrics, and the generated API specification.
 
 These are current code ownership boundaries, not promises that legacy Tenant, AccessPolicy,

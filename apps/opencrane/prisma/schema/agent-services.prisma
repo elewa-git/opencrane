@@ -67,7 +67,7 @@ model AgentRevision {
   agentService        AgentService                   @relation("AgentServiceRevisions", fields: [agentServiceId], references: [id], onDelete: Restrict)
   activeFor           AgentService[]                 @relation("ActiveAgentRevision")
   skillAssignments    AgentRevisionSkillAssignment[]
-  mcpAssignments      AgentRevisionMcpAssignment[]
+  integrationAssignments AgentRevisionIntegrationAssignment[]
   runs                AgentRun[]
 
   @@unique([agentServiceId, revision])
@@ -88,12 +88,18 @@ model AgentRevisionSkillAssignment {
   @@map("agent_revision_skill_assignments")
 }
 
-model AgentRevisionMcpAssignment {
-  agentRevisionId String        @map("agent_revision_id")
-  mcpServerId     String        @map("mcp_server_id")
-  allowedTools    String[]      @map("allowed_tools")
-  agentRevision   AgentRevision @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+/// Immutable tool allow-list for one integration on one draft AgentRevision.
+model AgentRevisionIntegrationAssignment {
+  agentRevisionId      String                       @map("agent_revision_id")
+  integrationId        String                       @map("integration_id")
+  siloId               String                       @map("silo_id")
+  custodyReferenceId   String                       @map("custody_reference_id")
+  allowedTools         String[]                     @map("allowed_tools")
+  agentRevision        AgentRevision                @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+  integration          Integration                  @relation(fields: [integrationId, siloId], references: [id, siloId], onDelete: Restrict)
+  custodyReference     IntegrationCustodyReference  @relation(fields: [custodyReferenceId, integrationId, siloId], references: [id, integrationId, siloId], onDelete: Restrict)
 
-  @@id([agentRevisionId, mcpServerId])
-  @@map("agent_revision_mcp_assignments")
+  @@id([agentRevisionId, integrationId])
+  @@index([integrationId, siloId])
+  @@map("agent_revision_integration_assignments")
 }

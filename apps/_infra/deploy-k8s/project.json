@@ -15,6 +15,14 @@
     "runtime-identity-negative-tests": {
       "executor": "nx:run-commands",
       "options": { "command": "bash scripts/runtime-identity-negative-tests.sh" }
+    },
+    "cilium-runtime-profile-contract": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash scripts/cilium-runtime-profile-contract.sh" }
+    },
+    "cilium-runtime-profile-live": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/cilium-runtime-profile-live.sh" }
     }
   }
 }

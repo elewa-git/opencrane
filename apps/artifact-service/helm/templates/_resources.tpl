@@ -188,5 +188,56 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
+---
+# The durable byte plane accepts only the release's catalog authority. Cilium validates the
+# source ServiceAccount as well as the stable release labels, preventing label-only spoofing.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $fullName }}-artifact-service
+  namespace: {{ $artifactNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: artifact-service
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+      "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+      "k8s:app.kubernetes.io/component": artifact-service
+      "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-artifact-service" $fullName | quote }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+            "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+            "k8s:app.kubernetes.io/component": opencrane-server
+            "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-opencrane-server" $fullName | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.artifactService.service.port | quote }}
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    {{- if .Values.observability.otel.enabled }}
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/component": otel-collector
+      toPorts:
+        - ports:
+            - port: {{ .Values.observability.otel.collector.otlpPort | quote }}
+              protocol: TCP
+    {{- end }}
 {{- end }}
 {{- end }}
