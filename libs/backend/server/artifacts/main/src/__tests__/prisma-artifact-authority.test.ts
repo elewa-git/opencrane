@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.js";
+import { PrismaArtifactAuthorityRepository } from "../prisma-artifact-authority.js";
 
 function _command()
 {

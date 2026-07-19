@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { __FilesystemArtifactStore } from "./filesystem-artifact-store.js";
+import { __FilesystemArtifactStore } from "../filesystem-artifact-store.js";
 
 /** Builds an authorized upload lease that remains valid through the test. */
 function _lease(id: string): { readonly leaseId: string; readonly siloId: string; readonly artifactId: string; readonly action: "artifact.write"; readonly expiresAtEpochSeconds: number }

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __PromoteArtifactUpload } from "./artifact-promotion.js";
-import type { ArtifactPromotionLeaseClaims, ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource } from "./artifact-store.types.js";
+import { __PromoteArtifactUpload } from "../artifact-promotion.js";
+import type { ArtifactPromotionLeaseClaims, ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource } from "../artifact-store.types.js";
 
 /** Builds one valid write lease for protocol tests. */
 function _lease(expiresAtEpochSeconds: number): ArtifactPromotionLeaseClaims

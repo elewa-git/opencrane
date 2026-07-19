@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway } from "./artifact-upload.factory.js";
+import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway } from "../artifact-upload.factory.js";
 
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";
 

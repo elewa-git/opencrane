@@ -7,7 +7,7 @@ import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@ope
 import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesystem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateServer } from "./server.js";
+import { _CreateServer } from "../server.js";
 
 const _leaseKeys = generateKeyPairSync("ed25519");
 const _receiptKeys = generateKeyPairSync("ed25519");
