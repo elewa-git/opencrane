@@ -6,18 +6,27 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 	const runtimeNamespace = environment["AGENT_CONTROLLER_WORKLOAD_NAMESPACE"]?.trim() ?? "";
 	const runtimeServiceAccountName = environment["AGENT_RUNTIME_SERVICE_ACCOUNT"]?.trim() ?? "";
 	const runtimeImage = environment["AGENT_RUNTIME_IMAGE"]?.trim() ?? "";
+	const runtimeProjectedTokenTtlSeconds = _positive(environment["AGENT_RUNTIME_PROJECTED_TOKEN_TTL_SECONDS"], 600);
+	const runtimeAppName = environment["AGENT_RUNTIME_APP_NAME"]?.trim() ?? "";
+	const runtimeReleaseInstance = environment["AGENT_RUNTIME_RELEASE_INSTANCE"]?.trim() ?? "";
 	const openCraneInternalUrl = environment["OPENCRANE_INTERNAL_URL"]?.trim() ?? "";
 	const openCraneTokenPath = environment["AGENT_CONTROLLER_OPENCRANE_TOKEN_PATH"]?.trim() ?? "";
 	const kubernetesTokenPath = environment["AGENT_CONTROLLER_KUBERNETES_TOKEN_PATH"]?.trim() ?? "";
 	const kubernetesCaPath = environment["AGENT_CONTROLLER_KUBERNETES_CA_PATH"]?.trim() ?? "";
-	if (!_dnsLabel(runtimeNamespace) || !_dnsLabel(runtimeServiceAccountName) || !/^.+@sha256:[a-f0-9]{64}$/u.test(runtimeImage) || !_internalUrl(openCraneInternalUrl) || !_absolutePath(openCraneTokenPath) || !_absolutePath(kubernetesTokenPath) || !_absolutePath(kubernetesCaPath)) throw new Error("agent controller configuration is incomplete or unsafe");
-	return { runtimeNamespace, runtimeServiceAccountName, runtimeImage, openCraneInternalUrl, openCraneTokenPath, kubernetesTokenPath, kubernetesCaPath, pollIntervalMs: _positive(environment["AGENT_CONTROLLER_POLL_INTERVAL_MS"], 1_000), healthPort: _port(environment["AGENT_CONTROLLER_HEALTH_PORT"], 8_080) };
+	if (!_dnsLabel(runtimeNamespace) || !_dnsLabel(runtimeServiceAccountName) || !_labelValue(runtimeAppName) || !_labelValue(runtimeReleaseInstance) || !/^.+@sha256:[a-f0-9]{64}$/u.test(runtimeImage) || !_internalUrl(openCraneInternalUrl) || !_absolutePath(openCraneTokenPath) || !_absolutePath(kubernetesTokenPath) || !_absolutePath(kubernetesCaPath)) throw new Error("agent controller configuration is incomplete or unsafe");
+	return { runtimeNamespace, runtimeServiceAccountName, runtimeImage, runtimeProjectedTokenTtlSeconds, runtimePodLabels: { "app.kubernetes.io/name": runtimeAppName, "app.kubernetes.io/instance": runtimeReleaseInstance }, openCraneInternalUrl, openCraneTokenPath, kubernetesTokenPath, kubernetesCaPath, pollIntervalMs: _positive(environment["AGENT_CONTROLLER_POLL_INTERVAL_MS"], 1_000), healthPort: _port(environment["AGENT_CONTROLLER_HEALTH_PORT"], 8_080) };
 }
 
 /** Checks a conservative Kubernetes DNS-label boundary. */
 function _dnsLabel(value: string): boolean
 {
 	return /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/u.test(value) && value.length <= 63;
+}
+
+/** Checks one bounded Kubernetes label value emitted into the runtime Pod selector. */
+function _labelValue(value: string): boolean
+{
+	return /^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$/u.test(value) && value.length <= 63;
 }
 
 /** Allows only a credential-free in-cluster server authority URL. */

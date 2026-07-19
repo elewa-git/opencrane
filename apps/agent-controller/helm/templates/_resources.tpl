@@ -1,7 +1,14 @@
 {{- define "opencrane.agentController.resources" -}}
 {{- if .Values.agentController.enabled }}
+{{- if not .Values.agentRuntime.enabled }}
+{{- fail "agentRuntime.enabled must be true when agentController.enabled=true" }}
+{{- end }}
 {{- $fullName := include "opencrane.fullname" . -}}
 {{- $namespace := default .Release.Namespace .Values.agentController.namespace -}}
+{{- $runtimeNamespace := default .Release.Namespace .Values.agentRuntime.namespace -}}
+{{- if ne $namespace $runtimeNamespace }}
+{{- fail "agentRuntime.namespace must equal agentController.namespace while the controller is namespaced" }}
+{{- end }}
 {{- $openCraneInternalUrl := .Values.agentController.openCraneInternalUrl | default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" $fullName .Release.Namespace .Values.clustertenantManager.service.internalPort) -}}
 apiVersion: v1
 kind: ServiceAccount
@@ -102,9 +109,15 @@ spec:
             - name: AGENT_CONTROLLER_OPENCRANE_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane/token
             - name: AGENT_RUNTIME_SERVICE_ACCOUNT
-              value: {{ required "agentController.runtimeServiceAccountName is required when agentController.enabled=true" .Values.agentController.runtimeServiceAccountName | quote }}
+              value: {{ required "agentRuntime.serviceAccountName is required when agentController.enabled=true" .Values.agentRuntime.serviceAccountName | quote }}
+            - name: AGENT_RUNTIME_APP_NAME
+              value: {{ include "opencrane.name" . | quote }}
+            - name: AGENT_RUNTIME_RELEASE_INSTANCE
+              value: {{ .Release.Name | quote }}
             - name: AGENT_RUNTIME_IMAGE
               value: {{ required "agentController.runtimeImage is required when agentController.enabled=true" .Values.agentController.runtimeImage | quote }}
+            - name: AGENT_RUNTIME_PROJECTED_TOKEN_TTL_SECONDS
+              value: {{ .Values.agentRuntime.projectedTokenTtlSeconds | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
             - name: AGENT_CONTROLLER_HEALTH_PORT

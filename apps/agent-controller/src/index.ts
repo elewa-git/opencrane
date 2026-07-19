@@ -17,7 +17,7 @@ async function _Main(): Promise<void>
 	const kubeConfig = new k8s.KubeConfig();
 	kubeConfig.loadFromOptions({ clusters: [{ name: "in-cluster", server: "https://kubernetes.default.svc", caFile: config.kubernetesCaPath, skipTLSVerify: false }], users: [{ name: "agent-controller", tokenFile: config.kubernetesTokenPath }], contexts: [{ name: "agent-controller", cluster: "in-cluster", user: "agent-controller" }], currentContext: "agent-controller" });
 	const authority = new _ControllerAuthorityHttpClient({ baseUrl: config.openCraneInternalUrl, tokenPath: config.openCraneTokenPath, fetch: globalThis.fetch });
-	const dependencies = { policy: { runtimeNamespace: config.runtimeNamespace, runtimeServiceAccountName: config.runtimeServiceAccountName, runtimeImage: config.runtimeImage }, desiredJobs: authority, status: authority, jobs: new _KubernetesAgentJobMutator(kubeConfig.makeApiClient(k8s.BatchV1Api), kubeConfig.makeApiClient(k8s.CoreV1Api)) };
+	const dependencies = { policy: { runtimeNamespace: config.runtimeNamespace, runtimeServiceAccountName: config.runtimeServiceAccountName, runtimeImage: config.runtimeImage, runtimeProjectedTokenTtlSeconds: config.runtimeProjectedTokenTtlSeconds, runtimePodLabels: config.runtimePodLabels }, desiredJobs: authority, status: authority, jobs: new _KubernetesAgentJobMutator(kubeConfig.makeApiClient(k8s.BatchV1Api), kubeConfig.makeApiClient(k8s.CoreV1Api)) };
 	const unbindConsole = ___BindConsole(log);
 	const health = _CreateControllerHealth({ port: config.healthPort });
 	await health.listen();

@@ -28,7 +28,7 @@ function _Client(fetch: typeof globalThis.fetch): _ControllerAuthorityHttpClient
 /** Constructs an immutable controller Job projection for acknowledgement tests. */
 function _Projection(image: string): AgentJobProjection
 {
-	return { name: "agent-run-run-123-a1", labels: {}, namespace: "opencrane-runtime", serviceAccountName: "agent-runtime", image, suspend: true, backoffLimit: 0 };
+	return { name: "agent-run-run-123-a1", labels: {}, namespace: "opencrane-runtime", serviceAccountName: "agent-runtime", image, suspend: true, backoffLimit: 0, projectedTokenTtlSeconds: 600 };
 }
 
 /** Returns the test-controlled projected-token reader. */

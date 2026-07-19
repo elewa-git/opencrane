@@ -22,6 +22,8 @@
 ---
 {{ include "opencrane.agentController.resources" . }}
 ---
+{{ include "opencrane.agentRuntime.resources" . }}
+---
 {{ include "opencrane.databaseSchema.job" . }}
 ---
 {{ include "opencrane.cognee.resources" . }}

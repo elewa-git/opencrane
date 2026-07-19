@@ -38,6 +38,8 @@ export interface AgentJobProjection
 	readonly suspend: boolean;
 	/** No retry is delegated to Kubernetes under the same durable attempt. */
 	readonly backoffLimit: 0;
+	/** Audience-bound runtime projected-token TTL sourced from the app-owned runtime profile. */
+	readonly projectedTokenTtlSeconds: number;
 }
 
 /** Immutable identity returned by Kubernetes after Job creation. */
@@ -62,6 +64,10 @@ export interface AgentControllerPolicy
 	readonly runtimeServiceAccountName: string;
 	/** Only runtime image the controller may project. */
 	readonly runtimeImage: string;
+	/** Runtime projected-token TTL pinned by the app-owned runtime identity profile. */
+	readonly runtimeProjectedTokenTtlSeconds: number;
+	/** Immutable workload labels required by the runtime app's NetworkPolicy selectors. */
+	readonly runtimePodLabels: Readonly<Record<string, string>>;
 }
 
 /** OpenCrane-owned source of already-authorized desired state. */

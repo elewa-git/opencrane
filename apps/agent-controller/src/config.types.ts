@@ -7,6 +7,10 @@ export interface AgentControllerProcessConfig
 	readonly runtimeServiceAccountName: string;
 	/** Immutable runtime OCI image the controller is allowed to assign. */
 	readonly runtimeImage: string;
+	/** Runtime projected-token TTL selected by the runtime identity profile. */
+	readonly runtimeProjectedTokenTtlSeconds: number;
+	/** Immutable runtime labels that must satisfy the app-owned NetworkPolicy selectors. */
+	readonly runtimePodLabels: Readonly<Record<string, string>>;
 	/** Private OpenCrane authority base URL. */
 	readonly openCraneInternalUrl: string;
 	/** Separate projected controller token accepted by OpenCrane only. */

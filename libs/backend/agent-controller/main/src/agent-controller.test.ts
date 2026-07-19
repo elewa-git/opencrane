@@ -9,6 +9,12 @@ function _Desired(): DesiredAgentJob
 	return { runId: "run-123", attempt: 1, agentServiceId: "service-123", agentRevisionId: "revision-123", siloId: "silo-123", subjectId: "user-123", namespace: "opencrane-runtime", serviceAccountName: "agent-runtime", image: "ghcr.io/opencrane/agent-runtime@sha256:abc" };
 }
 
+/** Build the runtime projection with the exact NetworkPolicy selector labels used by these tests. */
+function _Projection(desired = _Desired()): AgentJobProjection
+{
+	return _BuildJobProjection(desired, 600, { "app.kubernetes.io/name": "opencrane", "app.kubernetes.io/instance": "runtime-test" });
+}
+
 /** Construct isolated fake dependencies while recording the security-relevant call order. */
 function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJob | null = null, bootstrapReady = true, createdSuspended = true): { readonly dependencies: AgentControllerDependencies; readonly calls: string[] }
 {
@@ -16,7 +22,7 @@ function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJ
 	return {
 		calls,
 		dependencies: {
-			policy: { runtimeNamespace: "opencrane-runtime", runtimeServiceAccountName: "agent-runtime", runtimeImage: "ghcr.io/opencrane/agent-runtime@sha256:abc" },
+			policy: { runtimeNamespace: "opencrane-runtime", runtimeServiceAccountName: "agent-runtime", runtimeImage: "ghcr.io/opencrane/agent-runtime@sha256:abc", runtimeProjectedTokenTtlSeconds: 600, runtimePodLabels: { "app.kubernetes.io/name": "opencrane", "app.kubernetes.io/instance": "runtime-test" } },
 			desiredJobs: { async readNext() { return desired; } },
 			jobs: {
 				async check() { calls.push("check"); },
@@ -46,7 +52,7 @@ describe("agent workload controller", function _describeController()
 
 	it("recovers a matching running Job only after authority re-confirms bootstrap readiness", async function _doesNotCreateAgain()
 	{
-		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false });
+		const fixture = _Dependencies(_Desired(), { name: _Projection().name, labels: _Projection().labels, uid: "job-uid", suspended: false });
 		await __ReconcileAgentJob(fixture.dependencies);
 		expect(fixture.calls).toEqual(["get", "job:job-uid", "pod", "pod:pod-uid"]);
 	});
@@ -68,7 +74,7 @@ describe("agent workload controller", function _describeController()
 
 	it("deletes and rejects an already-running Job before it can run without bootstrap acknowledgement", async function _rejectsUnsafeExistingJob()
 	{
-		const fixture = _Dependencies(_Desired(), { name: _BuildJobProjection(_Desired()).name, labels: _BuildJobProjection(_Desired()).labels, uid: "job-uid", suspended: false }, false);
+		const fixture = _Dependencies(_Desired(), { name: _Projection().name, labels: _Projection().labels, uid: "job-uid", suspended: false }, false);
 		await expect(__ReconcileAgentJob(fixture.dependencies)).resolves.toEqual({ outcome: "rejected", reason: "unsafe_existing_job", runId: "run-123", attempt: 1 });
 		expect(fixture.calls).toEqual(["get", "job:job-uid", "delete:job-uid", "reject:unsafe_existing_job"]);
 	});
@@ -82,7 +88,7 @@ describe("agent workload controller", function _describeController()
 
 	it("keeps the Kubernetes projection deterministic and retry-distinct", function _buildsProjection()
 	{
-		expect(_BuildJobProjection(_Desired())).toMatchObject({ name: expect.stringMatching(/^agent-run-run-123-[a-f0-9]{16}-a1$/), suspend: true, backoffLimit: 0, serviceAccountName: "agent-runtime" });
+		expect(_BuildJobProjection(_Desired(), 600, { "app.kubernetes.io/name": "opencrane", "app.kubernetes.io/instance": "runtime-test" })).toMatchObject({ name: expect.stringMatching(/^agent-run-run-123-[a-f0-9]{16}-a1$/), suspend: true, backoffLimit: 0, serviceAccountName: "agent-runtime", labels: { "app.kubernetes.io/name": "opencrane", "app.kubernetes.io/instance": "runtime-test" } });
 		expect(_BuildJobProjection({ ..._Desired(), attempt: 2 }).name).not.toBe(_BuildJobProjection(_Desired()).name);
 	});
 

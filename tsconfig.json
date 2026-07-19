@@ -106,6 +106,9 @@
       "@opencrane/backend/agent-controller/kubernetes": [
         "./libs/backend/agent-controller/kubernetes/src/index.ts"
       ],
+      "@opencrane/backend/agent-runtime/job-template": [
+        "./libs/backend/agent-runtime/job-template/src/index.ts"
+      ],
       "@opencrane/backend/server/skills": [
         "./libs/backend/server/skills/main/src/index.ts"
       ],
