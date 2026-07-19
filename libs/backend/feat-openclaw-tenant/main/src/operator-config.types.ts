@@ -73,8 +73,6 @@ export interface OpenClawTenantOperatorConfig
   defaultTenantPolicyRef: string;
   /** MCP gateway service URL rendered into tenant config. */
   mcpGatewayUrl: string;
-  /** Skill registry service URL rendered into tenant config. */
-  skillRegistryUrl: string;
   /** Cognee service endpoint. */
   cogneeEndpoint: string;
   /** Internal listener port. */

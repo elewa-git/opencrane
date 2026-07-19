@@ -68,7 +68,6 @@ describe("_LoadOperatorConfig multi-instance fail-closed guard (MI.1 / brief B2)
 		// Runtime-plane URL env vars are intentionally unset so the fallbacks are exercised.
 		const config = _LoadOperatorConfig();
 		expect(config.mcpGatewayUrl).toBe("http://opencrane-mcp-gateway.oc-acme.svc:8080");
-		expect(config.skillRegistryUrl).toBe("http://opencrane-feat-skill-registry.oc-acme.svc:5000");
 		// The pod-facing internal URL is namespace-derived (Service DNS on the internal port).
 		expect(config.controlPlaneInternalServiceUrl).toBe("http://opencrane-opencrane-server.oc-acme.svc:8081");
 		// The operator's OWN internal call is a localhost self-call — not namespace-derived.

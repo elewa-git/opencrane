@@ -13,7 +13,7 @@ OpenCrane splits a platform installation into a single **fleet release** (cluste
 
 ## Why silos exist
 
-Before the silo model, the platform ran shared singleton services — one Obot, one feat-skill-registry, one LiteLLM, one Postgres — multiplexing every ClusterTenant's data behind application-level access controls. That design has a fundamental weakness: isolation depends entirely on every plane's ACL being correct, and the manager must constantly infer *which tenant* a given request or database row belongs to.
+Before the silo model, the platform ran shared singleton services — one Obot, one LiteLLM, one Postgres — multiplexing every ClusterTenant's data behind application-level access controls. That design has a fundamental weakness: isolation depends entirely on every plane's ACL being correct, and the manager must constantly infer *which tenant* a given request or database row belongs to.
 
 The silo model eliminates both problems in the same move: each ClusterTenant gets its own dedicated instances of every runtime plane and its own database. The silo *is* the scope, so there is no tenant to infer and no shared ACL to trust.
 
@@ -53,8 +53,8 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 │  │ manager           │  │ (scoped  │  │ gateway         │    │
 │  │ (tenant-facing    │  │  to this │  └─────────────────┘    │
 │  │  surface + CT     │  │  silo)   │  ┌─────────────────┐    │
-│  │  read-model)      │  └──────────┘  │ feat-skill-registry  │    │
-│  └───────────────────┘               └─────────────────┘    │
+│  │  read-model)      │  └──────────┘                         │
+│  └───────────────────┘                                       │
 │  ┌───────────────────┐               ┌─────────────────┐    │
 │  │  CNPG Postgres    │               │ LiteLLM         │    │
 │  │  (per-CT DB,      │               └─────────────────┘    │
@@ -76,7 +76,7 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 | Zitadel IAM admin + SA key | Yes (`fleetManager.zitadel.*`) | No |
 | Per-org user login (OIDC) | Fleet OIDC (`fleetManager.oidc.*`) | Silo OIDC (`clustertenantManager.oidc.*`) |
 | Fleet registry DB | Yes (`fleetManager.database.*`) | No |
-| Runtime planes (Obot, feat-skill-registry, LiteLLM, Cognee) | No | Yes |
+| Runtime planes (Obot, LiteLLM, Cognee) | No | Yes |
 | Operator | No (fleet-manager reconciles ClusterTenants) | Yes (namespace-scoped to this silo) |
 | Per-silo Postgres | No | Yes — one CNPG `Cluster` CR per silo namespace |
 | Cluster-wide infra (ingress-nginx, external-dns, CNPG operator, cert-manager) | Installed here (once) | Reused from fleet release |
@@ -102,7 +102,7 @@ apps/fleet-platform/deploy.sh \
 
 Required flags: `--base-domain`. Optional: `--ingress-ip` (derived automatically from the ingress-nginx LoadBalancer when omitted), `--cert-manager` and its TLS sub-flags.
 
-This installs the `opencrane-fleet` chart into `opencrane-system` with `fleetManager.clusterTenantApi.enabled=true` and `billing.enabled=true`. The fleet-manager and all cluster-wide infrastructure (CRDs, ingress-nginx, external-dns, CNPG operator, cert-manager) are installed here. No runtime planes (Obot, feat-skill-registry, LiteLLM, Cognee) are part of this release — those live in silos.
+This installs the `opencrane-fleet` chart into `opencrane-system` with `fleetManager.clusterTenantApi.enabled=true` and `billing.enabled=true`. The fleet-manager and all cluster-wide infrastructure (CRDs, ingress-nginx, external-dns, CNPG operator, cert-manager) are installed here. No runtime planes (Obot, LiteLLM, Cognee) are part of this release — those live in silos.
 
 ### Step 2 — install one silo per ClusterTenant
 

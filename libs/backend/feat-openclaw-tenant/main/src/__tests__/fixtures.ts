@@ -43,7 +43,6 @@ export const defaultConfig: OpenClawTenantOperatorConfig = {
   cogneeLiteLlmMonthlyBudgetUsd: 10,
   defaultTenantPolicyRef: "",
   mcpGatewayUrl: "http://opencrane-mcp-gateway.default.svc:8080",
-  skillRegistryUrl: "http://opencrane-feat-skill-registry.default.svc:5000",
   cogneeEndpoint: "",
   internalPort: 8081,
   controlPlaneInternalUrl: "http://localhost:8081",

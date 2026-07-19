@@ -51,7 +51,6 @@ describe("TenantResourceBuilder", () =>
     expect(runtimeContract.tenant.name).toBe("cfg");
     expect(runtimeContract.contractVersion).toBe("2.1.0");
     expect(runtimeContract.mcp.gateway).toBe(defaultConfig.mcpGatewayUrl);
-    expect(runtimeContract.skills.registry).toBe(defaultConfig.skillRegistryUrl);
   });
 
   it("emits litellm-proxy in replace mode (LiteLLM is the only provider — no bare-provider bypass)", () =>
@@ -202,12 +201,10 @@ describe("TenantResourceBuilder", () =>
     // AGENTS.md must contain key platform concepts (static file — references env var names).
     expect(data["AGENTS.md"]).toContain("managed");
     expect(data["AGENTS.md"]).toContain("OPENCRANE_MCP_GATEWAY_URL");
-    expect(data["AGENTS.md"]).toContain("OPENCRANE_SKILL_REGISTRY_URL");
     expect(data["AGENTS.md"]).toContain("Platform Invariants");
 
     // TOOLS.md must reference the env var names (static file — no literal URLs injected).
     expect(data["TOOLS.md"]).toContain("OPENCRANE_MCP_GATEWAY_URL");
-    expect(data["TOOLS.md"]).toContain("OPENCRANE_SKILL_REGISTRY_URL");
 
     // Both platform docs must make the agent AWARE of the Cognee org-memory layer.
     expect(data["AGENTS.md"]).toContain("OPENCRANE_MEMORY_BACKEND");
@@ -234,7 +231,6 @@ describe("TenantResourceBuilder", () =>
     expect(runtimeContract.policy.effectiveRef).toBe("default-egress");
     expect(runtimeContract.policy.mcpServers).toBeUndefined();
     expect(runtimeContract.mcp.servers).toEqual([]);
-    expect(runtimeContract.skills.entitled).toEqual([]);
   });
 
   it("advertises workspace-only org memory when Cognee is not configured", () =>
@@ -405,9 +401,7 @@ describe("TenantResourceBuilder", () =>
     expect(envVars.OPENCRANE_RUNTIME_MODE).toBe("managed");
     expect(envVars.OPENCRANE_RUNTIME_CONTRACT_PATH).toBe("/config/opencrane-managed-runtime.json");
     expect(envVars.OPENCRANE_MCP_GATEWAY_URL).toBe(defaultConfig.mcpGatewayUrl);
-    expect(envVars.OPENCRANE_SKILL_REGISTRY_URL).toBe(defaultConfig.skillRegistryUrl);
     expect(envVars.OPENCRANE_MCP_GATEWAY_TOKEN_PATH).toBe("/var/run/opencrane/tokens/obot-gateway.token");
-    expect(envVars.OPENCRANE_SKILL_REGISTRY_TOKEN_PATH).toBe("/var/run/opencrane/tokens/feat-skill-registry.token");
     expect(envVars.OPENCRANE_POLICY_REF).toBe("restricted-mcp");
     expect(envVars.HOME).toBe("/tmp/opencrane-home");
     expect(envVars.NPM_CONFIG_CACHE).toBe("/tmp/npm-cache");
@@ -419,8 +413,7 @@ describe("TenantResourceBuilder", () =>
     expect(volumes.some((volume) => volume.name === "tmp" && volume.emptyDir !== undefined)).toBe(true);
     expect(volumes.some((volume) =>
       volume.name === "projected-identity"
-      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "obot-gateway")
-      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "feat-skill-registry"),
+      && volume.projected?.sources?.some((source) => source.serviceAccountToken?.audience === "obot-gateway"),
     )).toBe(true);
   });
 

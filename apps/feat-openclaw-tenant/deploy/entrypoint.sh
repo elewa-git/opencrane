@@ -9,7 +9,6 @@ CONFIG_SOURCE="${OPENCRANE_CONFIG_SOURCE_PATH:-/config/openclaw.json}"
 RUNTIME_CONTRACT_PATH="${OPENCRANE_RUNTIME_CONTRACT_PATH:-/config/opencrane-managed-runtime.json}"
 # Writable copy of the contract — the polling loop writes here; entrypoint reads from here.
 RUNTIME_CONTRACT_WRITABLE="${OPENCRANE_RUNTIME_CONTRACT_WRITABLE:-/tmp/opencrane-managed-runtime.json}"
-SKILLS_DIR="$STATE_DIR/agents/main/skills"
 # Control-plane re-pull configuration (injected by operator into every tenant Deployment).
 OPENCRANE_CONTROL_PLANE_URL="${OPENCRANE_CONTROL_PLANE_URL:-}"
 OPENCRANE_CONTRACT_TOKEN_PATH="${OPENCRANE_CONTRACT_TOKEN_PATH:-/var/run/opencrane/tokens/opencrane-server.token}"
@@ -20,10 +19,6 @@ CONTRACT_POLL_INTERVAL="${OPENCRANE_CONTRACT_POLL_INTERVAL:-30}"
 OPENCRANE_ALLOWED_MCP_SERVERS="${OPENCRANE_ALLOWED_MCP_SERVERS:-}"
 OPENCRANE_DENIED_MCP_SERVERS="${OPENCRANE_DENIED_MCP_SERVERS:-}"
 OPENCRANE_MCP_POLICY_ENFORCED="${OPENCRANE_MCP_POLICY_ENFORCED:-false}"
-# Skill-registry delivery: pull entitled skill bundles by digest from the in-cluster
-# feat-skill-registry, authenticating with the audience-bound projected SA token.
-OPENCRANE_SKILL_REGISTRY_URL="${OPENCRANE_SKILL_REGISTRY_URL:-}"
-OPENCRANE_SKILL_REGISTRY_TOKEN_PATH="${OPENCRANE_SKILL_REGISTRY_TOKEN_PATH:-/var/run/opencrane/tokens/feat-skill-registry.token}"
 # Mandatory platform backends (decided, not optional). Org memory is Cognee; model routing is the
 # LiteLLM proxy. The workspace docs state these as facts, so a pod that boots without them is
 # MISCONFIGURED — the preflight below surfaces that loudly instead of letting the runtime silently
@@ -135,96 +130,9 @@ for (const doc of docs) {
 EOF
 }
 
-function _pull_entitled_skills()
-{
-  local contract_file="$1"
-
-  # Need a registry URL, a readable projected token, and a contract to do anything.
-  # On a cold boot the bootstrap contract has skills.entitled=[], so this is a no-op
-  # until the first opencrane-ui poll lands the live contract (mirrors TOOLS.md).
-  if [ -z "$OPENCRANE_SKILL_REGISTRY_URL" ] || [ ! -f "$contract_file" ] || [ ! -r "$OPENCRANE_SKILL_REGISTRY_TOKEN_PATH" ]; then
-    return 0
-  fi
-
-  # Node owns the fetch+write so JSON parsing, the Bearer call, and the exact bytes
-  # stay in one place. Entitlement is already enforced by the registry + opencrane-ui
-  # (a non-entitled digest 404s) — group-based entitlement is the sole skill-authorization surface.
-  node - "$contract_file" "$OPENCRANE_SKILL_REGISTRY_URL" "$OPENCRANE_SKILL_REGISTRY_TOKEN_PATH" "$SKILLS_DIR" <<'EOF' || true
-const fs = require("node:fs");
-const path = require("node:path");
-
-const [, , contractPath, registryUrl, tokenPath, skillsDir] = process.argv;
-
-let contract;
-try { contract = JSON.parse(fs.readFileSync(contractPath, "utf8")); } catch { process.exit(0); }
-
-const entitled = Array.isArray(contract?.skills?.entitled) ? contract.skills.entitled : [];
-if (entitled.length === 0) { process.exit(0); }
-
-let token;
-try { token = fs.readFileSync(tokenPath, "utf8").trim(); } catch { process.exit(0); }
-if (!token) { process.exit(0); }
-
-const base = registryUrl.replace(/\/+$/, "");
-
-async function _pull()
-{
-  for (const skill of entitled)
-  {
-    // Tolerate both the enriched object shape {id,name,digest} and a legacy bare-id string.
-    const name = typeof skill === "string" ? skill : skill?.name;
-    const digest = typeof skill === "string" ? null : skill?.digest;
-    if (!name || !digest) { continue; }
-    // Keep the on-disk name a single safe path segment so a write can never escape the skills dir.
-    if (name.includes("/") || name.includes("..")) { continue; }
-
-    let res;
-    try
-    {
-      res = await fetch(`${base}/bundles/${encodeURIComponent(digest)}`, {
-        headers: { Authorization: `Bearer ${token}` },
-        signal: AbortSignal.timeout(10_000),
-      });
-    }
-    catch (err)
-    {
-      process.stderr.write(`[opencrane] skill '${name}' fetch failed: ${err && err.message ? err.message : "error"}\n`);
-      continue;
-    }
-
-    if (!res.ok)
-    {
-      // 404 = not entitled / not found (existence-hiding at the registry); other codes are transient.
-      process.stderr.write(`[opencrane] skill '${name}' not delivered (status ${res.status})\n`);
-      continue;
-    }
-
-    const body = await res.text();
-    try
-    {
-      const dir = path.join(skillsDir, name);
-      fs.mkdirSync(dir, { recursive: true });
-      fs.writeFileSync(path.join(dir, "SKILL.md"), body);
-    }
-    catch (err)
-    {
-      // A write failure (permissions, disk full) must surface and must not abort the
-      // remaining entitled skills — log and move on to the next bundle.
-      process.stderr.write(`[opencrane] skill '${name}' write failed: ${err && err.message ? err.message : "error"}\n`);
-      continue;
-    }
-    process.stderr.write(`[opencrane] Delivered skill '${name}' (${digest}) to workspace\n`);
-  }
-}
-
-_pull().catch(() => process.exit(0));
-EOF
-}
-
 # Fingerprint the CONTRACT fields whose change a hot-reload actually propagates to the
-# running agent: the workspace docs (consumed by _apply_workspace_docs) and the entitled
-# skills (consumed by _pull_entitled_skills). openclaw.json's mcp.servers are static —
-# rendered once at boot — so a contract delta touching neither docs nor skills would
+# running agent: workspace docs (consumed by _apply_workspace_docs). openclaw.json's
+# mcp.servers are static — rendered once at boot — so a contract delta touching no docs would
 # re-spawn the stdio MCP servers for nothing, and every needless re-spawn is a fresh
 # chance to hit `MCP error -32000: Connection closed`. The poll loop reloads only when
 # this fingerprint changes. Emits a sha256 hex digest (or a sentinel that forces a reload
@@ -246,7 +154,6 @@ try {
   const relevant = {
     workspace: c && c.workspace !== undefined ? c.workspace : null,
     managedDocs: c && Array.isArray(c.managedDocs) ? c.managedDocs : [],
-    skills: c && c.skills && Array.isArray(c.skills.entitled) ? c.skills.entitled : [],
   };
   process.stdout.write(crypto.createHash("sha256").update(JSON.stringify(relevant)).digest("hex"));
 } catch {
@@ -312,7 +219,7 @@ function _contract_poll_loop()
 
       if [ "$new_sum" != "$old_sum" ]; then
         # Fingerprint the reload-relevant fields BEFORE overwriting the old contract, so a
-        # docs/skills change (which a reload must propagate) is distinguishable from a bare
+        # workspace-doc change (which a reload must propagate) is distinguishable from a bare
         # metadata/model-catalog delta (which must NOT churn the stdio MCP servers).
         # Distinct sentinels on failure so a fingerprint error never aborts the poll loop
         # (set -e) and always falls through to a reload (fail safe).
@@ -323,19 +230,15 @@ function _contract_poll_loop()
         mv "$tmp_path" "$writable_path"
         echo "[opencrane] Contract updated (sha256: ${new_sum})" >&2
 
-        # Re-render contract-derived workspace docs (TOOLS.md) and pull newly-entitled skill
-        # bundles. Both are idempotent, so running them on every contract change is cheap and
-        # keeps the on-disk files current. Additive: a de-entitled skill stops being advertised
-        # in TOOLS.md and 404s at the registry, but its on-disk copy is left in place (pruning
-        # de-entitled skills is a separate follow-up).
+        # Re-render contract-derived workspace docs (TOOLS.md). This is idempotent, so running
+        # it on every contract change keeps the on-disk guidance current.
         _apply_workspace_docs "$writable_path"
-        _pull_entitled_skills "$writable_path"
 
         # Only trigger the file-watch reload when a reload would actually change what the
         # agent sees. A no-op openclaw.json rewrite still makes OpenClaw re-read its config and
-        # re-init plugins for nothing, so skip it when workspace docs + skills are unchanged.
+        # re-init plugins for nothing, so skip it when workspace docs are unchanged.
         if [ "$new_fp" != "$old_fp" ]; then
-          echo "[opencrane] Reload-relevant fields (workspace docs/skills) changed; triggering hot-reload" >&2
+          echo "[opencrane] Reload-relevant workspace docs changed; triggering hot-reload" >&2
           _trigger_openclaw_reload
         else
           echo "[opencrane] Contract change is not reload-relevant; skipping reload" >&2
@@ -374,7 +277,7 @@ function _main()
   _load_mcp_policy
 
   # Ensure GCS-backed directory structure
-  mkdir -p "$STATE_DIR/agents/main/agent" "$SKILLS_DIR" \
+  mkdir -p "$STATE_DIR/agents/main/agent" \
            "$STATE_DIR/sessions" "$STATE_DIR/uploads" "$STATE_DIR/knowledge" \
            "$WORKSPACE_DIR"
 
@@ -427,10 +330,8 @@ function _main()
   # copy; fall back to the ConfigMap-mounted original.
   if [ -f "$RUNTIME_CONTRACT_WRITABLE" ]; then
     _apply_workspace_docs "$RUNTIME_CONTRACT_WRITABLE"
-    _pull_entitled_skills "$RUNTIME_CONTRACT_WRITABLE"
   else
     _apply_workspace_docs "$RUNTIME_CONTRACT_PATH"
-    _pull_entitled_skills "$RUNTIME_CONTRACT_PATH"
   fi
 
   echo "[opencrane] Starting OpenClaw gateway"

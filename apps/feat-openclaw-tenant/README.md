@@ -14,13 +14,12 @@ Pod starts
         3. Apply the operator-rendered OpenClaw config and platform-owned workspace files
         4. Seed tenant-editable workspace files only when they do not yet exist
         5. Load the effective AccessPolicy-derived tool rules
-        6. Pull entitled skill bundles by digest from the Skill Registry
-        7. Start the image-baked OpenClaw gateway and poll for workspace/skill contract changes
+        6. Start the image-baked OpenClaw gateway and poll for workspace contract changes
 ```
 
-The contract poll updates platform-owned workspace guidance and entitled skills. It does not
-change the executable runtime. A runtime or plugin update is a new image build and a normal
-workload rollout; rolling back the image restores the complete pinned pair atomically.
+The contract poll updates platform-owned workspace guidance. It does not change the executable
+runtime. A runtime or plugin update is a new image build and a normal workload rollout; rolling
+back the image restores the complete pinned pair atomically.
 
 ## Storage layout
 
@@ -33,9 +32,6 @@ workload rollout; rolling back the image restores the complete pinned pair atomi
 | `/etc/openclaw/encryption-key` | Kubernetes Secret | Per-tenant encryption key |
 | `/tmp` | `emptyDir` | Writable home, cache and refreshed contract copy |
 
-Org and team skills are not mounted from shared storage. The pod pulls only the bundle digests
-listed in its effective contract, and the Skill Registry checks entitlement on every read.
-
 ## Runtime configuration
 
 | Variable | Purpose |
@@ -46,7 +42,6 @@ listed in its effective contract, and the Skill Registry checks entitlement on e
 | `OPENCLAW_TENANT_NAME` | Tenant identifier injected by the operator |
 | `OPENCRANE_RUNTIME_CONTRACT_PATH` | Bootstrap managed-runtime contract |
 | `OPENCRANE_CONTROL_PLANE_URL` | Control-plane origin used for contract refreshes |
-| `OPENCRANE_SKILL_REGISTRY_URL` | In-cluster Skill Registry used for entitled bundle pulls |
 | `OPENCRANE_MEMORY_BACKEND` / `COGNEE_ENDPOINT` | Required organisational-memory connection |
 | `LITELLM_ENDPOINT` | Required model-routing proxy |
 
@@ -58,8 +53,8 @@ runtime components.
 
 A tenant binds to an `AccessPolicy` through `spec.policyRef`, a matching selector, or the
 operator default. The control plane compiles that effective policy with the tenant's grants and
-serves the resulting MCP allow/deny set and entitled skill digests in the effective contract.
-There is no separate tenant-local tool-policy field.
+serves the resulting MCP allow/deny set in the effective contract. There is no separate
+tenant-local tool-policy field.
 
 ## Hardening baseline
 
