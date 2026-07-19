@@ -16,3 +16,5 @@ it; the library exposes no transport.
 
 Tagged `scope:artifacts`: it may depend only on `scope:artifacts` (the models package) and
 `scope:shared` — never on apps, byte stores, or sibling domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

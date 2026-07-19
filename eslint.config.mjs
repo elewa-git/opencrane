@@ -20,6 +20,33 @@ import nx from "@nx/eslint-plugin";
 import tsEslint from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 
+/** Enforces the package test-layout convention independently of Vitest discovery. */
+const testLayout = {
+  rules: {
+    "require-tests-directory": {
+      meta: {
+        type: "problem",
+        docs: { description: "require TypeScript tests to live below __tests__" },
+        schema: [],
+        messages: { misplacedTest: "Move this test below a __tests__ directory." },
+      },
+      create(context) {
+        const filename = context.filename.replaceAll("\\", "/");
+
+        if (filename.includes("/__tests__/")) {
+          return {};
+        }
+
+        return {
+          Program(node) {
+            context.report({ node, messageId: "misplacedTest" });
+          },
+        };
+      },
+    },
+  },
+};
+
 export default [
   {
     ignores: [
@@ -198,6 +225,11 @@ export default [
         },
       ],
     },
+  },
+  {
+    files: ["**/*.test.ts"],
+    plugins: { "test-layout": testLayout },
+    rules: { "test-layout/require-tests-directory": "error" },
   },
   {
     // Vitest configs are build tooling, not product modules: every one imports the

@@ -18,3 +18,5 @@ restricted to configured suffixes and only a response-header allowlist passed ba
 
 Tagged `scope:channel-proxy`: it may depend only on `scope:channel-proxy` and `scope:shared`
 (models, util, observability) — never on apps, server domains, or the runtimes it fronts.
+
+The control-plane decision it defers to lives in [`server/channel-targets`](../../server/channel-targets/main/); see [`../../README.md`](../../README.md) for the backend map.

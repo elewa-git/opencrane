@@ -17,3 +17,5 @@ server process.
 
 Tagged `scope:agent-services`: it may depend only on `scope:agents` (the AgentRevision model),
 `scope:audit`, `scope:authorization`, and `scope:shared` — never on apps or sibling domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

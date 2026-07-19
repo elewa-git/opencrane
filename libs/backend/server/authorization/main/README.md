@@ -28,3 +28,5 @@ Pure decision logic plus the Prisma adapters (`PrismaRuntimeAuthorityRepository`
 server composes it; PEPs supply the trusted expectations — this library never derives trust from
 request bytes. Tagged `scope:authorization`: it may depend only on `scope:audit`,
 `scope:authorization` (the models package) and `scope:shared` — never on apps or sibling domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

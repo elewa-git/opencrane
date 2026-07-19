@@ -22,3 +22,5 @@ conversations domain). Composed by the personal-agent product backend.
 Tagged `type:lib`, `layer:backend`, `scope:personal-runs`: it may depend only on
 `scope:agents` models, `scope:authorization` models, and `scope:shared` packages — never on
 apps or sibling personal-agent domains.
+
+See [`../../README.md`](../../README.md) for the personal-agent capability map.

@@ -20,3 +20,5 @@ It is the approval write authority composed by the personal-agent product backen
 
 Tagged `type:lib`, `layer:backend`, `scope:personal-personas`: it may depend only on
 `scope:shared` packages — never on apps or sibling personal-agent domains.
+
+See [`../../README.md`](../../README.md) for the personal-agent capability map.

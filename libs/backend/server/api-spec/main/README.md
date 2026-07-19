@@ -14,3 +14,5 @@ fragments but never import this package back, keeping the aggregation direction 
 
 Tagged `scope:api-spec`: it may depend on the contributing domain scopes listed in
 `eslint.config.mjs` plus `scope:shared`, and nothing may flow the other way except apps.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

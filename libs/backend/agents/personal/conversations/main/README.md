@@ -17,3 +17,5 @@ transcripts — it is the write authority only, composed by the personal-agent p
 Tagged `type:lib`, `layer:backend`, `scope:personal-conversations`: it may depend only on
 `scope:agents` models and `scope:shared` packages — never on apps, entrypoints, the frontend,
 or sibling personal-agent domains.
+
+See [`../../README.md`](../../README.md) for the personal-agent capability map.

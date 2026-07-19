@@ -19,3 +19,5 @@ groups. `___AuthRouter` exposes the public surface (`/me`, `/login`, `/callback`
 Composed by the OpenCrane server (`apps/opencrane/src/index.ts`). Tagged `scope:identity`: it may
 depend only on `scope:auth`, `scope:cluster-tenants`, `scope:connections`, `scope:projection`, and
 `scope:shared` — never on apps or other domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

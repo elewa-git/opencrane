@@ -20,3 +20,5 @@ authority over `/api/internal/channel-targets:resolve` and holds no policy of it
 Tagged `scope:channel-targets` (no scope-level depConstraint is registered yet in
 `eslint.config.mjs`); the `layer:backend` and `type:lib` rules still forbid importing entrypoint
 or frontend layers and apps. It imports only the authorization models and shared utilities.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

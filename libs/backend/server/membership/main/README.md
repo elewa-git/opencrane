@@ -18,3 +18,5 @@ gate through the membership-authority port.
 
 Tagged `scope:membership`: it may depend only on `scope:audit`, `scope:authorization`, and
 `scope:shared` — never on apps or sibling domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.
