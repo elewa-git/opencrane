@@ -12,8 +12,7 @@
     ],
     "production": [
       "default",
-      "!{projectRoot}/src/__tests__/**",
-      "!{projectRoot}/**/*.test.ts"
+      "!{projectRoot}/src/__tests__/**"
     ]
   },
   "targetDefaults": {

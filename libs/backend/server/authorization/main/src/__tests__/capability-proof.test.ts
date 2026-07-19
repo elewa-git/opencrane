@@ -4,8 +4,8 @@ import { ___CanonicalizeJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 import { describe, expect, it } from "vitest";
 
-import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof.js";
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
+import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "../capability-proof.js";
+import { __DigestCanonicalJson } from "../canonical-json-digest.js";
 
 /** Fixed trusted clock used by proof fixtures. */
 const NOW = 1_750_000_000;

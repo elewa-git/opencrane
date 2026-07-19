@@ -1,7 +1,7 @@
 import { AgentRunState, AgentRunTrigger, ChannelInvocationAction } from "@prisma/client";
 import { describe, expect, it } from "vitest";
 
-import { PrismaChannelTargetAuthorityRepository } from "./prisma-channel-target-authority.js";
+import { PrismaChannelTargetAuthorityRepository } from "../prisma-channel-target-authority.js";
 
 /** Builds the minimum transaction facade needed to reject a run during issuance. */
 function _issueTransaction(trigger: AgentRunTrigger, state: AgentRunState): Record<string, unknown>

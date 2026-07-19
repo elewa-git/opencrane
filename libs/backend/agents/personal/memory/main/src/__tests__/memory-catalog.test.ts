@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __RecordMemoryFact } from "./memory-catalog.js";
+import { __RecordMemoryFact } from "../memory-catalog.js";
 
 describe("memory catalog", function ()
 {

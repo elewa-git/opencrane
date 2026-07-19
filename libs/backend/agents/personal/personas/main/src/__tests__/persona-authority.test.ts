@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __ApprovePersona } from "./persona-authority.js";
+import { __ApprovePersona } from "../persona-authority.js";
 
 describe("persona authority", function ()
 {

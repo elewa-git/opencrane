@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaFleetMembershipAuthorityRepository } from "./prisma-membership-authority.js";
+import { PrismaFleetMembershipAuthorityRepository } from "../prisma-membership-authority.js";
 
 /** Creates one verified signed membership revision row. */
 function _revisionRow()
