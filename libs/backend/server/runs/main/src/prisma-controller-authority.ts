@@ -197,7 +197,7 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 		});
 	}
 
-	/** Marks one undeliverable desired Job failed and fails its current queued run attempt transactionally. */
+	/** Marks one unsafe desired Job failed, including an unstarted assigned attempt, transactionally. */
 	async rejectDesiredJob(runId: string, attempt: number, reason: string, nowEpochMs: number): Promise<void>
 	{
 		const now = new Date(nowEpochMs);
@@ -206,10 +206,15 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 			// 1. Lock the run before the event so rejection cannot invert a claim or acknowledgement.
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${runId} FOR UPDATE`);
 			const run = await transaction.agentRun.findUnique({ where: { id: runId } });
-			const event = await _lockAttemptEvent(transaction, runId, attempt);
-			if (event === null || run === null || run.attempt !== attempt || run.state !== AgentRunState.Queued) throw new Error("run attempt cannot be rejected");
+			const event = await _lockAttemptEvent(transaction, runId, attempt, true);
+			if (event === null || run === null || run.attempt !== attempt || (run.state !== AgentRunState.Queued && run.state !== AgentRunState.Assigned)) throw new Error("run attempt cannot be rejected");
 
-			// 2. Fail both durable records together so the bad event cannot block later work or look pending.
+			// 2. Revoke an unstarted assignment before failing the run, so a deleted unsafe Job cannot wedge it.
+			if (run.state === AgentRunState.Assigned)
+			{
+				await transaction.workloadAssignment.updateMany({ where: { runId, attempt, state: WorkloadAssignmentState.PendingPod }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
+			}
+			// 3. Fail both durable records together so the bad event cannot block later work or look pending.
 			await transaction.agentRun.update({ where: { id: run.id }, data: { state: AgentRunState.Failed, finishedAt: now, terminalReason: "RuntimeFailure" } });
 			await _failOutboxEvent(transaction, event.id, now, _failureCode(reason));
 		});
@@ -217,10 +222,10 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 }
 
 /** Locks the one unpublished attempt-request event for a run attempt. */
-async function _lockAttemptEvent(transaction: Prisma.TransactionClient, runId: string, attempt: number): Promise<{ readonly id: string; readonly claimedAt: Date | null; readonly payload: Prisma.JsonValue } | null>
+async function _lockAttemptEvent(transaction: Prisma.TransactionClient, runId: string, attempt: number, includePublished = false): Promise<{ readonly id: string; readonly claimedAt: Date | null; readonly payload: Prisma.JsonValue } | null>
 {
-	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "run_id" = ${runId} AND "attempt" = ${attempt} AND "kind" = CAST(${"run.attempt_requested"} AS "RunOutboxEventKind") AND "published_at" IS NULL AND "failed_at" IS NULL FOR UPDATE`);
-	const events = await transaction.outboxEvent.findMany({ where: { runId, attempt, kind: RunOutboxEventKind.RunAttemptRequested, publishedAt: null, failedAt: null }, select: { id: true, claimedAt: true, payload: true }, take: 2 });
+	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "run_id" = ${runId} AND "attempt" = ${attempt} AND "kind" = CAST(${"run.attempt_requested"} AS "RunOutboxEventKind") AND "failed_at" IS NULL ${includePublished ? Prisma.empty : Prisma.sql`AND "published_at" IS NULL`} FOR UPDATE`);
+	const events = await transaction.outboxEvent.findMany({ where: { runId, attempt, kind: RunOutboxEventKind.RunAttemptRequested, failedAt: null, ...(includePublished ? {} : { publishedAt: null }) }, select: { id: true, claimedAt: true, payload: true }, take: 2 });
 	return events.length === 1 ? events[0] ?? null : null;
 }
 
