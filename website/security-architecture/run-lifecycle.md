@@ -23,8 +23,9 @@ separately-owned steps.
 
 ## A run's life
 
-A **run** is one attempt-tracked execution of an agent revision in a thread. Its
-state machine is short, and (as the
+A **run** is one attempt-tracked execution of an agent revision in a
+**thread** — a conversation's ordered history of messages. Its state machine is
+short, and (as the
 [data authority page](/security-architecture/data-authority) explained) each
 transition is trigger-guarded in Postgres:
 
@@ -101,7 +102,7 @@ authority's actual terminal state.
 ::: info Status
 The event store, sequencing, and terminal fencing are enforced in the database
 today; the workload-authenticated ingest route and the SSE endpoint are the
-next Phase D slices.
+next slices of the current build phase.
 :::
 
 ## Steering: input while the run is busy
@@ -136,7 +137,7 @@ with every queued message still receiving a durable disposition.
 ::: info Status
 The steering contracts and events are fully designed (and the terminal-race
 semantics fixed); the inbox and boundary-claim implementation is a named
-remaining Phase D slice.
+remaining slice of the current build phase.
 :::
 
 ## Sandboxed execution: OpenSandbox
@@ -148,23 +149,26 @@ narrow OpenCrane boundary (ADR 0009):
 
 - Only the agent controller may call the OpenSandbox lifecycle API — it has no
   public ingress and is unreachable from agent and sandbox workloads alike.
-- Each sandbox receives an **attenuated, attempt-scoped delegation**: the
-  intersection of what the initiating actor and agent were granted, the exact
-  approved action and argument digest, and the sandbox profile ceiling —
-  proof-bound to that one sandbox's workload identity and expiry. It can never
-  exceed what the agent had, and no agent or provider credential is copied in.
+- Each sandbox receives an **attenuated, attempt-scoped delegation**. It starts
+  from the same user-∩-agent intersection as any capability, narrowed to the
+  exact approved action and argument digest, then clipped by the sandbox
+  profile's ceiling. The result is proof-bound to that one sandbox's workload
+  identity and expiry — it can never exceed what the agent had, and no agent or
+  provider credential is copied in.
 - Egress policy is rendered from the approved capability *before* the sandbox
   is created; the sandbox cannot reach the lifecycle API or edit its own policy.
 - Sandbox output becomes durable only through an authorised artifact-store
   finalisation; a retry is always a new attempt with a new proof — an execution
   with ambiguous side effects is never silently reused.
 
-Production sandboxes require a hardened runtime class (gVisor or Kata) and fail
-closed when it is unavailable.
+Production sandboxes require a hardened container runtime (gVisor or Kata —
+runtimes that add a kernel-isolation layer between the sandbox and the host)
+and fail closed when it is unavailable.
 
 ::: info Status
-ADR 0009 is accepted; the OpenSandbox app boundary, adapter contract, and its
-negative tests are scheduled Phase D slices, with conformance in Phase E.
+ADR 0009 is accepted; the OpenSandbox app boundary, its adapter contract, and
+its negative tests are scheduled in the current build phase, with full
+conformance testing in the runtime phase that follows.
 :::
 
 ## The whole picture

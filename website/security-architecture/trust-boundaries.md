@@ -69,8 +69,9 @@ one door, and the door checks three things:
    past its authorisation.
 3. **Content-addressed promotion.** The service hashes what actually arrived,
    verifies it against the leased digest, and only then publishes the bytes at
-   their content address. It answers with a **signed receipt** — the only
-   evidence the server accepts to finalise the artifact record.
+   their content address (the address *is* the hash of the bytes — verified,
+   not asserted). It answers with a **signed receipt** — the only evidence the
+   server accepts to finalise the artifact record.
 
 The workload itself holds no Kubernetes RBAC and no automounted token; its
 network policy admits only the server as a client. Note the deliberate asymmetry
@@ -86,8 +87,9 @@ suspended, acknowledge, unsuspend — are covered in
 [Workload identity](/security-architecture/workload-identity#the-controller-one-mutator-no-judgement);
 what matters here is the boundary shape:
 
-- Inbound, it accepts **no traffic at all** (its network policy has no ingress
-  rules — health probes come from the kubelet, not the network).
+- Inbound, it accepts **no traffic at all** (its network policy allows no
+  incoming connections — health probes come from Kubernetes itself, not over
+  the network).
 - Outbound, it may reach exactly two things: the Kubernetes API and the server's
   internal port.
 - Everything it learns from the server it re-validates against its own pinned
@@ -119,17 +121,24 @@ layers do:
 
 **Kubernetes NetworkPolicies** provide the floor: platform namespaces carry
 default-deny policies, and each app ships its own precise allow rules
-(exactly the flows described above — nothing more). The umbrella policies
-deliberately *exclude* the four boundary workloads so a broad platform rule can
-never quietly widen a precise one.
+(exactly the flows described above — nothing more). The broad platform-wide
+policies deliberately *exclude* the four boundary workloads: each carries only
+its own precise policy, so a platform-wide allow rule can never quietly add a
+flow to a boundary workload.
 
-**Cilium policies bind flows to identity.** Labels can be edited; a
-ServiceAccount cannot be impersonated. Each boundary workload additionally
-carries a Cilium policy that selects on the workload's **ServiceAccount
-identity**, so "may talk to the server" means *this identity* may — a Pod that
-merely copies the right labels matches nothing. A contract test asserts every
-boundary workload has an identity-bound policy, and a live probe proves an
-identical-but-unlabelled client is actually dropped on the wire.
+**Cilium policies bind flows to identity.**
+[Cilium](https://github.com/italanta/opencrane/blob/main/apps/_infra/cilium/README.md)
+is the cluster's network layer — and unlike a plain firewall, it can tell *who*
+a connection comes from.
+That matters because Kubernetes **labels** (the free-form name tags on Pods,
+editable by anyone who can edit the Pod) are how ordinary network policies
+select traffic — and labels can be copied. A ServiceAccount cannot. Each
+boundary workload therefore carries an additional Cilium policy that selects on
+the workload's **ServiceAccount identity**, so "may talk to the server" means
+*this identity* may — a Pod that merely copies the right labels matches
+nothing. A contract test asserts every boundary workload has an identity-bound
+policy, and a live probe proves an identical-but-unlabelled client is actually
+dropped on the wire.
 
 The result, end to end: every arrow in the topology diagram on the
 [overview page](/security-architecture/) exists because a policy explicitly

@@ -27,7 +27,7 @@ Three rules define the model:
 
 A **Kubernetes ServiceAccount** (KSA) is an identity the cluster itself manages.
 Kubernetes can *project* a token for it into a Pod: a short-lived credential,
-automatically rotated by the kubelet, that names the ServiceAccount and — the
+automatically rotated by Kubernetes, that names the ServiceAccount and — the
 important part — an **audience**: the one verifier the token is meant for.
 
 OpenCrane disables the default token automount on every workload (a Pod gets no
@@ -39,7 +39,7 @@ workload only the tokens its job requires, each with a distinct audience:
 | channel-proxy | `opencrane` | Calling the server's internal target-resolution API |
 | agent-controller | `agent-controller` | Calling the server's controller-authority API |
 | agent-controller | `https://kubernetes.default.svc` | Calling the Kubernetes API itself |
-| agent-runtime | `opencrane` | Reserved for the future proof-bound bootstrap (no network path yet) |
+| agent-runtime | `opencrane` | Reserved for the proof-bound bootstrap listener — designed, not yet reachable: today the runtime has no network path to the server at all |
 
 Audience-binding is what makes a stolen token boring: a token minted for the
 `agent-controller` audience is rejected by every other verifier, so possession of
@@ -77,66 +77,56 @@ The trust still originates with the server; only the proof format differs.
 **RBAC** (role-based access control) is how Kubernetes grants API permissions to
 identities. OpenCrane's rule: the workloads that execute agent code get **none**.
 
-The agent-runtime identity has no Role, no ClusterRole, no automounted token, and
-a network policy that denies all ingress and allows egress only to DNS and the
+The agent-runtime identity has no Role (a granted permission bundle), no
+ClusterRole (the cluster-wide variant), no automounted token, and a network
+policy that allows no incoming connections and outgoing ones only to DNS and the
 telemetry collector. If an agent's code is tricked or compromised, the blast
 radius is a process that cannot call the Kubernetes API, cannot reach the
-database, and cannot even open a connection to the server. This is not aspiration
-— it is contract-tested: negative tests render the chart and assert the
-ServiceAccount has no RBAC (directly or via inherited groups), and live tests run
-`kubectl auth can-i` against a real cluster expecting `no` across the board.
+database, and cannot even open a connection to the server. This is not
+aspiration — it is contract-tested: negative tests render the deployment
+templates and assert the ServiceAccount has no RBAC (directly or via inherited
+groups), and live tests run `kubectl auth can-i` against a real cluster
+expecting `no` across the board.
 
 ## The controller: one mutator, no judgement
 
 If runtimes cannot create their own workloads, someone must. That someone —
 the **only** someone — is the agent controller. Its Kubernetes Role is a
-namespaced allowlist: create/patch/delete on `Jobs`, read on `Pods`, and nothing
-else. No Secrets access, no other resource types, no ClusterRole.
+namespaced allowlist: create/patch/delete on `Jobs` (the run-to-completion
+workloads runs execute in), read on `Pods`, and nothing else. No Secrets access,
+no other resource types, no ClusterRole.
 
 Just as important: the controller executes decisions but never makes them.
 
 ```
- server (authority)                     controller (executor)
-────────────────────────────────────────────────────────────────
- derives desired run     ──claim──▶     validates it against its
- from canonical rows                    own pinned policy
-                                        creates the Job SUSPENDED
- records Job UID         ◀─ack────      (it cannot start yet)
- issues bootstrap
- confirms readiness      ──ready──▶     unsuspends the Job
- records first Pod UID   ◀─ack────
+     server (authority)                     controller (executor)
+────────────────────────────────────────────────────────────────────
+ 1.  derives desired run     ──claim──▶     validates it against its
+     from canonical rows                    own pinned policy
+ 2.                                         creates the Job SUSPENDED
+ 3.  records Job UID         ◀─ack────      (it cannot start yet)
+     issues bootstrap
+ 4.  confirms readiness      ──ready──▶     unsuspends the Job
+ 5.  records first Pod UID   ◀─ack────
 ```
 
 Every workload the controller creates starts **suspended** and is unsuspended
 only after the server has durably recorded the exact Job identity (its
-Kubernetes UID) and confirmed bootstrap readiness. The controller reports
-observations — Job UID, first Pod UID — but the server treats them as
-coordinates to verify, never as authority: a mismatched name, a changed runtime
-profile, or a stale attempt is rejected at the API and the work is re-derived
-from the database. A controller crash therefore loses nothing (unacknowledged
-claims become reclaimable), and a duplicate reconcile double-runs nothing
-(acknowledgements are idempotent per run attempt).
+Kubernetes UID) and confirmed the **bootstrap** is ready — the one-time exchange
+from the [previous page](/security-architecture/capabilities#proof-of-possession)
+in which the new run registers its proof key. "Pinned policy" in step 1 means
+the values baked into the controller's own deployment configuration — the exact
+namespace, ServiceAccount, and image runtime Jobs are allowed to use; a desired
+run that names anything else is rejected before any Job is created, so even a
+compromised server cannot use the controller to schedule an arbitrary image.
 
-## Fail-closed configuration: the route that refuses to exist
-
-The controller-authority API is powerful enough that the server refuses to mount
-it at all unless its configuration is complete and safe. At startup,
-`_LoadControllerAuthorityConfig` requires every one of:
-
-- the controller's exact namespace and ServiceAccount name — the TokenReview
-  identity of the only permitted caller;
-- the runtime profile name, namespace, and (zero-RBAC) ServiceAccount its Jobs
-  run under;
-- the runtime image **pinned by digest** (`…@sha256:<64 hex>`) — a floating tag
-  never validates;
-- an assignment TTL between 60 and 300 seconds.
-
-If anything is missing or invalid, the loader returns nothing and the route is
-**never mounted** — the run plane simply does not exist in that process. There
-are deliberately no defaults: a guessed controller identity would make
-TokenReview authenticate the wrong workload, and an unpinned image would let the
-controller schedule unreviewed code. A visibly absent route is diagnosable; a
-route mounted with invented authority is not.
+The controller reports observations — Job UID, first Pod UID — but the server
+treats them as coordinates to verify, never as authority: a mismatched name, a
+changed runtime profile, or a stale attempt is rejected at the API and the work
+is re-derived from the database. A controller crash therefore loses nothing
+(unacknowledged claims become reclaimable), and a repeated sync pass — a
+*reconcile*, in controller jargon — double-runs nothing (acknowledgements are
+idempotent per run attempt).
 
 ## How this composes with capabilities
 
@@ -148,6 +138,28 @@ the UIDs at creation, and the server persisted them before the workload ever
 acted. When a proof arrives, the verifier compares the signed workload fields
 against those recorded facts — identity checked twice, from two independent
 directions.
+
+## Advanced: the route that refuses to exist
+
+One last fail-closed detail, for readers who operate the platform. The
+controller-authority API is powerful enough that the server refuses to mount it
+at all unless its configuration is complete and safe. At startup,
+`_LoadControllerAuthorityConfig` requires every one of:
+
+- the controller's exact namespace and ServiceAccount name — the TokenReview
+  identity of the only permitted caller;
+- the **runtime profile** — the server-owned bundle naming the namespace,
+  (zero-RBAC) ServiceAccount, and image that runtime Jobs use;
+- that image **pinned by digest** (`…@sha256:<64 hex>`) — a floating tag (one
+  whose content can silently change) never validates;
+- an assignment lifetime between 60 and 300 seconds.
+
+If anything is missing or invalid, the loader returns nothing and the route is
+**never mounted** — the run plane simply does not exist in that process. There
+are deliberately no defaults: a guessed controller identity would make
+TokenReview authenticate the wrong workload, and an unpinned image would let the
+controller schedule unreviewed code. A visibly absent route is diagnosable; a
+route mounted with invented authority is not.
 
 > **See also:** [Trust boundaries & the network](/security-architecture/trust-boundaries)
 > for the network layer that backs these identities, and

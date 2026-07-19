@@ -24,11 +24,15 @@ way round.
 
 ## One database server per silo, one credential per database
 
-Each silo (one customer's isolated environment) runs **one Postgres server** —
-a single CNPG-managed cluster — hosting a separate **logical database per
-platform component**: the OpenCrane product authority, the integration gateway
-(Obot), the model gateway (LiteLLM), and observability (Langfuse), with the
-fleet registry alongside where deployed.
+Each silo runs **one Postgres server**
+([`apps/postgres`](https://github.com/italanta/opencrane/blob/main/apps/postgres/README.md))
+— a single managed instance, run by
+CloudNativePG (CNPG), the Kubernetes operator that manages Postgres — hosting a
+separate **logical database per platform component**: the OpenCrane product
+authority, the integration gateway (Obot), the model gateway (LiteLLM), and
+observability (Langfuse). Where the operator's cross-silo control plane (the
+*fleet* introduced in [Capabilities & proofs](/security-architecture/capabilities#effective-access-two-principals-one-intersection))
+is deployed, its registry database sits alongside.
 
 Sharing the server is an efficiency decision; sharing *access* is not allowed:
 
@@ -43,27 +47,28 @@ the network policies of the previous page) — not from paying for idle database
 servers per component.
 
 ::: info Decision status
-This topology is decision **D1** (2026-07-19), reaffirming the one-server-per-silo
-model in ADR 0002 and adding per-database roles and credentials. The deploy path
-is being realigned to it; interim builds may still show one CNPG cluster per
-component.
+This topology was settled by a July 2026 platform decision, reaffirming the
+one-server-per-silo model in architecture decision record (ADR) 0002 and adding
+the per-database roles and credentials. The deploy path is being realigned to
+it; interim builds may still run one Postgres server per component.
 :::
 
 ## Triggers: the schema defends itself
 
 Application code enforces the rules of the previous pages — but application code
-has bugs, and a future migration or an operator with `psql` bypasses it entirely.
-So the most safety-critical invariants are enforced a layer lower, as
-**database triggers**: functions Postgres itself runs on every write, refusing
-illegal changes no matter who makes them.
+has bugs, and a future migration or an operator connected directly with `psql`
+(the Postgres console) bypasses it entirely. So the most safety-critical
+invariants are enforced a layer lower, as **database triggers**: functions
+Postgres itself runs on every write, refusing illegal changes no matter who
+makes them.
 
 Around forty such guards ship with the schema. They fall into four families:
 
 **Immutability.** Facts, once recorded, cannot be edited or deleted — only
-superseded by new rows. Published agent revisions, run input snapshots,
-conversation messages and run events, capability catalogue revisions, verified
-membership assertions, artifact lineage: all reject `UPDATE`/`DELETE` at the
-database. The audit ledger is append-only by trigger, not by convention.
+superseded by new rows. Published agent revisions, conversation messages and
+run events, and verified membership assertions — among a dozen other record
+types — all reject `UPDATE`/`DELETE` at the database. The audit ledger is
+append-only by trigger, not by convention.
 
 **Closed lifecycles.** Records that change state may only move along their
 declared state machine. A run may go `accepted → queued → assigned → running →
@@ -81,10 +86,10 @@ database's half of the run-integrity story the
 [run lifecycle page](/security-architecture/run-lifecycle) tells from the top.
 
 **Cross-record consistency.** Constraint triggers hold multi-row invariants: an
-agent service's active revision must be a *published* revision of that service; a
-skill assigned to a revision must remain published; persona approval requires a
-completed interview, the exact reviewed template, and three-to-five insights;
-artifact lineage may never cross a silo.
+agent service's active revision must be a *published* revision of that service;
+a skill assigned to a revision must remain published; a persona (an agent's
+reviewed personality profile) can only be approved with its complete review
+evidence present; artifact lineage may never cross a silo.
 
 The practical consequence: even a compromised server process, writing to
 Postgres with valid credentials, cannot rewrite history, skip a state, resurrect
@@ -111,12 +116,12 @@ content: fetch it, hash it, and you have verified it.
 
 Writes follow the leased protocol of the
 [trust boundaries page](/security-architecture/trust-boundaries#2-artifact-service-leased-writes),
-with crash-safe mechanics underneath: bytes are staged privately and fsynced,
-then *hard-linked* into place — an operation the filesystem makes atomic and
-that fails rather than overwrites, so a concurrent identical upload succeeds
-idempotently and a crash at any moment leaves either the complete verified
-object or nothing. One store per silo, deduplicated by digest, on one expandable
-volume.
+with crash-safe mechanics underneath: bytes are staged privately and forced to
+disk (`fsync`), then *hard-linked* into place — an operation the filesystem
+makes atomic and that fails rather than overwrites, so a concurrent identical
+upload succeeds harmlessly and a crash at any moment leaves either the complete
+verified object or nothing. One store per silo, deduplicated by digest, on one
+expandable volume.
 
 ## Fresh provisioning
 
