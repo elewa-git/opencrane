@@ -23,11 +23,13 @@ export interface ControllerDesiredJob
 	readonly expiresAtEpochMs: number;
 }
 
-/** Immutable Kubernetes Job observation supplied by the authenticated controller. */
+/** Immutable Kubernetes Job acknowledgement supplied by the authenticated controller. */
 export interface ControllerJobObservation
 {
-	/** Server-issued desired Job coordinates. */
-	readonly desired: ControllerDesiredJob;
+	/** Durable run identifier selected by the server. */
+	readonly runId: string;
+	/** Current durable run attempt selected by the server. */
+	readonly attempt: number;
 	/** Deterministic Kubernetes Job name. */
 	readonly workloadName: string;
 	/** Kubernetes-assigned immutable Job UID. */
@@ -48,6 +50,30 @@ export interface VerifiedControllerIdentity
 	readonly namespace: string;
 	/** TokenReview-confirmed service-account name. */
 	readonly serviceAccountName: string;
+}
+
+/** Fixed identity policy for the sole controller workload. */
+export interface ControllerAuthorityIdentityPolicy
+{
+	/** TokenReview audience required from the controller's projected token. */
+	readonly audience: "agent-controller";
+	/** Exact namespace containing the controller KSA. */
+	readonly namespace: string;
+	/** Exact controller service-account name. */
+	readonly serviceAccountName: string;
+}
+
+/** Dependencies for the private controller authority HTTP adapter. */
+export interface ControllerAuthorityRouterDependencies
+{
+	/** Durable OpenCrane run/outbox authority. */
+	readonly repository: ControllerAuthorityRepository;
+	/** Kubernetes TokenReview client owned only by the OpenCrane server. */
+	readonly authApi: import("@kubernetes/client-node").AuthenticationV1Api;
+	/** Exact projected controller identity policy. */
+	readonly identity: ControllerAuthorityIdentityPolicy;
+	/** Trusted wall-clock source. */
+	readonly nowEpochMs: () => number;
 }
 
 /** Persistence boundary for controller desired state and immutable acknowledgements. */
