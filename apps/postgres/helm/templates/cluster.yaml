@@ -22,8 +22,17 @@
 {{- $_ := set $databaseOwners $database.owner true -}}
 {{- $_ := set $credentialSecrets $database.credentialsSecret true -}}
 {{- end -}}
-{{- if and .Values.backup.enabled (not .Values.backup.plugin.name) -}}
-{{- fail "backup.plugin.name is required when backup.enabled=true" -}}
+{{- if and .Values.backup.enabled (not (has .Values.backup.frequency (list "daily" "weekly" "monthly"))) -}}
+{{- fail "backup.frequency must be daily, weekly, or monthly when backup.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (lt (int .Values.backup.retainedCopies) 1) -}}
+{{- fail "backup.retainedCopies must be at least 1 when backup.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (not .Values.backup.objectStore.name) -}}
+{{- fail "backup.objectStore.name is required when backup.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (not .Values.backup.objectStore.configuration.destinationPath) -}}
+{{- fail "backup.objectStore.configuration.destinationPath is required when backup.enabled=true" -}}
 {{- end -}}
 {{- if and .Values.restore.enabled (not .Values.restore.plugin.name) -}}
 {{- fail "restore.plugin.name is required when restore.enabled=true" -}}
@@ -115,10 +124,8 @@ spec:
   {{- end }}
   {{- if .Values.backup.enabled }}
   plugins:
-    - name: {{ .Values.backup.plugin.name | quote }}
+    - name: "barman-cloud.cloudnative-pg.io"
       isWALArchiver: true
-      {{- with .Values.backup.plugin.parameters }}
       parameters:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+        barmanObjectName: {{ .Values.backup.objectStore.name | quote }}
   {{- end }}

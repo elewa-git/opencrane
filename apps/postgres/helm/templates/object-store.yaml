@@ -1,0 +1,22 @@
+{{- if .Values.backup.enabled }}
+apiVersion: barmancloud.cnpg.io/v1
+kind: ObjectStore
+metadata:
+  name: {{ .Values.backup.objectStore.name | quote }}
+  annotations:
+    # Backup enablement controls scheduling and WAL archiving. The recovery
+    # destination survives a disable/uninstall so restore can still name it.
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  # CNPG-I/Barman retains a recovery window, including WAL needed for point-in-time recovery.
+  # The finite cadence maps retained copies to that window (seven daily copies => 7d).
+  retentionPolicy: {{ include "opencrane.postgres.backupRetentionPolicy" . | quote }}
+  configuration:
+    {{- toYaml .Values.backup.objectStore.configuration | nindent 4 }}
+  {{- with .Values.backup.objectStore.instanceSidecarConfiguration }}
+  instanceSidecarConfiguration:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

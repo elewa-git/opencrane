@@ -44,9 +44,25 @@ kubectl wait --for=condition=Ready cluster/opencrane-postgres \
 
 `scripts/publish-app-connection-secret.sh` creates an application Secret for one logical database;
 its `uri` key is that database's canonical connection URI. Each application role can authenticate
-only to its own database; there are no shared owner roles or credentials. Backup
-and restore stay disabled until a CNPG-I plugin and its object-store resource are installed and
-explicitly selected in values. The k3d acceptance path server-dry-runs both contracts against the
-pinned CNPG CRDs, then installs a pinned Barman Cloud plugin and MinIO test target, writes a marker,
-completes an on-demand physical backup, recovers a fresh Cluster, and verifies the marker through the
-recovered application Secret.
+only to its own database; there are no shared owner roles or credentials.
+
+Backup and restore stay disabled until the cluster has the CNPG-I Barman Cloud plugin. When backup is
+enabled, this chart owns the per-ClusterTenant `ObjectStore` and its Barman retention policy; the
+destination configuration references pre-created credential Secrets and must be unique to that
+ClusterTenant. The infrastructure policy contract is deliberately small:
+
+- `backup.enabled` switches scheduled backup and WAL archiving on or off;
+- `backup.frequency` is one of `daily`, `weekly`, or `monthly` and selects the generated
+  `ScheduledBackup` cadence;
+- `backup.retainedCopies` is at least one and maps to Barman's retention window: for example,
+  seven daily copies becomes `7d`, while four weekly copies becomes `4w`.
+
+Barman enforces a point-in-time recovery window, including required WAL; it is not an exact
+base-backup-count deleter, so immediate/manual backups can make the physical count differ at the
+window edge. Phase F / #224 owns the ClusterTenant-admin UI and its storage-cost explanation; its
+reconciler writes this chart contract rather than leaving retention in a hand-managed ObjectStore.
+Enabling backups without an object-store name and destination fails Helm rendering.
+
+The k3d acceptance path server-dry-runs both contracts against the pinned CNPG CRDs, then installs a
+pinned Barman Cloud plugin and MinIO test target, writes a marker, completes an on-demand physical
+backup, recovers a fresh Cluster, and verifies the marker through the recovered application Secret.
