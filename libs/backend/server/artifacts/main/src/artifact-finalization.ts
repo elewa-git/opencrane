@@ -2,7 +2,13 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactAuthorityRepository, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult } from "./artifact-finalization.types.js";
 
-/** Finalizes ArtifactStore-promoted bytes into canonical metadata and an outbox event. */
+/**
+ * Finalizes ArtifactStore-promoted bytes into canonical metadata and an outbox event.
+ *
+ * This authority never touches bytes: it accepts only the receipt facts produced by ArtifactStore
+ * and delegates their single-use, transactional consumption to persistence. Keeping byte I/O out
+ * of the transaction prevents a slow store operation from widening the catalog lock window.
+ */
 export async function __FinalizeArtifactRevision(repository: ArtifactAuthorityRepository, command: FinalizeArtifactRevisionCommand): Promise<FinalizeArtifactRevisionResult>
 {
 	// 1. Validate storage-neutral metadata and authenticated receipt coordinates before persistence.
@@ -17,7 +23,8 @@ export async function __FinalizeArtifactRevision(repository: ArtifactAuthorityRe
 		return { outcome: "denied", reason: "invalid_command" };
 	}
 
-	// 2. Commit only metadata, current pointer, receipt consumption, and outbox; bytes stay behind ArtifactStore.
+	// 2. Commit only metadata, current pointer, receipt consumption, and outbox. Bytes stay behind
+	// ArtifactStore so a durable catalog event can never claim it also owns mutable byte storage.
 	const result = await repository.finalizeRevisionAtomically(command);
 
 	// 3. Expose idempotent success while keeping stale or replayed receipts fail closed.

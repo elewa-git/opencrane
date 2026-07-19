@@ -9,7 +9,21 @@ import type { ArtifactByteStream, ArtifactStore, ArtifactStorePromotion, Artifac
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 import type { FilesystemArtifactStoreOptions } from "./filesystem-artifact-store.types.js";
 
-/** POSIX-backed ArtifactStore adapter with private staging and atomic content-addressed promotion. */
+/**
+ * POSIX-backed ArtifactStore adapter with private staging and atomic content-addressed promotion.
+ *
+ * Crash-durability model: untrusted bytes are first written and fsynced under a private
+ * `staging/` directory, then published by hard-linking the staged inode at its canonical
+ * `sha256/ab/<digest>` path and fsyncing that directory. A crash therefore leaves either no
+ * canonical entry or the complete verified bytes at their address; partial bytes stay private.
+ *
+ * Integrity model: this adapter computes the canonical address from durable bytes. A caller's
+ * digest or length is only cross-checked, never trusted. Promotion is idempotent per address,
+ * but an existing object is re-verified before the repeat request succeeds.
+ *
+ * Path confinement: no caller-controlled string becomes a filesystem path. Staging paths derive
+ * from a SHA-256 lease-id hash and canonical paths from a strict `sha256:<hex64>` address.
+ */
 export class __FilesystemArtifactStore implements ArtifactStore
 {
 	/** Mounted volume root owned only by the artifact-service process. */
@@ -33,7 +47,8 @@ export class __FilesystemArtifactStore implements ArtifactStore
 			throw new Error("invalid or expired ArtifactStore stage command");
 		}
 
-		// 1. Create only private, deterministic staging directories under the mounted artifact volume.
+		// 1. Create private deterministic staging below the mounted root. The hashed handle cannot
+		// shape a path; exclusive create prevents concurrent writers from interleaving one lease.
 		await mkdir(this._stagingDirectory(), { recursive: true });
 		const stagingHandle = createHash("sha256").update(command.lease.leaseId, "utf8").digest("hex");
 		const stagingPath = this._stagingPath(stagingHandle);
@@ -43,7 +58,8 @@ export class __FilesystemArtifactStore implements ArtifactStore
 
 		try
 		{
-			// 2. Hash and fsync every supplied chunk before accepting any promotion metadata.
+			// 2. Hash and fsync every supplied chunk before accepting metadata. Promotion hard-links this
+			// inode, so bytes must be durable before acknowledging their canonical address.
 			for await (const chunk of command.bytes)
 			{
 				const bytes = Buffer.from(chunk);
@@ -103,7 +119,8 @@ export class __FilesystemArtifactStore implements ArtifactStore
 				throw error;
 			}
 
-			// 2. Never trust a same-size pathname: it must still be a regular file at the exact digest.
+			// 2. EEXIST is idempotent promotion: re-verify type, size, and digest so a corrupt survivor
+			// never becomes a successful canonical object merely because it has the same pathname.
 			const existing = await lstat(targetPath);
 			if (!existing.isFile() || existing.size !== staged.byteLength || await this._hashFile(targetPath) !== staged.contentAddress)
 			{
@@ -111,7 +128,8 @@ export class __FilesystemArtifactStore implements ArtifactStore
 			}
 		}
 
-		// 3. Remove only the private staging link after the canonical link is durable or confirmed present.
+		// 3. Remove private staging only after the canonical link is durable or confirmed present. A
+		// crash before publication must leave the verified staged bytes available for a retry.
 		await unlink(sourcePath);
 		return { leaseId: staged.leaseId, contentAddress: staged.contentAddress, byteLength: staged.byteLength, mediaType: staged.mediaType, created };
 	}
@@ -197,7 +215,12 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		return `sha256:${hash.digest("hex")}`;
 	}
 
-	/** Persist a newly linked canonical directory entry before an acknowledged promotion. */
+	/**
+	 * Persist a newly linked canonical directory entry before acknowledging promotion.
+	 *
+	 * fsyncing a file alone does not persist its new directory entry on POSIX. Without syncing the
+	 * containing directory, a crash could lose an acknowledged hard link while its receipt survives.
+	 */
 	private async _syncDirectory(directory: string): Promise<void>
 	{
 		const handle = await open(directory, "r");
@@ -211,7 +234,12 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 	}
 
-	/** Converts a deterministic internal staging handle into a path below the private staging root. */
+	/**
+	 * Converts a deterministic internal staging handle into a path below the private staging root.
+	 *
+	 * Strict lowercase hex is the traversal guard: a public `StagedArtifact` cannot contain `/`,
+	 * `..`, or other path syntax that could name a file outside `staging/`.
+	 */
 	private _stagingPath(stagingHandle: string): string
 	{
 		if (!/^[a-f0-9]{64}$/u.test(stagingHandle))
@@ -235,7 +263,12 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		return join(this._contentDirectory(contentAddress), digest);
 	}
 
-	/** Strips the validated address prefix without accepting arbitrary filesystem path input. */
+	/**
+	 * Strips the validated address prefix without accepting arbitrary filesystem path input.
+	 *
+	 * All canonical path derivation funnels through this strict check, keeping read, promote, and
+	 * purge confined to the mounted store root.
+	 */
 	private _digest(contentAddress: string): string
 	{
 		if (!___IsSha256ContentAddress(contentAddress))

@@ -2,7 +2,12 @@ import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
 
 import type { ArtifactStorePromotion, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types.js";
 
-/** Validates an OpenCrane-issued lease before an adapter creates temporary bytes. */
+/**
+ * Validates an OpenCrane-issued lease before an adapter creates temporary bytes.
+ *
+ * Invariant: a lease authorizes exactly one `artifact.write` for one silo and artifact and must be
+ * unexpired at the supplied clock. Any failure rejects before a single staging byte is created.
+ */
 export function __ValidateVerifiedArtifactWriteLease(lease: VerifiedArtifactWriteLease, nowEpochSeconds: number): boolean
 {
 	return lease.leaseId.trim().length > 0
@@ -13,7 +18,12 @@ export function __ValidateVerifiedArtifactWriteLease(lease: VerifiedArtifactWrit
 		&& lease.expiresAtEpochSeconds >= nowEpochSeconds;
 }
 
-/** Validates stage coordinates before untrusted bytes are accepted by an ArtifactStore adapter. */
+/**
+ * Validates stage coordinates before untrusted bytes are accepted by an ArtifactStore adapter.
+ *
+ * Invariant: declared digest and length must be strictly shaped so the adapter's byte-for-byte
+ * cross-check cannot be bypassed with an ambiguously parsed value. Failure performs no staging I/O.
+ */
 export function __ValidateStageArtifactCommand(command: StageArtifactCommand, nowEpochSeconds: number): boolean
 {
 	const expectedAddressIsValid = command.expectedContentAddress === null || ___IsSha256ContentAddress(command.expectedContentAddress);
@@ -25,7 +35,12 @@ export function __ValidateStageArtifactCommand(command: StageArtifactCommand, no
 		&& command.mediaType.includes("/");
 }
 
-/** Validates a staged handle before immutable promotion. */
+/**
+ * Validates a staged handle before immutable promotion.
+ *
+ * Invariant: promotion can target only a strict content address, preventing a public handle from
+ * steering the filesystem adapter to an arbitrary path. Invalid metadata never links or deletes.
+ */
 export function __ValidateStagedArtifact(staged: StagedArtifact): boolean
 {
 	return staged.leaseId.trim().length > 0
@@ -37,7 +52,12 @@ export function __ValidateStagedArtifact(staged: StagedArtifact): boolean
 		&& staged.mediaType.includes("/");
 }
 
-/** Validates metadata returned by an idempotent canonical promotion. */
+/**
+ * Validates metadata returned by an idempotent canonical promotion.
+ *
+ * Invariant: only complete canonical metadata may be signed into a receipt or committed by the
+ * catalog authority; malformed promotion output is rejected rather than repaired.
+ */
 export function __ValidateArtifactStorePromotion(promotion: ArtifactStorePromotion): boolean
 {
 	return promotion.leaseId.trim().length > 0
