@@ -20,7 +20,7 @@ This file is the canonical agent instruction file for the repository.
 | **Prisma & migrations** | [`docs/agents/prisma.md`](docs/agents/prisma.md) | adding/altering database models or writing a migration — per-domain schema files under `prisma/schema/`, migration naming. |
 | **Cluster topology** | [`docs/agents/cluster-architecture.md`](docs/agents/cluster-architecture.md) | you need the whole-cluster picture — planes, namespaces, Helm templates, isolation tiers, multi-instance, Workload Identity. |
 | **Monorepo boundaries** | [`docs/agents/monorepo.md`](docs/agents/monorepo.md) | creating/moving an app or library, adding a deployable workload, or changing NX tags/dependency direction. |
-| **Build, Test & Infra** | [`docs/agents/infra.md`](docs/agents/infra.md) | building/testing, or editing Terraform/Helm/deploy under `platform/`. |
+| **Build, Test & Infra** | [`docs/agents/infra.md`](docs/agents/infra.md) | building/testing, or editing Terraform/Helm/deploy under `apps/_infra/deploy-k8s/platform/`. |
 | **Workflow & Review Gate** | [`docs/agents/workflow.md`](docs/agents/workflow.md) | planning (`plan.md`/`CHANGELOG.md`), writing commit messages, or hitting the review gate. |
 | **App-Specific** | [`docs/agents/app-specific.md`](docs/agents/app-specific.md) | working inside a specific `apps/*` or `libs/*` package; per-package map + API-first rule. |
 

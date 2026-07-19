@@ -1,5 +1,11 @@
 # OpenClaw tenant runtime
 
+> **Status: frozen blue runtime — deletion target.** OpenClaw is the *current* runtime, frozen
+> under the rewrite freeze; it is replaced by the OpenCrane-owned green runtime and dies by
+> whole-silo replacement. Maintenance changes only. The skill-registry pulls described below are
+> retired wiring: the `feat-skill-registry` service is deleted, so those pulls no-op and the
+> wiring is pending removal.
+
 This app owns the **immutable OpenClaw runtime image** used by each employee-assistant pod.
 OpenClaw and the Cognee memory plugin are pinned and installed under `/opt/openclaw` when the
 image is built; pod startup never downloads or replaces executable runtime code.
@@ -14,7 +20,7 @@ Pod starts
         3. Apply the operator-rendered OpenClaw config and platform-owned workspace files
         4. Seed tenant-editable workspace files only when they do not yet exist
         5. Load the effective AccessPolicy-derived tool rules
-        6. Pull entitled skill bundles by digest from the Skill Registry
+        6. Pull entitled skill bundles by digest from the Skill Registry (retired — no-ops)
         7. Start the image-baked OpenClaw gateway and poll for workspace/skill contract changes
 ```
 
@@ -33,8 +39,9 @@ workload rollout; rolling back the image restores the complete pinned pair atomi
 | `/etc/openclaw/encryption-key` | Kubernetes Secret | Per-tenant encryption key |
 | `/tmp` | `emptyDir` | Writable home, cache and refreshed contract copy |
 
-Org and team skills are not mounted from shared storage. The pod pulls only the bundle digests
-listed in its effective contract, and the Skill Registry checks entitlement on every read.
+Org and team skills are not mounted from shared storage. The entrypoint can pull bundle digests
+listed in the effective contract from a Skill Registry, but that service is deleted — the pull
+path is dead wiring pending removal.
 
 ## Runtime configuration
 
@@ -46,7 +53,7 @@ listed in its effective contract, and the Skill Registry checks entitlement on e
 | `OPENCLAW_TENANT_NAME` | Tenant identifier injected by the operator |
 | `OPENCRANE_RUNTIME_CONTRACT_PATH` | Bootstrap managed-runtime contract |
 | `OPENCRANE_CONTROL_PLANE_URL` | Control-plane origin used for contract refreshes |
-| `OPENCRANE_SKILL_REGISTRY_URL` | In-cluster Skill Registry used for entitled bundle pulls |
+| `OPENCRANE_SKILL_REGISTRY_URL` | Retired — the skill-registry service is deleted; dead wiring pending removal |
 | `OPENCRANE_MEMORY_BACKEND` / `COGNEE_ENDPOINT` | Required organisational-memory connection |
 | `LITELLM_ENDPOINT` | Required model-routing proxy |
 

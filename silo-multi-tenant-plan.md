@@ -13,7 +13,21 @@ queued task. Keep it updated as phases land.
 sequence — **Phase 0 → S1 · Phase 1 → S2 · Phase 2a → S3 · Phase 2b → S4 · Phase 2 identity
 loop → S5 · Phase 3 → S6 · Phase 4 → S7**. The remaining `plan.md` items run after as S8–S12.
 
----
+> **Superseded elements (2026-07-19).** The isolation model in this plan (strict per-silo
+> default-deny, super-admin as the only cross-silo principal) remains canonical, but several
+> mechanism decisions below have since been resolved or replaced:
+>
+> - **Substrate decided** — ADR 0003: self-managed upstream Cilium with label/KSA-based
+>   identities as the baseline; SPIRE/SPIFFE is optional-later, and the service-mesh options
+>   (Istio ambient / Linkerd) are rejected (Linkerd is removed from the repo). The "open
+>   substrate decision" in §2 is closed.
+> - **Zitadel as the PDP is blue-era** — Zitadel persists only in the frozen blue platform; the
+>   target identity model is proof-bound capabilities + workload identity (ADR 0008). Phases
+>   2a/2b below are historical design, folded into the green authorization work.
+> - **Skill registry deleted** — the per-CT `feat-skill-registry` ("Skills register") no longer
+>   exists; skills are Postgres-modelled `Skill`/`SkillRevision` records + `ArtifactStore` bytes.
+> - **`oc` CLI deleted** (2026-07-16, #248) — the platform is API-first; every `oc` reference
+>   below is historical.
 
 ## 1. The model (vocabulary — use these terms everywhere)
 

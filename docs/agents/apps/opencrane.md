@@ -55,7 +55,7 @@ CRUD + notable actions:
 
 **Not served here (fleet-only since the split):** `cluster-tenants` lifecycle CRUD + provisioning, org membership, billing, `platform/dns`, and Zitadel administration moved to the [`fleet-operator`](./fleet-operator.md). The silo keeps `ClusterTenant` + `OrgMembership` as local **read-models** (per-org login + the org-admin gate) but does not mount their management routers.
 
-**Internal (`/api/internal`, no `___AuthMiddleware`):** `contract/:name` (pod re-pull, TokenReview) and `awareness/participation` (TokenReview). Plus projection drift/repair helpers.
+**Internal (`/api/internal`, no `___AuthMiddleware`):** `tenant-models` (NetworkPolicy-only), `contract/:name` (pod re-pull, TokenReview), `awareness/participation` (TokenReview), and — when the controller authority is enabled — `agent-controller` (TokenReview on the controller's projected token). Plus projection drift/repair helpers.
 
 ## Auth subsystem
 

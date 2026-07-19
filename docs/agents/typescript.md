@@ -338,8 +338,8 @@ Each workspace package should have a single barrel export file at the package ro
 
 ```typescript
 // CORRECT
-import { TenantOperator } from "@opencrane/fleet-operator";
+import { ___CreateControlPlaneClient } from "@opencrane/contracts";
 
 // WRONG
-import { TenantOperator } from "@opencrane/fleet-operator/src/tenant-operator";
+import { ___CreateControlPlaneClient } from "@opencrane/contracts/src/client";
 ```

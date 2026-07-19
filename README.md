@@ -44,11 +44,11 @@ OpenCrane is a **control plane for organizational AI**. It sits on top of agent 
 
 **Your organization stays in control:**
 - **Personal assistants at scale**: Deploy a private AI assistant for every employee in minutes—each one isolated, secure, and acting on behalf of that employee.
-- **One dedicated silo per organisation**: Every customer org runs its own isolated stack—dedicated operator, control plane, LLM proxy, MCP gateway, knowledge base, skill registry, and database—provisioned and managed by a central fleet. There is no shared singleton that mixes org data.
+- **One dedicated silo per organisation**: Every customer org runs its own isolated stack—dedicated operator, control plane, LLM proxy, MCP gateway, knowledge base, and database—provisioned and managed by a central fleet. There is no shared singleton that mixes org data.
 - **Vendor independence and BYOK**: Choose your LLM provider—Claude, GPT, open-source models—without lock-in. Each org sets its own provider keys (Bring Your Own Key) through the platform API; keys are stored as Kubernetes Secrets and routed only through the org's LiteLLM proxy, never written to the database.
 - **Model routing and cost control**: Pin a model per skill or let the platform choose. The platform sets per-employee budgets and model allowlists, which the org's LiteLLM proxy enforces at request time; the control plane meters spend and warns as budgets approach. An eval-driven, human-gated optimisation loop surfaces "switch this skill's model to save N% at equal quality".
 - **Self-hosted, data-sovereign**: Deploy OpenCrane on your infrastructure. Your organizational data—documents, conversations, collected information—stays on your network, never sent to external vendors. Shared skills are stored and versioned in your repository.
-- **Security and governance**: Identity-keyed network isolation (Cilium + SPIFFE) gives every workload a cryptographic identity; each silo is default-deny. One fleet release manages identity, access control, skill deployment, cost tracking, audit, and RBAC-filtered access to organizational knowledge across all silos.
+- **Security and governance**: Identity-keyed network isolation (Cilium) gives every workload an enforceable identity; each silo is default-deny. One fleet release manages identity, access control, skill deployment, cost tracking, audit, and RBAC-filtered access to organizational knowledge across all silos.
 - **Organizational intelligence**: Company-wide information gathering agents harvest knowledge from your platforms—starting with Slack, with further sources connecting through the MCP gateway as they land—and make it available to assistants through retrieval plugins, with automatic role-based filtering.
 - **Scale from day one**: From 10 employees to 10,000—the same Kubernetes-native architecture scales seamlessly.
 
@@ -81,8 +81,8 @@ See [`CHANGELOG.md`](CHANGELOG.md) for the capabilities shipped so far and [`pla
 OpenCrane is **Kubernetes-native** and **API-first**. A central **fleet** manages
 organisation lifecycle (ClusterTenant provisioning, CRDs, platform DNS, and identity
 brokering). Each customer organisation runs its own **silo**: a dedicated operator,
-opencrane-server, LiteLLM proxy, MCP gateway (Obot), knowledge base (Cognee), skill
-registry, and database — all in an isolated namespace, with no shared data between orgs.
+opencrane-server, LiteLLM proxy, MCP gateway (Obot), knowledge base (Cognee), and
+database — all in an isolated namespace, with no shared data between orgs.
 
 Within each silo:
 
@@ -127,7 +127,7 @@ Legend:   [live] live today      [partial] partial / gated      [desired] desire
 │ └───────────────────────────┘    └────────────────────────────────────────────────────┘                                    │
 │                                                                                                                            │
 │                                                                                                                            │
-│ Shared planes:   Cognee brain [live] · Skill registry + gate [live] ·                                                      │
+│ Shared planes:   Cognee brain [live] · Skill store [partial] ·                                                             │
 │                  LiteLLM router (BYOK) [live] · Harvesting agents [live]                                                   │
 │                                                                                                                            │
 │ No fleet manager: for one ClusterTenant the manager IS the whole control plane.                                            │
@@ -141,11 +141,10 @@ Legend:   [live] live today      [partial] partial / gated      [desired] desire
 | Component | Path | Description |
 |-----------|------|-------------|
 | Silo operator | `apps/opencrane/` | Per-silo control plane: headless Express REST API (`/api/v1`) + in-silo controllers; emits `openapi.json` at build time |
-| Silo chart | `apps/_infra/deploy-k8s/` | Helm chart `opencrane-silo` — per-org silo: silo operator + planes (Cognee, LiteLLM, Obot, skill registry) + Langfuse + gateway. Deploy with `apps/_infra/deploy-k8s/deploy.sh`. |
+| Silo chart | `apps/_infra/deploy-k8s/` | Helm chart `opencrane-silo` — per-org silo: silo operator + planes (Cognee, LiteLLM, Obot) + Langfuse + gateway. Deploy with `apps/_infra/deploy-k8s/deploy.sh`. |
 | Deployment platform | `apps/_infra/deploy-k8s/platform/` | Internal Helm helper chart, deploy engine (`k8s-deploy.sh`, `configure-oidc.sh`), cluster provisioning (`provision.sh`, behind `--provision`), Terraform, value profiles, tests, and `deploy-single-tenant.sh` |
 | Contracts | `libs/contracts/` | Generated TypeScript client + DTOs from `openapi.json`; used by the OpenCrane UI and external surfaces |
-| Docker | `apps/*/deploy/Dockerfile` | Per-app Dockerfiles (silo operator, tenant runtime, skill registry), built and published by `.github/workflows/docker.yml` |
-| Skills | `skills/shared/` | Org/team shared skill library |
+| Docker | `apps/*/deploy/Dockerfile` | Per-app Dockerfiles (silo operator, tenant runtime, and the target run-plane apps), built and published by `.github/workflows/docker.yml` |
 | Docs site | `website/` | VitePress documentation site published to GitHub Pages |
 
 > The fleet operator (`apps/fleet-operator/`) and fleet chart (`apps/fleet-platform/`) moved to
@@ -166,7 +165,6 @@ reference. The site is built with [VitePress](https://vitepress.dev) from
 | [Connection security model](https://opencrane.ai/security/connection-security) | How OpenCrane keeps the browser↔assistant connection secure |
 | [Hosting architecture](https://opencrane.ai/operators/hosting) | On-prem-default hosting adapters, the cloud seam, and cert-manager TLS issuance |
 | [MCP gateway (Obot)](https://opencrane.ai/integrators/mcp-gateway) | Connecting assistants to external tools over MCP |
-| [Skill registry & delivery](https://opencrane.ai/integrators/skill-registry) | Skill catalog, scan/entitle pipeline, and per-read delivery |
 | [Retrieval & memory](https://opencrane.ai/integrators/retrieval-memory) | Cognee retrieval plane: datasets, AccessPolicy mapping, freshness |
 | [API overview](https://opencrane.ai/reference/api-overview) · [Interactive API reference](https://opencrane.ai/reference/api) · [Runbook](https://opencrane.ai/operators/runbook) | Authentication and API conventions · live endpoint reference · operational runbook |
 
