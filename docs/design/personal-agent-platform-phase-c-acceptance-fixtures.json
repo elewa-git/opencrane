@@ -96,7 +96,11 @@
       "id": "steering-after-finalization-starts-next-run",
       "given": ["active-run-finalizing", "user-message-sent-mid-run"],
       "when": "run-completes-before-absorption",
-      "expect": ["message-starts-next-run", "client-sees-queued-as-next-run"]
+      "expect": [
+        "terminal-transition-wins",
+        "message-starts-successor-run",
+        "client-sees-deferred-with-successor-run-reference"
+      ]
     },
     {
       "id": "steering-survives-pod-replacement",

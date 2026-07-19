@@ -348,9 +348,12 @@ tool results are appended and before the next model call — and place any retur
 model context ahead of that call. An empty result proceeds unchanged. Absorption is observed by the
 shell at the drain point, which emits the corresponding `steering.absorbed` event; drivers never
 emit steering events and never mutate already-persisted history. If a run reaches its terminal
-outcome with messages still queued, the shell starts the next run from them. A later mid-turn
-upgrade may reuse the `paused` checkpoint machinery to absorb steering inside a turn; that changes
-no part of this contract.
+outcome before its drain claims queued messages, the terminal transition wins: the shell starts a
+successor run from those messages and emits `steering.deferred` on the terminal run with the
+successor run reference. A client can therefore distinguish deferred steering from an absent
+absorption and follow the message to its successor run. A later mid-turn upgrade may reuse the
+`paused` checkpoint machinery to absorb steering inside a turn; that changes no part of this
+contract.
 
 ### Canonical run model
 
@@ -387,6 +390,7 @@ context.compaction_started
 context.compaction_completed
 steering.queued
 steering.absorbed
+steering.deferred
 run.usage
 run.completed | run.failed | run.cancelled
 ```
@@ -654,10 +658,11 @@ Gate L0 should record these explicitly:
 
 1. **resolved 2026-07-18 — steer.** A second user message during a run is durably queued and
    absorbed at the next turn boundary (the `LoopSteeringSource` drain point) before the next model
-   call; if the run finalizes first, it starts the next run. The client learns which happened via
-   `steering.queued`/`steering.absorbed`. Rejection is never the default. Mid-turn absorption
-   (reusing the approval checkpoint pause/resume machinery) is deferred until between-turn latency
-   is proven insufficient;
+   call. If the run finalizes first, its terminal transition wins and the shell starts a successor
+   run; `steering.deferred` on the terminal run names that successor. The client learns which path
+   happened via `steering.queued`/`steering.absorbed` or `steering.deferred`. Rejection is never
+   the default. Mid-turn absorption (reusing the approval checkpoint pause/resume machinery) is
+   deferred until between-turn latency is proven insufficient;
 2. which tools require durable human approval and which can ever execute in parallel;
 3. the permitted model fallback set and whether fallback after visible output is forbidden;
 4. quantitative per-run token, cost, time, tool and child-agent budgets;
