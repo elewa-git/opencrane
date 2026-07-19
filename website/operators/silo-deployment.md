@@ -75,9 +75,9 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 | Zitadel IAM admin + SA key | Yes (`fleetManager.zitadel.*`) | No |
 | Per-org user login (OIDC) | Fleet OIDC (`fleetManager.oidc.*`) | Silo OIDC (`clustertenantManager.oidc.*`) |
 | Fleet registry DB | Yes (`fleetManager.database.*`) | No |
-| Runtime planes (Obot, LiteLLM, Cognee) | No | Yes |
+| Runtime planes ([Obot](https://github.com/italanta/opencrane/blob/main/apps/_infra/obot/README.md), [LiteLLM](https://github.com/italanta/opencrane/blob/main/apps/_infra/litellm/README.md), [Cognee](https://github.com/italanta/opencrane/blob/main/apps/_infra/cognee/README.md)) | No | Yes |
 | Operator | No (fleet-manager reconciles ClusterTenants) | Yes (namespace-scoped to this silo) |
-| Per-silo Postgres | No | Yes — one CNPG `Cluster` CR per silo namespace |
+| Per-silo Postgres ([`apps/postgres`](https://github.com/italanta/opencrane/blob/main/apps/postgres/README.md)) | No | Yes — one CNPG `Cluster` CR per silo namespace |
 | Cluster-wide infra (ingress-nginx, external-dns, CNPG operator, cert-manager) | Installed here (once) | Reused from fleet release |
 
 ::: tip Two charts, two install profiles
