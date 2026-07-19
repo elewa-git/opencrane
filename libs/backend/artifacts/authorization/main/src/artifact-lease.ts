@@ -21,7 +21,7 @@ export function __VerifyArtifactWriteLease(compact: string, publicKeyPem: string
 {
 	const payload = _verify(compact, publicKeyPem);
 	const issuedAt = payload?.iat;
-	if (payload === null || payload.typ !== _LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt > nowEpochSeconds + 5) return null;
+	if (payload === null || payload.typ !== _LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds + 300) return null;
 	const claims = _leaseFromPayload(payload);
 	return claims !== null && _isLease(claims, nowEpochSeconds) ? claims : null;
 }

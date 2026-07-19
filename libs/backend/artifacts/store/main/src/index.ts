@@ -1,2 +1,3 @@
 export { __ValidateArtifactStorePromotion, __ValidateStageArtifactCommand, __ValidateStagedArtifact, __ValidateVerifiedArtifactWriteLease } from "./artifact-store.js";
-export type { ArtifactByteStream, ArtifactStore, ArtifactStorePromotion, ArtifactStorePurgeResult, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types.js";
+export { __PromoteArtifactUpload } from "./artifact-promotion.js";
+export type { ArtifactByteStream, ArtifactPromotionLeaseClaims, ArtifactPromotionLeaseVerifier, ArtifactPromotionProtocolConfig, ArtifactPromotionReceiptClaims, ArtifactPromotionReceiptSigner, ArtifactStore, ArtifactStorePromotion, ArtifactStorePurgeResult, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult, StageArtifactCommand, StagedArtifact, VerifiedArtifactWriteLease } from "./artifact-store.types.js";

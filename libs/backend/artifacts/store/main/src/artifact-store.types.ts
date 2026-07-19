@@ -16,6 +16,17 @@ export interface VerifiedArtifactWriteLease
 	readonly expiresAtEpochSeconds: number;
 }
 
+/** Write authorization returned by a verified artifact-service lease before bounded-upload checks. */
+export interface ArtifactPromotionLeaseClaims extends VerifiedArtifactWriteLease
+{
+	/** Exact canonical address that the incoming bytes must match, or null for an unbounded lease. */
+	readonly expectedContentAddress: string | null;
+	/** Exact byte length that the incoming bytes must match, or null for an unbounded lease. */
+	readonly expectedByteLength: number | null;
+	/** Media type retained in the promotion receipt and later catalog revision. */
+	readonly mediaType: string;
+}
+
 /** Request to stage one bounded byte stream behind a previously authorized lease. */
 export interface StageArtifactCommand
 {
@@ -67,6 +78,65 @@ export interface ArtifactStorePurgeResult
 	/** Whether canonical bytes were removed by this call. */
 	readonly purged: boolean;
 }
+
+/** Validates one compact OpenCrane lease without coupling promotion to a signing implementation. */
+export interface ArtifactPromotionLeaseVerifier
+{
+	/** Returns verified claims when the compact lease is authentic and current, otherwise null. */
+	verify(compactLease: string, nowEpochSeconds: number): ArtifactPromotionLeaseClaims | null;
+}
+
+/** Signs the one receipt that lets the catalog consume a successful canonical promotion. */
+export interface ArtifactPromotionReceiptSigner
+{
+	/** Signs immutable promotion facts with the artifact-service receipt authority. */
+	sign(claims: ArtifactPromotionReceiptClaims): string;
+}
+
+/** Signed facts passed to the receipt signer after a canonical promotion. */
+export interface ArtifactPromotionReceiptClaims
+{
+	/** Lease that authorized the corresponding byte stream. */
+	readonly leaseId: string;
+	/** Canonical SHA-256 address that the store promoted. */
+	readonly contentAddress: string;
+	/** Exact number of canonical bytes. */
+	readonly byteLength: number;
+	/** Validated media type attached to the canonical bytes. */
+	readonly mediaType: string;
+	/** Epoch-second receipt issuance time. */
+	readonly issuedAtEpochSeconds: number;
+}
+
+/** HTTP-neutral upload source with a declared-size guard and an adapter-owned cancellation hook. */
+export interface BoundedArtifactUploadByteSource
+{
+	/** Compact OpenCrane lease supplied by the HTTP adapter. */
+	readonly compactLease: string | null;
+	/** Raw declared content length, or null when the transport did not provide one. */
+	readonly declaredByteLength: string | null;
+	/** Untrusted request bytes, bounded again by the storage adapter. */
+	readonly bytes: ArtifactByteStream;
+	/** Cancels the underlying transport after the absolute promotion deadline is exceeded. */
+	abort(reason: Error): void;
+}
+
+/** Time and duration policy for one promotion protocol invocation. */
+export interface ArtifactPromotionProtocolConfig
+{
+	/** Hard promotion duration before the protocol cancels the byte source. */
+	readonly maxUploadDurationMilliseconds: number;
+	/** Current wall-clock epoch milliseconds, injected for deterministic protocol tests. */
+	readonly nowEpochMilliseconds: () => number;
+	/** Receipt authority that signs only a completed canonical promotion. */
+	readonly receiptSigner: ArtifactPromotionReceiptSigner;
+}
+
+/** Stable expected outcomes from artifact promotion before a transport translates them. */
+export type PromoteArtifactUploadResult =
+	| { readonly outcome: "promoted"; readonly promotion: ArtifactStorePromotion; readonly receipt: string }
+	| { readonly outcome: "rejected"; readonly reason: "invalid_artifact_lease" | "artifact_body_exceeds_lease" | "expired_artifact_lease" }
+	| { readonly outcome: "deadline_exceeded" };
 
 /** Storage-neutral byte authority. OpenCrane owns leases, receipts, catalog state, and authorization. */
 export interface ArtifactStore

@@ -25,6 +25,44 @@ grep -q 'secretName: "opencrane-artifact-service-keys"' "$OUTPUT"
 grep -q 'readOnlyRootFilesystem: true' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: artifact-service' "$OUTPUT"
 
+NETWORK_POLICY="$(awk '
+/^---$/ {
+  if (network_policy && artifact_policy) {
+    print document
+    found = 1
+    exit
+  }
+  document = ""
+  network_policy = 0
+  artifact_policy = 0
+  next
+}
+{
+  document = document $0 "\n"
+  if ($0 == "kind: NetworkPolicy") network_policy = 1
+  if (network_policy && $0 == "  name: opencrane-artifact-service") artifact_policy = 1
+}
+END {
+  if (!found && network_policy && artifact_policy) print document
+}
+' "$OUTPUT")"
+
+if [[ -z "$NETWORK_POLICY" ]]; then
+  echo "artifact service must render its dedicated NetworkPolicy" >&2
+  exit 1
+fi
+
+grep -q 'policyTypes: \["Ingress", "Egress"\]' <<<"$NETWORK_POLICY"
+grep -q 'app.kubernetes.io/component: opencrane-server' <<<"$NETWORK_POLICY"
+grep -q 'kubernetes.io/metadata.name: kube-system' <<<"$NETWORK_POLICY"
+grep -q 'k8s-app: kube-dns' <<<"$NETWORK_POLICY"
+grep -q 'port: 53' <<<"$NETWORK_POLICY"
+
+if grep -qE '^  egress: \[\]|^    - \{\}$|^    - to: \[\]$' <<<"$NETWORK_POLICY"; then
+  echo "artifact service NetworkPolicy must deny all egress except explicitly listed internal targets" >&2
+  exit 1
+fi
+
 if grep -A40 'name: opencrane-artifact-service' "$OUTPUT" | grep -qE 'kind: (Role|RoleBinding|ClusterRole|ClusterRoleBinding)'; then
   echo "artifact service must not receive Kubernetes API permissions" >&2
   exit 1

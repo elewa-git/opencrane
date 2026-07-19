@@ -21,6 +21,17 @@ describe("ArtifactStore signed internal protocol", function _suite()
 		expect(__VerifyArtifactWriteLease(compact, _leasePublicKey, 1_750_000_061)).toBeNull();
 	});
 
+	it("rejects leases issued outside the symmetric five-minute clock-skew window", function _leaseIssuedAtWindow()
+	{
+		const now = 1_750_000_400;
+		const atPastBoundary = __SignArtifactWriteLease({ leaseId: "lease-past-boundary", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: now + 60, expectedContentAddress: null, expectedByteLength: null, mediaType: "text/plain" }, _leasePrivateKey, now - 300);
+		const beforePastBoundary = __SignArtifactWriteLease({ leaseId: "lease-too-old", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: now + 60, expectedContentAddress: null, expectedByteLength: null, mediaType: "text/plain" }, _leasePrivateKey, now - 301);
+		const atFutureBoundary = __SignArtifactWriteLease({ leaseId: "lease-future-boundary", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: now + 600, expectedContentAddress: null, expectedByteLength: null, mediaType: "text/plain" }, _leasePrivateKey, now + 300);
+		expect(__VerifyArtifactWriteLease(atPastBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-past-boundary" });
+		expect(__VerifyArtifactWriteLease(beforePastBoundary, _leasePublicKey, now)).toBeNull();
+		expect(__VerifyArtifactWriteLease(atFutureBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-future-boundary" });
+	});
+
 	it("keeps service promotion receipts distinct from write-lease authority", function _receiptRoundTrip()
 	{
 		const compact = __SignArtifactPromotionReceipt({ leaseId: "lease-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "text/plain", issuedAtEpochSeconds: 1_750_000_000 }, _receiptPrivateKey);
