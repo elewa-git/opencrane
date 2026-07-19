@@ -40,6 +40,37 @@ subjects:
 {{- end }}
 ---
 {{- /*
+  TokenReview is a Kubernetes cluster-scoped authentication API, so this narrow server-owned
+  permission cannot live in a namespace Role. Internal runtime and controller routes validate
+  projected ServiceAccount tokens here; neither caller receives this permission.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "opencrane.fullname" . }}-opencrane-server-tokenreview-{{ .Release.Namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+rules:
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "opencrane.fullname" . }}-opencrane-server-tokenreview-{{ .Release.Namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "opencrane.fullname" . }}-opencrane-server-tokenreview-{{ .Release.Namespace }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opencrane.fullname" . }}-opencrane-server
+    namespace: {{ .Release.Namespace }}
+---
+{{- /*
   Stage 4: the silo READS the cluster-scoped ClusterTenant CR to resolve a host's per-org
   login client (per-org-client.ts: get by name, list by vanityDomain). ClusterTenant is
   cluster-scoped, so a get/list/watch grant cannot live in the namespaced Role above — it
