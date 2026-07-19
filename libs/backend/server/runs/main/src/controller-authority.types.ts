@@ -19,8 +19,6 @@ export interface ControllerDesiredJob
 	readonly serviceAccountName: string;
 	/** Exact immutable runtime image. */
 	readonly image: string;
-	/** Epoch-millisecond expiry for the assignment/bootstrap authority. */
-	readonly expiresAtEpochMs: number;
 }
 
 /** Immutable Kubernetes Job acknowledgement supplied by the authenticated controller. */
