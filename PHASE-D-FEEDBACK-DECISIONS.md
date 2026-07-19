@@ -351,6 +351,62 @@ precondition/validation lives in guards/aspects — not inline branching. Judgem
 
 ---
 
+## Decision D12 — comment `ControllerAuthorityRepository` / `PrismaControllerAuthorityRepository` with consumer + intent
+
+**Status:** DECIDED (Jente, 2026-07-19). Concrete instance of the D9 documentation standard.
+
+**Context.** `ControllerAuthorityRepository` (the port, `controller-authority.types.ts:78`) and
+`PrismaControllerAuthorityRepository` (the Prisma adapter, `prisma-controller-authority.ts:18`) carry
+only a terse one-line "what it does" JSDoc ("derives all desired workload state from canonical rows").
+Neither says **who calls it or why it exists** — the load-bearing context for the reader.
+
+**Decision.** Add class-level comments that state:
+- **Consumer** — the controller-authority internal API / router (`controller-authority.router.ts`),
+  invoked by the `apps/agent-controller` reconciler over the workload-authenticated internal route, is
+  the only caller. Human/product code does not use this repository.
+- **Why it exists** — it is the fail-closed persistence boundary for controller claims (claim desired
+  job → record Job → record Pod), so a controller crash or duplicate reconcile can neither lose work
+  nor double-run it; all authority is derived from canonical rows, never from controller-supplied
+  state. State the port-vs-adapter split (interface = the contract the router depends on; Prisma class
+  = the one durable implementation).
+
+Apply the same consumer + intent standard to the sibling `*-authority` repositories flagged in D9.
+
+---
+
+## Decision D11 (FINAL TASK) — performance analysis of every added step
+
+**Status:** DECIDED (Jente, 2026-07-19). The closing task for the Phase D review.
+
+**Ask.** Quantify the **performance impact of each step the Phase D stack adds** to the request/run
+path — per-step latency and throughput cost, hot paths, and per-run/per-event/per-action
+amplification — so the security/correctness machinery's runtime price is known, not assumed.
+
+**Steps to measure (enumerate cost per invocation and how often it fires):**
+- **Capability-proof verification** — ES256/DPoP signature verify + full binding comparison per
+  action (`capability-proof`); fires per authorized action.
+- **Kubernetes `TokenReview`** — a live API-server round trip per controller/internal request
+  (`controller-authority` API, channel-target resolve, artifact lease). Network-bound; check caching.
+- **Run-ingest commit-before-SSE** — every visible callback persisted as a `RunEvent` (DB write) then
+  read back for cursor SSE delivery; per event on long runs — likely the dominant hot path.
+- **Fenced boundary claim / steering absorb** — idempotent boundary transaction per model-decision
+  boundary.
+- **Authority-repo transactions** — the multi-row lock-ordered `$transaction`s in the `*-authority`
+  Prisma repos (claim/record/finalize) per state transition.
+- **Artifact lease + receipt** — Ed25519 sign/verify per upload; stage→hash→promote (full-content
+  SHA-256) per artifact.
+- **Per-database connections (D1 context)** — connection-pool footprint; simplified once D1 collapses
+  to one server per ClusterTenant.
+- **Cilium default-deny + identity-bound policies** — per-connection policy evaluation overhead.
+
+**Method.** Micro-bench the crypto/verify steps in isolation; measure the DB steps against a real
+Postgres (the live authority suite harness); model the per-run amplification (events × verify × DB
+writes) for a representative long task; call out anything O(events) or O(actions) on the request path.
+Report a per-step cost table + the top 3 optimization targets. Run after D1 (topology) lands so the
+DB numbers reflect the target shape.
+
+---
+
 ## Related open feedback (not yet decided)
 
 - **A — ADR 0002 drift:** `values.yaml:12` still cites "ONE CNPG cluster per silo (ADR 0002
