@@ -53,7 +53,7 @@ export class _ControllerAuthorityHttpClient implements DesiredAgentJobSource, Ag
 	{
 		const token = (await readFile(this.options.tokenPath, "utf8")).trim();
 		if (token.length === 0) throw new Error("controller projected authority token is empty");
-		return this.options.fetch(new URL(path, this.options.baseUrl), { method, headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
+		return this.options.fetch(new URL(`/api/internal/agent-controller${path}`, this.options.baseUrl), { method, headers: { authorization: `Bearer ${token}`, ...(body === undefined ? {} : { "content-type": "application/json" }) }, body: body === undefined ? undefined : JSON.stringify(body) });
 	}
 
 	/** Requires an exact no-content successful authority response. */
