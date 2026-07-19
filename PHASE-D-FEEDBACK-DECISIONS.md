@@ -576,11 +576,42 @@ Split every logged to-do into two tracks:
 | D10 | Refactor `if` clusters → polymorphism / validator-aspect where it clarifies the model |
 | D11 | Performance analysis of every added step (benchmark + model) |
 | D15 (bake-off) | The #246 conformance run / driver selection producing the evidence |
+| D18 | Single agent loading / session-creation flow assembling `RunInputSnapshot` (design-first: spec → build) |
 
 **Mixed items** are split at the track boundary: D9 (docs→Claude, dedup→Codex), D15 (writeup→Claude,
 conformance run→Codex), D8 (the *review* is Claude, the *fixes* are Codex). Sequencing note from
 earlier decisions still holds: **D5 (lib reorg) before D4 (test moves) and the README pass** so both
 target final paths; **D1 before D11** so perf numbers reflect the target topology.
+
+---
+
+## D18 — one singular, holistic agent loading / session-creation flow (persona loading is a step in it)
+
+**Status:** DECIDED (Jente, 2026-07-19). Design-first; feeds the Phase E runtime lane
+([#246](https://github.com/italanta/opencrane/issues/246)).
+
+**Context.** Persona loading exists today only as `_LoadApprovalSnapshot`
+(`libs/backend/server/personas/main/src/prisma-persona-authority.ts`) — "persona evidence loaded
+before **approval**." `RunInputSnapshot` is a contract type
+(`libs/contracts/src/run-input-snapshot.types.ts`, its digest referenced by `agent-run.types.ts`) but
+has **no single assembler**; the run libs don't compose persona / preferences / memory / tool policy.
+So there is an approval flow, but **no cohesive "load the agent / create the session" flow** — the
+piece a reader (and the runtime) most needs to understand is missing.
+
+**Decision.** Define **one named, holistic, easy-to-understand agent loading / session-creation flow**
+with a single entry point that deterministically assembles everything a run needs — approved
+`PersonaRevision`, `PreferenceFact`s, memory, tool policy, budget, identity/capabilities — into the
+`RunInputSnapshot`. Persona loading is **one clearly-named step inside that flow**, not a side effect
+of the approval path. Approval stays a separate upstream gate (a persona must be approved to be
+loadable) that *feeds* the flow rather than hosting the load.
+
+**Requirements.** One entry point / assembler; deterministic (the snapshot digest); each input a named,
+individually-testable step; documented as the "run lifecycle / session creation" narrative in the D14
+architecture chapter (and the code carries the flow, not scattered loaders). Design the single flow
+spec first, then build it in the Phase E runtime lane.
+
+**Routing.** Implementation track (D17), **design-first** — write the flow spec (Claude/design), then
+Codex builds it with Claude review.
 
 ---
 
