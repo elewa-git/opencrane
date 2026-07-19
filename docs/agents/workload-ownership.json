@@ -7,6 +7,8 @@
     "opencrane-ui",
     "channel-proxy",
     "artifact-service",
+    "agent-controller",
+    "agent-controller-prepared-job",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -66,6 +68,24 @@
         "StatefulSet/opencrane-redis-primary",
         "Job/opencrane-opencrane-server-migrate"
       ]
+    },
+    {
+      "id": "agent-controller",
+      "setValues": [
+        "agentController.enabled=true",
+        "agentController.runtimeImage=ghcr.io/italanta/opencrane-agent-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "agentController.kubernetesApi.cidr=10.0.0.0/8"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-agent-controller",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "Deployment/opencrane-mcp-gateway",
+        "Job/opencrane-opencrane-server-migrate"
+      ]
     }
   ],
   "runtimeConstructs": [
@@ -123,6 +143,16 @@
         "langfuse-valkey-primary",
         "langfuse-minio"
       ]
+    },
+    {
+      "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts",
+      "anchor": "return _observed(await this.batchApi.createNamespacedJob({",
+      "workloadIds": ["agent-controller-prepared-job"]
+    },
+    {
+      "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["agent-controller-prepared-job"]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -228,6 +258,26 @@
       "localOwner": true,
       "source": { "type": "file", "path": "apps/artifact-service/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactService.resources\"" }
+    },
+    {
+      "id": "agent-controller",
+      "podClass": "Deployment/agent-controller",
+      "renderedPodClass": "Deployment/opencrane-agent-controller",
+      "image": "ghcr.io/italanta/opencrane-agent-controller:<release-tag>",
+      "owner": "apps/agent-controller",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentController.resources\"" },
+      "sharedImageContract": "The controller deploys as the sole Kubernetes mutation authority for agent workload Jobs."
+    },
+    {
+      "id": "agent-controller-prepared-job",
+      "podClass": "Job/agent-runtime-prepared-attempt",
+      "image": "server-authorized immutable runtime image",
+      "owner": "apps/agent-controller",
+      "localOwner": true,
+      "source": { "type": "file", "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts", "anchor": "kind: \"Job\"" },
+      "sharedImageContract": "The controller owns only the suspended, bootstrap-inert Job projection. A future app-owned runtime replacement assumes execution ownership before bootstrapReady can become true."
     },
     {
       "id": "cognee",
