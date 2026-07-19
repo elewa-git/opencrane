@@ -73,7 +73,7 @@ function _mapService(row: { id: string; siloId: string; kind: string; name: stri
 }
 
 /** Maps one locked Prisma revision row and its immutable assignments to the target contract. */
-function _mapRevision(row: { id: string; agentServiceId: string; revision: number; state: string; digest: string; promptPolicyVersion: string; personaRevisionId: string | null; modelPolicyId: string; budget: Prisma.JsonValue; authoredBy: string; createdAt: Date; publishedAt: Date | null; skillAssignments: Array<{ skillId: string; skillRevisionId: string }>; mcpAssignments: Array<{ mcpServerId: string; allowedTools: string[] }> }): AgentRevision
+function _mapRevision(row: { id: string; agentServiceId: string; revision: number; state: string; digest: string; promptPolicyVersion: string; personaRevisionId: string | null; modelPolicyId: string; budget: Prisma.JsonValue; authoredBy: string; createdAt: Date; publishedAt: Date | null; skillAssignments: Array<{ skillId: string; skillRevisionId: string }>; integrationAssignments: Array<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }> }): AgentRevision
 {
 	return {
 		id: row.id,
@@ -85,7 +85,7 @@ function _mapRevision(row: { id: string; agentServiceId: string; revision: numbe
 		personaRevisionId: row.personaRevisionId,
 		modelPolicyId: row.modelPolicyId,
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
-		mcpAssignments: row.mcpAssignments.map(assignment => ({ serverId: assignment.mcpServerId, allowedTools: assignment.allowedTools })),
+		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: assignment.allowedTools })),
 		budget: row.budget as unknown as AgentBudget,
 		authoredBy: row.authoredBy,
 		createdAt: row.createdAt.toISOString(),
@@ -122,7 +122,7 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 	/** Loads one immutable revision and all executable assignments. */
 	async getRevision(agentRevisionId: string): Promise<AgentRevision | null>
 	{
-		const row = await this.prisma.agentRevision.findUnique({ where: { id: agentRevisionId }, include: { skillAssignments: true, mcpAssignments: true } });
+		const row = await this.prisma.agentRevision.findUnique({ where: { id: agentRevisionId }, include: { skillAssignments: true, integrationAssignments: true } });
 		return row === null ? null : _mapRevision(row);
 	}
 
@@ -136,14 +136,14 @@ export class PrismaAgentServicePublicationRepository implements AgentServicePubl
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${publication.agentServiceId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_revisions" WHERE "id" = ${publication.agentRevisionId} FOR UPDATE`);
 			const serviceRow = await transaction.agentService.findUnique({ where: { id: publication.agentServiceId } });
-			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, mcpAssignments: true } });
+			const revisionRow = await transaction.agentRevision.findUnique({ where: { id: publication.agentRevisionId }, include: { skillAssignments: true, integrationAssignments: true } });
 			if (serviceRow === null || revisionRow === null || _serviceState(serviceRow.state) !== publication.expectedServiceState || serviceRow.activeRevisionId !== publication.expectedActiveRevisionId || revisionRow.agentServiceId !== publication.agentServiceId || revisionRow.state !== AgentRevisionState.Draft)
 			{
 				return { status: "conflict", currentActiveRevisionId: serviceRow?.activeRevisionId ?? null } as const;
 			}
 
 			// 2. Change both lifecycle coordinates inside the same transaction so neither can escape alone.
-			const publishedRow = await transaction.agentRevision.update({ where: { id: publication.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: new Date(publication.publishedAt) }, include: { skillAssignments: true, mcpAssignments: true } });
+			const publishedRow = await transaction.agentRevision.update({ where: { id: publication.agentRevisionId }, data: { state: AgentRevisionState.Published, publishedAt: new Date(publication.publishedAt) }, include: { skillAssignments: true, integrationAssignments: true } });
 			const activeRow = await transaction.agentService.update({ where: { id: publication.agentServiceId }, data: { state: AgentServiceState.Active, activeRevisionId: publication.agentRevisionId, updatedAt: new Date(publication.publishedAt) } });
 
 			// 3. Append authenticated decision evidence before commit; audit failure rolls back publication.

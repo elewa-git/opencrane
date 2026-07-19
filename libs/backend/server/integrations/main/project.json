@@ -1,0 +1,13 @@
+{
+  "name": "backend-server-integrations",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/integrations/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:integrations"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/integrations/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/integrations/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh tests/integrations-authority.sql", "cwd": "libs/backend/server/integrations/main" } },
+    "test:negative": { "executor": "nx:run-commands", "options": { "command": "../../../../../scripts/integration-authority-negative-tests.sh", "cwd": "libs/backend/server/integrations/main" } }
+  }
+}
