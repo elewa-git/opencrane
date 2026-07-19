@@ -20,13 +20,23 @@ function _Job(uid = "job-uid", suspended = true)
 function _Apis()
 {
 	return {
-		batchApi: { readNamespacedJob: vi.fn(), createNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn() },
+		batchApi: { listNamespacedJob: vi.fn(), readNamespacedJob: vi.fn(), createNamespacedJob: vi.fn(), deleteNamespacedJob: vi.fn(), patchNamespacedJob: vi.fn() },
 		coreApi: { listNamespacedPod: vi.fn() },
 	};
 }
 
 describe("Kubernetes agent Job mutator", function _describeJobMutator()
 {
+	it("proves namespaced Kubernetes Job-list authority before reporting controller readiness", async function _checksKubernetesAuthority()
+	{
+		const apis = _Apis();
+		apis.batchApi.listNamespacedJob.mockResolvedValue({ items: [] });
+		const mutator = new _KubernetesAgentJobMutator(apis.batchApi as never, apis.coreApi as never);
+
+		await expect(mutator.check("opencrane-runtime")).resolves.toBeUndefined();
+		expect(apis.batchApi.listNamespacedJob).toHaveBeenCalledWith({ namespace: "opencrane-runtime", limit: 1 });
+	});
+
 	it("maps an absent Job to null without suppressing other API failures", async function _mapsNotFound()
 	{
 		const apis = _Apis();

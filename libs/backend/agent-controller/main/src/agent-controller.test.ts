@@ -19,6 +19,7 @@ function _Dependencies(desired: DesiredAgentJob | null, observed: ObservedAgentJ
 			policy: { runtimeNamespace: "opencrane-runtime", runtimeServiceAccountName: "agent-runtime", runtimeImage: "ghcr.io/opencrane/agent-runtime@sha256:abc" },
 			desiredJobs: { async readNext() { return desired; } },
 			jobs: {
+				async check() { calls.push("check"); },
 				async get() { calls.push("get"); return observed; },
 				async createSuspended(projection: AgentJobProjection) { calls.push("create"); return { name: projection.name, labels: projection.labels, uid: "job-uid", suspended: createdSuspended }; },
 				async delete(_: AgentJobProjection, uid: string) { calls.push(`delete:${uid}`); },

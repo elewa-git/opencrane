@@ -336,6 +336,7 @@ agentController:
   runtimeImage: ""
   projectedTokenTtlSeconds: 600
   pollIntervalMs: 1000
+  healthPort: 8080
   openCraneInternalUrl: ""
   kubernetesApi:
     cidr: ""

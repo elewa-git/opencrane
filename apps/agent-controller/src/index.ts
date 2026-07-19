@@ -2,11 +2,12 @@ import "./instrument.js";
 
 import * as k8s from "@kubernetes/client-node";
 
-import { __ReconcileAgentJob } from "@opencrane/backend/agent-controller";
 import { _ControllerAuthorityHttpClient, _KubernetesAgentJobMutator } from "@opencrane/backend/agent-controller/kubernetes";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/observability";
 
 import { _ReadConfig } from "./config.js";
+import { _ReconcileOnce } from "./controller-loop.js";
+import { _CreateControllerHealth } from "./health.js";
 import { _log as log } from "./log.js";
 
 /** Starts the bounded database-blind controller loop. */
@@ -18,6 +19,8 @@ async function _Main(): Promise<void>
 	const authority = new _ControllerAuthorityHttpClient({ baseUrl: config.openCraneInternalUrl, tokenPath: config.openCraneTokenPath, fetch: globalThis.fetch });
 	const dependencies = { policy: { runtimeNamespace: config.runtimeNamespace, runtimeServiceAccountName: config.runtimeServiceAccountName, runtimeImage: config.runtimeImage }, desiredJobs: authority, status: authority, jobs: new _KubernetesAgentJobMutator(kubeConfig.makeApiClient(k8s.BatchV1Api), kubeConfig.makeApiClient(k8s.CoreV1Api)) };
 	const unbindConsole = ___BindConsole(log);
+	const health = _CreateControllerHealth({ port: config.healthPort });
+	await health.listen();
 	let stopping = false;
 	let active = false;
 	const timer = setInterval(function _tick() { void _reconcile(); }, config.pollIntervalMs);
@@ -29,12 +32,7 @@ async function _Main(): Promise<void>
 		active = true;
 		try
 		{
-			const result = await __ReconcileAgentJob(dependencies);
-			if (result.outcome !== "idle") log.info({ outcome: result.outcome, runId: result.runId, attempt: result.attempt }, "agent Job reconciliation completed");
-		}
-		catch (err)
-		{
-			log.warn({ err }, "agent Job reconciliation failed; will retry");
+			await _ReconcileOnce(dependencies, health, log);
 		}
 		finally
 		{
@@ -47,6 +45,7 @@ async function _Main(): Promise<void>
 		stopping = true;
 		clearInterval(timer);
 		log.info({ signal }, "agent controller shutting down");
+		await health.shutdown();
 		await ___ShutdownTelemetry();
 		unbindConsole();
 		process.exit(0);

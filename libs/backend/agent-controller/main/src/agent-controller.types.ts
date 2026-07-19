@@ -74,6 +74,8 @@ export interface DesiredAgentJobSource
 /** Kubernetes-only port owned by the controller app adapter. */
 export interface AgentJobMutator
 {
+	/** Verify Kubernetes API reachability and the controller's namespaced Job-list permission. */
+	check(namespace: string): Promise<void>;
 	/** Load a Job by deterministic identity without modifying it. */
 	get(projection: AgentJobProjection): Promise<ObservedAgentJob | null>;
 	/** Create a suspended Job and return its immutable identity. */
