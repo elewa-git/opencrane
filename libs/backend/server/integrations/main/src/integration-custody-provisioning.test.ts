@@ -13,6 +13,12 @@ describe("integration custody provisioning", function _suite()
 		expect(JSON.stringify(log.warn.mock.calls)).not.toContain("write-only");
 	});
 
+	it("keeps a remote failure closed when diagnostic logging itself fails", async function _throwingLogger()
+	{
+		const log = { warn: vi.fn().mockImplementation(function _throw() { throw new Error("logger unavailable"); }), error: vi.fn() };
+		await expect(__ProvisionIntegrationCustody({ provision: vi.fn().mockRejectedValue(new Error("timeout")), revoke: vi.fn() }, { persistReady: vi.fn() }, log, _Command())).resolves.toEqual({ outcome: "unavailable", reason: "remote_unavailable" });
+	});
+
 	it("revokes remote custody when persistence fails", async function _compensation()
 	{
 		const revoke = vi.fn().mockResolvedValue(undefined);

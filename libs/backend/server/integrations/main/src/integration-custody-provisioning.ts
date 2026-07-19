@@ -13,7 +13,7 @@ export async function __ProvisionIntegrationCustody(custody: ObotCustodyPort, re
 	}
 	catch (err)
 	{
-		log.warn(_FailureLogFields(command, err), "Obot custody provisioning failed");
+		_Warn(log, command, err, "Obot custody provisioning failed");
 		return { outcome: "unavailable", reason: "remote_unavailable" };
 	}
 	if (provisioned.obotCatalogEntryId !== command.obotCatalogEntryId || !provisioned.obotCustodyReference.trim() || provisioned.expiresAt <= new Date())
@@ -24,7 +24,7 @@ export async function __ProvisionIntegrationCustody(custody: ObotCustodyPort, re
 		}
 		catch (err)
 		{
-			log.error(_FailureLogFields(command, err), "Obot custody compensation failed after an invalid response");
+			_Error(log, command, err, "Obot custody compensation failed after an invalid response");
 			return { outcome: "unavailable", reason: "compensation_failed" };
 		}
 		return { outcome: "unavailable", reason: "remote_unavailable" };
@@ -39,7 +39,7 @@ export async function __ProvisionIntegrationCustody(custody: ObotCustodyPort, re
 	catch (err)
 	{
 		// 3. Revoke the remote result so a persistence failure never leaves usable untracked custody.
-		log.warn(_FailureLogFields(command, err), "Integration custody persistence failed; starting compensation");
+		_Warn(log, command, err, "Integration custody persistence failed; starting compensation");
 		try
 		{
 			await custody.revoke(provisioned.obotCustodyReference);
@@ -47,7 +47,7 @@ export async function __ProvisionIntegrationCustody(custody: ObotCustodyPort, re
 		}
 		catch (compensationError)
 		{
-			log.error(_FailureLogFields(command, compensationError), "Obot custody compensation failed after a persistence failure");
+			_Error(log, command, compensationError, "Obot custody compensation failed after a persistence failure");
 			return { outcome: "unavailable", reason: "compensation_failed" };
 		}
 	}
@@ -67,4 +67,24 @@ function _FailureLogFields(command: ProvisionIntegrationCustodyCommand, err: unk
 		obotCatalogEntryId: command.obotCatalogEntryId,
 		errorType: err instanceof Error ? err.constructor.name : typeof err,
 	};
+}
+
+/** Emits a warning without allowing observability failures to change the fail-closed custody result. */
+function _Warn(log: IntegrationCustodyLogger, command: ProvisionIntegrationCustodyCommand, err: unknown, message: string): void
+{
+	try
+	{
+		log.warn(_FailureLogFields(command, err), message);
+	}
+	catch { /* Logging is diagnostic only; custody failure handling must remain fail closed. */ }
+}
+
+/** Emits an error without allowing observability failures to change the fail-closed custody result. */
+function _Error(log: IntegrationCustodyLogger, command: ProvisionIntegrationCustodyCommand, err: unknown, message: string): void
+{
+	try
+	{
+		log.error(_FailureLogFields(command, err), message);
+	}
+	catch { /* Logging is diagnostic only; custody failure handling must remain fail closed. */ }
 }
