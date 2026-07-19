@@ -81,6 +81,10 @@ spec:
         - name: agent-controller
           image: "{{ .Values.agentController.image.repository }}:{{ .Values.agentController.image.tag }}"
           imagePullPolicy: {{ .Values.agentController.image.pullPolicy }}
+          ports:
+            - name: health
+              containerPort: {{ .Values.agentController.healthPort }}
+              protocol: TCP
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
@@ -103,6 +107,8 @@ spec:
               value: {{ required "agentController.runtimeImage is required when agentController.enabled=true" .Values.agentController.runtimeImage | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
+            - name: AGENT_CONTROLLER_HEALTH_PORT
+              value: {{ .Values.agentController.healthPort | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: kubernetes-api-token
@@ -113,6 +119,22 @@ spec:
               readOnly: true
           resources:
             {{- toYaml .Values.agentController.resources | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 1
+            periodSeconds: 5
+            timeoutSeconds: 1
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /livez
+              port: health
+            initialDelaySeconds: 1
+            periodSeconds: 10
+            timeoutSeconds: 1
+            failureThreshold: 3
       volumes:
         # This token is only for the Kubernetes API. Its audience differs from the
         # server token below, so a token accepted by one authority is useless to the other.

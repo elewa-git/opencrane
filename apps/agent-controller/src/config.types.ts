@@ -17,4 +17,6 @@ export interface AgentControllerProcessConfig
 	readonly kubernetesCaPath: string;
 	/** Maximum cadence for the bounded one-Job reconciliation loop. */
 	readonly pollIntervalMs: number;
+	/** Pod-local HTTP port reserved for kubelet liveness and readiness probes. */
+	readonly healthPort: number;
 }

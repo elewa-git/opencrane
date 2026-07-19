@@ -11,7 +11,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 	const kubernetesTokenPath = environment["AGENT_CONTROLLER_KUBERNETES_TOKEN_PATH"]?.trim() ?? "";
 	const kubernetesCaPath = environment["AGENT_CONTROLLER_KUBERNETES_CA_PATH"]?.trim() ?? "";
 	if (!_dnsLabel(runtimeNamespace) || !_dnsLabel(runtimeServiceAccountName) || !/^.+@sha256:[a-f0-9]{64}$/u.test(runtimeImage) || !_internalUrl(openCraneInternalUrl) || !_absolutePath(openCraneTokenPath) || !_absolutePath(kubernetesTokenPath) || !_absolutePath(kubernetesCaPath)) throw new Error("agent controller configuration is incomplete or unsafe");
-	return { runtimeNamespace, runtimeServiceAccountName, runtimeImage, openCraneInternalUrl, openCraneTokenPath, kubernetesTokenPath, kubernetesCaPath, pollIntervalMs: _positive(environment["AGENT_CONTROLLER_POLL_INTERVAL_MS"], 1_000) };
+	return { runtimeNamespace, runtimeServiceAccountName, runtimeImage, openCraneInternalUrl, openCraneTokenPath, kubernetesTokenPath, kubernetesCaPath, pollIntervalMs: _positive(environment["AGENT_CONTROLLER_POLL_INTERVAL_MS"], 1_000), healthPort: _port(environment["AGENT_CONTROLLER_HEALTH_PORT"], 8_080) };
 }
 
 /** Checks a conservative Kubernetes DNS-label boundary. */
@@ -38,5 +38,13 @@ function _positive(value: string | undefined, fallback: number): number
 {
 	const parsed = value === undefined ? fallback : Number(value);
 	if (!Number.isSafeInteger(parsed) || parsed < 100 || parsed > 60_000) throw new Error("AGENT_CONTROLLER_POLL_INTERVAL_MS must be between 100 and 60000");
+	return parsed;
+}
+
+/** Parses a valid local TCP listener port without allowing an accidental privileged bind. */
+function _port(value: string | undefined, fallback: number): number
+{
+	const parsed = value === undefined ? fallback : Number(value);
+	if (!Number.isSafeInteger(parsed) || parsed < 1_024 || parsed > 65_535) throw new Error("AGENT_CONTROLLER_HEALTH_PORT must be between 1024 and 65535");
 	return parsed;
 }

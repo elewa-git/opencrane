@@ -17,6 +17,12 @@ export class _KubernetesAgentJobMutator implements AgentJobMutator
 		this.coreApi = coreApi;
 	}
 
+	/** Proves the Kubernetes API is reachable and this controller retains its namespaced Job-list grant. */
+	async check(namespace: string): Promise<void>
+	{
+		await this.batchApi.listNamespacedJob({ namespace, limit: 1 });
+	}
+
 	/** Reads one deterministic Job without treating an absent Job as an error. */
 	async get(projection: AgentJobProjection): Promise<ObservedAgentJob | null>
 	{
