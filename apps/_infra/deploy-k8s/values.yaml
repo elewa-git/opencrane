@@ -322,6 +322,32 @@ artifactService:
       cpu: 500m
       memory: 512Mi
 
+# -- Database-blind controller for suspended, server-authorized agent Jobs. Disabled until the
+# separately owned agent-runtime app and one-time bootstrap delivery are both available.
+agentController:
+  enabled: false
+  namespace: ""
+  image:
+    repository: ghcr.io/italanta/opencrane-agent-controller
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  replicas: 1
+  runtimeServiceAccountName: agent-runtime
+  runtimeImage: ""
+  projectedTokenTtlSeconds: 600
+  pollIntervalMs: 1000
+  openCraneInternalUrl: ""
+  kubernetesApi:
+    cidr: ""
+    port: 443
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 # -- Control plane settings
 clustertenantManager:
   # NOTE: a `clustertenantManager.enabled` gate (to suppress the silo manager + its idle planes in

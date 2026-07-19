@@ -94,6 +94,12 @@ spec:
               value: /var/run/opencrane/tokens/kubernetes/ca.crt
             - name: AGENT_CONTROLLER_OPENCRANE_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane/token
+            - name: AGENT_RUNTIME_SERVICE_ACCOUNT
+              value: {{ required "agentController.runtimeServiceAccountName is required when agentController.enabled=true" .Values.agentController.runtimeServiceAccountName | quote }}
+            - name: AGENT_RUNTIME_IMAGE
+              value: {{ required "agentController.runtimeImage is required when agentController.enabled=true" .Values.agentController.runtimeImage | quote }}
+            - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
+              value: {{ .Values.agentController.pollIntervalMs | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: kubernetes-api-token
