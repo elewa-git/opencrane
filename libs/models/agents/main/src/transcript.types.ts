@@ -10,7 +10,33 @@ export type MessageRole = "user" | "assistant" | "tool" | "system";
 export type MessageState = "pending" | "streaming" | "completed" | "failed" | "cancelled";
 
 /** Stable public vocabulary of ordered run events. */
-export type RunEventType = "run.accepted" | "run.started" | "message.started" | "message.delta" | "message.completed" | "tool.requested" | "tool.approval_required" | "tool.started" | "tool.progress" | "tool.completed" | "context.compaction_started" | "context.compaction_completed" | "run.usage" | "run.completed" | "run.failed" | "run.cancelled";
+export type RunEventType = "run.accepted" | "run.started" | "message.started" | "message.delta" | "message.completed" | "tool.requested" | "tool.approval_required" | "tool.started" | "tool.progress" | "tool.completed" | "context.compaction_started" | "context.compaction_completed" | "steering.queued" | "steering.absorbed" | "steering.deferred" | "run.usage" | "run.completed" | "run.failed" | "run.cancelled";
+
+/** Event classifications that carry the durable steering outcome for one message. */
+export type SteeringRunEventType = "steering.queued" | "steering.absorbed" | "steering.deferred";
+
+/** Payload emitted when a mid-run user message enters the durable steering queue. */
+export interface SteeringQueuedRunEventPayload
+{
+	/** Immutable message that was accepted into the active run's steering queue. */
+	readonly messageId: MessageId;
+}
+
+/** Payload emitted when the active run claims a queued message at a turn boundary. */
+export interface SteeringAbsorbedRunEventPayload
+{
+	/** Immutable queued message incorporated into the next model input. */
+	readonly messageId: MessageId;
+}
+
+/** Payload emitted when terminal completion routes queued input to a successor run. */
+export interface SteeringDeferredRunEventPayload
+{
+	/** Immutable queued message that the terminal run could not absorb. */
+	readonly messageId: MessageId;
+	/** Successor run that owns the queued message after the terminal transition wins. */
+	readonly successorRunId: AgentRunId;
+}
 
 /** Provenance attached to one immutable message. */
 export interface MessageProvenance
@@ -76,17 +102,32 @@ export interface Message
 	readonly completedAt: string | null;
 }
 
-/** Ordered immutable event emitted by one run. */
-export interface RunEvent
+/** Common ordered envelope for one immutable run event. */
+export interface RunEventEnvelope<EventType extends RunEventType, Payload>
 {
 	/** Run that owns the event stream. */
 	readonly runId: AgentRunId;
 	/** One-based contiguous sequence within the run. */
 	readonly sequence: number;
 	/** Stable public event classification. */
-	readonly type: RunEventType;
+	readonly type: EventType;
 	/** Immutable event payload with no runtime-SDK types. */
-	readonly payload: Readonly<Record<string, unknown>>;
+	readonly payload: Payload;
 	/** ISO-8601 instant at which the event was persisted. */
 	readonly occurredAt: string;
 }
+
+/** Ordered event that does not use the steering-specific public payload vocabulary. */
+export type NonSteeringRunEvent = RunEventEnvelope<Exclude<RunEventType, SteeringRunEventType>, Readonly<Record<string, unknown>>>;
+
+/** Ordered event recording durable admission of one mid-run user message. */
+export type SteeringQueuedRunEvent = RunEventEnvelope<"steering.queued", SteeringQueuedRunEventPayload>;
+
+/** Ordered event recording that an active run incorporated one queued message. */
+export type SteeringAbsorbedRunEvent = RunEventEnvelope<"steering.absorbed", SteeringAbsorbedRunEventPayload>;
+
+/** Ordered event recording that a terminal run routed one message to its successor. */
+export type SteeringDeferredRunEvent = RunEventEnvelope<"steering.deferred", SteeringDeferredRunEventPayload>;
+
+/** Ordered immutable event emitted by one run. */
+export type RunEvent = NonSteeringRunEvent | SteeringQueuedRunEvent | SteeringAbsorbedRunEvent | SteeringDeferredRunEvent;

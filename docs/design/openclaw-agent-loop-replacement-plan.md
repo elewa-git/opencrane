@@ -343,17 +343,17 @@ will be replayed. SDK types must not enter public APIs, frontend state, tool pol
 contracts.
 
 Steering is pull-based. The shell owns a durable queue of mid-run user messages (canonical
-`Message` records on the thread); the driver must call `drain()` at every turn boundary — after
-tool results are appended and before the next model call — and place any returned messages into the
-model context ahead of that call. An empty result proceeds unchanged. Absorption is observed by the
-shell at the drain point, which emits the corresponding `steering.absorbed` event; drivers never
-emit steering events and never mutate already-persisted history. If a run reaches its terminal
-outcome before its drain claims queued messages, the terminal transition wins: the shell starts a
-successor run from those messages and emits `steering.deferred` on the terminal run with the
-successor run reference. A client can therefore distinguish deferred steering from an absent
-absorption and follow the message to its successor run. A later mid-turn upgrade may reuse the
-`paused` checkpoint machinery to absorb steering inside a turn; that changes no part of this
-contract.
+`Message` records on the thread) and emits `steering.queued` with the accepted `messageId`. The
+driver must call `drain()` at every turn boundary — after tool results are appended and before the
+next model call — and place any returned messages into the model context ahead of that call. An
+empty result proceeds unchanged. Absorption is observed by the shell at the drain point, which emits
+`steering.absorbed` with that `messageId`; drivers never emit steering events and never mutate
+already-persisted history. If a run reaches its terminal outcome before its drain claims queued
+messages, the terminal transition wins: the shell starts a successor run from those messages and
+emits `steering.deferred` on the terminal run with the `messageId` and `successorRunId`. A client
+can therefore distinguish deferred steering from an absent absorption and follow the message to its
+successor run. A later mid-turn upgrade may reuse the `paused` checkpoint machinery to absorb
+steering inside a turn; that changes no part of this contract.
 
 ### Canonical run model
 
@@ -394,6 +394,12 @@ steering.deferred
 run.usage
 run.completed | run.failed | run.cancelled
 ```
+
+For every accepted mid-run message, persist `steering.queued` before publication. Persist exactly
+one visible outcome for that message: `steering.absorbed` when the active run claims it at a turn
+boundary, or `steering.deferred` when that run reaches its terminal transition first. Deferred
+events include the successor run identifier so a reconnecting client can follow the message without
+inferring an outcome from the absence of absorption.
 
 Persist events before they are published. A client reconnects from the last sequence it has applied;
 live SSE or WebSocket delivery and history are two views over the same log.

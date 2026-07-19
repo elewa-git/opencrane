@@ -78,19 +78,19 @@
       "id": "steering-absorbed-before-next-action",
       "given": ["active-run", "user-message-sent-mid-run"],
       "when": "next-agent-action-prepares",
-      "expect": ["message-absorbed-into-active-run", "absorption-ordered-before-next-action", "no-run-abort", "client-sees-absorbed"]
+      "expect": ["message-accepted-once", "client-sees-queued-with-message-reference", "message-absorbed-into-active-run", "absorption-ordered-before-next-action", "no-run-abort", "client-sees-absorbed-with-message-reference"]
     },
     {
       "id": "steering-during-tool-execution",
       "given": ["active-run", "tool-executing", "user-message-sent-mid-run"],
       "when": "tool-completes",
-      "expect": ["tool-result-preserved", "message-absorbed-before-next-model-call"]
+      "expect": ["tool-result-preserved", "message-absorbed-before-next-model-call", "client-sees-absorbed-with-message-reference"]
     },
     {
       "id": "steering-during-pending-approval",
       "given": ["run-paused-awaiting-approval", "user-message-sent"],
       "when": "approval-decision-resumes-run",
-      "expect": ["message-absorbed-at-resume-boundary", "approval-state-unchanged"]
+      "expect": ["message-absorbed-at-resume-boundary", "approval-state-unchanged", "client-sees-absorbed-with-message-reference"]
     },
     {
       "id": "steering-after-finalization-starts-next-run",
@@ -99,7 +99,7 @@
       "expect": [
         "terminal-transition-wins",
         "message-starts-successor-run",
-        "client-sees-deferred-with-successor-run-reference"
+        "client-sees-deferred-with-message-and-successor-run-reference"
       ]
     },
     {

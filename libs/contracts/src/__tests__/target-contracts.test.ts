@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalStatus } from "../index.js";
-import type { AgentRun, AgentService, Approval, AuthorizationGrant, PersonaRevision, PlatformPolicy, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import type { AgentRun, AgentService, Approval, AuthorizationGrant, PersonaRevision, PlatformPolicy, RunEvent, SignedFleetMembershipRevision, SteeringDeferredRunEvent } from "../index.js";
 
 describe("canonical model exports", function ()
 {
@@ -84,6 +84,19 @@ describe("canonical model exports", function ()
 
     expect(event.runId).toBe(approval.runId);
     expect(run.agentServiceId).toBe(service.id);
+  });
+
+  it("exports the terminal steering outcome with its successor run", function _steeringContract()
+  {
+    const deferred: SteeringDeferredRunEvent = {
+      runId: "run-1",
+      sequence: 5,
+      type: "steering.deferred",
+      payload: { messageId: "message-2", successorRunId: "run-2" },
+      occurredAt: "2026-07-18T09:00:03.000Z",
+    };
+
+    expect(deferred.payload.successorRunId).toBe("run-2");
   });
 });
 describe("canonical fleet and platform exports", function ()

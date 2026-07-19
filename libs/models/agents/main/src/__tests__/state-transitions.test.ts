@@ -70,4 +70,18 @@ describe("agent model state transitions", function _stateTransitionSuite()
 		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-2", 2))).toBe(false);
 		expect(__CanAppendRunEvent(_Event("run-1", 1), _Event("run-1", 1.5))).toBe(false);
 	});
+
+	it("exposes durable steering outcomes with their causal message and successor identifiers", function _steeringRunEvents()
+	{
+		const queued: RunEvent = { runId: "run-1", sequence: 2, type: "steering.queued", payload: { messageId: "message-2" }, occurredAt: "2026-07-18T08:00:01.000Z" };
+		const absorbed: RunEvent = { runId: "run-1", sequence: 3, type: "steering.absorbed", payload: { messageId: "message-2" }, occurredAt: "2026-07-18T08:00:02.000Z" };
+		const deferred: RunEvent = { runId: "run-1", sequence: 4, type: "steering.deferred", payload: { messageId: "message-3", successorRunId: "run-2" }, occurredAt: "2026-07-18T08:00:03.000Z" };
+		// @ts-expect-error Deferred steering must identify the run that now owns the message.
+		const invalidDeferred: RunEvent = { runId: "run-1", sequence: 5, type: "steering.deferred", payload: { messageId: "message-4" }, occurredAt: "2026-07-18T08:00:04.000Z" };
+
+		expect(queued.payload.messageId).toBe("message-2");
+		expect(absorbed.payload.messageId).toBe("message-2");
+		expect(deferred.payload.successorRunId).toBe("run-2");
+		expect(invalidDeferred).toBeDefined();
+	});
 });
