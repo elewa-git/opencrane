@@ -72,6 +72,7 @@ describe("canonical model exports", function ()
       threadId: "thread-1",
       trigger: "interactive",
       delegatedUserId: "user-1",
+      executionSubjectId: "user-1",
       requestIdempotencyKey: "request-1",
       lineage: { rootRunId: "run-1", parentRunId: null },
       attempt: 1,
