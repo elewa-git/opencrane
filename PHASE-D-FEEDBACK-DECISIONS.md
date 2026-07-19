@@ -471,6 +471,37 @@ delivered here.
 
 ---
 
+## Decision D15 — document a comparison of our agent runtime against the researched alternatives
+
+**Status:** DECIDED (Jente, 2026-07-19). Feeds the Phase E runtime lane
+([#246](https://github.com/italanta/opencrane/issues/246)); logged now so it isn't skipped.
+
+**Context.** OpenCrane builds its own runtime (ADR 0005) with a conformance-selected TypeScript
+toolkit driving only the bounded model/tool loop. The candidates are already researched — `@openai/
+agents` (primary spike), Vercel `ai` / `ToolLoopAgent` (control), AgentScope (blueprint, never a
+dependency), with the outgoing OpenClaw loop as the baseline. The selection is meant to be
+evidence-driven (#246, Gate L3/L4), but the **comparison itself must be written down** — our runtime +
+its chosen driver measured head-to-head against the alternatives — not left as an internal pick.
+
+**Decision.** Produce a documented comparison (an ADR appendix or the runtime design doc, referenced
+from #246) of the OpenCrane-owned runtime against the researched alternatives, on the dimensions that
+actually decide it:
+- **Conformance** to the independently-authored target fixtures against the LiteLLM provider matrix.
+- **Callback/event fidelity** — does the driver emit model/tool/approval/progress/usage/terminal
+  callbacks cleanly enough for the commit-before-SSE + cursor-replay model (each `RunEvent` persisted
+  before delivery)?
+- **Steering** — can mid-run input be absorbed at a model-decision boundary (D-model), or does the
+  loop foreclose it?
+- **Reliability envelope** — retries, cancellation, replay, terminal-race behaviour.
+- **Control surface** — how much of Thread/Message/Run/approval/budget we keep vs. the loop claims.
+- **Multimodal / document authoring**, **license**, **cost/perf**, **exact-pin/supply-chain**.
+
+Include the trigger already on record: if both TS toolkits fail Gate L3, the language choice reopens.
+The deliverable is the evidence table + the chosen driver with its rationale, so the decision is
+auditable rather than asserted.
+
+---
+
 ## Related open feedback (not yet decided)
 
 - **A — ADR 0002 drift:** `values.yaml:12` still cites "ONE CNPG cluster per silo (ADR 0002
