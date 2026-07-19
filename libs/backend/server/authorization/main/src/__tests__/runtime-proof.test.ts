@@ -4,10 +4,10 @@ import { ___CanonicalizeJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 import { describe, expect, it } from "vitest";
 
-import { __ComputeEs256JwkThumbprint } from "./capability-proof.js";
-import { __DigestCanonicalJson } from "./canonical-json-digest.js";
-import { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "./runtime-proof.js";
-import type { CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ExecuteCapabilityActionCommand, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapExpectation, RuntimeBootstrapRepository } from "./runtime-proof.types.js";
+import { __ComputeEs256JwkThumbprint } from "../capability-proof.js";
+import { __DigestCanonicalJson } from "../canonical-json-digest.js";
+import { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "../runtime-proof.js";
+import type { CapabilityActionExecutor, CapabilityActionFailureResult, CapabilityActionIntent, CapabilityActionReceipt, CapabilityActionReceiptRepository, CapabilityActionReservationResult, CapabilityActionSuccessResult, ExecuteCapabilityActionCommand, RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult, RuntimeBootstrapExpectation, RuntimeBootstrapRepository } from "../runtime-proof.types.js";
 
 /** Fixed trusted NumericDate used by action-proof fixtures. */
 const NOW = 1_750_000_000;

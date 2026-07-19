@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __AppendRunEvent } from "./conversation-authority.js";
-import type { ConversationAuthorityRepository } from "./conversation-authority.types.js";
+import { __AppendRunEvent } from "../conversation-authority.js";
+import type { ConversationAuthorityRepository } from "../conversation-authority.types.js";
 
 describe("conversation authority", function ()
 {

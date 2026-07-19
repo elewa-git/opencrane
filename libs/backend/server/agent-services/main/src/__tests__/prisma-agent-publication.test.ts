@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import type { AuditDecisionRecord } from "@opencrane/backend/server/audit";
-import { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication.js";
+import { PrismaAgentServicePublicationRepository } from "../prisma-agent-publication.js";
 
 /** Creates one locked Prisma service row. */
 function _serviceRow()

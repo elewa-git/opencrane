@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-import type { AuthorizedChannelTarget, ChannelProxyDependencies, ChannelTargetResolver, SubjectRateLimiter, TargetResolutionRequest } from "./channel-proxy.types.js";
-import { __ForwardCommand, __RelayEvents } from "./forwarding.js";
-import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy.js";
-import { __FixedWindowRateLimiter } from "./rate-limiter.js";
+import type { AuthorizedChannelTarget, ChannelProxyDependencies, ChannelTargetResolver, SubjectRateLimiter, TargetResolutionRequest } from "../channel-proxy.types.js";
+import { __ForwardCommand, __RelayEvents } from "../forwarding.js";
+import { __HasForgedIdentityHeaders, __ValidateOrigin } from "../origin-policy.js";
+import { __FixedWindowRateLimiter } from "../rate-limiter.js";
 
 /** Construct a live authorized target for one focused test. */
 function _Target(endpoint = "http://agent-runtime.default.svc.cluster.local:8080/v1/channel"): AuthorizedChannelTarget
