@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "pino";
 
-import { _RunWatchLoop } from "./watch-runner.js";
+import { _RunWatchLoop } from "../watch-runner.js";
 
 type WatchEventCallback = (type: string, resource: unknown) => void;
 type WatchDoneCallback = (err: unknown) => void;

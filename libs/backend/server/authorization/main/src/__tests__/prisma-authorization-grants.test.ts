@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";
+import { PrismaAuthorizationGrantRepository } from "../prisma-authorization-grants.js";
 
 describe("Prisma authorization grant reader", function _suite()
 {
