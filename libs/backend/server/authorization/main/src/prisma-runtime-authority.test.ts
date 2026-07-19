@@ -67,8 +67,9 @@ describe("Prisma runtime authority adapter", function _suite()
 		const proofCreate = vi.fn().mockResolvedValue({ id: "proof-1" });
 		const transaction = {
 			$queryRaw: vi.fn().mockResolvedValue([]),
-			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-1", consumedAt: null }), update: bootstrapUpdate },
+			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-1", runId: "run-1", attempt: 1, workloadUid: "job-1", agentServiceId: "service-1", agentRevisionId: "revision-1", consumedAt: null }), update: bootstrapUpdate },
 			runProofKey: { create: proofCreate },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ attempt: 1, state: "Assigned" }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		};
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRuntimeAuthorityRepository(prisma);
@@ -79,6 +80,22 @@ describe("Prisma runtime authority adapter", function _suite()
 		expect(transaction.$queryRaw).toHaveBeenCalledTimes(3);
 		expect(bootstrapUpdate).toHaveBeenCalledOnce();
 		expect(proofCreate).toHaveBeenCalledWith({ data: expect.objectContaining({ publicKeyJwk: { kty: "EC", crv: "P-256", x: "x", y: "y" }, keyThumbprint: "k".repeat(43) }) });
+		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: "Assigned" }, data: expect.objectContaining({ state: "Running", startedAt: expect.any(Date) }) });
+	});
+
+	it("refuses a bootstrap when the current run moved to a later attempt", async function _rejectsStaleAttempt()
+	{
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue({ id: "bootstrap-1", runId: "run-1", attempt: 1, workloadUid: "job-1", agentServiceId: "service-1", agentRevisionId: "revision-1", consumedAt: null }), update: vi.fn() },
+			runProofKey: { create: vi.fn() },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ attempt: 2, state: "Assigned" }), updateMany: vi.fn() },
+		};
+		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+
+		await expect(new PrismaRuntimeAuthorityRepository(prisma).consumeAndBindProofKeyAtomically(_bootstrap())).resolves.toEqual({ status: "conflict" });
+		expect(transaction.workloadBootstrap.update).not.toHaveBeenCalled();
+		expect(transaction.runProofKey.create).not.toHaveBeenCalled();
 	});
 
 	it("reserves receipt and appends audit before external action execution", async function _reserve()
