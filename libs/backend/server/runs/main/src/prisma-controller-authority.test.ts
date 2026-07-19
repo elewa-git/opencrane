@@ -128,4 +128,22 @@ describe("Prisma controller authority adapter", function _suite()
 
 		await expect(_repository(transaction).recordJob({ runId: "run-1", attempt: 1, workloadName: "agent-run-run-1-a2d003afd28962f6-a1", workloadUid: "job-uid-1" }, 1_000_000)).rejects.toThrow("lease expired");
 	});
+
+	it("unwinds an unstarted assigned attempt after the controller deletes an unsafe active Job", async function _unsafeActive()
+	{
+		const assignmentUpdate = vi.fn().mockResolvedValue({ count: 1 });
+		const runUpdate = vi.fn().mockResolvedValue({});
+		const eventUpdate = vi.fn().mockResolvedValue({});
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			outboxEvent: { findMany: vi.fn().mockResolvedValue([{ ..._event(), publishedAt: new Date(995_000) }]), update: eventUpdate },
+			agentRun: { findUnique: vi.fn().mockResolvedValue(_run(AgentRunState.Assigned)), update: runUpdate },
+			workloadAssignment: { updateMany: assignmentUpdate },
+		};
+
+		await expect(_repository(transaction).rejectDesiredJob("run-1", 1, "unsafe_existing_job", 1_000_000)).resolves.toBeUndefined();
+		expect(assignmentUpdate).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: "PendingPod" }, data: { state: "Revoked", revokedAt: new Date(1_000_000) } });
+		expect(runUpdate).toHaveBeenCalledWith({ where: { id: "run-1" }, data: { state: AgentRunState.Failed, finishedAt: new Date(1_000_000), terminalReason: "RuntimeFailure" } });
+		expect(eventUpdate).toHaveBeenCalledWith({ where: { id: "event-1" }, data: { failedAt: new Date(1_000_000), failureCode: "unsafe_existing_job" } });
+	});
 });

@@ -60,6 +60,22 @@ spec:
             # Second (internal-only) listener for /api/internal/*.
             - name: INTERNAL_PORT
               value: {{ .Values.clustertenantManager.service.internalPort | quote }}
+            {{- if .Values.agentController.enabled }}
+            - name: AGENT_CONTROLLER_NAMESPACE
+              value: {{ default .Release.Namespace .Values.agentController.namespace | quote }}
+            - name: AGENT_CONTROLLER_SERVICE_ACCOUNT
+              value: {{ printf "%s-agent-controller" (include "opencrane.fullname" .) | quote }}
+            - name: AGENT_RUNTIME_PROFILE
+              value: "personal-default"
+            - name: AGENT_RUNTIME_NAMESPACE
+              value: {{ default .Release.Namespace .Values.agentController.namespace | quote }}
+            - name: AGENT_RUNTIME_SERVICE_ACCOUNT
+              value: {{ required "agentController.runtimeServiceAccountName is required when agentController.enabled=true" .Values.agentController.runtimeServiceAccountName | quote }}
+            - name: AGENT_RUNTIME_IMAGE
+              value: {{ required "agentController.runtimeImage is required when agentController.enabled=true" .Values.agentController.runtimeImage | quote }}
+            - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS
+              value: "300"
+            {{- end }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "opencrane-server") | nindent 12 }}
             - name: INGRESS_DOMAIN
               value: {{ .Values.ingress.domain | quote }}
