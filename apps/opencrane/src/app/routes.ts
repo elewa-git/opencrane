@@ -19,6 +19,9 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/retrieval";
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { spec } from "@opencrane/backend/server/api-spec";
+import { __CreateControllerAuthorityRouter, PrismaControllerAuthorityRepository } from "@opencrane/backend/server/runs";
+
+import type { ControllerAuthorityConfig } from "./controller-authority.config.types.js";
 
 /**
  * Registers all API routes on the given Express application instance.
@@ -43,7 +46,7 @@ import { spec } from "@opencrane/backend/server/api-spec";
  *     projected pod token, which the browser-session middleware cannot satisfy.
  * @see apps/opencrane/helm/templates/_networkpolicy.tpl — the runtime-plane policies.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, controllerAuthority: ControllerAuthorityConfig | null = null): void
 {
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
@@ -51,6 +54,12 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
   // Note: /api/internal/contract enforces per-tenant identity via TokenReview — not NetworkPolicy-only.
   app.use("/api/internal/contract", _RegisterInternalTenantContract(prisma, authApi));
   app.use("/api/internal/awareness/participation", _RegisterInternalParticipation(prisma, authApi));
+  // Controller authority is internal-only and performs its own exact TokenReview. It is disabled
+  // until the chart provides one closed controller identity and one immutable runtime profile.
+  if (controllerAuthority !== null)
+  {
+    app.use("/api/internal/agent-controller", __CreateControllerAuthorityRouter({ repository: new PrismaControllerAuthorityRepository(prisma, controllerAuthority.runtimeProfiles), authApi, identity: controllerAuthority.identity, nowEpochMs: Date.now }));
+  }
 }
 
 /**

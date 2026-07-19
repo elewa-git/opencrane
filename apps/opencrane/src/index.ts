@@ -29,6 +29,7 @@ import { _SetTenantSuspended } from "@opencrane/backend/server/tenants";
 // namespace, so a silo stands on its own; the fleet-manager watches only the cluster-scoped
 // ClusterTenant CR and nothing inside a silo.
 import { _LoadOperatorConfig } from "./app/config.js";
+import { _LoadControllerAuthorityConfig } from "./app/controller-authority.config.js";
 import { _BuildHostingAdapter } from "./hosting/index.js";
 
 // Route any stray console.* call (first-party or third-party) through the
@@ -116,7 +117,7 @@ export function createInternalApp(prisma: PrismaClient, authApi: k8s.Authenticat
   app.use(express.json());
   app.use(___RequestContext());
   app.use(pinoHttp({ logger: log, genReqId: function _genReqId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
-  _RegisterInternalRoutes(app, prisma, authApi);
+  _RegisterInternalRoutes(app, prisma, authApi, _LoadControllerAuthorityConfig());
   app.use(_ErrorHandler(log));
   return app;
 }
