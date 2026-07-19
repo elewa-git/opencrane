@@ -257,6 +257,10 @@ Contract rollout canary control and fleet participation monitoring.
 
 ### Sessions
 
+The current API exposes active assistant sessions. The target Thread, Run and ordered RunEvent
+contract is documented under [Runs & streaming](/integrators/agents/runs-streaming); its routes are
+🔶 planned and will appear here only when they ship.
+
 | Method | Path | Description |
 |--------|------|-------------|
 | `GET` | `/sessions` | List active assistant sessions |

@@ -32,4 +32,5 @@ team, or whole department — see [Control access](/guide/permissions).
 ## Going deeper
 
 How tool calls are routed, scoped, and audited is covered in the
-[MCP gateway deep dive](/integrators/mcp-gateway).
+[agent MCP-calling flow](/integrators/agents/mcp-calling). Catalogue installation, Obot deployment
+and credential custody are covered in the [MCP gateway deep dive](/integrators/mcp-gateway).
