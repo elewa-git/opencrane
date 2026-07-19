@@ -407,6 +407,30 @@ DB numbers reflect the target shape.
 
 ---
 
+## Decision D13 — document `_LoadControllerAuthorityConfig` in code and on the website authority page
+
+**Status:** DECIDED (Jente, 2026-07-19). Instance of the D9 documentation standard, extended to
+reader-facing docs.
+
+**Context.** `_LoadControllerAuthorityConfig` (`apps/opencrane/src/app/controller-authority.config.ts:4`)
+is the fail-closed gate that mounts the controller authority route only when the full identity +
+runtime-profile configuration is present, returning `null` (route absent) otherwise. Today it carries
+one JSDoc line, and the website's authority/identity page (`website/security/identity.md`) has **zero**
+mention of the controller-authority plane, capabilities, or this config gate.
+
+**Decision.** Document it at both levels:
+- **In code** — expand the JSDoc to state the exact required configuration (audience, expected
+  ServiceAccount/namespace identity; runtime-profile image digest, TTL bounds, DNS-label names), the
+  fail-closed contract (any missing/invalid field → `null` → route never mounted → the controller
+  cannot obtain authority), and *why* it fails closed rather than defaulting.
+- **On the website** — add a controller-authority section to the authority page
+  (`website/security/identity.md`, per the `website` agent house style): how the controller
+  authenticates (Kubernetes `TokenReview`), how this config gate makes the authority route present
+  only under complete, safe configuration, and how it fits the capability / proof-bound model (the
+  page currently documents neither). This closes the reader-facing gap, not just the code comment.
+
+---
+
 ## Related open feedback (not yet decided)
 
 - **A — ADR 0002 drift:** `values.yaml:12` still cites "ONE CNPG cluster per silo (ADR 0002
