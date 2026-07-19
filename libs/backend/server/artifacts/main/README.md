@@ -1,8 +1,20 @@
-# @opencrane/backend/server/artifacts — Artifact revisions
+# @opencrane/backend/server/artifacts — artifact finalization write authority
 
-Owns finalization of visible artifact metadata after ArtifactStore has promoted the bytes. It
-checks the promotion evidence and commits the revision, current pointer, and delivery intent as
-one durable result; it does not perform artifact byte I/O itself.
+Owns the finalization of artifact revisions: turning bytes already promoted by the ArtifactStore
+into canonical revision metadata, the current-revision pointer, a consumed promotion receipt, and
+an outbox event — all in one atomic repository commit. `__FinalizeArtifactRevision` validates the
+storage-neutral command first (SHA-256 content address, non-negative byte length, media type,
+lease id, receipt digest, positive revision, creator, idempotency key) and denies anything
+malformed before persistence. Replayed idempotency keys surface as `finalized` with
+`idempotent: true`; stale or replayed promotion receipts stay fail-closed.
 
-The public surface is `src/index.ts`; persistence is supplied through `ArtifactAuthorityRepository`.
-See [`../../README.md`](../../README.md) for the control-plane map.
+The boundary is deliberate: this authority persists leases, receipts, and metadata — it never
+stores or serves artifact bytes, which remain behind the ArtifactStore. Persistence goes through
+the `ArtifactAuthorityRepository` port whose atomic contract is exercised directly against
+Postgres by `tests/artifact-authority.sql` (the `test:sql` target). The OpenCrane server composes
+it; the library exposes no transport.
+
+Tagged `scope:artifacts`: it may depend only on `scope:artifacts` (the models package) and
+`scope:shared` — never on apps, byte stores, or sibling domains.
+
+See [`../../README.md`](../../README.md) for the control-plane capability map.

@@ -1,9 +1,23 @@
-# @opencrane/backend/agents/personal/memory — Memory catalogue
+# @opencrane/backend/agents/personal/memory — memory fact catalogue authority
 
-Owns the durable-memory catalogue for a personal agent. It records consent, provenance, and a
-content digest after the memory store accepts a fact; the fact content itself stays in the durable
-memory store rather than being copied into this authority.
+Personal-agent product domain that catalogues durable memory facts. `__RecordMemoryFact`
+records metadata and provenance only — dataset, Cognee external id, a SHA-256 content digest
+(validated with `___IsSha256ContentAddress`), consent state, sensitivity, and exactly one
+explainable source (an `ArtifactRevision`, a `Message`, or an explicit user statement). The
+durable fact content itself stays in Cognee and is never copied into Postgres.
 
-The public surface is `src/index.ts`; persistence and outbox commitment are supplied through
-`MemoryCatalogRepository`. See [`../../README.md`](../../README.md) for the other personal-agent
-capabilities.
+Persistence sits behind `MemoryCatalogRepository.recordFactAtomically`, which commits the
+catalogue row and the downstream Cognee outbox intent in one transaction; repeat delivery of
+the same `idempotencyKey` is reported as success (`idempotent: true`), while retired or
+missing datasets and correction conflicts fail closed. Corrections reference the superseded
+fact via `supersedesFactId` rather than mutating it. Database-side guarantees are exercised
+by `tests/memory-authority.sql` via the `test:sql` target.
+
+It does not talk to Cognee, run retrieval, or store fact content — it is the catalogue write
+authority composed by the personal-agent product backend.
+
+Tagged `type:lib`, `layer:backend`, `scope:personal-memory`: it may depend only on
+`scope:artifacts` models and `scope:shared` packages — never on apps or sibling
+personal-agent domains.
+
+See [`../../README.md`](../../README.md) for the personal-agent capability map.
