@@ -38,6 +38,34 @@ ingress:
 gatewayProxy:
   enabled: true
 
+# Dev-plane reservations measured against gke_weownai-proto_europe-west1-b_opencrane-dev
+# on 2026-07-19. CPU requests keep six near-idle silo planes schedulable; memory requests
+# reserve observed steady-state use plus headroom so the stateful planes are not evicted first.
+# These target-plane values deliberately exclude the retired OpenClaw and skill-registry paths.
+clustertenantManager:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 256Mi
+
+  cognee:
+    resources:
+      requests:
+        cpu: 25m
+        memory: 768Mi
+
+litellm:
+  resources:
+    requests:
+      cpu: 25m
+      memory: 768Mi
+
+mcpGateway:
+  resources:
+    requests:
+      cpu: 75m
+      memory: 256Mi
+
 tenant:
   gateway:
     # -- OC-2 / CONN.4 trusted-proxy allowlist for the opencrane-dev cluster.
