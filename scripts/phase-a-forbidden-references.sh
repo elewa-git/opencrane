@@ -156,6 +156,26 @@ _check_pattern "OPENCLAW-OBOT-HEALTH" '(Obot health checker|Obot health)' "($TAR
 _check_file_absent "TENANT-CRD-RETIRED-FIELD" "apps/_infra/deploy-k8s/templates/crds/tenant.opencrane.io_tenants.yaml" '^[[:space:]]+(mcpPolicy|channels|configOverrides|openclawVersion):'
 _check_file_absent "TENANT-SPEC-RETIRED-FIELD" "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/models/tenant-spec.types.ts" '^[[:space:]]+(mcpPolicy|channels|configOverrides|openclawVersion)\??:'
 
+# The Skill Registry producer and its delivery API are deleted. These were the direct consumers
+# that kept issuing tokens, publishing registry URLs, and silently attempting delivery after that
+# deletion. Keep the assertion path-specific: historical design records may still explain the
+# retired subsystem, but no live consumer may recreate it.
+SKILL_REGISTRY_CONSUMER_PATTERN='(feat-skill-registry|SKILL_REGISTRY|skillRegistry)'
+for skill_registry_consumer in \
+	"apps/opencrane/src/app/config.ts" \
+	"apps/opencrane/src/__tests__/config.test.ts" \
+	"apps/feat-openclaw-tenant/deploy/entrypoint.sh" \
+	"apps/feat-openclaw-tenant/README.md" \
+	"libs/backend/feat-openclaw-tenant/main/src/operator-config.types.ts" \
+	"libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/2-config-map.ts" \
+	"libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts" \
+	"libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/workspace/AGENTS.md" \
+	"libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/workspace/TOOLS.md" \
+	"libs/backend/feat-openclaw-tenant/main/src/__tests__/fixtures.ts" \
+	"libs/backend/feat-openclaw-tenant/main/src/__tests__/tenants/tenant-resource-builder.test.ts"; do
+	_check_file_absent "SKILL-REGISTRY-CONSUMER" "$skill_registry_consumer" "$SKILL_REGISTRY_CONSUMER_PATTERN"
+done
+
 # Pairing/device state and the no-token pod-token route are direct-deletion targets. Constrain the
 # remaining implementation and documentation so no new dependency can grow before removal.
 _check_pattern "PAIRING-DEVICE" '(BrokeredDevice|brokered-device|openclaw-pairing|/pod-token/cut|/:name/pairing)' "($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS)"

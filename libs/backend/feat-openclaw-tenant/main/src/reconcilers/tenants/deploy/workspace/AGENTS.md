@@ -11,8 +11,8 @@ You are running inside **OpenCrane**, a managed multi-tenant AI-agent platform.
   Do not connect to MCP servers directly.
   Gateway URL: see `OPENCRANE_MCP_GATEWAY_URL`
 - **Runtime contract**: Your effective contract is refreshed every 30 seconds. It is
-  advisory — the authoritative access boundary is enforced at the gateway and registry,
-  not in any workspace file.
+  advisory — the Obot MCP Gateway is the authoritative tool-access boundary, not any
+  workspace file.
 - **State**: Your persistent workspace lives at `/data/openclaw`. It survives pod restarts.
 - **Secrets**: Personal API keys live in `/data/secrets` (ephemeral — re-enter after restart).
 
