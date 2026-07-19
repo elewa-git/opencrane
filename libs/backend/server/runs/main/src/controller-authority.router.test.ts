@@ -17,7 +17,7 @@ function _authApi(username = "system:serviceaccount:opencrane-system:agent-contr
 function _repository(): ControllerAuthorityRepository
 {
 	return {
-		claimDesiredJob: vi.fn().mockResolvedValue({ runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", namespace: "runtime", serviceAccountName: "agent-runtime", image: "ghcr.io/opencrane/runtime@sha256:abc", expiresAtEpochMs: 2_000 }),
+		claimDesiredJob: vi.fn().mockResolvedValue({ runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectId: "user-1", namespace: "runtime", serviceAccountName: "agent-runtime", image: "ghcr.io/opencrane/runtime@sha256:abc" }),
 		recordJob: vi.fn().mockResolvedValue({ bootstrapReady: false }),
 		recordPod: vi.fn().mockResolvedValue(undefined),
 		rejectDesiredJob: vi.fn().mockResolvedValue(undefined),
