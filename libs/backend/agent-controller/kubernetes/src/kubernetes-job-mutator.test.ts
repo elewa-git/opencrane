@@ -7,7 +7,7 @@ import { _KubernetesAgentJobMutator } from "./kubernetes-job-mutator.js";
 /** Construct one controller-approved Kubernetes Job projection. */
 function _Projection(): AgentJobProjection
 {
-	return { name: "agent-run-run-123-a1", labels: { "opencrane.io/run-id": "run-123" }, namespace: "opencrane-runtime", serviceAccountName: "agent-runtime", image: "ghcr.io/opencrane/agent-runtime@sha256:abc", suspend: true, backoffLimit: 0 };
+	return { name: "agent-run-run-123-a1", labels: { "opencrane.io/run-id": "run-123" }, namespace: "opencrane-runtime", serviceAccountName: "agent-runtime", image: "ghcr.io/opencrane/agent-runtime@sha256:abc", suspend: true, backoffLimit: 0, projectedTokenTtlSeconds: 600 };
 }
 
 /** Constructs a Kubernetes Job response with immutable identity. */

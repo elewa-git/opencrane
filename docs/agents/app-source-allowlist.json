@@ -101,6 +101,7 @@
     "apps/channel-proxy/project.json",
     "apps/artifact-service/project.json",
     "apps/agent-controller/project.json",
+    "apps/agent-runtime/project.json",
     "apps/postgres/project.json",
     "apps/opencrane/package.json",
     "apps/_infra/deploy-k8s/project.json",

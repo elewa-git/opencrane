@@ -68,9 +68,9 @@ spec:
             - name: AGENT_RUNTIME_PROFILE
               value: "personal-default"
             - name: AGENT_RUNTIME_NAMESPACE
-              value: {{ default .Release.Namespace .Values.agentController.namespace | quote }}
+              value: {{ default .Release.Namespace .Values.agentRuntime.namespace | quote }}
             - name: AGENT_RUNTIME_SERVICE_ACCOUNT
-              value: {{ required "agentController.runtimeServiceAccountName is required when agentController.enabled=true" .Values.agentController.runtimeServiceAccountName | quote }}
+              value: {{ required "agentRuntime.serviceAccountName is required when agentController.enabled=true" .Values.agentRuntime.serviceAccountName | quote }}
             - name: AGENT_RUNTIME_IMAGE
               value: {{ required "agentController.runtimeImage is required when agentController.enabled=true" .Values.agentController.runtimeImage | quote }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS

@@ -17,6 +17,9 @@ dependencies:
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
   version: 0.1.0
+- name: opencrane-agent-runtime
+  repository: file://../../agent-runtime/helm
+  version: 0.1.0
 - name: opencrane-database-schema
   repository: file://components/database-schema
   version: 0.1.0
@@ -32,5 +35,5 @@ dependencies:
 - name: langfuse
   repository: https://langfuse.github.io/langfuse-k8s
   version: 1.5.37
-digest: sha256:d3297dbbc7b94bf61c4e981642321d3330d39d2db1ba50af7120a741f46e53e7
-generated: "2026-07-19T03:35:56.428248+03:00"
+digest: sha256:fb562e28d0633eacc9698cf57addff2a1058e38a0aceba649bc8e03326e1be60
+generated: "2026-07-19T04:21:19.150289+03:00"

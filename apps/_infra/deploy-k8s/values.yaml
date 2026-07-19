@@ -322,8 +322,15 @@ artifactService:
       cpu: 500m
       memory: 512Mi
 
-# -- Database-blind controller for suspended, server-authorized agent Jobs. Disabled until the
-# separately owned agent-runtime app and one-time bootstrap delivery are both available.
+# -- Runtime workload identity. The controller cannot create a Job unless this target KSA boundary
+# is rendered; Jobs remain suspended until the proof-bound bootstrap exchange lands.
+agentRuntime:
+  enabled: false
+  namespace: ""
+  serviceAccountName: agent-runtime
+  projectedTokenTtlSeconds: 600
+
+# -- Database-blind controller for suspended, server-authorized agent Jobs.
 agentController:
   enabled: false
   namespace: ""
@@ -332,7 +339,6 @@ agentController:
     tag: 0.1.0
     pullPolicy: IfNotPresent
   replicas: 1
-  runtimeServiceAccountName: agent-runtime
   runtimeImage: ""
   projectedTokenTtlSeconds: 600
   pollIntervalMs: 1000

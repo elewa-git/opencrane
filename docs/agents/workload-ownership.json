@@ -8,7 +8,7 @@
     "channel-proxy",
     "artifact-service",
     "agent-controller",
-    "agent-controller-prepared-job",
+    "agent-runtime-prepared-job",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -73,6 +73,7 @@
       "id": "agent-controller",
       "setValues": [
         "agentController.enabled=true",
+        "agentRuntime.enabled=true",
         "agentController.runtimeImage=ghcr.io/italanta/opencrane-agent-runtime@sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         "agentController.kubernetesApi.cidr=10.0.0.0/8"
       ],
@@ -146,13 +147,13 @@
     },
     {
       "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts",
-      "anchor": "return _observed(await this.batchApi.createNamespacedJob({",
-      "workloadIds": ["agent-controller-prepared-job"]
+      "anchor": "this.batchApi.createNamespacedJob({ namespace: projection.namespace, body: __BuildRuntimeJobTemplate(projection) })",
+      "workloadIds": ["agent-runtime-prepared-job"]
     },
     {
-      "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts",
+      "path": "libs/backend/agent-runtime/job-template/src/job-template.ts",
       "anchor": "kind: \"Job\"",
-      "workloadIds": ["agent-controller-prepared-job"]
+      "workloadIds": ["agent-runtime-prepared-job"]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -271,13 +272,13 @@
       "sharedImageContract": "The controller deploys as the sole Kubernetes mutation authority for agent workload Jobs."
     },
     {
-      "id": "agent-controller-prepared-job",
+      "id": "agent-runtime-prepared-job",
       "podClass": "Job/agent-runtime-prepared-attempt",
       "image": "server-authorized immutable runtime image",
-      "owner": "apps/agent-controller",
+      "owner": "apps/agent-runtime",
       "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agent-controller/kubernetes/src/kubernetes-job-mutator.ts", "anchor": "kind: \"Job\"" },
-      "sharedImageContract": "The controller owns only the suspended, bootstrap-inert Job projection. A future app-owned runtime replacement assumes execution ownership before bootstrapReady can become true."
+      "source": { "type": "file", "path": "libs/backend/agent-runtime/job-template/src/job-template.ts", "anchor": "kind: \"Job\"" },
+      "sharedImageContract": "The runtime app owns the suspended, bootstrap-inert Job identity, token, and scratch projection. The controller remains its sole Kubernetes mutator."
     },
     {
       "id": "cognee",

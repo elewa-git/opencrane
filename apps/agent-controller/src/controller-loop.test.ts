@@ -9,7 +9,7 @@ import type { ControllerLoopLogger, ControllerReadiness } from "./controller-loo
 function _Dependencies(failAuthority = false, failKubernetes = false): AgentControllerDependencies
 {
 	return {
-		policy: { runtimeNamespace: "opencrane-runtime", runtimeServiceAccountName: "agent-runtime", runtimeImage: "ghcr.io/opencrane/agent-runtime@sha256:abc" },
+		policy: { runtimeNamespace: "opencrane-runtime", runtimeServiceAccountName: "agent-runtime", runtimeImage: "ghcr.io/opencrane/agent-runtime@sha256:abc", runtimeProjectedTokenTtlSeconds: 600, runtimePodLabels: { "app.kubernetes.io/name": "opencrane", "app.kubernetes.io/instance": "runtime-test" } },
 		desiredJobs: { async readNext() { if (failAuthority) throw new Error("authority unavailable"); return null; } },
 		jobs: {
 			async check() { if (failKubernetes) throw new Error("Kubernetes unavailable"); },

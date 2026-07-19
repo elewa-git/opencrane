@@ -1,6 +1,7 @@
 import * as k8s from "@kubernetes/client-node";
 
 import type { AgentJobMutator, AgentJobProjection, ObservedAgentJob } from "@opencrane/backend/agent-controller";
+import { __BuildRuntimeJobTemplate } from "@opencrane/backend/agent-runtime/job-template";
 
 /** Kubernetes-only adapter that projects exact controller-approved Jobs. */
 export class _KubernetesAgentJobMutator implements AgentJobMutator
@@ -40,35 +41,7 @@ export class _KubernetesAgentJobMutator implements AgentJobMutator
 	/** Creates only a suspended, non-retrying Job with no Kubernetes API token. */
 	async createSuspended(projection: AgentJobProjection): Promise<ObservedAgentJob>
 	{
-		return _observed(await this.batchApi.createNamespacedJob({
-			namespace: projection.namespace,
-			body: {
-				apiVersion: "batch/v1",
-				kind: "Job",
-				metadata: { name: projection.name, labels: projection.labels },
-				spec: {
-					suspend: true,
-					backoffLimit: projection.backoffLimit,
-					template: {
-						metadata: { labels: projection.labels },
-						spec: {
-							serviceAccountName: projection.serviceAccountName,
-							automountServiceAccountToken: false,
-							restartPolicy: "Never",
-							containers: [{
-								name: "agent-runtime",
-								image: projection.image,
-								securityContext: {
-									allowPrivilegeEscalation: false,
-									capabilities: { drop: ["ALL"] },
-									readOnlyRootFilesystem: true,
-								},
-							}],
-						},
-					},
-				},
-			},
-		}));
+		return _observed(await this.batchApi.createNamespacedJob({ namespace: projection.namespace, body: __BuildRuntimeJobTemplate(projection) }));
 	}
 
 	/** Deletes only the exact previously observed Job UID. */

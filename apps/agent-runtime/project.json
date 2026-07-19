@@ -1,0 +1,8 @@
+{
+  "name": "agent-runtime",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/agent-runtime",
+  "tags": ["type:app", "layer:entrypoint", "scope:agents"],
+  "targets": { "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/agent-runtime/helm" } } }
+}

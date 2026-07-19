@@ -18,7 +18,7 @@ export async function __ReconcileAgentJob(dependencies: AgentControllerDependenc
 	}
 
 	// 2. Create only an inert projection and durably acknowledge its immutable Kubernetes UID.
-	const projection = _BuildJobProjection(desired);
+	const projection = _BuildJobProjection(desired, dependencies.policy.runtimeProjectedTokenTtlSeconds, dependencies.policy.runtimePodLabels);
 	const existing = await dependencies.jobs.get(projection);
 	const observed = existing ?? await dependencies.jobs.createSuspended(projection);
 	if (!_MatchesProjection(observed, projection))
@@ -58,12 +58,13 @@ export async function __ReconcileAgentJob(dependencies: AgentControllerDependenc
 }
 
 /** Build a deterministic projection that carries no untrusted Kubernetes fields. */
-export function _BuildJobProjection(desired: DesiredAgentJob): AgentJobProjection
+export function _BuildJobProjection(desired: DesiredAgentJob, projectedTokenTtlSeconds = 600, runtimePodLabels: Readonly<Record<string, string>> = {}): AgentJobProjection
 {
 	return {
 		name: _KubernetesJobName(desired.runId, desired.attempt),
 		namespace: desired.namespace,
 		labels: {
+			...runtimePodLabels,
 			"app.kubernetes.io/component": "agent-runtime",
 			"opencrane.io/run-id": desired.runId,
 			"opencrane.io/run-attempt": String(desired.attempt),
@@ -75,6 +76,7 @@ export function _BuildJobProjection(desired: DesiredAgentJob): AgentJobProjectio
 		image: desired.image,
 		suspend: true,
 		backoffLimit: 0,
+		projectedTokenTtlSeconds,
 	};
 }
 
