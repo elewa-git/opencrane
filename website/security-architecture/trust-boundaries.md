@@ -103,7 +103,8 @@ and tool use — executes. Its boundary is the strangest of the four because it 
 defined by absence:
 
 - zero Kubernetes RBAC, no automounted token;
-- deny-all ingress; egress to DNS and telemetry only;
+- deny-all ingress (no incoming connections); egress (outgoing connections) to
+  DNS and telemetry only;
 - **no network path to the server, the database, or the artifact store** — in
   the current phase the runtime cannot open a connection to any of them
   (the proof-bound bootstrap listener arrives in a later phase, as its own

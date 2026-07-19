@@ -133,7 +133,7 @@ a whole silo). Evaluation is deliberately boring:
 Grants are never edited in place — changing access means writing a new grant or
 revoking an old one — so the evidence trail behind any decision stays intact.
 
-## Effective access: two principals, one intersection
+## Effective access: two parties, one intersection
 
 When a *user* asks an *agent* to act, whose permissions apply? Both. The server
 computes **effective access** as the intersection of what the human actor may do

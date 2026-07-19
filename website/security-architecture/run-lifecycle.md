@@ -110,7 +110,9 @@ next slices of the current build phase.
 Send a message while your agent is mid-run and two things are simultaneously
 true: the message must be durable *immediately*, and the run must not be
 corrupted by it. OpenCrane resolves this with a **steering inbox** and one rule
-about timing.
+about timing. The outcome, in one sentence: your message is either absorbed at
+a safe point or visibly deferred to the next run — never dropped, and never
+injected mid-tool.
 
 The message is persisted at once (with a `steering.queued` event). It is
 considered for absorption only at a **model-decision boundary** — the moment

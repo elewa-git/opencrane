@@ -56,8 +56,8 @@ it; interim builds may still run one Postgres server per component.
 ## Triggers: the schema defends itself
 
 Application code enforces the rules of the previous pages — but application code
-has bugs, and a future migration or an operator connected directly with `psql`
-(the Postgres console) bypasses it entirely. So the most safety-critical
+has bugs, and a future migration or an administrator connected directly with
+`psql` (the Postgres console) bypasses it entirely. So the most safety-critical
 invariants are enforced a layer lower, as **database triggers**: functions
 Postgres itself runs on every write, refusing illegal changes no matter who
 makes them.
