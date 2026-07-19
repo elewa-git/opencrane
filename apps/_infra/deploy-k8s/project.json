@@ -11,6 +11,10 @@
     "dependency-status": {
       "executor": "nx:run-commands",
       "options": { "command": "helm dependency list apps/_infra/deploy-k8s" }
+    },
+    "runtime-identity-negative-tests": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash scripts/runtime-identity-negative-tests.sh" }
     }
   }
 }
