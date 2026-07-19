@@ -5,7 +5,11 @@ platform stays efficient as tenant count grows. Captures the findings from the 2
 capacity investigation and records the networking/mesh decision (**upstream, self-managed Cilium
 as the portable k8s-native dataplane — NOT a cloud-managed flavour; Linkerd deferred**).
 
-Status: living plan. Phase 0 (dev resize) is done; the rest is sequenced below.
+Status: largely historical (June–July 2026). Phase 0 (dev resize) is done and the D1/D2
+substrate decisions are executed (ADR 0003: upstream Cilium; Linkerd removed). The plane-pooling
+and scale-to-zero phases (D4/D5) are deferred until measured target-workload evidence exists
+(plan.md 2026-07-18 rebase, #136), and the per-silo plane tables below predate the
+`feat-skill-registry` deletion.
 
 ---
 

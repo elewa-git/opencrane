@@ -8,8 +8,8 @@ time to do it.
 ## Isolation tiers — dedicated compute (deferred from S6 / ADR 0002)
 
 S6 ([ADR 0002](docs/adr/0002-per-clustertenant-silo-architecture.md)) gives every ClusterTenant
-a dedicated per-CT stack (Obot, feat-skill-registry, Cognee, LiteLLM, operator, networking, DB) **on
-shared nodes**. The tiers that change the *underlying compute* are deferred:
+a dedicated per-CT stack (Obot, Cognee, LiteLLM, operator, networking, DB — the per-CT
+`feat-skill-registry` originally in this stack has since been deleted) **on shared nodes**. The tiers that change the *underlying compute* are deferred:
 
 - **`dedicatedNodes`** — pin a tenant's per-CT stack to its own node pool (taints/affinity).
   Pure scheduling change on top of the existing per-CT topology; no plane-architecture change.
@@ -30,8 +30,10 @@ Today the **only** central (shared, cross-silo) components are the **opencrane-u
 grows, e.g.:
 
 - A **central skills catalog / registry** — a shared source catalog/marketplace, distinct from
-  the per-CT feat-skill-registry *delivery* plane each tenant already runs. (Per-CT delivery stays;
-  this would be an upstream shared catalog tenants pull from.)
+  per-silo skill storage. (The per-CT `feat-skill-registry` delivery service is deleted; skills
+  are now Postgres-modelled `Skill`/`SkillRevision` records plus `ArtifactStore` bytes, with
+  delivery/execution arriving on the sandbox substrate. This item would be an upstream shared
+  catalog tenants pull from.)
 
 Any new central component must justify why it is safe to share cross-silo (it sees no tenant
 data, or only super-admin-scoped data) before leaving the per-CT default.

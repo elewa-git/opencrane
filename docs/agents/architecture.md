@@ -14,18 +14,18 @@ The non-obvious shape of the system (verified June 2026). Read this before touch
 [`cluster-architecture.md` → Tenancy Model](./cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant)):
 
 - **ClusterTenant** (cluster-scoped CRD `clustertenants.opencrane.io`, **optional** parent) — the first-class *customer* / isolation unit. Carries `isolationTier`, compute mode, resource quota, and its own base domain; binds a namespace (`status.boundNamespace`).
-- **UserTenant** (namespaced CRD, always exists) — **is** the per-user OpenClaw agent-pod definition (one pod per UserTenant), exposed at `<user>.<clustertenant-domain>`. "UserTenant" is the canonical doc name; the CRD kind is still `Tenant` in code. There is no separate "openclaw" CRD; "OpenClaw" is the pod runtime.
+- **UserTenant** (namespaced CRD, always exists) — **is** the per-user OpenClaw agent-pod definition (one pod per UserTenant), reached through the org host `<org>.<base>` via the operator's identity-routing proxy (no per-user public host). "UserTenant" is the canonical doc name; the CRD kind is still `Tenant` in code. There is no separate "openclaw" CRD; "OpenClaw" is the pod runtime.
 - A UserTenant *without* `clusterTenantRef` deploys into the install namespace (single-install legacy mode). *With* a ref, the operator resolves the parent ClusterTenant's bound namespace and applies its isolation policy.
 - `isolationTier` ∈ `shared` (bin-packed nodes) · `dedicatedNodes` (tainted node pool) · `dedicatedCluster` (own kube-apiserver via external provisioner). Enum: `ClusterTenantIsolationTier` in `libs/contracts/src/cluster-tenant.types.ts`.
 
-**Five planes** (each detailed in [`app-specific.md`](./app-specific.md)):
+**Four planes** (each detailed in [`app-specific.md`](./app-specific.md)):
 
 | Plane | Role | Talks to |
 |-------|------|----------|
 | **opencrane-api** | API-first management surface (`/api/v1`), OIDC broker, source of truth for Tenants/AccessPolicies/Grants/MCP/Skills. Dual-writes CRDs + Postgres. | everything |
 | **operator** | Reconciles UserTenant (`Tenant`)/ClusterTenant/AccessPolicy CRs → namespaces, pods, Ingresses, NetworkPolicies, buckets. | Kubernetes API |
 | **Obot MCP gateway** | MCP credential custody and tool-execution PEP. OpenCrane owns catalog and grants; tenant pods reach MCP servers *through* Obot. | tenant pods, MCP workloads |
-| **feat-central-agents** | Background ingestion worker (Slack connector → Postgres `OrgDocument`). Not API-first. | external sources, Postgres |
+| **feat-central-agents** | Background ingestion worker (Slack connector → Cognee org index; sync cursor in Postgres). Not API-first. | external sources, Cognee, Postgres |
 
 **Target identity is purpose-specific**, with non-interchangeable credentials: (1) OIDC session
 cookies for human operators and (2) **projected SA tokens** for in-cluster workloads
@@ -44,7 +44,7 @@ to the new product. Do not port their rows, CRDs, subject bindings, credentials,
 schemas, protocols, or bytes. Refactor capabilities directly to the target contract and delete the
 replaced implementation in the same slice.
 
-**Effective contract:** each tenant's entitlements compile into one SHA256-keyed JSON blob (`GET /:name/effective-contract`) covering awareness datasets + MCP servers + skill bundles. Tenant pods re-pull it on a ~30s loop; on `contractId` change the pod gets a SIGHUP + a re-rendered config. This is the runtime authorization mechanism — changing a grant is not effective until the contract recompiles and the pod re-pulls.
+**Effective contract:** each tenant's entitlements compile into one SHA256-keyed JSON blob (`GET /:name/effective-contract`) covering awareness datasets + MCP servers + skills. Tenant pods re-pull it on a ~30s loop; on `contractId` change the pod gets a SIGHUP + a re-rendered config. This is the runtime authorization mechanism — changing a grant is not effective until the contract recompiles and the pod re-pulls.
 
 ## IAM-First
 

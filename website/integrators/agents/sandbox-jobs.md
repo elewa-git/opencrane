@@ -34,7 +34,7 @@ for the source component model.
 | OpenCrane | Authorisation, approval, immutable assignment, attempt/retry, cancellation, audit, RunEvents and ArtifactVersions |
 | `apps/agent-controller` | Only OpenCrane caller of the private lifecycle API; maps one approved attempt to one sandbox |
 | OpenSandbox | Confined sandbox creation, `execd`, egress component, TTL/resource enforcement and execution diagnostics |
-| `apps/tool-runner` | Approved images and execution profiles; zero Kubernetes RBAC and scratch-only workspace |
+| `apps/agent-runtime` | Approved images and execution profiles; zero Kubernetes RBAC and scratch-only workspace |
 | Obot | MCP integration execution and credential custody |
 
 The OpenSandbox API key authenticates one internal controller hop. It is not tenant identity or
@@ -84,7 +84,7 @@ action, arguments, artifacts, egress, resources or capability of the running san
 
 ## Initial security profile
 
-- No public lifecycle ingress and no access from agent or tool-runner workloads.
+- No public lifecycle ingress and no access from agent or agent-runtime workloads.
 - Kubernetes rights limited to named sandbox workload types in the sandbox namespace.
 - No service-account token automount or Kubernetes RBAC inside the sandbox.
 - Default-deny Cilium policy and an immutable allow-list rendered from the action capability.

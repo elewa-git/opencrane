@@ -72,7 +72,7 @@ suppresses the entitlement.
 
 ## Inter-user sharing (S4d)
 
-A user who holds an entitlement to a tool (MCP server) or skill bundle can share that
+A user who holds an entitlement to a tool (MCP server) can share that
 entitlement with another user or group. This is an explicit, identity-bound action:
 the share is written as an `Allow` grant on the recipient, and the recipient's Tenant
 picks it up on its next contract poll.
@@ -85,7 +85,7 @@ picks it up on its next contract poll.
 │                                                │
 │  1. Resolve caller from OIDC session           │
 │  2. Validate payloadType + recipientType       │
-│  3. Confirm the payload exists (MCP/skill)     │
+│  3. Confirm the payload exists (MCP server)    │
 │  4. Confirm the group exists (group recipient) │
 │  5. LEAST-PRIVILEGE GATE:                      │
 │     compile(caller, payloadType) → Allow?      │

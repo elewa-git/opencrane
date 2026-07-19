@@ -14,8 +14,13 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 |---------|-----------|-----------|
 | `@opencrane/server` | [apps/opencrane.md](./apps/opencrane.md) | API-first hub (**Express 5** + Prisma + K8s client). The app owns process bootstrap, configuration, route/lifecycle composition, Prisma, and its Helm unit; HTTP capabilities and reconcilers live in libraries. Listens `:8080`. |
 | `@opencrane/feat-central-agents` | [apps/feat-central-agents.md](./apps/feat-central-agents.md) | Background ingestion worker (not API-first). Slack → normalise → Cognee; cursor in Postgres. `/healthz`, `/metrics`. |
+| `@opencrane/artifact-service` | [apps/artifact-service.md](./apps/artifact-service.md) | Guarded CAS write path: signed write leases in, atomic content-addressed promotion, signed receipts out. Zero RBAC, one PVC per silo. Protocol lives in `libs/backend/artifacts/*`. |
+| `@opencrane/agent-controller` | [`apps/agent-controller/README.md`](../../apps/agent-controller/README.md) | Sole workload mutator of the target run plane — reconciles desired runs into Kubernetes Jobs; no other app may schedule execution. Logic in `libs/backend/agent-controller/*`. |
+| `agent-runtime` | [`apps/agent-runtime/README.md`](../../apps/agent-runtime/README.md) | Inert Job boundary: owns the standing ServiceAccount and policies agent Jobs run under — zero RBAC, no token automount. Helm-only app root. |
+| `@opencrane/channel-proxy` | [`apps/channel-proxy/README.md`](../../apps/channel-proxy/README.md) | Edge trust boundary: terminates untrusted client connections and relays to the OpenCrane server; makes no product decisions. Transport lives in `libs/backend/channel-proxy/*`. |
+| `postgres` | [`apps/postgres/README.md`](../../apps/postgres/README.md) | Durable PostgreSQL deployable: one CloudNativePG `Cluster` per silo with expandable storage, ingress isolation, and optional backup/recovery. |
 | _(apps/opencrane-ui)_ | — | Org-admin Angular SPA, ported in from WeOwnAI (#152). PrimeNG, zoneless/signals, standalone components — see [`angular.md`](./angular.md). Just another client of the opencrane-api (API-First Rule below). `npx nx build\|serve opencrane-ui`. |
-| `cognee`, `litellm`, `obot` | Local `README.md` | Deployment-only Nx apps under `apps/_infra/<name>`. Each owns its pinned image contract, identity, service, policy, and Helm templates; the upstream product source remains external. |
+| `cilium`, `cognee`, `litellm`, `obot` | Local `README.md` | Deployment-only Nx apps under `apps/_infra/<name>`. Each owns its pinned image contract, identity, service, policy, and Helm templates; the upstream product source remains external. |
 | `langfuse` | [`apps/_infra/langfuse/README.md`](../../apps/_infra/langfuse/README.md) | Pinned upstream deployment wrapper with all six bundled workload classes registered explicitly. |
 | `database-schema` | [`apps/_infra/deploy-k8s/components/database-schema/README.md`](../../apps/_infra/deploy-k8s/components/database-schema/README.md) | Deploy-k8s-owned Prisma migration Job component. It runs the exact server image with DB-only reachability and no mounted ServiceAccount token. |
 | _(apps/_infra/deploy-k8s)_ | — | Silo umbrella and deploy entrypoint. It composes app-owned Helm library units, owns deploy-only components such as the schema Job, and carries CRDs, issuers, external-secret wiring, and cross-plane defaults. |
@@ -34,11 +39,12 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 
 ## OpenCrane server domains (`libs/backend/server/*/main`)
 
-The control plane and extracted runtime capabilities are split into 21 NX packages
-(`backend-server-<d>` at `libs/backend/server/<d>/main`): tenants, policies, grants, skills,
-model-routing, providers, awareness, spend, groups, mcp, company-docs, audit,
-access-tokens, metrics, connections, cluster-tenants, retrieval, contract, projection,
-identity, and api-spec. The separate `libs/backend/feat-openclaw-tenant/main` package remains a
+The control plane and extracted runtime capabilities are split into 31 NX packages
+(`backend-server-<d>` at `libs/backend/server/<d>/main`): access-tokens, agent-services, api-spec,
+artifacts, audit, authorization, awareness, channel-targets, cluster-tenants, company-docs,
+connections, contract, conversations, grants, groups, identity, integrations, mcp, membership,
+memory, metrics, model-routing, personas, policies, projection, providers, retrieval, runs, skills,
+spend, and tenants. The separate `libs/backend/feat-openclaw-tenant/main` package remains a
 deletion boundary until the personal-agent runtime replacement lands.
 Each owns its routes, core services, API types, tests, and (where applicable) a
 `prisma/schema/<d>.prisma` slice. Layout, bounded `scope:<capability>` rules, and the

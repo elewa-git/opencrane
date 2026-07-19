@@ -6,7 +6,7 @@ OpenCrane splits a platform installation into a single **fleet release** (cluste
 > [Fleet and silo operating model](/operators/fleet-silo-model) — how the fleet-manager and clustertenant-manager differ, what each owns, and how to configure fleet OIDC and Zitadel management.
 > [ClusterTenant manager configuration](/operators/clustertenantmanager-config) — Helm values reference for every silo opencrane-api setting.
 > [Networking & isolation](/operators/networking) — the NetworkPolicy floor and the silo boundary.
-> [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) — the identity-keyed mTLS layer that rides on top of the silo boundary.
+> [Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity) — the identity-keyed policy layer that rides on top of the silo boundary.
 > [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how IAM policies, skills, and resource shares are scoped per silo.
 
 ---
@@ -53,14 +53,13 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 │  │ manager           │  │ (scoped  │  │ gateway         │    │
 │  │ (tenant-facing    │  │  to this │  └─────────────────┘    │
 │  │  surface + CT     │  │  silo)   │  ┌─────────────────┐    │
-│  │  read-model)      │  └──────────┘  │ feat-skill-registry  │    │
+│  │  read-model)      │  └──────────┘  │ LiteLLM         │    │
 │  └───────────────────┘               └─────────────────┘    │
 │  ┌───────────────────┐               ┌─────────────────┐    │
-│  │  CNPG Postgres    │               │ LiteLLM         │    │
+│  │  CNPG Postgres    │               │ Cognee          │    │
 │  │  (per-CT DB,      │               └─────────────────┘    │
-│  │   this NS only)   │               ┌─────────────────┐    │
-│  └───────────────────┘               │ Cognee          │    │
-│                                      └─────────────────┘    │
+│  │   this NS only)   │                                      │
+│  └───────────────────┘                                      │
 │  fleetManager.clusterTenantApi.enabled: false                 │
 │  billing.enabled: false                                       │
 │  Reuses cluster-wide infra installed by the fleet release     │
@@ -76,9 +75,9 @@ The silo model eliminates both problems in the same move: each ClusterTenant get
 | Zitadel IAM admin + SA key | Yes (`fleetManager.zitadel.*`) | No |
 | Per-org user login (OIDC) | Fleet OIDC (`fleetManager.oidc.*`) | Silo OIDC (`clustertenantManager.oidc.*`) |
 | Fleet registry DB | Yes (`fleetManager.database.*`) | No |
-| Runtime planes (Obot, feat-skill-registry, LiteLLM, Cognee) | No | Yes |
+| Runtime planes ([Obot](https://github.com/italanta/opencrane/blob/main/apps/_infra/obot/README.md), [LiteLLM](https://github.com/italanta/opencrane/blob/main/apps/_infra/litellm/README.md), [Cognee](https://github.com/italanta/opencrane/blob/main/apps/_infra/cognee/README.md)) | No | Yes |
 | Operator | No (fleet-manager reconciles ClusterTenants) | Yes (namespace-scoped to this silo) |
-| Per-silo Postgres | No | Yes — one CNPG `Cluster` CR per silo namespace |
+| Per-silo Postgres ([`apps/postgres`](https://github.com/italanta/opencrane/blob/main/apps/postgres/README.md)) | No | Yes — one CNPG `Cluster` CR per silo namespace |
 | Cluster-wide infra (ingress-nginx, external-dns, CNPG operator, cert-manager) | Installed here (once) | Reused from fleet release |
 
 ::: tip Two charts, two install profiles
@@ -102,7 +101,7 @@ apps/fleet-platform/deploy.sh \
 
 Required flags: `--base-domain`. Optional: `--ingress-ip` (derived automatically from the ingress-nginx LoadBalancer when omitted), `--cert-manager` and its TLS sub-flags.
 
-This installs the `opencrane-fleet` chart into `opencrane-system` with `fleetManager.clusterTenantApi.enabled=true` and `billing.enabled=true`. The fleet-manager and all cluster-wide infrastructure (CRDs, ingress-nginx, external-dns, CNPG operator, cert-manager) are installed here. No runtime planes (Obot, feat-skill-registry, LiteLLM, Cognee) are part of this release — those live in silos.
+This installs the `opencrane-fleet` chart into `opencrane-system` with `fleetManager.clusterTenantApi.enabled=true` and `billing.enabled=true`. The fleet-manager and all cluster-wide infrastructure (CRDs, ingress-nginx, external-dns, CNPG operator, cert-manager) are installed here. No runtime planes (Obot, LiteLLM, Cognee) are part of this release — those live in silos.
 
 ### Step 2 — install one silo per ClusterTenant
 
@@ -139,7 +138,7 @@ Each silo's isolation rests on three independent layers:
 
 1. **Dedicated instances** — no plane is shared between silos. Data and credentials are co-resident only within a silo's own namespace.
 2. **Namespace isolation + NetworkPolicy floor** — the default-deny NetworkPolicy in each silo namespace blocks all cross-silo traffic at L3/L4. See [Networking & isolation](/operators/networking).
-3. **Cilium + SPIFFE identity** — workload identity is pinned by a SPIFFE SVID and enforced by `CiliumNetworkPolicy` (plus mutual TLS), adding a layer keyed on cryptographic identity rather than network position. See [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity).
+3. **Cilium identity** — workload identity is derived from the pod's namespace, application, and ServiceAccount labels and enforced by `CiliumNetworkPolicy`, adding a layer keyed on workload identity rather than network position. See [Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity).
 
 The operator in each silo is namespace-scoped (`requireWatchNamespace`). It owns that silo's Ingress, `DNSEndpoint`, and certificate binding — and only those. A silo operator cannot write resources in another silo's namespace.
 

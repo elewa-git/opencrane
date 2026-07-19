@@ -2,7 +2,11 @@
 
 Watches `Tenant` custom resources and reconciles the corresponding Kubernetes workloads.
 
-Each `Tenant` here is a **UserTenant** — a per-user OpenClaw agent gateway ("UserTenant" is the canonical doc name; the CRD kind stays `Tenant` in code). The reconciled workloads run inside the namespace of the owning **ClusterTenant** (the customer / isolation unit), so they are fenced by the ClusterTenant's `ResourceQuota`/`LimitRange` and `isolationTier`. The Ingress built per UserTenant is the gateway host `<name>.<ingress.domain>`, under the ClusterTenant base domain. See [Tenancy Model — ClusterTenant vs UserTenant](../../../../docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
+> Part of the frozen blue OpenClaw platform, inside the `feat-openclaw-tenant` deletion boundary
+> (see [`libs/backend/README.md`](../../../../../README.md)): maintenance only, removed when the
+> silo is replaced by the green runtime.
+
+Each `Tenant` here is a **UserTenant** — a per-user OpenClaw agent gateway ("UserTenant" is the canonical doc name; the CRD kind stays `Tenant` in code). The reconciled workloads run inside the namespace of the owning **ClusterTenant** (the customer / isolation unit), so they are fenced by the ClusterTenant's `ResourceQuota`/`LimitRange` and `isolationTier`. The Ingress built per UserTenant is the gateway host `<name>.<ingress.domain>`, under the ClusterTenant base domain. See [Tenancy Model — ClusterTenant vs UserTenant](../../../../../../../docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
 
 ## Public API
 

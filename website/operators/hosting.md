@@ -433,7 +433,7 @@ apps/fleet-platform/      # chart: opencrane-fleet
                           #   ingress.className=nginx, certManager.enabled=false.
 
 apps/_infra/deploy-k8s/   # chart: opencrane-silo
-├── Chart.yaml                 # per-org opencrane-api + runtime planes (Obot, feat-skill-registry,
+├── Chart.yaml                 # per-org opencrane-api + runtime planes (Obot,
 │                              #   LiteLLM, Cognee) + per-silo CNPG Cluster CR
 └── values.yaml
 

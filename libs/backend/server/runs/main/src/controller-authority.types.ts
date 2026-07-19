@@ -74,7 +74,23 @@ export interface ControllerAuthorityRouterDependencies
 	readonly nowEpochMs: () => number;
 }
 
-/** Persistence boundary for controller desired state and immutable acknowledgements. */
+/**
+ * Persistence boundary for controller desired state and immutable acknowledgements.
+ *
+ * Sole consumer: the controller-authority internal router (`controller-authority.router.ts`),
+ * which only `apps/agent-controller` reaches — over the workload-authenticated internal listener,
+ * after TokenReview. No human or product code path calls this contract.
+ *
+ * It exists so controller claims are fail-closed and durable. A controller crash, restart, or
+ * duplicate reconcile can neither lose accepted work (an unacknowledged claim becomes reclaimable
+ * when its lease expires) nor double-run it (acknowledgements are idempotent per run attempt and
+ * a conflicting one is rejected). Every desired Job is derived from canonical database rows at the
+ * moment of the claim; controller-supplied fields are coordinates to match against, never
+ * authority to store.
+ *
+ * This interface is the port the router depends on; `PrismaControllerAuthorityRepository` is its
+ * one durable adapter.
+ */
 export interface ControllerAuthorityRepository
 {
 	/** Claim at most one reclaimable desired Job without publishing its outbox event. */

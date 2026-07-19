@@ -124,7 +124,8 @@ The same platform also has separate or overlapping state for:
 - OpenClaw JSONL sessions and a disconnected `SessionScope` table;
 - Cognee datasets, bespoke Cognee credentials, and superseded awareness tables;
 - MCP access policies, MCP grants, generic grants, credentials, installs, and an effective contract;
-- skill bytes in Postgres, OCI/Zot, runtime files, and now-removed shared-PVC assumptions;
+- skill bytes in Postgres, runtime files, the since-deleted OCI/Zot store, and now-removed
+  shared-PVC assumptions;
 - OpenClaw pairing/device records although the browser uses a same-origin authenticated proxy.
 
 Repair loops, translation layers, fallback paths, and transitional flags are symptoms of these
@@ -134,8 +135,8 @@ multiple authorities. They should not be carried into the target.
 
 The repository currently contains three CRDs—ClusterTenant, Tenant, and AccessPolicy—while some
 architecture docs describe six. Obot docs still describe a registry polling path removed by the
-deployment. ADR 0003 requires Linkerd removal while dormant Linkerd code and an optimization note
-retain it. The root plan still names closed issues and omits several live issues. The companion plan
+deployment. ADR 0003 requires Linkerd removal; the dormant Linkerd code has since been
+deleted. The root plan still names closed issues and omits several live issues. The companion plan
 therefore includes a live issue disposition rather than treating the present roadmap as current.
 
 ## Target topology
@@ -272,7 +273,7 @@ The [Cilium ServiceAccount policy model](https://docs.cilium.io/en/stable/securi
 supports that layer; its L7 controls can additionally constrain service paths, but they are still
 not business authorization.
 
-ADR 0003 should be corrected before implementation. Current Cilium identities are label-derived
+ADR 0003 has since been corrected (2026-07-16) as recommended here. Current Cilium identities are label-derived
 numeric security identities; custom SPIRE SVIDs are not interchangeable with them. Cilium
 [mutual authentication is documented with limitations](https://docs.cilium.io/en/stable/network/servicemesh/mutual-authentication/mutual-authentication/#limitations)
 and should not be the baseline business trust mechanism. Use projected KSA tokens and application
@@ -560,9 +561,10 @@ This preserves Python as the preferred authoring language without treating the o
 as a security sandbox. The leading candidate's beta sandbox/skill facilities may be evaluated, but
 they are not the platform security boundary.
 
-The current Postgres/OCI/Zot/runtime-file delivery paths collapse into the artifact service plus
-logical skill catalog. OCI becomes an optional export adapter only if cross-cluster or third-party
-distribution is proven necessary.
+The earlier Postgres/OCI/Zot/runtime-file delivery paths have collapsed into the logical skill
+catalog plus artifact-store bytes (the Zot store and skill-registry app are deleted; delivery and
+execution follow on the sandbox substrate). OCI becomes an optional export adapter only if
+cross-cluster or third-party distribution is proven necessary.
 
 ### OpenSandbox-backed sandbox jobs
 
@@ -853,7 +855,8 @@ capability with operational recovery and UI.
 ### Absorb into clearer authorities
 
 - `apps/feat-central-agents` becomes AgentService + schedule + MCP/skill assignments;
-- `apps/feat-skill-registry` becomes logical skill catalog plus artifact delivery;
+- `apps/feat-skill-registry` becomes logical skill catalog plus artifact delivery (done: the app,
+  its chart, and the Zot store are deleted);
 - skill bytes and documents become ArtifactVersions on disk;
 - company/workspace docs become PersonaProfile/PersonaRevision/PreferenceFact where they define
   assistant identity; ordinary content becomes artifacts;
@@ -872,8 +875,8 @@ capability with operational recovery and UI.
   from the new authorization state;
 - superseded awareness content/rollout/participation tables;
 - Postgres/OCI/runtime-file dual-write and fallback when artifact authority lands;
-- Zot as a required core component unless external OCI distribution is proven;
-- Linkerd code after the Cilium baseline is live;
+- Zot as a required core component unless external OCI distribution is proven (done);
+- Linkerd code after the Cilium baseline is live (done);
 - fleet, billing, shared-platform, and implicit topology values already moved or unused;
 - stale docs that describe removed CRDs, Obot polling, pairing, or shared skills.
 

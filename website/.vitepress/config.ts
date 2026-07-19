@@ -43,6 +43,10 @@ export default defineConfig({
         ],
       },
       {
+        text: 'Security & architecture',
+        link: '/security-architecture/',
+      },
+      {
         text: 'Reference',
         items: [
           { text: 'API (interactive)', link: '/reference/api' },
@@ -96,6 +100,17 @@ export default defineConfig({
           { text: 'API reference (interactive)', link: '/reference/api' },
           { text: 'API overview', link: '/reference/api-overview' },
           { text: 'Contracts SDK', link: '/integrators/contracts-sdk' },
+        ],
+      },
+      {
+        text: 'Security & architecture',
+        items: [
+          { text: 'Overview', link: '/security-architecture/' },
+          { text: 'Capabilities & proofs', link: '/security-architecture/capabilities' },
+          { text: 'Workload identity', link: '/security-architecture/workload-identity' },
+          { text: 'Trust boundaries & the network', link: '/security-architecture/trust-boundaries' },
+          { text: 'Data authority', link: '/security-architecture/data-authority' },
+          { text: 'Run lifecycle', link: '/security-architecture/run-lifecycle' },
         ],
       },
       {

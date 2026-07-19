@@ -116,7 +116,8 @@ injected server-side and never reach an assistant or a browser. That's what make
 ## Isolation
 
 Each assistant is walled off from every other — separate storage, separate identity,
-and **default-deny networking keyed on cryptographic identity** (Cilium + SPIFFE), so
+and **default-deny networking keyed on workload identity** (Cilium; SPIFFE/SPIRE can be
+layered on later), so
 one customer's silo can never reach another's. See
 [Identity & network isolation](/operators/cilium-spiffe-identity) for the who-can-talk-to-whom
 rules. If you ever need to run **completely separate OpenCrane instances** in one

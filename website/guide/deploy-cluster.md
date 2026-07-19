@@ -28,9 +28,10 @@ A working cluster requires **two Helm releases** installed in order:
    sure `kubectl` points at it.
 2. **Make images reachable** — pull OpenCrane's images from a registry your cluster
    can read (the public images, your own mirror, or your provider's registry).
-3. **Install the fleet release** (`apps/fleet-platform`, chart `opencrane-fleet`) — this
-   installs the cluster-wide bootstrap (CRDs, cert-manager issuer, ingress-nginx,
-   external-dns, CNPG operator) plus the fleet-manager.
+3. **Install the fleet release** (chart `opencrane-fleet`, shipped from the
+   proprietary fleet repository — no longer at `apps/fleet-platform` in this repo) —
+   this installs the cluster-wide bootstrap (CRDs, cert-manager issuer,
+   ingress-nginx, external-dns, CNPG operator) plus the fleet-manager.
 4. **Install one silo release per org** (`apps/_infra/deploy-k8s`, chart
    `opencrane-silo`) — the per-org control plane and runtime planes.
 5. **Point your domain** at the ingress — see [Set up your domain](/guide/dns).

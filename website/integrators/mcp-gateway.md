@@ -1,6 +1,8 @@
 # Obot MCP gateway
 
-OpenCrane runs **Obot** as the in-cluster gateway for MCP (Model Context Protocol)
+OpenCrane runs
+[**Obot**](https://github.com/italanta/opencrane/blob/main/apps/_infra/obot/README.md)
+as the in-cluster gateway for MCP (Model Context Protocol)
 tools. This page separates Obot's runtime catalogue from OpenCrane's API-first
 governance and per-tenant access decisions.
 

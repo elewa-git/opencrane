@@ -6,6 +6,8 @@ and an owner allowlist rendered into each tenant runtime.
 
 > See also: [Identity and connection auth](/security/identity) for the wider identity model.
 > [Networking and isolation](/operators/networking) covers the cluster enforcement layers.
+> This page describes the **currently deployed** connection model; the target authority model
+> (capabilities + workload identity) is documented in [Security & architecture](/security-architecture/).
 
 ## Connection flow
 

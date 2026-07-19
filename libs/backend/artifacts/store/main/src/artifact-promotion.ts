@@ -1,6 +1,18 @@
 import type { ArtifactPromotionProtocolConfig, ArtifactPromotionLeaseVerifier, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "./artifact-store.types.js";
 
-/** Promotes one verified, bounded artifact upload and creates its catalog-consumable receipt. */
+/**
+ * Promotes one verified, bounded artifact upload and creates its catalog-consumable receipt.
+ *
+ * The protocol is signed-lease in, signed-receipt out, because the artifact service holds no
+ * session state and no product database access: the OpenCrane-signed lease is the entire
+ * authorization for one artifact write (its digest, byte ceiling, and expiry), and the signed
+ * receipt is the only evidence OpenCrane accepts to finalize the catalog row. Neither direction
+ * trusts the transport, the runtime, or any ambient credential.
+ *
+ * Every failure path is a typed rejection with no partial success: bytes are never staged before
+ * the lease verifies, and no receipt is ever signed after the lease-bound deadline — a receipt
+ * that outlived its lease would let a slow or replayed upload finalize authority it no longer has.
+ */
 export async function __PromoteArtifactUpload(store: ArtifactStore, leaseVerifier: ArtifactPromotionLeaseVerifier, byteSource: BoundedArtifactUploadByteSource, config: ArtifactPromotionProtocolConfig): Promise<PromoteArtifactUploadResult>
 {
 	// 1. Verify the caller's compact lease before consuming or staging any untrusted request bytes.

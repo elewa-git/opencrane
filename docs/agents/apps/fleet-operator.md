@@ -1,7 +1,14 @@
 # App: fleet-operator (`@opencrane/fleet-operator`)
 
-> Deep-dive for `apps/fleet-operator`. Index: [`../app-specific.md`](../app-specific.md). Cluster context:
+> Deep-dive for the fleet control plane. Index: [`../app-specific.md`](../app-specific.md). Cluster context:
 > [`../cluster-architecture.md`](../cluster-architecture.md). Verified June 2026 (post fleet/silo split, v0.6.0).
+>
+> **External since the fleet/silo split (italanta/opencrane#150):** the fleet-operator app and the
+> `fleet-platform` chart live in the WeOwnAI repo — there is no `apps/fleet-operator` in this
+> checkout (`docs/agents/workload-ownership.json` records it as an external workload). This page is
+> the operating reference for that external control plane. Its Zitadel-centred org identity is the
+> current (blue-era) model, not the target — target identity is capabilities + workload identity
+> (ADR 0008).
 
 The **cluster-wide hub + super-admin** — a single fleet-wide singleton (`@opencrane/fleet-operator`,
 "fleet-manager") that owns ClusterTenant lifecycle for the whole fleet. It serves at the fleet

@@ -21,6 +21,13 @@ access to **both** the opencrane-api and the user's own OpenClaw pod.
 > See also: [Agent authentication](/integrators/agents/authentication) for the target chain from
 > workload bootstrap to proof-bound run and action capabilities.
 
+::: info Current platform vs target model
+This page documents the identity chain of the **currently deployed** platform (Zitadel OIDC
+sessions + the identity-routing proxy). The **target** authority model — capabilities +
+workload identity, fail-closed authorization — is documented in
+[Security & architecture](/security-architecture/).
+:::
+
 ## Two planes, one identity
 
 OpenCrane has two backends a user touches, and they must not require two logins:
@@ -75,7 +82,7 @@ All steps are ✅ implemented (gated by `gatewayProxy.enabled`).
 | Credential | Subject | Audience / target | TTL / storage | Status |
 |-----------|---------|-------------------|---------------|--------|
 | **Control-plane session cookie** | the human | control plane + identity-routing proxy | server-signed, HTTP-only cookie (~12h) | ✅ |
-| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `feat-skill-registry` / `opencrane-server` | ~600s, kubelet-rotated, in-cluster only | ✅ |
+| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `opencrane-server` | ~600s, kubelet-rotated, in-cluster only | ✅ |
 
 The browser holds **only** the HTTP-only session cookie. There is no bootstrap token, no
 device token, and no pod-specific credential in the browser.
@@ -86,11 +93,11 @@ browser**. It is how the pod calls *outward* — e.g. OpenClaw → Obot MCP Gate
 (`aud=opencrane-server`). The browser never holds an `obot-gateway` token and never talks
 to Obot directly.
 
-The pod's Kubernetes ServiceAccount is also what SPIRE mints its **SPIFFE SVID** from
-(`spiffe://opencrane/ct/<org>/<workload>`), so a workload's *network* identity and its
-*outward-call* identity are the same principal. That SVID is what the silo's
-`CiliumNetworkPolicy` rules and mutual TLS are keyed on — see
-[Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity).
+The pod's Kubernetes ServiceAccount is also one of the labels Cilium derives the
+workload's **security identity** from, so a workload's *network* identity and its
+*outward-call* identity trace back to the same principal. That label-derived identity is
+what the silo's `CiliumNetworkPolicy` rules are keyed on — see
+[Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity).
 
 ## Two OIDC registrations: fleet and silo
 
@@ -299,7 +306,8 @@ Authentication establishes *who*; authorization is split across the two planes:
 
 ## See also
 
-- [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) — the workload-identity side: SPIFFE SVIDs, the who-can-talk-to-whom rules, and how they compose with human OIDC identity
+- [Security & architecture](/security-architecture/) — the target authority model: capabilities, workload identity, and fail-closed authorization
+- [Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity) — the workload-identity side: Cilium security identities, the who-can-talk-to-whom rules, and how they compose with human OIDC identity
 - [Networking & isolation](/operators/networking) — the two-plane model, NetworkPolicy enforcement, the three-layer gateway seam, and known egress gaps
 - [Connection security](/security/connection-security) — CONN.9/CONN.10 threat model and transport hardening posture
 - [Zitadel key rotation](/security/zitadel-key-rotation) — how to rotate the fleet-manager's Zitadel SA key that provisions ClusterTenant Zitadel Orgs
