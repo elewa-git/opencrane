@@ -95,6 +95,7 @@
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",
+    "apps/_infra/cilium/project.json",
     "apps/_infra/langfuse/project.json",
     "apps/_infra/litellm/project.json",
     "apps/_infra/obot/project.json",

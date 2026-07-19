@@ -83,25 +83,11 @@ Trade-offs to plan for:
   only**, plain Calico `--enable-network-policy` can be toggled, but it neither removes `kube-proxy`
   nor matches the portable Cilium contract — it is not the target.)
 
-### D2 — Linkerd deferred (scaffolding stays dormant)
+### D2 — Linkerd removed
 
-The repo already scaffolds **Linkerd** (S5 / ADR 0001): the operator emits per-silo `Server` +
-`MeshTLSAuthentication` + `AuthorizationPolicy` CRDs, gated behind `linkerdMeshEnabled`
-(`LINKERD_MESH_ENABLED`, default **false**, and not installed on any cluster today).
-
-**We do not adopt Linkerd now.** Cilium already covers the security lockdown (#105), encryption,
-and the overhead win. Linkerd is *additive value only* for a true service-mesh feature set —
-per-request retries/timeouts, traffic splitting (canary/blue-green), golden L7 metrics, circuit
-breaking — or if we later prefer its per-workload mTLS-ServiceAccount-identity authz model.
-
-Adopt Linkerd **only** when one of those concrete needs appears, and prefer **ambient (sidecarless)
-mode** then, to avoid a ~50–100m CPU sidecar on every pod (material on a CPU-constrained cluster).
-Do not run Cilium transparent encryption *and* Linkerd mTLS simultaneously (double-encryption); pick
-one for the wire. The Linkerd code can stay dormant at zero cost — it fails closed when the CRDs are
-absent.
-
-Note: Linkerd is never a CNI; it always runs on top of a CNI. So "Cilium vs Linkerd" is only a real
-choice at the policy/encryption/identity layer, where Cilium is sufficient for current needs.
+The dormant Linkerd mesh configuration was deleted with the Cilium replacement. Cilium is the sole
+target workload-network substrate; future service-mesh work requires a new measured requirement and
+must not restore a compatibility gate or sidecar path.
 
 ### D3 — Right-size resource requests (dev DONE; prod TODO)
 
@@ -158,7 +144,6 @@ With D4, the only per-tenant cost left is the OpenClaw pod. Most tenants are idl
 | 2 | **Node consolidation** — fewer, bigger nodes (e.g. 2–3 × `e2-standard-4` vs 6 × `e2-medium`) | amortise per-node system tax | next |
 | 3 | **Plane pooling + tiering** (D4) — `shared` tier shares planes | breaks the per-tenant duplication curve | design |
 | 4 | **Scale-to-zero + wake-on-access** for agent pods (D5) | cost ≈ active tenants | design |
-| — | Linkerd (D2) | mesh features / per-workload mTLS identity | deferred |
 
 Phases 1 and 2 compound (tighter packing on fewer nodes) and are the cheapest near-term wins; 3 and
 4 are the structural changes that matter most as tenant count grows.
@@ -204,6 +189,4 @@ Phases 1 and 2 compound (tighter packing on fewer nodes) and are the cheapest ne
 
 ## 6. Non-goals (for now)
 
-- **Linkerd / a sidecar mesh** — deferred (D2); revisit only for concrete mesh features, ambient mode.
 - **Production resource sizing** — `values-dev.yaml` is dev-only; size prod to measured load.
-- **Cilium transparent encryption + Linkerd mTLS together** — never both.

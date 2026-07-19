@@ -253,19 +253,16 @@ DNS_WRITER_GSA="${OPENCRANE_DNS_WRITER_GSA:-${DNS_WRITER_GSA:-}}"
 
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
-# crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
-# ignores NetworkPolicy (the isolation model is a no-op), unpullable first-party images,
+# crash-looping cluster: no default StorageClass (every PVC pends), an unready Cilium substrate
+# (the isolation model is a no-op), unpullable first-party images,
 # a base domain whose NS delegation does not resolve (acme orders + external-dns hang), and
 # a missing DNS-write capability shared by external-dns + cert-manager. Also via
 # OPENCRANE_PREFLIGHT=1. It is advisory unless run — the install itself does not auto-run it.
 PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
 
 # --multi-ct is the EXPLICIT multi-ClusterTenant predicate: this install hosts many orgs
-# (ClusterTenants) or many isolated instances in one cluster, so cross-tenant isolation is
-# mandatory rather than advisory. It is a deliberate flag (never inferred), so the fail-closed
-# checks below can trust it: preflight makes the NetworkPolicy-enforcing-CNI check FATAL (not
-# advisory) under multi-CT, and the fleet profile passes it so the fleet-platform chart's
-# deploy.sh (now in the WeOwnAI repo, italanta/opencrane#150) runs a mandatory preflight.
+# (ClusterTenants) or many isolated instances in one cluster. Cilium is mandatory for every
+# target install, while this flag retains the extra multi-tenant storage safeguards below.
 # Also via OPENCRANE_MULTI_CT=1.
 MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 
@@ -355,6 +352,23 @@ if [[ -n "$BASE_DOMAIN" ]]; then
   _validate_base_domain "$BASE_DOMAIN"
 fi
 
+# Cilium is the target workload-network enforcement substrate. Standard NetworkPolicies are
+# only meaningful after its agent is ready; the CRD proves the identity-aware policy API exists.
+# This function is read-only and is deliberately shared by preflight and the install path.
+_cilium_ready() {
+  local timeout="${CILIUM_TIMEOUT_SECONDS:-$TIMEOUT}"
+  kubectl get daemonset cilium --namespace kube-system >/dev/null 2>&1 \
+    && kubectl get deployment cilium-operator --namespace kube-system >/dev/null 2>&1 \
+    && kubectl get crd ciliumnetworkpolicies.cilium.io >/dev/null 2>&1 \
+    && kubectl rollout status daemonset/cilium --namespace kube-system --timeout="${timeout}s" >/dev/null \
+    && kubectl rollout status deployment/cilium-operator --namespace kube-system --timeout="${timeout}s" >/dev/null
+}
+
+_require_cilium_ready() {
+  log "Checking required Cilium agent, operator, and policy CRD readiness"
+  _cilium_ready || { err "Cilium must be installed and ready before an OpenCrane target deployment. Require kube-system/cilium DaemonSet, kube-system/cilium-operator Deployment, and ciliumnetworkpolicies.cilium.io CRD."; exit 1; }
+}
+
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
 # so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
@@ -407,19 +421,9 @@ _run_preflight() {
   _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
 
-  # 2. NetworkPolicy-enforcing CNI — the platform's isolation model is built on
-  #    NetworkPolicy; a CNI that silently ignores them (e.g. stock kindnet/flannel) makes
-  #    every default-deny a no-op. We probe for a known enforcing CNI DaemonSet. FATAL under
-  #    --multi-ct (cross-tenant isolation is mandatory there, so a no-op CNI is a security
-  #    hole, not a warning); advisory (warn-and-continue) for a single-CT install where a
-  #    non-enforcing CNI only weakens defence-in-depth on a one-org box.
-  if ! kubectl get ds -n kube-system -o name 2>/dev/null | grep -qiE "calico|cilium|weave|antrea|kube-router"; then
-    if [[ "$MULTI_CT" == "1" ]]; then
-      PF_FAILS+=("No NetworkPolicy-enforcing CNI detected (looked for calico/cilium/weave/antrea/kube-router in kube-system). Under --multi-ct the platform's NetworkPolicy isolation is MANDATORY and would be a NO-OP on this CNI — cross-tenant traffic would not be denied. Install an enforcing CNI (GKE: enable Dataplane V2 / network-policy).")
-    else
-      warn "Preflight: no NetworkPolicy-enforcing CNI detected (calico/cilium/weave/antrea/kube-router). NetworkPolicy isolation will be a no-op; acceptable for a single-tenant box but re-run with --multi-ct if this hosts multiple tenants."
-    fi
-  fi
+  # 2. Cilium is mandatory even for a single target silo. Accepting another CNI or warning
+  #    through this check would make the Cilium identity/FQDN policy contract aspirational.
+  _cilium_ready || PF_FAILS+=("Cilium is not ready. Require kube-system/cilium DaemonSet, kube-system/cilium-operator Deployment, and ciliumnetworkpolicies.cilium.io CRD before deploying OpenCrane.")
 
   # 2b. Tenant StorageClass encryption (ADVISORY) — tenant state lands on the cluster's
   #     default StorageClass unless --storage-class pins one. At-rest encryption is a
@@ -513,6 +517,9 @@ if [[ "$PREFLIGHT" == "1" ]]; then
   log "Preflight complete (no install performed). Re-run without --preflight to install."
   exit 0
 fi
+
+_require_cilium_ready
+bash "$SCRIPT_DIR/../../cilium/scripts/probe-network-policy.sh"
 
 # Canonical artifact bytes are retained indefinitely on a mounted PVC. Pinning the resolved
 # class makes the claim stable across default-class changes, and refuses a class that cannot

@@ -85,8 +85,6 @@ export interface OpenClawTenantOperatorConfig
   controlPlaneInternalServiceUrl: string;
   /** Projected service-account token lifetime. */
   projectedTokenTtlSeconds: number;
-  /** Whether frozen Linkerd identity resources are rendered. */
-  linkerdMeshEnabled: boolean;
   /** Whether the silo may create tenant namespaces. */
   manageTenantNamespaces: boolean;
   /** Silo topology mode. */

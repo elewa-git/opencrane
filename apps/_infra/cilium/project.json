@@ -1,0 +1,16 @@
+{
+  "name": "cilium",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["type:app", "layer:entrypoint", "scope:network"],
+  "targets": {
+    "check": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/cilium/scripts/probe-network-policy.sh --help" }
+    },
+    "syntax": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash -n apps/_infra/cilium/deploy.sh apps/_infra/cilium/scripts/probe-network-policy.sh" }
+    }
+  }
+}

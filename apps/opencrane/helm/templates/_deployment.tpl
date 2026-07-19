@@ -327,12 +327,6 @@ spec:
               value: {{ .Values.fleetManager.idleTimeoutMinutes | quote }}
             - name: IDLE_CHECK_INTERVAL_SECONDS
               value: {{ .Values.fleetManager.idleCheckIntervalSeconds | quote }}
-            # -- Linkerd identity substrate gate (S5 / ADR 0001), default off. When true the
-            #    silo reconcile annotates its namespace for mesh injection and emits the per-silo
-            #    deny-by-default Server + MeshTLSAuthentication + AuthorizationPolicy. Fails
-            #    closed if the Linkerd policy CRDs are absent — a safe no-op without Linkerd.
-            - name: LINKERD_MESH_ENABLED
-              value: {{ .Values.fleetManager.linkerdMeshEnabled | quote }}
             {{- /*
               #151 item 4 — single deploymentMode switch. Fail-fast guard: an EXPLICIT
               deploymentMode must agree with fleetInternalUrl, never silently disagree with it.

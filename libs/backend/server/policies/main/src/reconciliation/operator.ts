@@ -8,7 +8,7 @@ import { PolicyResourceBuilder } from "./policy-resource-builder.js";
 
 /**
  * Watches AccessPolicy custom resources and reconciles the corresponding
- * Kubernetes NetworkPolicy and optional CiliumNetworkPolicy resources.
+ * Kubernetes NetworkPolicy and CiliumNetworkPolicy resources.
  */
 export class PolicyOperator
 {
@@ -93,7 +93,7 @@ export class PolicyOperator
   }
 
   /**
-   * Reconcile the NetworkPolicy (and optional CiliumNetworkPolicy) for
+   * Reconcile the NetworkPolicy and CiliumNetworkPolicy for
    * an AccessPolicy CR based on its egress and domain rules.
    */
   async reconcilePolicy(policy: AccessPolicy): Promise<void>
@@ -108,22 +108,11 @@ export class PolicyOperator
       await __K8sApplyResource(this.objectApi, netpol, this.log);
     }
 
-    // If Cilium is available and domain rules are specified, create CiliumNetworkPolicy
+    // Apply FQDN egress policy when requested; Cilium is a required cluster dependency.
     if (policy.spec.domains?.allow?.length)
     {
       const ciliumPolicy = this.resourceBuilder.buildCiliumPolicy(policy, namespace);
-      try
-      {
-        await __K8sApplyResource(this.objectApi, ciliumPolicy, this.log);
-      }
-      catch (err)
-      {
-        // Cilium CRDs may not be installed — log and skip
-        this.log.warn(
-          { name },
-          "could not apply CiliumNetworkPolicy (Cilium may not be installed)",
-        );
-      }
+      await __K8sApplyResource(this.objectApi, ciliumPolicy, this.log);
     }
 
     await this._patchPolicyStatus(policy, namespace);

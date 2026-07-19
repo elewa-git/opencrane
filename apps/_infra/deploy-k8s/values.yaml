@@ -239,14 +239,6 @@ fleetManager:
   idleTimeoutMinutes: 30
   # -- How often (seconds) the idle-checker scans for inactive tenants
   idleCheckIntervalSeconds: 60
-  # -- Linkerd identity substrate (S5 / ADR 0001). DEFAULT OFF. When true the silo
-  #    reconcile annotates each silo namespace for Linkerd mesh injection and emits a
-  #    per-silo deny-by-default Server + MeshTLSAuthentication + AuthorizationPolicy
-  #    (the meshed mTLS-identity analogue of the S2 default-deny NetworkPolicy), layered
-  #    ADDITIVELY on top of the Cilium/Dataplane-V2 L3/4 floor. Requires Linkerd installed
-  #    in the cluster; if its policy CRDs are absent the operator fails closed (skips the
-  #    objects) so flipping this on without Linkerd is a safe no-op.
-  linkerdMeshEnabled: false
 
 # -- Channel trust-boundary settings
 channelProxy:

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { defaultConfig, gcpConfig, gcpAdapter, onPremAdapter, _makeAccessPolicy, _makeTenant } from "../fixtures.js";
-import { _BuildClusterTenantLimitRange, _BuildClusterTenantNamespace, _BuildClusterTenantResourceQuota, _BuildClusterTenantScheduling, _BuildConfigMap, _BuildDeployment, _BuildGatewayNetworkPolicy, _BuildServiceAccount, _BuildSiloBaselineNetworkPolicy, _BuildSiloExternalEgressNetworkPolicy, _BuildSiloKubernetesApiEgressNetworkPolicy, _BuildSiloLinkerdIdentityPolicy, _BuildStatePvc, _ConfigChecksum } from "../../reconcilers/tenants/deploy/index.js";
+import { _BuildClusterTenantLimitRange, _BuildClusterTenantNamespace, _BuildClusterTenantResourceQuota, _BuildClusterTenantScheduling, _BuildConfigMap, _BuildDeployment, _BuildGatewayNetworkPolicy, _BuildServiceAccount, _BuildSiloBaselineNetworkPolicy, _BuildSiloExternalEgressNetworkPolicy, _BuildSiloKubernetesApiEgressNetworkPolicy, _BuildStatePvc, _ConfigChecksum } from "../../reconcilers/tenants/deploy/index.js";
 
 describe("TenantResourceBuilder", () =>
 {
@@ -544,61 +544,6 @@ describe("Silo Kubernetes API egress NetworkPolicy", () =>
   });
 });
 
-describe("Silo Linkerd identity policy (S5 / ADR 0001 — meshed default-deny silo edge)", () =>
-{
-  const config = { ...defaultConfig, operatorNamespace: "opencrane-system", gatewayPort: 18789 };
-  const bundle = _BuildSiloLinkerdIdentityPolicy("opencrane-acme", "acme", config);
-
-  it("emits a deny-by-default Server over every pod (empty podSelector, v1beta1)", () =>
-  {
-    const { server } = bundle;
-    expect(server.apiVersion).toBe("policy.linkerd.io/v1beta1");
-    expect(server.kind).toBe("Server");
-    expect(server.metadata.namespace).toBe("opencrane-acme");
-    expect(server.metadata.labels["opencrane.io/cluster-tenant"]).toBe("acme");
-    // Empty selector → every pod in the silo namespace; deny → default-deny baseline.
-    expect(server.spec.podSelector).toEqual({});
-    expect(server.spec.accessPolicy).toBe("deny");
-    expect(server.spec.port).toBe(18789);
-  });
-
-  it("admits ingress identities only from the same silo and the operator namespace", () =>
-  {
-    const { meshTlsAuthentication } = bundle;
-    expect(meshTlsAuthentication.apiVersion).toBe("policy.linkerd.io/v1alpha1");
-    expect(meshTlsAuthentication.kind).toBe("MeshTLSAuthentication");
-    expect(meshTlsAuthentication.spec.identities).toContain(
-      "*.opencrane-acme.serviceaccount.identity.linkerd.cluster.local",
-    );
-    expect(meshTlsAuthentication.spec.identities).toContain(
-      "*.opencrane-system.serviceaccount.identity.linkerd.cluster.local",
-    );
-  });
-
-  it("binds the Server to the authentication via an AuthorizationPolicy (v1alpha1)", () =>
-  {
-    const { authorizationPolicy, server, meshTlsAuthentication } = bundle;
-    expect(authorizationPolicy.apiVersion).toBe("policy.linkerd.io/v1alpha1");
-    expect(authorizationPolicy.kind).toBe("AuthorizationPolicy");
-    // targetRef points at the deny-by-default Server.
-    expect(authorizationPolicy.spec.targetRef).toEqual({ group: "policy.linkerd.io", kind: "Server", name: server.metadata.name });
-    // requiredAuthenticationRefs points at the allow-list MeshTLSAuthentication.
-    expect(authorizationPolicy.spec.requiredAuthenticationRefs).toContainEqual({
-      group: "policy.linkerd.io", kind: "MeshTLSAuthentication", name: meshTlsAuthentication.metadata.name,
-    });
-  });
-
-  it("creates NO cross-silo identity path (no foreign silo identity is ever listed)", () =>
-  {
-    const serialized = JSON.stringify(bundle);
-    // The only identity domains referenced are the silo's own and the operator plane —
-    // never another ClusterTenant silo (e.g. opencrane-bcorp).
-    expect(serialized).not.toContain("opencrane-bcorp");
-    const nsDomains = [...serialized.matchAll(/\*\.([^.]+)\.serviceaccount\.identity/g)].map(m => m[1]);
-    expect(new Set(nsDomains)).toEqual(new Set(["opencrane-acme", "opencrane-system"]));
-  });
-});
-
 describe("ClusterTenant isolation builders (CT.5)", () =>
 {
   it("builds a Namespace labelled for PSA baseline enforce/warn/audit", () =>
@@ -611,16 +556,6 @@ describe("ClusterTenant isolation builders (CT.5)", () =>
     expect(labels["pod-security.kubernetes.io/warn"]).toBe("baseline");
     expect(labels["pod-security.kubernetes.io/audit"]).toBe("baseline");
     expect(labels["opencrane.io/cluster-tenant"]).toBe("acme");
-  });
-
-  it("omits the Linkerd inject annotation by default and stamps it when gated on (S5)", () =>
-  {
-    // Default (gate off) — no mesh injection annotation.
-    const off = _BuildClusterTenantNamespace("ct-acme", "acme");
-    expect(off.metadata?.annotations?.["linkerd.io/inject"]).toBeUndefined();
-    // Gate on — namespace opts its pods into the mesh.
-    const on = _BuildClusterTenantNamespace("ct-acme", "acme", true);
-    expect(on.metadata?.annotations?.["linkerd.io/inject"]).toBe("enabled");
   });
 
   it("builds a ResourceQuota from every present quota dimension", () =>

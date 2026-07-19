@@ -10,9 +10,8 @@ import { TenantPolicyResolutionState, TenantStatusPhase, type TenantDegradedReas
 
 import { __K8sApplyResource, _IsK8sNotFound, _RunWatchLoop, K8sWatchEventType, OPENCRANE_API_GROUP, OPENCRANE_API_VERSION, TENANT_CRD_PLURAL, type ClusterTenantResource } from "@opencrane/server/_infra/api";
 import { _BuildOrgDomainProvisioner, type OrgDomainProvisioner } from "@opencrane/backend/server/cluster-tenants";
-import { _BuildClusterTenantLimitRange, _BuildClusterTenantNamespace, _BuildClusterTenantResourceQuota, _BuildConfigMap, _BuildDeployment, _BuildGatewayNetworkPolicy, _BuildService, _BuildServiceAccount, _BuildSiloBaselineNetworkPolicy, _BuildSiloExternalEgressNetworkPolicy, _BuildSiloKubernetesApiEgressNetworkPolicy, _BuildSiloLinkerdIdentityPolicy, _BuildStatePvc, _ConfigChecksum, _ResolveTenantModelGate } from "./deploy/index.js";
+import { _BuildClusterTenantLimitRange, _BuildClusterTenantNamespace, _BuildClusterTenantResourceQuota, _BuildConfigMap, _BuildDeployment, _BuildGatewayNetworkPolicy, _BuildService, _BuildServiceAccount, _BuildSiloBaselineNetworkPolicy, _BuildSiloExternalEgressNetworkPolicy, _BuildSiloKubernetesApiEgressNetworkPolicy, _BuildStatePvc, _ConfigChecksum, _ResolveTenantModelGate } from "./deploy/index.js";
 import { TenantCleanup } from "./destroy/tenant-cleanup.js";
-import { LinkerdIdentityClient } from "./internal/linkerd-identity.client.js";
 
 import { TenantEncryptionKeys } from "./internal/tenant-encryption-keys.js";
 import { TenantLiteLlmKeys } from "./internal/tenant-litellm-keys.js";
@@ -654,9 +653,7 @@ export class TenantOperator
     const clusterTenantName = clusterTenant.metadata?.name ?? namespace;
 
     // 1. Namespace — ensure the fenced namespace exists and carries the PSA
-    //    baseline enforce/warn/audit labels before any workload lands in it. When the
-    //    Linkerd gate is on (S5) it is also annotated for mesh injection so workloads
-    //    pick up the sidecar/identity; the annotation is inert on a Linkerd-less cluster.
+    //    baseline enforce/warn/audit labels before any workload lands in it.
     //
     //    Ownership is explicit (not inferred from a 403): in the fleet-managed topology the
     //    fleet-manager creates and owns each org's namespace and the silo SA holds NO
@@ -667,7 +664,7 @@ export class TenantOperator
     //    NetworkPolicy + quota applies target this namespace and fail NotFound if it is missing.
     if (this.config.manageTenantNamespaces)
     {
-      await __K8sApplyResource(this.coreApi, _BuildClusterTenantNamespace(namespace, clusterTenantName, this.config.linkerdMeshEnabled), this.log);
+      await __K8sApplyResource(this.coreApi, _BuildClusterTenantNamespace(namespace, clusterTenantName), this.log);
     }
     else
     {
@@ -698,23 +695,6 @@ export class TenantOperator
     //       without this exclusion Cognee could exfiltrate the silo's data to an
     //       attacker-controlled host the moment that's exploited.
     await __K8sApplyResource(this.networkingApi, _BuildSiloExternalEgressNetworkPolicy(namespace, clusterTenantName), this.log);
-
-    // 1c. Linkerd identity layer (S5 / ADR 0001) — gated OFF by default. When on, lay
-    //     the meshed mTLS-identity analogue of the S2 baseline ON TOP of the L3/4 floor:
-    //     a deny-by-default Server + a MeshTLSAuthentication allow-list (intra-silo + the
-    //     operator plane only) + the AuthorizationPolicy binding them. Applied as untyped
-    //     CRs; the client fails closed (logs + skips) if Linkerd's CRDs are absent, so
-    //     enabling the gate on a Linkerd-less cluster is a safe no-op, not a wedged reconcile.
-    if (this.config.linkerdMeshEnabled)
-    {
-      const linkerdClient = new LinkerdIdentityClient(this.customApi, this.log);
-      const bundle = _BuildSiloLinkerdIdentityPolicy(namespace, clusterTenantName, this.config);
-      const { applied } = await linkerdClient.applySiloIdentityPolicy(namespace, bundle);
-      if (!applied)
-      {
-        this.log.warn({ namespace, clusterTenant: clusterTenantName }, "Linkerd identity policy skipped (CRDs absent); silo isolated at L3/4 only");
-      }
-    }
 
     // 2. ResourceQuota — cap the customer's aggregate CPU/memory/pods/storage/GPU
     //    so a single customer cannot starve the cluster. Only stamped when the

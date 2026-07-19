@@ -1,0 +1,5 @@
+chart: cilium
+repository: oci://quay.io/cilium/charts/cilium
+version: 1.19.6
+namespace: kube-system
+release: cilium
