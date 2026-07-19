@@ -1,4 +1,8 @@
 import type { ObotCustodyCredential } from "@opencrane/server/_infra/obot-custody";
+import type { Logger } from "@opencrane/observability";
+
+/** Structured logger methods used by the custody provisioning operation. */
+export type IntegrationCustodyLogger = Pick<Logger, "warn" | "error">;
 
 /** Request to provision remote custody for an integration. */
 export interface ProvisionIntegrationCustodyCommand
