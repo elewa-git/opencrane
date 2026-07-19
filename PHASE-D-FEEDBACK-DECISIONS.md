@@ -531,7 +531,56 @@ the new D14 security & architecture chapter and to every page rewritten in Part 
 the newcomer's experience, not correctness (correctness is Part 1 + the code); the writer revises to
 the reader's feedback until they agree it's good.
 
-**Note.** This is the final logged item of the Phase D feedback session.
+**Part 3 — cross-link to component READMEs.** In the website docs, where a page discusses a specific
+app or library, **link to that component's `README.md` on GitHub** (the per-app/per-lib READMEs from
+the D-scope README pass). The app/library ↔ component mapping is in
+`docs/agents/workload-ownership.json` (and the per-app `docs/agents/apps/*.md`) — _confirm the exact
+mapping source the user intended._ Keeps the website conceptual while linking readers to the
+authoritative source-level README for each component.
+
+---
+
+## D17 — handoff routing: Documentation → Claude, Implementation → Codex (with Claude review)
+
+**Status:** DECIDED (Jente, 2026-07-19). How the D1–D16 work is split and assigned.
+
+Split every logged to-do into two tracks:
+- **Documentation track → Claude** (writes docs/comments directly).
+- **Implementation track → Codex, with Claude review** (Codex implements; Claude reviews the diff).
+
+**Documentation track (→ Claude)**
+
+| Item | Work |
+|---|---|
+| D6 | Comment `ArtifactStore` / `__FilesystemArtifactStore` (invariants, why) |
+| D7 | Document `apps/artifact-service` — README + inline comments + `docs/agents/apps/artifact-service.md` |
+| D12 | Class comments on `ControllerAuthorityRepository` / `PrismaControllerAuthorityRepository` (consumer + intent) |
+| D13 | Document `_LoadControllerAuthorityConfig` (JSDoc + website) |
+| D14 | Website security & architecture chapter (whole authority model) |
+| D16 | Repo-wide docs staleness sweep + writer/reader loop + README cross-links (~159 `.md`) |
+| README pass | The paused per-lib/per-app README set (46 README-less libs + apps) — write against D5 final paths |
+| D9 (docs half) | READMEs + why-comments across the stack |
+| D15 (writeup) | The written runtime comparison (ADR appendix / design doc) |
+
+**Implementation track (→ Codex, Claude reviews)**
+
+| Item | Work |
+|---|---|
+| D1 | One Postgres server per ClusterTenant, N databases, per-database roles/secrets |
+| D2 | Squash migrations to one baseline (preserve the 13 raw-SQL trigger/function blocks) |
+| D3 | User-facing per-CT backup policy surface + retention wiring |
+| D4 | Move all tests into `__tests__/` (import fixes) + ESLint enforcement rule |
+| D5 | Split lib namespaces: operator `/server/` vs agent `/agents/` (personas first) + scope tags |
+| D8 | Artifact lib (`libs/backend/server/artifacts`) quality fixes + close #270 findings (iat bound, NP test) |
+| D9 (dedup half) | Extract shared utilities / better domain modelling to remove duplication |
+| D10 | Refactor `if` clusters → polymorphism / validator-aspect where it clarifies the model |
+| D11 | Performance analysis of every added step (benchmark + model) |
+| D15 (bake-off) | The #246 conformance run / driver selection producing the evidence |
+
+**Mixed items** are split at the track boundary: D9 (docs→Claude, dedup→Codex), D15 (writeup→Claude,
+conformance run→Codex), D8 (the *review* is Claude, the *fixes* are Codex). Sequencing note from
+earlier decisions still holds: **D5 (lib reorg) before D4 (test moves) and the README pass** so both
+target final paths; **D1 before D11** so perf numbers reflect the target topology.
 
 ---
 
