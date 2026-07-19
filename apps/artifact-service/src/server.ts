@@ -21,7 +21,13 @@ export async function _PrepareArtifactStore(config: ArtifactServiceProcessConfig
 	});
 }
 
-/** Create the private server, which accepts only OpenCrane-signed, bounded write leases. */
+/**
+ * Create the private server, which accepts only OpenCrane-signed, bounded write leases.
+ *
+ * The app is transport only: lease verification, byte bounding, deadline, stage-to-promote, and
+ * receipt signing belong to `@opencrane/backend/artifacts/*`. This shell adapts HTTP in and typed
+ * outcomes out; it intentionally exposes no read, list, or delete surface.
+ */
 export function _CreateServer(config: ArtifactServiceProcessConfig, store: ArtifactStore): Server
 {
 	return createServer(function _handle(request, response)
@@ -81,7 +87,13 @@ function _byteSource(request: IncomingMessage): BoundedArtifactUploadByteSource
 	};
 }
 
-/** Translates stable storage-domain outcomes into the private HTTP endpoint contract. */
+/**
+ * Translates stable storage-domain outcomes into the private HTTP endpoint contract.
+ *
+ * Deadline expiry destroys the socket because responding would keep a streaming client consuming
+ * disk past its lease bound. Oversize maps to 413 so a compliant client stops resending a body that
+ * can never fit; other protocol rejections are 403s with their stable typed reason.
+ */
 function _writePromotionOutcome(response: ServerResponse, outcome: PromoteArtifactUploadResult): void
 {
 	if (outcome.outcome === "promoted")
