@@ -2,9 +2,8 @@
 
 ::: tip In plain terms
 Not every task needs your best (most expensive) model. **Model routing** lets you pick the
-right model for each kind of work — or let OpenCrane pick for you — and **prove a cheaper
-model is just as good before you switch to it**. Less spend, same quality, and you approve
-every change yourself.
+right model for each kind of work — or let OpenCrane pick for you. Less spend, same quality,
+and you stay in control of every change.
 :::
 
 ## What you can do
@@ -13,10 +12,8 @@ every change yourself.
   choose automatically.
 - **Keep each customer to the models they're allowed.** A tenant can only call models you've
   granted them.
-- **Prove savings before you commit.** Try a cheaper model against real example tasks, see
-  how much you'd save and how confident the result is, and switch only if you approve.
 
-Nothing changes silently. The platform *proposes*; a human *approves*.
+Nothing changes silently — routing follows the defaults and pins you set yourself.
 
 ## Pick a model per skill
 
@@ -25,8 +22,8 @@ default for that scope. Pin when you want predictability; use auto when you'd ra
 the choice in one place. When a skill is on auto, the choice comes from a default you set
 once — for the whole company, or per customer.
 
-Manage the registered models through `/api/v1/models`, and each skill's posture through
-`/api/v1/skills/posture/skill`. Use the generated contracts client or the
+Manage the registered models through `/api/v1/models`, and the auto defaults through
+`/api/v1/model-routing/defaults`. Use the generated contracts client or the
 [interactive API reference](/reference/api) for the current payload types.
 
 ## Keep each customer to their allowed models
@@ -35,27 +32,13 @@ Every customer is confined to the models you've granted them. If a model isn't o
 list, their assistants simply can't call it — the boundary is enforced automatically, you
 don't have to police it.
 
-## Prove a cheaper model before you switch
-
-This is the part that protects quality. Instead of guessing whether a cheaper model is
-"good enough", you measure it:
-
-1. **Give the skill a few example tasks** — the kind of thing it does day to day — with a
-   quality bar each answer must clear.
-2. **Run a measurement.** OpenCrane tries both your current model and the cheaper candidate
-   on every example, has an independent model grade the answers, and reports **how much
-   you'd save and how sure it is** of that number.
-3. **Nothing changes.** A good result becomes a *suggestion* waiting for your approval — live
-   traffic is never touched during a measurement.
-
-Create examples through `/api/v1/model-routing/eval-cases`, then start a run with
-`POST /api/v1/model-routing/measurements/run`. All of these routes require authentication.
-
-## Approve or reject — you decide
-
-A measurement that shows real savings turns into a ranked suggestion. You review it and
-choose; nothing is ever applied on its own. Approving switches the skill and records the
-decision in the [audit log](/guide/audit); rejecting changes nothing.
+::: info The automated savings-measurement loop has been retired
+Earlier versions shipped a built-in measurement loop (`eval-cases` and `measurements/run`
+endpoints) that graded a cheaper candidate model against example tasks before a switch.
+That loop has been removed and its routes no longer exist. To change a skill's model,
+update its pin or the auto default yourself, and use the cost and quality metrics below to
+judge the result.
+:::
 
 ## See cost & quality at a glance
 
@@ -65,10 +48,8 @@ stay on the server — the browser never holds them.
 
 ## Going deeper
 
-How model resolution, allowlists, and savings measurement work under the hood is covered in
-the [API overview → Model routing](/reference/api-overview#model-routing). The full operator
-recipe for turning on measurement lives at
-[`docs/operators/routing-measurement.md`](https://github.com/italanta/opencrane/blob/main/docs/operators/routing-measurement.md).
+How model resolution and allowlists work under the hood is covered in
+the [API overview → Model routing](/reference/api-overview#model-routing).
 
 ## See also
 

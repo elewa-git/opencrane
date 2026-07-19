@@ -1,6 +1,8 @@
 # OpenCrane memory layer (Cognee retrieval)
 
-OpenCrane's **organisational memory** is a Cognee-backed knowledge layer that tenant
+OpenCrane's **organisational memory** is a
+[Cognee](https://github.com/italanta/opencrane/blob/main/apps/_infra/cognee/README.md)-backed
+knowledge layer that tenant
 agents query during the agentic loop. This page covers write-through ingest, dataset
 isolation, AccessPolicy mapping, and freshness controls.
 

@@ -7,6 +7,14 @@ instances in one Kubernetes cluster** — for example, hosting multiple distinct
 customers or business units side by side. If that's not you, skip it.
 :::
 
+::: info Fleet chart location
+The fleet platform chart described on this page moved to OpenCrane's proprietary
+fleet repository as part of the open-core split (#150). `apps/fleet-platform/…`
+paths below refer to that repository's layout, not this open-source repo. The CRD
+bundle installed cluster-wide is mirrored at
+`apps/_infra/deploy-k8s/templates/crds/` here.
+:::
+
 Run **N strictly-isolated OpenCrane instances in one cluster**, each owning its own
 namespace(s), RBAC, and per-instance control plane and operator. Multi-instance mode is
 **opt-in** (`multiInstance.enabled=true`). The legacy single-install path is the default
@@ -90,7 +98,6 @@ The bundle installs the cluster-scoped CRDs in the `opencrane.io` group:
 | `accesspolicies.opencrane.io` | `AccessPolicy` | `v1alpha1` |
 | `mcpservers.opencrane.io` | `MCPServer` | `v1alpha1` |
 | `schedules.opencrane.io` | `Schedule` | `v1alpha1` |
-| `skillregistries.opencrane.io` | `SkillRegistry` | `v1alpha1` |
 | `clustertenants.opencrane.io` | `ClusterTenant` | `v1alpha1` |
 
 To preview exactly what will be applied (e.g. in CI before a fleet rollout), render the

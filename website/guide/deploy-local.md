@@ -31,14 +31,22 @@ node:
 curl -sfL https://get.k3s.io | sh -
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
-# 2. Install OpenCrane — fleet release (cluster bootstrap + fleet-manager)
-apps/fleet-platform/deploy.sh --base-domain <your-domain>
+# 2. Install the fleet release (cluster bootstrap + fleet-manager) — the fleet
+#    chart ships from the proprietary fleet repository (see note below)
+<fleet-repo>/deploy.sh --base-domain <your-domain>
 
 # 3. Install a silo release for your organisation
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain <your-domain> \
   --cluster-tenant <org-name>
 ```
+
+::: info Where the fleet chart lives
+The fleet release (cluster bootstrap + fleet-manager) is the proprietary half of
+OpenCrane's open-core split and ships from its own repository — it is no longer at
+`apps/fleet-platform` in the open-source repo. The silo release
+(`apps/_infra/deploy-k8s`) is the open-source part shown above.
+:::
 
 Point your domain at the server's IP (see [Set up your domain](/guide/dns)) and you
 have a real, public deployment on a single host.
