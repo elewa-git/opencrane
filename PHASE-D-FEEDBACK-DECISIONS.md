@@ -431,6 +431,46 @@ mention of the controller-authority plane, capabilities, or this config gate.
 
 ---
 
+## Decision D14 — author a dedicated website chapter on security & architecture (the whole authority model)
+
+**Status:** DECIDED (Jente, 2026-07-19). Expands D13's website scope from one page to a full chapter.
+
+**Context.** The website has no home for the target security/architecture story. `website/security/`
+holds only three blue/OpenClaw-era pages (`identity.md`, `connection-security.md`,
+`zitadel-key-rotation.md`), buried inside the collapsed "Operating OpenCrane" nav group; `website/
+advanced/architecture.md` is a single page. **None of it documents the Phase D authority model** —
+capabilities, proofs, controller authority, workload identity, fail-closed authorization, run fencing,
+or the target run/data architecture. D13 asked for the controller-config gate on "the authority page";
+the real need is the whole model documented as its own chapter.
+
+**Decision.** Create a **top-level "Security & architecture" chapter** on the website (via the
+`website` agent, house style; promoted in `.vitepress/config.ts` nav, not buried under Operating),
+documenting the target model end to end. Grounded in ADR 0008/0009 and the code — not the stale
+blue-era pages.
+
+**Security half — the whole authority model:**
+- Capabilities: single-action, proof-bound, time-boxed, bound to workload/run/attempt/args; the
+  `ActionCapability` shape and issuance.
+- Proof-of-possession: the DPoP/ES256 proof envelope, per-request binding, replay/expiry handling.
+- Effective-authorization digest and grant-staleness rejection.
+- Workload identity: KSA + audience-bound projected tokens, `TokenReview`; runtimes hold no ambient
+  RBAC; the controller as sole workload mutator; the fail-closed config gate (D13).
+- Trust boundaries: channel-proxy (edge, delegates all authz), artifact-service (leased writes),
+  agent-controller, agent-runtime (inert). Network default-deny (Cilium, identity-bound).
+- Data authority: Postgres as sole authority, per-database least-privilege credentials (D1),
+  fencing/immutability triggers. The fail-closed principle throughout.
+
+**Architecture half:**
+- Target topology (apps own deployables, logic in libs, dependency direction).
+- Run lifecycle: run-ingest → `RunEvent` commit-before-SSE → cursor delivery; steering absorb/defer.
+- ArtifactStore CAS; Postgres authority + fresh provisioning; OpenSandbox sandbox boundary (ADR 0009).
+
+**Also:** the three existing blue-era security pages need review/reaping as the green model replaces
+them (ties to Phase G zero-residue docs). D13's *code* portion stands; its website portion is
+delivered here.
+
+---
+
 ## Related open feedback (not yet decided)
 
 - **A — ADR 0002 drift:** `values.yaml:12` still cites "ONE CNPG cluster per silo (ADR 0002
