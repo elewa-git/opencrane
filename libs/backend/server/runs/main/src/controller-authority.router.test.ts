@@ -69,6 +69,15 @@ describe("controller authority internal router", function _suite()
 		expect(repository.recordPod).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, workloadName: "agent-run-run-1", workloadUid: "job-uid", podUid: "pod-uid" }, 1_000);
 	});
 
+	it("allows the exact controller to durably reject a malformed desired Job", async function _rejectsDesired()
+	{
+		const repository = _repository();
+		const response = await request(_app(repository, _authApi())).post("/api/internal/agent-controller/desired/reject").set("Authorization", "Bearer t").send({ runId: "run-1", attempt: 1, reason: "invalid_desired_job" });
+
+		expect(response.status).toBe(204);
+		expect(repository.rejectDesiredJob).toHaveBeenCalledWith("run-1", 1, "invalid_desired_job", 1_000);
+	});
+
 	it("does not invoke authority methods for missing tokens or malformed acknowledgement data", async function _rejectsUntrusted()
 	{
 		const repository = _repository();

@@ -29,6 +29,25 @@ export function __CreateControllerAuthorityRouter(dependencies: ControllerAuthor
 			_problem(response, 503, "authority_unavailable");
 		}
 	});
+	router.post("/desired/reject", async function _rejectDesired(request: Request, response: Response)
+	{
+		if (!await _authenticate(request, response, dependencies)) return;
+		const rejection = _desiredRejection(request.body);
+		if (rejection === null)
+		{
+			_problem(response, 400, "invalid_rejection");
+			return;
+		}
+		try
+		{
+			await dependencies.repository.rejectDesiredJob(rejection.runId, rejection.attempt, rejection.reason, dependencies.nowEpochMs());
+			response.status(204).end();
+		}
+		catch
+		{
+			_problem(response, 409, "rejection_rejected");
+		}
+	});
 
 	router.post("/workloads/job", async function _recordJob(request: Request, response: Response)
 	{
@@ -131,6 +150,13 @@ function _podObservation(value: unknown): ControllerPodObservation | null
 	const job = _jobObservation(value);
 	if (job === null || !_record(value) || typeof value.podUid !== "string" || !_identifier(value.podUid)) return null;
 	return { ...job, podUid: value.podUid };
+}
+
+/** Parse one bounded controller rejection without accepting arbitrary diagnostic data. */
+function _desiredRejection(value: unknown): { readonly runId: string; readonly attempt: number; readonly reason: string } | null
+{
+	if (!_record(value) || typeof value.runId !== "string" || !Number.isSafeInteger(value.attempt) || typeof value.reason !== "string" || !_identifier(value.runId) || (value.attempt as number) < 1 || !_identifier(value.reason) || value.reason.length > 120) return null;
+	return { runId: value.runId, attempt: value.attempt as number, reason: value.reason };
 }
 
 /** Narrow untrusted JSON to a non-array record. */

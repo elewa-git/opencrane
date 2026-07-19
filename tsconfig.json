@@ -100,6 +100,12 @@
       "@opencrane/backend/server/runs": [
         "./libs/backend/server/runs/main/src/index.ts"
       ],
+      "@opencrane/backend/agent-controller": [
+        "./libs/backend/agent-controller/main/src/index.ts"
+      ],
+      "@opencrane/backend/agent-controller/kubernetes": [
+        "./libs/backend/agent-controller/kubernetes/src/index.ts"
+      ],
       "@opencrane/backend/server/skills": [
         "./libs/backend/server/skills/main/src/index.ts"
       ],
