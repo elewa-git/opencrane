@@ -97,7 +97,6 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
     controlPlaneInternalUrl: _readEnvValue<string>("CLUSTERTENANT_MANAGER_INTERNAL_URL", "string", false, "http://localhost:8081"),
     controlPlaneInternalServiceUrl: _readEnvValue<string>("CLUSTERTENANT_MANAGER_INTERNAL_SERVICE_URL", "string", false, `http://opencrane-opencrane-server.${ownNamespace}.svc:8081`),
     projectedTokenTtlSeconds: _readEnvValue<number>("PROJECTED_TOKEN_TTL_SECONDS", "number", false, 600),
-    linkerdMeshEnabled: _readEnvValue<boolean>("LINKERD_MESH_ENABLED", "boolean", false, false),
     deploymentMode,
     standaloneSeedName: _readEnvValue<string>("CLUSTER_TENANT_SEED_NAME", "string", false, ""),
     standaloneSeedDisplayName: _readEnvValue<string>("CLUSTER_TENANT_SEED_DISPLAY_NAME", "string", false, ""),

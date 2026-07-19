@@ -138,14 +138,6 @@ and is folded into the per-namespace Role by MI.4's namespaced cert Issuer.
 - apiGroups: ["cilium.io"]
   resources: ["ciliumnetworkpolicies"]
   verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- if .Values.fleetManager.linkerdMeshEnabled }}
-# Linkerd identity-layer policy CRs the silo reconcile applies per namespace (S5): a
-# deny-by-default Server + MeshTLSAuthentication allow-list + the binding AuthorizationPolicy.
-# Granted only when the mesh gate is on; an absent Linkerd CRD makes the apply skip.
-- apiGroups: ["policy.linkerd.io"]
-  resources: ["servers", "meshtlsauthentications", "authorizationpolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- end }}
 # Events for audit trail.
 - apiGroups: [""]
   resources: ["events"]

@@ -9,6 +9,9 @@
     "artifact-service",
     "agent-controller",
     "agent-runtime-prepared-job",
+    "cilium-agent",
+    "cilium-operator",
+    "cilium-policy-probe",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -104,6 +107,16 @@
       "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts",
       "anchor": "kind: \"Deployment\"",
       "workloadIds": ["openclaw-tenant-runtime"]
+    },
+    {
+      "path": "apps/_infra/cilium/deploy.sh",
+      "anchor": "arguments=(upgrade --install \"$RELEASE\" \"$CHART\"",
+      "workloadIds": ["cilium-agent", "cilium-operator"]
+    },
+    {
+      "path": "apps/_infra/cilium/scripts/probe-network-policy.sh",
+      "anchor": "kind: Pod",
+      "workloadIds": ["cilium-policy-probe"]
     },
     {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
@@ -279,6 +292,33 @@
       "localOwner": true,
       "source": { "type": "file", "path": "libs/backend/agent-runtime/job-template/src/job-template.ts", "anchor": "kind: \"Job\"" },
       "sharedImageContract": "The runtime app owns the suspended, bootstrap-inert Job identity, token, and scratch projection. The controller remains its sole Kubernetes mutator."
+    },
+    {
+      "id": "cilium-agent",
+      "podClass": "DaemonSet/cilium",
+      "image": "upstream Cilium chart 1.19.6",
+      "owner": "apps/_infra/cilium",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/_infra/cilium/deploy.sh", "anchor": "arguments=(upgrade --install \"$RELEASE\" \"$CHART\"" },
+      "sharedImageContract": "The app-owned cluster CNI substrate is installed once before any OpenCrane product workload."
+    },
+    {
+      "id": "cilium-operator",
+      "podClass": "Deployment/cilium-operator",
+      "image": "upstream Cilium chart 1.19.6",
+      "owner": "apps/_infra/cilium",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/_infra/cilium/deploy.sh", "anchor": "arguments=(upgrade --install \"$RELEASE\" \"$CHART\"" },
+      "sharedImageContract": "The app-owned cluster CNI substrate is installed once before any OpenCrane product workload."
+    },
+    {
+      "id": "cilium-policy-probe",
+      "podClass": "Pod/cilium-policy-probe",
+      "image": "pinned Cilium policy-probe images",
+      "owner": "apps/_infra/cilium",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/_infra/cilium/scripts/probe-network-policy.sh", "anchor": "kind: Pod" },
+      "sharedImageContract": "The cleanup-safe probe proves Cilium allows and denies the exact selected endpoints before product deployment."
     },
     {
       "id": "cognee",

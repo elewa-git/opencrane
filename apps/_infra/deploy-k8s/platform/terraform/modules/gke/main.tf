@@ -84,14 +84,9 @@ resource "google_container_cluster" "cluster"
 
   # Autopilot mode — no node pools to manage.
   #
-  # NETWORK-POLICY ENFORCEMENT (S2 / silo Phase 1, task_d6404452): Autopilot clusters
-  # run GKE Dataplane V2 (Cilium) and ENFORCE NetworkPolicy inherently — there is no
-  # `network_policy {}` / `datapath_provider` knob to set here (setting them on an
-  # Autopilot cluster is rejected). So the per-silo default-deny baseline the operator
-  # emits (_BuildSiloBaselineNetworkPolicy) is actually enforced on any cluster created
-  # by this module. DO NOT migrate this to a Standard cluster without re-adding
-  # `datapath_provider = "ADVANCED_DATAPATH"` (or `network_policy { enabled = true }`),
-  # or every NetworkPolicy silently becomes a no-op and the silo edge fails OPEN.
+  # This legacy Autopilot provisioning path is not a target OpenCrane substrate: it cannot
+  # install the app-owned upstream Cilium release. The target deployment gate therefore
+  # rejects it until cluster provisioning moves to a Cilium-compatible clean cluster path.
   enable_autopilot = true
 
   # Private cluster configuration — only when a custom VPC provides Cloud NAT.

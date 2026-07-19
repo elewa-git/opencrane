@@ -11,5 +11,4 @@ export * from "./custom-object-apply.js";
 export type * from "./custom-object-apply.types.js";
 export * from "./watch-runner.js";
 export * from "./cluster-tenant.types.js";
-export * from "./linkerd.js";
 export * from "./cluster-tenant-namespace.js";

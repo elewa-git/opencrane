@@ -49,7 +49,6 @@ export const defaultConfig: OpenClawTenantOperatorConfig = {
   controlPlaneInternalUrl: "http://localhost:8081",
   controlPlaneInternalServiceUrl: "http://opencrane-opencrane-server.default.svc:8081",
   projectedTokenTtlSeconds: 600,
-  linkerdMeshEnabled: false,
   // Fleet-managed baseline fixture (#151 item 4): tests exercising the standalone path opt in
   // via a config override (deploymentMode: "standalone", etc).
   deploymentMode: "fleet-managed",

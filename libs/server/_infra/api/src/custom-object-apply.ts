@@ -11,8 +11,8 @@ export type { CustomObjectRef } from "./custom-object-apply.types.js";
  * (already exists) the caller calls this to GET the live object, copy its
  * `metadata.resourceVersion` onto the desired manifest, and `replace` — converging without the
  * content-type pitfalls of a merge-patch. Both managers drive cert-manager Certificates,
- * external-dns DNSEndpoints, cert-manager Issuers, and Linkerd policy CRs through this exact
- * dance, so it lives here in `@opencrane/server/_infra/api` to be defined once.
+ * external-dns DNSEndpoints, and cert-manager Issuers through this exact dance, so it lives
+ * here in `@opencrane/server/_infra/api` to be defined once.
  *
  * The caller owns the create + error-classification (404-absent-CRD vs 409-conflict, via the
  * `_IsConflict`/`_IsCrdAbsent` helpers); this is only the 409 → replace tail.
