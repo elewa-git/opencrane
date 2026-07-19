@@ -8,14 +8,12 @@ metadata:
 spec:
   cluster:
     name: {{ include "opencrane.postgres.fullname" . }}
-  schedule: {{ .Values.backup.schedule | quote }}
+  schedule: {{ include "opencrane.postgres.backupSchedule" . | quote }}
   immediate: {{ .Values.backup.immediate }}
   backupOwnerReference: cluster
   method: plugin
   pluginConfiguration:
-    name: {{ .Values.backup.plugin.name | quote }}
-    {{- with .Values.backup.plugin.parameters }}
+    name: "barman-cloud.cloudnative-pg.io"
     parameters:
-      {{- toYaml . | nindent 6 }}
-    {{- end }}
+      barmanObjectName: {{ .Values.backup.objectStore.name | quote }}
 {{- end }}

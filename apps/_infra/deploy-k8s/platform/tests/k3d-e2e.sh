@@ -444,32 +444,10 @@ kubectl wait --for=condition=Complete job/opencrane-backup-bucket \
   -n "$NAMESPACE" \
   --timeout="${TIMEOUT_SECONDS}s"
 
-cat <<EOF | kubectl apply -f -
-apiVersion: barmancloud.cnpg.io/v1
-kind: ObjectStore
-metadata:
-  name: ${BACKUP_OBJECT_STORE_NAME}
-  namespace: ${NAMESPACE}
-spec:
-  configuration:
-    destinationPath: s3://backups/
-    endpointURL: http://${BACKUP_MINIO_NAME}.${NAMESPACE}.svc.cluster.local:9000
-    s3Credentials:
-      accessKeyId:
-        name: opencrane-backup-object-store-credentials
-        key: ACCESS_KEY_ID
-      secretAccessKey:
-        name: opencrane-backup-object-store-credentials
-        key: ACCESS_SECRET_KEY
-    wal:
-      compression: gzip
-  instanceSidecarConfiguration:
-    env:
-      - name: AWS_REQUEST_CHECKSUM_CALCULATION
-        value: when_required
-      - name: AWS_RESPONSE_CHECKSUM_VALIDATION
-        value: when_required
-EOF
+# The chart, rather than this harness, owns the Barman ObjectStore. This exact
+# value is also supplied to the static server-side API check below, so a future
+# Phase F policy cannot accidentally leave retention in an out-of-band manifest.
+BACKUP_OBJECT_STORE_JSON="{\"name\":\"$BACKUP_OBJECT_STORE_NAME\",\"configuration\":{\"destinationPath\":\"s3://backups/\",\"endpointURL\":\"http://$BACKUP_MINIO_NAME.$NAMESPACE.svc.cluster.local:9000\",\"s3Credentials\":{\"accessKeyId\":{\"name\":\"opencrane-backup-object-store-credentials\",\"key\":\"ACCESS_KEY_ID\"},\"secretAccessKey\":{\"name\":\"opencrane-backup-object-store-credentials\",\"key\":\"ACCESS_SECRET_KEY\"}},\"wal\":{\"compression\":\"gzip\"}},\"instanceSidecarConfiguration\":{\"env\":[{\"name\":\"AWS_REQUEST_CHECKSUM_CALCULATION\",\"value\":\"when_required\"},{\"name\":\"AWS_RESPONSE_CHECKSUM_VALIDATION\",\"value\":\"when_required\"}]}}"
 
 function _validate_cnpg_backup_recovery_schema()
 {
@@ -482,8 +460,9 @@ function _validate_cnpg_backup_recovery_schema()
     --set-json "databases=$DATABASES_JSON" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set backup.enabled=true \
-    --set backup.plugin.name=barman-cloud.cloudnative-pg.io \
-    --set backup.plugin.parameters.barmanObjectName=contract-only >"$rendered"
+    --set backup.frequency=daily \
+    --set backup.retainedCopies=7 \
+    --set-json "backup.objectStore=$BACKUP_OBJECT_STORE_JSON" >"$rendered"
   kubectl apply --server-side --dry-run=server -n "$NAMESPACE" -f "$rendered" >/dev/null
 
   echo "[e2e] Validating recovery contract against the pinned CNPG API server schema"
@@ -585,8 +564,9 @@ function _run_backup_restore_smoke()
     --namespace "$NAMESPACE" \
     --reuse-values \
     --set backup.enabled=true \
-    --set backup.plugin.name=barman-cloud.cloudnative-pg.io \
-    --set-string "backup.plugin.parameters.barmanObjectName=$BACKUP_OBJECT_STORE_NAME"
+    --set backup.frequency=daily \
+    --set backup.retainedCopies=7 \
+    --set-json "backup.objectStore=$BACKUP_OBJECT_STORE_JSON"
 
   kubectl wait --for=condition=ContinuousArchiving "cluster/$OPENCRANE_DB_RELEASE_NAME" \
     -n "$NAMESPACE" \

@@ -52,12 +52,21 @@ privileges:
   timeoutSeconds: 300
 
 backup:
+  # This is the infrastructure contract that Phase F/#224's ClusterTenant policy
+  # reconciles into. It deliberately has no UI or product API here.
   enabled: false
-  schedule: "0 0 2 * * *"
+  # A bounded cadence makes retainedCopies convertible to the Barman ObjectStore
+  # recovery-window policy: daily => Nd, weekly => Nw, monthly => Nm.
+  frequency: daily
+  retainedCopies: 7
   immediate: false
-  plugin:
+  # The Barman Cloud CNPG-I ObjectStore is app-owned when backups are enabled.
+  # Configuration contains references to pre-created credential Secrets; it never
+  # contains credential values. destinationPath must be unique per ClusterTenant.
+  objectStore:
     name: ""
-    parameters: {}
+    configuration: {}
+    instanceSidecarConfiguration: {}
 
 restore:
   enabled: false
