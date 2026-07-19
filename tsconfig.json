@@ -70,6 +70,9 @@
       "@opencrane/backend/server/identity": [
         "./libs/backend/server/identity/main/src/index.ts"
       ],
+      "@opencrane/backend/server/integrations": [
+        "./libs/backend/server/integrations/main/src/index.ts"
+      ],
       "@opencrane/backend/server/metrics": [
         "./libs/backend/server/metrics/main/src/index.ts"
       ],

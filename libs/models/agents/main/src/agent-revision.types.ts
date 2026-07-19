@@ -12,12 +12,14 @@ export interface SkillRevisionReference
 	readonly revisionId: string;
 }
 
-/** Immutable reference to an MCP server assignment. */
-export interface McpAssignmentReference
+/** Immutable reference to an integration assignment. */
+export interface IntegrationAssignmentReference
 {
-	/** Stable MCP server identifier. */
-	readonly serverId: string;
-	/** Explicit tool names exposed from the server. */
+	/** Stable silo-scoped integration identifier. */
+	readonly integrationId: string;
+	/** Immutable opaque Obot custody reference selected for the revision. */
+	readonly custodyReferenceId: string;
+	/** Explicit tool identifiers exposed from the integration. */
 	readonly allowedTools: readonly string[];
 }
 
@@ -53,8 +55,8 @@ export interface AgentRevision
 	readonly modelPolicyId: string;
 	/** Immutable skill revisions available to the runtime. */
 	readonly skills: readonly SkillRevisionReference[];
-	/** Immutable MCP server and tool assignments available to the runtime. */
-	readonly mcpAssignments: readonly McpAssignmentReference[];
+	/** Immutable integration and tool assignments available to the runtime. */
+	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
 	/** Resource ceilings applied to each run. */
 	readonly budget: AgentBudget;
 	/** Identifier of the user who authored the revision. */
