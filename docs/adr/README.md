@@ -13,7 +13,7 @@ is not itself published.
 | ADR | Title | Status |
 |-----|-------|--------|
 | [0001](0001-cluster-tenant-virtual-network-isolation.md) | ClusterTenant-as-virtual-network strict isolation (substrate) | Superseded by 0003 |
-| [0002](0002-per-clustertenant-silo-architecture.md) | Per-ClusterTenant silo architecture (dedicated operator, planes, API/DB per tenant) | Accepted |
+| [0002](0002-per-clustertenant-silo-architecture.md) | Per-ClusterTenant silo architecture (dedicated operator, planes, API/DB per tenant) | Accepted; amended 2026-07-19 |
 | [0003](0003-cilium-spiffe-identity-substrate.md) | Cilium identity and network-policy substrate | Accepted; corrected 2026-07-16 |
 | [0004](0004-open-core-fleet-silo-licence-split.md) | Open-core licence split at the fleet ↔ silo boundary (AGPL template + proprietary fleet) | Accepted |
 | [0005](0005-opencrane-owned-agent-runtime.md) | OpenCrane-owned agent runtime | Accepted; amended 2026-07-18 |

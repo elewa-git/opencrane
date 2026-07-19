@@ -1,6 +1,6 @@
 # ADR 0002 — Per-ClusterTenant silo architecture (dedicated operator, planes, API/DB per tenant)
 
-- **Status:** Accepted
+- **Status:** Accepted; amended 2026-07-19 (decision D1: one CNPG server per silo reaffirmed, per-database roles/credentials added)
 - **Date:** 2026-06-26
 - **Task:** `task_5164276f` (Phase 3 / S6 of the strict-multi-tenancy program)
 - **Supersedes / superseded by:** none — **refines** [ADR 0001](0001-cluster-tenant-virtual-network-isolation.md), which chose the isolation *substrate* (Linkerd + the NetworkPolicy floor) and explicitly deferred the *placement* decisions (which planes move into the silo, the per-CT operator design, per-CT API/DB) to Phase 3 / this ADR.
@@ -52,6 +52,14 @@ Each ClusterTenant runs its **own dedicated instances** of the full per-tenant s
 - its own **operator**
 - its own **per-CT networking** (the S2 NetworkPolicy silo + S5 Linkerd identity)
 - its own **tenant DB** (a dedicated Postgres database for the tenant)
+
+  > **Amendment (2026-07-19, decision D1).** Reaffirmed and refined: each silo runs **one CNPG
+  > Postgres server (one `Cluster`)** hosting its sibling logical databases (opencrane, obot,
+  > litellm, langfuse, fleet as appropriate). A per-authority split into separate CNPG Clusters
+  > (briefly introduced by PR #268) is rejected — it multiplies idle pods and PVCs without
+  > isolation gains. New with D1: **each database gets its own least-privilege role and its own
+  > credential Secret** (no shared owner role across sibling databases), so a leaked or rotated
+  > credential's blast radius is one database.
 
 Planes are **never shared singletons multiplexing tenants behind an ACL**. The **only central
 (shared, cross-silo) components are the opencrane-api and Zitadel** — nothing else. (Other
