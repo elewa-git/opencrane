@@ -157,6 +157,9 @@
       "@opencrane/server/_infra/http": [
         "./libs/server/_infra/http/src/index.ts"
       ],
+      "@opencrane/server/_infra/obot-custody": [
+        "./libs/server/_infra/obot-custody/src/index.ts"
+      ],
       "@opencrane/server/_infra/tenant-hosting": [
         "./libs/server/_infra/tenant-hosting/src/index.ts"
       ],
