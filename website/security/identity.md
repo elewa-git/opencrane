@@ -75,7 +75,7 @@ All steps are ✅ implemented (gated by `gatewayProxy.enabled`).
 | Credential | Subject | Audience / target | TTL / storage | Status |
 |-----------|---------|-------------------|---------------|--------|
 | **Control-plane session cookie** | the human | control plane + identity-routing proxy | server-signed, HTTP-only cookie (~12h) | ✅ |
-| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `feat-skill-registry` / `opencrane-server` | ~600s, kubelet-rotated, in-cluster only | ✅ |
+| **Projected SA token** | a Kubernetes service account | `obot-gateway` / `opencrane-server` | ~600s, kubelet-rotated, in-cluster only | ✅ |
 
 The browser holds **only** the HTTP-only session cookie. There is no bootstrap token, no
 device token, and no pod-specific credential in the browser.

@@ -10,12 +10,6 @@ All MCP server calls route through the gateway at `OPENCRANE_MCP_GATEWAY_URL`.
 Your entitled MCP servers are listed in your runtime contract. The current allow-list is
 available in `OPENCRANE_ALLOWED_MCP_SERVERS` at startup and refreshed every 30 seconds.
 
-## Skill Registry
-
-Skills are fetched from `OPENCRANE_SKILL_REGISTRY_URL`.
-
-Your entitled skills are listed in your runtime contract (`skills.entitled`).
-
 ## Org Memory (Cognee)
 
 Your organisation's shared long-term memory **is** a Cognee knowledge graph at `COGNEE_ENDPOINT`

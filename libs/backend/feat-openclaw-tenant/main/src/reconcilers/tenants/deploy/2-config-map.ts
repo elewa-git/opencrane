@@ -206,10 +206,9 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
 
   // 2. Managed-runtime contract — publish OpenCrane-owned capabilities and
   //    tenant context in a machine-readable form for runtime features.
-  //    mcp.servers and skills.entitled are advisory stubs only; the live
-  //    compiled grant is served by GET /api/tenants/:name/effective-contract
-  //    and re-pulled by the pod at each agentic-loop boundary. The ingress
-  //    planes (Obot MCP Gateway, Skill Registry) are the authoritative boundary.
+  //    mcp.servers is an advisory stub only; the live compiled grant is served
+  //    by GET /api/tenants/:name/effective-contract and re-pulled by the pod at
+  //    each agentic-loop boundary. The Obot MCP Gateway is the authoritative boundary.
   const runtimeContract = {
     version: "opencrane-runtime/v1alpha1",
     contractVersion: "2.1.0",
@@ -227,11 +226,6 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
       gateway: config.mcpGatewayUrl,
       // Actual compiled server grants are fetched from effective-contract at runtime.
       servers: [],
-    },
-    skills: {
-      registry: config.skillRegistryUrl,
-      // Actual entitled skill index is fetched from effective-contract at runtime.
-      entitled: [],
     },
     // Org-memory backend advertised to the runtime. Cognee IS the platform memory engine — a
     // settled dependency, not an option. When it is wired (COGNEE_ENDPOINT injected into the pod —

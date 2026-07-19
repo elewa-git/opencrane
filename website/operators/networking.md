@@ -38,7 +38,7 @@ OpenCrane organises all cluster traffic into **two distinct planes**: a narrow p
 ┌─────────────────────────────────────────────────────────────────────┐
 │  PLANE 2 — INTERNAL CLUSTER NETWORK (ClusterIP only)                │
 │                                                                     │
-│  opencrane-api :8080    mcp-gateway :8080    feat-skill-registry :5000   │
+│  opencrane-api :8080    mcp-gateway :8080                               │
 │  litellm :4000          cognee :8000         postgres (CNPG) :5432  │
 │                                                                     │
 │  per-org namespaces (opencrane-<org>):                              │
@@ -101,7 +101,6 @@ All platform services are ClusterIP-only. No plane service exposes an Ingress or
 |---------|------|-----------|
 | opencrane-api | 8080 | opencrane-system |
 | mcp-gateway (Obot) | 8080 | opencrane-system |
-| feat-skill-registry | 5000 | opencrane-system |
 | litellm | 4000 | opencrane-system |
 | cognee | 8000 | opencrane-system |
 | Postgres (CNPG) | 5432 | opencrane-system |
@@ -155,10 +154,8 @@ The silo chart renders per-plane ingress NetworkPolicies when `networkPolicy.ena
 
 | Policy | Protects | Admits ingress from |
 |--------|----------|---------------------|
-| `*-opencrane-api-ingress` | opencrane-api :8080 | ingress-nginx namespace + operator + mcp-gateway + feat-skill-registry + tenant pods (contract re-pull) |
+| `*-opencrane-api-ingress` | opencrane-api :8080 | ingress-nginx namespace + operator + mcp-gateway + tenant pods (contract re-pull) |
 | `*-mcp-gateway-ingress` | mcp-gateway :8080 | tenant pods + opencrane-api + operator |
-| `*-feat-skill-registry-ingress` | feat-skill-registry :5000 | tenant pods + opencrane-api + operator |
-| `*-skill-oci-ingress` | skill OCI store | opencrane-api only |
 
 Tenant pods reach the control plane to re-pull their effective contract (`GET /api/internal/contract/:name`); the policy allows this, and the handler enforces identity via TokenReview — so network and application auth are both in play.
 
@@ -177,7 +174,7 @@ The policy uses an **empty `podSelector`** (it selects every pod in the silo nam
 | Ingress | the same silo namespace (intra-silo) | pods within one org talk to each other |
 | Ingress | the opencrane-api / operator namespace | the super-admin plane is the only principal allowed to reach inward (it brokers the gateway connection) |
 | Egress | cluster DNS (`kube-system`, UDP/TCP 53) | without this every name lookup fails and the pod is dead |
-| Egress | the same silo namespace + the opencrane-api / operator namespace | reach the shared planes (opencrane-api, Obot/MCP, feat-skill-registry, LiteLLM, Cognee) in the shared tier |
+| Egress | the same silo namespace + the opencrane-api / operator namespace | reach the shared planes (opencrane-api, Obot/MCP, LiteLLM, Cognee) in the shared tier |
 | Egress | external HTTPS (TCP 443) | the agent legitimately calls out to LLM / MCP / Git endpoints |
 
 This **replaces the retired `opencrane-tenant-default` policy**, which sat in the install namespace (`opencrane-system`) and selected tenant pods cluster-wide by `app.kubernetes.io/component=tenant` — so it governed nothing in the per-org namespaces where tenant pods actually run, leaving egress unrestricted there. The operator now emits one correctly-scoped policy per silo namespace it provisions, so egress (DNS + HTTPS only) and east-west default-deny are enforced in the right place. The companion per-tenant gateway policy (`openclaw-<tenant>-gateway`, [Layer 1](#the-authenticated-operator-seam) above) narrows the gateway *port* to the operator on top of this baseline; `NetworkPolicy` rules are additive, so the two compose.
@@ -200,7 +197,7 @@ Egress is bounded the same way: `CiliumNetworkPolicy` `toFQDN` rules give each s
 
 The following gaps are honest assessments verified against the live codebase. They do not undermine the overall isolation model but operators should be aware of them.
 
-**litellm, langfuse, and the otel-collector have no ingress NetworkPolicy.** The plane ingress policies cover the control plane, mcp-gateway, feat-skill-registry, and OCI store. LiteLLM, Langfuse, and the OTEL collector are not yet covered by a corresponding ingress policy — a defence-in-depth gap. Application-level auth still applies on those services.
+**litellm, langfuse, and the otel-collector have no ingress NetworkPolicy.** The plane ingress policies cover the control plane and mcp-gateway. LiteLLM, Langfuse, and the OTEL collector are not yet covered by a corresponding ingress policy — a defence-in-depth gap. Application-level auth still applies on those services.
 
 **Plane ingress rules use tenant podSelectors without a namespaceSelector.** The rules admitting tenant pods to the control plane and plane services select by `app.kubernetes.io/component=tenant` without scoping to the correct namespace. In a multi-instance cluster, a tenant pod from a different instance's namespace could match. This is a multi-instance hygiene gap; the fix is to also add a `namespaceSelector` that constrains to the instance's own org namespaces.
 

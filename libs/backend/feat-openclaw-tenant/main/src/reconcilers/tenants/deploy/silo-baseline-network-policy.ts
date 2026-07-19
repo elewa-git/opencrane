@@ -38,8 +38,8 @@ function _IpBlockForHost(host: string): k8s.V1IPBlock | undefined
  *   opencrane-ui/operator namespace (the super-admin plane is the only principal
  *   allowed to reach in — it brokers the gateway connection).
  * - **Egress** to cluster DNS, and to the same silo namespace + the opencrane-ui
- *   namespace (the shared planes — opencrane-ui, Obot/MCP, feat-skill-registry, LiteLLM,
- *   Cognee — live there in the shared tier).
+ *   namespace (the shared planes — opencrane-ui, Obot/MCP, LiteLLM, Cognee — live
+ *   there in the shared tier).
  *
  * External HTTPS (LLM/MCP/Git) is deliberately NOT in this policy — see
  * {@link _BuildSiloExternalEgressNetworkPolicy}, a separate policy so Cognee can be

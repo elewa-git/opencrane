@@ -50,8 +50,7 @@ OpenCrane's Stage 4 architecture splits platform management into two distinct ma
 │  OIDC: clustertenantManager.oidc.* — per-org login               │
 │  DB:   clustertenantManager.database.*  (per-silo Postgres)      │
 │                                                                  │
-│  runtime planes: Obot / MCP gateway, feat-skill-registry, LiteLLM,   │
-│                  Cognee                                          │
+│  runtime planes: Obot / MCP gateway, LiteLLM, Cognee              │
 │  operator: namespace-scoped to this silo only                    │
 └──────────────────────────────────────────────────────────────────┘
 ```

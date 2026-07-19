@@ -16,7 +16,7 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
   const hostingProvider = _readHostingProvider();
 
   // 2. Resolve this operator's own namespace for the runtime-plane URL fallbacks.
-  //    The Helm chart always sets MCP_GATEWAY_URL / SKILL_REGISTRY_URL /
+  //    The Helm chart always sets MCP_GATEWAY_URL /
   //    CLUSTERTENANT_MANAGER_INTERNAL_URL to release-prefixed values, so these defaults are a
   //    safety net only. They derive from POD_NAMESPACE (downward API) so an unset env
   //    resolves to THIS instance's namespace — never a hard-coded shared namespace
@@ -91,7 +91,6 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
     cogneeLiteLlmMonthlyBudgetUsd: _readEnvValue<number>("COGNEE_LITELLM_MONTHLY_BUDGET_USD", "number", false, 10),
     defaultTenantPolicyRef: _readEnvValue<string>("DEFAULT_TENANT_POLICY_REF", "string", false, ""),
     mcpGatewayUrl: _readEnvValue<string>("MCP_GATEWAY_URL", "string", false, `http://opencrane-mcp-gateway.${ownNamespace}.svc:8080`),
-    skillRegistryUrl: _readEnvValue<string>("SKILL_REGISTRY_URL", "string", false, `http://opencrane-feat-skill-registry.${ownNamespace}.svc:5000`),
     cogneeEndpoint: _readEnvValue<string>("COGNEE_ENDPOINT", "string", false, ""),
     internalPort: _readEnvValue<number>("INTERNAL_PORT", "number", false, 8081),
     controlPlaneInternalUrl: _readEnvValue<string>("CLUSTERTENANT_MANAGER_INTERNAL_URL", "string", false, "http://localhost:8081"),
@@ -125,7 +124,7 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
 
 /**
  * Resolve the namespace this operator pod runs in, used only as the fallback host
- * for the runtime-plane URLs (MCP gateway, skill registry, control plane).
+ * for the runtime-plane URLs (MCP gateway and control plane).
  *
  * Reads POD_NAMESPACE, which the Helm operator Deployment populates from the
  * downward API (`metadata.namespace`). Falls back to `default` when unset (e.g. in

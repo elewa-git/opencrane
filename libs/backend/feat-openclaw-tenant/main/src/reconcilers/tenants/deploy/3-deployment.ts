@@ -15,10 +15,9 @@ import { _CredentialsSecretName } from "../internal/cognee-tenant-identity.js";
  * into runtime behavior: image/version selection, platform env vars, storage
  * strategy, LiteLLM integration, and pod hardening defaults.
  *
- * Skill and MCP grants are NOT injected here. They are compiled by the
- * opencrane-server effective-contract endpoint and re-pulled by the pod at each
- * agentic-loop boundary. The contract is advisory; the ingress planes (Obot
- * MCP Gateway and Skill Registry) are the live authz boundary.
+ * MCP grants are NOT injected here. They are compiled by the opencrane-server
+ * effective-contract endpoint and re-pulled by the pod at each agentic-loop
+ * boundary. The contract is advisory; the Obot MCP Gateway is the live authz boundary.
  *
  * @param stateVolume - Pre-computed state volume from the hosting adapter.
  *   The adapter decides whether the volume is a CSI mount (cloud) or PVC ref (on-prem).
@@ -63,9 +62,7 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
     { name: "OPENCRANE_RUNTIME_MODE", value: "managed" },
     { name: "OPENCRANE_RUNTIME_CONTRACT_PATH", value: "/config/opencrane-managed-runtime.json" },
     { name: "OPENCRANE_MCP_GATEWAY_URL", value: config.mcpGatewayUrl },
-    { name: "OPENCRANE_SKILL_REGISTRY_URL", value: config.skillRegistryUrl },
     { name: "OPENCRANE_MCP_GATEWAY_TOKEN_PATH", value: "/var/run/opencrane/tokens/obot-gateway.token" },
-    { name: "OPENCRANE_SKILL_REGISTRY_TOKEN_PATH", value: "/var/run/opencrane/tokens/feat-skill-registry.token" },
     // The tenant pod reaches /api/internal/contract on the opencrane-server's INTERNAL listener
     // via the Service DNS (a pod's own localhost is itself — controlPlaneInternalUrl is the
     // operator's self-call and must NOT be injected here).
@@ -134,8 +131,6 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
 
   // 2. Volume mounts — the state volume mount comes from the adapter;
   //    everything else is provider-agnostic and stays read-only where possible.
-  //    Skills are now pulled per-entitlement from the Skill Registry via
-  //    projected token; no shared filesystem delivery path exists.
   const volumeMounts: k8s.V1VolumeMount[] = [
     stateVolume.volumeMount,
     { name: "config", mountPath: "/config", readOnly: true },
@@ -160,13 +155,6 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
               path: "obot-gateway.token",
               expirationSeconds: config.projectedTokenTtlSeconds,
               audience: "obot-gateway",
-            },
-          },
-          {
-            serviceAccountToken: {
-              path: "feat-skill-registry.token",
-              expirationSeconds: config.projectedTokenTtlSeconds,
-              audience: "feat-skill-registry",
             },
           },
           {

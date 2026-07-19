@@ -51,4 +51,14 @@ if [[ "$output" != *"SESSION-SCOPE"* ]]; then
 	exit 1
 fi
 
+git -C "$TMP_DIR" rm -qf apps/opencrane/prisma/schema/probe.prisma
+mkdir -p "$TMP_DIR/apps/opencrane/src/app"
+printf '%s\n' 'export const retiredConsumer = "OPENCRANE_SKILL_REGISTRY_URL";' >"$TMP_DIR/apps/opencrane/src/app/config.ts"
+git -C "$TMP_DIR" add apps/opencrane/src/app/config.ts
+output="$(cd "$TMP_DIR" && "$GUARD" 2>&1 || true)"
+if [[ "$output" != *"SKILL-REGISTRY-CONSUMER"* ]]; then
+	printf 'Expected Skill Registry consumer rejection, got:\n%s\n' "$output" >&2
+	exit 1
+fi
+
 printf 'Phase A forbidden-reference negative test passed.\n'
