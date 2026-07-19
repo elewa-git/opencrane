@@ -87,6 +87,13 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 				await _failOutboxEvent(transaction, event.id, now, "runtime_authority_unavailable");
 				return null;
 			}
+			const claimPayload = _bindRuntimeProfile(event.payload, service.workloadProfile);
+			if (claimPayload === null)
+			{
+				await _failOutboxEvent(transaction, event.id, now, "runtime_profile_changed");
+				return null;
+			}
+			await transaction.outboxEvent.update({ where: { id: event.id }, data: { payload: claimPayload } });
 
 			// 4. Persist Queued before returning so a later acknowledgement can atomically create the assignment.
 			if (run.state === AgentRunState.Accepted)
@@ -145,6 +152,7 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 			const event = await _lockAttemptEvent(transaction, coordinates.runId, coordinates.attempt);
 			if (event === null) throw new Error("run attempt is not awaiting assignment");
 			if (event.claimedAt === null || event.claimedAt.getTime() < nowEpochMs - _CLAIM_LEASE_MS) throw new Error("controller acknowledgement lease expired");
+			if (_claimedRuntimeProfile(event.payload) !== service.workloadProfile) throw new Error("runtime profile changed after desired Job issuance");
 
 			// 3. Insert assignment and opaque bootstrap before marking the outbox delivered or changing run lifecycle.
 			const expiresAt = new Date(nowEpochMs + profile.assignmentTtlMs);
@@ -209,10 +217,10 @@ export class PrismaControllerAuthorityRepository implements ControllerAuthorityR
 }
 
 /** Locks the one unpublished attempt-request event for a run attempt. */
-async function _lockAttemptEvent(transaction: Prisma.TransactionClient, runId: string, attempt: number): Promise<{ readonly id: string; readonly claimedAt: Date | null } | null>
+async function _lockAttemptEvent(transaction: Prisma.TransactionClient, runId: string, attempt: number): Promise<{ readonly id: string; readonly claimedAt: Date | null; readonly payload: Prisma.JsonValue } | null>
 {
 	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "run_id" = ${runId} AND "attempt" = ${attempt} AND "kind" = CAST(${"run.attempt_requested"} AS "RunOutboxEventKind") AND "published_at" IS NULL AND "failed_at" IS NULL FOR UPDATE`);
-	const events = await transaction.outboxEvent.findMany({ where: { runId, attempt, kind: RunOutboxEventKind.RunAttemptRequested, publishedAt: null, failedAt: null }, select: { id: true, claimedAt: true }, take: 2 });
+	const events = await transaction.outboxEvent.findMany({ where: { runId, attempt, kind: RunOutboxEventKind.RunAttemptRequested, publishedAt: null, failedAt: null }, select: { id: true, claimedAt: true, payload: true }, take: 2 });
 	return events.length === 1 ? events[0] ?? null : null;
 }
 
@@ -228,6 +236,23 @@ function _requestedPayloadMatches(payload: Prisma.JsonValue, runId: string, atte
 	if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return false;
 	const value = payload as Record<string, unknown>;
 	return value.runId === runId && value.attempt === attempt;
+}
+
+/** Binds one server-selected runtime profile to a reclaimable outbox request. */
+function _bindRuntimeProfile(payload: Prisma.JsonValue, runtimeProfile: string): Prisma.InputJsonValue | null
+{
+	if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+	const value = payload as Record<string, unknown>;
+	if (typeof value.controllerRuntimeProfile === "string" && value.controllerRuntimeProfile !== runtimeProfile) return null;
+	return { ...value, controllerRuntimeProfile: runtimeProfile } as Prisma.InputJsonValue;
+}
+
+/** Reads the one immutable server-selected runtime profile from an outbox request. */
+function _claimedRuntimeProfile(payload: Prisma.JsonValue): string | null
+{
+	if (typeof payload !== "object" || payload === null || Array.isArray(payload)) return null;
+	const value = payload as Record<string, unknown>;
+	return typeof value.controllerRuntimeProfile === "string" ? value.controllerRuntimeProfile : null;
 }
 
 /** Narrows the evolving public acknowledgement contract to its non-authoritative coordinates. */

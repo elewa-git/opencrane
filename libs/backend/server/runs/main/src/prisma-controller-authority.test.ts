@@ -12,7 +12,7 @@ function _profiles(): ReadonlyMap<string, { readonly namespace: string; readonly
 /** Builds the smallest durable event row accepted by the controller authority. */
 function _event(claimedAt: Date | null = new Date(990_000))
 {
-	return { id: "event-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunAttemptRequested, payload: { runId: "run-1", attempt: 1 }, availableAt: new Date(0), claimedAt, publishedAt: null, failedAt: null, deliveryCount: 0 };
+	return { id: "event-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunAttemptRequested, payload: { runId: "run-1", attempt: 1, controllerRuntimeProfile: "personal-default" }, availableAt: new Date(0), claimedAt, publishedAt: null, failedAt: null, deliveryCount: 0 };
 }
 
 /** Builds one current queued run for an acknowledged controller Job. */
