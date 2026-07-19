@@ -41,8 +41,13 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 				response.end(JSON.stringify({ error: "not_found" }));
 				return;
 			}
-			const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), _byteSource(request), { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
+			const byteSource = _byteSource(request);
+			const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), byteSource, { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
 			_writePromotionOutcome(response, outcome);
+			if (outcome.outcome === "rejected" && outcome.reason === "artifact_body_exceeds_lease")
+			{
+				byteSource.abort(new Error("artifact body exceeds its signed lease byte limit"));
+			}
 		}).catch(function _onRequestFailure(err)
 		{
 			log.error({ err, method: request.method, path }, "artifact service request failed");

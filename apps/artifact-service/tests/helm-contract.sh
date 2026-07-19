@@ -25,43 +25,43 @@ grep -q 'secretName: "opencrane-artifact-service-keys"' "$OUTPUT"
 grep -q 'readOnlyRootFilesystem: true' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: artifact-service' "$OUTPUT"
 
-NETWORK_POLICY="$(awk '
-/^---$/ {
-  if (network_policy && artifact_policy) {
-    print document
-    found = 1
-    exit
-  }
-  document = ""
-  network_policy = 0
-  artifact_policy = 0
-  next
-}
-{
-  document = document $0 "\n"
-  if ($0 == "kind: NetworkPolicy") network_policy = 1
-  if (network_policy && $0 == "  name: opencrane-artifact-service") artifact_policy = 1
-}
-END {
-  if (!found && network_policy && artifact_policy) print document
-}
-' "$OUTPUT")"
+ruby -ryaml -e '
+documents = YAML.load_stream(File.read(ARGV.fetch(0))).compact
+policy = documents.find do |document|
+  document.is_a?(Hash) && document["kind"] == "NetworkPolicy" && document.dig("metadata", "name") == "opencrane-artifact-service"
+end
+abort "artifact service NetworkPolicy must render" unless policy
 
-if [[ -z "$NETWORK_POLICY" ]]; then
-  echo "artifact service must render its dedicated NetworkPolicy" >&2
-  exit 1
-fi
+spec = policy.fetch("spec")
+abort "artifact service NetworkPolicy must select only artifact-service pods" unless spec.dig("podSelector", "matchLabels", "app.kubernetes.io/component") == "artifact-service"
+abort "artifact service NetworkPolicy must enforce ingress and egress" unless spec.fetch("policyTypes").sort == ["Egress", "Ingress"]
 
-grep -q 'policyTypes: \["Ingress", "Egress"\]' <<<"$NETWORK_POLICY"
-grep -q 'app.kubernetes.io/component: opencrane-server' <<<"$NETWORK_POLICY"
-grep -q 'kubernetes.io/metadata.name: kube-system' <<<"$NETWORK_POLICY"
-grep -q 'k8s-app: kube-dns' <<<"$NETWORK_POLICY"
-grep -q 'port: 53' <<<"$NETWORK_POLICY"
+server_rule = spec.fetch("ingress").find do |rule|
+  rule.fetch("from").any? do |peer|
+    peer.dig("namespaceSelector", "matchLabels", "kubernetes.io/metadata.name") == "default" && peer.dig("podSelector", "matchLabels", "app.kubernetes.io/component") == "opencrane-server"
+  end && rule.fetch("ports").map { |port| [port["protocol"], port["port"]] } == [["TCP", 8080]]
+end
+abort "artifact service NetworkPolicy must admit only the OpenCrane server on TCP 8080" unless server_rule
 
-if grep -qE '^  egress: \[\]|^    - \{\}$|^    - to: \[\]$' <<<"$NETWORK_POLICY"; then
-  echo "artifact service NetworkPolicy must deny all egress except explicitly listed internal targets" >&2
-  exit 1
-fi
+egress = spec.fetch("egress")
+abort "artifact service NetworkPolicy must have explicit egress rules" if egress.empty?
+egress.each do |rule|
+  peers = rule["to"]
+  abort "artifact service NetworkPolicy must not allow broad egress" unless peers.is_a?(Array) && !peers.empty?
+  peers.each do |peer|
+    abort "artifact service NetworkPolicy egress peers must be namespace and pod selected" unless peer.key?("namespaceSelector") && peer.key?("podSelector")
+  end
+end
+
+dns_rule = egress.find do |rule|
+  rule.fetch("to").any? do |peer|
+    peer.dig("namespaceSelector", "matchLabels", "kubernetes.io/metadata.name") == "kube-system" && peer.dig("podSelector", "matchLabels", "k8s-app") == "kube-dns"
+  end
+end
+abort "artifact service NetworkPolicy must permit only selected kube-dns pods for DNS" unless dns_rule
+dns_ports = dns_rule.fetch("ports").map { |port| [port["protocol"], port["port"]] }
+abort "artifact service NetworkPolicy DNS egress must permit UDP and TCP port 53 only" unless dns_ports.sort == [["TCP", 53], ["UDP", 53]]
+' "$OUTPUT"
 
 if grep -A40 'name: opencrane-artifact-service' "$OUTPUT" | grep -qE 'kind: (Role|RoleBinding|ClusterRole|ClusterRoleBinding)'; then
   echo "artifact service must not receive Kubernetes API permissions" >&2
