@@ -1,5 +1,26 @@
-{{- if not .Values.credentials.existingSecret -}}
-{{- fail "credentials.existingSecret is required; OpenCrane never generates database credentials" -}}
+{{- if eq (len .Values.databases) 0 -}}
+{{- fail "databases must contain at least the initdb database" -}}
+{{- end -}}
+{{- $primary := index .Values.databases 0 -}}
+{{- $databaseNames := dict -}}
+{{- $databaseOwners := dict -}}
+{{- $credentialSecrets := dict -}}
+{{- range $database := .Values.databases }}
+{{- if or (not .name) (not .owner) (not .credentialsSecret) -}}
+{{- fail "every databases entry requires name, owner, and credentialsSecret; OpenCrane never generates database credentials" -}}
+{{- end -}}
+{{- if hasKey $databaseNames $database.name -}}
+{{- fail (printf "databases entries must have unique names; duplicate %q" $database.name) -}}
+{{- end -}}
+{{- if hasKey $databaseOwners $database.owner -}}
+{{- fail (printf "databases entries must have unique owners; duplicate %q" $database.owner) -}}
+{{- end -}}
+{{- if hasKey $credentialSecrets $database.credentialsSecret -}}
+{{- fail (printf "databases entries must have unique credentialsSecret values; duplicate %q" $database.credentialsSecret) -}}
+{{- end -}}
+{{- $_ := set $databaseNames $database.name true -}}
+{{- $_ := set $databaseOwners $database.owner true -}}
+{{- $_ := set $credentialSecrets $database.credentialsSecret true -}}
 {{- end -}}
 {{- if and .Values.backup.enabled (not .Values.backup.plugin.name) -}}
 {{- fail "backup.plugin.name is required when backup.enabled=true" -}}
@@ -50,10 +71,10 @@ spec:
   bootstrap:
     recovery:
       source: {{ .Values.restore.sourceName | quote }}
-      database: {{ .Values.database.name | quote }}
-      owner: {{ .Values.database.owner | quote }}
+      database: {{ $primary.name | quote }}
+      owner: {{ $primary.owner | quote }}
       secret:
-        name: {{ .Values.credentials.existingSecret | quote }}
+        name: {{ $primary.credentialsSecret | quote }}
       {{- with .Values.restore.targetTime }}
       recoveryTarget:
         targetTime: {{ . | quote }}
@@ -69,10 +90,28 @@ spec:
   {{- else }}
   bootstrap:
     initdb:
-      database: {{ .Values.database.name | quote }}
-      owner: {{ .Values.database.owner | quote }}
+      database: {{ $primary.name | quote }}
+      owner: {{ $primary.owner | quote }}
       secret:
-        name: {{ .Values.credentials.existingSecret | quote }}
+        name: {{ $primary.credentialsSecret | quote }}
+  {{- end }}
+  {{- if gt (len .Values.databases) 1 }}
+  managed:
+    roles:
+      {{- range $index, $database := .Values.databases }}
+      {{- if gt $index 0 }}
+      - name: {{ $database.owner | quote }}
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        replication: false
+        bypassrls: false
+        passwordSecret:
+          name: {{ $database.credentialsSecret | quote }}
+      {{- end }}
+      {{- end }}
   {{- end }}
   {{- if .Values.backup.enabled }}
   plugins:

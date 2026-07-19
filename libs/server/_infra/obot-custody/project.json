@@ -1,0 +1,11 @@
+{
+  "name": "server-infra-obot-custody",
+  "$schema": "../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/server/_infra/obot-custody/src",
+  "tags": ["type:lib", "layer:infra", "scope:obot-custody"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/server/_infra/obot-custody" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/server/_infra/obot-custody" } }
+  }
+}

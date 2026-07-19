@@ -9,22 +9,22 @@ KEEP_CLUSTER="${KEEP_CLUSTER:-1}"
 LOCAL_PROFILE="${LOCAL_PROFILE:-default}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 MIN_FREE_GB="${MIN_FREE_GB:-12}"
-SILO_DB_RELEASE_NAME="${SILO_DB_RELEASE_NAME:-opencrane-silo-postgres}"
-FLEET_DB_RELEASE_NAME="${FLEET_DB_RELEASE_NAME:-opencrane-fleet-postgres}"
-OBOT_DB_RELEASE_NAME="${OBOT_DB_RELEASE_NAME:-opencrane-obot-postgres}"
-LITELLM_DB_RELEASE_NAME="${LITELLM_DB_RELEASE_NAME:-opencrane-litellm-postgres}"
+POSTGRES_RELEASE_NAME="${POSTGRES_RELEASE_NAME:-opencrane-postgres}"
 POSTGRES_CREDENTIALS_SECRET="${POSTGRES_CREDENTIALS_SECRET:-opencrane-postgres-credentials}"
 FLEET_POSTGRES_CREDENTIALS_SECRET="${FLEET_POSTGRES_CREDENTIALS_SECRET:-opencrane-fleet-postgres-credentials}"
 OBOT_POSTGRES_CREDENTIALS_SECRET="${OBOT_POSTGRES_CREDENTIALS_SECRET:-opencrane-obot-postgres-credentials}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${LITELLM_POSTGRES_CREDENTIALS_SECRET:-opencrane-litellm-postgres-credentials}"
+LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-opencrane-langfuse-postgres-credentials}"
 SILO_POSTGRES_OWNER="${SILO_POSTGRES_OWNER:-opencrane_local}"
 FLEET_POSTGRES_OWNER="${FLEET_POSTGRES_OWNER:-opencrane_fleet_local}"
 OBOT_POSTGRES_OWNER="${OBOT_POSTGRES_OWNER:-obot_local}"
 LITELLM_POSTGRES_OWNER="${LITELLM_POSTGRES_OWNER:-litellm_local}"
+LANGFUSE_POSTGRES_OWNER="${LANGFUSE_POSTGRES_OWNER:-langfuse_local}"
 DB_PASSWORD="${DB_PASSWORD:-opencrane-local-password}"
 FLEET_DB_PASSWORD="${FLEET_DB_PASSWORD:-opencrane-fleet-local-password}"
 OBOT_DB_PASSWORD="${OBOT_DB_PASSWORD:-obot-local-password}"
 LITELLM_DB_PASSWORD="${LITELLM_DB_PASSWORD:-litellm-local-password}"
+LANGFUSE_DB_PASSWORD="${LANGFUSE_DB_PASSWORD:-langfuse-local-password}"
 CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
 LITELLM_SECRET_NAME="${LITELLM_SECRET_NAME:-opencrane-litellm}"
 LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-opencrane-local-master-key}"
@@ -154,8 +154,8 @@ k3d image import ghcr.io/cloudnative-pg/postgresql:17.5 --cluster "$CLUSTER_NAME
 
 echo "[local] Using profile '$LOCAL_PROFILE' with values '$VALUES_FILE'"
 
-# 5. Install the pinned external CNPG test substrate, then one app-owned Cluster per
-# database authority. Fleet and silo deliberately never share a Prisma migration history.
+# 5. Install the pinned external CNPG test substrate, then one app-owned Cluster with
+# isolated logical databases and credentials. Fleet and silo remain separate databases.
 echo "[local] Installing CloudNativePG Engine Operator into control plane"
 helm repo add cnpg https://cloudnative-pg.github.io/charts --force-update >/dev/null
 helm upgrade --install cnpg cnpg/cloudnative-pg \
@@ -185,27 +185,23 @@ _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" "$SILO_POSTGRES_OWNE
 _create_database_credentials "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER" "$FLEET_DB_PASSWORD"
 _create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" "$OBOT_DB_PASSWORD"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" "$LITELLM_DB_PASSWORD"
+_create_database_credentials "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER" "$LANGFUSE_DB_PASSWORD"
 
-function _install_database()
+function _install_postgres_server()
 {
-  local release_name="$1"
-  local database_name="$2"
-  local credentials_secret="$3"
-  local database_owner="$4"
-  local client_selectors_json="$5"
-
-  echo "[local] Installing PostgreSQL target '$database_name' as '$release_name'"
-  helm upgrade --install "$release_name" "$ROOT_DIR/apps/postgres/helm" \
+  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$SILO_POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"fleet\",\"owner\":\"$FLEET_POSTGRES_OWNER\",\"credentialsSecret\":\"$FLEET_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
+  echo "[local] Installing one PostgreSQL server with isolated logical databases"
+  helm upgrade --install "$POSTGRES_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    --set "credentials.existingSecret=$credentials_secret" \
-    --set-string "database.name=$database_name" \
-    --set-string "database.owner=$database_owner" \
+    --set-json "databases=$databases_json" \
     --set "storage.storageClass=local-path" \
     --set "networkPolicy.operatorNamespace=$NAMESPACE" \
-    --set-json "networkPolicy.clientPodSelectors=$client_selectors_json"
-  kubectl wait --for=condition=Ready "cluster/$release_name" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
-  bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
-    "$NAMESPACE" "$credentials_secret" "${release_name}-app" "${release_name}-rw" "$database_name"
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
+  kubectl wait --for=condition=Ready "cluster/$POSTGRES_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  for database_resource in fleet obot litellm langfuse; do
+    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${POSTGRES_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  done
+  kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE_NAME}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
 }
 
 function _copy_cnpg_uri_secret()
@@ -221,14 +217,26 @@ function _copy_cnpg_uri_secret()
     | kubectl apply -f -
 }
 
-_install_database "$SILO_DB_RELEASE_NAME" opencrane "$POSTGRES_CREDENTIALS_SECRET" "$SILO_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}}]'
-_install_database "$FLEET_DB_RELEASE_NAME" fleet "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager-migrate"}}]'
-_install_database "$OBOT_DB_RELEASE_NAME" obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}}]'
-_install_database "$LITELLM_DB_RELEASE_NAME" litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
+_install_postgres_server
+function _publish_database_connection()
+{
+  local credentials_secret="$1"
+  local app_secret="$2"
+  local database_name="$3"
+  bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
+    "$NAMESPACE" "$credentials_secret" "$app_secret" "${POSTGRES_RELEASE_NAME}-rw" "$database_name"
+}
+
+OPENCRANE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-opencrane-app"
+FLEET_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-fleet-app"
+OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-obot-app"
+LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-litellm-app"
+LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-langfuse-app"
+_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$OPENCRANE_POSTGRES_APP_SECRET" opencrane
+_publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" fleet
+_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" obot
+_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" litellm
+_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" langfuse
 
 function _assert_distinct_cnpg_app_credentials()
 {
@@ -252,11 +260,11 @@ function _assert_distinct_cnpg_app_credentials()
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "${SILO_DB_RELEASE_NAME}-app" "${FLEET_DB_RELEASE_NAME}-app" "${OBOT_DB_RELEASE_NAME}-app" "${LITELLM_DB_RELEASE_NAME}-app"
+_assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
 
-_copy_cnpg_uri_secret "${OBOT_DB_RELEASE_NAME}-app" "${RELEASE_NAME}-obot" dsn
-_copy_cnpg_uri_secret "${OBOT_DB_RELEASE_NAME}-app" opencrane-silo-obot dsn
-_copy_cnpg_uri_secret "${LITELLM_DB_RELEASE_NAME}-app" opencrane-litellm-db DATABASE_URL
+_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "${RELEASE_NAME}-obot" dsn
+_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" opencrane-silo-obot dsn
+_copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" opencrane-litellm-db DATABASE_URL
 
 if [[ "$LOCAL_PROFILE" == "strict" ]]; then
   kubectl create secret generic "$LITELLM_SECRET_NAME" \
@@ -290,7 +298,7 @@ helm_args=(
   --values
   "$VALUES_FILE"
   --set
-  "fleetManager.database.existingSecret=${FLEET_DB_RELEASE_NAME}-app"
+  "fleetManager.database.existingSecret=${FLEET_POSTGRES_APP_SECRET}"
   --set
   "fleetManager.database.secretKey=uri"
   --set
@@ -329,7 +337,7 @@ silo_args=(
   --values
   "$VALUES_FILE"
   --set
-  "clustertenantManager.database.existingSecret=${SILO_DB_RELEASE_NAME}-app"
+  "clustertenantManager.database.existingSecret=${OPENCRANE_POSTGRES_APP_SECRET}"
   --set
   "clustertenantManager.database.secretKey=uri"
   --set

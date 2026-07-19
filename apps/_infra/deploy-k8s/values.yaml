@@ -9,14 +9,13 @@ global:
   # -- Deployment environment used for Helm validations (`dev`, `staging`, `prod`).
   environment: dev
 
-# -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG cluster
-#    IN ITS OWN NAMESPACE, serving that silo's opencrane-ui + runtime planes — so the silo's
-#    database holds exactly one ClusterTenant's data and the opencrane-ui API never has to
-#    disambiguate which tenant a row belongs to (the silo IS the scope). That per-namespace
-#    cluster + its credentials Secret are provisioned by the deploy scripts (apps/_infra/deploy-k8s/deploy.sh →
-#    k8s-deploy.sh), and the opencrane-ui consumes it via controlPlane.database.existingSecret —
-#    identically to the central release, just scoped to the silo namespace. No chart-side
-#    per-CT DB block is needed.
+# -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
+#    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,
+#    Obot, LiteLLM, and Langfuse (and fleet when that plane is present), while retaining one
+#    pod/PVC footprint per silo. The per-namespace Cluster + per-database connection Secrets are
+#    provisioned by the deploy scripts (apps/_infra/deploy-k8s/deploy.sh → k8s-deploy.sh); the
+#    opencrane-ui consumes only its OpenCrane connection Secret. The silo is still the tenant scope,
+#    so the tenant-facing API never disambiguates ClusterTenant rows.
 
 # -- Multi-ClusterTenant profile switch (issue #127). The EXPLICIT predicate (never
 #    inferred) that this install hosts MANY tenants — many orgs (ClusterTenants) and/or
@@ -1275,7 +1274,7 @@ clusterTenant:
 #    inside this release. The opencrane-ui metrics proxy and LiteLLM trace callback
 #    are auto-wired to the in-cluster service — no manual host/key configuration needed.
 #    k8s-deploy.sh creates the `opencrane-langfuse` Secret (stable across upgrades) and
-#    adds the `langfuse` database to the shared CNPG cluster before the Helm install.
+#    supplies Langfuse's own role and database on the per-silo CNPG server before the Helm install.
 #
 #    Structure: `langfuse.inCluster` is an OpenCrane-level switch consumed by our templates.
 #    All other keys (`langfuse.langfuse`, `langfuse.postgresql`, etc.) are forwarded verbatim
@@ -1353,16 +1352,16 @@ langfuse:
       signUpDisabled: true
 
   # -- PostgreSQL: DISABLED bundled instance. k8s-deploy.sh provisions the `langfuse`
-  #    database inside the shared CNPG cluster; host is injected via --set at deploy time.
+  #    database and its distinct role on the per-silo CNPG server; host and credentials are
+  #    injected via --set at deploy time.
   postgresql:
     deploy: false
     # -- Hostname injected by k8s-deploy.sh: <release>-postgres-rw.<namespace>.svc.cluster.local
     host: ""
     auth:
       username: "opencrane"
-      # -- Reuse the CNPG cluster creds Secret (created by k8s-deploy.sh, never rotated
-      #    without also recreating the CNPG cluster).
-      existingSecret: "opencrane-postgres-creds"
+      # -- Langfuse's own published connection Secret (not an OpenCrane credential).
+      existingSecret: "opencrane-postgres-langfuse-app"
       secretKeys:
         userPasswordKey: "password"
         adminPasswordKey: "password"

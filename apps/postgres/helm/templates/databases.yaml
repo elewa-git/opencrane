@@ -1,0 +1,20 @@
+{{- range $index, $database := .Values.databases }}
+{{- if gt $index 0 }}
+---
+apiVersion: postgresql.cnpg.io/v1
+kind: Database
+metadata:
+  name: {{ printf "%s-%s" (include "opencrane.postgres.fullname" $) $database.name | trunc 63 | trimSuffix "-" }}
+  annotations:
+    # Sibling logical database data is retained with its CNPG Cluster; deletion requires
+    # an explicit operator action, never Helm uninstall.
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "opencrane.postgres.labels" $ | nindent 4 }}
+spec:
+  name: {{ $database.name | quote }}
+  owner: {{ $database.owner | quote }}
+  cluster:
+    name: {{ include "opencrane.postgres.fullname" $ }}
+{{- end }}
+{{- end }}

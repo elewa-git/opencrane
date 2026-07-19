@@ -6,7 +6,7 @@
   "targets": {
     "helm-lint": {
       "executor": "nx:run-commands",
-      "options": { "command": "helm lint apps/postgres/helm --set credentials.existingSecret=lint-only" }
+      "options": { "command": "helm lint apps/postgres/helm --set-json 'databases=[{\"name\":\"opencrane\",\"owner\":\"opencrane\",\"credentialsSecret\":\"lint-opencrane\"},{\"name\":\"obot\",\"owner\":\"obot\",\"credentialsSecret\":\"lint-obot\"},{\"name\":\"litellm\",\"owner\":\"litellm\",\"credentialsSecret\":\"lint-litellm\"},{\"name\":\"langfuse\",\"owner\":\"langfuse\",\"credentialsSecret\":\"lint-langfuse\"}]'" }
     },
     "test": {
       "executor": "nx:run-commands",

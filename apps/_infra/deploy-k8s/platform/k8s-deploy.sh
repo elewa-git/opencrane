@@ -28,6 +28,7 @@
 #                            [--fleet-postgres-credentials-secret NAME] [--fleet-postgres-owner OWNER]
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
+#                            --langfuse-postgres-credentials-secret NAME [--langfuse-postgres-owner OWNER]
 #                            [--postgres-values FILE]
 #                            [--no-ingress-nginx]
 #                            [--no-external-dns]
@@ -239,6 +240,8 @@ OBOT_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_OBOT_POSTGRES_CREDENTIALS_SECRET:-
 OBOT_POSTGRES_OWNER="${OPENCRANE_OBOT_POSTGRES_OWNER:-obot}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SECRET:-}"
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
+LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-}"
+LANGFUSE_POSTGRES_OWNER="${OPENCRANE_LANGFUSE_POSTGRES_OWNER:-langfuse}"
 # The central fleet profile owns a separate registry database. Silo wrappers disable
 # it through fleetManager.enabled=false; an explicit environment override exists for
 # other thin profiles that do not render the fleet manager.
@@ -317,6 +320,8 @@ while [[ $# -gt 0 ]]; do
     --obot-postgres-owner) OBOT_POSTGRES_OWNER="$2"; shift 2 ;;
     --litellm-postgres-credentials-secret) LITELLM_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
+    --langfuse-postgres-credentials-secret) LANGFUSE_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
+    --langfuse-postgres-owner) LANGFUSE_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
     --dns-writer-gsa)   DNS_WRITER_GSA="$2"; shift 2 ;;
     --cert-manager)  CERT_MANAGER="on"; shift ;;
@@ -376,6 +381,7 @@ _run_preflight() {
   # 1b. PostgreSQL is app-owned, while its operator and bootstrap credentials are external
   # prerequisites. Validate both without installing, generating, rotating, or repairing them.
   kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1 || PF_FAILS+=("CloudNativePG operator is absent (clusters.postgresql.cnpg.io CRD not found). Install it before OpenCrane.")
+  kubectl get crd databases.postgresql.cnpg.io >/dev/null 2>&1 || PF_FAILS+=("CloudNativePG Database CRD is absent (databases.postgresql.cnpg.io not found). Install a compatible operator before OpenCrane.")
   _preflight_postgres_bootstrap() {
     local authority="$1"
     local credentials_secret="$2"
@@ -406,6 +412,7 @@ _run_preflight() {
   [[ "$INSTALL_FLEET_DATABASE" == "0" ]] || _preflight_postgres_bootstrap fleet "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER"
   _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
+  _preflight_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
 
   # 2. NetworkPolicy-enforcing CNI — the platform's isolation model is built on
   #    NetworkPolicy; a CNI that silently ignores them (e.g. stock kindnet/flannel) makes
@@ -579,11 +586,15 @@ LANGFUSE_REDIS_PASSWORD="${LANGFUSE_REDIS_PASSWORD:-$(_gen_secret)}"
 log "Target cluster: $(kubectl config current-context)"
 log "Namespace: $NAMESPACE   Release: $RELEASE   Image tag: $IMAGE_TAG"
 
-# 1. Install app-owned PostgreSQL releases. Each authority gets its own CNPG Cluster,
-# application Secret, PVC lifecycle, and migration history. This is a clean target layout:
-# no shared sibling databases, dual writes, or legacy database import.
+# 1. Install one app-owned PostgreSQL server for this ClusterTenant. Logical databases
+# share its pod/PVC but never credentials: each has its own login role, basic-auth input,
+# and published application connection Secret.
 if ! kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
   err "CloudNativePG is required (clusters.postgresql.cnpg.io is absent). Install the operator before OpenCrane."
+  exit 1
+fi
+if ! kubectl get crd databases.postgresql.cnpg.io >/dev/null 2>&1; then
+  err "CloudNativePG Database CRD is required (databases.postgresql.cnpg.io is absent). Install a compatible operator before OpenCrane."
   exit 1
 fi
 _require_postgres_bootstrap() {
@@ -620,30 +631,44 @@ _require_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_
 [[ "$INSTALL_FLEET_DATABASE" == "0" ]] || _require_postgres_bootstrap fleet "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER"
 _require_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
 _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
+_require_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
 
-_install_postgres_target() {
-  local target_release="$1"
-  local database_name="$2"
-  local credentials_secret="$3"
-  local database_owner="$4"
-  local client_selectors_json="$5"
-  local postgres_args=(upgrade --install "$target_release" "$POSTGRES_CHART_DIR"
+POSTGRES_RELEASE="${RELEASE}-postgres"
+_install_postgres_server() {
+  local client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
+  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
+  if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
+    client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager-migrate"}}]'
+    databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"fleet\",\"owner\":\"$FLEET_POSTGRES_OWNER\",\"credentialsSecret\":\"$FLEET_POSTGRES_CREDENTIALS_SECRET\"}]"
+  fi
+  local postgres_args=(upgrade --install "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR"
     --namespace "$NAMESPACE"
-    --set-string "credentials.existingSecret=$credentials_secret"
-    --set-string "database.name=$database_name"
-    --set-string "database.owner=$database_owner"
+    --set-json "databases=$databases_json"
     --set-json "networkPolicy.clientPodSelectors=$client_selectors_json")
   [[ -n "$POSTGRES_VALUES_FILE" ]] && postgres_args+=(--values "$POSTGRES_VALUES_FILE")
   [[ -n "$STORAGE_CLASS" ]] && postgres_args+=(--set-string "storage.storageClass=$STORAGE_CLASS")
-  if helm status "$target_release" -n "$NAMESPACE" >/dev/null 2>&1; then
+  if helm status "$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
     postgres_args+=(--reset-then-reuse-values)
   fi
 
-  log "Installing PostgreSQL target '$database_name' as release '$target_release'…"
+  log "Installing PostgreSQL server with isolated logical databases…"
   helm "${postgres_args[@]}"
-  kubectl wait --for=condition=Ready "cluster/${target_release}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  kubectl wait --for=condition=Ready "cluster/${POSTGRES_RELEASE}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm" "${POSTGRES_RELEASE}-langfuse"; do
+    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  done
+  if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
+    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${POSTGRES_RELEASE}-fleet" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  fi
+  kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+}
+
+_publish_database_connection() {
+  local credentials_secret="$1"
+  local app_secret="$2"
+  local database_name="$3"
   bash "$POSTGRES_CONNECTION_PUBLISHER" \
-    "$NAMESPACE" "$credentials_secret" "${target_release}-app" "${target_release}-rw" "$database_name"
+    "$NAMESPACE" "$credentials_secret" "$app_secret" "${POSTGRES_RELEASE}-rw" "$database_name"
 }
 
 _copy_cnpg_uri_secret() {
@@ -659,21 +684,19 @@ _copy_cnpg_uri_secret() {
     | kubectl apply -f -
 }
 
-POSTGRES_RELEASE="${RELEASE}-postgres"
-FLEET_POSTGRES_RELEASE="${RELEASE}-fleet-postgres"
-OBOT_POSTGRES_RELEASE="${RELEASE}-obot-postgres"
-LITELLM_POSTGRES_RELEASE="${RELEASE}-litellm-postgres"
-
-_install_postgres_target "$POSTGRES_RELEASE" "opencrane" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}}]'
+_install_postgres_server
+POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
+OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
+LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
+LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-langfuse-app"
+_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" opencrane
+_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" obot
+_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" litellm
+_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" langfuse
 if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-  _install_postgres_target "$FLEET_POSTGRES_RELEASE" "fleet" "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER" \
-    '[{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager-migrate"}}]'
+  FLEET_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-fleet-app"
+  _publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" fleet
 fi
-_install_postgres_target "$OBOT_POSTGRES_RELEASE" "obot" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}}]'
-_install_postgres_target "$LITELLM_POSTGRES_RELEASE" "litellm" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -697,19 +720,16 @@ _assert_distinct_cnpg_app_credentials() {
   done
 }
 if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-  _assert_distinct_cnpg_app_credentials "${POSTGRES_RELEASE}-app" "${FLEET_POSTGRES_RELEASE}-app" "${OBOT_POSTGRES_RELEASE}-app" "${LITELLM_POSTGRES_RELEASE}-app"
+  _assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
 else
-  _assert_distinct_cnpg_app_credentials "${POSTGRES_RELEASE}-app" "${OBOT_POSTGRES_RELEASE}-app" "${LITELLM_POSTGRES_RELEASE}-app"
+  _assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
 fi
 
-# CNPG's `<cluster>-app` Secret is canonical. Adapt only the key/name required by
-# third-party charts, without creating databases inside another authority's Cluster.
-POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-app"
-FLEET_POSTGRES_APP_SECRET="${FLEET_POSTGRES_RELEASE}-app"
+# Per-database app secrets are canonical. Adapt only the key/name required by third-party charts.
 OBOT_DSN_SECRET="${RELEASE}-obot"
 LITELLM_DATABASE_SECRET="${RELEASE}-litellm-db"
-_copy_cnpg_uri_secret "${OBOT_POSTGRES_RELEASE}-app" "$OBOT_DSN_SECRET" dsn
-_copy_cnpg_uri_secret "${LITELLM_POSTGRES_RELEASE}-app" "$LITELLM_DATABASE_SECRET" DATABASE_URL
+_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "$OBOT_DSN_SECRET" dsn
+_copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" "$LITELLM_DATABASE_SECRET" DATABASE_URL
 
 # ArtifactStore uses two distinct per-silo Ed25519 roles: the catalog signs bounded write leases
 # and verifies promotion receipts; artifact-service verifies leases and signs receipts. The two
@@ -1166,17 +1186,20 @@ TN_TAG="${TENANT_TAG:-$IMAGE_TAG}"
 # controlPlaneHost) are derived from it. Setting it explicitly here keeps a single
 # source of truth across the chart, the issuer, and the operator's per-org provisioning.
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set "ingress.domain=$BASE_DOMAIN")
-# Langfuse endpoint wiring is independent from PostgreSQL. Its storage must be supplied by
-# its own deployable contract when enabled; the OpenCrane database is not a shared SQL host.
+# Langfuse has its own database and role on this ClusterTenant's shared PostgreSQL server.
+# It never receives the OpenCrane, Obot, or LiteLLM credential.
+helm_args+=(--set-string "langfuse.postgresql.host=${POSTGRES_RELEASE}-rw.${NAMESPACE}.svc.cluster.local")
+helm_args+=(--set-string "langfuse.postgresql.auth.username=$LANGFUSE_POSTGRES_OWNER")
+helm_args+=(--set-string "langfuse.postgresql.auth.existingSecret=$LANGFUSE_POSTGRES_APP_SECRET")
+helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.userPasswordKey=password")
+helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.adminPasswordKey=password")
+helm_args+=(--set-string "langfuse.postgresql.auth.database=langfuse")
 helm_args+=(--set "langfuse.s3.auth.rootPassword=$LANGFUSE_S3_ROOT_PASSWORD")
 helm_args+=(--set "global.valkey.password=$LANGFUSE_REDIS_PASSWORD")
 helm_args+=(--set "langfuse.clickhouse.auth.password=$LANGFUSE_CH_PASSWORD")
 # Bitnami sub-subchart conditions default to deploy:true in the Langfuse chart even
 # when langfuse.inCluster.enabled=false; pass passwords unconditionally so Bitnami's
 # upgrade password-validation templates are satisfied regardless of Langfuse state.
-# Also re-assert the condition flag so --reuse-values can never accidentally carry
-# a stale true from a previous in-cluster install.
-helm_args+=(--set "langfuse.inCluster.enabled=false")
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set-string "langfuse.langfuse.nextauth.url=https://langfuse.${BASE_DOMAIN}")
 # OIDC human-login (opencrane-ui silo). Rendered iff an issuer URL is given; otherwise
 # the chart emits no OIDC env and the opencrane-ui stays in token/development mode.

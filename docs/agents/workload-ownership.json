@@ -13,6 +13,7 @@
     "openclaw-tenant-runtime",
     "obot-dynamic-mcp-child",
     "postgres-database",
+    "postgres-database-privileges",
     "ingress-nginx-controller",
     "ingress-nginx-admission-create",
     "ingress-nginx-admission-patch",
@@ -86,7 +87,7 @@
     },
     {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local postgres_args=(upgrade --install \"$target_release\" \"$POSTGRES_CHART_DIR\"",
+      "anchor": "local postgres_args=(upgrade --install \"$POSTGRES_RELEASE\" \"$POSTGRES_CHART_DIR\"",
       "workloadIds": ["postgres-database"]
     },
     {
@@ -288,6 +289,16 @@
       "source": { "type": "file", "path": "apps/postgres/helm/templates/cluster.yaml", "anchor": "kind: Cluster" },
       "classification": "survivor",
       "reason": "apps/postgres owns the durable CNPG Cluster contract over a separately supplied CNPG operator."
+    },
+    {
+      "id": "postgres-database-privileges",
+      "podClass": "Job/postgres-database-privileges",
+      "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
+      "owner": "apps/postgres",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true },
+      "classification": "survivor",
+      "reason": "apps/postgres owns the bounded credential-fed hook that removes PostgreSQL PUBLIC access from each logical database."
     },
     {
       "id": "ingress-nginx-controller",

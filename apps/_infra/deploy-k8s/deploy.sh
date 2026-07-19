@@ -5,13 +5,14 @@
 # A thin profile over the shared install core (k8s-deploy.sh). It installs ONE
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
 # nodes: its own operator + channel proxy + Obot + LiteLLM + Cognee + opencrane-ui,
-# per-CT networking, and separate app-owned PostgreSQL releases for OpenCrane,
-# Obot, and DB-backed LiteLLM, with self-service
+# per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
+# and credentials for OpenCrane, Obot, LiteLLM, and Langfuse, with self-service
 # manager/billing OFF.
 #
 # The CLUSTER-WIDE infra (ingress-nginx, external-dns, CloudNativePG, cert-manager) is an
 # external prerequisite. A silo never installs these shared controllers. It creates only
-# its namespaced app releases and requires a pre-created PostgreSQL credentials Secret.
+# its namespaced app releases and requires one pre-created PostgreSQL basic-auth credentials
+# Secret for each logical database.
 #
 # The self-service ClusterTenant manager + billing are OFF (a silo serves exactly one
 # ClusterTenant; the fleet is managed by the central super-admin opencrane-ui).
@@ -21,6 +22,9 @@
 #       --base-domain dev.opencrane.ai \
 #       --cluster-tenant acme \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
+#       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
+#       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
+#       --langfuse-postgres-credentials-secret opencrane-langfuse-postgres-bootstrap \
 #       [--namespace opencrane-acme] [--ingress-ip 34.1.2.3] \
 #       [ANY k8s-deploy.sh flag]
 #
@@ -29,7 +33,7 @@
 # omitted the core auto-derives it from the cluster-wide ingress-nginx LoadBalancer.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
-# Secret already present in the target namespace.
+# Secrets already present in the target namespace.
 # =============================================================================
 set -euo pipefail
 
@@ -69,8 +73,9 @@ if ! kubectl get crd clusters.postgresql.cnpg.io >/dev/null 2>&1; then
 fi
 
 # The silo lives in its own namespace so its per-CT DB + planes are isolated from every other
-# silo and from the central release. Its OpenCrane, Obot, and LiteLLM databases are separate
-# CNPG Clusters inside that namespace. Default `opencrane-<cluster-tenant>`; --namespace overrides.
+# silo and from the central release. One CNPG Cluster in that namespace hosts its isolated
+# OpenCrane, Obot, LiteLLM, and Langfuse logical databases. Default `opencrane-<cluster-tenant>`;
+# --namespace overrides.
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 
 # Per-org OIDC (org-admin login). opencrane-server resolves the per-org CLIENT from the

@@ -135,6 +135,7 @@ export default [
             { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:auth", "scope:grants", "scope:retrieval", "scope:shared"] },
             { sourceTag: "scope:groups", onlyDependOnLibsWithTags: ["scope:groups", "scope:shared"] },
             { sourceTag: "scope:http", onlyDependOnLibsWithTags: ["scope:http", "scope:shared"] },
+            { sourceTag: "scope:integrations", onlyDependOnLibsWithTags: ["scope:integrations", "scope:obot-custody", "scope:shared"] },
             { sourceTag: "scope:k8s-api", onlyDependOnLibsWithTags: ["scope:k8s-api", "scope:shared"] },
             {
               sourceTag: "scope:identity",
@@ -151,6 +152,7 @@ export default [
             { sourceTag: "scope:metrics", onlyDependOnLibsWithTags: ["scope:awareness", "scope:metrics", "scope:projection", "scope:shared"] },
             { sourceTag: "scope:membership", onlyDependOnLibsWithTags: ["scope:audit", "scope:authorization", "scope:membership", "scope:shared"] },
             { sourceTag: "scope:personal-memory", onlyDependOnLibsWithTags: ["scope:artifacts", "scope:personal-memory", "scope:shared"] },
+            { sourceTag: "scope:obot-custody", onlyDependOnLibsWithTags: ["scope:obot-custody", "scope:shared"] },
             { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:shared"] },
             { sourceTag: "scope:policies", onlyDependOnLibsWithTags: ["scope:grants", "scope:k8s-api", "scope:policies", "scope:projection", "scope:shared"] },
             { sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:personal-personas", "scope:shared"] },

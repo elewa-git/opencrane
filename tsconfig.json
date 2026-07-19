@@ -70,6 +70,9 @@
       "@opencrane/backend/server/identity": [
         "./libs/backend/server/identity/main/src/index.ts"
       ],
+      "@opencrane/backend/server/integrations": [
+        "./libs/backend/server/integrations/main/src/index.ts"
+      ],
       "@opencrane/backend/server/metrics": [
         "./libs/backend/server/metrics/main/src/index.ts"
       ],
@@ -144,6 +147,9 @@
       ],
       "@opencrane/server/_infra/http": [
         "./libs/server/_infra/http/src/index.ts"
+      ],
+      "@opencrane/server/_infra/obot-custody": [
+        "./libs/server/_infra/obot-custody/src/index.ts"
       ],
       "@opencrane/server/_infra/tenant-hosting": [
         "./libs/server/_infra/tenant-hosting/src/index.ts"

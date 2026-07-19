@@ -1,0 +1,58 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}-database-privileges
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ .Values.privileges.timeoutSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "opencrane.postgres.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/part-of: opencrane
+        app.kubernetes.io/component: postgres-database-privileges
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        {{- range $database := .Values.databases }}
+        - name: {{ printf "%s-privileges" $database.name | trunc 63 | trimSuffix "-" }}
+          image: {{ $.Values.image | quote }}
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              deadline="$(( $(date +%s) + {{ $.Values.privileges.timeoutSeconds }} ))"
+              until psql -v ON_ERROR_STOP=1 -d "$PGDATABASE" -c 'SELECT 1' >/dev/null 2>&1; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  echo "Timed out waiting for logical database '$PGDATABASE'" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              psql -v ON_ERROR_STOP=1 -d "$PGDATABASE" -v database="$PGDATABASE" -v owner="$PGUSER" <<'SQL'
+              REVOKE CONNECT, TEMPORARY ON DATABASE :"database" FROM PUBLIC;
+              GRANT CONNECT, TEMPORARY ON DATABASE :"database" TO :"owner";
+              SQL
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $database.credentialsSecret | quote }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $database.credentialsSecret | quote }}
+                  key: password
+            - name: PGHOST
+              value: {{ printf "%s-rw" (include "opencrane.postgres.fullname" $) | quote }}
+            - name: PGDATABASE
+              value: {{ $database.name | quote }}
+        {{- end }}

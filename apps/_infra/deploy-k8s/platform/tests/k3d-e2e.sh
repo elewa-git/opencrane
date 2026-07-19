@@ -42,17 +42,18 @@ DB_STORAGE_GB="${DB_STORAGE_GB:-20}"
 DISK_HEADROOM_GB="${DISK_HEADROOM_GB:-2}"
 MIN_FREE_GB="${MIN_FREE_GB:-$(( DB_STORAGE_GB + DISK_HEADROOM_GB ))}"
 OPENCRANE_DB_RELEASE_NAME="${OPENCRANE_DB_RELEASE_NAME:-opencrane-postgres}"
-OBOT_DB_RELEASE_NAME="${OBOT_DB_RELEASE_NAME:-opencrane-obot-postgres}"
-LITELLM_DB_RELEASE_NAME="${LITELLM_DB_RELEASE_NAME:-opencrane-litellm-postgres}"
 POSTGRES_CREDENTIALS_SECRET="${POSTGRES_CREDENTIALS_SECRET:-opencrane-postgres-credentials}"
 OBOT_POSTGRES_CREDENTIALS_SECRET="${OBOT_POSTGRES_CREDENTIALS_SECRET:-opencrane-obot-postgres-credentials}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${LITELLM_POSTGRES_CREDENTIALS_SECRET:-opencrane-litellm-postgres-credentials}"
+LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-opencrane-langfuse-postgres-credentials}"
 POSTGRES_OWNER="${POSTGRES_OWNER:-opencrane_e2e}"
 OBOT_POSTGRES_OWNER="${OBOT_POSTGRES_OWNER:-obot_e2e}"
 LITELLM_POSTGRES_OWNER="${LITELLM_POSTGRES_OWNER:-litellm_e2e}"
+LANGFUSE_POSTGRES_OWNER="${LANGFUSE_POSTGRES_OWNER:-langfuse_e2e}"
 DB_PASSWORD="${DB_PASSWORD:-opencrane-e2e-password}"
 OBOT_DB_PASSWORD="${OBOT_DB_PASSWORD:-obot-e2e-password}"
 LITELLM_DB_PASSWORD="${LITELLM_DB_PASSWORD:-litellm-e2e-password}"
+LANGFUSE_DB_PASSWORD="${LANGFUSE_DB_PASSWORD:-langfuse-e2e-password}"
 CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
 CNPG_SYSTEM_NAMESPACE="cnpg-system"
 CERT_MANAGER_CHART_VERSION="${CERT_MANAGER_CHART_VERSION:-v1.15.1}"
@@ -334,6 +335,8 @@ echo "[e2e] Bootstrapping one credentials Secret per PostgreSQL authority"
 _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER" "$DB_PASSWORD"
 _create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" "$OBOT_DB_PASSWORD"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" "$LITELLM_DB_PASSWORD"
+_create_database_credentials "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER" "$LANGFUSE_DB_PASSWORD"
+DATABASES_JSON="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
 
 echo "[e2e] Installing pinned MinIO backup target"
 kubectl create secret generic opencrane-backup-object-store-credentials \
@@ -476,7 +479,7 @@ function _validate_cnpg_backup_recovery_schema()
   echo "[e2e] Validating backup contract against the pinned CNPG API server schema"
   helm template postgres-backup-contract "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    --set "credentials.existingSecret=$POSTGRES_CREDENTIALS_SECRET" \
+    --set-json "databases=$DATABASES_JSON" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set backup.enabled=true \
     --set backup.plugin.name=barman-cloud.cloudnative-pg.io \
@@ -486,7 +489,7 @@ function _validate_cnpg_backup_recovery_schema()
   echo "[e2e] Validating recovery contract against the pinned CNPG API server schema"
   helm template postgres-recovery-contract "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    --set "credentials.existingSecret=$POSTGRES_CREDENTIALS_SECRET" \
+    --set-json "databases=$DATABASES_JSON" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set restore.enabled=true \
     --set restore.plugin.name=barman-cloud.cloudnative-pg.io \
@@ -496,27 +499,30 @@ function _validate_cnpg_backup_recovery_schema()
   rm -f "$rendered"
 }
 
-function _install_database()
+function _install_postgres_server()
 {
-  local release_name="$1"
-  local database_name="$2"
-  local credentials_secret="$3"
-  local database_owner="$4"
-  local client_selectors_json="$5"
-
-  echo "[e2e] Installing PostgreSQL target '$database_name' as '$release_name'"
-  helm upgrade --install "$release_name" "$ROOT_DIR/apps/postgres/helm" \
+  echo "[e2e] Installing one PostgreSQL server with isolated logical databases"
+  helm upgrade --install "$OPENCRANE_DB_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    --set "credentials.existingSecret=$credentials_secret" \
-    --set-string "database.name=$database_name" \
-    --set-string "database.owner=$database_owner" \
+    --set-json "databases=$DATABASES_JSON" \
     --set "storage.size=${DB_STORAGE_GB}Gi" \
     --set "storage.storageClass=local-path" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
-    --set-json "networkPolicy.clientPodSelectors=$client_selectors_json"
-  kubectl wait --for=condition=Ready "cluster/$release_name" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
+  kubectl wait --for=condition=Ready "cluster/$OPENCRANE_DB_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  for database_resource in obot litellm langfuse; do
+    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${OPENCRANE_DB_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  done
+  kubectl wait --for=condition=complete "job/${OPENCRANE_DB_RELEASE_NAME}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+}
+
+function _publish_database_connection()
+{
+  local credentials_secret="$1"
+  local app_secret="$2"
+  local database_name="$3"
   bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
-    "$NAMESPACE" "$credentials_secret" "${release_name}-app" "${release_name}-rw" "$database_name"
+    "$NAMESPACE" "$credentials_secret" "$app_secret" "${OPENCRANE_DB_RELEASE_NAME}-rw" "$database_name"
 }
 
 function _copy_cnpg_uri_secret()
@@ -564,7 +570,7 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: ${OPENCRANE_DB_RELEASE_NAME}-app
+                  name: ${OPENCRANE_POSTGRES_APP_SECRET}
                   key: uri
 EOF
   kubectl wait --for=condition=Complete job/opencrane-backup-schema-migrate \
@@ -625,12 +631,53 @@ spec:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: ${OPENCRANE_DB_RELEASE_NAME}-app
+                  name: ${OPENCRANE_POSTGRES_APP_SECRET}
                   key: uri
 EOF
   kubectl wait --for=condition=Complete job/opencrane-backup-marker-writer \
     -n "$NAMESPACE" \
     --timeout="${TIMEOUT_SECONDS}s"
+
+  _write_logical_database_marker() {
+    local database_name="$1"
+    local app_secret="$2"
+    local job_name="opencrane-backup-marker-writer-${database_name}"
+    cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${job_name}
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mcp-gateway
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: writer
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -c 'CREATE TABLE IF NOT EXISTS backup_restore_smoke (marker text PRIMARY KEY);'
+              psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO backup_restore_smoke(marker) VALUES ('${BACKUP_MARKER}-${database_name}') ON CONFLICT (marker) DO NOTHING;"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${app_secret}
+                  key: uri
+EOF
+    kubectl wait --for=condition=Complete "job/${job_name}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  }
+
+  _write_logical_database_marker obot "$OBOT_POSTGRES_APP_SECRET"
+  _write_logical_database_marker litellm "$LITELLM_POSTGRES_APP_SECRET"
+  _write_logical_database_marker langfuse "$LANGFUSE_POSTGRES_APP_SECRET"
 
   echo "[e2e] Taking an on-demand plugin backup"
   cat <<EOF | kubectl apply -f -
@@ -654,13 +701,11 @@ EOF
   echo "[e2e] Recovering the backup into fresh Cluster '$RESTORE_DB_RELEASE_NAME'"
   helm upgrade --install "$RESTORE_DB_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    --set "credentials.existingSecret=$POSTGRES_CREDENTIALS_SECRET" \
-    --set-string database.name=opencrane \
-    --set-string "database.owner=$POSTGRES_OWNER" \
+    --set-json "databases=$DATABASES_JSON" \
     --set "storage.size=${DB_STORAGE_GB}Gi" \
     --set storage.storageClass=local-path \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
-    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}}]' \
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
     --set restore.enabled=true \
     --set restore.plugin.name=barman-cloud.cloudnative-pg.io \
     --set-string "restore.plugin.parameters.barmanObjectName=$BACKUP_OBJECT_STORE_NAME" \
@@ -668,8 +713,21 @@ EOF
   kubectl wait --for=condition=Ready "cluster/$RESTORE_DB_RELEASE_NAME" \
     -n "$NAMESPACE" \
     --timeout="${TIMEOUT_SECONDS}s"
-  bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
-    "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-app" "${RESTORE_DB_RELEASE_NAME}-rw" opencrane
+  for database_resource in obot litellm langfuse; do
+    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${RESTORE_DB_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  done
+  kubectl wait --for=condition=complete "job/${RESTORE_DB_RELEASE_NAME}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  _publish_restored_connection() {
+    local credentials_secret="$1"
+    local app_secret="$2"
+    local database_name="$3"
+    bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
+      "$NAMESPACE" "$credentials_secret" "$app_secret" "${RESTORE_DB_RELEASE_NAME}-rw" "$database_name"
+  }
+  _publish_restored_connection "$POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-opencrane-app" opencrane
+  _publish_restored_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-obot-app" obot
+  _publish_restored_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-litellm-app" litellm
+  _publish_restored_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-langfuse-app" langfuse
 
   echo "[e2e] Verifying the restored marker through the recovered application Secret"
   cat <<EOF | kubectl apply -f -
@@ -702,27 +760,126 @@ spec:
                 fi
                 sleep 2
               done
-              restored_marker="\$(psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -Atc 'SELECT marker FROM backup_restore_smoke LIMIT 1')"
+              restored_marker="\$(psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "SELECT marker FROM backup_restore_smoke WHERE marker = '${BACKUP_MARKER}'")"
               test "\$restored_marker" = "${BACKUP_MARKER}"
           env:
             - name: DATABASE_URL
               valueFrom:
                 secretKeyRef:
-                  name: ${RESTORE_DB_RELEASE_NAME}-app
+                  name: ${RESTORE_DB_RELEASE_NAME}-opencrane-app
                   key: uri
 EOF
   kubectl wait --for=condition=Complete job/opencrane-backup-restore-verifier \
     -n "$NAMESPACE" \
     --timeout="${TIMEOUT_SECONDS}s"
+
+  _verify_restored_logical_marker() {
+    local database_name="$1"
+    local app_secret="$2"
+    local job_name="opencrane-backup-restore-verifier-${database_name}"
+    cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${job_name}
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: postgres-restore-smoke
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: verifier
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              restored_marker="\$(psql "\$DATABASE_URL" -v ON_ERROR_STOP=1 -Atc "SELECT marker FROM backup_restore_smoke WHERE marker = '${BACKUP_MARKER}-${database_name}'")"
+              test "\$restored_marker" = "${BACKUP_MARKER}-${database_name}"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${app_secret}
+                  key: uri
+EOF
+    kubectl wait --for=condition=Complete "job/${job_name}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  }
+
+  _verify_restored_logical_marker obot "${RESTORE_DB_RELEASE_NAME}-obot-app"
+  _verify_restored_logical_marker litellm "${RESTORE_DB_RELEASE_NAME}-litellm-app"
+  _verify_restored_logical_marker langfuse "${RESTORE_DB_RELEASE_NAME}-langfuse-app"
 }
 
 _validate_cnpg_backup_recovery_schema
-_install_database "$OPENCRANE_DB_RELEASE_NAME" opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}}]'
-_install_database "$OBOT_DB_RELEASE_NAME" obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}}]'
-_install_database "$LITELLM_DB_RELEASE_NAME" litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" \
-  '[{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
+_install_postgres_server
+OPENCRANE_POSTGRES_APP_SECRET="${OPENCRANE_DB_RELEASE_NAME}-opencrane-app"
+OBOT_POSTGRES_APP_SECRET="${OPENCRANE_DB_RELEASE_NAME}-obot-app"
+LITELLM_POSTGRES_APP_SECRET="${OPENCRANE_DB_RELEASE_NAME}-litellm-app"
+LANGFUSE_POSTGRES_APP_SECRET="${OPENCRANE_DB_RELEASE_NAME}-langfuse-app"
+_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$OPENCRANE_POSTGRES_APP_SECRET" opencrane
+_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" obot
+_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" litellm
+_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" langfuse
+
+function _assert_cross_database_denied()
+{
+  local source_name="$1"
+  local source_secret="$2"
+  local target_name="$3"
+  local job_name="postgres-cross-db-${source_name}-${target_name}"
+
+  echo "[e2e] Verifying $source_name cannot connect to $target_name"
+  cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: ${job_name}
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: mcp-gateway
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: cross-database-denial
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              if psql -v ON_ERROR_STOP=1 -d "${target_name}" -c 'SELECT 1' >/dev/null 2>&1; then
+                echo "${source_name} unexpectedly connected to ${target_name}" >&2
+                exit 1
+              fi
+              psql -v ON_ERROR_STOP=1 -d "${source_name}" -c 'SELECT 1' >/dev/null
+          env:
+            - name: PGHOST
+              value: ${OPENCRANE_DB_RELEASE_NAME}-rw
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: ${source_secret}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: ${source_secret}
+                  key: password
+EOF
+  kubectl wait --for=condition=complete "job/${job_name}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+}
+
+_assert_cross_database_denied obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" opencrane
+_assert_cross_database_denied litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" obot
+_assert_cross_database_denied langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" litellm
 
 _migrate_opencrane_database
 _run_backup_restore_smoke
@@ -749,10 +906,10 @@ function _assert_distinct_cnpg_app_credentials()
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "${OPENCRANE_DB_RELEASE_NAME}-app" "${OBOT_DB_RELEASE_NAME}-app" "${LITELLM_DB_RELEASE_NAME}-app"
+_assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
 
-_copy_cnpg_uri_secret "${OBOT_DB_RELEASE_NAME}-app" "${RELEASE_NAME}-obot" dsn
-_copy_cnpg_uri_secret "${LITELLM_DB_RELEASE_NAME}-app" opencrane-litellm-db DATABASE_URL
+_copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "${RELEASE_NAME}-obot" dsn
+_copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" opencrane-litellm-db DATABASE_URL
 
 # Boot-time BYOK bootstrap key — seeds a model so the default-tenant seed's ≥1-model gate passes.
 kubectl create secret generic "$BOOTSTRAP_SECRET_NAME" \
@@ -777,7 +934,7 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/apps/_infra/deploy-k8s" \
   --set "clustertenantManager.standaloneSeed.displayName=$ORG_DISPLAY_NAME" \
   --set "clustertenantManager.standaloneSeed.ownerEmail=$OWNER_EMAIL" \
   --set "clustertenantManager.standaloneSeed.tier=$ORG_TIER" \
-  --set "clustertenantManager.database.existingSecret=${OPENCRANE_DB_RELEASE_NAME}-app" \
+  --set "clustertenantManager.database.existingSecret=${OPENCRANE_POSTGRES_APP_SECRET}" \
   --set "clustertenantManager.database.secretKey=uri" \
   --set "litellm.existingDatabaseSecret=opencrane-litellm-db" \
   --set "litellm.databaseSecretKey=DATABASE_URL" \

@@ -51,7 +51,8 @@ Each ClusterTenant runs its **own dedicated instances** of the full per-tenant s
 - **LiteLLM**
 - its own **operator**
 - its own **per-CT networking** (the S2 NetworkPolicy silo + S5 Linkerd identity)
-- its own **tenant DB** (a dedicated Postgres database for the tenant)
+- its own **tenant DB server** (one dedicated Postgres server for the tenant, with separate
+  logical databases and credentials for its runtime planes)
 
 Planes are **never shared singletons multiplexing tenants behind an ACL**. The **only central
 (shared, cross-silo) components are the opencrane-api and Zitadel** — nothing else. (Other
@@ -87,7 +88,7 @@ construction** (no resolution needed; the CT name is the input). What moves out 
 
 ### 3. Per-CT API + DB retires the resolution-ambiguity class — uniformly
 
-Because every tier has a **dedicated per-CT tenant-facing API + DB instance** (decision 1),
+Because every tier has a **dedicated per-CT tenant-facing API + DB server** (decision 1),
 the resolution-ambiguity class is killed **the same way at every tier**: the silo *is* the
 scope, so the tenant-facing plane never infers a caller's tenant from request shape. The only
 cross-silo plane left (the super-admin opencrane-api, decision 2) acts on **named** CTs, which
@@ -117,11 +118,11 @@ them does not block this ADR.
 
 1. **Provisioner reparent** — model **every** ClusterTenant as a `multiInstance` instance the
    `ClusterTenantProvisioner` stamps out (namespace + scoped operator + `mode=instance` planes
-   incl. LiteLLM + per-CT DB), on shared nodes.
+   incl. LiteLLM + one per-CT DB server), on shared nodes.
 2. **Per-CT operator** — provision the namespace-scoped operator per CT; move per-org
    ingress/DNS ownership into it (fail-closed).
 3. **Tenant API/DB split** — separate the central super-admin (cross-silo, named-CT) surface
-   from the per-CT tenant-facing (silo-scoped) API + DB instance; delete the #68 resolution shim.
+   from the per-CT tenant-facing (silo-scoped) API + DB server; delete the #68 resolution shim.
 
 (Isolation-tier scheduling — dedicated nodes / vcluster — and the S7 cost model are
 [`future-work.md`](../../future-work.md), not part of this split.)

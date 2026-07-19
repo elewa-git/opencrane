@@ -1,15 +1,22 @@
 instances: 1
 image: ghcr.io/cloudnative-pg/postgresql:17.5
 
-database:
-  name: opencrane
-  owner: opencrane
-
-credentials:
-  # Required. The Secret must be type kubernetes.io/basic-auth with username/password keys.
-  # Its decoded username must equal database.owner; deploy entrypoints enforce this
-  # before installing the Cluster.
-  existingSecret: ""
+# One physical CNPG Cluster hosts these isolated logical databases. The first item is
+# bootstrapped by CNPG initdb; each later item becomes a CNPG Database CR and a managed
+# PostgreSQL role. Every item must use its own basic-auth Secret (username/password).
+databases:
+  - name: opencrane
+    owner: opencrane
+    credentialsSecret: ""
+  - name: obot
+    owner: obot
+    credentialsSecret: ""
+  - name: litellm
+    owner: litellm
+    credentialsSecret: ""
+  - name: langfuse
+    owner: langfuse
+    credentialsSecret: ""
 
 storage:
   size: 20Gi
@@ -29,12 +36,20 @@ networkPolicy:
   operatorNamespace: cnpg-system
   operatorPodLabels:
     app.kubernetes.io/name: cloudnative-pg
-  # Only the canonical server and its migration hook connect to this database.
+  # All database clients in this ClusterTenant namespace. PostgreSQL roles and
+  # per-database credentials, not NetworkPolicy, enforce logical-database isolation.
   clientPodSelectors:
     - matchLabels:
         app.kubernetes.io/component: opencrane-server
     - matchLabels:
         app.kubernetes.io/component: opencrane-server-migrate
+    - matchLabels:
+        app.kubernetes.io/component: postgres-database-privileges
+
+privileges:
+  # A bounded in-cluster psql Job runs after each Cluster/Database reconciliation to
+  # remove PostgreSQL's default PUBLIC CONNECT/TEMPORARY grants from every logical DB.
+  timeoutSeconds: 300
 
 backup:
   enabled: false

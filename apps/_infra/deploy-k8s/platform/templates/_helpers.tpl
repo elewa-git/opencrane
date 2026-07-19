@@ -174,11 +174,11 @@ and the migration Job all share it so they can never drift).
 
 Both roles wire the opencrane-ui to the database the installer provisions via
 `controlPlane.database.existingSecret` (or `.url`). Per-ClusterTenant isolation (S6 / ADR 0002)
-comes from the SILO deploying a dedicated CNPG cluster IN ITS OWN NAMESPACE — one Postgres per
-silo serving that silo's opencrane-ui + runtime planes — so the silo opencrane-ui's DB already
-holds exactly one ClusterTenant's data and never has to infer which tenant a row belongs to. The
-deploy scripts (`apps/_infra/deploy-k8s/deploy.sh` → `k8s-deploy.sh`) provision that per-namespace cluster + secret;
-this helper just consumes whatever secret the installer points at, identically for both roles.
+comes from the SILO deploying one dedicated CNPG server IN ITS OWN NAMESPACE. That server has
+separate logical databases and credentials per plane; this helper receives only the OpenCrane
+database Secret, so the silo opencrane-ui never shares a database role or needs to infer a tenant.
+The deploy scripts (`apps/_infra/deploy-k8s/deploy.sh` → `k8s-deploy.sh`) provision the server +
+per-database Secrets; this helper just consumes the OpenCrane one for both roles.
 
 With no explicit DB this renders no DATABASE_URL (the opencrane-ui stays in its no-DB mode); a
 real deploy always supplies one.
