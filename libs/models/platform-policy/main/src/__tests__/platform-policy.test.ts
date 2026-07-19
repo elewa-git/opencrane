@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ___IsDurableStatePolicy, ___IsPlatformPolicy, ___IsRuntimeFilesystemPolicy, ___IsSiloUpdateDurationAllowed, ___IsSiloUpdatePolicy, ___MAXIMUM_SILO_UPDATE_DURATION_MS, ___PLATFORM_POLICY } from "./platform-policy.js";
+import { ___IsDurableStatePolicy, ___IsPlatformPolicy, ___IsRuntimeFilesystemPolicy, ___IsSiloUpdateDurationAllowed, ___IsSiloUpdatePolicy, ___MAXIMUM_SILO_UPDATE_DURATION_MS, ___PLATFORM_POLICY } from "../platform-policy.js";
 
 describe("platform policy", function _suite()
 {

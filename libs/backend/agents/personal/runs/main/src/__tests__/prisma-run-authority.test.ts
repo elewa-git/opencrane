@@ -1,7 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";
+import { PrismaAgentRunAuthorityRepository } from "../prisma-run-authority.js";
 
 /** Creates one retryable Prisma run row. */
 function _runRow()

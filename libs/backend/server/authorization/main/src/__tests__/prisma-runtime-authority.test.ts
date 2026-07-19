@@ -1,8 +1,8 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
-import type { CapabilityActionIntent, RuntimeBootstrapClaim } from "./runtime-proof.types.js";
+import { PrismaRuntimeAuthorityRepository } from "../prisma-runtime-authority.js";
+import type { CapabilityActionIntent, RuntimeBootstrapClaim } from "../runtime-proof.types.js";
 
 /** Creates one exact runtime bootstrap claim. */
 function _bootstrap(): RuntimeBootstrapClaim

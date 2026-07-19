@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __PublishSkillRevision } from "./skill-publication.js";
+import { __PublishSkillRevision } from "../skill-publication.js";
 
 describe("skill publication", function ()
 {

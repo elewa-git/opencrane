@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { __FinalizeArtifactRevision } from "./artifact-finalization.js";
+import { __FinalizeArtifactRevision } from "../artifact-finalization.js";
 
 describe("artifact finalization", function ()
 {
