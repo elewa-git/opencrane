@@ -1,6 +1,8 @@
 # Silo read-model projection (Stage 4 follow-up)
 
-Status: **design — needs one decision before implementation.** This is the remaining *live blocker*
+Status: **resolved — Option A (CR `spec.zitadel`) adopted and implemented** (see
+[`fleet-silo-contract.md`](fleet-silo-contract.md)); retained as the design record.
+Original status: design — needs one decision before implementation. This was the remaining *live blocker*
 after the Stage 4 feature move (commit `7d4b6d0`): the clustertenant-manager (silo) no longer owns the
 ClusterTenant registry, but its per-org login still needs ClusterTenant data.
 

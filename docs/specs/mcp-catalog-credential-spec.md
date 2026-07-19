@@ -1,5 +1,10 @@
 # Spec: MCP Catalogue, Credentials & Per-User Activation
 
+> **Pre-pivot record (June 2026).** This spec predates the personal-agent pivot: it activates MCP
+> servers into "each user's OpenClaw", the blue runtime now frozen for replacement. The Obot
+> custody/catalogue analysis remains the input for the target integration plane (PR #241 port,
+> issue #255); read the activation mechanics as historical.
+
 > **Status:** Reconciled with P0 (PR #40 landed the prerequisites) · **Date:** 20 June 2026,
 > updated 21 June 2026 · **Owner:** Jente Rosseel
 > **Decision:** Keep Obot as the MCP catalogue + gateway + credential broker + server host (MIT; the

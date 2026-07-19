@@ -1,6 +1,9 @@
 # Fleet ↔ silo contract specification
 
-Status: **design — the one contract that survives the fleet/silo repo split (Phase 3, #150 pull-forward).**
+Status: **design record — the split has since been executed** (the fleet manager now lives in the
+`weownai` repo; `apps/fleet-operator` is gone from this one). The contract below remains the live
+cross-repo interface; "today" language reflects the pre-split state when this was written.
+Original status: design — the one contract that survives the fleet/silo repo split (Phase 3, #150 pull-forward).
 This document specifies the single cross-repo interface between the **fleet manager** (moving OUT to the
 `weownai` repo, relicensed proprietary) and the **ClusterTenant silo** (staying in `opencrane-2`, AGPL).
 It moves no code and flips no licence headers — it records the decisions so the later move (#151) can happen
