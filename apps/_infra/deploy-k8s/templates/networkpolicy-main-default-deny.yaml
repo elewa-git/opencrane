@@ -20,9 +20,8 @@
   flag expects before flipping it on in production). MANDATORY (see the `fail` guard above)
   once `multiCt.enabled=true`.
 
-  FQDN-BASED EGRESS: rule 7 allows port 443 to ANY external destination (conservative — a
-  NetworkPolicy cannot match on FQDN). Replace with CiliumNetworkPolicy scoped to
-  networkPolicy.defaultAllowedDomains / your Zitadel host if the cluster runs Cilium.
+  FQDN-BASED EGRESS: this legacy umbrella cannot match FQDNs. Target workload profiles use
+  app-owned CiliumNetworkPolicies with exact service and DNS destinations instead.
 */}}
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
@@ -33,13 +32,13 @@ metadata:
     {{- include "opencrane.labels" . | nindent 4 }}
     app.kubernetes.io/component: platform-default-deny
 spec:
-  # ArtifactStore has an app-owned, server-only policy. Excluding it here prevents the generic
-  # platform allow-list from widening its ingress/egress through Kubernetes' additive semantics.
+  # Target workload profiles have app-owned Cilium and Kubernetes policies. Excluding them here
+  # prevents this legacy umbrella allow-list from widening their ingress/egress additively.
   podSelector:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service]
+        values: [artifact-service, agent-controller, agent-runtime, opencrane-server]
   policyTypes:
     - Ingress
     - Egress

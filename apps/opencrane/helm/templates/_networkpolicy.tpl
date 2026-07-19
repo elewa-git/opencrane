@@ -96,6 +96,108 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.artifactService.service.port }}
+    # ArtifactStore is addressed by its cluster DNS name, so this exact resolver egress is
+    # required before the catalog can use the otherwise constrained byte-plane Service.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+---
+# Cilium supplies the identity-aware half of the control-plane boundary. Target callers must
+# satisfy both their exact release labels and Kubernetes-issued ServiceAccount identities; the
+# retained tenant/fleet rows stay label-scoped only until their OpenClaw replacements land.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ include "opencrane.fullname" . }}-opencrane-server
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opencrane-server
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+      "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+      "k8s:app.kubernetes.io/component": opencrane-server
+      "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-opencrane-server" (include "opencrane.fullname" .) | quote }}
+  ingress:
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Values.networkPolicy.ingressNamespace | default "ingress-nginx" | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.port | quote }}
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+            "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+            "k8s:app.kubernetes.io/component": channel-proxy
+            "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-channel-proxy" (include "opencrane.fullname" .) | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.internalPort | quote }}
+              protocol: TCP
+    {{- if .Values.agentController.enabled }}
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ default .Release.Namespace .Values.agentController.namespace | quote }}
+            "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+            "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+            "k8s:app.kubernetes.io/component": agent-controller
+            "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-agent-controller" (include "opencrane.fullname" .) | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.internalPort | quote }}
+              protocol: TCP
+    {{- end }}
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/component": fleet-manager
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.port | quote }}
+              protocol: TCP
+    - fromEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/component": tenant
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.internalPort | quote }}
+              protocol: TCP
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ default (printf "%s-artifacts" .Release.Namespace) .Values.artifactService.namespace | quote }}
+            "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+            "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+            "k8s:app.kubernetes.io/component": artifact-service
+            "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-artifact-service" (include "opencrane.fullname" .) | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.artifactService.service.port | quote }}
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
 ---
 {{- end }}
 {{- end }}

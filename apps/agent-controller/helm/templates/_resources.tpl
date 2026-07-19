@@ -236,5 +236,61 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
+---
+# Bind controller egress to its Kubernetes-issued identity instead of a mutable workload label.
+# The runtime ServiceAccount is deliberately absent: it never receives Kubernetes API egress.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $fullName }}-agent-controller
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+      "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+      "k8s:app.kubernetes.io/component": agent-controller
+      "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-agent-controller" $fullName | quote }}
+  egress:
+    - toCIDR:
+        - {{ required "agentController.kubernetesApi.cidr is required when agentController.enabled=true" .Values.agentController.kubernetesApi.cidr | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.agentController.kubernetesApi.port | default 443 | quote }}
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ .Release.Namespace | quote }}
+            "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+            "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+            "k8s:app.kubernetes.io/component": opencrane-server
+            "io.cilium.k8s.policy.serviceaccount": {{ printf "%s-opencrane-server" $fullName | quote }}
+      toPorts:
+        - ports:
+            - port: {{ .Values.clustertenantManager.service.internalPort | quote }}
+              protocol: TCP
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    {{- if .Values.observability.otel.enabled }}
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ $namespace | quote }}
+            "k8s:app.kubernetes.io/component": otel-collector
+      toPorts:
+        - ports:
+            - port: {{ .Values.observability.otel.collector.otlpPort | quote }}
+              protocol: TCP
+    {{- end }}
 {{- end }}
 {{- end }}

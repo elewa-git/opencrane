@@ -55,5 +55,45 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
+---
+# Cilium enforces the same default-deny runtime profile using immutable workload and
+# ServiceAccount identity. This intentionally grants no OpenCrane API access until the
+# proof-bound runtime listener is introduced with its own exact policy.
+apiVersion: cilium.io/v2
+kind: CiliumNetworkPolicy
+metadata:
+  name: {{ $fullName }}-agent-runtime
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: agent-runtime
+spec:
+  endpointSelector:
+    matchLabels:
+      "k8s:app.kubernetes.io/name": {{ include "opencrane.name" . | quote }}
+      "k8s:app.kubernetes.io/instance": {{ .Release.Name | quote }}
+      "k8s:app.kubernetes.io/component": agent-runtime
+      "io.cilium.k8s.policy.serviceaccount": {{ .Values.agentRuntime.serviceAccountName | quote }}
+  egress:
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": kube-system
+            "k8s:k8s-app": kube-dns
+      toPorts:
+        - ports:
+            - port: "53"
+              protocol: UDP
+            - port: "53"
+              protocol: TCP
+    {{- if .Values.observability.otel.enabled }}
+    - toEndpoints:
+        - matchLabels:
+            "k8s:io.kubernetes.pod.namespace": {{ $namespace | quote }}
+            "k8s:app.kubernetes.io/component": otel-collector
+      toPorts:
+        - ports:
+            - port: {{ .Values.observability.otel.collector.otlpPort | quote }}
+              protocol: TCP
+    {{- end }}
 {{- end }}
 {{- end }}

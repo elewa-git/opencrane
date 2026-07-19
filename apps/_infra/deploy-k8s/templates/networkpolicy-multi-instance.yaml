@@ -38,8 +38,13 @@ metadata:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: cross-instance-isolation
 spec:
-  # Empty podSelector → applies to every pod in this instance namespace.
-  podSelector: {}
+  # Target workload profiles must not inherit this legacy same-instance allow-list: Kubernetes
+  # NetworkPolicy rules are additive, so that would widen their app-owned Cilium boundaries.
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: [artifact-service, agent-controller, agent-runtime, opencrane-server]
   policyTypes:
     - Ingress
     - Egress
