@@ -14,7 +14,22 @@ const _CLAIM_LEASE_MS = 30_000;
 /** Audience used by runtime Pods when exchanging their projected workload token. */
 const _RUNTIME_AUDIENCE = "opencrane";
 
-/** Prisma-backed controller authority that derives all desired workload state from canonical rows. */
+/**
+ * Prisma-backed controller authority that derives all desired workload state from canonical rows.
+ *
+ * The one durable adapter behind the `ControllerAuthorityRepository` port. Its only caller is the
+ * controller-authority internal router, which `apps/agent-controller`'s reconciler invokes over
+ * the workload-authenticated internal route — nothing user-facing touches this class.
+ *
+ * Why it exists: the claim → record-Job → record-Pod sequence is the fail-closed persistence of
+ * controller work. Each step is one lock-ordered transaction (service, then run, then outbox
+ * event) that revalidates the canonical rows before writing, so a controller crash leaves a
+ * reclaimable lease instead of lost work, a duplicate reconcile hits an idempotent
+ * acknowledgement instead of a second Job, and a run whose service, revision, or profile changed
+ * under the claim is failed durably rather than started against stale authority. The controller
+ * never supplies authority — its observations are matched against server-derived expectations
+ * (deterministic Job name, previously issued profile) and rejected on any mismatch.
+ */
 export class PrismaControllerAuthorityRepository implements ControllerAuthorityRepository
 {
 	/** OpenCrane product-authority database client. */
