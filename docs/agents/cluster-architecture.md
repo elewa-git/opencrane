@@ -111,6 +111,10 @@ library units with the parent release context; shared labels and topology helper
 | `apps/_infra/obot/helm` | Obot gateway Deployment, Service, KSA/RBAC, and NetworkPolicy |
 | `apps/_infra/langfuse` | Pinned upstream chart ownership for web, worker, ClickHouse, ZooKeeper, Valkey, and MinIO workload classes |
 | `apps/artifact-service/helm` | Canonical ArtifactStore byte service: RWO expandable PVC, private service, and no catalog authority |
+| `apps/agent-controller/helm` | Agent-controller Deployment, scoped Role/RoleBinding (sole workload mutator), and Network/CiliumNetworkPolicy |
+| `apps/agent-runtime/helm` | Standing agent-Job ServiceAccount (zero RBAC, no automount) and its Network/CiliumNetworkPolicy boundary |
+| `apps/channel-proxy/helm` | Channel-proxy Deployment, Service, identity, and edge NetworkPolicy |
+| `apps/postgres/helm` | CloudNativePG `Cluster`, scheduled backup, and ingress-isolation NetworkPolicy |
 | `apps/_infra/deploy-k8s/templates/{cluster-issuer,external-secrets-store,networkpolicy-*}.yaml` | Issuer/external-secret composition and cross-plane/default-deny policy |
 
 The machine-enforced inventory is `docs/agents/workload-ownership.json`; adding a pod class

@@ -3,16 +3,16 @@
 > Part of the OpenCrane agent guidance. See [`AGENTS.md`](../../AGENTS.md) for the index.
 
 The OpenCrane server database schema is owned **per domain**, mirroring the
-`libs/backend/<domain>/main` package layout (#153). One physical PostgreSQL database and one
+`libs/backend/server/<domain>/main` package layout (#153). One physical PostgreSQL database and one
 migration history remain, but every model/enum has exactly one owning domain.
 
 ## Schema layout
 
 - The schema is a **multi-file folder**: `apps/opencrane/prisma/schema/`
   (Prisma ≥ 6.7 folder mode; wired via `"prisma": { "schema": "prisma/schema" }` in the
-  operator `package.json`).
+  opencrane-server `package.json`).
 - `base.prisma` holds the `generator` and `datasource` blocks — nothing else.
-- `<domain>.prisma` holds the models and enums owned by `libs/backend/<domain>/main`
+- `<domain>.prisma` holds the models and enums owned by `libs/backend/server/<domain>/main`
   (e.g. `grants.prisma`, `model-routing.prisma`). Cross-file relations are fine — Prisma
   merges the folder into one schema.
 

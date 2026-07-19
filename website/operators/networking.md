@@ -38,13 +38,13 @@ OpenCrane organises all cluster traffic into **two distinct planes**: a narrow p
 ┌─────────────────────────────────────────────────────────────────────┐
 │  PLANE 2 — INTERNAL CLUSTER NETWORK (ClusterIP only)                │
 │                                                                     │
-│  opencrane-api :8080    mcp-gateway :8080    feat-skill-registry :5000   │
+│  opencrane-api :8080    mcp-gateway :8080                            │
 │  litellm :4000          cognee :8000         postgres (CNPG) :5432  │
 │                                                                     │
 │  per-org namespaces (opencrane-<org>):                              │
 │    openclaw-<tenant> :18789  (no Ingress, no public DNS)            │
 │                                                                     │
-│  Isolated by Cilium identity policy + SPIFFE mTLS (per silo)        │
+│  Isolated by NetworkPolicy + Cilium identity policy (per silo)      │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -101,7 +101,6 @@ All platform services are ClusterIP-only. No plane service exposes an Ingress or
 |---------|------|-----------|
 | opencrane-api | 8080 | opencrane-system |
 | mcp-gateway (Obot) | 8080 | opencrane-system |
-| feat-skill-registry | 5000 | opencrane-system |
 | litellm | 4000 | opencrane-system |
 | cognee | 8000 | opencrane-system |
 | Postgres (CNPG) | 5432 | opencrane-system |
@@ -155,10 +154,8 @@ The silo chart renders per-plane ingress NetworkPolicies when `networkPolicy.ena
 
 | Policy | Protects | Admits ingress from |
 |--------|----------|---------------------|
-| `*-opencrane-api-ingress` | opencrane-api :8080 | ingress-nginx namespace + operator + mcp-gateway + feat-skill-registry + tenant pods (contract re-pull) |
+| `*-opencrane-api-ingress` | opencrane-api :8080 | ingress-nginx namespace + operator + mcp-gateway + tenant pods (contract re-pull) |
 | `*-mcp-gateway-ingress` | mcp-gateway :8080 | tenant pods + opencrane-api + operator |
-| `*-feat-skill-registry-ingress` | feat-skill-registry :5000 | tenant pods + opencrane-api + operator |
-| `*-skill-oci-ingress` | skill OCI store | opencrane-api only |
 
 Tenant pods reach the control plane to re-pull their effective contract (`GET /api/internal/contract/:name`); the policy allows this, and the handler enforces identity via TokenReview — so network and application auth are both in play.
 
@@ -177,7 +174,7 @@ The policy uses an **empty `podSelector`** (it selects every pod in the silo nam
 | Ingress | the same silo namespace (intra-silo) | pods within one org talk to each other |
 | Ingress | the opencrane-api / operator namespace | the super-admin plane is the only principal allowed to reach inward (it brokers the gateway connection) |
 | Egress | cluster DNS (`kube-system`, UDP/TCP 53) | without this every name lookup fails and the pod is dead |
-| Egress | the same silo namespace + the opencrane-api / operator namespace | reach the shared planes (opencrane-api, Obot/MCP, feat-skill-registry, LiteLLM, Cognee) in the shared tier |
+| Egress | the same silo namespace + the opencrane-api / operator namespace | reach the shared planes (opencrane-api, Obot/MCP, LiteLLM, Cognee) in the shared tier |
 | Egress | external HTTPS (TCP 443) | the agent legitimately calls out to LLM / MCP / Git endpoints |
 
 This **replaces the retired `opencrane-tenant-default` policy**, which sat in the install namespace (`opencrane-system`) and selected tenant pods cluster-wide by `app.kubernetes.io/component=tenant` — so it governed nothing in the per-org namespaces where tenant pods actually run, leaving egress unrestricted there. The operator now emits one correctly-scoped policy per silo namespace it provisions, so egress (DNS + HTTPS only) and east-west default-deny are enforced in the right place. The companion per-tenant gateway policy (`openclaw-<tenant>-gateway`, [Layer 1](#the-authenticated-operator-seam) above) narrows the gateway *port* to the operator on top of this baseline; `NetworkPolicy` rules are additive, so the two compose.
@@ -186,11 +183,11 @@ This **replaces the retired `opencrane-tenant-default` policy**, which sat in th
 This baseline is an **L3/L4** floor — a namespace-scoped, port-keyed allow-list. It only takes effect on a `NetworkPolicy`-enforcing CNI: GKE Dataplane V2 (and Autopilot) enforce it inherently; Calico/Cilium do elsewhere. On a CNI that does not enforce `NetworkPolicy`, the floor is inert.
 :::
 
-### Identity-keyed enforcement (Cilium + SPIFFE)
+### Identity-keyed enforcement (Cilium)
 
-The baseline above is keyed on namespaces and ports. On top of it, the platform enforces isolation on **workload identity** and at **L7**, using Cilium + SPIFFE. Every silo workload is issued a SPIFFE SVID (`spiffe://opencrane/ct/<org>/<workload>`) derived from its Kubernetes ServiceAccount, and every silo-to-silo call is mutually authenticated (mTLS). `CiliumNetworkPolicy` then expresses the same default-deny + allow-intra-silo + allow-super-admin posture — but keyed on that cryptographic identity rather than on an IP, and extended to per-route (L7) authorisation. The `NetworkPolicy` floor stays in place underneath (Cilium enforces it too), so the two compose as defence in depth.
+The baseline above is keyed on namespaces and ports. On top of it, the platform enforces isolation on **workload identity** and at **L7**, using Cilium. Cilium derives a security identity for every silo workload from its identity-relevant Kubernetes labels — namespace, application, and ServiceAccount. `CiliumNetworkPolicy` then expresses the same default-deny + allow-intra-silo + allow-super-admin posture — but keyed on that label-derived identity rather than on an IP, and extended to per-route (L7) authorisation. The `NetworkPolicy` floor stays in place underneath (Cilium enforces it too), so the two compose as defence in depth. Cryptographic workload identity (SPIFFE SVIDs via SPIRE, and Cilium mutual authentication) is **optional later work**, not part of the deployed baseline.
 
-See [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) for the full model — the two kinds of identity, the who-can-talk-to-whom rules, and how a workload gets its identity. See [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) for the substrate decision (it supersedes the earlier Linkerd choice in ADR 0001).
+See [Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity) for the full model — the two kinds of identity, the who-can-talk-to-whom rules, and how a workload gets its identity. See [ADR 0003 — Cilium identity and network-policy substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) for the substrate decision (it supersedes the earlier Linkerd choice in ADR 0001).
 
 Egress is bounded the same way: `CiliumNetworkPolicy` `toFQDN` rules give each silo a per-hostname allow-list (e.g. only `api.openai.com`), so a silo reaches DNS and its approved provider/tool endpoints and nothing else. An `AccessPolicy` with `egressRules` narrows this further per tenant.
 
@@ -200,21 +197,21 @@ Egress is bounded the same way: `CiliumNetworkPolicy` `toFQDN` rules give each s
 
 The following gaps are honest assessments verified against the live codebase. They do not undermine the overall isolation model but operators should be aware of them.
 
-**litellm, langfuse, and the otel-collector have no ingress NetworkPolicy.** The plane ingress policies cover the control plane, mcp-gateway, feat-skill-registry, and OCI store. LiteLLM, Langfuse, and the OTEL collector are not yet covered by a corresponding ingress policy — a defence-in-depth gap. Application-level auth still applies on those services.
+**litellm, langfuse, and the otel-collector have no ingress NetworkPolicy.** The plane ingress policies cover the control plane and mcp-gateway. LiteLLM, Langfuse, and the OTEL collector are not yet covered by a corresponding ingress policy — a defence-in-depth gap. Application-level auth still applies on those services.
 
 **Plane ingress rules use tenant podSelectors without a namespaceSelector.** The rules admitting tenant pods to the control plane and plane services select by `app.kubernetes.io/component=tenant` without scoping to the correct namespace. In a multi-instance cluster, a tenant pod from a different instance's namespace could match. This is a multi-instance hygiene gap; the fix is to also add a `namespaceSelector` that constrains to the instance's own org namespaces.
 
-**The L3/L4 floor is the safety net beneath the identity layer.** Identity-keyed enforcement (Cilium + SPIFFE, above) is the primary cross-silo control; the portable `NetworkPolicy` floor stays underneath as defence in depth. The floor takes effect on a `NetworkPolicy`-enforcing CNI — with Cilium as the CNI it is enforced natively alongside the `CiliumNetworkPolicy` identity rules. On any CNI that does not enforce `NetworkPolicy`, the floor is inert and isolation rests on the identity layer alone.
+**The L3/L4 floor is the safety net beneath the identity layer.** Identity-keyed enforcement (Cilium, above) is the primary cross-silo control; the portable `NetworkPolicy` floor stays underneath as defence in depth. The floor takes effect on a `NetworkPolicy`-enforcing CNI — with Cilium as the CNI it is enforced natively alongside the `CiliumNetworkPolicy` identity rules. On any CNI that does not enforce `NetworkPolicy`, the floor is inert and isolation rests on the identity layer alone.
 
 ---
 
 ## See also
 
 - [Sandbox jobs](/integrators/agents/sandbox-jobs) — the OpenSandbox workload and immutable egress profile
-- [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) — the identity-keyed layer on top of this L3/4 baseline: the principals, the who-can-talk-to-whom rules, SPIFFE SVIDs, and FQDN egress
+- [Identity & network isolation (Cilium)](/operators/cilium-spiffe-identity) — the identity-keyed layer on top of this L3/4 baseline: the principals, the who-can-talk-to-whom rules, and FQDN egress
 - [ClusterTenant members](/operators/cluster-tenant-members) — managing who can administrate an org (Owner/Admin/Member roles) and the last-owner guardrail
 - [Identity & connection auth](/security/identity) — credential types, OIDC session, projected-identity tokens, and the identity-routing proxy flow
 - [Connection security](/security/connection-security) — the full CONN.9/CONN.10 threat model, the trusted-proxy auth decision record, and the transport hardening posture
 - [DNS configuration](/operators/dns-config) — external-dns setup, cert-manager issuers, and the zone-write identity model
 - [Hosting & deployment](/operators/hosting) — ingress class, TLS cert modes, cloud hosting adapters
-- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision behind identity-keyed enforcement (supersedes ADR 0001, which chose Linkerd)
+- [ADR 0003 — Cilium identity and network-policy substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision behind identity-keyed enforcement (supersedes ADR 0001, which chose Linkerd)

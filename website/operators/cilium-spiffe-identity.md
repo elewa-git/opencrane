@@ -1,7 +1,8 @@
-# Identity & network isolation (Cilium + SPIFFE)
+# Identity & network isolation (Cilium)
 
-Every workload and every person on the platform has a **cryptographic identity**, and
-**every network decision is made on that identity — never on an IP address**. This is
+Every workload and every person on the platform has an **identity the network can
+check**, and **every network decision is made on that identity — never on an IP
+address**. This is
 what keeps one customer's silo sealed off from every other, and it is the single idea
 behind all the rules on this page.
 
@@ -9,28 +10,28 @@ behind all the rules on this page.
 > [Networking & isolation](/operators/networking) — the two-plane cluster model and the public edge this identity layer sits behind; read that first for the overall shape.
 > [Identity & connection auth](/security/identity) — how a person signs in (Zitadel OIDC) and reaches their own assistant.
 > [Silo deployment model](/operators/silo-deployment) — how each customer's silo is installed as its own release.
-> [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the decision behind this model, and why it supersedes the earlier Linkerd choice.
+> [ADR 0003 — Cilium identity and network-policy substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the decision behind this model, and why it supersedes the earlier Linkerd choice.
 
 ---
 
 ## Two kinds of identity
 
-There are exactly two kinds of principal on the platform, and each carries a
-cryptographic identity that the network can check.
+There are exactly two kinds of principal on the platform, and each carries an
+identity that the network can check.
 
 | Principal | Identity | Issued by | Used for |
 |-----------|----------|-----------|----------|
 | **A person** (owner, admin, member) | Zitadel **OIDC** session, scoped to their org | Zitadel (one org per customer) | Signing in to the control plane and reaching their own assistant |
-| **A workload** (control plane, operator, LiteLLM, Obot, Cognee, an assistant pod) | **SPIFFE SVID** — `spiffe://opencrane/ct/<org>/<workload>` | SPIRE, from the pod's Kubernetes ServiceAccount | Proving *which workload* is calling, over mutual TLS |
+| **A workload** (control plane, operator, LiteLLM, Obot, Cognee, an assistant pod) | **Cilium security identity** — derived from its namespace, application, and ServiceAccount labels | Cilium, from the pod's identity-relevant Kubernetes labels | Selecting which network-policy rules apply to *which workload* |
 
 People and workloads meet only at the control plane, and only over an OIDC-guarded
 hop. A person never gets a workload identity, and a workload never gets a browser
 credential.
 
 ::: tip Why identity, not IP
-Pods come and go; IP addresses churn and can be reused. A SPIFFE identity is bound to
-the workload's ServiceAccount, is short-lived, and rotates automatically — so a rule
-written against it keeps meaning the same thing no matter where the pod lands.
+Pods come and go; IP addresses churn and can be reused. A Cilium identity is bound to
+the workload's stable properties — its namespace, application, and ServiceAccount — so
+a rule written against it keeps meaning the same thing no matter where the pod lands.
 :::
 
 ---
@@ -88,21 +89,27 @@ The chain is automatic — no secrets to distribute, nothing for an operator to 
 hand.
 
 ```
-Kubernetes ServiceAccount           the pod's declared identity
-        │
+Kubernetes labels                   namespace, application, ServiceAccount
+        │                           — the pod's declared, stable properties
         ▼
-SPIRE issues a SPIFFE SVID          spiffe://opencrane/ct/acme/openclaw
-        │  (short-lived, auto-rotating X.509)
+Cilium security identity            a numeric identity derived from those
+        │                           identity-relevant labels
         ▼
-Cilium mutual authentication        every silo-to-silo call is mTLS,
-        │                           proven on both ends by SVID
-        ▼
-CiliumNetworkPolicy decision        allow / deny keyed on the SVID identity
+CiliumNetworkPolicy decision        allow / deny keyed on that identity
 ```
 
-Each workload's SVID is derived from its ServiceAccount, so "who is calling" is a
-cryptographic fact, not a header a caller can spoof. Calls between workloads are wrapped
-in mutual TLS, so both ends prove their identity before a byte of application data flows.
+Each workload's Cilium identity is derived from its namespace, application, and
+ServiceAccount labels — properties set by the operator at provisioning time, not
+something a caller can spoof from inside a pod. Network identity controls
+*reachability*; the application layer still authenticates every call explicitly, using
+audience-bound projected ServiceAccount tokens validated by the receiving workload
+(see [identity & connection auth](/security/identity)).
+
+Cryptographic workload identity — SPIFFE SVIDs issued by SPIRE, and Cilium mutual
+authentication (mTLS) — is **optional later work** under
+[ADR 0003](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md).
+It is not part of the deployed baseline, and adopting it carries its own compatibility
+and operational gate.
 
 ---
 
@@ -138,20 +145,20 @@ the org has approved.
 
 ---
 
-## Three layers, all keyed on identity
+## Three layers of enforcement
 
 The isolation is defence-in-depth: a connection between two silos has to defeat **all
-three** layers, and each is keyed on the same workload identity.
+three** layers.
 
 | Layer | What it does | Cross-silo verdict |
 |-------|--------------|--------------------|
+| **L3/L4 — standard `NetworkPolicy` floor** | Portable, namespace/port-keyed default-deny baseline (enforced by Cilium too) | Drops the packet — no rule ever names another silo |
 | **L3/L4 — CiliumNetworkPolicy** | Packet-level allow-list, keyed on Cilium security identity | Drops the packet — the source identity isn't in any allow rule |
 | **L7 — CiliumNetworkPolicy (per-route)** | Which identities may call which routes/methods | Rejects the request — the caller identity isn't authorised for that route |
-| **mTLS — SPIFFE mutual auth** | Both ends prove their SVID before data flows | Fails the handshake — no trusted SVID for a foreign silo |
 
-A gap in any one layer doesn't open the silo, because the other two still have to pass.
-And because all three read the same identity, they can't disagree about *who* the caller
-is.
+A gap in any one layer doesn't open the silo, because the others still have to pass.
+If SPIFFE/SPIRE mutual authentication is adopted later, it would add a fourth,
+handshake-level layer on top.
 
 ::: info The floor never disappears
 The portable, standard-`NetworkPolicy` default-deny floor from the silo baseline stays
@@ -167,4 +174,4 @@ relax it.
 - [Networking & isolation](/operators/networking) — the public edge, the two planes, and how the silo baseline composes with these identity rules
 - [Identity & connection auth](/security/identity) — how a person authenticates (Zitadel OIDC) and reaches their own assistant with no browser-held pod credential
 - [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how a person's org-scoped identity flows into what their assistant may retrieve and act on
-- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision and why it supersedes ADR 0001 (Linkerd)
+- [ADR 0003 — Cilium identity and network-policy substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision and why it supersedes ADR 0001 (Linkerd)
