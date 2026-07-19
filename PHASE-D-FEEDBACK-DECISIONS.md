@@ -502,6 +502,39 @@ auditable rather than asserted.
 
 ---
 
+## Decision D16 (FINAL ISSUE) — repo-wide docs staleness sweep + writer/reader review loop
+
+**Status:** DECIDED (Jente, 2026-07-19). The closing docs mandate for the Phase D → G work.
+
+**Part 1 — full staleness analysis and correction.** Audit **every** documentation Markdown file in
+the repo for staleness against the target (green) product, and correct it. Scope (stack HEAD):
+- `website/**` — 40 pages
+- `docs/**` — 42 files (design, ADR, agents)
+- other repo `*.md` — 77 (READMEs, briefs, root docs)
+- **~159 `.md` total.**
+Flag and fix content describing deleted/blue-era behaviour (OpenClaw, skill-registry, Zitadel-era
+identity, Linkerd, per-authority Postgres split, etc.); reconcile with the decisions in this doc and
+ADR 0008/0009. Ties to the Phase G zero-residue docs pass — but done proactively, not deferred.
+
+**Part 2 — writer/reader review loop for the website.** After a writer agent rewrites each website
+page, a **second agent reads it as "a junior developer with a bachelor's degree, new to and genuinely
+interested in the platform"** and critiques on:
+- **Clarity** — reads clearly; a newcomer can follow it.
+- **Jargon** — does not over-rely on jargon; terms are introduced before use.
+- **Concept coverage** — every concept is actually explained, not assumed.
+- **Progression** — high-level overview first, then concept-by-concept, then advanced topics — never
+  advanced-first.
+- **Engagement** — is it actually interesting to read?
+
+Writer and reader **iterate together per page** until the page passes on all five. Apply the loop to
+the new D14 security & architecture chapter and to every page rewritten in Part 1. The reader's job is
+the newcomer's experience, not correctness (correctness is Part 1 + the code); the writer revises to
+the reader's feedback until they agree it's good.
+
+**Note.** This is the final logged item of the Phase D feedback session.
+
+---
+
 ## Related open feedback (not yet decided)
 
 - **A — ADR 0002 drift:** `values.yaml:12` still cites "ONE CNPG cluster per silo (ADR 0002
