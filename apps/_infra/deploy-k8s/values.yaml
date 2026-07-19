@@ -426,7 +426,7 @@ clustertenantManager:
   resources:
     requests:
       cpu: 100m
-      memory: 128Mi
+      memory: 256Mi
     limits:
       cpu: 500m
       memory: 512Mi
@@ -494,7 +494,7 @@ clustertenantManager:
     resources:
       requests:
         cpu: 100m
-        memory: 256Mi
+        memory: 768Mi
       limits:
         cpu: "1"
         memory: 1Gi
@@ -683,7 +683,7 @@ litellm:
   resources:
     requests:
       cpu: 100m
-      memory: 256Mi
+      memory: 768Mi
     limits:
       cpu: "1"
       memory: 1Gi
