@@ -23,7 +23,7 @@
     { "path": "apps/opencrane/src/index.ts", "owner": "apps/opencrane", "classification": "process-entrypoint" },
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
+    { "path": "apps/opencrane/src/infra/artifacts/__tests__/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/scripts/migrate.ts", "owner": "apps/opencrane", "classification": "migration-entrypoint" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
@@ -52,7 +52,7 @@
     { "path": "apps/artifact-service/src/instrument.ts", "owner": "apps/artifact-service", "classification": "process-instrumentation" },
     { "path": "apps/artifact-service/src/log.ts", "owner": "apps/artifact-service", "classification": "process-logging" },
     { "path": "apps/artifact-service/src/server.ts", "owner": "apps/artifact-service", "classification": "route-composition" },
-    { "path": "apps/artifact-service/src/server.test.ts", "owner": "apps/artifact-service", "classification": "composition-test" },
+    { "path": "apps/artifact-service/src/__tests__/server.test.ts", "owner": "apps/artifact-service", "classification": "composition-test" },
     { "path": "apps/artifact-service/vitest.config.ts", "owner": "apps/artifact-service", "classification": "test-config" },
 
     { "path": "apps/feat-central-agents/src/__tests__/connectors/slack.connector.test.ts", "owner": "apps/feat-central-agents", "classification": "delete" },
