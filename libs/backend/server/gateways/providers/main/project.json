@@ -1,0 +1,27 @@
+{
+  "name": "backend-server-providers",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/gateways/providers/main/src",
+  "tags": [
+    "type:lib",
+    "layer:backend",
+    "scope:providers"
+  ],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/server/gateways/providers/main"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/backend/server/gateways/providers/main"
+      }
+    }
+  }
+}

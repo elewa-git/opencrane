@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import type * as k8s from "@kubernetes/client-node";
 
 import type { OpenClawTenantOperatorConfig } from "../../../operator-config.types.js";
-import type { AccessPolicy } from "@opencrane/backend/server/policies";
+import type { AccessPolicy } from "@opencrane/backend/server/iam/policies";
 import type { Tenant } from "../models/tenant.types.js";
 import type { TenantModelSet } from "@opencrane/contracts";
 import { _BuildTenantLabels } from "./tenant-labels.js";

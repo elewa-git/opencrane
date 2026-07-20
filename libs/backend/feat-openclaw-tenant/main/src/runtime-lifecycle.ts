@@ -2,7 +2,7 @@ import * as k8s from "@kubernetes/client-node";
 
 import { _ResolveOwnClusterTenantName, _SeedOwnClusterTenant, _SeedOwnDefaultTenant } from "@opencrane/backend/server/cluster-tenants";
 import { _ProvisionByokKey } from "@opencrane/backend/server/model-routing";
-import { PolicyOperator } from "@opencrane/backend/server/policies";
+import { PolicyOperator } from "@opencrane/backend/server/iam/policies";
 import { GatewayProxyServer } from "@opencrane/server/_infra/channel-proxy";
 import { CogneeLiteLlmKey } from "./reconcilers/tenants/internal/cognee-litellm-key.js";
 import { CogneeSiloTenant } from "./reconcilers/tenants/internal/cognee-silo-tenant.js";

@@ -2,7 +2,7 @@ import type * as k8s from "@kubernetes/client-node";
 import { describe, expect, it, vi } from "vitest";
 
 import { defaultConfig, _makeTenant } from "../fixtures.js";
-import type { AccessPolicy } from "@opencrane/backend/server/policies";
+import type { AccessPolicy } from "@opencrane/backend/server/iam/policies";
 import { _ResolveTenantPolicy } from "../../reconcilers/tenants/internal/policy-resolution.js";
 import { TenantPolicyResolutionState } from "../../reconcilers/tenants/models/tenant-status.types.js";
 

@@ -1,7 +1,7 @@
 import type * as k8s from "@kubernetes/client-node";
 
 import type { OpenClawTenantOperatorConfig } from "../../../operator-config.types.js";
-import type { AccessPolicy } from "@opencrane/backend/server/policies";
+import type { AccessPolicy } from "@opencrane/backend/server/iam/policies";
 import { ACCESS_POLICY_CRD_PLURAL, OPENCRANE_API_GROUP, OPENCRANE_API_VERSION } from "@opencrane/server/_infra/api";
 import type { Tenant } from "../models/tenant.types.js";
 import type { TenantPolicyResolutionResult } from "./policy-resolution.types.js";

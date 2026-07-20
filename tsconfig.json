@@ -10,14 +10,14 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
-      "@opencrane/backend/server/access-tokens": [
-        "./libs/backend/server/access-tokens/main/src/index.ts"
+      "@opencrane/backend/server/iam/access-tokens": [
+        "./libs/backend/server/iam/access-tokens/main/src/index.ts"
       ],
-      "@opencrane/backend/server/agent-services": [
-        "./libs/backend/server/agent-services/main/src/index.ts"
+      "@opencrane/backend/server/agents/agent-services": [
+        "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
-      "@opencrane/backend/server/artifacts": [
-        "./libs/backend/server/artifacts/main/src/index.ts"
+      "@opencrane/backend/server/agents/artifacts": [
+        "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],
       "@opencrane/backend/artifacts/store": [
         "./libs/backend/artifacts/store/main/src/index.ts"
@@ -31,11 +31,11 @@
       "@opencrane/backend/server/api-spec": [
         "./libs/backend/server/api-spec/main/src/index.ts"
       ],
-      "@opencrane/backend/server/audit": [
-        "./libs/backend/server/audit/main/src/index.ts"
+      "@opencrane/backend/server/iam/audit": [
+        "./libs/backend/server/iam/audit/main/src/index.ts"
       ],
-      "@opencrane/backend/server/authorization": [
-        "./libs/backend/server/authorization/main/src/index.ts"
+      "@opencrane/backend/server/iam/authorization": [
+        "./libs/backend/server/iam/authorization/main/src/index.ts"
       ],
       "@opencrane/backend/server/awareness": [
         "./libs/backend/server/awareness/main/src/index.ts"
@@ -55,20 +55,20 @@
       "@opencrane/backend/server/contract": [
         "./libs/backend/server/contract/main/src/index.ts"
       ],
-      "@opencrane/backend/server/grants": [
-        "./libs/backend/server/grants/main/src/index.ts"
+      "@opencrane/backend/server/iam/grants": [
+        "./libs/backend/server/iam/grants/main/src/index.ts"
       ],
       "@opencrane/backend/feat-openclaw-tenant": [
         "./libs/backend/feat-openclaw-tenant/main/src/index.ts"
       ],
-      "@opencrane/backend/server/groups": [
-        "./libs/backend/server/groups/main/src/index.ts"
+      "@opencrane/backend/server/iam/groups": [
+        "./libs/backend/server/iam/groups/main/src/index.ts"
       ],
       "@opencrane/backend/server/mcp": [
         "./libs/backend/server/mcp/main/src/index.ts"
       ],
-      "@opencrane/backend/server/identity": [
-        "./libs/backend/server/identity/main/src/index.ts"
+      "@opencrane/backend/server/iam/identity": [
+        "./libs/backend/server/iam/identity/main/src/index.ts"
       ],
       "@opencrane/backend/server/integrations": [
         "./libs/backend/server/integrations/main/src/index.ts"
@@ -76,8 +76,8 @@
       "@opencrane/backend/server/metrics": [
         "./libs/backend/server/metrics/main/src/index.ts"
       ],
-      "@opencrane/backend/server/membership": [
-        "./libs/backend/server/membership/main/src/index.ts"
+      "@opencrane/backend/server/iam/membership": [
+        "./libs/backend/server/iam/membership/main/src/index.ts"
       ],
       "@opencrane/backend/agents/personal/memory": [
         "./libs/backend/agents/personal/memory/main/src/index.ts"
@@ -85,8 +85,8 @@
       "@opencrane/backend/server/model-routing": [
         "./libs/backend/server/model-routing/main/src/index.ts"
       ],
-      "@opencrane/backend/server/policies": [
-        "./libs/backend/server/policies/main/src/index.ts"
+      "@opencrane/backend/server/iam/policies": [
+        "./libs/backend/server/iam/policies/main/src/index.ts"
       ],
       "@opencrane/backend/agents/personal/personas": [
         "./libs/backend/agents/personal/personas/main/src/index.ts"
@@ -103,8 +103,8 @@
       "@opencrane/backend/agents/personal/runs": [
         "./libs/backend/agents/personal/runs/main/src/index.ts"
       ],
-      "@opencrane/backend/server/skills": [
-        "./libs/backend/server/skills/main/src/index.ts"
+      "@opencrane/backend/server/agents/skills": [
+        "./libs/backend/server/agents/skills/main/src/index.ts"
       ],
       "@opencrane/backend/server/spend": [
         "./libs/backend/server/spend/main/src/index.ts"

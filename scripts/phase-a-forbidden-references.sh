@@ -159,7 +159,7 @@ _check_file_absent "TENANT-SPEC-RETIRED-FIELD" "libs/backend/feat-openclaw-tenan
 # Pairing/device state and the no-token pod-token route are direct-deletion targets. Constrain the
 # remaining implementation and documentation so no new dependency can grow before removal.
 _check_pattern "PAIRING-DEVICE" '(BrokeredDevice|brokered-device|openclaw-pairing|/pod-token/cut|/:name/pairing)' "($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS)"
-POD_TOKEN_DELETION_SCOPE="^(libs/backend/server/identity/main/src/auth\.router\.ts|libs/backend/server/connections/main/src/(core/gateway-resolve|routes/auth-connections|__tests__/auth-connections\.test)\.ts|website/security/connection-security\.md|docs/agents/(architecture|apps/opencrane)\.md|CHANGELOG\.md|plan\.md|plan-done\.md|docs/design/(personal-agent-platform-architecture|personal-agent-platform-direct-refactor-plan|openclaw-agent-loop-replacement-plan)\.md)$"
+POD_TOKEN_DELETION_SCOPE="^(libs/backend/server/iam/identity/main/src/auth\.router\.ts|libs/backend/server/tenancy/connections/main/src/(core/gateway-resolve|routes/auth-connections|__tests__/auth-connections\.test)\.ts|website/security/connection-security\.md|docs/agents/(architecture|apps/opencrane)\.md|CHANGELOG\.md|plan\.md|plan-done\.md|docs/design/(personal-agent-platform-architecture|personal-agent-platform-direct-refactor-plan|openclaw-agent-loop-replacement-plan)\.md)$"
 _check_pattern "POD-TOKEN-DELETION-BOUNDARY" '(/api/v1/auth/pod-token|["`]/?pod-token(/cut)?["`])' "$POD_TOKEN_DELETION_SCOPE"
 
 # SessionScope is retired product state. All runtime CRUD/client/package references are forbidden

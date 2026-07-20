@@ -5,8 +5,8 @@ import { Readable } from "node:stream";
 import type { PrismaClient } from "@prisma/client";
 
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
-import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/artifacts";
-import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/artifacts";
+import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/agents/artifacts";
+import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 
 /** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }

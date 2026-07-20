@@ -1,4 +1,4 @@
-import type { AccessPolicy } from "@opencrane/backend/server/policies";
+import type { AccessPolicy } from "@opencrane/backend/server/iam/policies";
 import type { OpenClawTenantOperatorConfig } from "../operator-config.types.js";
 import type { Tenant } from "../reconcilers/tenants/models/tenant.types.js";
 import { TenantStatusPhase } from "../reconcilers/tenants/models/tenant-status.types.js";

@@ -15,7 +15,7 @@ import { ___BindConsole, ___GetContext, ___RequestContext, ___ShutdownTelemetry 
 import { ___AuthMiddleware } from "@opencrane/server/_infra/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/server/_infra/http";
 
-import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/identity";
+import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/iam/identity";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { _log as log } from "./app/log.js";

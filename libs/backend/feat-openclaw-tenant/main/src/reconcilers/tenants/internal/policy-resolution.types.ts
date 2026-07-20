@@ -1,4 +1,4 @@
-import type { AccessPolicy } from "@opencrane/backend/server/policies";
+import type { AccessPolicy } from "@opencrane/backend/server/iam/policies";
 import { TenantPolicyResolutionState } from "../models/tenant-status.types.js";
 
 /** Result payload for deterministic tenant policy resolution. */
