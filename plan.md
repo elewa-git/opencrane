@@ -86,8 +86,10 @@ close-out and the plugin research spike.
 | [#133](https://github.com/italanta/opencrane/issues/133) — **Skill-bundle registry-only cutover (S9)** | Live Zot backfill run → drop `SkillBundle.content` | Needs live infra; tooling ready (`oc skills backfill`). |
 | [#135](https://github.com/italanta/opencrane/issues/135) — **Provider-secret cutover (S10)** | Remove `org-shared-secrets` broadcast · retire `ProviderApiKey` | **BLOCKED external** (OpenClaw translator image + WeOwnAI). |
 | [#136](https://github.com/italanta/opencrane/issues/136) — **Deferred capabilities (S7 · S12 · D4/D5)** | Dedicated-compute tiers & cost model · guardrail stream · plane pooling + scale-to-zero | Future. S7 relies on the same provisioner-webhook seam #150 formalises. |
-| [#141](https://github.com/italanta/opencrane/issues/141) — **Cluster-based devops agents (research spike)** | Always-on in-cluster counterpart to the `/deploy-loop` fleet: drift/error detection, pre-upgrade config review — read-only, remediation via PRs/issues | Future; scope + guardrails in the issue. |
-| [#131](https://github.com/italanta/opencrane/issues/131) — **CLI & docs polish** (low prio) | `oc providers byok` · README component-table fix · budget-enforcement seam wording | Anytime. |
+| ~~[#141](https://github.com/italanta/opencrane/issues/141) — Cluster-based devops agents (research spike)~~ | ~~in-cluster counterpart to `/deploy-loop`~~ | **Closed 2026-07-13 (not planned).** |
+| ~~[#131](https://github.com/italanta/opencrane/issues/131) — CLI & docs polish~~ | ~~`oc providers byok` · README table · budget wording~~ | **Closed 2026-07-13 (not planned)** — moot after the `oc` CLI was deleted 2026-07-16 (#248). |
+
+**Phase E status (2026-07-21):** no executable work in this repo today. #141/#131 are closed; #117 is gated on Phase A #127 and runs green-side at R2; #133 needs a live-cluster backfill run; #135 is blocked externally; #136 is future. Phase E advances only once Phase A lands and the green R-sequence opens.
 
 Folded elsewhere: CONN.4/5 device-seam kill-or-keep → **#117** · live Cognee `/v1/search`
 verification → **#130**.
