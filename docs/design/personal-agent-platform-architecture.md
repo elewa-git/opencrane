@@ -746,7 +746,7 @@ capability with operational recovery and UI.
 | Multimodal intake | Runtime/provider-dependent, no governed pipeline | **Medium/high** | Artifact/preprocess pipeline |
 | Document authoring | Ad hoc tool/files, no versioned QA path | **Far** | Artifact and trusted authoring Jobs |
 | Skill authoring and Python code | Multiple storage paths; lifecycle issue open | **Far** | Skill catalog + artifact versions |
-| Managed agent registry | Central-agent issue/app is Slack-specific | **Far** | AgentService/Revision |
+| Managed agent registry | Central-agent issue/app is single-connector (ingestion-only) | **Far** | AgentService/Revision |
 | Scheduling | OpenClaw cron unused; generic service scheduler absent | **Medium/high** | OpenCrane run ledger + K8s trigger/Job |
 | Approvals/durable workflows | No unified run/approval ledger | **Medium/high:** toolkit pause state may help | OpenCrane Run/Approval state |
 | Run/operations console | Fragmented UI and infra consoles | **Far** | OpenCrane UI/API |

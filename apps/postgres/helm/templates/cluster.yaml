@@ -60,6 +60,24 @@
 {{- fail "the initdb target baseline ConfigMap reference requires name and key" -}}
 {{- end -}}
 {{- end -}}
+{{- if and .Values.pooler.enabled (lt (int .Values.postgresql.maxConnections) 1) -}}
+{{- fail "postgresql.maxConnections must be positive when the pooler is enabled" -}}
+{{- end -}}
+{{- if and .Values.pooler.enabled (lt (int .Values.pooler.instances) 1) -}}
+{{- fail "pooler.instances must be positive when the pooler is enabled" -}}
+{{- end -}}
+{{- if and .Values.pooler.enabled (lt (int .Values.pooler.maxClientConnections) 1) -}}
+{{- fail "pooler.maxClientConnections must be positive when the pooler is enabled" -}}
+{{- end -}}
+{{- if and .Values.pooler.enabled (lt (int .Values.pooler.maxDbConnections) 1) -}}
+{{- fail "pooler.maxDbConnections must be positive when the pooler is enabled" -}}
+{{- end -}}
+{{- if and .Values.pooler.enabled (gt (mul (len .Values.databases) (int .Values.pooler.maxDbConnections)) (int .Values.postgresql.maxConnections)) -}}
+{{- fail "pooler maxDbConnections across logical databases must not exceed postgresql.maxConnections" -}}
+{{- end -}}
+{{- if and .Values.pooler.enabled (empty .Values.pooler.clientPodSelectors) -}}
+{{- fail "pooler.clientPodSelectors must not be empty when the pooler is enabled" -}}
+{{- end -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
 metadata:
@@ -77,6 +95,9 @@ spec:
   instances: {{ .Values.instances }}
   imageName: {{ .Values.image | quote }}
   enableSuperuserAccess: false
+  postgresql:
+    parameters:
+      max_connections: {{ .Values.postgresql.maxConnections | quote }}
   inheritedMetadata:
     labels:
       {{- include "opencrane.postgres.labels" . | nindent 6 }}

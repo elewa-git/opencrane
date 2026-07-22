@@ -85,7 +85,7 @@ requirement is not preserved merely because its implementation already exists.
 - Tenant and AccessPolicy CRDs as business authorities;
 - `/auth/pod-token`, pairing, BrokeredDevice, gateway-admin state, and static internal agent tokens;
 - mutable workspace persona files and `SessionScope` product state;
-- awareness/participation rollout models and the Slack-specific interval loop;
+- awareness/participation rollout models and the legacy ingestion interval loop (its useful behaviour returns as a central agent driven by an Obot MCP server);
 - `feat-skill-registry`, Zot/core OCI, shared skill files/PVC, and DB/OCI fallbacks;
 - broad secret broadcasts and arbitrary config overrides;
 - Linkerd and obsolete shared/multi-instance/billing topology switches;
@@ -227,13 +227,21 @@ Deliver:
 - schedules, idempotent triggers, recorded runs/outbox, suspended one-attempt Jobs, Job/Pod-bound
   bootstrap, concurrency, deadlines, backoff, cancellation, and terminal repair;
 - scheduled AgentService identity independent of its creator;
+- central agents: org/department/team/shared managed AgentServices, schedule- or event-triggered for
+  one bounded task, on the shared personal-agent runtime substrate under a narrower connector-scoped
+  identity, reaching external systems only through Obot-custodied MCP servers (multi-instance, e.g.
+  one per connected source);
 - the strict personal→managed boundary;
 - approvals, effective access, audit, model/cost evidence, schedules, run status, and notifications;
 - OpenTelemetry plus durable business/run evidence;
 - runbooks for pause, revoke, provider/PEP outage, restore, and forward repair.
 
-Useful Slack behavior is re-expressed as schedule + MCP + skill + checkpoint. The interval worker
-and direct Cognee writes are deleted.
+Central agents run on the same runtime substrate as personal agents (the suspended one-attempt Job,
+controller, and outbound-only shell) but under a narrower, connector-scoped workload identity that is
+independent of any human user, extending the "scheduled AgentService identity independent of its
+creator" rule above. There is no bespoke per-source worker: external systems are reached only through
+Obot-custodied MCP servers, which may be instantiated per connected source. The legacy ingestion
+interval worker and its direct Cognee writes are deleted.
 
 ## Phase F — product and operator surfaces
 

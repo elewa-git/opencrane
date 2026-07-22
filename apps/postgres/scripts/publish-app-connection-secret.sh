@@ -7,8 +7,8 @@
 # placed in a command argument, shell trace, log line, or repository file.
 set -euo pipefail
 
-if [[ "$#" -ne 5 ]]; then
-  echo "Usage: $0 <namespace> <source-basic-auth-secret> <connection-secret> <host> <database>" >&2
+if [[ "$#" -ne 5 && "$#" -ne 6 ]]; then
+  echo "Usage: $0 <namespace> <source-basic-auth-secret> <connection-secret> <host> <database> [connection-options]" >&2
   exit 64
 fi
 
@@ -17,6 +17,7 @@ SOURCE_SECRET="$2"
 CONNECTION_SECRET="$3"
 HOST="$4"
 DATABASE="$5"
+CONNECTION_OPTIONS="${6:-sslmode=disable}"
 
 if [[ "$SOURCE_SECRET" == "$CONNECTION_SECRET" ]]; then
   echo "Source and application connection Secrets must be distinct." >&2
@@ -75,7 +76,7 @@ PASSWORD="$(printf '%s' "$PASSWORD_BASE64" | base64 -d)"
 ENCODED_USERNAME="$(_url_encode "$USERNAME")"
 ENCODED_PASSWORD="$(_url_encode "$PASSWORD")"
 ENCODED_DATABASE="$(_url_encode "$DATABASE")"
-URI="postgresql://${ENCODED_USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/${ENCODED_DATABASE}?sslmode=disable"
+URI="postgresql://${ENCODED_USERNAME}:${ENCODED_PASSWORD}@${HOST}:5432/${ENCODED_DATABASE}?${CONNECTION_OPTIONS}"
 HOST_BASE64="$(printf '%s' "$HOST" | base64 | tr -d '\n')"
 PORT_BASE64="$(printf '5432' | base64 | tr -d '\n')"
 DATABASE_BASE64="$(printf '%s' "$DATABASE" | base64 | tr -d '\n')"

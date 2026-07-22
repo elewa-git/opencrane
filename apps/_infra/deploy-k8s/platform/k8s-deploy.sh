@@ -609,6 +609,10 @@ if ! kubectl get crd databases.postgresql.cnpg.io >/dev/null 2>&1; then
   err "CloudNativePG Database CRD is required (databases.postgresql.cnpg.io is absent). Install a compatible operator before OpenCrane."
   exit 1
 fi
+if ! kubectl get crd poolers.postgresql.cnpg.io >/dev/null 2>&1; then
+  err "CloudNativePG Pooler CRD is required (poolers.postgresql.cnpg.io is absent). Install a compatible operator before OpenCrane."
+  exit 1
+fi
 _require_postgres_bootstrap() {
   local authority="$1"
   local credentials_secret="$2"
@@ -687,6 +691,9 @@ _install_postgres_server() {
     err "PostgreSQL '$POSTGRES_RELEASE' restored baseline '$reconciled_baseline', but this release requires '$POSTGRES_BASELINE_CONFIG_MAP'. Restore a compatible physical backup or recreate the database; OpenCrane does not migrate schemas."
     exit 1
   fi
+  # CNPG Pooler resources do not publish a Kubernetes Ready condition; the managed Deployment does.
+  kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm" "${POSTGRES_RELEASE}-langfuse"; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   done
@@ -699,9 +706,15 @@ _install_postgres_server() {
 _publish_database_connection() {
   local credentials_secret="$1"
   local app_secret="$2"
-  local database_name="$3"
+  local host="$3"
+  local database_name="$4"
+  local connection_options="${5:-}"
+  local publisher_args=("$NAMESPACE" "$credentials_secret" "$app_secret" "$host" "$database_name")
+  if [[ -n "$connection_options" ]]; then
+    publisher_args+=("$connection_options")
+  fi
   bash "$POSTGRES_CONNECTION_PUBLISHER" \
-    "$NAMESPACE" "$credentials_secret" "$app_secret" "${POSTGRES_RELEASE}-rw" "$database_name"
+    "${publisher_args[@]}"
 }
 
 _copy_cnpg_uri_secret() {
@@ -723,14 +736,18 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-langfuse-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
-_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" opencrane
-_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" obot
-_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" litellm
-_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" langfuse
-_publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" opencrane
+POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
+# The one replica of the OpenCrane server gets five Prisma connections at most.
+# This leaves 75 of the 80 physical-server connections outside Prisma's process
+# pool and keeps the 50-connection PgBouncer database budget authoritative.
+_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
+_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
+_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
+_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" langfuse
+_publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
   FLEET_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-fleet-app"
-  _publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" fleet
+  _publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" fleet
 fi
 
 _assert_distinct_cnpg_app_credentials() {
@@ -1223,7 +1240,7 @@ TN_TAG="${TENANT_TAG:-$IMAGE_TAG}"
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set "ingress.domain=$BASE_DOMAIN")
 # Langfuse has its own database and role on this ClusterTenant's shared PostgreSQL server.
 # It never receives the OpenCrane, Obot, or LiteLLM credential.
-helm_args+=(--set-string "langfuse.postgresql.host=${POSTGRES_RELEASE}-rw.${NAMESPACE}.svc.cluster.local")
+helm_args+=(--set-string "langfuse.postgresql.host=${POSTGRES_POOLER_HOST}.${NAMESPACE}.svc.cluster.local")
 helm_args+=(--set-string "langfuse.postgresql.auth.username=$LANGFUSE_POSTGRES_OWNER")
 helm_args+=(--set-string "langfuse.postgresql.auth.existingSecret=$LANGFUSE_POSTGRES_APP_SECRET")
 helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.userPasswordKey=password")

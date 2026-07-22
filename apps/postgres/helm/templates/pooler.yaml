@@ -1,0 +1,27 @@
+{{- if .Values.pooler.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: Pooler
+metadata:
+  name: {{ printf "%s-pooler" (include "opencrane.postgres.fullname" .) | trunc 63 | trimSuffix "-" }}
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres-pooler
+spec:
+  cluster:
+    name: {{ include "opencrane.postgres.fullname" . }}
+  instances: {{ .Values.pooler.instances }}
+  type: rw
+  pgbouncer:
+    poolMode: {{ .Values.pooler.poolMode | quote }}
+    parameters:
+      max_client_conn: {{ .Values.pooler.maxClientConnections | quote }}
+      max_db_connections: {{ .Values.pooler.maxDbConnections | quote }}
+      default_pool_size: {{ .Values.pooler.defaultPoolSize | quote }}
+      reserve_pool_size: {{ .Values.pooler.reservePoolSize | quote }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: postgres-pooler
+    spec:
+      containers: []
+{{- end }}

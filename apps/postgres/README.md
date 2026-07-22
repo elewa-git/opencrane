@@ -13,10 +13,10 @@ CNPG owns the running database. It is the single durable data store every silo d
 ## What it owns
 
 A **silo** is one customer's isolated slice of OpenCrane. This chart declares the silo's database:
-**one** CNPG `Cluster` holding several logical databases, expandable mounted storage, ingress
-isolation, and optional plugin-based backup/recovery. Application data is retained indefinitely; the
-Cluster survives Helm uninstall, and deleting a database is an explicit operator action, never a
-release side-effect.
+**one** CNPG `Cluster` holding several logical databases, a bounded CNPG-managed PgBouncer pooler,
+expandable mounted storage, ingress isolation, and optional plugin-based backup/recovery. Application
+data is retained indefinitely; the Cluster survives Helm uninstall, and deleting a database is an
+explicit operator action, never a release side-effect.
 
 It sits beneath everything else in the silo — the server, LiteLLM, Obot, and Langfuse each get their
 own logical database inside the shared Cluster, and each authenticates only to its own:
@@ -24,7 +24,7 @@ own logical database inside the shared Cluster, and each authenticates only to i
 ```
  ┌──────────────────────────────────────────────┐
  │  postgres (this chart)  ◄── HERE               │  declares desired Cluster + network boundary
- │   one CNPG Cluster                             │
+ │   one CNPG Cluster + bounded PgBouncer Pooler  │
  │     ├── opencrane   ├── litellm                │  one logical DB + owner role per authority
  │     ├── obot        └── langfuse  (+ fleet)    │
  │     └── database admin .........................│  inspect every DB; no durable writes/superuser
@@ -52,6 +52,14 @@ database is published by
 authorities or leaking them into command arguments or logs. Clean setup publishes the baseline with
 `scripts/publish-initdb-baseline-config-map.sh`; physical recovery does not execute that SQL because
 the backup already contains the schema, but records the source baseline identity as provenance.
+
+The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
+budget permits at most ten server connections per logical database (fifty across the deployed
+databases) while PostgreSQL permits eighty. The OpenCrane server's one replica is further capped at
+five Prisma connections with a five-second acquisition timeout. That means a burst waits at PgBouncer
+instead of holding every PostgreSQL connection while a run-admission transaction waits on a service
+lock. If replica counts or database count change, change these numbers together and keep the summed
+pooler budget below `postgresql.maxConnections`.
 
 **Invariant.** One CNPG Cluster hosts many databases (not one cluster per authority — that wastes idle
 pods and volumes). Because CNPG (as the database-pod controller) generates the instance-manager

@@ -123,9 +123,13 @@ and governed Python skill Jobs
 
 **AgentService lane:** implement AgentService/Revision/Run, organization/department/team/project/
 personal/user sharing, schedules, one-attempt Jobs, approvals, effective access, audit, cost, and the
-one-way personal→managed boundary ([#129](https://github.com/italanta/opencrane/issues/129)). Port
-useful Slack behavior only as schedule + MCP + skill + checkpoint; delete the interval worker and
-direct Cognee writes. Conversation-initiated config changes (always-granted `upgrade_session` tool,
+one-way personal→managed boundary ([#129](https://github.com/italanta/opencrane/issues/129)).
+**Central agents** — org-, department-, team-, or otherwise shared managed AgentServices that run on a
+schedule or a specific trigger to do one bounded task — run on the same runtime substrate as personal
+agents but under a narrower, connector-scoped workload identity independent of any human user. They
+reach external systems only through Obot-custodied MCP servers, instantiable per connected source. The
+legacy ingestion interval worker and its direct Cognee writes are deleted.
+Conversation-initiated config changes (always-granted `upgrade_session` tool,
 logged persona refresh, apply-at-next-snapshot) → [#318](https://github.com/italanta/opencrane/issues/318).
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,

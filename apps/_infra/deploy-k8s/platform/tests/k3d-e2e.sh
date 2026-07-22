@@ -603,6 +603,8 @@ function _install_postgres_server()
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
   kubectl wait --for=condition=Ready "cluster/$OPENCRANE_DB_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  kubectl wait --for=create "deployment/${OPENCRANE_DB_RELEASE_NAME}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+  kubectl wait --for=condition=available "deployment/${OPENCRANE_DB_RELEASE_NAME}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   for database_resource in obot litellm langfuse; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${OPENCRANE_DB_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   done
@@ -615,7 +617,7 @@ function _publish_database_connection()
   local app_secret="$2"
   local database_name="$3"
   bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
-    "$NAMESPACE" "$credentials_secret" "$app_secret" "${OPENCRANE_DB_RELEASE_NAME}-rw" "$database_name"
+    "$NAMESPACE" "$credentials_secret" "$app_secret" "${OPENCRANE_DB_RELEASE_NAME}-pooler" "$database_name"
 }
 
 function _copy_cnpg_uri_secret()
@@ -770,13 +772,20 @@ EOF
     --set "storage.size=${DB_STORAGE_GB}Gi" \
     --set storage.storageClass=local-path \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
-    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
+    --set-json 'pooler.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
     --set restore.enabled=true \
     --set-string "restore.sourceBaselineConfigMap=$OPENCRANE_BASELINE_CONFIG_MAP" \
     --set restore.plugin.name=barman-cloud.cloudnative-pg.io \
     --set-string "restore.plugin.parameters.barmanObjectName=$BACKUP_OBJECT_STORE_NAME" \
     --set-string "restore.plugin.parameters.serverName=$OPENCRANE_DB_RELEASE_NAME"
   kubectl wait --for=condition=Ready "cluster/$RESTORE_DB_RELEASE_NAME" \
+    -n "$NAMESPACE" \
+    --timeout="${TIMEOUT_SECONDS}s"
+  kubectl wait --for=create "deployment/${RESTORE_DB_RELEASE_NAME}-pooler" \
+    -n "$NAMESPACE" \
+    --timeout="${TIMEOUT_SECONDS}s"
+  kubectl wait --for=condition=available "deployment/${RESTORE_DB_RELEASE_NAME}-pooler" \
     -n "$NAMESPACE" \
     --timeout="${TIMEOUT_SECONDS}s"
   for database_resource in obot litellm langfuse; do
@@ -787,8 +796,8 @@ EOF
     local credentials_secret="$1"
     local app_secret="$2"
     local database_name="$3"
-    bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
-      "$NAMESPACE" "$credentials_secret" "$app_secret" "${RESTORE_DB_RELEASE_NAME}-rw" "$database_name"
+  bash "$ROOT_DIR/apps/postgres/scripts/publish-app-connection-secret.sh" \
+      "$NAMESPACE" "$credentials_secret" "$app_secret" "${RESTORE_DB_RELEASE_NAME}-pooler" "$database_name"
   }
   _publish_restored_connection "$POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-opencrane-app" opencrane
   _publish_restored_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "${RESTORE_DB_RELEASE_NAME}-obot-app" obot

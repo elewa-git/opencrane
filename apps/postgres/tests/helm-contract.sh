@@ -10,6 +10,7 @@ DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"po
 COMMON_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql)
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
+bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/pooler-deploy-contract.sh"
 helm template opencrane-postgres "$CHART" \
   --namespace opencrane \
   "${COMMON_VALUES[@]}" \
@@ -21,6 +22,13 @@ helm template opencrane-postgres "$CHART" \
 
 grep -q '^kind: Cluster$' "$OUTPUT"
 test "$(grep -c '^kind: Cluster$' "$OUTPUT")" -eq 1
+grep -q '^kind: Pooler$' "$OUTPUT"
+test "$(grep -c '^kind: Pooler$' "$OUTPUT")" -eq 1
+grep -q 'name: opencrane-postgres-pooler' "$OUTPUT"
+grep -q 'poolMode: "session"' "$OUTPUT"
+grep -q 'max_client_conn: "50"' "$OUTPUT"
+grep -q 'max_db_connections: "10"' "$OUTPUT"
+grep -q 'max_connections: "80"' "$OUTPUT"
 test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 3
 test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 4
 grep -q '^kind: Job$' "$OUTPUT"
@@ -55,6 +63,10 @@ grep -q 'createdb: false' "$OUTPUT"
 grep -q 'createrole: false' "$OUTPUT"
 grep -q 'method: plugin' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: opencrane-server' "$OUTPUT"
+grep -q 'app.kubernetes.io/component: mcp-gateway' "$OUTPUT"
+grep -q 'app.kubernetes.io/component: litellm' "$OUTPUT"
+grep -q 'app.kubernetes.io/name: langfuse' "$OUTPUT"
+grep -q 'app.kubernetes.io/component: fleet-manager' "$OUTPUT"
 
 if grep -qE '^kind: (ServiceAccount|Role|RoleBinding|ClusterRole|ClusterRoleBinding)$' "$OUTPUT"; then
   echo "postgres chart must not duplicate the deterministic CloudNativePG runtime identity" >&2
@@ -79,6 +91,14 @@ function _assert_invalid_databases()
 _assert_invalid_databases duplicate-name '[{"name":"opencrane","owner":"opencrane","credentialsSecret":"opencrane-secret"},{"name":"opencrane","owner":"obot","credentialsSecret":"obot-secret"}]'
 _assert_invalid_databases duplicate-owner '[{"name":"opencrane","owner":"opencrane","credentialsSecret":"opencrane-secret"},{"name":"obot","owner":"opencrane","credentialsSecret":"obot-secret"}]'
 _assert_invalid_databases duplicate-credentials '[{"name":"opencrane","owner":"opencrane","credentialsSecret":"shared-secret"},{"name":"obot","owner":"obot","credentialsSecret":"shared-secret"}]'
+
+if helm template invalid-pool-budget "$CHART" \
+  "${COMMON_VALUES[@]}" \
+  --set postgresql.maxConnections=20 \
+  --set pooler.maxDbConnections=10 >/dev/null 2>&1; then
+  echo "postgres chart accepted a pooler server-connection budget above PostgreSQL capacity" >&2
+  exit 1
+fi
 
 helm template one-database "$CHART" \
   --set-json 'databases=[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"}]' \

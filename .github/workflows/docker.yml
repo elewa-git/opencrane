@@ -93,9 +93,6 @@ jobs:
         if: steps.node-modules.outputs.cache-hit != 'true'
         run: npm ci
 
-      - name: Generate the database client
-        run: npm run db:generate -w @opencrane/server
-
       - name: Install Helm for topology render validation
         uses: azure/setup-helm@v5
         with:
@@ -127,6 +124,11 @@ jobs:
         run: |
           ./apps/_infra/deploy-k8s/platform/tests/tenant-entrypoint-contract-policy.sh
           ./apps/_infra/deploy-k8s/platform/tests/tenant-image-immutability.sh
+
+      # The topology gate must inspect the checked-in app owners, before any
+      # generator can introduce transient files beneath an app root.
+      - name: Generate the database client
+        run: npm run db:generate -w @opencrane/server
 
       - name: Restore the Nx computation cache
         uses: actions/cache@v4
