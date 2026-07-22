@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Phase A deletion-debt guard (#245/#248).
 #
-# Retired runtime/CLI concepts may remain only in exact target decision records, applied Prisma
-# schema history, and the legacy implementation paths that are still awaiting direct deletion. The
+# Retired runtime/CLI concepts may remain only in exact target decision records and the legacy
+# implementation paths that are still awaiting direct deletion. The active database baseline is
+# target state, not historical evidence. The
 # patterns deliberately avoid generic words such as "channels", "MCP", or "session": those remain
 # valid product concepts. Linkerd is governed by an exact path inventory until it is deleted.
 
@@ -15,7 +16,6 @@ FAILURES=0
 LEGACY_LINKERD_INVENTORY="docs/agents/legacy-linkerd-inventory.txt"
 
 TARGET_RECORDS='^(plan\.md|docs/design/(personal-agent-platform-architecture|personal-agent-platform-direct-refactor-plan|personal-agent-platform-product-contract|openclaw-agent-loop-replacement-plan)\.md|docs/adr/0005-[^/]+\.md)$'
-APPLIED_SCHEMA_HISTORY='^apps/opencrane/prisma/migrations/'
 RESEARCH_HISTORY='^(docs/research/litellm-byok-byom-research\.md|docs/specs/mcp-catalog-credential-spec\.md)$'
 HISTORICAL_RECORDS='^(plan-done\.md|CHANGELOG\.md|silo-multi-tenant-plan\.md|docs/briefs/mcp-skills-platform-brief\.md|docs/design/stage5-silo-autonomous-controllers-plan\.md|docs/agents/deploy-ledger\.md)$'
 RUNTIME_CONTRACT_TESTS='^(\.github/workflows/docker\.yml|apps/_infra/deploy-k8s/platform/tests/tenant-image-immutability\.sh|libs/backend/feat-openclaw-tenant/main/src/__tests__/tenants/tenant-resource-builder\.test\.ts)$'
@@ -148,7 +148,7 @@ _check_legacy_linkerd_inventory()
 # mcpPolicyEnforced and genuine frontend channel models are intentionally outside these patterns.
 _check_pattern "SHARED-SKILLS" '(/shared-skills|OPENCRANE_SHARED_SKILLS_DIR|_link_shared_skills)' "($TARGET_RECORDS|$HISTORICAL_RECORDS|$RUNTIME_CONTRACT_TESTS)"
 _check_pattern "SHARED-SKILLS-VALUES" '^[[:space:]]*sharedSkills:' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
-_check_pattern "CONFIG-OVERRIDES" 'configOverrides' "($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS)"
+_check_pattern "CONFIG-OVERRIDES" 'configOverrides' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
 _check_pattern "TENANT-MCP-POLICY" '(^|[^[:alnum:]_])mcpPolicy([^[:alnum:]_]|$)' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
 _check_pattern "OPENCLAW-RUNTIME-VERSION" '(openclawVersion|OPENCLAW_VERSION|DEFAULT_OPENCLAW_VERSION)' "($TARGET_RECORDS|$HISTORICAL_RECORDS|$RUNTIME_CONTRACT_TESTS|^apps/feat-openclaw-tenant/deploy/Dockerfile$)"
 _check_pattern "OPENCLAW-CANARY" '(TenantUpdateWithCanaryStrategyController|tenant-update-with-canary-strategy|OPENCRANE_TENANT_ROLLOUT|OPENCRANE_CANARY_TIMEOUT)' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
@@ -158,14 +158,12 @@ _check_file_absent "TENANT-SPEC-RETIRED-FIELD" "libs/backend/feat-openclaw-tenan
 
 # Pairing/device state and the no-token pod-token route are direct-deletion targets. Constrain the
 # remaining implementation and documentation so no new dependency can grow before removal.
-_check_pattern "PAIRING-DEVICE" '(BrokeredDevice|brokered-device|openclaw-pairing|/pod-token/cut|/:name/pairing)' "($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS)"
+_check_pattern "PAIRING-DEVICE" '(BrokeredDevice|brokered-device|openclaw-pairing|/pod-token/cut|/:name/pairing)' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
 POD_TOKEN_DELETION_SCOPE="^(libs/backend/server/iam/identity/main/src/auth\.router\.ts|libs/backend/server/tenancy/connections/main/src/(core/gateway-resolve|routes/auth-connections|__tests__/auth-connections\.test)\.ts|website/security/connection-security\.md|docs/agents/(architecture|apps/opencrane)\.md|CHANGELOG\.md|plan\.md|plan-done\.md|docs/design/(personal-agent-platform-architecture|personal-agent-platform-direct-refactor-plan|openclaw-agent-loop-replacement-plan)\.md)$"
 _check_pattern "POD-TOKEN-DELETION-BOUNDARY" '(/api/v1/auth/pod-token|["`]/?pod-token(/cut)?["`])' "$POD_TOKEN_DELETION_SCOPE"
 
-# SessionScope is retired product state. All runtime CRUD/client/package references are forbidden
-# outside the exact old schema, applied Prisma schema history, and decision records.
-SESSION_SCOPE_RETENTION="($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS|^docs/agents/apps/opencrane\.md$)"
-_check_pattern "SESSION-SCOPE" '(SessionScope|session-scope([^[:alnum:]]|$)|@opencrane/backend-sessions|/sessions/[^[:space:]`"]*/scope)' "$SESSION_SCOPE_RETENTION"
+# SessionScope is retired product state. Only target and historical decision records retain it.
+_check_pattern "SESSION-SCOPE" '(SessionScope|session-scope([^[:alnum:]]|$)|@opencrane/backend-sessions|/sessions/[^[:space:]`"]*/scope)' "($TARGET_RECORDS|$HISTORICAL_RECORDS)"
 
 # The Obot registry poll was a no-op. The spec is retained only as evidence explaining its removal.
 _check_pattern "OBOT-REGISTRY-POLL" '(obot-registry|OBOT_SERVER_PROVIDER_REGISTRIES)' "($TARGET_RECORDS|$RESEARCH_HISTORY|$HISTORICAL_RECORDS)"
@@ -173,7 +171,7 @@ _check_pattern "OBOT-REGISTRY-POLL" '(obot-registry|OBOT_SERVER_PROVIDER_REGISTR
 # Artifact bytes have one target owner: ArtifactStore on the artifact-service PVC. Keep retired
 # OCI/Zot vocabulary out of active guidance and the README so it cannot be mistaken for a usable
 # deployment option. Target decision records and applied history retain the deletion rationale.
-ARTIFACT_LEGACY_RECORDS="($TARGET_RECORDS|$APPLIED_SCHEMA_HISTORY|$HISTORICAL_RECORDS|^docs/adr/0002-[^/]+\.md$|^\.agents/skills/observability/SKILL\.md$|^\.claude/agents/observability\.md$|^\.codex/agents/observability\.toml$)"
+ARTIFACT_LEGACY_RECORDS="($TARGET_RECORDS|$HISTORICAL_RECORDS|^docs/adr/0002-[^/]+\.md$|^\.agents/skills/observability/SKILL\.md$|^\.claude/agents/observability\.md$|^\.codex/agents/observability\.toml$)"
 _check_pattern "ARTIFACT-OCI-ZOT" '(skill-oci-store|SKILL_OCI_|[Zz]ot([[:space:]/[:punct:]]|$)|OCI/ORAS|OCI registry)' "$ARTIFACT_LEGACY_RECORDS"
 
 # CLI history is kept only in the accepted decision trail and the two named research/spec records.

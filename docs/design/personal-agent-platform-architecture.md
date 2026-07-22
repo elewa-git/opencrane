@@ -459,6 +459,9 @@ retroactive access to the conversation that produced the draft.
 
 Use ordinary filesystem semantics, not an S3 requirement:
 
+- an `Artifact` is the logical asset; an `ArtifactVersion` is its immutable content and metadata;
+  an `ArtifactRef` is an authorized reference from a message or run to that specific version;
+
 - canonical bytes live in a content-addressed layout on an `apps/artifact-service` PVC, for example
   `sha256/ab/<digest>`;
 - Postgres holds artifact IDs, versions, owner, MIME/type, size/hash, lineage, provenance, grants,
@@ -652,6 +655,50 @@ neither is the product's transcript authority. Compaction creates a versioned su
 provenance while retaining the immutable transcript under retention policy. Provider-specific
 compaction may be used when supported, but a provider-neutral fallback is required behind LiteLLM.
 Do not add a second transcript writer or an OpenClaw adapter to the target path.
+
+### Conversation, run, and file records
+
+**What an `AgentRun` is, end to end.** An `AgentRun` is one execution of our internal Agentic
+Loop — the bounded, streamed model/tool loop OpenCrane owns and runs inside its reliability
+envelope. A single triggering event — an interactive message, a manual invocation, or a schedule
+firing — starts one `AgentRun`. Before any model call, the run freezes its `RunInputSnapshot`
+(persona revision, model route, tool/skill revisions, budgets, memory policy — fields below), so
+nothing decided after that point can change what this run does. The runtime then executes the
+Agentic Loop against that frozen snapshot: stream a model response, execute any tool calls, append
+results, and repeat until no tool calls or queued follow-ups remain — the loop mechanics live in
+the [OpenClaw agent-loop replacement plan](openclaw-agent-loop-replacement-plan.md#the-actual-inner-loop);
+every `AgentRun` is exactly one full execution of that loop, however many rounds it takes. Every
+round — each model call, tool call, and approval — is persisted and streamed live as an ordered
+`RunEvent`, so a run with ten tool calls is exactly as auditable as a run with one. If a step fails
+transiently, the run retries as a new attempt under the same `AgentRun` record, never a new run; if
+the failure is unsafe or attempts are exhausted, the run ends in one persisted terminal failure
+rather than silently disappearing. The run ends — completed, cancelled, or failed — with a terminal
+`RunEvent`; the thread's next message starts an entirely new `AgentRun` with its own fresh
+snapshot.
+
+There is no durable generic `Session` record. A `Thread` is the user-visible conversation and owns
+its immutable `Message` history. An interactive message creates an `AgentRun` for that thread;
+manual and scheduled managed-agent invocations create the same `AgentRun` without requiring a
+thread. A durable one-active-run lease serializes interactive work for a thread, while idempotency
+keys prevent a repeated send or trigger from creating a second external side effect.
+
+Each `AgentRun` references an immutable `AgentRevision` and owns one `RunInputSnapshot`. The
+snapshot freezes the approved persona revision, effective grant/contract evidence, model route,
+tool and skill revisions, budgets, memory-query policy, artifact inputs, and prompt-compiler
+version. A later persona, grant, skill, or policy change cannot alter a run that was already
+accepted.
+
+`RunEvent` is the ordered, canonical event stream for a run. It records message output, tool
+lifecycle, approval, artifact, usage, and terminal events before the UI receives them. A
+`ToolInvocation` records the exact action, normalized argument hash, policy decision, dispatch
+idempotency key, side-effect state, and result reference. If the action needs consent, its
+`ApprovalRequest` binds the same run, revision, subject, action, and arguments; resumption uses
+that durable decision rather than a toolkit-local session.
+
+An `Artifact` is the logical asset, such as a report or uploaded document. An `ArtifactVersion` is
+one immutable version of that asset. `ArtifactRef` is the governed link from a `Message`,
+`RunInputSnapshot`, or `RunEvent` to a specific version. The reference preserves provenance and
+access control without putting ungoverned filesystem paths into the conversation protocol.
 
 ## OpenCrane-owned toolkit loop
 

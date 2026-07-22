@@ -3,7 +3,6 @@
   "policy": "Every pod class has one exact owner. Paths slated for direct removal use classification delete; compatibility and time-boxed ownership exceptions are forbidden.",
   "requiredWorkloadIds": [
     "opencrane-server",
-    "database-schema",
     "opencrane-ui",
     "channel-proxy",
     "artifact-service",
@@ -42,8 +41,7 @@
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
-        "Deployment/opencrane-mcp-gateway",
-        "Job/opencrane-opencrane-server-migrate"
+        "Deployment/opencrane-mcp-gateway"
       ]
     },
     {
@@ -71,8 +69,7 @@
         "Deployment/opencrane-mcp-gateway",
         "StatefulSet/opencrane-zookeeper",
         "StatefulSet/opencrane-clickhouse-shard0",
-        "StatefulSet/opencrane-redis-primary",
-        "Job/opencrane-opencrane-server-migrate"
+        "StatefulSet/opencrane-redis-primary"
       ]
     }
   ],
@@ -127,7 +124,6 @@
       "anchor": "helm_args=(upgrade --install \"$RELEASE\" \"$CHART_DIR\"",
       "workloadIds": [
         "opencrane-server",
-        "database-schema",
         "opencrane-ui",
         "channel-proxy",
         "artifact-service",
@@ -206,17 +202,6 @@
       "localOwner": true,
       "source": { "type": "file", "path": "apps/opencrane/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.server.deployment\"" }
-    },
-    {
-      "id": "database-schema",
-      "podClass": "Job/opencrane-server-migrate",
-      "renderedPodClass": "Job/opencrane-opencrane-server-migrate",
-      "image": "ghcr.io/italanta/opencrane-server:<same-release-tag>",
-      "owner": "apps/_infra/deploy-k8s",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/components/database-schema/templates/_job.tpl", "anchor": "kind: Job", "coversLocalTemplate": true },
-      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.databaseSchema.job\"" },
-      "sharedImageContract": "Runs dist/apps/opencrane/scripts/migrate.js from the immutable server image; apps/opencrane remains the only Prisma schema and migration owner."
     },
     {
       "id": "opencrane-ui",

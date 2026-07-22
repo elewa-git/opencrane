@@ -54,25 +54,31 @@ OpenCrane is a **control plane for organizational AI**. It sits on top of agent 
 
 ## How It Works
 
-Each employee gets their own **private AI assistant**—an isolated OpenClaw instance running as a Kubernetes pod. This assistant:
+Each employee gets their own **private AI assistant**—one continuous assistant that knows who
+they are, works on their behalf, and keeps their conversations and files private. Under the
+hood that assistant is a structured model with a set of durable conversations rather than a
+long-lived process, so a restart or scale-down never erases the relationship.
 
-- **Knows who you are**: Holds your personal access tokens and can read and write data across the organization's platforms *as you*
-- **Stays private**: Your conversations with the AI are stored locally in your pod's encrypted storage. OpenCrane enforces network-level policies and budget controls, but does not log or inspect conversation contents.
-- **Accesses organizational knowledge directly**: Uses the official Cognee memory plugin during the agentic loop, with company, user, and agent scopes bound to the tenant identity.
+- **Knows who you are**: Every run draws on an agent persona trained on your needs, working
+  style, and communication preferences—one that keeps learning and improving the more you use
+  it—plus your permitted company context, budget, and tools. The model may change between runs
+  as routing or cost policy improves, but every other input is frozen for the run already
+  underway, so a later policy or skill change never rewrites work in progress.
+- **Stays yours**: Conversations and files are private to their owner. Team agents and
+  scheduled company services run on the same foundation—without ever gaining access to a
+  person's private conversations or files.
+- **Never forgets a conversation**: A conversation is a thread with an ordered, durable history.
+  Each message starts one recorded run, which can be safely cancelled, resumed after approval, or
+  replayed in the UI without duplicate results.
+- **Tools with control**: Assistants can use approved integrations, company knowledge, files, and
+  governed skills. Higher-risk actions wait for the right person's approval before they happen.
+- **Files that remain useful**: Uploads and generated outputs are managed as versioned assets. A
+  conversation refers to a specific version of a file, which keeps sharing, history, and auditing
+  clear even when newer versions are created.
 
-OpenCrane also runs **company-wide information gathering agents** (dedicated tenant deployments with elevated permissions) that:
-- Continuously harvest organizational knowledge, starting with Slack, with further sources (Teams, email, ticketing systems) connecting through the MCP gateway as they land
-- Index this knowledge into a centralized Org Knowledge Index
-- Make it available to all tenant assistants via retrieval plugins (role-based access)
-
-OpenCrane orchestrates all of this by:
-- **Infrastructure Management**: Deploying and managing assistants for each employee. Supporting local or remote LLM models. Setting token budgets and cost limits per employee, enforced by the org's LLM proxy and metered by the control plane.
-- **Permissions Control Plane**: Managing dataset memberships and permissions in Cognee (for org/team/project/personal scopes) without sitting in the retrieval request path.
-- **Managed organizational memory**: Wiring each tenant runtime to its entitled Cognee scopes through the official OpenClaw memory plugin.
-- **Organizational Knowledge**: Company-wide agents harvest and index org data; direct tenant retrieval runtimes make it accessible based on role and dataset scope.
-- **Scalable architecture**: The same multi-tenant, Kubernetes-native design works from 10 to 10,000 employees.
-- **Skill sharing**: Managing skill updates and deployments across the organization.
-- **Secure storage**: All data stored in your organization's infrastructure, encrypted at rest.
+OpenCrane provides the surrounding control plane: it manages assistants, access, budgets, shared
+knowledge, integrations, skills, and durable assets while keeping each organisation's data in its
+own silo.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the capabilities shipped so far and [`plan-done.md`](plan-done.md) for the history behind them.
 

@@ -57,11 +57,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   new domain is included on the next build without touching the build definition. The `npm ci` →
   `docker build` → app-start pipeline stays identical.
 
-- **Database models are now owned per domain, with clear migration ownership.** The single
-  `schema.prisma` is replaced by per-domain files under `prisma/schema/<domain>.prisma` (e.g.
-  `prisma/schema/tenants.prisma`), and migrations follow the convention `NNNN_<domain>_description.sql`
-  — visible code ownership and single-direction dependency for Wave 5 plugin-owned migrations.
-  The migration runner (Prisma + the pre-install Hook Job) remains unchanged.
+- **Operators can create a silo database directly from one reviewed target definition.** Per-domain
+  Prisma files keep model ownership visible, while a content-addressed immutable baseline is applied
+  once during CloudNativePG `initdb` as the application owner. Server startup never changes schema,
+  physical recovery reuses the schema in the backup, and a changed target requires a clean database.
 
 - **Org admins can supply their own upstream provider key and get a full tier-structured model
   catalog from a single credential.** Calling `PUT /api/v1/providers/byok/:provider` (org-admin
@@ -87,16 +86,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 ### Changed
 
 - **Maintainers can now navigate deployment and server ownership directly from the directory
-  structure.** Deployment-only applications live under `apps/_infra`, the installation chart and
-  database-schema Job live under `apps/_infra/deploy-k8s`, reusable OpenCrane server domains live
+  structure.** Deployment-only applications live under `apps/_infra`, the installation chart lives
+  under `apps/_infra/deploy-k8s`, reusable OpenCrane server domains live
   under `libs/backend/server`, and server-process support lives under `libs/server/_infra`.
-  Rendered workloads and runtime behaviour are unchanged.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
   OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, Obot, and
-  Langfuse live under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those charts with its
-  database-schema deployment component. The reorganized chart preserves the rendered workload
-  behaviour.
+  Langfuse live under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
 
 - **Platform developers can reuse functional server capabilities without importing an app root.**
   Tenant reconciliation, identity, projection, connection auth, policy reconciliation, channel

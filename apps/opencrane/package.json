@@ -6,15 +6,13 @@
   "type": "module",
   "scripts": {
     "build": "npm run db:generate && npm run build:bundle",
-    "build:bundle": "rm -rf ../../dist/apps/opencrane && esbuild src/index.ts src/scripts/migrate.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outdir=../../dist/apps/opencrane && cp -r ../../libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/workspace ../../dist/apps/opencrane/workspace && tsx scripts/emit-openapi.mts",
+    "build:bundle": "rm -rf ../../dist/apps/opencrane && esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outdir=../../dist/apps/opencrane && cp -r ../../libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/workspace ../../dist/apps/opencrane/workspace && tsx scripts/emit-openapi.mts",
     "emit-openapi": "tsx scripts/emit-openapi.mts",
     "dev": "tsx watch src/index.ts",
     "start": "node ../../dist/apps/opencrane/index.js",
     "test": "vitest run",
     "lint": "tsc --noEmit",
-    "db:migrate": "prisma migrate deploy",
-    "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "db:generate": "prisma generate"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
@@ -30,7 +28,6 @@
     "openapi-fetch": "^0.17.0",
     "pino": "^9.6.0",
     "pino-http": "^10.0.0",
-    "prisma": "^6.0.0",
     "zod": "^3.25.0"
   },
   "optionalDependencies": {
@@ -43,6 +40,7 @@
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.0",
     "openid-client": "^6.8.4",
+    "prisma": "^6.0.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",

@@ -72,8 +72,10 @@ register its exact first Pod UID. The runtime stream separately accepts the
 explicit, separate runtime namespace. Durable assignment remains the authority for the exact
 ServiceAccount, Job, Pod, run, and revision; the projected bootstrap reference and a ServiceAccount
 name alone are never sufficient.
-The runtime stream still injects an empty command authority, so a verified Pod may maintain a
-heartbeat connection but cannot receive commands or persist candidate output yet.
+The adjacent one-use bootstrap route binds a runtime-generated public proof key to that exact Pod.
+Only after the bootstrap is consumed does the durable stream authority mint and idempotently
+redeliver a fenced `start_attempt` command, persist its sequence, and admit candidates that reference
+an accepted command. Missing, revoked, expired, or differently bound bootstrap proof fails closed.
 
 ## Boundary
 
@@ -89,21 +91,17 @@ import back into it.
 
 ## Data & persistence
 
-Owns the silo's Prisma schema, split per domain under `prisma/schema/*.prisma`, and one greenfield
-initializer at `prisma/migrations/0001_target_baseline/migration.sql`. The runs slice binds every
-`AgentRun` to exactly one immutable `RunInputSnapshot` by run, digest, thread, silo, service,
-revision and effective-contract coordinates, and commits its initial acceptance and dispatch events
-in the same transaction. A partial or mismatched admission therefore cannot commit. The initializer
-includes the reviewed PostgreSQL functions and triggers that enforce authority invariants Prisma
-cannot express. Cancellation is a nonterminal cleanup phase: active runs first enter `cancelling`,
-cannot mint bootstrap or proof authority there, and become `cancelled` only after cleanup records its
-matching terminal event. Pending approvals close without resume authority even when their expiry
-sweeper has not run yet. The migrate init-container applies it to a new database with
-`prisma migrate deploy`.
-During a CNPG restore it waits at most three wall-clock minutes for the PostgreSQL Service endpoint
-to accept a TCP connection, then runs Prisma exactly once. Schema, permissions, and migration-history
-errors still fail immediately. OpenCrane does not carry an upgrade path or data migration from an
-older product schema.
+Owns the silo's Prisma schema, split per domain under `prisma/schema/*.prisma`, and one app-owned
+target database definition at `prisma/bootstrap/target-baseline.sql`. CloudNativePG applies that SQL
+once, during `initdb` for an empty database, as the configured application owner. Physical recovery
+uses the schema already stored in the backup, and server startup never mutates database shape.
+OpenCrane does not carry an upgrade or data-conversion path from an older product schema. The runs slice binds every `AgentRun`
+to exactly one `RunInputSnapshot` by run, digest, thread, silo, service, revision and
+effective-contract coordinates, so a partial or mismatched admission cannot commit.
+Cancellation is a nonterminal cleanup phase: active runs first enter `cancelling`, cannot mint
+bootstrap or proof authority there, and become `cancelled` only after exact workload cleanup records
+the matching terminal event. Pending approvals close without resume authority even if their expiry
+sweeper has not yet run.
 
 ## Runtime & config
 
@@ -118,6 +116,7 @@ Read from the environment at startup.
 | `AGENT_CONTROLLER_CLAIM_LEASE_SECONDS` | Database-owned lease for one controller delivery attempt | `30` |
 | `AGENT_RUNTIME_NAMESPACE` | Dedicated namespace for untrusted runtime Jobs; must differ from `POD_NAMESPACE` | *(required)* |
 | `AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS` | Hard lifetime of a pending runtime workload assignment | `3600` |
+| `AGENT_RUNTIME_COMMAND_TTL_SECONDS` | Lifetime of a server-issued runtime command, bounded by the assignment lease | `60` |
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
 | `WATCH_NAMESPACE` | Namespace member workspaces are seeded into | falls back to `NAMESPACE` |

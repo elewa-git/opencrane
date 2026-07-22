@@ -52,7 +52,7 @@ Tagged `scope:<tag>`: it may depend only on <…> — never on apps or sibling d
 <!-- Optional — include only when it applies: -->
 ## Data & persistence
 
-<Prisma models/tables owned; migration location.>
+<Prisma models/tables owned; target baseline owner and clean-database setup boundary.>
 
 ## Runtime & config
 

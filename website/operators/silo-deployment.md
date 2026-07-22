@@ -120,7 +120,7 @@ Repeat this command for each ClusterTenant. Each invocation:
 
 - installs into the silo namespace (`opencrane-<cluster-tenant>` by default);
 - passes `--no-ingress-nginx --no-external-dns --no-db-operator` so the cluster-wide singletons are not re-installed;
-- applies a dedicated CNPG `Cluster` CR in the silo namespace — one Postgres server per silo, with separate OpenCrane, Obot, LiteLLM, and Langfuse databases and credentials, reconciled by the cluster-wide CNPG operator;
+- publishes the OpenCrane-owned target SQL as an immutable, content-addressed ConfigMap and applies it once through CNPG `initdb`, then creates one Postgres server per silo with separate OpenCrane, Obot, LiteLLM, and Langfuse databases and credentials;
 - sets `fleetManager.clusterTenantApi.enabled=false` and `billing.enabled=false`.
 
 ::: info One Postgres per silo

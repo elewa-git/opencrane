@@ -6,7 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEST_FILE="$SCRIPT_DIR/phase-d-authority-integration.sql"
 
 if command -v psql >/dev/null 2>&1; then
-  : "${DATABASE_URL:?Set DATABASE_URL to an empty database with all migrations applied}"
+  : "${DATABASE_URL:?Set DATABASE_URL to an empty database with the target baseline applied}"
   run_psql() {
     psql "$DATABASE_URL" --no-psqlrc --set=ON_ERROR_STOP=1 "$@"
   }

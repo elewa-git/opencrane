@@ -6,7 +6,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 
 if grep -R -n -E 'McpAssignmentReference|mcpAssignments|mcpServerId|agent_revision_mcp_assignments' \
-  apps/opencrane/prisma/migrations/0001_target_baseline/migration.sql \
+  apps/opencrane/prisma/bootstrap/target-baseline.sql \
   apps/opencrane/prisma/schema/agent-services.prisma \
   libs/models/agents/main/src \
   libs/backend/server/agents/agent-services/main/src; then

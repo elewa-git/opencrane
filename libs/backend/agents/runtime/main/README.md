@@ -50,8 +50,9 @@ authorities to accept or reject.
 - `__AdmitRuntimeCommand` — validates a control-plane command before stream delivery.
 - `__AdmitRuntimeCandidate` — validates a runtime-proposed event or deferred action.
 - `PrismaRuntimeDispatchAuthority` — the durable adapter the app injects into the stream transport;
-  it loads assignment authority, mints and advances commands, admits candidates, and releases the
-  runtime-instance binding on stream loss.
+  it loads assignment authority, requires the exact consumed bootstrap and live proof-key binding,
+  mints and advances commands, admits candidates, and releases the runtime-instance binding on
+  stream loss.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
@@ -72,9 +73,11 @@ OpenClaw compatibility path, a cancellation side authority, or a second durable 
 The adapter owns two Postgres models in `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
-attempt's accepted command set). Migrations live under `apps/opencrane/prisma/migrations`
-(`0002_runtime_command_dispatch`). It reads the assignment, run, and immutable snapshot rows owned by
-the personal-run and conversation domains but never writes them.
+attempt's accepted command set). Their clean-database shape lives in the app-owned
+`apps/opencrane/prisma/bootstrap/target-baseline.sql`; there is no incremental migration path or
+runtime schema runner. The adapter reads the assignment, run, and immutable snapshot rows owned by
+the personal-run and conversation domains plus the consumed bootstrap and proof-key rows owned by
+authorization, but never writes them.
 
 ## Dependency direction
 

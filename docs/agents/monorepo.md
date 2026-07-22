@@ -33,8 +33,8 @@ that process boundary and has no useful independent contract.
 Charts may aggregate deployables, but aggregation does not erase app ownership: every rendered
 workload must map back to its own `apps/<name>` or `apps/_infra/<name>` root. An umbrella such as
 `apps/_infra/deploy-k8s` composes app-owned deployment units and release values; it does not become
-the anonymous owner of their Pods. A deploy-only component explicitly registered to the composer,
-such as its database-schema hook, remains visible as that app's owned component. A distinct image or
+the anonymous owner of their Pods. A deploy-only component explicitly registered to the composer
+remains visible as that app's owned component. A distinct image or
 process role otherwise gets a distinct app root. A Job using the exact same image, entrypoint, trust
 boundary, and lifecycle as an existing app may remain owned by it.
 

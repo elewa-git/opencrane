@@ -54,6 +54,9 @@ legitimate request — never hand out access it should not.
 - `__ConsumeRuntimeBootstrap` — validates and atomically spends a one-time startup token that binds a
   run to its pod and attempt, and accepts only the `opencrane-agent-runtime` projected-token audience,
   so it cannot be reused or confused with a service-specific action token.
+- `__CreateRuntimeBootstrapRouter`, `PrismaRuntimeBootstrapExchange` — expose the internal
+  TokenReview-authenticated exchange and load its bootstrap plus independent registered assignment
+  before atomically binding the runtime-generated public proof key.
 - `__ExecuteCapabilityAction` — verifies the proof, reserves its unique id durably, then runs the
   effect exactly once (or returns the earlier result on an allowed idempotent retry).
 - `__CancelPendingRunApprovalAuthority` — closes only pending approvals for an exact run attempt on
@@ -61,6 +64,8 @@ legitimate request — never hand out access it should not.
 - `__DigestCanonicalJson` — a stable hash of a request used across the checks above.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
+- Bootstrap route contracts: `RuntimeBootstrapExchangeRecord`, `RuntimeBootstrapReviewedIdentity`,
+  `RuntimeBootstrapSubmission`, `RuntimeBootstrapExchangeRepository`, and their dependency ports.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,
   `AuthorizationMembershipAuthority`, `CapabilityActionExecutor`, and their siblings.
 

@@ -48,7 +48,6 @@ and `apps/_infra/deploy-k8s/platform/` (the shared engine, Terraform, and tests)
 | `apps/fleet-platform/` (chart `opencrane-fleet`) | Central-plane K8s service accounts, RBAC bindings, workload identity annotations, NetworkPolicy, CRDs |
 | `apps/_infra/deploy-k8s/` (chart `opencrane-silo`) | Umbrella composition, deployment profiles, CRDs, issuers, external-secret wiring, and app-owned workload composition |
 | `apps/{opencrane,opencrane-ui,artifact-service}/helm/`, `apps/_infra/{cognee,litellm,obot}/helm/` | App-owned Helm library units for current per-silo workloads and their policy/identity contracts |
-| `apps/_infra/deploy-k8s/components/database-schema/` | Deploy-time Prisma schema Job component using the immutable server image and DB-only authority |
 | `apps/_infra/langfuse/` | Pinned upstream wrapper and explicit six-class workload inventory; the umbrella retains the direct dependency for render parity |
 | `apps/_infra/deploy-k8s/platform/` (Helm library chart + shared deploy engine) | Shared named-templates (`templates/_helpers.tpl`), `k8s-deploy.sh` / `configure-oidc.sh` / `provision.sh` / `deploy-single-tenant.sh` |
 | `apps/fleet-platform/deploy.sh`, `apps/_infra/deploy-k8s/deploy.sh` | Fleet / silo deploy flows |

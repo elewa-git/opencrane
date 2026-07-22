@@ -19,21 +19,6 @@ spec:
         app.kubernetes.io/component: opencrane-server
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-opencrane-server
-      initContainers:
-        # Apply pending Prisma migrations before the server starts (prisma migrate
-        # deploy). Runs the same image so the schema/migrations match the binary;
-        # the server never boots against an un-migrated database. Idempotent — a
-        # no-op when the DB is already at the latest migration. This is a
-        # belt-and-suspenders guard for pod (re)creation BETWEEN deploys: the
-        # deploy-time migration authority is the pre-upgrade hook Job
-        # (`opencrane-database-schema` component), which an unchanged `helm upgrade`
-        # cannot skip the way it skips an unchanged pod template.
-        - name: db-migrate
-          image: "{{ .Values.clustertenantManager.image.repository }}:{{ .Values.clustertenantManager.image.tag }}"
-          imagePullPolicy: {{ .Values.clustertenantManager.image.pullPolicy }}
-          command: ["node", "dist/apps/opencrane/scripts/migrate.js"]
-          env:
-            {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
       containers:
         - name: opencrane-ui
           image: "{{ .Values.clustertenantManager.image.repository }}:{{ .Values.clustertenantManager.image.tag }}"

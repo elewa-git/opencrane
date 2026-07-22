@@ -104,7 +104,7 @@ library units with the parent release context; shared labels and topology helper
 | Owner | Creates |
 |-------|---------|
 | `apps/opencrane/helm` | Control-plane Deployment, Service, Ingress/certificate, SA/RBAC, gateway-proxy Service, and server NetworkPolicy |
-| `apps/_infra/deploy-k8s/components/database-schema` | DB-only Prisma migration Job using the exact server image, with no mounted ServiceAccount token |
+| `apps/postgres/helm` | CNPG Cluster, clean `initdb` baseline reference, logical Database resources, backup/recovery, and database-privileges Job |
 | `apps/opencrane-ui/helm` | Optional administration SPA Deployment and Service |
 | `apps/_infra/cognee/helm` | Cognee Deployment, Service, PVC, identity, probes, and NetworkPolicy |
 | `apps/_infra/litellm/helm` | LiteLLM Deployment, Service, credential Secret contract, and non-token identity |

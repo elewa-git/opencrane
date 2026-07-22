@@ -35,7 +35,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 **Allowed freely (read-only diagnosis):**
 - `kubectl get/describe/logs/events/top` (any resource), `helm status/get
   values/get manifest/history`, `helm template`/`helm lint` locally.
-- Database review when a failure smells data-shaped (migration half-applied, orphaned
+- Database review when a failure smells data-shaped (baseline bootstrap incomplete, orphaned
   rows, drifted seed data): read-only SQL through the CloudNativePG primary —
   `kubectl exec` into the cnpg pod running `psql -c "SELECT …"` counts as read-only
   and is allowed. **SELECT only — never INSERT/UPDATE/DELETE/DDL**, and never paste
@@ -72,7 +72,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 - Invoke the profile script with the flags/values the caller specified (values presets
   live in `apps/_infra/deploy-k8s/platform/values/`, e.g. `opencrane-dev.yaml`). Capture full output.
 - After the script exits, verify liveness yourself — do not trust exit code 0 alone:
-  pods Ready across the release namespaces, ingress has an address, migrations Job
+  pods Ready across the release namespaces, ingress has an address, database bootstrap
   completed, opencrane-ui `/healthz` answers, operator logs free of crash loops.
 - On failure, diagnose to a root cause **class** with evidence (the exact log lines,
   events, or SQL counts), then stop — fixing is the triager's job, not yours.
@@ -85,7 +85,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 | `script` | deploy script logic/ordering/flag gap | fix PR on the script |
 | `config` | wrong/missing value for THIS env; chart+script fine | values-preset fix PR, or design question |
 | `codebase` | app code bug surfaced by the deploy | GitHub issue |
-| `data` | database state (migrations, seeds, drift) | GitHub issue with SQL evidence |
+| `data` | database state (baseline, seeds, drift) | GitHub issue with SQL evidence |
 | `infra` | cluster/cloud/external (quota, DNS, IAM, registry) | ledger note + question if policy-shaped |
 | `flake` | transient; identical retry succeeded | ledger note with retry count |
 

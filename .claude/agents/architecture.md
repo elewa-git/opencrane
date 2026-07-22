@@ -43,7 +43,7 @@ BLOCK when any rendered Pod, Deployment, StatefulSet, DaemonSet, CronJob, or Job
 aggregating chart does not count as ownership by itself. Upstream products deployed by
 the release still get deployment-only app roots owning their pin, configuration, identity, state,
 network policy, wiring, and smoke contract. A deploy-only component explicitly registered to the
-composer, such as its database-schema hook, remains visible as that app's owned component. A
+composer remains visible as that app's owned component. A
 distinct image/process role otherwise needs a distinct root; a Job may share an owner only when it
 uses that app's exact image, entrypoint, trust boundary, and lifecycle. Browser entrypoints also
 remain apps; the retired command-line product has no app root.

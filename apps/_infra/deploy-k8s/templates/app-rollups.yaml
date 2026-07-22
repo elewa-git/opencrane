@@ -22,8 +22,6 @@
 ---
 {{ include "opencrane.agentController.resources" . }}
 ---
-{{ include "opencrane.databaseSchema.job" . }}
----
 {{ include "opencrane.cognee.resources" . }}
 ---
 {{ include "opencrane.litellm.secret" . }}

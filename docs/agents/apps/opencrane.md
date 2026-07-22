@@ -20,8 +20,8 @@ identity configuration. It serves the org-scoped management surface and reads th
 
 `apps/opencrane/src` is deliberately small and closed by
 `docs/agents/app-source-allowlist.json`: process entrypoint/lifecycle composition, environment
-configuration, route assembly, instrumentation/logging, Prisma construction and migration, and the
-hosting-adapter factory. The app also owns Prisma schema/migrations and its Helm unit under
+configuration, route assembly, instrumentation/logging, Prisma construction, and the
+hosting-adapter factory. The app also owns its Prisma schema, clean-database target baseline, and Helm unit under
 `apps/opencrane/helm`.
 
 Implementation lives with its capability:
@@ -80,11 +80,11 @@ The composed frozen runtime lifecycle provisions Cognee's dependencies, all best
 
 ## Prisma schema (`prisma/schema/`)
 
-The current schema contains legacy Tenant, AccessPolicy, awareness, workspace,
-projection, and `SessionScope` state. These are deletion targets. The first target persistence slice
-replaces the migration history with a fresh target initializer for AgentService/Revision/Run,
+The current schema contains legacy Tenant, AccessPolicy, awareness, workspace, and projection state.
+These are deletion targets. The first target persistence slice
+uses a fresh target baseline for AgentService/Revision/Run,
 Thread/Message/RunEvent, Approval, Persona, Artifact, SkillRevision, grants, audit, and membership
-projection; it does not retain legacy columns or readers.
+projection. CNPG applies it only while creating an empty database; startup never changes schema.
 
 ## Key Env
 

@@ -18,6 +18,23 @@ tenant:
     tag: e2e
     pullPolicy: IfNotPresent
 
+# The smoke deploys the actual trust-boundary workloads from locally built images. This avoids
+# depending on unpublished registry tags while preserving the same isolated namespace/PVC shape.
+channelProxy:
+  image:
+    repository: opencrane/channel-proxy
+    tag: e2e
+    pullPolicy: IfNotPresent
+
+artifactService:
+  image:
+    repository: opencrane/artifact-service
+    tag: e2e
+    pullPolicy: IfNotPresent
+  persistence:
+    storageClass: local-path
+    size: 1Gi
+
 ingress:
   enabled: true
   className: nginx

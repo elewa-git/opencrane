@@ -1,3 +1,6 @@
+-- OpenCrane target database baseline.
+-- Applied once by CloudNativePG while creating an empty application database.
+
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -168,6 +171,9 @@ CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 
 -- CreateEnum
 CREATE TYPE "RunOutboxEventKind" AS ENUM ('run.accepted', 'run.attempt_requested', 'run.workload_release_requested', 'run.workload_cleanup_requested', 'run.cancellation_requested', 'run.resume_requested');
+
+-- CreateEnum
+CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'cancel_attempt');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -1351,6 +1357,36 @@ CREATE TABLE "run_outbox_events" (
 );
 
 -- CreateTable
+CREATE TABLE "runtime_command_streams" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "fence" INTEGER NOT NULL DEFAULT 1,
+    "runtime_instance_id" TEXT,
+    "next_command_sequence" INTEGER NOT NULL DEFAULT 1,
+    "accepted_candidate_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
+);
+
+-- CreateTable
+CREATE TABLE "runtime_dispatched_commands" (
+    "id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "sequence" INTEGER NOT NULL,
+    "command_id" TEXT NOT NULL,
+    "kind" "RuntimeCommandKind" NOT NULL,
+    "fence" INTEGER NOT NULL,
+    "issued_at" TIMESTAMP(3) NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "runtime_dispatched_commands_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "skills" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2037,6 +2073,15 @@ CREATE INDEX "run_outbox_events_published_at_available_at_idx" ON "run_outbox_ev
 CREATE UNIQUE INDEX "run_outbox_events_run_id_sequence_key" ON "run_outbox_events"("run_id", "sequence");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
+
+-- CreateIndex
+CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
+
+-- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
 
 -- CreateIndex
@@ -2283,6 +2328,9 @@ ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" F
 ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2352,7 +2400,7 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_i
 CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"
     ON "memory_datasets"("silo_id", "scope_kind", "organization_id", COALESCE("scope_resource_id", ''));
 
--- Current legacy-owned projection models retain their target cardinality and scope guards.
+-- Projection read models retain their required cardinality and scope guards.
 ALTER TABLE "tenant_dataset_memberships" ADD CONSTRAINT "tenant_dataset_memberships_scope_subject_check" CHECK (
     ("scope" IN ('team', 'department', 'project', 'personal') AND LENGTH(BTRIM("subject")) > 0)
     OR ("scope" = 'org' AND "subject" = 'default')
@@ -2363,7 +2411,6 @@ CREATE UNIQUE INDEX "org_memberships_one_owner_per_org"
     ON "org_memberships"("cluster_tenant") WHERE "role" = 'owner';
 
 -- Database-native authority guards omitted by Prisma schema diff.
--- Source migrations are intentionally retired by this greenfield baseline.
 
 -- Functions
 CREATE FUNCTION "enforce_agent_revision_immutability"() RETURNS trigger

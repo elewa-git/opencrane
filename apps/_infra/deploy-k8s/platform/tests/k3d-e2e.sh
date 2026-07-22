@@ -32,6 +32,10 @@ NAMESPACE="${NAMESPACE:-opencrane-system}"
 # name, so opencrane.fullname == the release name).
 RELEASE_NAME="${RELEASE_NAME:-opencrane-silo}"
 RUNTIME_NAMESPACE="${RUNTIME_NAMESPACE:-${RELEASE_NAME}-runtime}"
+ARTIFACT_NAMESPACE="${ARTIFACT_NAMESPACE:-${NAMESPACE}-artifacts}"
+ARTIFACT_CATALOG_KEY_SECRET="${ARTIFACT_CATALOG_KEY_SECRET:-opencrane-artifact-catalog-keys}"
+ARTIFACT_SERVICE_KEY_SECRET="${ARTIFACT_SERVICE_KEY_SECRET:-opencrane-artifact-service-keys}"
+ARTIFACT_KEY_DIR=""
 KEEP_CLUSTER="${KEEP_CLUSTER:-0}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-240}"
 DB_STORAGE_GB="${DB_STORAGE_GB:-20}"
@@ -194,30 +198,37 @@ function _require_free_space()
 function _cleanup()
 {
   local exit_code=$?
+  local diagnostic_namespace
+
+  if [[ -n "$ARTIFACT_KEY_DIR" ]]; then
+    rm -rf "$ARTIFACT_KEY_DIR" 2>/dev/null || true
+  fi
 
   # On a failed run, dump cluster diagnostics BEFORE the teardown deletes the (otherwise lost)
   # cluster — pod/job states, recent events, and each pod's describe + current/previous logs
   # across both containers. Without this a CI failure in the deploy phase is undebuggable.
   if [[ "$exit_code" -ne 0 ]]; then
     echo "[e2e] ===== FAILURE (exit $exit_code): cluster diagnostics ====="
-    kubectl get pods,jobs -n "$NAMESPACE" -o wide 2>/dev/null || true
+    kubectl get pods,jobs -A -o wide 2>/dev/null || true
     echo "[e2e] --- cluster services / network policies ---"
     kubectl get svc,endpoints,endpointslices -A -o wide 2>/dev/null || true
     kubectl get networkpolicies -A -o wide 2>/dev/null || true
     echo "[e2e] --- clustertenants / tenants ---"
     kubectl get clustertenants,tenants -A 2>/dev/null || true
     echo "[e2e] --- recent events ---"
-    kubectl get events -n "$NAMESPACE" --sort-by=.lastTimestamp 2>/dev/null | tail -40 || true
-    for p in $(kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null); do
-      local log_tail=80
-      if [[ "$p" == *"opencrane-server"* ]]; then
-        log_tail=240
-      fi
-      echo "[e2e] ### describe $p"
-      kubectl describe "$p" -n "$NAMESPACE" 2>/dev/null | tail -30 || true
-      echo "[e2e] ### logs $p"
-      kubectl logs "$p" -n "$NAMESPACE" --all-containers --tail="$log_tail" 2>/dev/null || true
-      kubectl logs "$p" -n "$NAMESPACE" --all-containers --previous --tail="$log_tail" 2>/dev/null || true
+    kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -60 || true
+    for diagnostic_namespace in "$NAMESPACE" "$ARTIFACT_NAMESPACE"; do
+      for p in $(kubectl get pods -n "$diagnostic_namespace" -o name 2>/dev/null); do
+        local log_tail=80
+        if [[ "$p" == *"opencrane-server"* ]]; then
+          log_tail=240
+        fi
+        echo "[e2e] ### describe $diagnostic_namespace/$p"
+        kubectl describe "$p" -n "$diagnostic_namespace" 2>/dev/null | tail -30 || true
+        echo "[e2e] ### logs $diagnostic_namespace/$p"
+        kubectl logs "$p" -n "$diagnostic_namespace" --all-containers --tail="$log_tail" 2>/dev/null || true
+        kubectl logs "$p" -n "$diagnostic_namespace" --all-containers --previous --tail="$log_tail" 2>/dev/null || true
+      done
     done
     echo "[e2e] ===== end diagnostics ====="
   fi
@@ -305,6 +316,11 @@ _require_cmd docker
 _require_cmd kubectl
 _require_cmd helm
 _require_cmd k3d
+_require_cmd openssl
+if [[ "$ARTIFACT_NAMESPACE" == "$NAMESPACE" ]]; then
+  echo "[e2e] ARTIFACT_NAMESPACE must differ from NAMESPACE so private key authorities stay isolated."
+  exit 1
+fi
 _require_docker_healthy
 _require_free_space
 
@@ -315,6 +331,12 @@ _retry 3 docker build -f "$ROOT_DIR/apps/opencrane/deploy/Dockerfile" -t opencra
 
 echo "[e2e] Building tenant image"
 _retry 3 docker build -f "$ROOT_DIR/apps/feat-openclaw-tenant/deploy/Dockerfile" -t opencrane/tenant:e2e "$ROOT_DIR"
+
+echo "[e2e] Building channel-proxy image"
+_retry 3 docker build -f "$ROOT_DIR/apps/channel-proxy/deploy/Dockerfile" -t opencrane/channel-proxy:e2e "$ROOT_DIR"
+
+echo "[e2e] Building artifact-service image"
+_retry 3 docker build -f "$ROOT_DIR/apps/artifact-service/deploy/Dockerfile" -t opencrane/artifact-service:e2e "$ROOT_DIR"
 
 # 3. Create a fresh cluster for deterministic test runs.
 echo "[e2e] Recreating k3d cluster '$CLUSTER_NAME'"
@@ -332,6 +354,8 @@ _retry 3 docker pull "$MINIO_CLIENT_IMAGE"
 echo "[e2e] Importing images into k3d"
 _import_k3d_image opencrane/opencrane-server:e2e
 _import_k3d_image opencrane/tenant:e2e
+_import_k3d_image opencrane/channel-proxy:e2e
+_import_k3d_image opencrane/artifact-service:e2e
 _import_k3d_image ghcr.io/cloudnative-pg/postgresql:17.5
 _import_k3d_image "$MINIO_IMAGE"
 _import_k3d_image "$MINIO_CLIENT_IMAGE"
@@ -390,6 +414,10 @@ _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER" "$
 _create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" "$OBOT_DB_PASSWORD"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" "$LITELLM_DB_PASSWORD"
 _create_database_credentials "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER" "$LANGFUSE_DB_PASSWORD"
+OPENCRANE_BASELINE_CONFIG_MAP="$(bash "$ROOT_DIR/apps/postgres/scripts/publish-initdb-baseline-config-map.sh" \
+  "$NAMESPACE" \
+  "$POSTGRES_OWNER" \
+  "$ROOT_DIR/apps/opencrane/prisma/bootstrap/target-baseline.sql")"
 DATABASES_JSON="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
 
 echo "[e2e] Installing pinned MinIO backup target"
@@ -536,6 +564,8 @@ function _validate_cnpg_backup_recovery_schema()
     --set-json "databases=$DATABASES_JSON" \
     --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME" \
     --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$OPENCRANE_BASELINE_CONFIG_MAP" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set backup.enabled=true \
     --set backup.plugin.name=barman-cloud.cloudnative-pg.io \
@@ -550,6 +580,7 @@ function _validate_cnpg_backup_recovery_schema()
     --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
     --set restore.enabled=true \
+    --set-string "restore.sourceBaselineConfigMap=$OPENCRANE_BASELINE_CONFIG_MAP" \
     --set restore.plugin.name=barman-cloud.cloudnative-pg.io \
     --set restore.plugin.parameters.barmanObjectName=contract-only \
     --set-string restore.targetTime=2026-07-18T00:00:00Z >"$rendered"
@@ -565,10 +596,12 @@ function _install_postgres_server()
     --set-json "databases=$DATABASES_JSON" \
     --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME" \
     --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$OPENCRANE_BASELINE_CONFIG_MAP" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql" \
     --set "storage.size=${DB_STORAGE_GB}Gi" \
     --set "storage.storageClass=local-path" \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
-    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
   kubectl wait --for=condition=Ready "cluster/$OPENCRANE_DB_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   for database_resource in obot litellm langfuse; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${OPENCRANE_DB_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
@@ -596,46 +629,6 @@ function _copy_cnpg_uri_secret()
     | kubectl create secret generic "$target_secret" -n "$NAMESPACE" \
         --from-file="${target_key}=/dev/stdin" --dry-run=client -o yaml \
     | kubectl apply -f -
-}
-
-function _migrate_opencrane_database()
-{
-  # A physical recovery must restore a bootable *fresh* application database, not
-  # merely arbitrary PostgreSQL tables. Run the immutable application's normal
-  # Prisma deploy before writing the backup marker so `_prisma_migrations` and the
-  # target schema travel with the base backup. This is first-install bootstrap,
-  # not compatibility or legacy-data migration.
-  echo "[e2e] Initializing the fresh OpenCrane schema before physical backup"
-  cat <<EOF | kubectl apply -f -
-apiVersion: batch/v1
-kind: Job
-metadata:
-  name: opencrane-backup-schema-migrate
-  namespace: ${NAMESPACE}
-spec:
-  backoffLimit: 0
-  template:
-    metadata:
-      labels:
-        app.kubernetes.io/component: opencrane-server-migrate
-    spec:
-      automountServiceAccountToken: false
-      restartPolicy: Never
-      containers:
-        - name: db-migrate
-          image: opencrane/opencrane-server:e2e
-          imagePullPolicy: IfNotPresent
-          command: ["node", "dist/apps/opencrane/scripts/migrate.js"]
-          env:
-            - name: DATABASE_URL
-              valueFrom:
-                secretKeyRef:
-                  name: ${OPENCRANE_POSTGRES_APP_SECRET}
-                  key: uri
-EOF
-  kubectl wait --for=condition=Complete job/opencrane-backup-schema-migrate \
-    -n "$NAMESPACE" \
-    --timeout="${TIMEOUT_SECONDS}s"
 }
 
 function _run_backup_restore_smoke()
@@ -777,8 +770,9 @@ EOF
     --set "storage.size=${DB_STORAGE_GB}Gi" \
     --set storage.storageClass=local-path \
     --set "networkPolicy.operatorNamespace=$CNPG_SYSTEM_NAMESPACE" \
-    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-restore-smoke"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]' \
     --set restore.enabled=true \
+    --set-string "restore.sourceBaselineConfigMap=$OPENCRANE_BASELINE_CONFIG_MAP" \
     --set restore.plugin.name=barman-cloud.cloudnative-pg.io \
     --set-string "restore.plugin.parameters.barmanObjectName=$BACKUP_OBJECT_STORE_NAME" \
     --set-string "restore.plugin.parameters.serverName=$OPENCRANE_DB_RELEASE_NAME"
@@ -993,7 +987,6 @@ _assert_cross_database_denied obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" opencrane
 _assert_cross_database_denied litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" obot
 _assert_cross_database_denied langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" litellm
 
-_migrate_opencrane_database
 _run_backup_restore_smoke
 
 # The standalone product must boot from the recovered authority, not quietly fall back to the
@@ -1031,6 +1024,36 @@ _assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$OBOT_PO
 _copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "${RELEASE_NAME}-obot" dsn
 _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" opencrane-litellm-db DATABASE_URL
 
+# ArtifactStore crosses a real namespace and key-authority boundary. Reproduce the deploy
+# engine's two-key arrangement in the disposable cluster so the smoke exercises the same
+# topology: OpenCrane signs leases and verifies receipts, while artifact-service verifies
+# leases and signs receipts. Private keys never share a Secret or namespace.
+function _create_artifact_keys()
+{
+  kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+  ARTIFACT_KEY_DIR="$(mktemp -d)"
+
+  openssl genpkey -algorithm ED25519 -out "$ARTIFACT_KEY_DIR/lease-private.pem"
+  openssl pkey -in "$ARTIFACT_KEY_DIR/lease-private.pem" -pubout -out "$ARTIFACT_KEY_DIR/lease-public.pem"
+  openssl genpkey -algorithm ED25519 -out "$ARTIFACT_KEY_DIR/receipt-private.pem"
+  openssl pkey -in "$ARTIFACT_KEY_DIR/receipt-private.pem" -pubout -out "$ARTIFACT_KEY_DIR/receipt-public.pem"
+
+  kubectl create secret generic "$ARTIFACT_CATALOG_KEY_SECRET" \
+    -n "$NAMESPACE" \
+    --from-file=lease-private.pem="$ARTIFACT_KEY_DIR/lease-private.pem" \
+    --from-file=receipt-public.pem="$ARTIFACT_KEY_DIR/receipt-public.pem" \
+    --dry-run=client \
+    -o yaml | kubectl apply -f -
+  kubectl create secret generic "$ARTIFACT_SERVICE_KEY_SECRET" \
+    -n "$ARTIFACT_NAMESPACE" \
+    --from-file=lease-public.pem="$ARTIFACT_KEY_DIR/lease-public.pem" \
+    --from-file=receipt-private.pem="$ARTIFACT_KEY_DIR/receipt-private.pem" \
+    --dry-run=client \
+    -o yaml | kubectl apply -f -
+}
+
+_create_artifact_keys
+
 # Boot-time BYOK bootstrap key — seeds a model so the default-tenant seed's ≥1-model gate passes.
 kubectl create secret generic "$BOOTSTRAP_SECRET_NAME" \
   -n "$NAMESPACE" \
@@ -1063,6 +1086,9 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/apps/_infra/deploy-k8s" \
   --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE" \
+  --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET" \
+  --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET" \
   --set "certManager.enabled=false"
 
 # Wait for the opencrane-server (skip helm --wait because local-path PVCs don't bind until a pod
@@ -1070,6 +1096,14 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/apps/_infra/deploy-k8s" \
 # by the release name because nameOverride (opencrane) is a prefix of it, so
 # opencrane.fullname == the release name → <release>-<component>.
 kubectl rollout status "deployment/${RELEASE_NAME}-opencrane-server" -n "$NAMESPACE" --timeout=180s
+kubectl rollout status "deployment/${RELEASE_NAME}-channel-proxy" -n "$NAMESPACE" --timeout=180s
+kubectl rollout status "deployment/${RELEASE_NAME}-artifact-service" -n "$ARTIFACT_NAMESPACE" --timeout=180s
+
+# The canonical bytes must live on their own mounted PVC behind the isolated Service and
+# ingress/egress policy. These assertions keep the greenfield durability boundary in the smoke.
+kubectl get pvc "${RELEASE_NAME}-artifact-service" -n "$ARTIFACT_NAMESPACE" >/dev/null
+kubectl get service "${RELEASE_NAME}-artifact-service" -n "$ARTIFACT_NAMESPACE" >/dev/null
+kubectl get networkpolicy "${RELEASE_NAME}-artifact-service" -n "$ARTIFACT_NAMESPACE" >/dev/null
 
 # Durable command dispatch and the one-use bootstrap exchange are reached over egress only: the
 # runtime plane must still declare NO ingress. Assert the agent-runtime NetworkPolicies carry an

@@ -15,16 +15,19 @@ FLEET_POSTGRES_CREDENTIALS_SECRET="${FLEET_POSTGRES_CREDENTIALS_SECRET:-opencran
 OBOT_POSTGRES_CREDENTIALS_SECRET="${OBOT_POSTGRES_CREDENTIALS_SECRET:-opencrane-obot-postgres-credentials}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${LITELLM_POSTGRES_CREDENTIALS_SECRET:-opencrane-litellm-postgres-credentials}"
 LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-opencrane-langfuse-postgres-credentials}"
+POSTGRES_ADMIN_CREDENTIALS_SECRET="${POSTGRES_ADMIN_CREDENTIALS_SECRET:-opencrane-postgres-admin-credentials}"
 SILO_POSTGRES_OWNER="${SILO_POSTGRES_OWNER:-opencrane_local}"
 FLEET_POSTGRES_OWNER="${FLEET_POSTGRES_OWNER:-opencrane_fleet_local}"
 OBOT_POSTGRES_OWNER="${OBOT_POSTGRES_OWNER:-obot_local}"
 LITELLM_POSTGRES_OWNER="${LITELLM_POSTGRES_OWNER:-litellm_local}"
 LANGFUSE_POSTGRES_OWNER="${LANGFUSE_POSTGRES_OWNER:-langfuse_local}"
+POSTGRES_ADMIN_NAME="${POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 DB_PASSWORD="${DB_PASSWORD:-opencrane-local-password}"
 FLEET_DB_PASSWORD="${FLEET_DB_PASSWORD:-opencrane-fleet-local-password}"
 OBOT_DB_PASSWORD="${OBOT_DB_PASSWORD:-obot-local-password}"
 LITELLM_DB_PASSWORD="${LITELLM_DB_PASSWORD:-litellm-local-password}"
 LANGFUSE_DB_PASSWORD="${LANGFUSE_DB_PASSWORD:-langfuse-local-password}"
+POSTGRES_ADMIN_PASSWORD="${POSTGRES_ADMIN_PASSWORD:-opencrane-admin-local-password}"
 CNPG_CHART_VERSION="${CNPG_CHART_VERSION:-0.29.0}"
 LITELLM_SECRET_NAME="${LITELLM_SECRET_NAME:-opencrane-litellm}"
 LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-opencrane-local-master-key}"
@@ -186,6 +189,11 @@ _create_database_credentials "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGR
 _create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" "$OBOT_DB_PASSWORD"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" "$LITELLM_DB_PASSWORD"
 _create_database_credentials "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER" "$LANGFUSE_DB_PASSWORD"
+_create_database_credentials "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME" "$POSTGRES_ADMIN_PASSWORD"
+OPENCRANE_BASELINE_CONFIG_MAP="$(bash "$ROOT_DIR/apps/postgres/scripts/publish-initdb-baseline-config-map.sh" \
+  "$NAMESPACE" \
+  "$SILO_POSTGRES_OWNER" \
+  "$ROOT_DIR/apps/opencrane/prisma/bootstrap/target-baseline.sql")"
 
 function _install_postgres_server()
 {
@@ -194,9 +202,13 @@ function _install_postgres_server()
   helm upgrade --install "$POSTGRES_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
     --set-json "databases=$databases_json" \
+    --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME" \
+    --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$OPENCRANE_BASELINE_CONFIG_MAP" \
+    --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql" \
     --set "storage.storageClass=local-path" \
     --set "networkPolicy.operatorNamespace=$NAMESPACE" \
-    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"opencrane-server-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager-migrate"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
+    --set-json 'networkPolicy.clientPodSelectors=[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"postgres-database-privileges"}}]'
   kubectl wait --for=condition=Ready "cluster/$POSTGRES_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   for database_resource in fleet obot litellm langfuse; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${POSTGRES_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"

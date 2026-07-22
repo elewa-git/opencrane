@@ -14,7 +14,6 @@
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
     { "path": "apps/opencrane/src/__tests__/config.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/__tests__/index.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/src/__tests__/migrate.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/app/config.ts", "owner": "apps/opencrane", "classification": "app-config" },
     { "path": "apps/opencrane/src/app/instrument.ts", "owner": "apps/opencrane", "classification": "process-instrumentation" },
     { "path": "apps/opencrane/src/app/log.ts", "owner": "apps/opencrane", "classification": "process-logging" },
@@ -25,8 +24,6 @@
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/__tests__/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/src/scripts/migrate.ts", "owner": "apps/opencrane", "classification": "migration-entrypoint" },
-    { "path": "apps/opencrane/src/scripts/migrate.types.ts", "owner": "apps/opencrane", "classification": "migration-entrypoint" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },

@@ -37,6 +37,9 @@
 {{- if and .Values.restore.enabled (not .Values.restore.plugin.name) -}}
 {{- fail "restore.plugin.name is required when restore.enabled=true" -}}
 {{- end -}}
+{{- if and .Values.restore.enabled (not .Values.restore.sourceBaselineConfigMap) -}}
+{{- fail "restore.sourceBaselineConfigMap is required when restore.enabled=true so the recovered schema retains its target-baseline provenance" -}}
+{{- end -}}
 {{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.clientPodSelectors) -}}
 {{- fail "networkPolicy.clientPodSelectors must not be empty when NetworkPolicy is enabled" -}}
 {{- end -}}
@@ -45,6 +48,17 @@
 {{- end -}}
 {{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.operatorPodLabels) -}}
 {{- fail "networkPolicy.operatorPodLabels must not be empty when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- $baselineConfigMapRefs := .Values.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs -}}
+{{- if and (not .Values.restore.enabled) (ne (len $baselineConfigMapRefs) 1) -}}
+{{- fail "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs must contain exactly one app-owned target baseline for a fresh database" -}}
+{{- end -}}
+{{- $baselineConfigMapRef := dict -}}
+{{- if gt (len $baselineConfigMapRefs) 0 -}}
+{{- $baselineConfigMapRef = index $baselineConfigMapRefs 0 -}}
+{{- if or (not $baselineConfigMapRef.name) (not $baselineConfigMapRef.key) -}}
+{{- fail "the initdb target baseline ConfigMap reference requires name and key" -}}
+{{- end -}}
 {{- end -}}
 apiVersion: postgresql.cnpg.io/v1
 kind: Cluster
@@ -56,6 +70,7 @@ metadata:
     # this Cluster. Publishing the expected name makes that external-controller
     # identity contract deterministic and auditable without pretending Helm owns it.
     opencrane.ai/cnpg-service-account: {{ include "opencrane.postgres.fullname" . | quote }}
+    opencrane.ai/database-baseline-config-map: {{ ternary .Values.restore.sourceBaselineConfigMap $baselineConfigMapRef.name .Values.restore.enabled | quote }}
   labels:
     {{- include "opencrane.postgres.labels" . | nindent 4 }}
 spec:
@@ -103,6 +118,9 @@ spec:
       owner: {{ $primary.owner | quote }}
       secret:
         name: {{ $primary.credentialsSecret | quote }}
+      postInitApplicationSQLRefs:
+        configMapRefs:
+          {{- toYaml $baselineConfigMapRefs | nindent 10 }}
   {{- end }}
   managed:
     roles:

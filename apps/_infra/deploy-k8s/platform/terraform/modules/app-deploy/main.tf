@@ -2,8 +2,6 @@
 # App Deploy module
 #
 # Deploys the OpenCrane Helm chart onto an already prepared cluster.
-# The chart-owned database-schema hook applies Prisma schema revisions. This is
-# the final step that brings the application online after infrastructure provisioning.
 # PostgreSQL and its credentials are app-owned and installed separately through
 # apps/postgres; Terraform deliberately has no duplicate database authority.
 # -----------------------------------------------------------------------------

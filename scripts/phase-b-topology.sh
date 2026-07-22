@@ -36,7 +36,6 @@ const appSourceClassifications = new Set([
   "composition-test",
   "delete",
   "hosting-composition",
-  "migration-entrypoint",
   "prisma-composition",
   "process-entrypoint",
   "process-instrumentation",

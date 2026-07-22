@@ -1,6 +1,0 @@
-apiVersion: v2
-name: opencrane-database-schema
-description: Named-template library for reconciling the OpenCrane database schema.
-type: library
-version: 0.1.0
-appVersion: "0.1.0"

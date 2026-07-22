@@ -74,7 +74,7 @@ describe("agent-controller run-dispatch router", function _DescribeRouter()
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn(), warn: vi.fn() };
-		const repository = { claimNextAttemptAtomically: vi.fn().mockRejectedValue(failure), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn(), registerFirstPodAndPublishReleaseAtomically: vi.fn() };
+		const repository = { claimNextAttemptAtomically: vi.fn().mockRejectedValue(failure), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn(), registerFirstPodAndPublishReleaseAtomically: vi.fn(), prunePublishedOutboxEventsAtomically: vi.fn() };
 		const { app } = _App({ repository, logger });
 
 		const response = await request(app).post("/run-attempts:claim").set("authorization", "Bearer secret-projected-token").send({});
@@ -87,7 +87,7 @@ describe("agent-controller run-dispatch router", function _DescribeRouter()
 	it("claims release work only for the reviewed controller", async function _ClaimRelease()
 	{
 		const claim = { lease: { eventId: "release-1", claimedAt: "2026-07-20T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:00:30.000Z" }, workload: { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-a", serviceAccountName: "agent-runtime-small", workloadUid: "job-uid-1", workloadProfile: "personal-small", assignmentExpiresAt: "2026-07-20T01:00:10.000Z", bootstrapReference: `bootstrap-v1_${"a".repeat(64)}` } } as const;
-		const { app, dependencies } = _App({ repository: { claimNextAttemptAtomically: vi.fn(), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn().mockResolvedValue({ status: "claimed", claim }), registerFirstPodAndPublishReleaseAtomically: vi.fn() } });
+		const { app, dependencies } = _App({ repository: { claimNextAttemptAtomically: vi.fn(), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn().mockResolvedValue({ status: "claimed", claim }), registerFirstPodAndPublishReleaseAtomically: vi.fn(), prunePublishedOutboxEventsAtomically: vi.fn() } });
 
 		const response = await request(app).post("/workload-releases:claim").set("authorization", "Bearer projected-token").send({});
 
@@ -100,7 +100,7 @@ describe("agent-controller run-dispatch router", function _DescribeRouter()
 	{
 		const terminalized = { status: "terminalized", eventId: "release-1", runId: "run-1", attempt: 1, failureCode: "RUN_WORKLOAD_RELEASE_INTEGRITY_INVALID" } as const;
 		const logger = { error: vi.fn(), warn: vi.fn() };
-		const repository = { claimNextAttemptAtomically: vi.fn(), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn().mockResolvedValue(terminalized), registerFirstPodAndPublishReleaseAtomically: vi.fn() };
+		const repository = { claimNextAttemptAtomically: vi.fn(), commitSuspendedJobAssignmentAtomically: vi.fn(), claimNextWorkloadReleaseAtomically: vi.fn().mockResolvedValue(terminalized), registerFirstPodAndPublishReleaseAtomically: vi.fn(), prunePublishedOutboxEventsAtomically: vi.fn() };
 		const { app } = _App({ repository, logger });
 
 		const response = await request(app).post("/workload-releases:claim").set("authorization", "Bearer projected-token").send({});

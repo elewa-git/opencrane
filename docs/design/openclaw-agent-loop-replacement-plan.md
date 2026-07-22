@@ -127,6 +127,13 @@ drain queued follow-up messages
 finish when no tools and no queued messages remain
 ```
 
+This is the mechanics of our internal Agentic Loop. Each full execution of it — however many
+model/tool rounds it takes — is what one `AgentRun` in the target architecture wraps and streams;
+see
+[personal-agent-platform-architecture.md](personal-agent-platform-architecture.md#conversation-run-and-file-records)
+for the end-to-end `AgentRun` lifecycle (trigger, frozen snapshot, this loop, attempts, terminal
+`RunEvent`).
+
 Important details are easy to miss:
 
 - Assistant text, reasoning, and tool-call fragments are emitted as start/update/end lifecycle

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
+import { AgentRunState as PrismaAgentRunState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient, type WorkloadKind } from "@prisma/client";
 
 import { AGENT_RUNTIME_PROTOCOL_V1, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
@@ -22,6 +22,16 @@ interface RuntimeDispatchContext
 	readonly agentRevisionId: string;
 	/** Silo in which the assignment is valid. */
 	readonly siloId: string;
+	/** Subject whose authority admitted the workload assignment. */
+	readonly subjectId: string;
+	/** Projected-token audience fixed for this workload. */
+	readonly audience: string;
+	/** Dedicated Kubernetes namespace containing the runtime workload. */
+	readonly namespace: string;
+	/** Kubernetes workload kind bound to the assignment. */
+	readonly workloadKind: WorkloadKind;
+	/** Immutable Kubernetes workload UID bound to the assignment. */
+	readonly workloadUid: string;
 	/** Owning-run lifecycle state that gates every command and candidate. */
 	readonly runState: RuntimeAdmissionRunState;
 	/** Canonical digest of the immutable assignment claims carried on every command. */
@@ -150,8 +160,9 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
 		const context = await _loadContext(transaction, identity);
 		if (context === null) return null;
+		if (!await _bootstrapProofIsLive(transaction, context, clock.nowEpochMs())) return null;
 
-		// 2. Bind the stream to the connecting runtime instance so a stale instance cannot be served.
+		// 2. Bind the stream to the connecting runtime instance only after one-use bootstrap proof exists.
 		const runtimeInstanceId = await _bindRuntimeInstance(transaction, context, open.runtimeInstanceId);
 		if (runtimeInstanceId === null) return null;
 		const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
@@ -192,9 +203,10 @@ async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock
 {
 	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 	{
-		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
+		// 1. Load and lock the live assignment, run, snapshot, and consumed bootstrap proof for the Pod.
 		const context = await _loadContext(transaction, identity);
 		if (context === null) return { accepted: false, reason: "unknown_workload" };
+		if (!await _bootstrapProofIsLive(transaction, context, clock.nowEpochMs())) return { accepted: false, reason: "unknown_workload" };
 		const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
 		if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
 		const commands = await transaction.runtimeDispatchedCommand.findMany({ where: { runId: context.runId, attempt: context.attempt }, orderBy: { sequence: "asc" } });
@@ -247,6 +259,11 @@ async function _loadContext(transaction: Prisma.TransactionClient, identity: Run
 		agentServiceId: assignment.agentServiceId,
 		agentRevisionId: assignment.agentRevisionId,
 		siloId: assignment.siloId,
+		subjectId: assignment.subjectId,
+		audience: assignment.audience,
+		namespace: assignment.namespace,
+		workloadKind: assignment.workloadKind,
+		workloadUid: assignment.workloadUid,
 		runState: _toAdmissionRunState(run.state),
 		assignmentDigest,
 		inputSnapshotDigest: run.inputSnapshotDigest,
@@ -261,6 +278,37 @@ async function _loadContext(transaction: Prisma.TransactionClient, identity: Run
 		assignmentIssuedAt: assignment.createdAt.toISOString(),
 		assignmentExpiresAt: assignment.expiresAt.toISOString(),
 	};
+}
+
+/** Require the exact consumed bootstrap and its live, unrevoked proof key before serving runtime work. */
+async function _bootstrapProofIsLive(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, nowEpochMs: number): Promise<boolean>
+{
+	// 1. Require one consumed bootstrap whose immutable coordinates still match the locked assignment.
+	const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
+	if (bootstrap === null
+		|| bootstrap.agentServiceId !== context.agentServiceId
+		|| bootstrap.agentRevisionId !== context.agentRevisionId
+		|| bootstrap.siloId !== context.siloId
+		|| bootstrap.subjectId !== context.subjectId
+		|| bootstrap.audience !== context.audience
+		|| bootstrap.serviceAccountName !== context.serviceAccountName
+		|| bootstrap.namespace !== context.namespace
+		|| bootstrap.workloadKind !== context.workloadKind
+		|| bootstrap.workloadUid !== context.workloadUid
+		|| bootstrap.consumedAt === null
+		|| bootstrap.consumedByPodUid !== context.podUid
+		|| bootstrap.receiptId === null
+		|| bootstrap.expiresAt.getTime() <= nowEpochMs) return false;
+
+	// 2. Require the proof key created by that exchange to remain bound to this exact Pod and lease.
+	const proofKey = await transaction.runProofKey.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
+	return proofKey !== null
+		&& proofKey.bootstrapId === bootstrap.id
+		&& proofKey.workloadKind === context.workloadKind
+		&& proofKey.workloadUid === context.workloadUid
+		&& proofKey.podUid === context.podUid
+		&& proofKey.revokedAt === null
+		&& proofKey.expiresAt.getTime() > nowEpochMs;
 }
 
 /** Lazily create the stream row and bind it to the connecting instance, or reject a stale instance. */

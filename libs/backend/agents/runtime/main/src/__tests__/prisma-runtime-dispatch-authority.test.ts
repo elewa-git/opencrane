@@ -62,16 +62,29 @@ interface FakeOptions
 	readonly podUid?: string | null;
 	/** Assignment state, defaulting to the registered state. */
 	readonly assignmentState?: string;
+	/** Whether the one-use runtime bootstrap has been consumed by the registered Pod. */
+	readonly bootstrapConsumed?: boolean;
+	/** Proof-key condition, defaulting to a live key bound to the registered Pod. */
+	readonly proofKeyState?: "valid" | "missing" | "revoked" | "wrong_pod";
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: FakeStreamRow[]; commands: FakeCommandRow[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: FakeStreamRow[]; commands: FakeCommandRow[]; revokeProofKey: () => void }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
 	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const bootstrap = { id: "bootstrap-1", runId: assignment.runId, attempt: assignment.attempt, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, audience: assignment.audience, serviceAccountName: assignment.serviceAccountName, namespace: assignment.namespace, workloadKind: assignment.workloadKind, workloadUid: assignment.workloadUid, expiresAt: assignment.expiresAt, consumedAt: options.bootstrapConsumed === false ? null : new Date("2026-07-20T00:00:30.000Z"), consumedByPodUid: options.bootstrapConsumed === false ? null : assignment.podUid, receiptId: options.bootstrapConsumed === false ? null : "receipt-1" };
+	const proofKeyState = options.proofKeyState ?? "valid";
+	const proofKey = proofKeyState === "missing" ? null : { bootstrapId: bootstrap.id, runId: assignment.runId, attempt: assignment.attempt, workloadKind: assignment.workloadKind, workloadUid: assignment.workloadUid, podUid: proofKeyState === "wrong_pod" ? "pod-other" : assignment.podUid, expiresAt: assignment.expiresAt, revokedAt: proofKeyState === "revoked" ? new Date("2026-07-20T00:00:45.000Z") : null };
+
+	/** Revoke the fake proof key after dispatch to exercise candidate-time authority revalidation. */
+	function _revokeProofKey(): void
+	{
+		if (proofKey !== null) proofKey.revokedAt = new Date("2026-07-20T00:00:45.000Z");
+	}
 
 	/** Return whether a stream row satisfies the guard fields present in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
@@ -94,6 +107,14 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 		},
 		agentRun: { async findUnique(args: { where: { id: string } }) { return args.where.id === run.id ? run : null; } },
 		runInputSnapshot: { async findUnique(args: { where: { runId_digest?: { runId: string; digest: string } } }) { return args.where.runId_digest && args.where.runId_digest.digest === snapshot.digest ? snapshot : null; } },
+		workloadBootstrap: { async findUnique(args: { where: { runId_attempt?: { runId: string; attempt: number } } }) { return args.where.runId_attempt?.runId === bootstrap.runId && args.where.runId_attempt.attempt === bootstrap.attempt ? bootstrap : null; } },
+		runProofKey: {
+			async findUnique(args: { where: { runId_attempt?: { runId: string; attempt: number } } })
+			{
+				const key = args.where.runId_attempt;
+				return key && proofKey && key.runId === proofKey.runId && key.attempt === proofKey.attempt ? proofKey : null;
+			},
+		},
 		runtimeCommandStream: {
 			async findUnique(args: { where: { runId_attempt: { runId: string; attempt: number } } }) { return streams.find(row => row.runId === args.where.runId_attempt.runId && row.attempt === args.where.runId_attempt.attempt) ?? null; },
 			async create(args: { data: { runId: string; attempt: number; runtimeInstanceId: string } }) { const row = { runId: args.data.runId, attempt: args.data.attempt, fence: 1, runtimeInstanceId: args.data.runtimeInstanceId, nextCommandSequence: 1, acceptedCandidateIds: [] }; streams.push(row); return row; },
@@ -116,7 +137,7 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 			async create(args: { data: FakeCommandRow }) { commands.push({ ...args.data }); return args.data; },
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, streams, commands };
+	return { prisma: client as unknown as PrismaClient, streams, commands, revokeProofKey: _revokeProofKey };
 }
 
 /** Build the adapter under test over a fake with the requested durable state. */
@@ -183,6 +204,24 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
 	});
 
+	it("mints no command before the registered Pod consumes its one-use bootstrap", async function _requiresConsumedBootstrap()
+	{
+		const context = _authority({ runState: "Running", bootstrapConsumed: false });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
+		expect(context.streams).toHaveLength(0);
+		expect(context.commands).toHaveLength(0);
+	});
+
+	it.each(["missing", "revoked", "wrong_pod"] as const)("mints no command for a %s bootstrap proof key", async function _requiresLiveProofKey(proofKeyState)
+	{
+		const context = _authority({ runState: "Running", proofKeyState });
+
+		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
+		expect(context.streams).toHaveLength(0);
+		expect(context.commands).toHaveLength(0);
+	});
+
 	it("admits an event candidate for a dispatched command and deduplicates its id", async function _admitsCandidate()
 	{
 		const context = _authority({ runState: "Running" });
@@ -214,6 +253,18 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const denied = await context.authority.__AdmitCandidate(_identity, { ..._candidate(command.commandId), fence: 99 });
 
 		expect(denied).toEqual({ accepted: false, reason: "fence_mismatch" });
+	});
+
+	it("denies candidate admission when the bootstrap proof is revoked after dispatch", async function _deniesCandidateAfterProofRevocation()
+	{
+		const context = _authority({ runState: "Running" });
+		const command = await context.authority.__NextCommand(_identity, _open, 0) as RuntimeCommandEnvelope;
+		context.revokeProofKey();
+
+		const denied = await context.authority.__AdmitCandidate(_identity, _candidate(command.commandId));
+
+		expect(denied).toEqual({ accepted: false, reason: "unknown_workload" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
 	});
 
 	it("denies candidates for an unknown workload", async function _deniesUnknownWorkload()

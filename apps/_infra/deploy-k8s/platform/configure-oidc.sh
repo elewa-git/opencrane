@@ -131,7 +131,7 @@ fi
 # Preserve the release's existing user-supplied values, then layer OIDC on top.
 # We capture them with `helm get values` and re-apply via -f rather than using
 # `--reuse-values`: --reuse-values bypasses the chart's values.yaml entirely, so
-# it nil-panics the moment the chart adds a new key (e.g. clustertenantManager.migrationJob).
+# it nil-panics the moment the chart adds a new nested key.
 # `-f <captured>` keeps the operator's config AND lets new chart defaults fill in.
 VALUES_TMP="$(mktemp -t opencrane-oidc-values.XXXXXX)"
 trap 'rm -f "$VALUES_TMP"' EXIT

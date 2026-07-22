@@ -169,8 +169,7 @@ legacy unprefixed `cognee` singleton, and this helper points the opencrane-ui at
 {{- end }}
 
 {{/*
-DATABASE_URL env entry for the opencrane-ui (deployment initContainer, main container,
-and the migration Job all share it so they can never drift).
+DATABASE_URL env entry for the opencrane-ui main container.
 
 Both roles wire the opencrane-ui to the database the installer provisions via
 `controlPlane.database.existingSecret` (or `.url`). Per-ClusterTenant isolation (S6 / ADR 0002)

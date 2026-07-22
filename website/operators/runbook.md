@@ -263,27 +263,23 @@ helm history opencrane-<ct> -n opencrane-<ct>
 helm rollback opencrane-<ct> -n opencrane-<ct> --wait
 ```
 
-### Database Migration Rollback
+### Database restore and application rollback
 
-Prisma migrations do not have automatic down-migrations. For critical data rollbacks:
+OpenCrane has no runtime schema migration or down-migration path. A release and its target database
+baseline are qualified together. For a critical data rollback, stop writes, recover a **new** CNPG
+Cluster from the physical backup, then deploy the application version that produced that backup.
 
-1. **Stop the clustertenant-manager** in the affected silo to prevent write conflicts:
-   ```bash
-   kubectl scale deployment/opencrane-clustertenant-manager -n opencrane-<ct> --replicas 0
-   ```
+::: warning Never rewrite a running schema
+Do not run `prisma db push`, an incremental SQL script, or a previous application image against the
+current database. If the target baseline changed, recreate from an empty database or restore a
+compatible physical backup. The deploy command fails when an existing Cluster was created from a
+different baseline.
+:::
 
-2. **Restore from backup** (GCP Cloud SQL):
-   ```bash
-   gcloud sql backups restore <backup-id> \
-     --restore-instance=opencrane-db \
-     --backup-instance=opencrane-db
-   ```
-
-3. **Redeploy the previous version**:
-   ```bash
-   helm rollback opencrane-<ct> -n opencrane-<ct>
-   kubectl scale deployment/opencrane-clustertenant-manager -n opencrane-<ct> --replicas 1
-   ```
+The repository's k3d acceptance path demonstrates the supported sequence end to end: create the
+source Cluster from the immutable baseline, take a Barman backup, recover a fresh Cluster without
+attaching bootstrap SQL, rebind application Secrets, and boot the silo from the recovered authority.
+See [`apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh).
 
 ### Tenant runtime rollback
 

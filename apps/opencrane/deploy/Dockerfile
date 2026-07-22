@@ -25,11 +25,9 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 COPY package.json package-lock.json ./
-# Copy app package.json, Prisma config and prisma directory for runtime installation + migrations.
-# prisma.config.ts is required at runtime: the db-migrate init container runs `prisma migrate deploy`
-# from this package root, and the config declares the schema folder + migrations path.
-COPY apps/opencrane/package.json apps/opencrane/prisma.config.ts apps/opencrane/
-COPY apps/opencrane/prisma apps/opencrane/prisma
+# The runtime image receives only the application manifest. Prisma generation and the target
+# database baseline are build/provisioning inputs; server startup never mutates schema.
+COPY apps/opencrane/package.json apps/opencrane/
 # Install only the app workspace's runtime dependencies
 RUN npm ci --omit=dev --workspace=apps/opencrane
 

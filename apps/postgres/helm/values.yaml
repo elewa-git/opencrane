@@ -25,6 +25,15 @@ databaseAdmin:
   name: opencrane_database_admin
   credentialsSecret: ""
 
+# A fresh Cluster receives exactly one app-owned target baseline during CNPG initdb.
+# The referenced ConfigMap is created before Helm installation and is content-addressed
+# and immutable. Recovery never attaches this input because the physical backup already
+# contains the authoritative schema.
+bootstrap:
+  initdb:
+    postInitApplicationSQLRefs:
+      configMapRefs: []
+
 storage:
   size: 20Gi
   storageClass: ""
@@ -49,8 +58,6 @@ networkPolicy:
     - matchLabels:
         app.kubernetes.io/component: opencrane-server
     - matchLabels:
-        app.kubernetes.io/component: opencrane-server-migrate
-    - matchLabels:
         app.kubernetes.io/component: postgres-database-privileges
 
 privileges:
@@ -69,6 +76,9 @@ backup:
 restore:
   enabled: false
   sourceName: source
+  # Content-addressed baseline identity recorded on the source Cluster. Recovery
+  # never executes this ConfigMap; it carries provenance for later deploy checks.
+  sourceBaselineConfigMap: ""
   targetTime: ""
   plugin:
     name: ""

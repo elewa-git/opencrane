@@ -61,7 +61,7 @@ not apply; never reorder.
    behaviour. Answer *how to use it correctly and where it stops*.
 6. **Dependency direction** — the `project.json` scope tag and what it may / may-not import, from the
    matching `depConstraint` in `eslint.config.mjs`. One or two sentences.
-7. *(optional)* **Data & persistence** — Prisma models/tables owned, migration location. Include for
+7. *(optional)* **Data & persistence** — Prisma models/tables owned, target baseline owner and clean-database setup boundary. Include for
    any package with a Prisma adapter.
 8. *(optional)* **Runtime & config** — required env/config and defaults. Include for apps and infra.
 9. *(optional)* **Status** — a banner for blue-frozen / deletion-boundary packages, stated first.

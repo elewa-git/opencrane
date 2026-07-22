@@ -38,9 +38,6 @@ dependencies:
   - name: opencrane-agent-controller
     version: 0.1.0
     repository: "file://../../agent-controller/helm"
-  - name: opencrane-database-schema
-    version: 0.1.0
-    repository: "file://components/database-schema"
   - name: opencrane-cognee
     version: 0.1.0
     repository: "file://../cognee/helm"
