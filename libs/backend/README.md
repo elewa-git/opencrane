@@ -13,8 +13,8 @@ retired personal-agent runtime and must not receive new functionality.
 
 ```text
 libs/backend/
-  agents/                     personal-agent product and shared execution authority
-    personal/<domain>/main    persona, memory, and conversation domains
+  agents/                     agent specializations and shared execution authority
+    personal/<domain>/main    personal persona, memory, and conversation domains
     execution/<domain>/main   input assembly and run-attempt domains
     execution/protocol        language-neutral command/candidate authority
     runtime/k8s-launcher      agent-controller Job projection
@@ -34,9 +34,9 @@ flattening unrelated responsibilities together.
 
 The server map is grouped into IAM, managed agents, gateway governance, knowledge, tenancy, and
 reporting. See [`server/README.md`](./server/README.md) for the member map and why `api-spec`
-remains outside every group. The personal-agent and runtime domains are mapped separately under
-[`agents/README.md`](./agents/README.md); they do not become operator/server capabilities merely
-because the OpenCrane app currently composes some of their ports.
+remains outside every group. Agent specializations and shared execution/runtime domains are mapped
+separately under [`agents/README.md`](./agents/README.md); they do not become operator/server
+capabilities merely because the OpenCrane app currently composes some of their ports.
 
 These are current code ownership boundaries, not promises that legacy Tenant, AccessPolicy,
 OpenClaw, rollout, or projection behavior survives the direct target refactor.

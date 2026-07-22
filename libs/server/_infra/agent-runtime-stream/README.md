@@ -24,7 +24,7 @@ Heartbeats keep an idle connection alive without inventing work.
  └───────────────┬──────────────────────┘
                  │ verified identity + parsed command/candidate
                  ▼
- personal-agent run authority ........ decides and persists
+ agent run authority ................. decides and persists
 ```
 
 **In this flow:** [agent-runtime](../../../../apps/agent-runtime/README.md) ·
@@ -44,7 +44,7 @@ The package does not repair identity, choose a run, mint a command, or persist a
 - `_CreateRuntimeTokenReviewer` — fail-closed Kubernetes TokenReview adapter for the fixed runtime
   audience, namespace, ServiceAccount grammar, and bound Pod UID.
 - `RuntimeTokenReviewer` — identity-review port used by the stream transport.
-- `RuntimeCommandStreamAuthority` — port through which the personal-agent domain supplies commands,
+- `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
   runtime-instance binding.
 - `RuntimeStreamTransportOptions` — fixed body, heartbeat, and polling limits plus the two authority
@@ -52,7 +52,7 @@ The package does not repair identity, choose a run, mint a command, or persist a
 
 ## Boundary
 
-This is server-owned infrastructure, not a personal-agent domain. It owns HTTP parsing,
+This is server-owned infrastructure, not an agent-product specialization. It owns HTTP parsing,
 server-sent-event framing, heartbeats, credential extraction, TokenReview delegation, and tracing.
 It owns no Prisma client, assignment lookup, lease, command ordering source, candidate persistence,
 runtime process, or Kubernetes mutation.
