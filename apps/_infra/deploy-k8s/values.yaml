@@ -1136,6 +1136,10 @@ projectedIdentity:
 # for internal platform services)
 networkPolicy:
   enabled: true
+  # -- Exact CNPG-managed Pooler identity admitted by application egress policies.
+  # Defaults to `<release>-postgres-pooler`; deploy tooling sets it explicitly so a
+  # recovery smoke can point the application at a separately named restored cluster.
+  postgresPoolerName: ""
   # -- Allow DNS resolution (still consumed by the multi-instance cross-namespace policy)
   allowDNS: true
   # -- Reserved for a future FQDN egress policy (requires Cilium). The per-silo egress

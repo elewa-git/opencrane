@@ -1183,6 +1183,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
+  --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"

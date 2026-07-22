@@ -1141,6 +1141,7 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/apps/_infra/deploy-k8s" \
   --set "clustertenantManager.standaloneSeed.tier=$ORG_TIER" \
   --set "clustertenantManager.database.existingSecret=${OPENCRANE_POSTGRES_APP_SECRET}" \
   --set "clustertenantManager.database.secretKey=uri" \
+  --set-string "networkPolicy.postgresPoolerName=${RESTORE_DB_RELEASE_NAME}-pooler" \
   --set "litellm.existingDatabaseSecret=opencrane-litellm-db" \
   --set "litellm.databaseSecretKey=DATABASE_URL" \
   --set "bootstrap.providerKey.existingSecret=$BOOTSTRAP_SECRET_NAME" \

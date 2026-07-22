@@ -4,7 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s"
 
-rendered="$(helm template opencrane-silo "$CHART_DIR")"
+rendered="$(helm template opencrane-silo "$CHART_DIR" \
+  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler)"
 server_policy="$(printf '%s\n' "$rendered" | awk '
   function flush_document() {
     if (is_policy && is_server_policy) {
@@ -33,7 +34,7 @@ server_policy="$(printf '%s\n' "$rendered" | awk '
 ')"
 
 [[ -n "$server_policy" ]]
-grep -Fq '              cnpg.io/poolerName: opencrane-silo-postgres-pooler' <<<"$server_policy"
+grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$server_policy"
 grep -Fq '          port: 5432' <<<"$server_policy"
 grep -Fq '          port: 443' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: kube-system' <<<"$server_policy"
