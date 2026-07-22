@@ -14,5 +14,5 @@
 # against the package index, together with the pinned base-image digest in deploy/Dockerfile and the
 # live-LiteLLM conformance run. That lock cannot be resolved from this offline slice, so the exact
 # top-level pins below are the qualification baseline, NOT the adopted hash-locked manifest.
-cryptography==44.0.0
+cryptography==48.0.1
 pydantic-ai-slim[openai]==2.13.0
