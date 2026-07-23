@@ -12,7 +12,10 @@ authority that publishes a reviewed skill revision.
 
 It is the final step of the authoring flow. A bundle is authored, uploaded as an artifact, then
 tested, scanned, and signed by an isolated job; this package publishes the revision only when that
-review evidence and the artifact reference still line up.
+server-owned review evidence and the artifact reference still line up. The later product API is
+deliberately not composed yet: it needs the authoritative fleet-to-silo membership projection to
+prove the administrator belongs to the host-derived ClusterTenant, rather than trusting a global
+session flag.
 
 ```
  authored skill bundle  ──►  ArtifactRevision (exact content address)
@@ -39,6 +42,8 @@ or a revision not in review, fails closed with a stable reason.
 ## Public surface
 
 - `__PublishSkillRevision` — the use case: verify evidence and artifact, then publish atomically.
+- `PrismaSkillAuthorityRepository` — locks the scoped skill, revision, and exact artifact before it
+  changes `review → published` and advances the current-revision pointer in one transaction.
 - Types: `SkillAuthorityRepository` (the persistence boundary), `PublishSkillRevisionCommand`,
   `PublishSkillRevisionResult`, `SkillPublicationEvidence`, `SkillPublicationSnapshot`, and the
   atomic result `AtomicPublishSkillRevisionResult`.
@@ -48,6 +53,8 @@ or a revision not in review, fails closed with a stable reason.
 The application layer supplies the Prisma-backed `SkillAuthorityRepository` and calls the use case.
 This package does not author, test, scan, or sign bundles, and it does not store bytes — it only
 records that a reviewed revision is now published, consistently with the artifact authority.
+It is not an OCI/package registry, has no internal bundle-download route, and does not configure or
+communicate with the retired `feat-skill-registry` workload.
 
 ## Dependency direction
 
