@@ -5,7 +5,8 @@ export { PrismaPersonaDraftRepository } from "./prisma-persona-draft-repository.
 export type { ApprovePersonaCommand, ApprovePersonaResult, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 export type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, CreatePersonaDraftResult, PersonaDraftInsightCommand, PersonaDraftRepository } from "./persona-draft-authority.types.js";
 export { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "./persona-interview-authority.js";
-export type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
+export { __StartPersonaInterviewWithinTransaction } from "./start-persona-interview-in-transaction.js";
+export type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult, StartPersonaInterviewWithinTransactionCommand, StartPersonaInterviewWithinTransactionResult } from "./persona-interview-authority.types.js";
 export { PrismaPersonaInterviewRepository } from "./prisma-persona-interview-repository.js";
 export { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
 export { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository.js";

@@ -133,7 +133,7 @@ export default [
             { sourceTag: "scope:connections", onlyDependOnLibsWithTags: ["scope:auth", "scope:connections", "scope:shared"] },
             { sourceTag: "scope:personal-conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:personal-conversations", "scope:shared"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:personal-configuration", "scope:shared"] },
-			{ sourceTag: "scope:personal-revisions", onlyDependOnLibsWithTags: ["scope:authorization", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:personal-revisions", "scope:shared"] },
+			{ sourceTag: "scope:personal-revisions", onlyDependOnLibsWithTags: ["scope:authorization", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:personal-personas", "scope:personal-revisions", "scope:shared"] },
             {
               sourceTag: "scope:contract",
               onlyDependOnLibsWithTags: [

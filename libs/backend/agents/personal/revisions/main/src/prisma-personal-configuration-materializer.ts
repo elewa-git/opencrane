@@ -1,10 +1,9 @@
 import { AgentRevisionState, AgentServiceKind, Prisma } from "@prisma/client";
 import type { PersonalConfigurationMaterializationSource, SessionAssemblyCommand, SessionAssemblyLoad } from "@opencrane/backend/agents/execution/inputs";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { JsonValue } from "@opencrane/util";
 
-import type { PersonalConfigurationMaterializationResult, PersonalRevisionCloneSource } from "./personal-configuration-materializer.types.js";
+import { __CreatePersonalRevisionCloneData, _PERSONAL_REVISION_INCLUDE } from "./personal-revision-clone.js";
+import type { PersonalConfigurationMaterializationResult } from "./personal-configuration-materializer.types.js";
 
 /** Prisma implementation that consumes one accepted model choice in the caller's admission transaction. */
 export class PrismaPersonalConfigurationMaterializer implements PersonalConfigurationMaterializationSource
@@ -45,8 +44,8 @@ export class PrismaPersonalConfigurationMaterializer implements PersonalConfigur
 				await _supersede(prisma, change.id);
 				continue;
 			}
-			const head = await prisma.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id }, include: _REVISION_INCLUDE });
-			if (head === null || head.modelDefinitionId === modelDefinitionId)
+			const head = await prisma.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id }, include: _PERSONAL_REVISION_INCLUDE });
+			if (head === null || head.personaRevisionId === null || head.modelDefinitionId === modelDefinitionId)
 			{
 				await _supersede(prisma, change.id);
 				continue;
@@ -54,7 +53,7 @@ export class PrismaPersonalConfigurationMaterializer implements PersonalConfigur
 
 			// 4. Clone all immutable revision content, publish it, advance the active pointer, then seal the journal row.
 			const createdAt = new Date(transaction.admittedAt);
-			const revision = await prisma.agentRevision.create({ data: _revisionCreateData(head, modelDefinitionId, command.executionSubjectId, createdAt), select: { id: true } });
+			const revision = await prisma.agentRevision.create({ data: __CreatePersonalRevisionCloneData(head, { modelDefinitionId, personaRevisionId: head.personaRevisionId, authoredBy: command.executionSubjectId, changeMessage: "Accepted personal model preference", createdAt }), select: { id: true } });
 			await prisma.agentRevision.update({ where: { id: revision.id }, data: { state: AgentRevisionState.Published, publishedAt: createdAt } });
 			await prisma.agentService.update({ where: { id: service.id }, data: { activeRevisionId: revision.id, updatedAt: createdAt } });
 			await prisma.personalConfigurationChange.update({ where: { id: change.id }, data: { state: "Applied", appliedPersonaRevisionId: profile.activeRevisionId, appliedAgentRevisionId: revision.id } });
@@ -63,8 +62,6 @@ export class PrismaPersonalConfigurationMaterializer implements PersonalConfigur
 	}
 }
 
-/** Complete immutable assignment shape required to clone a personal AgentRevision. */
-const _REVISION_INCLUDE = { skillAssignments: true, integrationAssignments: true, scopeAttachments: true } as const;
 
 /** Returns a successful no-op result when no accepted model change can advance this admission. */
 function _unchanged(): SessionAssemblyLoad<PersonalConfigurationMaterializationResult>
@@ -98,11 +95,4 @@ async function _resolveGlobalModelDefinitionId(prisma: Prisma.TransactionClient,
 async function _supersede(prisma: Prisma.TransactionClient, changeId: string): Promise<void>
 {
 	await prisma.personalConfigurationChange.update({ where: { id: changeId }, data: { state: "Superseded" } });
-}
-
-/** Builds the draft clone payload while changing only model identity and direct lineage parent. */
-function _revisionCreateData(head: PersonalRevisionCloneSource, modelDefinitionId: string, authoredBy: string, createdAt: Date): Prisma.AgentRevisionCreateInput
-{
-	const content = { agentServiceId: head.agentServiceId, revision: head.revision + 1, promptPolicyVersion: head.promptPolicyVersion, personaRevisionId: head.personaRevisionId, modelDefinitionId, budget: head.budget, skills: head.skillAssignments.map(function _skill(assignment) { return { skillId: assignment.skillId, revisionId: assignment.skillRevisionId }; }), integrationAssignments: head.integrationAssignments.map(function _integration(assignment) { return { integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] }; }), scopeAttachments: head.scopeAttachments.map(function _scope(attachment) { return { scope: attachment.scope, subjectType: attachment.subjectType, subjectId: attachment.subjectId }; }) } as unknown as JsonValue;
-	return { agentService: { connect: { id: head.agentServiceId } }, revision: head.revision + 1, parentRevision: { connect: { id: head.id } }, changeMessage: "Accepted personal model preference", state: AgentRevisionState.Draft, digest: __DigestCanonicalJson(content), promptPolicyVersion: head.promptPolicyVersion, personaRevisionId: head.personaRevisionId, modelDefinition: { connect: { id: modelDefinitionId } }, budget: head.budget as Prisma.InputJsonValue, authoredBy, createdAt, skillAssignments: { create: head.skillAssignments.map(function _skillAssignment(assignment) { return { skillId: assignment.skillId, skillRevisionId: assignment.skillRevisionId }; }) }, integrationAssignments: { create: head.integrationAssignments.map(function _integrationAssignment(assignment) { return { integrationId: assignment.integrationId, siloId: assignment.siloId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] }; }) }, scopeAttachments: { create: head.scopeAttachments.map(function _scopeAttachment(attachment) { return { scope: attachment.scope as never, subjectType: attachment.subjectType as never, subjectId: attachment.subjectId }; }) } };
 }
