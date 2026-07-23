@@ -88,6 +88,7 @@ model ArtifactUploadLease {
   finalizedAt             DateTime?                @map("finalized_at")
   createdAt               DateTime                 @default(now()) @map("created_at")
   artifact                Artifact                 @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  preprocessJobOutput     ArtifactPreprocessJob?   @relation("ArtifactPreprocessOutputLease")
 
   @@index([artifactId, state, expiresAt])
   @@index([siloId, state, expiresAt])
@@ -142,12 +143,14 @@ model ArtifactPreprocessJob {
   failureCode       String?                    @map("failure_code")
   derivedArtifactId String?                    @map("derived_artifact_id")
   derivedRevisionId String?                    @map("derived_revision_id")
+  outputLeaseId     String?                    @unique @map("output_lease_id")
   completedAt       DateTime?                  @map("completed_at")
   createdAt         DateTime                   @default(now()) @map("created_at")
   updatedAt         DateTime                   @updatedAt @map("updated_at")
   sourceRevision    ArtifactRevision           @relation("ArtifactPreprocessSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
   derivedArtifact   Artifact?                  @relation("ArtifactPreprocessOutput", fields: [derivedArtifactId], references: [id], onDelete: Restrict)
   derivedRevision   ArtifactRevision?          @relation("ArtifactPreprocessOutputRevision", fields: [derivedRevisionId], references: [id], onDelete: Restrict)
+  outputLease       ArtifactUploadLease?       @relation("ArtifactPreprocessOutputLease", fields: [outputLeaseId], references: [id], onDelete: Restrict)
 
   @@unique([sourceRevisionId, pipelineVersion])
   @@unique([derivedArtifactId])
