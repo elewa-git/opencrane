@@ -6,7 +6,7 @@
 
 This package is part of the **personal-agent product**. A **persona** is the saved personality and
 instructions an agent runs with — who it is and how it should behave. A user builds one through an
-onboarding interview, producing a **draft**. This package owns the full durable lifecycle: it starts
+onboarding or accepted-refresh interview, producing a **draft**. This package owns the full durable lifecycle: it starts
 an interview from a reviewed question set, captures each answer once, freezes the completed evidence,
 derives a draft from selected-template evidence, and then approves a fully evidenced draft into the
 single live persona.
@@ -44,12 +44,16 @@ failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insi
 
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
-fails closed and a crash leaves the previous active persona intact, never a half-approved one.
+fails closed and a crash leaves the previous active persona intact, never a half-approved one. A
+refresh interview carries the accepted configuration-change ID that started it; it cannot claim an
+unrelated onboarding or refresh interview as its evidence.
 
 ## Public surface
 
 - `__StartPersonaInterview`, `__RecordPersonaInterviewAnswer`, `__CompletePersonaInterview` — start,
   append to, and complete the reviewed onboarding interview lifecycle.
+- `__StartPersonaInterviewWithinTransaction` — the shared composition primitive for starting one
+  reviewed interview after another authority has locked the profile and verified its own fence.
 - `StartPersonaInterviewCommand` / `StartPersonaInterviewResult`,
   `RecordPersonaInterviewAnswerCommand` / `RecordPersonaInterviewAnswerResult`, and
   `CompletePersonaInterviewCommand` / `CompletePersonaInterviewResult` — the lifecycle requests and

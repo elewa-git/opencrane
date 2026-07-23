@@ -15,6 +15,31 @@ export interface StartPersonaInterviewCommand
 	readonly startedAt: string;
 }
 
+/** Request to create or locate an interview inside a caller-owned, profile-locked transaction. */
+export interface StartPersonaInterviewWithinTransactionCommand
+{
+	/** Profile owner whose current interview is being located. */
+	readonly userId: string;
+	/** Profile already locked by the caller to serialize competing starts. */
+	readonly personaProfileId: string;
+	/** Optional accepted refresh change that must own this exact interview. */
+	readonly refreshChangeId?: string;
+	/** Reviewed question-set identifier frozen for the new interview. */
+	readonly questionSetId: string;
+	/** Exact reviewed question-set version frozen for the new interview. */
+	readonly questionSetVersion: number;
+	/** Trusted creation instant for the new interview. */
+	readonly startedAt: string;
+}
+
+/** Result of locating one existing interview or creating a new reviewed interview within a transaction. */
+export type StartPersonaInterviewWithinTransactionResult =
+	| { readonly status: "started"; readonly interviewId: string }
+	| { readonly status: "linked_in_progress"; readonly interviewId: string }
+	| { readonly status: "linked_closed" }
+	| { readonly status: "other_in_progress"; readonly interviewId: string }
+	| { readonly status: "question_set_unavailable" };
+
 /** Request to record one immutable answer while an interview remains in progress. */
 export interface RecordPersonaInterviewAnswerCommand
 {
