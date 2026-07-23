@@ -1,10 +1,14 @@
 import { AgentServiceKind, Prisma, type PrismaClient } from "@prisma/client";
+import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
+import { __ProposePersonalConfigurationChange } from "./personal-configuration.js";
+import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
 import type { PersonalConfigurationChangeRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
+import type { UpgradeSessionProposalReceipt, UpgradeSessionProposalRepository } from "./upgrade-session.types.js";
 
 /** Prisma adapter that proves a proposal's user, thread, run, profile, and service bindings atomically. */
-export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeRepository
+export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeRepository, UpgradeSessionProposalRepository
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -49,6 +53,22 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 			this.logger.error({ err, operation: "personal_configuration.propose", siloId: command.siloId, sourceRunId: command.sourceRunId }, "Personal configuration proposal persistence failed");
 			return _isProvenanceConflict(err) ? { status: "provenance_conflict" } : { status: "persistence_unavailable" };
 		}
+	}
+
+	/** Map one validated built-in tool candidate to the same durable proposal authority. */
+	async proposeUpgradeSession(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>
+	{
+		// 1. Reject non-personal or non-conversation snapshots before deriving any mutable profile coordinate.
+		if (snapshot.personaRevisionId === null || snapshot.threadId === null || !_IsPersonalConfigurationPatch(candidate.arguments)) throw new Error("upgrade_session requires a personal conversation snapshot and object patch");
+
+		// 2. Resolve the only profile owned by the immutable execution subject in this silo.
+		const profile = await this.prisma.personaProfile.findUnique({ where: { siloId_userId: { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId } }, select: { id: true } });
+		if (profile === null) throw new Error("upgrade_session personal profile is unavailable");
+
+		// 3. Reuse the proposal authority so current-revision provenance is checked atomically at insertion.
+		const result = await __ProposePersonalConfigurationChange(this, { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, personaProfileId: profile.id, agentServiceId: snapshot.agentServiceId, sourceThreadId: snapshot.threadId, sourceRunId: snapshot.runId, sourceMessageId: null, requestedPatch: candidate.arguments, requestedPatchDigest: candidate.argumentsDigest, expectedPersonaRevisionId: snapshot.personaRevisionId, expectedAgentRevisionId: snapshot.agentRevisionId, proposedAt: now });
+		if (result.outcome !== "proposed") throw new Error(`upgrade_session proposal denied: ${result.reason}`);
+		return { changeId: result.changeId };
 	}
 }
 

@@ -86,6 +86,10 @@ approval, and stops on a positive cancel signal. The approval pause is reachable
 grant flagged `requiresApproval` defers and opens a pending `ApprovalRequest`); the human
 approval-DECISION endpoint and the steering-INGEST surface are the operator/product plane in Phase F
 (#224), so approval and steering are not yet driven by an external route.
+For personal conversation snapshots, this composition also adds the reserved `upgrade_session` tool
+after normal MCP grants are compiled and reseals the delivered input. The call itself is not deferred;
+it uses the same durable `ToolInvocation` ledger to record a future-only configuration proposal. A
+later explicit user decision and a later run snapshot own any actual change.
 Idle runtime streams do not create a database transaction every second. An accepted runtime
 candidate wakes local streams to check the durable command state immediately; a bounded recovery
 check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of

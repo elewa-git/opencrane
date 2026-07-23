@@ -1,14 +1,13 @@
-import { createHash } from "node:crypto";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import { ___CanonicalizeJson, type JsonValue } from "@opencrane/util";
-
+import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
 import type { PersonalConfigurationChangeRepository, ProposePersonalConfigurationChangeCommand, ProposePersonalConfigurationChangeResult } from "./personal-configuration.types.js";
 
 /** Persist a future-snapshot-only personal configuration proposal after strict coordinate validation. */
 export async function __ProposePersonalConfigurationChange(repository: PersonalConfigurationChangeRepository, command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeResult>
 {
 	// 1. Refuse caller-controlled empty identities or malformed evidence before persistence can be queried.
-	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.personaProfileId) || !_valid(command.agentServiceId) || !_valid(command.sourceThreadId) || !_valid(command.sourceRunId) || (command.sourceMessageId !== null && !_valid(command.sourceMessageId)) || !_patchIsObject(command.requestedPatch) || _DigestPatch(command.requestedPatch) !== command.requestedPatchDigest || Number.isNaN(Date.parse(command.proposedAt)))
+	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.personaProfileId) || !_valid(command.agentServiceId) || !_valid(command.sourceThreadId) || !_valid(command.sourceRunId) || (command.sourceMessageId !== null && !_valid(command.sourceMessageId)) || !_IsPersonalConfigurationPatch(command.requestedPatch) || _DigestPatch(command.requestedPatch) !== command.requestedPatchDigest || Number.isNaN(Date.parse(command.proposedAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}
@@ -25,18 +24,12 @@ function _valid(value: string): boolean
 	return value.trim().length > 0 && value.length <= 200;
 }
 
-/** Preserve only object-shaped proposal payloads for later explicit policy evaluation. */
-function _patchIsObject(value: unknown): value is Readonly<Record<string, unknown>>
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length > 0;
-}
-
 /** Canonicalise JSON-compatible input before deriving the only durable patch identity. */
 function _DigestPatch(value: Readonly<Record<string, unknown>>): string | null
 {
 	try
 	{
-		return `sha256:${createHash("sha256").update(___CanonicalizeJson(value as JsonValue), "utf8").digest("hex")}`;
+		return ___DigestCanonicalJson(value as JsonValue);
 	}
 	catch
 	{

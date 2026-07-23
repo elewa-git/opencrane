@@ -19,8 +19,9 @@ apply an accepted request only while those recorded active revisions still match
 
 The invariant is that a proposal is durable provenance, not mutable session state. Missing or
 cross-owner source coordinates fail closed. This first foundation does not itself approve, apply,
-or expose a browser/API control; later first-party `upgrade_session` and product surfaces use this
-single journal rather than creating parallel mutation paths.
+or expose a browser/API control. Its first-party `upgrade_session` descriptor is always callable in
+a personal conversation, but its call records only a proposed change in this same journal; it never
+means the request is already user-approved or applied.
 
 ## Public surface
 
@@ -28,12 +29,14 @@ single journal rather than creating parallel mutation paths.
 - `PersonalConfigurationChangeRepository` is the persistence port that proves source ownership in
   its atomic insert.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
+- `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
+  adds only to personal conversation inputs.
 
 ## Boundary
 
 The package does not mutate `RunInputSnapshot`, perform persona synthesis, approve a user decision,
-or invoke an MCP tool. The app composes its Prisma adapter later; runtime transport and UI remain
-separate owners.
+or invoke an MCP tool. The app composes its Prisma adapter and `ToolInvocation` ledger; runtime
+transport and UI remain separate owners.
 
 ## Dependency direction
 
