@@ -5,6 +5,10 @@ ROOT_DIR="$(cd "$(dirname "$0")/../../../../.." && pwd)"
 CLUSTER_NAME="${CLUSTER_NAME:-opencrane-local}"
 NAMESPACE="${NAMESPACE:-opencrane-system}"
 RELEASE_NAME="${RELEASE_NAME:-opencrane}"
+ARTIFACT_NAMESPACE="${ARTIFACT_NAMESPACE:-${NAMESPACE}-artifacts}"
+ARTIFACT_CATALOG_KEY_SECRET="${ARTIFACT_CATALOG_KEY_SECRET:-opencrane-artifact-catalog-keys}"
+ARTIFACT_SERVICE_KEY_SECRET="${ARTIFACT_SERVICE_KEY_SECRET:-opencrane-artifact-service-keys}"
+ARTIFACT_KEY_DIR=""
 KEEP_CLUSTER="${KEEP_CLUSTER:-1}"
 LOCAL_PROFILE="${LOCAL_PROFILE:-default}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
@@ -36,6 +40,7 @@ LITELLM_MASTER_KEY="${LITELLM_MASTER_KEY:-opencrane-local-master-key}"
 # copy of WeOwnAI's apps/fleet-operator and apps/fleet-platform to run this local cluster.
 FLEET_OPERATOR_DIR="${FLEET_OPERATOR_DIR:-}"
 FLEET_CHART_DIR="${FLEET_CHART_DIR:-}"
+SKIP_FLEET="${SKIP_FLEET:-0}"
 
 function _require_cmd()
 {
@@ -71,6 +76,10 @@ function _require_free_space()
 
 function _cleanup()
 {
+  if [[ -n "$ARTIFACT_KEY_DIR" ]]; then
+    rm -rf "$ARTIFACT_KEY_DIR" 2>/dev/null || true
+  fi
+
   if [[ "$KEEP_CLUSTER" == "1" ]]; then
     echo "[local] KEEP_CLUSTER=1, leaving k3d cluster '$CLUSTER_NAME' running"
     return
@@ -123,21 +132,31 @@ _require_cmd k3d
 _require_docker_healthy
 _require_free_space
 
-if [[ -z "$FLEET_OPERATOR_DIR" || ! -f "$FLEET_OPERATOR_DIR/deploy/Dockerfile" || -z "$FLEET_CHART_DIR" || ! -d "$FLEET_CHART_DIR" ]]; then
-  echo "[local] The fleet-operator app and fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) and no longer ship in this repo."
-  echo "[local] Set FLEET_OPERATOR_DIR and FLEET_CHART_DIR to a checked-out copy of WeOwnAI's apps/fleet-operator and apps/fleet-platform, then re-run."
-  exit 1
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  if [[ -z "$FLEET_OPERATOR_DIR" || ! -f "$FLEET_OPERATOR_DIR/deploy/Dockerfile" || -z "$FLEET_CHART_DIR" || ! -d "$FLEET_CHART_DIR" ]]; then
+    echo "[local] The fleet-operator app and fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) and no longer ship in this repo."
+    echo "[local] Set FLEET_OPERATOR_DIR and FLEET_CHART_DIR to a checked-out copy of WeOwnAI's apps/fleet-operator and apps/fleet-platform, then re-run."
+    exit 1
+  fi
 fi
 
 # 2. Build local images so the cluster does not depend on published registries.
-echo "[local] Building operator image"
-docker build -f "$FLEET_OPERATOR_DIR/deploy/Dockerfile" -t opencrane/operator:local "$ROOT_DIR"
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  echo "[local] Building operator image"
+  docker build -f "$FLEET_OPERATOR_DIR/deploy/Dockerfile" -t opencrane/operator:local "$ROOT_DIR"
+fi
 
 echo "[local] Building tenant image"
 docker build -f "$ROOT_DIR/apps/feat-openclaw-tenant/deploy/Dockerfile" -t opencrane/tenant:local "$ROOT_DIR"
 
 echo "[local] Building opencrane-ui image"
 docker build -f "$ROOT_DIR/apps/opencrane/deploy/Dockerfile" -t opencrane/opencrane-server:local "$ROOT_DIR"
+
+echo "[local] Building channel-proxy image"
+docker build -f "$ROOT_DIR/apps/channel-proxy/deploy/Dockerfile" -t opencrane/channel-proxy:local "$ROOT_DIR"
+
+echo "[local] Building artifact-service image"
+docker build -f "$ROOT_DIR/apps/artifact-service/deploy/Dockerfile" -t opencrane/artifact-service:local "$ROOT_DIR"
 
 # 3. Create a fresh cluster for a deterministic full-stack install.
 echo "[local] Recreating k3d cluster '$CLUSTER_NAME'"
@@ -151,9 +170,13 @@ docker pull ghcr.io/cloudnative-pg/pgbouncer:1.25.1
 
 # 4b. Import locally built images into the k3d runtime.
 echo "[local] Importing images into k3d"
-k3d image import opencrane/operator:local --cluster "$CLUSTER_NAME"
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  k3d image import opencrane/operator:local --cluster "$CLUSTER_NAME"
+fi
 k3d image import opencrane/tenant:local --cluster "$CLUSTER_NAME"
 k3d image import opencrane/opencrane-server:local --cluster "$CLUSTER_NAME"
+k3d image import opencrane/channel-proxy:local --cluster "$CLUSTER_NAME"
+k3d image import opencrane/artifact-service:local --cluster "$CLUSTER_NAME"
 k3d image import ghcr.io/cloudnative-pg/postgresql:17.5 --cluster "$CLUSTER_NAME"
 k3d image import ghcr.io/cloudnative-pg/pgbouncer:1.25.1 --cluster "$CLUSTER_NAME"
 
@@ -187,7 +210,9 @@ function _create_database_credentials()
 
 echo "[local] Bootstrapping one credentials Secret per PostgreSQL authority"
 _create_database_credentials "$POSTGRES_CREDENTIALS_SECRET" "$SILO_POSTGRES_OWNER" "$DB_PASSWORD"
-_create_database_credentials "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER" "$FLEET_DB_PASSWORD"
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  _create_database_credentials "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER" "$FLEET_DB_PASSWORD"
+fi
 _create_database_credentials "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER" "$OBOT_DB_PASSWORD"
 _create_database_credentials "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER" "$LITELLM_DB_PASSWORD"
 _create_database_credentials "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER" "$LANGFUSE_DB_PASSWORD"
@@ -222,7 +247,11 @@ POSTGRES_KUBERNETES_API_ARGS=(
 
 function _install_postgres_server()
 {
-  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$SILO_POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"fleet\",\"owner\":\"$FLEET_POSTGRES_OWNER\",\"credentialsSecret\":\"$FLEET_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
+  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$SILO_POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"}"
+  if [[ "$SKIP_FLEET" != "1" ]]; then
+    databases_json="${databases_json},{\"name\":\"fleet\",\"owner\":\"$FLEET_POSTGRES_OWNER\",\"credentialsSecret\":\"$FLEET_POSTGRES_CREDENTIALS_SECRET\"}"
+  fi
+  databases_json="${databases_json},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
   echo "[local] Installing one PostgreSQL server with isolated logical databases"
   helm upgrade --install "$POSTGRES_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
@@ -239,7 +268,11 @@ function _install_postgres_server()
   kubectl wait --for=condition=Ready "cluster/$POSTGRES_RELEASE_NAME" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   kubectl wait --for=create "deployment/${POSTGRES_RELEASE_NAME}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE_NAME}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
-  for database_resource in fleet obot litellm langfuse; do
+  local database_resources=(obot litellm langfuse)
+  if [[ "$SKIP_FLEET" != "1" ]]; then
+    database_resources+=(fleet)
+  fi
+  for database_resource in "${database_resources[@]}"; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${POSTGRES_RELEASE_NAME}-${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
   done
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE_NAME}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
@@ -274,7 +307,9 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-litellm-app"
 LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE_NAME}-langfuse-app"
 _publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$OPENCRANE_POSTGRES_APP_SECRET" opencrane
-_publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" fleet
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  _publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" fleet
+fi
 _publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" obot
 _publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" litellm
 _publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" langfuse
@@ -301,7 +336,11 @@ function _assert_distinct_cnpg_app_credentials()
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  _assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
+else
+  _assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
+fi
 
 _copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "${RELEASE_NAME}-obot" dsn
 _copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" opencrane-silo-obot dsn
@@ -327,44 +366,74 @@ if grep -A 5 "certManager:" "$VALUES_FILE" 2>/dev/null | grep -q "enabled: true"
 fi
 
 # 6. Install the FLEET chart (fleet-manager + cluster bootstrap) wired to the in-cluster registry DB.
-echo "[local] Installing fleet release '$RELEASE_NAME'"
-helm_args=(
-  upgrade
-  --install
-  "$RELEASE_NAME"
-  "$FLEET_CHART_DIR"
-  --namespace
-  "$NAMESPACE"
-  --create-namespace
-  --values
-  "$VALUES_FILE"
-  --set
-  "fleetManager.database.existingSecret=${FLEET_POSTGRES_APP_SECRET}"
-  --set
-  "fleetManager.database.secretKey=uri"
-  --set
-  "fleetManager.clusterTenantApi.enabled=false"
-  --set
-  "litellm.existingDatabaseSecret=opencrane-litellm-db"
-  --set
-  "litellm.databaseSecretKey=DATABASE_URL"
-)
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  echo "[local] Installing fleet release '$RELEASE_NAME'"
+  helm_args=(
+    upgrade
+    --install
+    "$RELEASE_NAME"
+    "$FLEET_CHART_DIR"
+    --namespace
+    "$NAMESPACE"
+    --create-namespace
+    --values
+    "$VALUES_FILE"
+    --set
+    "fleetManager.database.existingSecret=${FLEET_POSTGRES_APP_SECRET}"
+    --set
+    "fleetManager.database.secretKey=uri"
+    --set
+    "fleetManager.clusterTenantApi.enabled=false"
+    --set
+    "litellm.existingDatabaseSecret=opencrane-litellm-db"
+    --set
+    "litellm.databaseSecretKey=DATABASE_URL"
+  )
 
-if [[ "$LOCAL_PROFILE" == "strict" ]]; then
-  helm_args+=(--set "litellm.existingSecret=$LITELLM_SECRET_NAME")
+  if [[ "$LOCAL_PROFILE" == "strict" ]]; then
+    helm_args+=(--set "litellm.existingSecret=$LITELLM_SECRET_NAME")
+  else
+    helm_args+=(--set-string "litellm.masterKey=$LITELLM_MASTER_KEY")
+  fi
+
+  # Per-cluster platform-operator seed (optional). Passed to Helm only when non-empty,
+  # so a default local install grants operator to nobody (fail-closed). Set via the
+  # OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL env (e.g. from the wizard).
+  if [[ -n "${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}" ]]; then
+    helm_args+=(--set-string "fleetManager.oidc.platformOperatorSeedEmail=${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL}")
+    echo "[local] Seeding platform operator (verified OIDC email match) for this cluster"
+  fi
+
+  helm "${helm_args[@]}"
 else
-  helm_args+=(--set-string "litellm.masterKey=$LITELLM_MASTER_KEY")
+  echo "[local] Skipping fleet installation"
 fi
 
-# Per-cluster platform-operator seed (optional). Passed to Helm only when non-empty,
-# so a default local install grants operator to nobody (fail-closed). Set via the
-# OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL env (e.g. from the wizard).
-if [[ -n "${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}" ]]; then
-  helm_args+=(--set-string "fleetManager.oidc.platformOperatorSeedEmail=${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL}")
-  echo "[local] Seeding platform operator (verified OIDC email match) for this cluster"
-fi
+function _create_artifact_keys()
+{
+  kubectl create namespace "$ARTIFACT_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f -
+  ARTIFACT_KEY_DIR="$(mktemp -d)"
 
-helm "${helm_args[@]}"
+  openssl genpkey -algorithm ED25519 -out "$ARTIFACT_KEY_DIR/lease-private.pem"
+  openssl pkey -in "$ARTIFACT_KEY_DIR/lease-private.pem" -pubout -out "$ARTIFACT_KEY_DIR/lease-public.pem"
+  openssl genpkey -algorithm ED25519 -out "$ARTIFACT_KEY_DIR/receipt-private.pem"
+  openssl pkey -in "$ARTIFACT_KEY_DIR/receipt-private.pem" -pubout -out "$ARTIFACT_KEY_DIR/receipt-public.pem"
+
+  kubectl create secret generic "$ARTIFACT_CATALOG_KEY_SECRET" \
+    -n "$NAMESPACE" \
+    --from-file=lease-private.pem="$ARTIFACT_KEY_DIR/lease-private.pem" \
+    --from-file=receipt-public.pem="$ARTIFACT_KEY_DIR/receipt-public.pem" \
+    --dry-run=client \
+    -o yaml | kubectl apply -f -
+  kubectl create secret generic "$ARTIFACT_SERVICE_KEY_SECRET" \
+    -n "$ARTIFACT_NAMESPACE" \
+    --from-file=lease-public.pem="$ARTIFACT_KEY_DIR/lease-public.pem" \
+    --from-file=receipt-private.pem="$ARTIFACT_KEY_DIR/receipt-private.pem" \
+    --dry-run=client \
+    -o yaml | kubectl apply -f -
+}
+
+_create_artifact_keys
 
 # 6b. Install the SILO chart into the same local test namespace.
 echo "[local] Installing silo release 'opencrane-silo'"
@@ -385,6 +454,12 @@ silo_args=(
   "litellm.existingDatabaseSecret=opencrane-litellm-db"
   --set
   "litellm.databaseSecretKey=DATABASE_URL"
+  --set-string
+  "artifactService.namespace=$ARTIFACT_NAMESPACE"
+  --set-string
+  "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
+  --set-string
+  "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
 )
 if [[ "$LOCAL_PROFILE" == "strict" ]]; then
   silo_args+=(--set "litellm.existingSecret=$LITELLM_SECRET_NAME")
@@ -394,7 +469,9 @@ fi
 helm "${silo_args[@]}"
 
 # 7. Wait for the platform workloads that depend on the database.
-_wait_for_rollout "deployment/opencrane-fleet-manager"
+if [[ "$SKIP_FLEET" != "1" ]]; then
+  _wait_for_rollout "deployment/opencrane-fleet-manager"
+fi
 _wait_for_rollout "deployment/opencrane-silo-opencrane-server"
 
 if kubectl get deployment/opencrane-silo-litellm -n "$NAMESPACE" >/dev/null 2>&1; then

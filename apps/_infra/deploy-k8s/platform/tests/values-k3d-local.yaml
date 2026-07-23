@@ -19,6 +19,18 @@ tenant:
     tag: local
     pullPolicy: IfNotPresent
 
+channelProxy:
+  image:
+    repository: opencrane/channel-proxy
+    tag: local
+    pullPolicy: IfNotPresent
+
+artifactService:
+  image:
+    repository: opencrane/artifact-service
+    tag: local
+    pullPolicy: IfNotPresent
+
 ingress:
   enabled: true
   className: nginx
