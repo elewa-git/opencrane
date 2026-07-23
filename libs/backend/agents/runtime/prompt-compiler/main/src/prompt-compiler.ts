@@ -12,7 +12,7 @@ import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";
  * snapshot compiled by one version is never silently consumed by another. Every snapshot declares
  * the version its compiler must match; a mismatch fails closed.
  */
-export const PROMPT_COMPILER_VERSION = "opencrane.prompt-compiler/2026-07-21.1";
+export const PROMPT_COMPILER_VERSION = "opencrane.prompt-compiler/2026-07-23.1";
 
 /**
  * Hydrate an immutable {@link RunInputSnapshot} into the literal {@link CompiledRunInput} the runtime
@@ -57,13 +57,14 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
 	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.toolGrantIds));
+	const preferenceStatements = await repositories.loadPreferenceFactStatements([...snapshot.preferenceFactIds].sort());
 	const memoryStatements = await repositories.loadMemoryFactStatements(_orderedFactIds(snapshot));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.modelRoute);
 
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
-	const instructions = _assembleInstructions(personaInstructions, memoryStatements, artifactSummaries, skillSummaries);
+	const instructions = _assembleInstructions(personaInstructions, preferenceStatements, memoryStatements, artifactSummaries, skillSummaries);
 	const budget = _resolveBudget(snapshot.budgetPolicy);
 	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: _attempt(snapshot), instructions, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
@@ -88,10 +89,11 @@ function _attempt(snapshot: RunInputSnapshot): number
 }
 
 /** Build the single instructions block from persona text and canonically ordered context sections. */
-function _assembleInstructions(personaInstructions: string, memoryStatements: readonly string[], artifactSummaries: readonly string[], skillSummaries: readonly string[]): string
+function _assembleInstructions(personaInstructions: string, preferenceStatements: readonly string[], memoryStatements: readonly string[], artifactSummaries: readonly string[], skillSummaries: readonly string[]): string
 {
 	const sections: string[] = [];
 	if (personaInstructions.trim().length > 0) sections.push(personaInstructions.trim());
+	if (preferenceStatements.length > 0) sections.push(`Approved personal preferences:\n${_bullets(preferenceStatements)}`);
 	if (memoryStatements.length > 0) sections.push(`Durable memory available for this run:\n${_bullets(memoryStatements)}`);
 	if (artifactSummaries.length > 0) sections.push(`Artifacts available for this run:\n${_bullets(artifactSummaries)}`);
 	if (skillSummaries.length > 0) sections.push(`Skills available for this run:\n${_bullets(skillSummaries)}`);

@@ -140,6 +140,18 @@ CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed', 'retake
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
 
 -- CreateEnum
+CREATE TYPE "PreferenceFactState" AS ENUM ('candidate', 'accepted', 'corrected', 'forgotten');
+
+-- CreateEnum
+CREATE TYPE "PreferenceFactConsentState" AS ENUM ('pending', 'explicit', 'confirmed');
+
+-- CreateEnum
+CREATE TYPE "PreferenceFactProvenanceKind" AS ENUM ('explicit_statement', 'conversation_message', 'interview', 'inferred');
+
+-- CreateEnum
+CREATE TYPE "PreferenceFactSensitivity" AS ENUM ('ordinary', 'sensitive');
+
+-- CreateEnum
 CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
 
 -- CreateEnum
@@ -1179,6 +1191,34 @@ CREATE TABLE "persona_insights" (
 );
 
 -- CreateTable
+CREATE TABLE "preference_facts" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "preference_key" TEXT NOT NULL,
+    "statement" TEXT NOT NULL,
+    "state" "PreferenceFactState" NOT NULL DEFAULT 'candidate',
+    "consent_state" "PreferenceFactConsentState" NOT NULL DEFAULT 'pending',
+    "provenance_kind" "PreferenceFactProvenanceKind" NOT NULL,
+    "provenance" JSONB NOT NULL,
+    "confidence" DECIMAL(4,3) NOT NULL,
+    "sensitivity" "PreferenceFactSensitivity" NOT NULL DEFAULT 'ordinary',
+    "source_message_id" TEXT,
+    "source_interview_id" TEXT,
+    "supersedes_fact_id" TEXT,
+    "recorded_by" TEXT NOT NULL,
+    "accepted_by" TEXT,
+    "idempotency_key" TEXT NOT NULL,
+    "recorded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "accepted_at" TIMESTAMP(3),
+    "corrected_at" TIMESTAMP(3),
+    "forgotten_at" TIMESTAMP(3),
+
+    CONSTRAINT "preference_facts_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "personal_configuration_changes" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -2084,6 +2124,24 @@ CREATE UNIQUE INDEX "persona_insights_persona_revision_id_id_key" ON "persona_in
 CREATE UNIQUE INDEX "persona_insights_persona_revision_id_answer_id_key" ON "persona_insights"("persona_revision_id", "answer_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "preference_facts_supersedes_fact_id_key" ON "preference_facts"("supersedes_fact_id");
+
+-- CreateIndex
+CREATE INDEX "preference_facts_silo_id_user_id_state_idx" ON "preference_facts"("silo_id", "user_id", "state");
+
+-- CreateIndex
+CREATE INDEX "preference_facts_persona_profile_id_state_idx" ON "preference_facts"("persona_profile_id", "state");
+
+-- CreateIndex
+CREATE INDEX "preference_facts_source_message_id_idx" ON "preference_facts"("source_message_id");
+
+-- CreateIndex
+CREATE INDEX "preference_facts_source_interview_id_idx" ON "preference_facts"("source_interview_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "preference_facts_silo_id_user_id_idempotency_key_key" ON "preference_facts"("silo_id", "user_id", "idempotency_key");
+
+-- CreateIndex
 CREATE INDEX "provider_credentials_cluster_tenant_idx" ON "provider_credentials"("cluster_tenant");
 
 -- CreateIndex
@@ -2466,6 +2524,18 @@ ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_previous_revis
 
 -- AddForeignKey
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision_id_fkey" FOREIGN KEY ("persona_revision_id") REFERENCES "persona_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_persona_profile_id_user_id_fkey" FOREIGN KEY ("persona_profile_id", "user_id") REFERENCES "persona_profiles"("id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_source_message_id_fkey" FOREIGN KEY ("source_message_id") REFERENCES "conversation_messages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_source_interview_id_fkey" FOREIGN KEY ("source_interview_id") REFERENCES "persona_interviews"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_supersedes_fact_id_fkey" FOREIGN KEY ("supersedes_fact_id") REFERENCES "preference_facts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_fkey" FOREIGN KEY ("provider_credential_id") REFERENCES "provider_credentials"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -4071,6 +4141,46 @@ BEGIN
     RETURN NULL;
 END;
 $$;
+CREATE FUNCTION "enforce_preference_fact_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE profile_silo TEXT; profile_user TEXT; source_silo TEXT; prior_silo TEXT; prior_user TEXT; prior_profile TEXT; prior_key TEXT; prior_state "PreferenceFactState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PreferenceFact rows use explicit forget lifecycle'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT "silo_id", "user_id" INTO profile_silo, profile_user FROM "persona_profiles" WHERE "id" = NEW."persona_profile_id" FOR UPDATE;
+        IF profile_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id" THEN RAISE EXCEPTION 'PreferenceFact requires the exact owner profile and silo'; END IF;
+        IF NEW."state" NOT IN ('candidate', 'accepted') THEN RAISE EXCEPTION 'PreferenceFact must begin as candidate or accepted'; END IF;
+        IF NEW."sensitivity" = 'sensitive' AND NEW."provenance_kind" = 'inferred' THEN RAISE EXCEPTION 'sensitive PreferenceFact cannot be inferred'; END IF;
+        IF NEW."provenance_kind" = 'conversation_message' OR NEW."provenance_kind" = 'inferred' THEN
+            SELECT thread."silo_id" INTO source_silo FROM "conversation_messages" message JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
+              JOIN "conversation_participants" participant ON participant."thread_id" = thread."id" AND participant."user_id" = NEW."user_id"
+              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, thread;
+            IF source_silo IS DISTINCT FROM NEW."silo_id" THEN RAISE EXCEPTION 'PreferenceFact message provenance must belong to its owner silo'; END IF;
+        ELSIF NEW."provenance_kind" = 'interview' THEN
+            SELECT profile."silo_id", interview."user_id" INTO source_silo, profile_user FROM "persona_interviews" interview JOIN "persona_profiles" profile ON profile."id" = interview."persona_profile_id" WHERE interview."id" = NEW."source_interview_id" FOR UPDATE OF interview, profile;
+            IF source_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id" THEN RAISE EXCEPTION 'PreferenceFact interview provenance must belong to its owner'; END IF;
+        END IF;
+        IF NEW."state" = 'accepted' AND (NEW."consent_state" = 'pending' OR NEW."accepted_by" IS DISTINCT FROM NEW."user_id") THEN RAISE EXCEPTION 'accepted PreferenceFact requires owner consent and approval'; END IF;
+        IF NEW."supersedes_fact_id" IS NOT NULL THEN
+            IF NEW."state" <> 'accepted' OR NEW."consent_state" = 'pending' OR NEW."accepted_by" IS DISTINCT FROM NEW."user_id" THEN RAISE EXCEPTION 'PreferenceFact correction successor must be accepted with owner consent'; END IF;
+            SELECT "silo_id", "user_id", "persona_profile_id", "preference_key", "state" INTO prior_silo, prior_user, prior_profile, prior_key, prior_state FROM "preference_facts" WHERE "id" = NEW."supersedes_fact_id" FOR UPDATE;
+            IF prior_silo IS DISTINCT FROM NEW."silo_id" OR prior_user IS DISTINCT FROM NEW."user_id" OR prior_profile IS DISTINCT FROM NEW."persona_profile_id" OR prior_key IS DISTINCT FROM NEW."preference_key" OR prior_state IS DISTINCT FROM 'accepted' THEN RAISE EXCEPTION 'PreferenceFact correction must supersede an accepted same-owner fact'; END IF;
+            UPDATE "preference_facts" SET "state" = 'corrected', "corrected_at" = clock_timestamp() WHERE "id" = NEW."supersedes_fact_id";
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id" OR NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id" OR NEW."preference_key" IS DISTINCT FROM OLD."preference_key" OR NEW."statement" IS DISTINCT FROM OLD."statement" OR NEW."provenance_kind" IS DISTINCT FROM OLD."provenance_kind" OR NEW."provenance" IS DISTINCT FROM OLD."provenance" OR NEW."confidence" IS DISTINCT FROM OLD."confidence" OR NEW."sensitivity" IS DISTINCT FROM OLD."sensitivity" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."source_interview_id" IS DISTINCT FROM OLD."source_interview_id" OR NEW."supersedes_fact_id" IS DISTINCT FROM OLD."supersedes_fact_id" OR NEW."recorded_by" IS DISTINCT FROM OLD."recorded_by" OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key" OR NEW."recorded_at" IS DISTINCT FROM OLD."recorded_at" THEN RAISE EXCEPTION 'PreferenceFact evidence is immutable'; END IF;
+    IF OLD."state" <> 'candidate' AND (NEW."consent_state" IS DISTINCT FROM OLD."consent_state" OR NEW."accepted_by" IS DISTINCT FROM OLD."accepted_by" OR NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at") THEN RAISE EXCEPTION 'PreferenceFact acceptance evidence is immutable'; END IF;
+    IF NEW."state" = 'forgotten' AND (NEW."corrected_at" IS NOT NULL OR (OLD."state" = 'candidate' AND (NEW."consent_state" <> 'pending' OR NEW."accepted_by" IS NOT NULL OR NEW."accepted_at" IS NOT NULL))) THEN RAISE EXCEPTION 'forgotten PreferenceFact must retain only prior acceptance evidence'; END IF;
+    IF NOT ((OLD."state" = 'candidate' AND NEW."state" IN ('candidate', 'accepted', 'forgotten')) OR (OLD."state" = 'accepted' AND NEW."state" IN ('accepted', 'corrected', 'forgotten')) OR (OLD."state" = 'corrected' AND NEW."state" = 'corrected') OR (OLD."state" = 'forgotten' AND NEW."state" = 'forgotten')) THEN RAISE EXCEPTION 'invalid PreferenceFact lifecycle transition'; END IF;
+    IF NEW."state" = 'accepted' AND (NEW."consent_state" = 'pending' OR NEW."accepted_by" IS DISTINCT FROM NEW."user_id") THEN RAISE EXCEPTION 'accepted PreferenceFact requires owner consent and approval'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_corrected_preference_successor"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."state" = 'corrected' AND NOT EXISTS (SELECT 1 FROM "preference_facts" successor WHERE successor."supersedes_fact_id" = NEW."id") THEN RAISE EXCEPTION 'Corrected PreferenceFact requires exactly one committed successor'; END IF;
+    RETURN NULL;
+END;
 CREATE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE artifact_silo_id TEXT;
 BEGIN
@@ -4367,6 +4477,24 @@ ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_approval_check
     );
 ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_history_check" CHECK ("previous_revision_id" IS NULL OR "previous_revision_id" <> "id");
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_statement_check" CHECK (btrim("statement") <> '');
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_valid_check" CHECK (
+        btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
+        AND btrim("preference_key") <> '' AND btrim("statement") <> '' AND btrim("recorded_by") <> '' AND btrim("idempotency_key") <> ''
+        AND "confidence" >= 0 AND "confidence" <= 1 AND jsonb_typeof("provenance") = 'object'
+        AND (("provenance_kind" = 'explicit_statement' AND "source_message_id" IS NULL AND "source_interview_id" IS NULL)
+          OR (("provenance_kind" IN ('conversation_message', 'inferred')) AND "source_message_id" IS NOT NULL AND "source_interview_id" IS NULL)
+          OR ("provenance_kind" = 'interview' AND "source_message_id" IS NULL AND "source_interview_id" IS NOT NULL))
+        AND NOT ("sensitivity" = 'sensitive' AND "provenance_kind" = 'inferred')
+    );
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_history_check" CHECK ("supersedes_fact_id" IS NULL OR "supersedes_fact_id" <> "id");
+ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_lifecycle_check" CHECK (
+        ("state" = 'candidate' AND "consent_state" = 'pending' AND "accepted_by" IS NULL AND "accepted_at" IS NULL AND "corrected_at" IS NULL AND "forgotten_at" IS NULL)
+     OR ("state" = 'accepted' AND "consent_state" IN ('explicit', 'confirmed') AND "accepted_by" = "user_id" AND "accepted_at" IS NOT NULL AND "corrected_at" IS NULL AND "forgotten_at" IS NULL)
+     OR ("state" = 'corrected' AND "accepted_by" = "user_id" AND "accepted_at" IS NOT NULL AND "corrected_at" IS NOT NULL AND "forgotten_at" IS NULL)
+     OR ("state" = 'forgotten' AND "forgotten_at" IS NOT NULL AND "corrected_at" IS NULL AND
+         (("consent_state" = 'pending' AND "accepted_by" IS NULL AND "accepted_at" IS NULL)
+          OR ("consent_state" IN ('explicit', 'confirmed') AND "accepted_by" = "user_id" AND "accepted_at" IS NOT NULL)))
+    );
 ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configuration_changes_valid_check" CHECK (
         btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
         AND btrim("agent_service_id") <> '' AND btrim("source_thread_id") <> '' AND btrim("source_run_id") <> ''
@@ -4576,6 +4704,9 @@ CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "me
 CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_fact_catalog" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_fact_lifecycle"();
 CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
+CREATE TRIGGER "preference_facts_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "preference_facts" FOR EACH ROW EXECUTE FUNCTION "enforce_preference_fact_lifecycle"();
+CREATE CONSTRAINT TRIGGER "corrected_preference_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "preference_facts"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_preference_successor"();
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
 CREATE TRIGGER "integrations_closed_lifecycle"
   BEFORE INSERT OR UPDATE OR DELETE ON "integrations"

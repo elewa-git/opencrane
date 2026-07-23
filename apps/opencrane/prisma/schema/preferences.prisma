@@ -1,0 +1,62 @@
+enum PreferenceFactState {
+  Candidate @map("candidate")
+  Accepted  @map("accepted")
+  Corrected @map("corrected")
+  Forgotten @map("forgotten")
+}
+
+enum PreferenceFactConsentState {
+  Pending   @map("pending")
+  Explicit  @map("explicit")
+  Confirmed @map("confirmed")
+}
+
+enum PreferenceFactProvenanceKind {
+  ExplicitStatement @map("explicit_statement")
+  ConversationMessage @map("conversation_message")
+  Interview          @map("interview")
+  Inferred           @map("inferred")
+}
+
+enum PreferenceFactSensitivity {
+  Ordinary @map("ordinary")
+  Sensitive @map("sensitive")
+}
+
+/// One user-controlled, prompt-eligible preference fact. Its statement remains retained for immutable historical snapshots.
+model PreferenceFact {
+  id                  String                       @id @default(cuid())
+  siloId              String                       @map("silo_id")
+  userId              String                       @map("user_id")
+  personaProfileId    String                       @map("persona_profile_id")
+  preferenceKey       String                       @map("preference_key")
+  statement           String
+  state               PreferenceFactState          @default(Candidate)
+  consentState        PreferenceFactConsentState   @default(Pending) @map("consent_state")
+  provenanceKind      PreferenceFactProvenanceKind @map("provenance_kind")
+  provenance          Json
+  confidence          Decimal                      @db.Decimal(4, 3)
+  sensitivity         PreferenceFactSensitivity    @default(Ordinary)
+  sourceMessageId     String?                      @map("source_message_id")
+  sourceInterviewId   String?                      @map("source_interview_id")
+  supersedesFactId    String?                      @unique @map("supersedes_fact_id")
+  recordedBy          String                       @map("recorded_by")
+  acceptedBy          String?                      @map("accepted_by")
+  idempotencyKey      String                       @map("idempotency_key")
+  recordedAt          DateTime                     @default(now()) @map("recorded_at")
+  acceptedAt          DateTime?                    @map("accepted_at")
+  correctedAt         DateTime?                    @map("corrected_at")
+  forgottenAt         DateTime?                    @map("forgotten_at")
+  profile             PersonaProfile               @relation("PersonaPreferenceFacts", fields: [personaProfileId, userId], references: [id, userId], onDelete: Restrict)
+  sourceMessage       ConversationMessage?         @relation("PreferenceFactSourceMessage", fields: [sourceMessageId], references: [id], onDelete: Restrict)
+  sourceInterview     PersonaInterview?            @relation("PreferenceFactSourceInterview", fields: [sourceInterviewId], references: [id], onDelete: Restrict)
+  supersedes          PreferenceFact?              @relation("PreferenceFactCorrections", fields: [supersedesFactId], references: [id], onDelete: Restrict)
+  correction          PreferenceFact?              @relation("PreferenceFactCorrections")
+
+  @@index([siloId, userId, state])
+  @@index([personaProfileId, state])
+  @@index([sourceMessageId])
+  @@index([sourceInterviewId])
+  @@unique([siloId, userId, idempotencyKey])
+  @@map("preference_facts")
+}

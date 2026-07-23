@@ -61,6 +61,7 @@ model ConversationMessage {
   createdAt   DateTime                 @default(now()) @map("created_at")
   completedAt DateTime?                @map("completed_at")
   thread      ConversationThread       @relation(fields: [threadId], references: [id], onDelete: Restrict)
+  preferenceFacts PreferenceFact[]     @relation("PreferenceFactSourceMessage")
 
   @@index([threadId, createdAt, id])
   @@index([runId])

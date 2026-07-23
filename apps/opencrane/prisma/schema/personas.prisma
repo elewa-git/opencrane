@@ -79,6 +79,7 @@ model PersonaProfile {
   updatedAt        DateTime          @updatedAt @map("updated_at")
   interviews       PersonaInterview[]
   revisions        PersonaRevision[] @relation("PersonaProfileRevisions")
+  preferenceFacts  PreferenceFact[]  @relation("PersonaPreferenceFacts")
   activeRevision   PersonaRevision?  @relation("ActivePersonaRevision", fields: [id, activeRevisionId], references: [personaProfileId, id], onDelete: Restrict)
 
   @@unique([siloId, userId])
@@ -102,6 +103,7 @@ model PersonaInterview {
   questionSet        PersonaQuestionSet    @relation(fields: [questionSetId, questionSetVersion], references: [id, version], onDelete: Restrict)
   answers            PersonaInterviewAnswer[]
   revisions          PersonaRevision[]
+  preferenceFacts    PreferenceFact[] @relation("PreferenceFactSourceInterview")
 
   @@unique([id, personaProfileId, userId, questionSetId, questionSetVersion])
   @@index([personaProfileId, state])

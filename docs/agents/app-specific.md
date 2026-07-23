@@ -56,7 +56,7 @@ schema/baseline ownership in [`prisma.md`](./prisma.md).
 ## Personal-agent and execution domains (`libs/backend/agents/{personal,execution}/*`)
 
 Personal-agent product capabilities use the `backend-agents-personal-<d>` NX namespace under
-`libs/backend/agents/personal/<d>/main`: personas, conversations, memory, configuration, and revisions. They own a person's
+`libs/backend/agents/personal/<d>/main`: personas, conversations, memory, preferences, configuration, and revisions. They own a person's
 approved persona, conversation events, memory catalogue, future-snapshot configuration proposals, and transaction-fenced model-revision materialisation. Shared execution capabilities use
 `backend-agents-execution-<d>` under `libs/backend/agents/execution/`: `inputs/main` assembles one
 immutable `RunInputSnapshot`, `runs/main` owns the run lifecycle, and `protocol` admits runtime

@@ -25,6 +25,8 @@ export interface PromptCompilerRepositories
 	loadToolDefinitions(toolGrantIds: readonly string[]): Promise<readonly CompiledToolDefinition[]>;
 	/** Resolve durable memory-fact statements included in the prompt for the given references. */
 	loadMemoryFactStatements(memoryFactIds: readonly string[]): Promise<readonly string[]>;
+	/** Resolve retained preference statements frozen by the snapshot, including historical corrected facts. */
+	loadPreferenceFactStatements(preferenceFactIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */
 	loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve one-line availability summaries for the immutable skill revisions offered to the run. */
