@@ -56,7 +56,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-# The fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150) and no longer
+# The fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) and no longer
 # ships in this repo — OPENCRANE_CHART_DIR / --chart MUST point at a checked-out copy of it
 # (or at apps/_infra/deploy-k8s for a silo release) when reconfiguring OIDC.
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
@@ -119,7 +119,7 @@ _active_context="${KUBE_CONTEXT:-$(kubectl config current-context 2>/dev/null ||
 # Confirm the release exists — this is a CONFIGURATOR, not an installer.
 if ! helm ${KCTX[@]+"${KCTX[@]}"} -n "$NAMESPACE" status "$RELEASE" >/dev/null 2>&1; then
   err "Release '$RELEASE' not found in namespace '$NAMESPACE' (context: $_active_context)."
-  err "This script configures OIDC on an EXISTING install. Deploy first — the fleet-platform chart's deploy.sh (now in the WeOwnAI repo, italanta/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh."
+  err "This script configures OIDC on an EXISTING install. Deploy first — the fleet-platform chart's deploy.sh (now in the WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh."
   exit 1
 fi
 

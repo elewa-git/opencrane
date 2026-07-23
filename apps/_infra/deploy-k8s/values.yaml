@@ -21,7 +21,7 @@ global:
 #    inferred) that this install hosts MANY tenants — many orgs (ClusterTenants) and/or
 #    many isolated instances — in one cluster, so cross-tenant isolation is MANDATORY.
 #    The fleet profile (the fleet-platform chart's deploy.sh, now in the WeOwnAI repo per
-#    italanta/opencrane#150) sets this true. When true, the
+#    elewa-git/opencrane#150) sets this true. When true, the
 #    platform-namespace default-deny and the cross-instance deny render UNCONDITIONALLY,
 #    and a Helm `fail` guard REJECTS the render if their opt-out knobs are switched off
 #    (fail-closed: an install flagged multi-CT can never silently ship without the deny
@@ -131,7 +131,7 @@ fleetManager:
   # -- Render the cluster-wide fleet-manager (the singleton operator + fleet/super-admin API +
   #    registry DB + Zitadel IAM). MUST be true in exactly ONE release per cluster (the fleet
   #    install via the fleet-platform chart's deploy.sh, now in the WeOwnAI repo per
-  #    italanta/opencrane#150) and FALSE in every per-silo install (apps/_infra/deploy-k8s/deploy.sh) —
+  #    elewa-git/opencrane#150) and FALSE in every per-silo install (apps/_infra/deploy-k8s/deploy.sh) —
   #    two fleet-managers would contend over the cluster-scoped ClusterTenant CRs + IAM ownership.
   #    Default true so a single-box `helm install` runs both managers co-located.
   enabled: true
@@ -144,7 +144,7 @@ fleetManager:
   clusterTenantApi:
     enabled: true
   image:
-    repository: ghcr.io/italanta/opencrane-fleet-manager
+    repository: ghcr.io/elewa-git/opencrane-fleet-manager
     tag: latest
     pullPolicy: IfNotPresent
   # -- Fleet registry database (the cluster-wide singleton's OWN Postgres holding the
@@ -232,7 +232,7 @@ channelProxy:
   #    thread, and runtime-target decisions to OpenCrane.
   enabled: true
   image:
-    repository: ghcr.io/italanta/opencrane-channel-proxy
+    repository: ghcr.io/elewa-git/opencrane-channel-proxy
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
@@ -276,7 +276,7 @@ artifactService:
   # namespaces, so the server cannot read the service-only receipt signing key.
   namespace: ""
   image:
-    repository: ghcr.io/italanta/opencrane-artifact-service
+    repository: ghcr.io/elewa-git/opencrane-artifact-service
     tag: 0.1.0
     pullPolicy: IfNotPresent
   replicas: 1
@@ -309,7 +309,7 @@ agentController:
   # server release namespace.
   runtimeNamespace: ""
   image:
-    repository: ghcr.io/italanta/opencrane-agent-controller
+    repository: ghcr.io/elewa-git/opencrane-agent-controller
     digest: ""
     pullPolicy: IfNotPresent
   replicas: 1
@@ -350,7 +350,7 @@ agentController:
   runtimeProfile:
     name: personal-default
     image:
-      repository: ghcr.io/italanta/opencrane-agent-runtime
+      repository: ghcr.io/elewa-git/opencrane-agent-runtime
       digest: ""
       pullPolicy: IfNotPresent
     runtimeStreamUrl: ""
@@ -425,7 +425,7 @@ clustertenantManager:
     # -- Isolation tier for the self-seeded org: shared | dedicatedNodes | dedicatedCluster.
     tier: shared
   image:
-    repository: ghcr.io/italanta/opencrane-server
+    repository: ghcr.io/elewa-git/opencrane-server
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
@@ -733,7 +733,7 @@ litellm:
 # -- Default tenant pod settings. Runtime code versions are baked into this image.
 tenant:
   defaultImage:
-    repository: ghcr.io/italanta/opencrane-openclaw-tenant
+    repository: ghcr.io/elewa-git/opencrane-openclaw-tenant
     tag: openclaw-2026.6.11-cognee-2026.7.9
     pullPolicy: IfNotPresent
   defaultResources:
@@ -860,7 +860,7 @@ ingress:
     #    docs/agents/cluster-architecture.md → "Wildcard TLS".
     secretName: opencrane-wildcard-tls
 
-# -- Chart-native org-admin SPA (opencrane-ui frontend, italanta/opencrane#152). Serves
+# -- Chart-native org-admin SPA (opencrane-ui frontend, elewa-git/opencrane#152). Serves
 # the built `apps/opencrane-ui` Angular bundle from an in-cluster, unprivileged nginx —
 # the same seam as `docs` below, applied to the org-admin console instead of the docs site.
 #
@@ -882,7 +882,7 @@ controlPlaneSpa:
     # Built by .github/workflows/docker.yml (OPENCRANE_UI_IMAGE) from
     # apps/opencrane-ui/deploy/Dockerfile — a static `nx build opencrane-ui` bundle
     # served by nginxinc/nginx-unprivileged.
-    repository: ghcr.io/italanta/opencrane-ui
+    repository: ghcr.io/elewa-git/opencrane-ui
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
@@ -913,7 +913,7 @@ controlPlaneSpa:
 docs:
   enabled: false
   image:
-    repository: ghcr.io/italanta/docs
+    repository: ghcr.io/elewa-git/docs
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1

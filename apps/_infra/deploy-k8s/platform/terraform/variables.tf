@@ -67,9 +67,9 @@ variable "enable_artifact_registry"
 # disabled. Defaults to the public ghcr.io OpenCrane org.
 variable "registry_url"
 {
-  description = "Registry base URL for OpenCrane images when enable_artifact_registry=false (e.g. ghcr.io/italanta)."
+  description = "Registry base URL for OpenCrane images when enable_artifact_registry=false (e.g. ghcr.io/elewa-git)."
   type        = string
-  default     = "ghcr.io/italanta"
+  default     = "ghcr.io/elewa-git"
 }
 
 # Enable GCS-backed tenant storage (Workload Identity + GCS Fuse). When false
@@ -95,7 +95,7 @@ variable "enable_app_deploy"
 
 variable "fleet_chart_path"
 {
-  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (italanta/opencrane#150)
+  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (elewa-git/opencrane#150)
   # and no longer ships in this repo. Required only when enable_app_deploy=true — point it at a
   # checked-out copy of WeOwnAI's apps/fleet-platform chart.
   description = "Path to the fleet-platform Helm chart (now maintained in the WeOwnAI repo). Required when enable_app_deploy=true."

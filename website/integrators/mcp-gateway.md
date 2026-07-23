@@ -51,7 +51,7 @@ access workflows:
 | Org admin | `/api/v1/policies` | Manage AccessPolicies, including MCP allow/deny sets |
 
 The routes are mounted in
-[`libs/backend/server/gateways/mcp/main/src/routes`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/gateways/mcp/main/src/routes)
+[`libs/backend/server/gateways/mcp/main/src/routes`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/gateways/mcp/main/src/routes)
 and use the same authentication and authorisation gates as the OpenCrane UI. Custom
 integrations should use these routes or the generated contracts client rather than
 writing control-plane tables directly.

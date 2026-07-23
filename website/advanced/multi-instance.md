@@ -275,7 +275,7 @@ resource gating are modeled and enforced rather than implied by how you wrote th
 > `Tenant` in code. All users in an org connect through the org's single host `<org>.<base>`;
 > the identity-routing proxy (in the operator) routes each session to its pod — there are no
 > per-user subdomains. See the authoritative
-> [Tenancy Model](https://github.com/italanta/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant)
+> [Tenancy Model](https://github.com/elewa-git/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant)
 > for the full table and DNS hierarchy.
 
 > **The invariant the resource makes enforceable: one customer = one `ClusterTenant` = one

@@ -6,7 +6,7 @@
 # apps/_infra/deploy-k8s chart's opencrane-ui-spa Deployment/Service
 # (controlPlaneSpa.enabled) and Ingress path-split route `/` here, `/api` + `/gateway`
 # to the opencrane-ui backend. Replaces WeOwnAI's externally-applied
-# platform/Dockerfile.opencrane-ui + deploy-org-frontend.sh (italanta/opencrane#152).
+# platform/Dockerfile.opencrane-ui + deploy-org-frontend.sh (elewa-git/opencrane#152).
 
 # Build stage
 FROM node:22-bookworm-slim AS build

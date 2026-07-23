@@ -89,12 +89,12 @@ out of bounds.
 | `CHANNEL_PROXY_MAX_EVENT_BYTES` | Per-event byte cap on the SSE relay | `262144` |
 
 Built into `dist/apps/channel-proxy` by esbuild and imaged from `deploy/Dockerfile`
-(`ghcr.io/italanta/opencrane-channel-proxy`). Its Helm chart under `helm/` is a named-template
+(`ghcr.io/elewa-git/opencrane-channel-proxy`). Its Helm chart under `helm/` is a named-template
 library composed by the silo umbrella chart
 ([`apps/_infra/deploy-k8s`](../_infra/deploy-k8s/README.md)).
 The final image pins the upstream Node user's numeric UID and GID (`1000:1000`) so Kubernetes can
 enforce the chart's `runAsNonRoot` policy before the container starts.
-
+elewa-git
 ## See also
 
 - Parent index: [apps](../README.md)

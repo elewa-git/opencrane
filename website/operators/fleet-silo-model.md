@@ -16,7 +16,7 @@ OpenCrane's Stage 4 architecture splits platform management into two distinct ma
 ┌──────────────────────────────────────────────────────────────────┐
 │  FLEET PLANE  (one per cluster)                                  │
 │  namespace: opencrane-system                                     │
-│  image: ghcr.io/italanta/opencrane-fleet-manager                 │
+│  image: ghcr.io/elewa-git/opencrane-fleet-manager                 │
 │                                                                  │
 │  fleet-manager:                                                  │
 │    • ClusterTenant lifecycle (create / update / delete)          │
@@ -37,7 +37,7 @@ OpenCrane's Stage 4 architecture splits platform management into two distinct ma
 ┌──────────────────────────────────────────────────────────────────┐
 │  SILO PLANE  (one per ClusterTenant)                             │
 │  namespace: opencrane-<cluster-tenant>                           │
-│  image: ghcr.io/italanta/opencrane-clustertenant-manager         │
+│  image: ghcr.io/elewa-git/opencrane-clustertenant-manager         │
 │                                                                  │
 │  clustertenant-manager:                                          │
 │    • Tenant (UserTenant / OpenClaw pod) lifecycle                │
@@ -123,7 +123,7 @@ fleetManager:
     serviceAccountKeyKey: service-account-key
 ```
 
-When `existingSecret` is set and `fleetManager.clusterTenantApi.enabled` is true, the chart renders a namespaced `Role` + `RoleBinding` granting the fleet-manager's ServiceAccount `patch` on that single named Secret — the minimum RBAC surface for in-place key rotation. Source: [`apps/fleet-platform/templates/fleet-manager-zitadel-rotation-rbac.yaml`](https://github.com/italanta/opencrane/blob/main/apps/fleet-platform/templates/fleet-manager-zitadel-rotation-rbac.yaml).
+When `existingSecret` is set and `fleetManager.clusterTenantApi.enabled` is true, the chart renders a namespaced `Role` + `RoleBinding` granting the fleet-manager's ServiceAccount `patch` on that single named Secret — the minimum RBAC surface for in-place key rotation. Source: [`apps/fleet-platform/templates/fleet-manager-zitadel-rotation-rbac.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/fleet-platform/templates/fleet-manager-zitadel-rotation-rbac.yaml).
 
 ### Per-silo OIDC (clustertenant-manager)
 

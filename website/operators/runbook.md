@@ -280,7 +280,7 @@ database, not with caller-supplied recovery metadata.
 The repository's k3d acceptance path demonstrates the supported sequence end to end: create the
 source Cluster from the immutable baseline, take a Barman backup, recover a fresh Cluster without
 attaching bootstrap SQL, rebind application Secrets, and boot the silo from the recovered authority.
-See [`apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh).
+See [`apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh).
 
 ### Tenant runtime rollback
 

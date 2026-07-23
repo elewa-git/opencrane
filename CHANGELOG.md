@@ -868,13 +868,13 @@ First tagged release — a working multi-tenant OpenClaw platform you can deploy
 - Initial scaffold of the multi-tenant OpenClaw platform (operator, control-plane, Angular app,
   launch script). Folded into the 0.2.0 tag.
 
-[Unreleased]: https://github.com/italanta/opencrane/compare/0.6.1...HEAD
-[0.6.1]: https://github.com/italanta/opencrane/compare/0.6.0...0.6.1
-[0.6.0]: https://github.com/italanta/opencrane/compare/0.5.3...0.6.0
-[0.5.3]: https://github.com/italanta/opencrane/compare/0.5.2...0.5.3
-[0.5.2]: https://github.com/italanta/opencrane/compare/0.5.1...0.5.2
-[0.5.1]: https://github.com/italanta/opencrane/compare/0.5.0...0.5.1
-[0.5.0]: https://github.com/italanta/opencrane/compare/0.4.0...0.5.0
-[0.4.0]: https://github.com/italanta/opencrane/releases/tag/0.4.0
-[0.3.0]: https://github.com/italanta/opencrane/releases/tag/0.3.0
-[0.2.0]: https://github.com/italanta/opencrane/releases/tag/0.2.0
+[Unreleased]: https://github.com/elewa-git/opencrane/compare/0.6.1...HEAD
+[0.6.1]: https://github.com/elewa-git/opencrane/compare/0.6.0...0.6.1
+[0.6.0]: https://github.com/elewa-git/opencrane/compare/0.5.3...0.6.0
+[0.5.3]: https://github.com/elewa-git/opencrane/compare/0.5.2...0.5.3
+[0.5.2]: https://github.com/elewa-git/opencrane/compare/0.5.1...0.5.2
+[0.5.1]: https://github.com/elewa-git/opencrane/compare/0.5.0...0.5.1
+[0.5.0]: https://github.com/elewa-git/opencrane/compare/0.4.0...0.5.0
+[0.4.0]: https://github.com/elewa-git/opencrane/releases/tag/0.4.0
+[0.3.0]: https://github.com/elewa-git/opencrane/releases/tag/0.3.0
+[0.2.0]: https://github.com/elewa-git/opencrane/releases/tag/0.2.0

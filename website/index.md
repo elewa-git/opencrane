@@ -18,7 +18,7 @@ hero:
       link: /guide/getting-started
     - theme: alt
       text: View on GitHub
-      link: https://github.com/italanta/opencrane
+      link: https://github.com/elewa-git/opencrane
 
 features:
   - title: Give people a helpful AI teammate

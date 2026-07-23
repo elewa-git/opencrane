@@ -351,7 +351,7 @@ is a target authorization parameter, not a production-transition decision.
    reason in the audit ledger.
 
 The current projected-ServiceAccount parser tracked in
-[#221](https://github.com/italanta/opencrane/issues/221) must use namespace plus full ServiceAccount
+[#221](https://github.com/elewa-git/opencrane/issues/221) must use namespace plus full ServiceAccount
 identity. Dropping a name prefix or namespace is not an acceptable basis for the new model.
 
 ## Unified agent service model

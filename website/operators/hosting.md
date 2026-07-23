@@ -10,7 +10,7 @@
 > (the openclaw / `Tenant` CRD), routed to from the org host `<org>.<ClusterTenant-domain>`
 > via the identity-routing proxy. The **ClusterTenant** is the customer/isolation unit that
 > owns the base domain. See the authoritative
-> [Tenancy Model](https://github.com/italanta/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
+> [Tenancy Model](https://github.com/elewa-git/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
 
 ## 1. Goals & Principles
 

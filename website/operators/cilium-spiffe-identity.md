@@ -9,7 +9,7 @@ behind all the rules on this page.
 > [Networking & isolation](/operators/networking) — the two-plane cluster model and the public edge this identity layer sits behind; read that first for the overall shape.
 > [Identity & connection auth](/security/identity) — how a person signs in (Zitadel OIDC) and reaches their own assistant.
 > [Silo deployment model](/operators/silo-deployment) — how each customer's silo is installed as its own release.
-> [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the decision behind this model, and why it supersedes the earlier Linkerd choice.
+> [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the decision behind this model, and why it supersedes the earlier Linkerd choice.
 
 ---
 
@@ -166,4 +166,4 @@ relax it.
 - [Networking & isolation](/operators/networking) — the public edge, the two planes, and how the silo baseline composes with these identity rules
 - [Identity & connection auth](/security/identity) — how a person authenticates (Zitadel OIDC) and reaches their own assistant with no browser-held pod credential
 - [Silo IAM: inheritance & sharing](/integrators/silo-iam) — how a person's org-scoped identity flows into what their assistant may retrieve and act on
-- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision and why it supersedes ADR 0001 (Linkerd)
+- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision and why it supersedes ADR 0001 (Linkerd)

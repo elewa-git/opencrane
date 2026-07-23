@@ -43,7 +43,7 @@ resource "helm_release" "opencrane"
   create_namespace = true
   # Chart split (Option 2): the once-per-cluster FLEET chart (bootstrap + fleet-manager).
   # Per-org SILO charts deploy dynamically out-of-band, not as a static terraform release.
-  # The fleet-platform chart itself moved to the WeOwnAI repo (italanta/opencrane#150); pass its
+  # The fleet-platform chart itself moved to the WeOwnAI repo (elewa-git/opencrane#150); pass its
   # local path via var.fleet_chart_path.
   chart            = var.fleet_chart_path
   wait             = true

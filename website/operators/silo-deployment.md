@@ -152,7 +152,7 @@ Both the fleet-manager and clustertenant-manager deployments are always rendered
 - **Fleet-manager** renders its ClusterTenant lifecycle, billing, Zitadel-admin, and platform-DNS routes only when `fleetManager.clusterTenantApi.enabled=true`. The fleet-manager's cluster-scoped RBAC and the Zitadel rotation `Role`/`RoleBinding` are gated on the same flag.
 - **Clustertenant-manager** renders the tenant-facing surface (tenants, policies, groups, budgets, model routing, sessions) and holds ClusterTenant/OrgMembership as local read-models projected from the fleet.
 
-Source: [`apps/fleet-platform/templates/fleet-manager-deployment.yaml`](https://github.com/italanta/opencrane/blob/main/apps/fleet-platform/templates/fleet-manager-deployment.yaml), the app-owned [`apps/opencrane/helm/templates/_deployment.tpl`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/helm/templates/_deployment.tpl), and the silo's [`app-rollups.yaml`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/templates/app-rollups.yaml) composition file.
+Source: [`apps/fleet-platform/templates/fleet-manager-deployment.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/fleet-platform/templates/fleet-manager-deployment.yaml), the app-owned [`apps/opencrane/helm/templates/_deployment.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_deployment.tpl), and the silo's [`app-rollups.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/templates/app-rollups.yaml) composition file.
 
 ---
 

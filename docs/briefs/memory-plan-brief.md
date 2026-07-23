@@ -2,7 +2,7 @@
 
 ## Purpose
 
-This brief consolidates findings from a review of `memory-review.md` in the `italanta/opencrane` repository, plus follow-up research on Cognee's ingestion model, multi-tenancy, and security. It is intended as input to an implementation plan that builds on top of the existing `plan.md`.
+This brief consolidates findings from a review of `memory-review.md` in the `elewa-git/opencrane` repository, plus follow-up research on Cognee's ingestion model, multi-tenancy, and security. It is intended as input to an implementation plan that builds on top of the existing `plan.md`.
 
 ## Background
 
@@ -121,7 +121,7 @@ A focused proof-of-concept comparing Cognee vs pgvector-native vs LangChain/Llam
 
 ## Sources
 
-- [italanta/opencrane — memory-review.md](https://github.com/italanta/opencrane/blob/main/memory-review.md)
+- [elewa-git/opencrane — memory-review.md](https://github.com/elewa-git/opencrane/blob/main/memory-review.md)
 - [Cognee Documentation — Permissions System Overview](https://docs.cognee.ai/core-concepts/multi-user-mode/permissions-system/overview)
 - [Cognee Documentation — Permissions & Security](https://docs.cognee.ai/cognee-cloud/permissions-security)
 - [Cognee Documentation — Core Concepts Overview](https://docs.cognee.ai/core-concepts/overview)

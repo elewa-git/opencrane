@@ -8,7 +8,7 @@ access to **both** the opencrane-api and the user's own OpenClaw pod.
 > in code. All users in an org connect through the org's single host `<org>.<base>`; the
 > identity-routing proxy (in the ClusterTenant operator) routes each session to its pod.
 > The **ClusterTenant** is the customer/isolation unit that owns the org host. See the authoritative
-> [Tenancy Model](https://github.com/italanta/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
+> [Tenancy Model](https://github.com/elewa-git/opencrane/blob/main/docs/agents/cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
 > Below, "tenant pod" / "tenant gateway" means a UserTenant.
 
 > **Status legend:** ✅ implemented · 🔶 planned/target. The OIDC opencrane-api

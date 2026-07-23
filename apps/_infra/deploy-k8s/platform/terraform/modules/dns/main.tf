@@ -15,7 +15,7 @@
 # the install-time platform records, and the zone-WRITE identity the controllers share —
 # it must NOT write per-org/per-host records itself (the old imperative Cloud DNS client
 # is gone). See dns-endpoint.client.ts in the fleet-operator app (now in the WeOwnAI repo,
-# italanta/opencrane#150).
+# elewa-git/opencrane#150).
 #
 # Identity vs records are DECOUPLED by dependency. The zone + the shared DNS-writer GSA
 # need nothing from the running app, so they are created whenever this module runs (i.e.

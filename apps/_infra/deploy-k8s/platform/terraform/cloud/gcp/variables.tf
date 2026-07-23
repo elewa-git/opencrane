@@ -47,7 +47,7 @@ variable "image_tag"
 
 variable "fleet_chart_path"
 {
-  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (italanta/opencrane#150)
+  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (elewa-git/opencrane#150)
   # and no longer ships in this repo. Point this at a checked-out copy of WeOwnAI's
   # apps/fleet-platform chart (local path, or a `helm pull`-ed archive dir).
   description = "Path to the fleet-platform Helm chart (now maintained in the WeOwnAI repo)"

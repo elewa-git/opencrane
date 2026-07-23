@@ -80,7 +80,7 @@ key file is not PEM.
 | `ARTIFACT_MAX_UPLOAD_DURATION_MILLISECONDS` | Hard cap on a single upload's duration | `300000` |
 
 Built into `dist/apps/artifact-service` by esbuild and imaged from `deploy/Dockerfile`
-(`ghcr.io/italanta/opencrane-artifact-service`). Its Helm chart under `helm/` is a named-template
+(`ghcr.io/elewa-git/opencrane-artifact-service`). Its Helm chart under `helm/` is a named-template
 library composed by the silo umbrella chart
 ([`apps/_infra/deploy-k8s`](../_infra/deploy-k8s/README.md)).
 

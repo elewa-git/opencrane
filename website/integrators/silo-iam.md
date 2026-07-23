@@ -50,10 +50,10 @@ matter which principal carried either grant. Deny-over-Allow precedence is uncha
 and deterministic — it operates across the full merged candidate list.
 
 Source:
-[`grant-compiler.ts`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/grants/main/src/core/grant-compiler.ts)
+[`grant-compiler.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/grants/main/src/core/grant-compiler.ts)
 — `compileForPrincipals(principalIds, payloadType, prisma)`.
 
-[`tenant-contract.ts`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/tenancy/contract/main/src/routes/internal/tenant-contract.ts)
+[`tenant-contract.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/tenancy/contract/main/src/routes/internal/tenant-contract.ts)
 — the contract poll route that assembles the principal set and calls `compileForPrincipals`.
 
 ::: info Precedence rules
@@ -133,7 +133,7 @@ entitlement you do not currently hold, and sharing never escalates privilege.
 :::
 
 Source:
-[`routes/shares.ts`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/grants/main/src/routes/shares.ts)
+[`routes/shares.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/grants/main/src/routes/shares.ts)
 — the full share router with the least-privilege gate at step 5.
 
 ---
@@ -181,7 +181,7 @@ to Cognee. If they are identical, no write occurs. This **diff-gate** prevents
 redundant Cognee traffic on every contract poll.
 
 Source:
-[`core/grants/derive-dataset-membership.ts`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/grants/main/src/core/derive-dataset-membership.ts).
+[`core/grants/derive-dataset-membership.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/grants/main/src/core/derive-dataset-membership.ts).
 
 ### Resource share-groups (direct file and chat sharing)
 
@@ -201,7 +201,7 @@ The least-privilege rule applies here too: only a current member of the resource
 group may add further recipients. A user who does not hold the resource cannot share it.
 
 Source:
-[`routes/resource-shares.ts`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/grants/main/src/routes/resource-shares.ts).
+[`routes/resource-shares.ts`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/grants/main/src/routes/resource-shares.ts).
 
 ### Cognee sync mechanics
 

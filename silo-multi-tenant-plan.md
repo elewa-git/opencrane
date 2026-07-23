@@ -450,7 +450,7 @@ Prereqs: `kubectl` context = `opencrane-dev`; `gcloud` authed to `weownai-proto`
 containing `f6afafd` (the trustNothing fix).
 
 **Step 1 — Build the operator image with the crash fix.**
-Push the branch; CI (`.github/workflows/docker.yml`) builds `ghcr.io/italanta/opencrane-operator:sha-<shortsha>`.
+Push the branch; CI (`.github/workflows/docker.yml`) builds `ghcr.io/elewa-git/opencrane-operator:sha-<shortsha>`.
 ```bash
 git push
 echo "operator tag: sha-$(git rev-parse --short HEAD)"   # note this tag for step 2

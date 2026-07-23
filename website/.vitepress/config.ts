@@ -4,7 +4,7 @@ import { defineConfig } from 'vitepress'
 // stays '/'. DOCS_BASE can override it (e.g. '/opencrane/') for project-pages hosting.
 const base = process.env.DOCS_BASE ?? '/'
 
-const REPO = 'https://github.com/italanta/opencrane'
+const REPO = 'https://github.com/elewa-git/opencrane'
 
 export default defineConfig({
   base,

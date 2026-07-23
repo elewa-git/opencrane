@@ -44,7 +44,7 @@ Skills move from draft to shared ability through a governed pipeline:
    already in review.
 
 The implementation of the publication authority lives in
-[`libs/backend/server/agents/skills/main`](https://github.com/italanta/opencrane/blob/own-personal-ai-agent-setup/libs/backend/server/agents/skills/main).
+[`libs/backend/server/agents/skills/main`](https://github.com/elewa-git/opencrane/blob/own-personal-ai-agent-setup/libs/backend/server/agents/skills/main).
 The public product workflow builds on that authority rather than restoring an OCI bundle
 registry or compatibility route.
 

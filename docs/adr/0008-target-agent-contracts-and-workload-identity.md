@@ -1,7 +1,7 @@
 # ADR 0008: Target agent contracts and workload identity
 
 **Status:** Accepted
-**Origin:** [#245](https://github.com/italanta/opencrane/issues/245)
+**Origin:** [#245](https://github.com/elewa-git/opencrane/issues/245)
 
 ## Context
 

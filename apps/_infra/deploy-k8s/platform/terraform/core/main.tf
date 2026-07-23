@@ -56,7 +56,7 @@ variable "helm_values_file"
 
 variable "fleet_chart_path"
 {
-  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (italanta/opencrane#150)
+  # The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (elewa-git/opencrane#150)
   # and no longer ships in this repo. Point this at a checked-out copy of WeOwnAI's
   # apps/fleet-platform chart (local path, or a `helm pull`-ed archive dir).
   description = "Path to the fleet-platform Helm chart (now maintained in the WeOwnAI repo)"
@@ -78,7 +78,7 @@ resource "helm_release" "opencrane"
   # (bootstrap + fleet-manager). Per-org SILO charts (apps/_infra/deploy-k8s) are deployed
   # DYNAMICALLY out-of-band (apps/_infra/deploy-k8s/deploy.sh today; the fleet operator auto-stamps them in S2),
   # so they are intentionally NOT a static terraform release.
-  # The fleet-platform chart itself moved to the WeOwnAI repo (italanta/opencrane#150); pass its
+  # The fleet-platform chart itself moved to the WeOwnAI repo (elewa-git/opencrane#150); pass its
   # local path via var.fleet_chart_path.
   chart      = var.fleet_chart_path
   namespace  = kubernetes_namespace.opencrane.metadata[0].name

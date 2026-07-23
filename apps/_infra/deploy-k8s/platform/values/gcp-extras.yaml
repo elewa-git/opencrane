@@ -5,7 +5,7 @@
 # GKE install — the baseline in values/gcp.yaml runs as standard k8s.
 #
 # Usage (assumes a checked-out copy of the fleet-platform chart, which moved to the
-# WeOwnAI repo per italanta/opencrane#150):
+# WeOwnAI repo per elewa-git/opencrane#150):
 #   helm install opencrane apps/fleet-platform \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml \

@@ -12,7 +12,7 @@
 
 | Key | Default | Purpose |
 |-----|---------|---------|
-| `clustertenantManager.image.repository` | `ghcr.io/italanta/opencrane-clustertenant-manager` | Container image registry and name. |
+| `clustertenantManager.image.repository` | `ghcr.io/elewa-git/opencrane-clustertenant-manager` | Container image registry and name. |
 | `clustertenantManager.image.tag` | `latest` | Image tag. Pinned at deploy time via `--opencrane-server-tag` (image tags must be restated per invocation because `--reset-then-reuse-values` re-applies chart defaults for unsupplied keys). |
 | `clustertenantManager.image.pullPolicy` | `IfNotPresent` | Image pull policy; `Always` forces a pull on every pod start. |
 | `clustertenantManager.replicas` | `1` | Number of clustertenant-manager pod replicas. Increase for HA; the Helm chart does not currently auto-scale based on load. |

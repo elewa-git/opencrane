@@ -68,7 +68,7 @@ stay on the server — the browser never holds them.
 How model resolution, allowlists, and savings measurement work under the hood is covered in
 the [API overview → Model routing](/reference/api-overview#model-routing). The full operator
 recipe for turning on measurement lives at
-[`docs/operators/routing-measurement.md`](https://github.com/italanta/opencrane/blob/main/docs/operators/routing-measurement.md).
+[`docs/operators/routing-measurement.md`](https://github.com/elewa-git/opencrane/blob/main/docs/operators/routing-measurement.md).
 
 ## See also
 

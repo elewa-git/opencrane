@@ -12,7 +12,7 @@
 #   scripts/config-docs-coverage.sh --keys-only apps/_infra/deploy-k8s   # dump inventory
 #   scripts/config-docs-coverage.sh --strict         # exit 1 when gaps exist
 #
-# The fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150) — pass
+# The fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) — pass
 # --chart <path-to-checked-out-copy> to check it; it is no longer in the default list.
 #
 # A key counts as documented when its full dotted path (e.g. `gatewayProxy.

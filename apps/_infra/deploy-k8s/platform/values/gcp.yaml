@@ -1,6 +1,6 @@
 # GCP / GKE values for OpenCrane — PLAIN-KUBERNETES baseline.
 #
-# NOTE: the fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150); the
+# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
 # usage below assumes a checked-out copy of it.
 # Usage: helm install opencrane apps/fleet-platform -f apps/_infra/deploy-k8s/platform/values/gcp.yaml
 #
@@ -32,7 +32,7 @@ clustertenantManager:
 litellm:
   enabled: true
   # endpoint is derived by opencrane.litellmEndpoint (see values.yaml in the fleet-platform
-  # chart, now in the WeOwnAI repo per italanta/opencrane#150).
+  # chart, now in the WeOwnAI repo per elewa-git/opencrane#150).
   existingSecret: opencrane-litellm
   generateMasterKey: false
   existingDatabaseSecret: opencrane-litellm-db

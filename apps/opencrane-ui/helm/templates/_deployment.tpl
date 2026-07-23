@@ -1,5 +1,5 @@
 {{- define "opencrane.ui.deployment" -}}
-{{- /* Chart-native org-admin SPA (opencrane-ui frontend, italanta/opencrane#152).
+{{- /* Chart-native org-admin SPA (opencrane-ui frontend, elewa-git/opencrane#152).
        Only rendered when controlPlaneSpa.enabled — the default OFF preserves today's
        external-Service ingress.sameOrigin.spaService behaviour untouched. See
        controlPlaneSpa in values.yaml for the cutover story. */ -}}

@@ -49,7 +49,7 @@ token explicitly per attempt.
 Deployment-only. It creates no Pods on its own; the control-plane launcher creates managed-runtime
 Jobs into this namespace under the managed identity profile. The live-Obot end-to-end proof of a
 managed agent (and the subsequent deletion of the bespoke `apps/feat-central-agents` harvester) is a
-NAMED LATER GATE tracked under [#337](https://github.com/italanta/opencrane/issues/337).
+NAMED LATER GATE tracked under [#337](https://github.com/elewa-git/opencrane/issues/337).
 
 ## See also
 

@@ -6,7 +6,7 @@
 #
 # It authenticates to the Zitadel Management API with the platform service-account key using the
 # JWT-bearer profile (the same credential + flow the fleet-manager's ZitadelManagementClient uses:
-# zitadel-client.ts in the fleet-operator app, now in the WeOwnAI repo per italanta/opencrane#150),
+# zitadel-client.ts in the fleet-operator app, now in the WeOwnAI repo per elewa-git/opencrane#150),
 # then flips `allowRegister` on the
 # org's login policy — creating the org-scoped policy if it is still inheriting the instance default.
 #

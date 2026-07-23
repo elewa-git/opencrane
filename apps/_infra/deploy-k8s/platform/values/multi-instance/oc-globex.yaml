@@ -1,7 +1,7 @@
 # Reference values — OpenCrane instance "globex" (native multi-instance, single cluster).
 #
 # Install (CRDs are installed ONCE cluster-wide first — see docs/multi-instance.md).
-# NOTE: the fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150); the
+# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
 # paths below assume a checked-out copy of it.
 #   kubectl apply -f apps/fleet-platform/crds/
 #   helm install oc-globex apps/fleet-platform -n oc-globex --create-namespace --skip-crds \

@@ -21,7 +21,7 @@ The current interval worker described below is the migration starting point, not
 boundary: its useful behaviour (normalisation, checkpointing, scoped Cognee writes) is re-expressed as
 a packaged central-agent definition over an approved Obot MCP server, after which the bespoke
 connector and its direct credential handling are removed. See the direct-refactor plan's Phase E2 and
-issue [#129](https://github.com/italanta/opencrane/issues/129) for the full model.
+issue [#129](https://github.com/elewa-git/opencrane/issues/129) for the full model.
 
 ## Loop (`src/index.ts`)
 

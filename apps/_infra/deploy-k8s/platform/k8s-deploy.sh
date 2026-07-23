@@ -11,7 +11,7 @@
 # and then call this script.
 #
 # Usage (normally invoked via a profile — the fleet-platform chart's deploy.sh (now in the
-# WeOwnAI repo, italanta/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
+# WeOwnAI repo, elewa-git/opencrane#150) or apps/_infra/deploy-k8s/deploy.sh — which preset
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
@@ -122,7 +122,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
-# app (the fleet chart, now in the WeOwnAI repo per italanta/opencrane#150; apps/_infra/deploy-k8s
+# app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
 # = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
 # own chart dir before exec'ing this engine; running k8s-deploy.sh directly without it fails loud
 # rather than guessing.
@@ -277,7 +277,7 @@ PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
 # mandatory rather than advisory. It is a deliberate flag (never inferred), so the fail-closed
 # checks below can trust it: preflight makes the NetworkPolicy-enforcing-CNI check FATAL (not
 # advisory) under multi-CT, and the fleet profile passes it so the fleet-platform chart's
-# deploy.sh (now in the WeOwnAI repo, italanta/opencrane#150) runs a mandatory preflight.
+# deploy.sh (now in the WeOwnAI repo, elewa-git/opencrane#150) runs a mandatory preflight.
 # Also via OPENCRANE_MULTI_CT=1.
 MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 
@@ -453,7 +453,7 @@ _run_preflight() {
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
   #    sits in ImagePullBackOff. A best-effort manifest check (skopeo/crane/docker) that
   #    only WARNS if no inspector is available (we never block on a missing local tool).
-  local _img="ghcr.io/italanta/opencrane-clustertenant-manager:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
+  local _img="ghcr.io/elewa-git/opencrane-clustertenant-manager:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
   if command -v skopeo >/dev/null 2>&1; then
     skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
   elif command -v crane >/dev/null 2>&1; then

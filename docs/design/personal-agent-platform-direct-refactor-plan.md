@@ -295,24 +295,24 @@ tests, deploys, restores, and operates without any predecessor-system assumption
 
 | Issue | Direct-refactor disposition |
 |---|---|
-| [#117](https://github.com/italanta/opencrane/issues/117) | Apply enforcing CNI and identity-matrix work to target runtime profiles |
-| [#127](https://github.com/italanta/opencrane/issues/127) | Retain default-deny, per-silo routing, encrypted-storage preflight, and live probes |
-| [#128](https://github.com/italanta/opencrane/issues/128) | Target Obot custody, grants, and runtime-neutral MCP; delete fake success |
-| [#129](https://github.com/italanta/opencrane/issues/129) | AgentService/Revision/Run/schedule epic |
-| [#133](https://github.com/italanta/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#135](https://github.com/italanta/opencrane/issues/135) | Remove broad provider-secret broadcast with its legacy owner |
-| [#150](https://github.com/italanta/opencrane/issues/150) | Keep only target fleet/silo lifecycle and OIDC contracts |
-| [#154](https://github.com/italanta/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
-| [#162](https://github.com/italanta/opencrane/issues/162) | Keep target chart-native UI deployment work |
-| [#174](https://github.com/italanta/opencrane/issues/174) | Fix bounded target LiteLLM provisioning and reconcile behavior |
-| [#220](https://github.com/italanta/opencrane/issues/220) | Carry least privilege into target workloads; delete OpenClaw-specific scope |
-| [#221](https://github.com/italanta/opencrane/issues/221) | Generalize canonical KSA identity into the target identity matrix |
-| [#222](https://github.com/italanta/opencrane/issues/222) | Artifact-backed, scanned, signed skills and isolated Python execution |
-| [#224](https://github.com/italanta/opencrane/issues/224) | Target model/cost/provider/budget console |
-| [#225](https://github.com/italanta/opencrane/issues/225) | Keep runtime-neutral stream/render/artifact/security work; delete gateway scope |
-| [#226](https://github.com/italanta/opencrane/issues/226) | Membership management over authoritative target APIs |
-| [#227](https://github.com/italanta/opencrane/issues/227) | Delete replaced packages and images as their owning slices land |
-| [#231](https://github.com/italanta/opencrane/issues/231) | Introduce final names directly; no aliases or legacy DNS preservation |
+| [#117](https://github.com/elewa-git/opencrane/issues/117) | Apply enforcing CNI and identity-matrix work to target runtime profiles |
+| [#127](https://github.com/elewa-git/opencrane/issues/127) | Retain default-deny, per-silo routing, encrypted-storage preflight, and live probes |
+| [#128](https://github.com/elewa-git/opencrane/issues/128) | Target Obot custody, grants, and runtime-neutral MCP; delete fake success |
+| [#129](https://github.com/elewa-git/opencrane/issues/129) | AgentService/Revision/Run/schedule epic |
+| [#133](https://github.com/elewa-git/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
+| [#135](https://github.com/elewa-git/opencrane/issues/135) | Remove broad provider-secret broadcast with its legacy owner |
+| [#150](https://github.com/elewa-git/opencrane/issues/150) | Keep only target fleet/silo lifecycle and OIDC contracts |
+| [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
+| [#162](https://github.com/elewa-git/opencrane/issues/162) | Keep target chart-native UI deployment work |
+| [#174](https://github.com/elewa-git/opencrane/issues/174) | Fix bounded target LiteLLM provisioning and reconcile behavior |
+| [#220](https://github.com/elewa-git/opencrane/issues/220) | Carry least privilege into target workloads; delete OpenClaw-specific scope |
+| [#221](https://github.com/elewa-git/opencrane/issues/221) | Generalize canonical KSA identity into the target identity matrix |
+| [#222](https://github.com/elewa-git/opencrane/issues/222) | Artifact-backed, scanned, signed skills and isolated Python execution |
+| [#224](https://github.com/elewa-git/opencrane/issues/224) | Target model/cost/provider/budget console |
+| [#225](https://github.com/elewa-git/opencrane/issues/225) | Keep runtime-neutral stream/render/artifact/security work; delete gateway scope |
+| [#226](https://github.com/elewa-git/opencrane/issues/226) | Membership management over authoritative target APIs |
+| [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete replaced packages and images as their owning slices land |
+| [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final names directly; no aliases or legacy DNS preservation |
 
 ## Staffing and execution
 

@@ -30,7 +30,7 @@ code:
 ```bash
 # Pin a specific OpenCrane release, then generate a typed client locally.
 curl -fsSL -o openapi/opencrane.json \
-  https://github.com/italanta/opencrane/releases/download/<tag>/openapi.json
+  https://github.com/elewa-git/opencrane/releases/download/<tag>/openapi.json
 npx openapi-typescript openapi/opencrane.json -o src/api/generated.ts
 ```
 
@@ -45,4 +45,4 @@ the implementation.
 - [API reference (interactive)](/reference/api)
 - [API overview](/reference/api-overview)
 - Full package README:
-  [`libs/contracts/README.md`](https://github.com/italanta/opencrane/blob/main/libs/contracts/README.md)
+  [`libs/contracts/README.md`](https://github.com/elewa-git/opencrane/blob/main/libs/contracts/README.md)

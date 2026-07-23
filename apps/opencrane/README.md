@@ -139,7 +139,7 @@ Read from the environment at startup.
 | `OPENCRANE_PROJECTION_REPAIR_INTERVAL_SECONDS` | Projection-repair loop cadence | `60` |
 
 Built into `dist/apps/opencrane` by esbuild and imaged from `deploy/Dockerfile`
-(`ghcr.io/italanta/opencrane-server`), with the repository root as build context. Its Helm chart under
+(`ghcr.io/elewa-git/opencrane-server`), with the repository root as build context. Its Helm chart under
 `helm/` is a named-template library (Deployment, RBAC, Services, ingress, certificate, NetworkPolicy)
 composed by the silo umbrella chart — see [`HELM.md`](./HELM.md).
 The pod runs as uid/gid 1000 with `fsGroup: 1000`; projected ArtifactStore key files use mode `0440`,
@@ -151,7 +151,7 @@ gateways, the GKE metadata endpoint when selected, and the cross-namespace Artif
 Shared and BYO dependencies must use HTTPS; installations that need hostname-level external
 restrictions should add Cilium FQDN policy.
 
-## See also
+## See alselewa-git
 
 - Parent index: [apps](../README.md)
 - Composed logic: [libs/backend/server](../../libs/backend/server/README.md)

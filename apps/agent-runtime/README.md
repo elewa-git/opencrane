@@ -126,7 +126,7 @@ assignment, and registers the unique first Pod. The offline conformance harness 
 matrix (`tests/test_conformance.py`, `tests/test_fault_matrix.py`) are built and CI-runnable; the
 live-LiteLLM conformance run over the pinned `pydantic-ai` package, the driver adoption evidence, and
 the corresponding OpenClaw loop deletion remain gated on
-[#337](https://github.com/italanta/opencrane/issues/337) (ADR 0010) and are not exercised offline.
+[#337](https://github.com/elewa-git/opencrane/issues/337) (ADR 0010) and are not exercised offline.
 
 ## See also
 

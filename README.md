@@ -155,7 +155,7 @@ Legend:   [live] live today      [partial] partial / gated      [desired] desire
 | Docs site | `website/` | VitePress documentation site published to GitHub Pages |
 
 > The fleet operator (`apps/fleet-operator/`) and fleet chart (`apps/fleet-platform/`) moved to
-> the [WeOwnAI](https://github.com/italanta/WeOwnAI) repo (italanta/opencrane#150); this repo now
+> the [WeOwnAI](https://github.com/elewa-git/WeOwnAI) repo (elewa-git/opencrane#150); this repo now
 > hosts only the standalone silo/ClusterTenant template.
 
 ## Documentation
@@ -200,7 +200,7 @@ The deploy scripts can provision the cluster too — `--provision local|gke|vps`
 
 ```bash
 # One command: provision a local k3d cluster AND install the fleet onto it.
-# The fleet-platform chart's deploy.sh now lives in the WeOwnAI repo (italanta/opencrane#150) —
+# The fleet-platform chart's deploy.sh now lives in the WeOwnAI repo (elewa-git/opencrane#150) —
 # check that out first, e.g.: ../weownai/apps/fleet-platform/deploy.sh --provision local --base-domain opencrane.local
 
 # Add an organisation (silo) once the fleet is up:
@@ -213,7 +213,7 @@ For fast dev iteration with locally-built images, the `apps/_infra/deploy-k8s/pl
 
 ```bash
 # One command: provision a GKE cluster (Terraform, internally) AND install the fleet.
-# The fleet-platform chart's deploy.sh now lives in the WeOwnAI repo (italanta/opencrane#150) —
+# The fleet-platform chart's deploy.sh now lives in the WeOwnAI repo (elewa-git/opencrane#150) —
 # check that out first, e.g.: ../weownai/apps/fleet-platform/deploy.sh --provision gke \
 #   --project-id my-project --base-domain opencrane.ai
 
@@ -222,7 +222,7 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant acme --base-domain opencrane.ai
 
 # Or provision + deploy the fleet AND one seeded org in a single pass (FLEET_CHART_DIR must
-# point at a checked-out copy of WeOwnAI's apps/fleet-platform — see italanta/opencrane#150)
+# point at a checked-out copy of WeOwnAI's apps/fleet-platform — see elewa-git/opencrane#150)
 FLEET_CHART_DIR=../weownai/apps/fleet-platform \
 apps/_infra/deploy-k8s/platform/deploy-single-tenant.sh --provision gke \
   --project-id my-project --base-domain opencrane.ai \

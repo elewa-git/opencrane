@@ -97,7 +97,7 @@ PROFILE_SET=(
   --no-ingress-nginx
   --no-external-dns
   # A silo NEVER runs the cluster-wide fleet-manager — that singleton lives in the fleet install
-  # (the fleet-platform chart's deploy.sh, now in the WeOwnAI repo per italanta/opencrane#150).
+  # (the fleet-platform chart's deploy.sh, now in the WeOwnAI repo per elewa-git/opencrane#150).
   # Two fleet-managers would contend over the ClusterTenant CRs + IAM.
   --set "fleetManager.enabled=false"
   --set "fleetManager.clusterTenantApi.enabled=false"

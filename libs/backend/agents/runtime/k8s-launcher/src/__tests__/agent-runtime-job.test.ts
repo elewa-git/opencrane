@@ -23,7 +23,7 @@ function _Assignment(): AgentRuntimeJobAssignment
 function _Profile(): AgentRuntimeJobProfile
 {
 	return {
-		image: "ghcr.io/italanta/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+		image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 		imagePullPolicy: "IfNotPresent",
 		runtimeStreamUrl: "http://opencrane-server.opencrane-silo-1.svc.cluster.local:3001/api/internal/agent-runtime",
 		litellmBaseUrl: "http://litellm.opencrane-silo-1.svc.cluster.local:4000",
@@ -101,9 +101,9 @@ describe("personal-runtime attempt Job", function _Suite()
 	{
 		expect(function _InternetEndpoint() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), runtimeStreamUrl: "https://example.com/runtime" }); }).toThrow(/in-cluster HTTP stream URL/);
 		expect(function _InvalidAttempt() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), attempt: 0 }, _Profile()); }).toThrow(/positive safe integer/);
-		expect(function _MutableImageTag() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), image: "ghcr.io/italanta/opencrane-agent-runtime:latest" }); }).toThrow(/immutable image/);
+		expect(function _MutableImageTag() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), image: "ghcr.io/elewa-git/opencrane-agent-runtime:latest" }); }).toThrow(/immutable image/);
 		expect(function _InvalidPullPolicy() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), imagePullPolicy: "Sometimes" as "Always" }); }).toThrow(/image pull policy/);
-		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-silo-1" }, _Profile()); }).toThrow(/different namespaces/);
+		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-sielewa-git _Profile()); }).toThrow(/different namespaces/);
 		expect(function _UnboundedScratch() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), scratchSize: "2Gi" }); }).toThrow(/bounded scratch/);
 		expect(function _MissingResourceLimits() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), resources: {} }); }).toThrow(/CPU and memory requests/);
 		expect(function _MissingBootstrapReference() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), bootstrapReference: "" }, _Profile()); }).toThrow(/invalid authority coordinate/);

@@ -37,8 +37,8 @@ the target, refined by the
 
 Toolkit selection remains evidence-driven: the offline Phase E conformance harness and fault-injection
 matrix are built and CI-runnable, but choosing and adopting the exact-pinned driver waits on the
-live-LiteLLM conformance leg, gated on [#337](https://github.com/italanta/opencrane/issues/337)
-(→ [#246](https://github.com/italanta/opencrane/issues/246)).
+live-LiteLLM conformance leg, gated on [#337](https://github.com/elewa-git/opencrane/issues/337)
+(→ [#246](https://github.com/elewa-git/opencrane/issues/246)).
 
 ## Current state
 
@@ -90,12 +90,12 @@ agent-runtime storage is mounted scratch and never the long-term home for user d
 
 Delete replaced legacy schemas, Tenant/AccessPolicy authority, OpenClaw imports, static agent-token
 paths, broad secret broadcasts, obsolete topology switches, and unowned deployables in the same
-slices. CI rejects reintroduction. [#117](https://github.com/italanta/opencrane/issues/117) supplies
-the enforcing-CNI work; [#221](https://github.com/italanta/opencrane/issues/221) generalizes the
-identity matrix; [#128](https://github.com/italanta/opencrane/issues/128) becomes the target Obot
+slices. CI rejects reintroduction. [#117](https://github.com/elewa-git/opencrane/issues/117) supplies
+the enforcing-CNI work; [#221](https://github.com/elewa-git/opencrane/issues/221) generalizes the
+identity matrix; [#128](https://github.com/elewa-git/opencrane/issues/128) becomes the target Obot
 adapter and fresh user-authorized integration flow — seeded by porting PR #241's reviewed Obot
 custody/credential/discovery slices from `main` per
-[#255](https://github.com/italanta/opencrane/issues/255).
+[#255](https://github.com/elewa-git/opencrane/issues/255).
 
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
@@ -128,32 +128,32 @@ approval-DECISION HTTP endpoint and the steering-INGEST HTTP surface are the ope
 Phase F (#224), so approval and steering are not end-to-end live. The offline conformance harness and
 fault-injection matrix ARE built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence); still gated on
-[#337](https://github.com/italanta/opencrane/issues/337) are the live-LiteLLM conformance leg,
+[#337](https://github.com/elewa-git/opencrane/issues/337) are the live-LiteLLM conformance leg,
 driver adoption evidence, and OpenClaw loop deletion — none of which has happened. The remaining
 E1/E2 product capabilities below are also incomplete.
 
-**Runtime lane** (→ [#246](https://github.com/italanta/opencrane/issues/246)): implement
+**Runtime lane** (→ [#246](https://github.com/elewa-git/opencrane/issues/246)): implement
 `RunInputSnapshot`, the TypeScript-owned prompt compiler, the language-neutral `AgentRuntimeProtocol v1`
 ([ADR 0010](docs/adr/0010-language-neutral-agent-runtime.md)), independently authored target fixtures,
 Pydantic-AI-first qualification against the target LiteLLM matrix, one exact-pinned driver, the reliability envelope,
 interview-generated PersonaRevision and PreferenceFact learning, multimodal and document authoring,
 and governed Python skill Jobs
-([#222](https://github.com/italanta/opencrane/issues/222),
-[#243](https://github.com/italanta/opencrane/issues/243)).
+([#222](https://github.com/elewa-git/opencrane/issues/222),
+[#243](https://github.com/elewa-git/opencrane/issues/243)).
 
 **AgentService lane:** implement AgentService/Revision/Run, organization/department/team/project/
 personal/user sharing, schedules, one-attempt Jobs, approvals, effective access, audit, cost, and the
-one-way personal→managed boundary ([#129](https://github.com/italanta/opencrane/issues/129)).
+one-way personal→managed boundary ([#129](https://github.com/elewa-git/opencrane/issues/129)).
 **Central agents** — org-, department-, team-, or otherwise shared managed AgentServices that run on a
 schedule or a specific trigger to do one bounded task — run on the same runtime substrate as personal
 agents but under a narrower, connector-scoped workload identity independent of any human user. They
 reach external systems only through Obot-custodied MCP servers, instantiable per connected source. The
 legacy ingestion interval worker and its direct Cognee writes are deleted.
 Conversation-initiated config changes (always-granted `upgrade_session` tool,
-logged persona refresh, apply-at-next-snapshot) → [#318](https://github.com/italanta/opencrane/issues/318).
+logged persona refresh, apply-at-next-snapshot) → [#318](https://github.com/elewa-git/opencrane/issues/318).
 
-**Central-agents sub-lane** (slice 6, [#332](https://github.com/italanta/opencrane/issues/332) — closes
-[#129](https://github.com/italanta/opencrane/issues/129)): BUILT (offline) — the scheduler semantics
+**Central-agents sub-lane** (slice 6, [#332](https://github.com/elewa-git/opencrane/issues/332) — closes
+[#129](https://github.com/elewa-git/opencrane/issues/129)): BUILT (offline) — the scheduler semantics
 (`backend-server-agent-scheduling`, composed inside `apps/opencrane`: cron+timezone eval, missed-run
 catch-up, overlap/backoff/suspension, idempotent run creation through the existing
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
@@ -166,7 +166,7 @@ tested), and the first packaged central-agent DEFINITION (the harvester expresse
 `AgentService` + schedule + Obot MCP assignment, Obot stubbed). NOT done — a NAMED LATER GATE:
 **the harvesting-central-agent live-Obot proof**, which blocks the reaper deletion of
 `apps/feat-central-agents`, its bespoke Slack connector, and the `HarvestingCursor` table; tracked
-under [#337](https://github.com/italanta/opencrane/issues/337). Until that proof lands,
+under [#337](https://github.com/elewa-git/opencrane/issues/337). Until that proof lands,
 `apps/feat-central-agents` and `HarvestingCursor` stay in place untouched.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
@@ -177,8 +177,8 @@ isolation, cancellation, provider, and artifact tests with no OpenClaw compatibi
 Deliver one OpenCrane API/UI for conversation, persona, memory, agent catalog and revisions,
 schedules and runs, approvals, assets, skills, membership, effective-access explanation, audit,
 health, model/cost/budget, and runtime versions
-([#224](https://github.com/italanta/opencrane/issues/224),
-[#226](https://github.com/italanta/opencrane/issues/226)). Upstream consoles remain diagnostic.
+([#224](https://github.com/elewa-git/opencrane/issues/224),
+[#226](https://github.com/elewa-git/opencrane/issues/226)). Upstream consoles remain diagnostic.
 
 Exit: named end-to-end user and operator journeys work only through the target APIs and UI;
 parallel legacy product surfaces are deleted.
@@ -197,8 +197,8 @@ workspace surfaces, legacy CRDs and schemas, projections, `feat-skill-registry`,
 `feat-central-agents`, Zot-only paths, Linkerd, obsolete topology values, old images/secrets/docs/
 tests, and temporary feature-prefixed naming. Any remaining item blocks qualification and is removed
 in its owning replacement phase, not deferred here
-([#227](https://github.com/italanta/opencrane/issues/227),
-[#231](https://github.com/italanta/opencrane/issues/231)). Update README, CHANGELOG, website,
+([#227](https://github.com/elewa-git/opencrane/issues/227),
+[#231](https://github.com/elewa-git/opencrane/issues/231)). Update README, CHANGELOG, website,
 runbooks, generated clients, and CI forbidden-reference checks.
 
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
@@ -208,26 +208,26 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 
 | Issue | Target-state action |
 |---|---|
-| [#127](https://github.com/italanta/opencrane/issues/127) | Keep enforcing CNI, per-silo routing, encrypted-storage preflights, and live probes |
-| [#128](https://github.com/italanta/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
-| [#129](https://github.com/italanta/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
-| [#133](https://github.com/italanta/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#135](https://github.com/italanta/opencrane/issues/135) | Remove broad provider-secret broadcast with the owning legacy path |
-| [#136](https://github.com/italanta/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
-| [#150](https://github.com/italanta/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
-| [#154](https://github.com/italanta/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
-| [#162](https://github.com/italanta/opencrane/issues/162) | Retain target chart-native UI deployment work |
-| [#174](https://github.com/italanta/opencrane/issues/174) | Fix bounded LiteLLM provisioning/reconcile behavior if it remains in the target adapter |
-| [#220](https://github.com/italanta/opencrane/issues/220) | Delete OpenClaw-specific scope; carry least privilege into target workload profiles |
-| [#221](https://github.com/italanta/opencrane/issues/221) | Generalize canonical KSA identity and repair into the target identity matrix |
-| [#222](https://github.com/italanta/opencrane/issues/222) | Build artifact-backed, scanned, signed, revocable skills and isolated Python execution |
-| [#224](https://github.com/italanta/opencrane/issues/224) | Build the target model/cost/provider/budget console |
-| [#225](https://github.com/italanta/opencrane/issues/225) | Retain runtime-neutral stream/render/artifact/security work; delete OpenClaw gateway scope |
-| [#226](https://github.com/italanta/opencrane/issues/226) | Build membership management over authoritative target APIs |
-| [#227](https://github.com/italanta/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
-| [#231](https://github.com/italanta/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
-| [#255](https://github.com/italanta/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by ADR 0007 and this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
-| [#318](https://github.com/italanta/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
+| [#127](https://github.com/elewa-git/opencrane/issues/127) | Keep enforcing CNI, per-silo routing, encrypted-storage preflights, and live probes |
+| [#128](https://github.com/elewa-git/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
+| [#129](https://github.com/elewa-git/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
+| [#133](https://github.com/elewa-git/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
+| [#135](https://github.com/elewa-git/opencrane/issues/135) | Remove broad provider-secret broadcast with the owning legacy path |
+| [#136](https://github.com/elewa-git/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
+| [#150](https://github.com/elewa-git/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
+| [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
+| [#162](https://github.com/elewa-git/opencrane/issues/162) | Retain target chart-native UI deployment work |
+| [#174](https://github.com/elewa-git/opencrane/issues/174) | Fix bounded LiteLLM provisioning/reconcile behavior if it remains in the target adapter |
+| [#220](https://github.com/elewa-git/opencrane/issues/220) | Delete OpenClaw-specific scope; carry least privilege into target workload profiles |
+| [#221](https://github.com/elewa-git/opencrane/issues/221) | Generalize canonical KSA identity and repair into the target identity matrix |
+| [#222](https://github.com/elewa-git/opencrane/issues/222) | Build artifact-backed, scanned, signed, revocable skills and isolated Python execution |
+| [#224](https://github.com/elewa-git/opencrane/issues/224) | Build the target model/cost/provider/budget console |
+| [#225](https://github.com/elewa-git/opencrane/issues/225) | Retain runtime-neutral stream/render/artifact/security work; delete OpenClaw gateway scope |
+| [#226](https://github.com/elewa-git/opencrane/issues/226) | Build membership management over authoritative target APIs |
+| [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
+| [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
+| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by ADR 0007 and this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
+| [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
 
 ## Deferred research
 

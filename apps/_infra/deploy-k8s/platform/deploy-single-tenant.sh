@@ -11,7 +11,7 @@
 #      fleet-manager, with self-service OFF and exactly ONE ClusterTenant SEEDED. The
 #      fleet operator reconciles that CR and binds the org namespace `opencrane-<org>`.
 #      The fleet-operator/fleet-platform surface moved to the WeOwnAI repo (see
-#      italanta/opencrane#150) — point FLEET_CHART_DIR at a checked-out copy of that
+#      elewa-git/opencrane#150) — point FLEET_CHART_DIR at a checked-out copy of that
 #      repo's fleet-platform chart (e.g. ../weownai/apps/fleet-platform).
 #   2. SILO chart (apps/_infra/deploy-k8s): the org's opencrane-ui + runtime planes,
 #      installed into `opencrane-<org>` (delegated to that app's deploy.sh).
@@ -42,7 +42,7 @@ FLEET_CHART="${FLEET_CHART_DIR:-}"
 SILO_DEPLOY="$REPO_ROOT/apps/_infra/deploy-k8s/deploy.sh"
 
 if [[ -z "$FLEET_CHART" || ! -d "$FLEET_CHART" ]]; then
-  echo -e "\033[0;31m[single-tenant]\033[0m The fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150) and no longer ships in opencrane." >&2
+  echo -e "\033[0;31m[single-tenant]\033[0m The fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) and no longer ships in opencrane." >&2
   echo -e "\033[0;31m[single-tenant]\033[0m Set FLEET_CHART_DIR to a checked-out copy of WeOwnAI's apps/fleet-platform and re-run." >&2
   exit 1
 fi

@@ -61,13 +61,13 @@ Exactly two host classes ever receive external traffic. Everything else is Clust
 | Control-plane host | `dev.opencrane.ai` | LoadBalancer IP | opencrane-api Service :8080 |
 | Per-org host | `acme.dev.opencrane.ai` | LoadBalancer IP | org control-UI SPA (`/`) + gateway-proxy :8090 (`/gateway` WebSocket) + opencrane-api :8080 (`/api/*`) |
 
-The opencrane-api host is either the apex (`<base>`) or a dedicated `platform.<base>`, controlled by the chart value `ingress.controlPlaneHost`. The dev cluster uses the apex directly (`dev.opencrane.ai`). The wildcard Ingress is rendered only when both `ingress.enabled` and `gatewayProxy.enabled` are true (see [`apps/_infra/deploy-k8s/templates/gateway-ingress.yaml`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/templates/gateway-ingress.yaml)).
+The opencrane-api host is either the apex (`<base>`) or a dedicated `platform.<base>`, controlled by the chart value `ingress.controlPlaneHost`. The dev cluster uses the apex directly (`dev.opencrane.ai`). The wildcard Ingress is rendered only when both `ingress.enabled` and `gatewayProxy.enabled` are true (see [`apps/_infra/deploy-k8s/templates/gateway-ingress.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/templates/gateway-ingress.yaml)).
 
 There are **no per-user subdomains**. Every user in an org connects through one org host; the identity-routing proxy resolves each session to its own pod. All three surfaces are served **same-origin** under that one host: the org control-UI owns `/`, opencrane-api owns `/api/*`, and the gateway WebSocket is routed at `/gateway`.
 
 ### How an org host resolves
 
-When a new org is provisioned, the operator's domain provisioner ([`apps/fleet-operator/src/cluster-tenants/internal/org-domain.provisioner.ts`](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/cluster-tenants/internal/org-domain.provisioner.ts)) creates a `DNSEndpoint` CR named `org-dns-<org>` in the org's namespace. This CR carries a single A record:
+When a new org is provisioned, the operator's domain provisioner ([`apps/fleet-operator/src/cluster-tenants/internal/org-domain.provisioner.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/fleet-operator/src/cluster-tenants/internal/org-domain.provisioner.ts)) creates a `DNSEndpoint` CR named `org-dns-<org>` in the org's namespace. This CR carries a single A record:
 
 ```
 <org>.<base>  A  <ingress-ip>  TTL 300
@@ -141,7 +141,7 @@ browser ── wss://<org>.<base>/gateway + OIDC cookie ──► wildcard Ingre
                                               tenant OpenClaw pod :18789
 ```
 
-**Layer 1 — NetworkPolicy (L4).** The operator builds and applies a per-tenant NetworkPolicy named `openclaw-<tenant>-gateway` (see [`apps/fleet-operator/src/tenants/deploy/network-policy.ts`](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/network-policy.ts)). It selects the tenant pod by its labels and admits ingress to port 18789 from exactly one source: pods with `component=operator` in the namespace labelled `kubernetes.io/metadata.name=opencrane-system`. No other in-cluster pod can reach the gateway port. Without this policy, any pod that knew the ClusterIP could assert an arbitrary `X-Forwarded-User` header and be trusted.
+**Layer 1 — NetworkPolicy (L4).** The operator builds and applies a per-tenant NetworkPolicy named `openclaw-<tenant>-gateway` (see [`apps/fleet-operator/src/tenants/deploy/network-policy.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/network-policy.ts)). It selects the tenant pod by its labels and admits ingress to port 18789 from exactly one source: pods with `component=operator` in the namespace labelled `kubernetes.io/metadata.name=opencrane-system`. No other in-cluster pod can reach the gateway port. Without this policy, any pod that knew the ClusterIP could assert an arbitrary `X-Forwarded-User` header and be trusted.
 
 **Layer 2 — trusted-proxy auth (L7).** The OpenClaw gateway runs in `trusted-proxy` mode and accepts the `X-Forwarded-User` identity header only from sources listed in `GATEWAY_TRUSTED_PROXIES` (the cluster pod CIDR; dev = `10.8.0.0/14`). OpenClaw fails closed on an empty `trustedProxies` list.
 
@@ -151,7 +151,7 @@ The security argument for this three-layer seam is detailed in [connection secur
 
 ### Plane ingress NetworkPolicies
 
-The silo chart renders per-plane ingress NetworkPolicies when `networkPolicy.enabled` is true (see [`apps/_infra/deploy-k8s/templates/networkpolicy-planes.yaml`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/templates/networkpolicy-planes.yaml)).
+The silo chart renders per-plane ingress NetworkPolicies when `networkPolicy.enabled` is true (see [`apps/_infra/deploy-k8s/templates/networkpolicy-planes.yaml`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/templates/networkpolicy-planes.yaml)).
 
 | Policy | Protects | Admits ingress from |
 |--------|----------|---------------------|
@@ -168,7 +168,7 @@ Tenant-to-plane calls carry **audience-bound projected-identity tokens** mounted
 
 ## The per-silo default-deny baseline
 
-Each ClusterTenant (org) is modelled as a strictly isolated **silo**. The operator now emits a per-silo default-deny baseline `NetworkPolicy` in **every** ClusterTenant namespace as it provisions the silo — `_BuildSiloBaselineNetworkPolicy` (see [`apps/fleet-operator/src/tenants/deploy/silo-baseline-network-policy.ts`](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/silo-baseline-network-policy.ts)), named `opencrane-<cluster-tenant>-silo-baseline`.
+Each ClusterTenant (org) is modelled as a strictly isolated **silo**. The operator now emits a per-silo default-deny baseline `NetworkPolicy` in **every** ClusterTenant namespace as it provisions the silo — `_BuildSiloBaselineNetworkPolicy` (see [`apps/fleet-operator/src/tenants/deploy/silo-baseline-network-policy.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/silo-baseline-network-policy.ts)), named `opencrane-<cluster-tenant>-silo-baseline`.
 
 The policy uses an **empty `podSelector`** (it selects every pod in the silo namespace) and names both `Ingress` and `Egress` in `policyTypes`, which flips the namespace to **default-deny**: anything not explicitly allowed below is dropped. The allow-list is the minimum a silo needs to function while staying isolated from every *other* silo — there is no silo→silo path because no rule ever names another silo namespace:
 
@@ -190,7 +190,7 @@ This baseline is an **L3/L4** floor — a namespace-scoped, port-keyed allow-lis
 
 The baseline above is keyed on namespaces and ports. On top of it, the platform enforces isolation on **workload identity** and at **L7**, using Cilium + SPIFFE. Every silo workload is issued a SPIFFE SVID (`spiffe://opencrane/ct/<org>/<workload>`) derived from its Kubernetes ServiceAccount, and every silo-to-silo call is mutually authenticated (mTLS). `CiliumNetworkPolicy` then expresses the same default-deny + allow-intra-silo + allow-super-admin posture — but keyed on that cryptographic identity rather than on an IP, and extended to per-route (L7) authorisation. The `NetworkPolicy` floor stays in place underneath (Cilium enforces it too), so the two compose as defence in depth.
 
-See [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) for the full model — the two kinds of identity, the who-can-talk-to-whom rules, and how a workload gets its identity. See [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) for the substrate decision (it supersedes the earlier Linkerd choice in ADR 0001).
+See [Identity & network isolation (Cilium + SPIFFE)](/operators/cilium-spiffe-identity) for the full model — the two kinds of identity, the who-can-talk-to-whom rules, and how a workload gets its identity. See [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) for the substrate decision (it supersedes the earlier Linkerd choice in ADR 0001).
 
 Egress is bounded the same way: `CiliumNetworkPolicy` `toFQDN` rules give each silo a per-hostname allow-list (e.g. only `api.openai.com`), so a silo reaches DNS and its approved provider/tool endpoints and nothing else. An `AccessPolicy` with `egressRules` narrows this further per tenant.
 
@@ -218,4 +218,4 @@ The following gaps are honest assessments verified against the live codebase. Th
 - [Connection security](/security/connection-security) — the full CONN.9/CONN.10 threat model, the trusted-proxy auth decision record, and the transport hardening posture
 - [DNS configuration](/operators/dns-config) — external-dns setup, cert-manager issuers, and the zone-write identity model
 - [Hosting & deployment](/operators/hosting) — ingress class, TLS cert modes, cloud hosting adapters
-- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/italanta/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision behind identity-keyed enforcement (supersedes ADR 0001, which chose Linkerd)
+- [ADR 0003 — Cilium + SPIFFE identity substrate](https://github.com/elewa-git/opencrane/blob/main/docs/adr/0003-cilium-spiffe-identity-substrate.md) — the substrate decision behind identity-keyed enforcement (supersedes ADR 0001, which chose Linkerd)

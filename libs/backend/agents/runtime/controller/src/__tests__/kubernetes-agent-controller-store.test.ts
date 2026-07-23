@@ -42,7 +42,7 @@ function _Job(): V1Job
 {
 	return __BuildSuspendedAgentRuntimeJob(
 		{ runId: "run-1", attempt: 1, agentServiceId: "service-1", agentRevisionId: "revision-1", siloId: "silo-1", namespace: "silo-a-runtime", bootstrapReference: "bootstrap-ref-1", litellmKeySecretName: "litellm-key-store-test" },
-			{ image: "ghcr.io/italanta/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", imagePullPolicy: "IfNotPresent", runtimeStreamUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-runtime", litellmBaseUrl: "http://litellm.silo-a.svc.cluster.local:4000", serverNamespace: "silo-a", serviceAccountName: "agent-runtime-default", projectedTokenTtlSeconds: 600, scratchSize: "64Mi", activeDeadlineSeconds: 900, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } } },
+			{ image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", imagePullPolicy: "IfNotPresent", runtimeStreamUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-runtime", litellmBaseUrl: "http://litellm.silo-a.svc.cluster.local:4000", serverNamespace: "silo-a", serviceAccountName: "agent-runtime-default", projectedTokenTtlSeconds: 600, scratchSize: "64Mi", activeDeadlineSeconds: 900, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } } },
 	);
 }
 

@@ -7,7 +7,7 @@ function _ProfilesJson(serverNamespace = "silo-a"): string
 {
 	return JSON.stringify({
 		"personal-default": {
-			image: "ghcr.io/italanta/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			imagePullPolicy: "IfNotPresent",
 			runtimeStreamUrl: `http://opencrane-server.${serverNamespace}.svc.cluster.local:3001/api/internal/agent-runtime`,
 				litellmBaseUrl: `http://litellm.${serverNamespace}.svc.cluster.local:4000`,

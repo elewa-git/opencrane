@@ -1263,8 +1263,8 @@ standing per-frame audit choke point are **not** in scope → that is the proxy
 
 ## Personal-agent program Phase A — deletion debt (complete 2026-07-17)
 
-Phase A closed [#245](https://github.com/italanta/opencrane/issues/245)'s rewrite-residue runway
-and [#248](https://github.com/italanta/opencrane/issues/248)'s command-line client retirement before
+Phase A closed [#245](https://github.com/elewa-git/opencrane/issues/245)'s rewrite-residue runway
+and [#248](https://github.com/elewa-git/opencrane/issues/248)'s command-line client retirement before
 the blue runtime freeze. The resulting blue surface is smaller, deterministic, and explicitly
 bounded for later per-silo replacement.
 
@@ -1292,7 +1292,7 @@ bounded for later per-silo replacement.
 
 ## Personal-agent program Phase B — lightweight app rollups (complete 2026-07-17)
 
-Phase B completed [#249](https://github.com/italanta/opencrane/issues/249) before the rewrite
+Phase B completed [#249](https://github.com/elewa-git/opencrane/issues/249) before the rewrite
 freeze. Deployable ownership now lives under `apps/*`, reusable implementation lives under
 `libs/*`, and the frozen blue behaviour remains render-compatible while later green phases get a
 clean import seam.
@@ -1321,7 +1321,7 @@ clean import seam.
 
 ## Personal-agent program Phase C — target contracts and app ownership (complete 2026-07-18)
 
-Phase C completed [#245](https://github.com/italanta/opencrane/issues/245) by defining the target
+Phase C completed [#245](https://github.com/elewa-git/opencrane/issues/245) by defining the target
 product vocabulary and workload boundaries needed to implement Phase D without consulting obsolete
 runtime behavior.
 

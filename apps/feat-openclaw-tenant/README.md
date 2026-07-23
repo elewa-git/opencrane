@@ -103,7 +103,7 @@ Tagged as an app entrypoint; it is a self-contained image build and is not impor
 
 The operator selects the image through `TENANT_DEFAULT_IMAGE`, rendered from `tenant.defaultImage` in
 the silo Helm values. The checked-in default tag
-(`ghcr.io/italanta/opencrane-openclaw-tenant:openclaw-2026.6.11-cognee-2026.7.9`) names both pinned
+(`ghcr.io/elewa-git/opencrane-openclaw-tenant:openclaw-2026.6.11-cognee-2026.7.9`) names both pinned
 runtime components. Build from the repository root:
 
 ```bash

@@ -10,7 +10,7 @@
 # --operator-tag, etc.) must be restated explicitly with --tag flags (they are not carried
 # from --values files).
 #
-# NOTE: the fleet-platform chart moved to the WeOwnAI repo (italanta/opencrane#150); the
+# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
 # deploy.sh below is a checked-out copy of it.
 #   apps/fleet-platform/deploy.sh \
 #     --base-domain dev.opencrane.ai \

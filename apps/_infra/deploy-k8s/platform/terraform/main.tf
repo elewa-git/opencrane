@@ -4,7 +4,7 @@
 # DEFAULT FLOW (plain-k8s on GKE): a single `terraform apply` provisions just a
 # GKE cluster on the project's default VPC — nothing else required. You then
 # install OpenCrane the standard way: the per-role charts (the fleet-platform chart, now in
-# the WeOwnAI repo per italanta/opencrane#150, and apps/_infra/deploy-k8s here).
+# the WeOwnAI repo per elewa-git/opencrane#150, and apps/_infra/deploy-k8s here).
 # Custom VPC/NAT, Artifact Registry, Cloud DNS, GCS-backed storage, and even
 # installing the Helm chart via Terraform (enable_app_deploy) are all OPT-IN
 # (see variables.tf).

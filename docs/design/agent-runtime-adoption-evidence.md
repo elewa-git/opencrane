@@ -1,7 +1,7 @@
 # Agent-runtime adoption-evidence record (template — UNPOPULATED)
 
 > Status: **TEMPLATE ONLY. Nothing below is adopted.** This record is filled and acted on by the
-> named later gate [#337](https://github.com/italanta/opencrane/issues/337), under
+> named later gate [#337](https://github.com/elewa-git/opencrane/issues/337), under
 > [ADR 0010](../adr/0010-language-neutral-agent-runtime.md). Do not treat an empty field as a pass.
 
 ## Purpose
@@ -43,5 +43,5 @@ from the passing run and only then flips status to adopted.
 ## See also
 
 - [ADR 0010 — Language-neutral agent runtime](../adr/0010-language-neutral-agent-runtime.md)
-- [#337 — conformance adoption + OpenClaw deletion gate](https://github.com/italanta/opencrane/issues/337)
-- [#246 — Phase E runtime boundary](https://github.com/italanta/opencrane/issues/246)
+- [#337 — conformance adoption + OpenClaw deletion gate](https://github.com/elewa-git/opencrane/issues/337)
+- [#246 — Phase E runtime boundary](https://github.com/elewa-git/opencrane/issues/246)
