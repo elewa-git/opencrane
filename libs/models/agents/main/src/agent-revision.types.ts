@@ -58,8 +58,8 @@ export interface AgentRevision
 	readonly promptPolicyVersion: string;
 	/** Approved persona revision for a personal agent, otherwise null. */
 	readonly personaRevisionId: PersonaRevisionId | null;
-	/** Stable model-routing policy identifier. */
-	readonly modelPolicyId: string;
+	/** Registered model definition selected for this immutable revision. */
+	readonly modelDefinitionId: string;
 	/** Immutable skill revisions available to the runtime. */
 	readonly skills: readonly SkillRevisionReference[];
 	/** Immutable integration and tool assignments available to the runtime. */

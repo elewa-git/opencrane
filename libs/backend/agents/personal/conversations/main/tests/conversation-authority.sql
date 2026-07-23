@@ -1,5 +1,8 @@
 BEGIN;
 
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('conversation-model', 'global', 'conversation-model', 'litellm-conversation-model', 'conversation-model', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
 BEGIN
@@ -15,8 +18,8 @@ $$;
 
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
 VALUES ('conversation-service', 'silo-conversation', 'managed', 'Conversation test', 'managed-agent', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_policy_id", "budget", "authored_by")
-VALUES ('conversation-agent-revision', 'conversation-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'model-v1', '{}', 'user-1');
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('conversation-agent-revision', 'conversation-service', 1, 'draft', 'sha256:' || repeat('a', 64), 'prompt-v1', 'conversation-model', '{}', 'user-1');
 UPDATE "agent_revisions" SET "state" = 'published', "published_at" = clock_timestamp() WHERE "id" = 'conversation-agent-revision';
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'conversation-agent-revision' WHERE "id" = 'conversation-service';
 SELECT pg_temp.expect_failure('thread must bind its exact agent service', $statement$INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at") VALUES ('thread-missing-service','silo-conversation','missing-service',clock_timestamp())$statement$, 'conversation_threads_agent_service_id_silo_id_fkey');

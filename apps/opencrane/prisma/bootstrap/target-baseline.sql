@@ -217,7 +217,7 @@ CREATE TABLE "agent_revisions" (
     "digest" TEXT NOT NULL,
     "prompt_policy_version" TEXT NOT NULL,
     "persona_revision_id" TEXT,
-    "model_policy_id" TEXT NOT NULL,
+    "model_definition_id" TEXT NOT NULL,
     "budget" JSONB NOT NULL,
     "authored_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2464,6 +2464,9 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision
 ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_fkey" FOREIGN KEY ("provider_credential_id") REFERENCES "provider_credentials"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "tenant_dataset_memberships" ADD CONSTRAINT "tenant_dataset_memberships_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2591,7 +2594,7 @@ BEGIN
         OR NEW."digest" IS DISTINCT FROM OLD."digest"
         OR NEW."prompt_policy_version" IS DISTINCT FROM OLD."prompt_policy_version"
         OR NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
-        OR NEW."model_policy_id" IS DISTINCT FROM OLD."model_policy_id"
+        OR NEW."model_definition_id" IS DISTINCT FROM OLD."model_definition_id"
         OR NEW."budget" IS DISTINCT FROM OLD."budget"
         OR NEW."authored_by" IS DISTINCT FROM OLD."authored_by"
         OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
@@ -2616,6 +2619,54 @@ CREATE FUNCTION "reject_agent_revision_delete"() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'AgentRevision rows cannot be deleted';
+END;
+$$;
+CREATE FUNCTION "enforce_referenced_model_definition_immutability"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+    IF EXISTS (
+        SELECT 1
+        FROM "agent_revisions"
+        WHERE "model_definition_id" = OLD."id"
+    ) AND (
+        NEW."scope" IS DISTINCT FROM OLD."scope"
+        OR NEW."cluster_tenant" IS DISTINCT FROM OLD."cluster_tenant"
+        OR NEW."public_model_name" IS DISTINCT FROM OLD."public_model_name"
+        OR NEW."litellm_model_id" IS DISTINCT FROM OLD."litellm_model_id"
+        OR NEW."upstream_model" IS DISTINCT FROM OLD."upstream_model"
+        OR NEW."api_base" IS DISTINCT FROM OLD."api_base"
+        OR NEW."provider_credential_id" IS DISTINCT FROM OLD."provider_credential_id"
+    ) THEN
+        RAISE EXCEPTION 'A ModelDefinition referenced by an AgentRevision is immutable';
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_agent_revision_model_definition_availability"() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    service_silo_id TEXT;
+    definition_scope "ModelRoutingScope";
+    definition_cluster_tenant TEXT;
+BEGIN
+    SELECT "silo_id"
+    INTO service_silo_id
+    FROM "agent_services"
+    WHERE "id" = NEW."agent_service_id"
+    FOR KEY SHARE;
+
+    SELECT "scope", "cluster_tenant"
+    INTO definition_scope, definition_cluster_tenant
+    FROM "model_definitions"
+    WHERE "id" = NEW."model_definition_id"
+    FOR KEY SHARE;
+
+    IF definition_scope IS DISTINCT FROM 'global'::"ModelRoutingScope"
+        AND (definition_scope IS DISTINCT FROM 'clusterTenant'::"ModelRoutingScope"
+            OR definition_cluster_tenant IS DISTINCT FROM service_silo_id) THEN
+        RAISE EXCEPTION 'AgentRevision model definition is unavailable to its service tenant';
+    END IF;
+    RETURN NEW;
 END;
 $$;
 CREATE FUNCTION "enforce_agent_service_lifecycle"() RETURNS trigger
@@ -4017,7 +4068,7 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_active_revision_chec
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_revision_check" CHECK ("revision" > 0);
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("digest") <> '' AND
-        btrim("prompt_policy_version") <> '' AND btrim("model_policy_id") <> '' AND
+        btrim("prompt_policy_version") <> '' AND btrim("model_definition_id") <> '' AND
         btrim("authored_by") <> '' AND "digest" ~ '^sha256:[0-9a-f]{64}$'
     );
 ALTER TABLE "agent_revision_scope_attachments" ADD CONSTRAINT "agent_revision_scope_attachments_nonempty_check" CHECK (
@@ -4329,6 +4380,12 @@ CREATE TRIGGER "agent_revisions_immutable"
 CREATE TRIGGER "agent_revisions_no_delete"
     BEFORE DELETE ON "agent_revisions"
     FOR EACH ROW EXECUTE FUNCTION "reject_agent_revision_delete"();
+CREATE TRIGGER "referenced_model_definitions_immutable"
+    BEFORE UPDATE ON "model_definitions"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_referenced_model_definition_immutability"();
+CREATE TRIGGER "agent_revision_model_definition_available"
+    BEFORE INSERT OR UPDATE OF "model_definition_id", "agent_service_id" ON "agent_revisions"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_model_definition_availability"();
 CREATE TRIGGER "agent_services_closed_lifecycle"
     BEFORE INSERT OR UPDATE OR DELETE ON "agent_services"
     FOR EACH ROW EXECUTE FUNCTION "enforce_agent_service_lifecycle"();

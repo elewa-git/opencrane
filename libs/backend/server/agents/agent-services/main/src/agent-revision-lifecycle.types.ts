@@ -7,8 +7,8 @@ export interface AgentRevisionContent
 	readonly promptPolicyVersion: string;
 	/** Approved persona revision, or null for a managed agent. */
 	readonly personaRevisionId: string | null;
-	/** Stable model-routing policy reference; carries no provider secret. */
-	readonly modelPolicyId: string;
+	/** Registered model-definition reference; carries no provider secret. */
+	readonly modelDefinitionId: string;
 	/** Immutable resource ceilings applied to each run. */
 	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxDurationMs: number };
 	/** Immutable skill revisions exposed to the runtime. */
@@ -121,6 +121,7 @@ export type AgentRevisionLifecycleDenial =
 	| "service_retired"
 	| "revision_not_found"
 	| "revision_service_mismatch"
+	| "model_definition_unavailable"
 	| "transition_not_allowed"
 	| "service_not_runnable"
 	| "run_admission_unavailable"

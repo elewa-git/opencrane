@@ -55,7 +55,7 @@ function _revisionDigest(agentServiceId: string, revision: number, content: Agen
 		revision,
 		promptPolicyVersion: content.promptPolicyVersion,
 		personaRevisionId: content.personaRevisionId,
-		modelPolicyId: content.modelPolicyId,
+		modelDefinitionId: content.modelDefinitionId,
 		budget: { maxTurns: content.budget.maxTurns, maxTokens: content.budget.maxTokens, maxDurationMs: content.budget.maxDurationMs },
 		skills: content.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })),
 		integrationAssignments: content.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })),
@@ -77,7 +77,7 @@ function _revisionCreateData(agentServiceId: string, siloId: string, revision: n
 		digest: _revisionDigest(agentServiceId, revision, content),
 		promptPolicyVersion: content.promptPolicyVersion,
 		personaRevisionId: content.personaRevisionId,
-		modelPolicyId: content.modelPolicyId,
+		modelDefinition: { connect: { id: content.modelDefinitionId } },
 		budget: { maxTurns: content.budget.maxTurns, maxTokens: content.budget.maxTokens, maxDurationMs: content.budget.maxDurationMs },
 		authoredBy,
 		createdAt,
@@ -88,18 +88,25 @@ function _revisionCreateData(agentServiceId: string, siloId: string, revision: n
 }
 
 /** Projects an immutable revision's persisted content back into an authoring content command. */
-function _contentFromRevision(row: { promptPolicyVersion: string; personaRevisionId: string | null; modelPolicyId: string; budget: Prisma.JsonValue; skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>; integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }>; scopeAttachments: ReadonlyArray<{ scope: string; subjectType: string; subjectId: string }> }): AgentRevisionContent
+function _contentFromRevision(row: { promptPolicyVersion: string; personaRevisionId: string | null; modelDefinitionId: string; budget: Prisma.JsonValue; skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>; integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }>; scopeAttachments: ReadonlyArray<{ scope: string; subjectType: string; subjectId: string }> }): AgentRevisionContent
 {
 	const budget = row.budget as unknown as AgentBudget;
 	return {
 		promptPolicyVersion: row.promptPolicyVersion,
 		personaRevisionId: row.personaRevisionId,
-		modelPolicyId: row.modelPolicyId,
+		modelDefinitionId: row.modelDefinitionId,
 		budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs },
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
 		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })),
 		scopeAttachments: row.scopeAttachments.map(attachment => ({ scope: _grantScope(attachment.scope), subjectType: _grantSubjectType(attachment.subjectType), subjectId: attachment.subjectId })),
 	};
+}
+
+/** Returns whether a model definition is globally available or belongs to the service's tenant scope. */
+async function _isModelDefinitionAvailable(transaction: Prisma.TransactionClient, modelDefinitionId: string, siloId: string): Promise<boolean>
+{
+	const definition = await transaction.modelDefinition.findUnique({ where: { id: modelDefinitionId }, select: { scope: true, clusterTenant: true } });
+	return definition?.scope === "Global" || (definition?.scope === "ClusterTenant" && definition.clusterTenant === siloId);
 }
 
 /**
@@ -144,6 +151,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		const createdAtDate = new Date(createdAt);
 		return this.prisma.$transaction(async function _create(transaction: Prisma.TransactionClient): Promise<CreateManagedAgentServiceResult>
 		{
+			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, command.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
 			const serviceRow = await transaction.agentService.create({ data: { siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, createdAt: createdAtDate, updatedAt: createdAtDate } });
 			const revisionRow = await transaction.agentRevision.create({ data: _revisionCreateData(serviceRow.id, command.siloId, 1, null, null, command.content, command.changeMessage, command.authoredBy, createdAtDate), include: _REVISION_INCLUDE });
 			return { outcome: "created", service: _mapService(serviceRow), revision: _mapRevision(revisionRow) };
@@ -158,6 +166,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		{
 			const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
 			if (guard.outcome !== "ok") return guard.result;
+			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
 			const revisionRow = await transaction.agentRevision.create({ data: _revisionCreateData(command.agentServiceId, guard.siloId, guard.head.revision + 1, guard.head.id, null, command.content, command.changeMessage, command.authoredBy, createdAtDate), include: _REVISION_INCLUDE });
 			return { outcome: "revised", revision: _mapRevision(revisionRow) };
 		});

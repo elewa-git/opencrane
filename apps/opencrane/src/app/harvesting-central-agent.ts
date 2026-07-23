@@ -1,4 +1,4 @@
-import type { AgentRevisionContent, CreateAgentScheduleCommand } from "@opencrane/backend/server/agents/agent-services";
+import type { HarvestingCentralAgentDefinition } from "./harvesting-central-agent.types.js";
 
 /**
  * The packaged "harvesting" central agent, expressed entirely as OpenCrane definition data.
@@ -10,18 +10,6 @@ import type { AgentRevisionContent, CreateAgentScheduleCommand } from "@opencran
  * run. The live-Obot end-to-end proof (and the subsequent deletion of `apps/feat-central-agents`,
  * its bespoke connector, and the `HarvestingCursor` table) is a NAMED LATER GATE tracked under #337.
  */
-export interface HarvestingCentralAgentDefinition
-{
-	/** Human-readable managed-service name. */
-	readonly name: string;
-	/** Named workload profile projecting the managed runtime policy. */
-	readonly workloadProfile: string;
-	/** Immutable executable content of the first Draft revision. */
-	readonly content: AgentRevisionContent;
-	/** The recurring schedule that will admit runs of the published revision. */
-	readonly schedule: Omit<CreateAgentScheduleCommand, "siloId" | "agentServiceId">;
-}
-
 /** The Obot MCP tools the harvester is permitted to invoke; nothing outside this list is callable. */
 export const HARVESTING_ALLOWED_TOOLS: readonly string[] = ["slack.listChannels", "slack.getChannelHistory"];
 
@@ -30,9 +18,10 @@ export const HARVESTING_ALLOWED_TOOLS: readonly string[] = ["slack.listChannels"
  *
  * @param obotCustodyReference - Opaque Obot custody reference for the Slack integration (never a
  *   credential); provided by the composition root once custody is provisioned.
+ * @param modelDefinitionId - Registered global model definition selected by the composition root.
  * @returns The packaged managed-agent definition and its schedule spec.
  */
-export function _HarvestingCentralAgentDefinition(obotCustodyReference: string): HarvestingCentralAgentDefinition
+export function _HarvestingCentralAgentDefinition(obotCustodyReference: string, modelDefinitionId: string): HarvestingCentralAgentDefinition
 {
 	return {
 		name: "Knowledge Harvester",
@@ -41,7 +30,7 @@ export function _HarvestingCentralAgentDefinition(obotCustodyReference: string):
 			promptPolicyVersion: "harvester-prompt-v1",
 			// A managed (central) agent never carries a persona.
 			personaRevisionId: null,
-			modelPolicyId: "managed-default",
+			modelDefinitionId,
 			budget: { maxTurns: 20, maxTokens: 200_000, maxDurationMs: 900_000 },
 			skills: [],
 			// One Obot MCP integration with a strict tool allow-list; only these tools are invocable.

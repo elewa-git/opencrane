@@ -43,6 +43,7 @@ model ModelDefinition {
   updatedAt            DateTime            @updatedAt @map("updated_at")
 
   providerCredential ProviderCredential? @relation(fields: [providerCredentialId], references: [id], onDelete: SetNull)
+  agentRevisions     AgentRevision[]
 
   @@unique([scope, clusterTenant, publicModelName])
   @@index([clusterTenant])
