@@ -6,8 +6,9 @@
 
 This package records a person's request to change how their agent behaves. It binds the request to
 the user, conversation, run, current persona revision, and current agent revision. A run input
-snapshot is immutable, so the package never changes work already in progress: a later authority may
-apply an accepted request only while those recorded active revisions still match.
+snapshot is immutable, so the package never changes work already in progress. An owner may first
+mark a request `Accepted`; a later materialisation authority may mark it `Applied` only while assembling a new
+snapshot and only while the recorded active revisions still match.
 
 ```
  conversation request ─► configuration proposal ◄── HERE ─► later approved revision
@@ -29,12 +30,14 @@ means the request is already user-approved or applied.
 - `PersonalConfigurationChangeRepository` is the persistence port that proves source ownership in
   its atomic insert.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
+- `__DecidePersonalConfigurationChange` records the owner's `Accepted` or `Rejected` decision but
+  never applies a patch itself.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 
 ## Boundary
 
-The package does not mutate `RunInputSnapshot`, perform persona synthesis, approve a user decision,
+The package does not mutate `RunInputSnapshot`, perform persona synthesis, apply a user decision,
 or invoke an MCP tool. The app composes its Prisma adapter and `ToolInvocation` ledger; runtime
 transport and UI remain separate owners.
 

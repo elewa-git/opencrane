@@ -1,5 +1,6 @@
 enum PersonalConfigurationChangeState {
   Proposed   @map("proposed")
+  Accepted   @map("accepted")
   Applied    @map("applied")
   Rejected   @map("rejected")
   Superseded @map("superseded")

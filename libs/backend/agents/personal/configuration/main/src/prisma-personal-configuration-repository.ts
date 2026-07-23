@@ -1,14 +1,14 @@
-import { AgentServiceKind, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentServiceKind, PersonalConfigurationChangeState, Prisma, type PrismaClient } from "@prisma/client";
 import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
 import { __ProposePersonalConfigurationChange } from "./personal-configuration.js";
 import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
-import type { PersonalConfigurationChangeRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
+import type { DecidePersonalConfigurationChangeCommand, PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
 import type { UpgradeSessionProposalReceipt, UpgradeSessionProposalRepository } from "./upgrade-session.types.js";
 
 /** Prisma adapter that proves a proposal's user, thread, run, profile, and service bindings atomically. */
-export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeRepository, UpgradeSessionProposalRepository
+export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, UpgradeSessionProposalRepository
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -52,6 +52,24 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 		{
 			this.logger.error({ err, operation: "personal_configuration.propose", siloId: command.siloId, sourceRunId: command.sourceRunId }, "Personal configuration proposal persistence failed");
 			return _isProvenanceConflict(err) ? { status: "provenance_conflict" } : { status: "persistence_unavailable" };
+		}
+	}
+
+	/** Compare-and-set an owner decision while retaining immutable proposal provenance. */
+	async decideAtomically(command: DecidePersonalConfigurationChangeCommand): Promise<{ readonly status: "accepted" | "rejected" } | { readonly status: "not_found_or_not_owner" | "already_decided" | "persistence_unavailable" }>
+	{
+		try
+		{
+			const state = command.decision === "accepted" ? PersonalConfigurationChangeState.Accepted : PersonalConfigurationChangeState.Rejected;
+			const updated = await this.prisma.personalConfigurationChange.updateMany({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId, state: PersonalConfigurationChangeState.Proposed }, data: { state, decidedAt: new Date(command.decidedAt), decidedBy: command.userId, rejectionReason: command.rejectionReason } });
+			if (updated.count === 1) return { status: command.decision };
+			const existing = await this.prisma.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { state: true } });
+			return existing === null ? { status: "not_found_or_not_owner" } : { status: "already_decided" };
+		}
+		catch (err)
+		{
+			this.logger.error({ err, operation: "personal_configuration.decide", siloId: command.siloId, changeId: command.changeId }, "Personal configuration decision persistence failed");
+			return { status: "persistence_unavailable" };
 		}
 	}
 

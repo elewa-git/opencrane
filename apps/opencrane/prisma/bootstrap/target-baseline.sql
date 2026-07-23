@@ -140,7 +140,7 @@ CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed', 'retake
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
 
 -- CreateEnum
-CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'applied', 'rejected', 'superseded');
+CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
 
 -- CreateEnum
 CREATE TYPE "ModelRoutingScope" AS ENUM ('global', 'clusterTenant');
@@ -3707,7 +3707,12 @@ BEGIN
        OR NEW."expected_agent_revision_id" IS DISTINCT FROM OLD."expected_agent_revision_id" OR NEW."proposed_at" IS DISTINCT FROM OLD."proposed_at" THEN
         RAISE EXCEPTION 'PersonalConfigurationChange proposal evidence is immutable';
     END IF;
-    IF OLD."state" <> 'proposed' OR NEW."state" = 'proposed' THEN RAISE EXCEPTION 'PersonalConfigurationChange has one terminal decision'; END IF;
+    IF OLD."state" <> 'proposed' AND (NEW."decided_at" IS DISTINCT FROM OLD."decided_at" OR NEW."decided_by" IS DISTINCT FROM OLD."decided_by" OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason") THEN
+        RAISE EXCEPTION 'PersonalConfigurationChange decision evidence is immutable';
+    END IF;
+    IF NOT (OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected')) THEN
+        RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -4223,6 +4228,8 @@ ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configurat
         AND "requested_patch_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND (("state" = 'proposed' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "rejection_reason" IS NULL
               AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
+             OR ("state" = 'accepted' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
+                 AND "rejection_reason" IS NULL AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
              OR ("state" = 'applied' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
                  AND "rejection_reason" IS NULL AND ("applied_persona_revision_id" IS NOT NULL OR "applied_agent_revision_id" IS NOT NULL))
              OR ("state" = 'rejected' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> '' AND btrim("rejection_reason") <> ''
