@@ -34,7 +34,7 @@ function _revision(): AgentRevision
 		digest: "sha256:revision",
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
-		modelPolicyId: "model-policy-1",
+		modelDefinitionId: "model-definition-1",
 		skills: [],
 		integrationAssignments: [],
 		scopeAttachments: [],
