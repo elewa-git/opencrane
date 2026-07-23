@@ -14,6 +14,8 @@
 #         inside the handler is the identity check, this is defence-in-depth).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
+#       - Artifact preprocessor: outbound `/api/internal/artifact-preprocessor/*` only; its dedicated
+#         projected ServiceAccount token is TokenReviewed by the server before every job operation.
 #   The operator's own /api/internal/tenant-models fetch is a localhost call within the
 #   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
 #
@@ -62,6 +64,19 @@ spec:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
               app.kubernetes.io/component: agent-controller
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    # The PDF worker has no database or server credential: this L3/4 rule admits only its fixed
+    # deployment label; TokenReview then fixes its KSA and audience inside the route.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-preprocessor
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
