@@ -33,8 +33,10 @@ genuine and has not already been used.
 When that immutable source is a PDF, the same transaction also records exactly one
 `pdf-to-text/v1` preprocessing job and an `artifact.preprocessing_requested` outbox event. It does
 not run a converter in the server or store extracted text in a JSON column. A subsequent fenced
-worker claim will create one generated text ArtifactVersion, preserve immutable source lineage, and
-publish normal revision evidence for downstream indexing.
+worker claim allocates one generated text Artifact; once the worker knows the exact text hash, this
+authority binds that attempt to one exact write lease. It accepts completion only after the attached
+lease is finalized for those exact bytes, preserves immutable source lineage, and publishes normal
+revision evidence for downstream indexing.
 
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
@@ -53,6 +55,9 @@ result instead of creating a duplicate. A stale, replayed, or already-consumed r
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
   and the upload ports (`ArtifactServicePromotionPort`, `ArtifactUploadCryptoPort`,
   `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`, `ArtifactUploadResult`).
+- The preprocessing state model: one source/pipeline job, an attempt/fence/expiry, a server-chosen
+  generated Artifact, and one durable `outputLeaseId`. That one-to-one lease reference prevents a
+  receipt from a previous attempt or an unrelated upload from being attached to a PDF result.
 
 ## Boundary
 
@@ -74,7 +79,10 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test lives in
 `tests/artifact-authority.sql`. Preprocess jobs are distinct from the outbox: a job has its own
 attempt, claim fence, expiry, output coordinate, and retry/terminal state, while an outbox event only
-records publication for independent downstream consumers.
+records publication for independent downstream consumers. While a worker is writing, its durable
+output lease must be active, exact-byte-bound, and no later than the claim expiry. Completion changes
+that same lease to finalized and proves its promoted address and length equal the immutable derived
+revision; failed attempts drop the job reference instead of retaining a reusable capability.
 
 ## See also
 

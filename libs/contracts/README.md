@@ -69,15 +69,24 @@ provider credentials or mutable source objects.
   locator projected through the Job's downward API, never a bearer credential. These types expose
   only immutable workload coordinates; they never expose the run-input body or let the controller
   choose a user, revision, namespace, runtime profile, or replacement Pod.
+- `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
+  `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, and `ArtifactPreprocessor*` — the private,
+  projected-token protocol for the PDF-to-text worker. A claim supplies one immutable PDF revision
+  and an exact read lease; after the worker hashes its extracted text, it requests an exact write
+  lease and can complete only with the matching artifact-service promotion receipt. These types do
+  not expose database access, a listing capability, a generic byte-store credential, or a way for
+  the worker to choose the source, owner, silo, or output revision.
 - Re-exported model types: the agent, artifact, authorization, and platform-policy DTOs.
 
 ## Boundary
 
 The one contract surface for public control-plane calls and first-party workload protocols; callers
 import it instead of duplicating wire shapes. It defines types and builds a client — it holds no
-business logic, persistence, or server state. Runtime and controller frames remain private workload
-contracts rather than public browser endpoints. External proprietary frontends should generate their
-client from the released spec (see below), keeping a clean process/network boundary.
+business logic, persistence, or server state. Runtime, controller, and artifact-preprocessor frames
+remain private workload contracts rather than public browser endpoints. The preprocessor's only
+caller is its dedicated Kubernetes worker, never a browser or tenant runtime. External proprietary
+frontends should generate their client from the released spec (see below), keeping a clean
+process/network boundary.
 
 ## Licensing
 
