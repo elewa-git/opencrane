@@ -129,6 +129,7 @@ export default [
             { sourceTag: "scope:connections", onlyDependOnLibsWithTags: ["scope:auth", "scope:connections", "scope:shared"] },
             { sourceTag: "scope:personal-conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:personal-conversations", "scope:shared"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:personal-configuration", "scope:shared"] },
+			{ sourceTag: "scope:personal-revisions", onlyDependOnLibsWithTags: ["scope:authorization", "scope:execution-inputs", "scope:execution-runs", "scope:personal-configuration", "scope:personal-revisions", "scope:shared"] },
             {
               sourceTag: "scope:contract",
               onlyDependOnLibsWithTags: [
@@ -167,7 +168,7 @@ export default [
             { sourceTag: "scope:policies", onlyDependOnLibsWithTags: ["scope:grants", "scope:k8s-api", "scope:policies", "scope:projection", "scope:shared"] },
             { sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:personal-personas", "scope:shared"] },
             { sourceTag: "scope:projection", onlyDependOnLibsWithTags: ["scope:cluster-tenants", "scope:k8s-api", "scope:projection", "scope:shared"] },
-            { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agents", "scope:artifacts", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:shared"] },
+			{ sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agents", "scope:artifacts", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:shared"] },
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:retrieval", "scope:shared"] },
             { sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:authorization", "scope:execution-runs", "scope:shared"] },

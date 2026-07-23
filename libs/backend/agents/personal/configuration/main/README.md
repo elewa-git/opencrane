@@ -7,8 +7,8 @@
 This package records a person's request to change how their agent behaves. It binds the request to
 the user, conversation, run, current persona revision, and current agent revision. A run input
 snapshot is immutable, so the package never changes work already in progress. An owner may first
-mark a request `Accepted`; a later materialisation authority may mark it `Applied` only while assembling a new
-snapshot and only while the recorded active revisions still match.
+mark a request `Accepted`; a later revision authority may mark a `model_alias` request `Applied`
+inside the next admission transaction, only while the recorded active revisions still match.
 
 ```
  conversation request ─► configuration proposal ◄── HERE ─► later approved revision
@@ -31,7 +31,8 @@ means the request is already user-approved or applied.
   its atomic insert.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
 - `__DecidePersonalConfigurationChange` records the owner's `Accepted` or `Rejected` decision but
-  never applies a patch itself.
+  never applies a patch itself. `persona_refresh` stays accepted until the normal interview and
+  authored-persona workflow produces a real approved revision.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview

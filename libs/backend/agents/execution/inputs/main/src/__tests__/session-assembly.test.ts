@@ -20,6 +20,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 				return outcome === "persistence_unavailable" ? { outcome: "denied", reason: outcome } as const : { outcome, snapshot: compiled.value.snapshot } as const;
 			},
 		},
+		personalConfiguration: { materialize: async function _materialize() { return { outcome: "loaded", value: { state: "unchanged" } } as const; } },
 		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } } as const; } },
 		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId } } as const; } },
 		threadContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"] } } as const; } },
@@ -79,6 +80,17 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 
 		expect(result).toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
 		expect(admitted).toBe(false);
+	});
+
+	it("fails closed before reading a run when personal materialisation refuses the admission", async function _deniesMaterializationRefusal()
+	{
+		let runLoaded = false;
+		const authorities = _Authorities(function _accept() { return "accepted"; });
+		authorities.personalConfiguration = { materialize: async function _materialize() { return { outcome: "denied", reason: "revision_unavailable" } as const; } };
+		authorities.runAuthority = { load: async function _load() { runLoaded = true; return { outcome: "denied", reason: "run_not_admittable" } as const; } };
+
+		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "denied", reason: "revision_unavailable" });
+		expect(runLoaded).toBe(false);
 	});
 
 	it("accepts a non-conversational run only when it has no transcript messages", async function _assemblesNonConversationalRun()
