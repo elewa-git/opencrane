@@ -86,6 +86,20 @@ approval, and stops on a positive cancel signal. The approval pause is reachable
 grant flagged `requiresApproval` defers and opens a pending `ApprovalRequest`); the human
 approval-DECISION endpoint and the steering-INGEST surface are the operator/product plane in Phase F
 (#224), so approval and steering are not yet driven by an external route.
+For personal conversation snapshots, this composition also adds the reserved `upgrade_session` tool
+after normal MCP grants are compiled and reseals the delivered input. The call itself is not deferred;
+it uses the same durable `ToolInvocation` ledger to record a future-only configuration proposal. A
+later explicit user decision and a later run snapshot own any actual change.
+Idle runtime streams do not create a database transaction every second. An accepted runtime
+candidate wakes local streams to check the durable command state immediately; a bounded recovery
+check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of
+truth for the command, its order, replay, and fence.
+
+When a controller has registered a current `events.read` route for a conversation service, the
+internal listener can also serve `/api/internal/conversation-replay`. The channel proxy presents a
+single-use context on that route; the replay library verifies the exact registered route and returns
+only display-safe Agent User Interface (AG-UI) server-sent events. The route stays disabled unless
+its controller-issued route identifier is configured, so the server never guesses a destination.
 
 Organisation administrators can also use `/api/v1/agent-services` to create a managed agent, edit
 its next immutable revision, inspect what changed, and publish a reviewed revision. A managed agent
@@ -140,6 +154,8 @@ Read from the environment at startup.
 | `AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS` | Hard lifetime of a pending runtime workload assignment | `3600` |
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
+| `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
+| `CHANNEL_REPLAY_ROUTE_ID` | Controller-registered `events.read` route accepted by the internal replay endpoint; unset disables replay | *(unset)* |
 | `WATCH_NAMESPACE` | Namespace member workspaces are seeded into | falls back to `NAMESPACE` |
 | `FLEET_INTERNAL_URL` | Fleet membership write-through URL; empty = standalone silo | *(empty)* |
 | `OPENCRANE_API_TOKEN` | Token for fleet-internal calls | *(empty)* |

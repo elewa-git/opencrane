@@ -9,7 +9,16 @@ import { join, relative } from "node:path";
 
 const [, , root] = process.argv;
 const errors = [];
-const domains = ["personas", "conversations", "runs", "memory"];
+const personalDomains = ["personas", "conversations", "memory"];
+const executionDomains = [
+	{ directory: "inputs/main", project: "inputs", alias: "inputs" },
+	{ directory: "runs/main", project: "runs", alias: "runs" },
+	{ directory: "protocol", project: "protocol", alias: "protocol" },
+];
+const legacyExecutionDomains = [
+	{ directory: "personal/runs/main", alias: "@opencrane/backend/agents/personal/runs", scope: "scope:personal-runs" },
+	{ directory: "personal/session/main", alias: "@opencrane/backend/agents/personal/session", scope: "scope:personal-session" },
+];
 const operatorDomains = ["membership", "authorization", "agent-services", "integrations"];
 const ignoredDirectories = new Set([".claude", ".git", ".nx", "coverage", "dist", "node_modules"]);
 
@@ -44,7 +53,15 @@ function walk(path, visit)
 const tsconfig = readJson(join(root, "tsconfig.json"));
 const eslintConfig = readFileSync(join(root, "eslint.config.mjs"), "utf8");
 
-for (const domain of domains)
+for (const legacy of legacyExecutionDomains)
+{
+	const legacyPath = join(root, "libs", "backend", "agents", legacy.directory);
+	if (existsSync(legacyPath)) fail(`legacy execution domain must not exist: ${relative(root, legacyPath)}`);
+	if (tsconfig.compilerOptions?.paths?.[legacy.alias]) fail(`legacy execution TypeScript alias must not exist: ${legacy.alias}`);
+	if (eslintConfig.includes(`sourceTag: "${legacy.scope}"`)) fail(`legacy execution ESLint scope must not exist: ${legacy.scope}`);
+}
+
+for (const domain of personalDomains)
 {
 	const scope = `scope:personal-${domain}`;
 	const projectPath = join(root, "libs", "backend", "agents", "personal", domain, "main", "project.json");
@@ -73,13 +90,38 @@ for (const domain of domains)
 	if (!eslintConfig.includes(`sourceTag: "${scope}"`)) fail(`missing ESLint dependency constraint for ${scope}`);
 }
 
+for (const domain of executionDomains)
+{
+	const scope = `scope:execution-${domain.project}`;
+	const projectPath = join(root, "libs", "backend", "agents", "execution", domain.directory, "project.json");
+	const alias = `@opencrane/backend/agents/execution/${domain.alias}`;
+
+	if (!existsSync(projectPath))
+	{
+		fail(`missing shared execution project: ${relative(root, projectPath)}`);
+		continue;
+	}
+
+	const project = readJson(projectPath);
+	const tags = project.tags ?? [];
+	const scopeTags = tags.filter(function isScope(tag) { return tag.startsWith("scope:"); });
+	if (project.name !== `backend-agents-execution-${domain.project}`) fail(`${relative(root, projectPath)}: project name must identify the shared execution namespace`);
+	if (!project.sourceRoot?.startsWith(`libs/backend/agents/execution/${domain.directory}/src`)) fail(`${relative(root, projectPath)}: sourceRoot must remain in the shared execution namespace`);
+	if (!tags.includes("type:lib") || !tags.includes("layer:backend") || scopeTags.length !== 1 || scopeTags[0] !== scope)
+	{
+		fail(`${relative(root, projectPath)}: tags must be type:lib, layer:backend, and exactly ${scope}`);
+	}
+	if (!tsconfig.compilerOptions?.paths?.[alias]) fail(`missing TypeScript alias: ${alias}`);
+	if (!eslintConfig.includes(`sourceTag: "${scope}"`)) fail(`missing ESLint dependency constraint for ${scope}`);
+}
+
 for (const domain of operatorDomains)
 {
 	const misplaced = join(root, "libs", "backend", "agents", "personal", domain, "main");
 	if (existsSync(misplaced)) fail(`control-plane domain must stay under server namespace: ${relative(root, misplaced)}`);
 }
 
-for (const domain of domains)
+for (const domain of personalDomains)
 {
 	const oldAlias = `@opencrane/backend/server/${domain}`;
 	walk(root, function inspect(path, stat) {
@@ -95,5 +137,5 @@ if (errors.length > 0)
 	process.exit(1);
 }
 
-process.stdout.write("Phase D personal-agent namespace boundary holds.\n");
+process.stdout.write("Phase D agent product and execution namespace boundaries hold.\n");
 NODE

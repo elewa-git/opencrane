@@ -181,20 +181,6 @@ spec:
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
             {{- end }}
-            {{- /* Optional, short-lived TEST bootstrap: when bootstrap.providerKey.existingSecret is
-                   set, the operator self-provisions this silo's OpenAI BYOK key on boot (writes the
-                   encrypted Secret + LiteLLM credential + seeds a default model). OFF by default;
-                   the raw key lives only in the named Secret, never in this chart. Delete the Secret
-                   (or clear existingSecret) to stop re-applying. Not for production — one shared key
-                   per silo, no per-tenant spend isolation. */ -}}
-            {{- if .Values.bootstrap.providerKey.existingSecret }}
-            - name: OPENCRANE_BOOTSTRAP_OPENAI_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.bootstrap.providerKey.existingSecret }}
-                  key: {{ .Values.bootstrap.providerKey.secretKey }}
-                  optional: true
-            {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
             {{- /* Langfuse metrics proxy (AIR.10): wire the opencrane-ui to the in-cluster
                    Langfuse when it is deployed as a subchart. LANGFUSE_HOST points at the

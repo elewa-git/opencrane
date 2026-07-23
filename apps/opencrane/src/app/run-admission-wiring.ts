@@ -2,8 +2,8 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaRunAdmissionRepository, RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/personal/runs";
-import type { RunAdmissionCommand, RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/personal/runs";
+import { PrismaRunAdmissionRepository, RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
+import type { RunAdmissionCommand, RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import type { RunAdmissionCapacityGate } from "./run-admission-wiring.types.js";

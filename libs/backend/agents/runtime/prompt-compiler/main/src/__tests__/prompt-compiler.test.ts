@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CompiledModelRoute, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { PROMPT_COMPILER_VERSION, __CompileRunInput } from "../prompt-compiler.js";
+import { PROMPT_COMPILER_VERSION, __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types.js";
 
 /** Build a snapshot fixture whose references the fake repositories can resolve. */
@@ -125,5 +125,23 @@ describe("__CompileRunInput", function _describeCompiler()
 	it("fails closed when the snapshot targets a different compiler version", async function _versionMismatch()
 	{
 		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), _repositories())).rejects.toThrow(/cannot compile snapshot version/);
+	});
+});
+
+describe("__AppendCompiledTool", function _describeAppend()
+{
+	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
+	{
+		const input = await __CompileRunInput(_snapshot(), _repositories());
+		const updated = __AppendCompiledTool(input, { name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: { type: "object" } });
+
+		expect(updated.tools.map(function _name(tool): string { return tool.name; })).toEqual(["alpha", "upgrade_session", "zulu"]);
+		expect(updated.digest).not.toBe(input.digest);
+	});
+
+	it("rejects a duplicate tool name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
+	{
+		const input = await __CompileRunInput(_snapshot(), _repositories());
+		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: { type: "object" } }); }).toThrow(/already contains tool/);
 	});
 });

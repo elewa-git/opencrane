@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/personal/runs";
+import { RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import { __CreateRunAdmissionCapacityGate, _CreateManagedRunAdmissionPortWithGate, _ReadRunAdmissionConcurrencyPolicy } from "../run-admission-wiring.js";

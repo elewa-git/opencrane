@@ -16,7 +16,7 @@ FAILURES=0
 LEGACY_LINKERD_INVENTORY="docs/agents/legacy-linkerd-inventory.txt"
 
 TARGET_RECORDS='^(plan\.md|docs/design/(personal-agent-platform-architecture|personal-agent-platform-direct-refactor-plan|personal-agent-platform-product-contract|openclaw-agent-loop-replacement-plan)\.md|docs/adr/0005-[^/]+\.md)$'
-RESEARCH_HISTORY='^(docs/research/litellm-byok-byom-research\.md|docs/specs/mcp-catalog-credential-spec\.md)$'
+RESEARCH_HISTORY='^(docs/specs/mcp-catalog-credential-spec\.md)$'
 HISTORICAL_RECORDS='^(plan-done\.md|CHANGELOG\.md|silo-multi-tenant-plan\.md|docs/briefs/mcp-skills-platform-brief\.md|docs/design/stage5-silo-autonomous-controllers-plan\.md|docs/agents/deploy-ledger\.md)$'
 RUNTIME_CONTRACT_TESTS='^(\.github/workflows/docker\.yml|apps/_infra/deploy-k8s/platform/tests/tenant-image-immutability\.sh|libs/backend/feat-openclaw-tenant/main/src/__tests__/tenants/tenant-resource-builder\.test\.ts)$'
 
@@ -186,10 +186,12 @@ _check_pattern "CLI-DEVICE-FLOW" '(device-grant|/auth/device(/activate|/token)?|
 TRANSITION_DECISION_RECORDS='^docs/adr/(README\.md|000[67]-[^/]+\.md)$'
 _check_pattern "TRANSITION-PROGRAM" '(frozen-blue|blue/green|whole-silo|maintenance[- ]window|activeSlot|activationEpoch|mid-cutover|R0/R3|R9 cutover|green branch|strangler|through[[:space:]]+R([0-9]|10)([^[:alnum:]_]|$)|until[[:space:]]+R([0-9]|10)([^[:alnum:]_]|$)|R([0-9]|10)(/R([0-9]|10))?[[:space:]]+(gate|cutover|migration|decommission|freeze))' "($HISTORICAL_RECORDS|$TRANSITION_DECISION_RECORDS)"
 
-# Issue #135's external secret-custody half is blocked. Existing references may shrink, but no new
-# broad-secret broadcast reference may be added while that explicit exception remains open.
-ORG_SECRET_135='^(docs/design/personal-agent-platform-architecture\.md|docs/research/litellm-byok-byom-research\.md)$'
+# The product design retains one historical deletion record for the former broad-secret broadcast.
+# No active implementation or additional documentation may reintroduce that pattern.
+ORG_SECRET_135='^(docs/design/personal-agent-platform-architecture\.md)$'
 _check_pattern "ORG-SHARED-SECRETS-135" 'org-shared-secrets' "$ORG_SECRET_135"
+
+_check_pattern "LEGACY-PROVIDER-KEY-API-353" 'ProviderApiKey|routes/provider-keys|/providers/keys' '^$'
 
 _check_legacy_linkerd_inventory
 

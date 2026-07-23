@@ -1,11 +1,3 @@
-model ProviderApiKey {
-  provider  String   @id
-  keyValue  String   @map("key_value")
-  updatedAt DateTime @updatedAt @map("updated_at")
-
-  @@map("provider_api_keys")
-}
-
 /// Scope at which a provider credential or model definition is owned (Track AIR).
 /// Provider keys are central (Global) or per-customer (ClusterTenant) — NEVER per openclaw tenant.
 enum ModelRoutingScope {

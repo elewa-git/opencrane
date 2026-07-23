@@ -10,9 +10,8 @@ set -euo pipefail
 #   1. install apps/_infra/deploy-k8s alone, standalone mode;
 #   2. the operator self-seeds its own ClusterTenant CR on boot and binds it to
 #      this namespace — `_SeedOwnClusterTenant`;
-#   3. it then seeds that org's `<org>-default` workspace Tenant — the ≥1-model
-#      onboarding gate is satisfied by the bootstrap provider key below, which
-#      seeds a model at boot — `_SeedOwnDefaultTenant`;
+#   3. the test seeds one explicit, non-secret model fixture, then the operator seeds that
+#      org's `<org>-default` workspace Tenant — `_SeedOwnDefaultTenant`;
 #   4. the in-silo TenantOperator reconciles that Tenant CR into its openclaw
 #      child resources and writes status back.
 #
@@ -85,14 +84,6 @@ TENANT_NAME="${ORG_NAME}-default"
 # `_ResolveOrgServingDomain`); ingress.domain is opencrane.local in the e2e values.
 INGRESS_DOMAIN="${INGRESS_DOMAIN:-opencrane.local}"
 EXPECTED_INGRESS_HOST="${ORG_NAME}.${INGRESS_DOMAIN}"
-
-# Boot-time BYOK bootstrap (apps/_infra/deploy-k8s `bootstrap.providerKey`): the
-# operator provisions this OpenAI key on boot and SEEDS A MODEL, which satisfies
-# the default-tenant seed's ≥1-model onboarding gate. The key never has to be
-# valid — the model row is written locally regardless of whether LiteLLM/OpenAI
-# are reachable, which is all the gate checks.
-BOOTSTRAP_SECRET_NAME="${BOOTSTRAP_SECRET_NAME:-opencrane-bootstrap-provider-key}"
-BOOTSTRAP_OPENAI_KEY="${BOOTSTRAP_OPENAI_KEY:-sk-e2e-dummy-key}"
 
 function _require_cmd()
 {
@@ -268,7 +259,7 @@ function _wait_for_clustertenant_bound()
 }
 
 # Poll until the seeded `<org>-default` Tenant reaches status.phase=Running. The Tenant CR
-# is seeded asynchronously on boot (after the ClusterTenant binds and a model is seeded), so
+# is seeded asynchronously on boot (after the ClusterTenant binds and the test model is present), so
 # this tolerates it not existing yet — jsonpath on an absent CR is empty and the loop retries.
 function _wait_for_tenant_running()
 {
@@ -645,6 +636,69 @@ function _copy_cnpg_uri_secret()
     | kubectl create secret generic "$target_secret" -n "$NAMESPACE" \
         --from-file="${target_key}=/dev/stdin" --dry-run=client -o yaml \
     | kubectl apply -f -
+}
+
+# The first-workspace gate requires one registered model because tenant runtimes use LiteLLM in
+# replace mode. Seed a deterministic model record for this disposable test only. The proxy route
+# is registered and called after LiteLLM becomes ready, so this fixture cannot certify a merely
+# database-shaped model. It contains no provider credential and no tenant receives an upstream
+# provider secret.
+function _seed_e2e_model_definition()
+{
+  cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: opencrane-e2e-model-fixture
+  namespace: ${NAMESPACE}
+spec:
+  backoffLimit: 0
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/component: opencrane-server
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      containers:
+        - name: seed-model
+          image: ghcr.io/cloudnative-pg/postgresql:17.5
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -c "INSERT INTO model_definitions (id, scope, public_model_name, litellm_model_id, upstream_model, is_default, created_at, updated_at) VALUES ('e2e-model-fixture', 'global', 'e2e/test-model', 'e2e-test-model', 'e2e/test-model', true, NOW(), NOW()) ON CONFLICT (id) DO NOTHING;"
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: ${OPENCRANE_POSTGRES_APP_SECRET}
+                  key: uri
+EOF
+  kubectl wait --for=condition=Complete job/opencrane-e2e-model-fixture -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"
+}
+
+# Register the fixture in the live LiteLLM proxy and prove its mock-response path before accepting
+# the seeded Tenant. LiteLLM's request-local mock response returns before any upstream provider
+# call, letting the smoke prove the model route without a raw provider credential.
+function _assert_e2e_model_routable()
+{
+  kubectl exec "deployment/${RELEASE_NAME}-litellm" -n "$NAMESPACE" -- python -c '
+import json
+import urllib.request
+
+headers = {"Authorization": "Bearer e2e-master-key", "Content-Type": "application/json"}
+
+def request(path, payload):
+    body = json.dumps(payload).encode()
+    command = urllib.request.Request("http://127.0.0.1:4000" + path, data=body, headers=headers, method="POST")
+    with urllib.request.urlopen(command, timeout=15) as response:
+        return json.load(response)
+
+request("/model/new", {"model_name": "e2e/test-model", "litellm_params": {"model": "openai/e2e-test-model"}})
+completion = request("/v1/chat/completions", {"model": "e2e/test-model", "messages": [{"role": "user", "content": "fixture"}], "mock_response": "e2e model route"})
+if completion["choices"][0]["message"]["content"] != "e2e model route":
+    raise RuntimeError("LiteLLM fixture model did not return the expected mock response")
+'
 }
 
 function _run_backup_restore_smoke()
@@ -1088,6 +1142,8 @@ function _assert_distinct_cnpg_app_credentials()
 }
 _assert_distinct_cnpg_app_credentials "$OPENCRANE_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
 
+_seed_e2e_model_definition
+
 _copy_cnpg_uri_secret "$OBOT_POSTGRES_APP_SECRET" "${RELEASE_NAME}-obot" dsn
 _copy_cnpg_uri_secret "$LITELLM_POSTGRES_APP_SECRET" opencrane-litellm-db DATABASE_URL
 
@@ -1121,13 +1177,6 @@ function _create_artifact_keys()
 
 _create_artifact_keys
 
-# Boot-time BYOK bootstrap key — seeds a model so the default-tenant seed's ≥1-model gate passes.
-kubectl create secret generic "$BOOTSTRAP_SECRET_NAME" \
-  -n "$NAMESPACE" \
-  --from-literal=openaiApiKey="$BOOTSTRAP_OPENAI_KEY" \
-  --dry-run=client \
-  -o yaml | kubectl apply -f -
-
 # 6. Install ONLY the standalone silo chart, wired to the in-cluster database and images.
 #    The test substrate has cert-manager for the CNPG-I plugin, but the OpenCrane release's
 #    self-managed Issuer/Certificate stays disabled because this smoke has no routable domain.
@@ -1150,7 +1199,6 @@ helm upgrade --install "$RELEASE_NAME" "$ROOT_DIR/apps/_infra/deploy-k8s" \
   --set "litellm.existingDatabaseSecret=opencrane-litellm-db" \
   --set "litellm.databaseSecretKey=DATABASE_URL" \
   --set "litellm.service.port=$LITELLM_SERVICE_PORT" \
-  --set "bootstrap.providerKey.existingSecret=$BOOTSTRAP_SECRET_NAME" \
   --set agentController.enabled=true \
   --set agentController.replicas=0 \
   --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
@@ -1202,6 +1250,7 @@ bash "$ROOT_DIR/apps/agent-controller/tests/identity-conformance.sh" "$NAMESPACE
 # Wait for LiteLLM (a silo plane) when cost routing is enabled by chart values.
 if kubectl get "deployment/${RELEASE_NAME}-litellm" -n "$NAMESPACE" >/dev/null 2>&1; then
   kubectl rollout status "deployment/${RELEASE_NAME}-litellm" -n "$NAMESPACE" --timeout=240s
+  _assert_e2e_model_routable
 fi
 
 # 7. Assert the standalone boot seeds ran: the operator created + bound its OWN ClusterTenant

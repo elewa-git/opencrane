@@ -1,0 +1,12 @@
+{
+  "name": "backend-agents-execution-runs",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/execution/runs/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:execution-runs"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/execution/runs/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/execution/runs/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/run-input-snapshot-admission.sql", "cwd": "libs/backend/agents/execution/runs/main" } }
+  }
+}

@@ -1,4 +1,4 @@
-import type { RunAdmissionCommand, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/personal/runs";
+import type { RunAdmissionCommand, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
 
 /** Hierarchical capacity boundary applied before run admission can begin persistence work. */
 export interface RunAdmissionCapacityGate

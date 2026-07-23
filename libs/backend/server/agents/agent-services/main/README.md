@@ -80,7 +80,7 @@ a silent partial publish.
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
 agent models), `scope:audit`, `scope:authorization`, `scope:grants`, and `scope:shared` — never on
 apps, gateways, or knowledge domains. run-now and session reading are injected by the app so this
-package never imports `scope:auth` or `scope:personal-runs`. The `scope:grants` edge is real and
+package never imports `scope:auth` or `scope:execution-runs`. The `scope:grants` edge is real and
 load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled

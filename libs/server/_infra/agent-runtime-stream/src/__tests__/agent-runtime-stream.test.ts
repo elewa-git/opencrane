@@ -7,10 +7,11 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { _RegisterInternalAgentRuntimeStream } from "../agent-runtime-stream.js";
+import { RuntimeCommandWakeup } from "../runtime-command-wakeup.js";
 import type { RuntimeCommandStreamAuthority } from "../agent-runtime-stream.types.js";
 
 /** Build a transport app with a deterministic projected-token reviewer. */
-function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"])
+function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"], commandWakeup?: RuntimeCommandWakeup)
 {
 	const app = express();
 	app.use(_RegisterInternalAgentRuntimeStream({
@@ -28,7 +29,8 @@ function _CreateApp(admit: RuntimeCommandStreamAuthority["__AdmitCandidate"])
 		},
 		maxBodyBytes: 64 * 1024,
 		heartbeatMilliseconds: 60_000,
-		commandPollMilliseconds: 1_000,
+		commandRecoveryMilliseconds: 1_000,
+		commandWakeup,
 	}));
 	return app;
 }
@@ -45,6 +47,16 @@ const _candidate: RuntimeCandidate = {
 	kind: "event",
 	eventType: "run.started",
 	payload: {},
+};
+
+/** Valid external action that may make a deferred resume command due after durable execution. */
+const _externalActionCandidate: RuntimeCandidate = {
+	..._candidate,
+	kind: "external_action",
+	toolRevisionId: "mcp-server:search",
+	toolInvocationId: "invocation-1",
+	argumentsDigest: "sha256:arguments",
+	arguments: { query: "example" },
 };
 
 /** Valid stream-open identity for the deterministic projected-token test reviewer. */
@@ -83,6 +95,18 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 		expect(admit).toHaveBeenCalledTimes(1);
 	});
 
+	it("wakes waiting streams only after an accepted external action may make a resume command due", async function _wakesAfterCandidateAcceptance()
+	{
+		const wakeup = new RuntimeCommandWakeup();
+		const waiting = wakeup.waitForChange(wakeup.currentRevision(), 30_000);
+		await request(_CreateApp(async function _accept() { return { accepted: true }; }, wakeup))
+			.post("/candidates")
+			.set("Authorization", "Bearer valid-token")
+			.send(_externalActionCandidate)
+			.expect(202, { accepted: true });
+		await expect(waiting).resolves.toBeUndefined();
+	});
+
 	it("returns a bounded retryable result for an admitted action whose durable reservation is unavailable", async function _retryableCandidateAdmission()
 	{
 		const admit = vi.fn<RuntimeCommandStreamAuthority["__AdmitCandidate"]>().mockResolvedValue({ accepted: false, reason: "external_action_dispatch_retryable", retryable: true, retryAfterMilliseconds: 1_000 });
@@ -117,7 +141,7 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 			authority: { __NextCommand: nextCommand, async __AdmitCandidate() { return { accepted: false }; } },
 			maxBodyBytes: 64 * 1024,
 			heartbeatMilliseconds: 5,
-			commandPollMilliseconds: 2,
+			commandRecoveryMilliseconds: 2,
 		}));
 		const server = createServer(app);
 		await new Promise<void>(function _listen(resolve) { server.listen(0, "127.0.0.1", resolve); });
@@ -164,7 +188,7 @@ describe("_RegisterInternalAgentRuntimeStream", function _runtimeTransportSuite(
 			authority: { async __NextCommand() { return null; }, async __AdmitCandidate() { return { accepted: false }; }, __ReleaseStream: release },
 			maxBodyBytes: 64 * 1024,
 			heartbeatMilliseconds: 5,
-			commandPollMilliseconds: 2,
+			commandRecoveryMilliseconds: 2,
 		}));
 		const server = createServer(app);
 		await new Promise<void>(function _listen(resolve) { server.listen(0, "127.0.0.1", resolve); });

@@ -1,56 +1,60 @@
-# Agents — the personal-agent product domains
+# Agents — agent product and execution domains
 
 > [backend](../README.md) › agents
 
-These packages hold the state and rules for the **personal-agent product**: the OpenCrane feature
-that gives each employee their own agent. Everything under `personal/` is that agent's *own*
-state — the conversations it has had, what it has learned, who it is configured to be, and each
-attempt it makes at a task. This is deliberately distinct from [`libs/backend/server`](../server/README.md),
-which is the operator **control plane** (who may act, tenancy, gateways, billing); the domains here
-are the per-employee agent looking after itself, not the operator looking after the fleet.
+This tier holds the rules and state that make an agent behave as an agent: a durable identity and
+service, a conversation, a run and its attempts, a frozen input, learned memory, a persona or other
+context, and the execution boundary that turns an authorised attempt into work. These concepts are
+general: a personal assistant and a future managed agent both need an identity, an attempt, and a
+safe execution boundary.
+
+`personal/` is the current specialization. It owns the employee-specific persistence and policy — a
+person's conversations, memory facts, and approved persona. It is deliberately distinct from
+[`libs/backend/server`](../server/README.md), the operator **control plane** that governs people,
+tenancy, gateways, and fleet-wide services. The execution and runtime packages below remain shared
+agent principles rather than becoming personal-only by proximity.
 
 ## Map
 
 | Package | What it owns |
 | --- | --- |
-| [`personal/conversations`](./personal/conversations/main/README.md) | Append-only run-event history. |
-| [`personal/memory`](./personal/memory/main/README.md) | Memory fact catalog. |
-| [`personal/personas`](./personal/personas/main/README.md) | Persona approval process. |
-| [`personal/runs`](./personal/runs/main/README.md) | Agent-run attempt authority. |
-| [`personal/session`](./personal/session/main/README.md) | Run input snapshot assembly. |
-| [`runtime`](./runtime/README.md) | Language-neutral command/candidate authority and agent-controller Job projection. |
+| [`personal/conversations`](./personal/conversations/main/README.md) | Personal specialization: append-only user-visible event history. |
+| [`personal/configuration`](./personal/configuration/main/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
+| [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: memory-fact catalogue and policy. |
+| [`personal/personas`](./personal/personas/main/README.md) | Personal specialization: persona approval process. |
+| [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
+| [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
+| [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
+| [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
 
 ```
-              backend/agents/personal   (one employee's agent)
-   ┌────────────────┬───────────────┬──────────────┬──────────────┐
- runs           conversations     memory        personas
- (attempts)     (event history)   (learned facts) (who it is)
-   ▲
-   │ admission transaction
- session  (freezes one immutable input snapshot per run)
+ personal specialization                shared agent execution
+conversations · memory · personas · configuration  ──► inputs ──► runs ──► protocol ──► runtime Job
+ employee-specific state                  frozen input  attempt   bounded executor boundary
 ```
 
-`runtime/` sits beside `personal/` because it validates the language-neutral execution boundary
-for both personal and managed runs. It owns neither the model loop nor a second run/event store.
+The diagram intentionally leaves room for future managed specializations without inventing packages
+before they exist. `execution/` and `runtime/` are shared by personal and managed attempts. Neither
+owns the model loop or a second run/event store.
 
 ## Dependency rule for this tier
 
-Each domain carries `layer:backend` and its own scope (`scope:personal-runs`,
-`scope:personal-conversations`, `scope:personal-memory`, `scope:personal-personas`). A domain may
-import the shared models it needs — the agent model (`scope:agents`), and for runs the
-authorization model, for memory the artifacts model — plus shared contracts (`scope:shared`) and
-its own scope. It may **not** import a sibling `personal-*` domain or any control-plane
-(`libs/backend/server`) domain. Cross-domain contact happens above, in the app that composes them.
-Never import an app.
+Each domain carries `layer:backend` and its own scope (`scope:execution-runs`,
+`scope:personal-conversations`, `scope:personal-configuration`, `scope:personal-memory`,
+`scope:personal-personas`). A domain may
+import the shared models it needs — the agent model (`scope:agents`), and for runs the authorization
+model, for memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
+It may **not** import an unrelated specialization or a control-plane (`libs/backend/server`) domain.
+Cross-domain contact happens above, in the app that composes them. Never import an app.
 
-One deliberate exception: `personal/session` (`scope:personal-session`) is the assembly step that
-sits *across* the domains, so its constraint additionally allows `scope:personal-runs` (the
+One deliberate exception: `execution/inputs` (`scope:execution-inputs`) is the assembly step that
+sits *across* the domains, so its constraint additionally allows `scope:execution-runs` (the
 admission transaction it compiles into), `scope:membership` (verified identity evidence), and
 `scope:artifacts` — see the `depConstraint` in `eslint.config.mjs`.
 
-The `runtime` domain may additionally consume the shared agent model, run/conversation/authorization
-ports, and contracts required to validate an attempt. It cannot import an app, transport adapter,
-or model driver.
+`execution/protocol` may additionally consume the shared agent model, run/conversation/authorization
+ports, and contracts required to validate an attempt. Neither it nor the runtime controller can import
+an app, transport adapter, or model driver.
 
 ## See also
 
