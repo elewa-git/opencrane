@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
+
 import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
-import { ___DigestCanonicalJson } from "@opencrane/util";
+import { ___CanonicalizeJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 import { ___DoWithTrace } from "@opencrane/observability";
 
@@ -123,5 +125,5 @@ function _optionalCount(value: JsonValue | undefined): number | null
 /** Seal the compiled payload with a SHA-256 digest over its canonical serialization. */
 function _digest(unsealed: Omit<CompiledRunInput, "digest">): `sha256:${string}`
 {
-	return ___DigestCanonicalJson(unsealed as unknown as JsonValue);
+	return `sha256:${createHash("sha256").update(___CanonicalizeJson(unsealed as unknown as JsonValue), "utf8").digest("hex")}`;
 }
