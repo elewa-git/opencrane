@@ -14,6 +14,8 @@ export interface SkillPublicationEvidence
 /** Request to publish one exact reviewed SkillRevision. */
 export interface PublishSkillRevisionCommand
 {
+	/** Trusted ClusterTenant scope derived by the application from the request host. */
+	readonly siloId: string;
 	/** Stable logical skill. */
 	readonly skillId: string;
 	/** Immutable skill revision being published. */
@@ -26,8 +28,6 @@ export interface PublishSkillRevisionCommand
 	readonly reviewedBy: string;
 	/** Trusted publication instant. */
 	readonly publishedAt: string;
-	/** Test, scan, and signature evidence. */
-	readonly evidence: SkillPublicationEvidence;
 }
 
 /** Consistent publication authority snapshot. */
@@ -39,6 +39,8 @@ export interface SkillPublicationSnapshot
 	readonly artifactPublished: boolean;
 	/** Exact content address held by Artifact metadata. */
 	readonly artifactContentAddress: string;
+	/** Server-owned evidence recorded by the isolated review job before the revision entered review. */
+	readonly evidence: SkillPublicationEvidence | null;
 }
 
 /** Atomic skill publication result. */
@@ -56,4 +58,4 @@ export interface SkillAuthorityRepository
 /** Stable result of skill publication. */
 export type PublishSkillRevisionResult =
 	| { readonly outcome: "published" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "not_in_review" | "artifact_unpublished" | "artifact_mismatch" | "conflict" };
+	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "not_in_review" | "artifact_unpublished" | "artifact_mismatch" | "review_evidence_missing" | "conflict" };
