@@ -18,6 +18,8 @@ const executionDomains = [
 const legacyExecutionDomains = [
 	{ directory: "personal/runs/main", alias: "@opencrane/backend/agents/personal/runs", scope: "scope:personal-runs" },
 	{ directory: "personal/session/main", alias: "@opencrane/backend/agents/personal/session", scope: "scope:personal-session" },
+	{ directory: "runtime/main", alias: "@opencrane/backend/agents/runtime" },
+	{ directory: "runtime/prompt-compiler/main", alias: "@opencrane/backend/agents/runtime/prompt-compiler" },
 ];
 const operatorDomains = ["membership", "authorization", "agent-services", "integrations"];
 const ignoredDirectories = new Set([".claude", ".git", ".nx", "coverage", "dist", "node_modules"]);
@@ -58,7 +60,7 @@ for (const legacy of legacyExecutionDomains)
 	const legacyPath = join(root, "libs", "backend", "agents", legacy.directory);
 	if (existsSync(legacyPath)) fail(`legacy execution domain must not exist: ${relative(root, legacyPath)}`);
 	if (tsconfig.compilerOptions?.paths?.[legacy.alias]) fail(`legacy execution TypeScript alias must not exist: ${legacy.alias}`);
-	if (eslintConfig.includes(`sourceTag: "${legacy.scope}"`)) fail(`legacy execution ESLint scope must not exist: ${legacy.scope}`);
+	if (legacy.scope && eslintConfig.includes(`sourceTag: "${legacy.scope}"`)) fail(`legacy execution ESLint scope must not exist: ${legacy.scope}`);
 }
 
 for (const domain of personalDomains)

@@ -2,8 +2,8 @@ import type { Prisma } from "@prisma/client";
 
 import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
-import { __CompileRunInput } from "@opencrane/backend/agents/runtime/prompt-compiler";
-import type { PromptCompilerRepositories } from "@opencrane/backend/agents/runtime/prompt-compiler";
+import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
+import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
 

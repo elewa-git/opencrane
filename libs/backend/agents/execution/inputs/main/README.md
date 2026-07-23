@@ -22,6 +22,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
  │   execution/inputs  ◄── HERE              │  load run/persona/thread/preferences/
  │   · orchestrates 8 authority loads        │  memory/tools/budget/identity, all inside
  │   · compiles + digests the one snapshot   │  the runs package's admission transaction
+ │   · compiles deterministic runtime input  │
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
           ▼
@@ -56,6 +57,10 @@ caller input.
   `CapabilitySetDigestSource` — the per-input ports the OpenCrane app implements with real adapters.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
+- `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot into
+  runtime-owned prompt input, with a version stamp that makes a compiler change visible in evidence.
+- `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
+  content while compiling.
 
 ## Boundary
 
@@ -63,7 +68,8 @@ Consumed by the run-admission path in the OpenCrane app, which composes the port
 authority adapters. It does not select a runtime driver, approve a persona, issue capabilities, or
 read mutable workspace files — and it never touches storage directly: every read goes through a
 port, and the only write goes through the [runs](../../runs/main/README.md) package's
-`RunAdmissionRepository`. Fail-closed throughout: malformed coordinates, a stale membership, a
+`RunAdmissionRepository`. The deterministic compiler reads only content already named by the sealed
+snapshot; it cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
 ## Dependency direction
