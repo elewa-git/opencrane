@@ -58,8 +58,9 @@ fails closed and a crash leaves the previous active persona intact, never a half
   and its canonical product-database implementation.
 - `__CreatePersonaDraft(repository, command)` — derives the selected template, next revision, and
   answer provenance from a completed interview; callers supply only reviewable insight statements.
-- `CreatePersonaDraftCommand` / `CreatePersonaDraftResult`, `PersonaDraftInsightCommand`, and
-  `PersonaDraftRepository` — the request, stable outcome, insight evidence, and draft persistence port.
+- `CreatePersonaDraftCommand` / `CreatePersonaDraftResult`, `CreatePersonaDraftPersistenceResult`,
+  `PersonaDraftInsightCommand`, and `PersonaDraftRepository` — the request, stable outcome, raw
+  persistence result, insight evidence, and draft persistence port.
 - `PrismaPersonaDraftRepository` — locks profile and interview evidence, then persists the derived
   template and three-to-five answer-bound insights as one draft.
 - `__ApprovePersona(repository, command)` — validates evidence, then approves and activates atomically.
