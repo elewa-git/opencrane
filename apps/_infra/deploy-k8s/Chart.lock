@@ -17,6 +17,9 @@ dependencies:
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
   version: 0.1.0
+- name: opencrane-artifact-preprocessor
+  repository: file://../../artifact-preprocessor/helm
+  version: 0.1.0
 - name: opencrane-cognee
   repository: file://../cognee/helm
   version: 0.1.0
@@ -29,5 +32,5 @@ dependencies:
 - name: langfuse
   repository: https://langfuse.github.io/langfuse-k8s
   version: 1.5.37
-digest: sha256:919555ead4d4c50d7112e840741e55a0ab50f43f0c02889aad74975195db5800
-generated: "2026-07-22T12:45:26.421421+03:00"
+digest: sha256:d55874ed00689602778ff6b2d1716b1a495405896daa0cad8c1b021415cd32b3
+generated: "2026-07-23T16:39:00.283385+03:00"

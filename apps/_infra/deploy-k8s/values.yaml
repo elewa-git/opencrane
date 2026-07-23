@@ -300,6 +300,37 @@ artifactService:
       cpu: 500m
       memory: 512Mi
 
+# -- Isolated, outbound-only PDF text worker. It receives only a rotating projected token and
+# server-issued byte capabilities; it has no database Secret, signing key, ArtifactStore mount, Service,
+# ingress, or Kubernetes API permission.
+artifactPreprocessor:
+  enabled: false
+  image:
+    repository: ghcr.io/italanta/opencrane-artifact-preprocessor
+    # -- Mandatory immutable image digest whenever this worker is enabled.
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  # -- Empty uses same-silo Service DNS names derived by the chart. Overrides remain explicit only for
+  # an externally hosted private endpoint with an equivalent network boundary.
+  openCraneInternalUrl: ""
+  artifactServiceUrl: ""
+  pollIntervalMs: 1000
+  requestTimeoutMs: 10000
+  projectedTokenTtlSeconds: 600
+  maximumSourceBytes: 33554432
+  maximumOutputBytes: 16777216
+  conversionTimeoutMs: 30000
+  # -- Must accommodate at most one bounded source PDF and its bounded derived UTF-8 output.
+  scratchSize: 64Mi
+  resources:
+    requests:
+      cpu: 100m
+      memory: 256Mi
+    limits:
+      cpu: "1"
+      memory: 512Mi
+
 # -- Personal-runtime workload controller. Disabled until an immutable runtime image digest and
 # exact Kubernetes API Service CIDR are supplied; enabling it never starts a runtime Job directly.
 agentController:

@@ -16,6 +16,7 @@ that ties the two together.
 | [`authorization`](./authorization/main/README.md) | Artifact write-lease and receipt authority. |
 | [`filesystem`](./filesystem/main/README.md) | On-disk content-addressed store. |
 | [`store`](./store/main/README.md) | Artifact promotion protocol and validation guards. |
+| [`preprocessor`](./preprocessor/main/README.md) | Fenced PDF-to-text worker protocol and its capability-limited adapters. |
 
 ```
    caller wants to store bytes
@@ -28,6 +29,9 @@ that ties the two together.
             │
             ▼
      filesystem .......... the one place the bytes actually live on disk
+            │
+            ▼
+    preprocessor ......... reads and promotes only server-authorized PDF derivatives
 ```
 
 ## Dependency rule for this tier

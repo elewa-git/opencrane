@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opencrane-artifact-preprocessor
+description: App-owned named-template library for the isolated PDF preprocessing worker.
+type: library
+version: 0.1.0
+appVersion: "0.1.0"

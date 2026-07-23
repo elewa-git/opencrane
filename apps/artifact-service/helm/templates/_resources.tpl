@@ -163,6 +163,17 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.artifactService.service.port }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-preprocessor
+      ports:
+        - protocol: TCP
+          port: {{ .Values.artifactService.service.port }}
   egress:
     - to:
         - namespaceSelector:

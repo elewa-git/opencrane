@@ -22,6 +22,8 @@
 ---
 {{ include "opencrane.agentController.resources" . }}
 ---
+{{ include "opencrane.artifactPreprocessor.resources" . }}
+---
 {{ include "opencrane.cognee.resources" . }}
 ---
 {{ include "opencrane.litellm.secret" . }}

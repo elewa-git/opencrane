@@ -61,12 +61,11 @@ HTTP endpoints: `POST /v1/artifacts/promote` writes under a signed write lease; 
 Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), list
 artifacts, or expose the disk as a file server. A read can only name the exact address signed into its
 lease. The chart currently admits **only the OpenCrane server** through the artifact-service
-NetworkPolicy; no worker is wired to this endpoint yet. The preprocessor slice must add one named
-consumer's matching egress and this chart's matching ingress before it can use a read lease, without
-widening access to arbitrary pods. That future worker will therefore not need direct PVC access. This
-process does not accept raw secrets as environment variables — signing keys are mounted PEM files, not
-env values. Verification and signing are delegated to the artifacts libraries; this process is only the
-HTTP adapter and byte pump around them.
+NetworkPolicy; its only non-server consumer is the `artifact-preprocessor` worker, admitted by the same
+release labels and namespace on the service port. That worker holds a short-lived server-issued read or
+write capability, never direct PVC access. This process does not accept raw secrets as environment
+variables — signing keys are mounted PEM files, not env values. Verification and signing are delegated
+to the artifacts libraries; this process is only the HTTP adapter and byte pump around them.
 
 ## Dependency direction
 
