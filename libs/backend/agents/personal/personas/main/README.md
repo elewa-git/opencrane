@@ -43,6 +43,8 @@ persona intact, never a half-approved one.
 - `PersonaApprovalSnapshot` — the consistent evidence read before the decision.
 - `AtomicApprovePersonaCommand` / `AtomicApprovePersonaResult` — the commit command carrying the accepted preconditions, and its raw result.
 - `PersonaAuthorityRepository` — the persistence port a caller must implement (or inject).
+- `PrismaPersonaAuthorityRepository` — the target Postgres implementation; it locks the profile,
+  approves the checked draft, and moves the active pointer in one transaction.
 
 ## Boundary
 
