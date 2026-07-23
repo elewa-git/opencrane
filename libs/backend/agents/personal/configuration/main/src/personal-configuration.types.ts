@@ -1,3 +1,6 @@
+/** Closed configuration change that a future personal revision authority may materialise. */
+export type PersonalConfigurationPatch = { readonly kind: "persona_refresh" } | { readonly kind: "model_alias"; readonly modelAlias: string };
+
 /** A durable request to change a personal agent only for a later immutable run snapshot. */
 export interface ProposePersonalConfigurationChangeCommand
 {
@@ -15,8 +18,8 @@ export interface ProposePersonalConfigurationChangeCommand
 	readonly sourceRunId: string;
 	/** Optional message that caused the request. */
 	readonly sourceMessageId: string | null;
-	/** Opaque, validated request payload retained for future policy evaluation. */
-	readonly requestedPatch: Readonly<Record<string, unknown>>;
+	/** Closed, validated request payload retained for later materialisation. */
+	readonly requestedPatch: PersonalConfigurationPatch;
 	/** Canonical SHA-256 digest of the request payload. */
 	readonly requestedPatchDigest: string;
 	/** Active persona revision that must still be current before application. */

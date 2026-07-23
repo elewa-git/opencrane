@@ -5,7 +5,7 @@ import { __ProposePersonalConfigurationChange } from "../personal-configuration.
 /** Build one valid proposal command with optional overrides. */
 function _Command(overrides: Partial<Parameters<typeof __ProposePersonalConfigurationChange>[1]> = {})
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { modelAlias: "careful-model" }, requestedPatchDigest: "sha256:389a2c5d10dcc2b13b1910f833c7f2ceaa3417a81ac583a9085b47df00aeb7d2", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z", ...overrides };
+	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { kind: "model_alias" as const, modelAlias: "careful-model" }, requestedPatchDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
 describe("personal configuration proposals", function _Suite()
@@ -35,6 +35,12 @@ describe("personal configuration proposals", function _Suite()
 	it("rejects a malformed null patch without throwing", async function _RejectsNullPatch()
 	{
 		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose() { return { status: "proposed", changeId: "unexpected" } as const; } }, _Command({ requestedPatch: null as never }));
+		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
+	});
+
+	it("rejects a patch variant or extra field that no later authority may interpret", async function _RejectsUnknownPatch()
+	{
+		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose() { return { status: "proposed", changeId: "unexpected" } as const; } }, _Command({ requestedPatch: { kind: "model_alias", modelAlias: "careful-model", budget: 10 } as never }));
 		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
 	});
 });

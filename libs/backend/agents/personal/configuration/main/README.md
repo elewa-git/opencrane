@@ -34,6 +34,9 @@ means the request is already user-approved or applied.
   never applies a patch itself.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
+- `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
+  and authored-persona workflow; `model_alias` requests a human-visible model alias. It cannot carry
+  raw SOUL text, budgets, credentials, policy IDs, tools, skills, integrations, or revision IDs.
 
 ## Boundary
 

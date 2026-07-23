@@ -9,7 +9,7 @@ export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
 	toolRevisionId: UPGRADE_SESSION_TOOL_REVISION,
 	description: "Propose a personal-agent configuration change for a future session after the user reviews it.",
 	requiresApproval: false,
-	parametersSchema: { type: "object", minProperties: 1, additionalProperties: true },
+	parametersSchema: { oneOf: [{ type: "object", properties: { kind: { const: "persona_refresh" } }, required: ["kind"], additionalProperties: false }, { type: "object", properties: { kind: { const: "model_alias" }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } }, required: ["kind", "modelAlias"], additionalProperties: false }] },
 };
 
 /** Return whether the immutable snapshot is eligible for the built-in personal configuration tool. */

@@ -4224,7 +4224,12 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_statement_check"
 ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configuration_changes_valid_check" CHECK (
         btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
         AND btrim("agent_service_id") <> '' AND btrim("source_thread_id") <> '' AND btrim("source_run_id") <> ''
-        AND jsonb_typeof("requested_patch") = 'object' AND "requested_patch" <> '{}'::jsonb
+        AND ("requested_patch" = '{"kind":"persona_refresh"}'::jsonb
+             OR ("requested_patch"->>'kind' = 'model_alias'
+                 AND jsonb_typeof("requested_patch"->'modelAlias') = 'string'
+                 AND "requested_patch"->>'modelAlias' ~ '[^[:space:]]'
+                 AND length("requested_patch"->>'modelAlias') <= 200
+                 AND ("requested_patch" - ARRAY['kind', 'modelAlias']) = '{}'::jsonb))
         AND "requested_patch_digest" ~ '^sha256:[0-9a-f]{64}$'
         AND (("state" = 'proposed' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "rejection_reason" IS NULL
               AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)

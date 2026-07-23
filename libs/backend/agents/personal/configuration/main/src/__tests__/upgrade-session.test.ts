@@ -22,5 +22,7 @@ describe("upgrade_session tool", function _UpgradeSessionSuite()
 	it("is first-party and never opens deferred approval for the invocation", function _Descriptor()
 	{
 		expect(UPGRADE_SESSION_TOOL).toMatchObject({ name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", requiresApproval: false });
+		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ additionalProperties: false })]) });
+		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ properties: expect.objectContaining({ modelAlias: expect.objectContaining({ pattern: "\\S" }) }) })]) });
 	});
 });

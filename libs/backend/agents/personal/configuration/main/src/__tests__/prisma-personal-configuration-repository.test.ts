@@ -17,7 +17,7 @@ function _Transaction(overrides: { readonly profile?: unknown; readonly thread?:
 /** Create one valid proposal command. */
 function _Command()
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { modelAlias: "careful-model" }, requestedPatchDigest: `sha256:${"a".repeat(64)}`, expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z" };
+	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { kind: "model_alias" as const, modelAlias: "careful-model" }, requestedPatchDigest: `sha256:${"a".repeat(64)}`, expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z" };
 }
 
 describe("Prisma personal configuration repository", function _Suite()

@@ -77,7 +77,7 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 	async proposeUpgradeSession(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>
 	{
 		// 1. Reject non-personal or non-conversation snapshots before deriving any mutable profile coordinate.
-		if (snapshot.personaRevisionId === null || snapshot.threadId === null || !_IsPersonalConfigurationPatch(candidate.arguments)) throw new Error("upgrade_session requires a personal conversation snapshot and object patch");
+		if (snapshot.personaRevisionId === null || snapshot.threadId === null || !_IsPersonalConfigurationPatch(candidate.arguments)) throw new Error("upgrade_session requires a personal conversation snapshot and supported configuration patch");
 
 		// 2. Resolve the only profile owned by the immutable execution subject in this silo.
 		const profile = await this.prisma.personaProfile.findUnique({ where: { siloId_userId: { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId } }, select: { id: true } });
