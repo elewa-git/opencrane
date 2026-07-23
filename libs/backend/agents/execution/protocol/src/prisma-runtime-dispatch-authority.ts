@@ -535,7 +535,7 @@ async function _loadResume(transaction: Prisma.TransactionClient, context: Runti
 }
 
 /** Map the durable snapshot row into the immutable wire snapshot the runtime receives. */
-function _buildSnapshotFrame(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; toolGrantIds: string[]; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+function _buildSnapshotFrame(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; messageArtifactAttachments: Prisma.JsonValue; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; toolGrantIds: string[]; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId,
@@ -545,6 +545,7 @@ function _buildSnapshotFrame(row: { runId: string; siloId: string; agentServiceI
 		snapshotVersion: row.snapshotVersion,
 		threadId: row.threadId,
 		messageIds: row.messageIds,
+		messageArtifactAttachments: row.messageArtifactAttachments as unknown as RunInputSnapshot["messageArtifactAttachments"],
 		personaRevisionId: row.personaRevisionId,
 		preferenceFactIds: row.preferenceFactIds,
 		artifactRevisionIds: row.artifactRevisionIds,

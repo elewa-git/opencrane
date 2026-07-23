@@ -62,10 +62,27 @@ model ConversationMessage {
   completedAt DateTime?                @map("completed_at")
   thread      ConversationThread       @relation(fields: [threadId], references: [id], onDelete: Restrict)
   preferenceFacts PreferenceFact[]     @relation("PreferenceFactSourceMessage")
+  artifactAttachments ConversationMessageArtifactAttachment[]
 
   @@index([threadId, createdAt, id])
   @@index([runId])
   @@map("conversation_messages")
+}
+
+/// Immutable artifact-revision input reference associated with one pending user message.
+model ConversationMessageArtifactAttachment {
+  messageId          String   @map("message_id")
+  artifactRevisionId String   @map("artifact_revision_id")
+  ordinal            Int
+  attachedBy         String   @map("attached_by")
+  attachedAt         DateTime @default(now()) @map("attached_at")
+  message            ConversationMessage @relation(fields: [messageId], references: [id], onDelete: Restrict)
+  artifactRevision   ArtifactRevision   @relation(fields: [artifactRevisionId], references: [id], onDelete: Restrict)
+
+  @@id([messageId, ordinal])
+  @@unique([messageId, artifactRevisionId])
+  @@index([artifactRevisionId])
+  @@map("conversation_message_artifact_attachments")
 }
 
 model ConversationRunEvent {

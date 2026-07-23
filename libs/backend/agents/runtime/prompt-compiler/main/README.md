@@ -11,6 +11,12 @@ through injected control-plane read ports, resolves the model route and literal 
 orders every collection canonically, stamps its own version, and seals the result with a SHA-256
 digest over the canonical payload.
 
+For a message attachment, the compiler receives the exact immutable `(messageId, ArtifactRevisionId,
+ordinal)` coordinate frozen at admission. Its control-plane adapter must resolve that same persisted
+conversation association and an active, published revision before exposing the revision's media type
+and content address to the runtime. It never accepts a file path, mutable artifact pointer, or a
+revision merely because its ID happens to exist.
+
 Because every referenced record is immutable, the same snapshot compiles to byte-identical output
 across process restarts. The compiler holds no database of its own: the app injects the read ports
 over the control-plane Prisma transaction so the runtime never re-derives prompt, persona, or tool
@@ -39,6 +45,8 @@ than being silently compiled by a mismatched version.
 - `PROMPT_COMPILER_VERSION` — the exact version this compiler stamps and requires on every snapshot.
 - `PromptCompilerRepositories` — the injected read ports the runtime authority implements over control-plane
   persona, preference, conversation, tool, memory, artifact, skill, and model-routing records.
+- `CompiledMessage.attachments` / `CompiledMessageAttachment` — the runtime-ready revision metadata for
+  exact user-message multimodal inputs; bytes remain in the ArtifactStore authority.
 
 ## Boundary
 

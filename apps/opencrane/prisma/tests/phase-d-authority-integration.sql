@@ -1601,12 +1601,12 @@ SELECT pg_temp.assert_true(
 
 INSERT INTO "run_input_snapshots" (
     "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-    "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route",
+    "effective_contract_digest", "thread_id", "message_artifact_attachments", "memory_facts", "identity_snapshot", "model_route",
     "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 )
 SELECT
     "id", 1, "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest",
-    "thread_id", '[]', '{}', '{}', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
+    "thread_id", '[]', '[]', '{}', '{}', '{}', '{}', 'sha256:' || repeat('0', 64), 'prompt-v1', "input_snapshot_digest"
 FROM "agent_runs"
 WHERE "id" IN (
     'run-retry-retirement', 'run-retry-rollover', 'run-state', 'run-action',

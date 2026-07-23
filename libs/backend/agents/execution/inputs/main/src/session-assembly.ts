@@ -93,6 +93,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		snapshotVersion: _SNAPSHOT_VERSION,
 		threadId: command.threadId,
 		messageIds: [...thread.messageIds],
+		messageArtifactAttachments: _orderedMessageArtifactAttachments(thread),
 		personaRevisionId: persona.personaRevisionId,
 		preferenceFactIds: ___SortBy(preferences.map(function _preferenceId(preference): string { return preference.id; })),
 		artifactRevisionIds: ___SortBy([...tools.artifactRevisionIds]),
@@ -118,4 +119,13 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Preserve message-history order while canonically ordering each message's immutable attachments. */
+function _orderedMessageArtifactAttachments(thread: ThreadContextInput): ThreadContextInput["messageArtifactAttachments"]
+{
+	const messageOrder = new Map(thread.messageIds.map(function _messageIndex(messageId, index) { return [messageId, index] as const; }));
+	return thread.messageArtifactAttachments
+		.filter(function _belongsToSelectedMessage(attachment): boolean { return messageOrder.has(attachment.messageId); })
+		.sort(function _byMessageThenOrdinal(left, right): number { return (messageOrder.get(left.messageId) ?? Number.MAX_SAFE_INTEGER) - (messageOrder.get(right.messageId) ?? Number.MAX_SAFE_INTEGER) || left.ordinal - right.ordinal || (left.artifactRevisionId < right.artifactRevisionId ? -1 : left.artifactRevisionId > right.artifactRevisionId ? 1 : 0); });
 }

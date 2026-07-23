@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { CompiledModelRoute, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
+import type { CompiledModelRoute, CompiledToolDefinition, MessageArtifactAttachmentReference, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import { PROMPT_COMPILER_VERSION, __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
@@ -17,6 +17,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		snapshotVersion: 1,
 		threadId: "thread-1",
 		messageIds: ["m-1", "m-2"],
+		messageArtifactAttachments: [],
 		personaRevisionId: "persona-1",
 		preferenceFactIds: [],
 		artifactRevisionIds: ["art-2", "art-1"],
@@ -51,7 +52,7 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 	const model: CompiledModelRoute = { modelAlias: "silo-default", maxOutputTokens: 1024 };
 	return {
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
-		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
+		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string; attachments: readonly [] }[]> { return ids.map(function _turn(id): { role: "user"; content: string; attachments: readonly [] } { return { role: "user", content: `msg:${id}`, attachments: [] }; }); },
 		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
 		loadMemoryFactStatements: async function _memory(ids): Promise<readonly string[]> { return ids.map(function _fact(id): string { return `remembered ${id}`; }); },
 		loadPreferenceFactStatements: async function _preferences(ids): Promise<readonly string[]> { return ids.map(function _fact(id): string { return `preference ${id}`; }); },
@@ -70,6 +71,24 @@ describe("__CompileRunInput", function _describeCompiler()
 
 		expect(compiled.promptCompilerVersion).toBe(PROMPT_COMPILER_VERSION);
 		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
+	});
+
+	it("passes exact ordered message artifact references to the compiler port", async function _passesMessageArtifacts()
+	{
+		let received: readonly MessageArtifactAttachmentReference[] = [];
+		const compiled = await __CompileRunInput(_snapshot({ messageArtifactAttachments: [{ messageId: "m-2", artifactRevisionId: "revision-2", ordinal: 0 }, { messageId: "m-1", artifactRevisionId: "revision-1", ordinal: 1 }] }), _repositories({ loadMessages: async function _messages(ids, references) { received = references; return ids.map(function _turn(id): { role: "user"; content: string; attachments: readonly [] } { return { role: "user", content: `msg:${id}`, attachments: [] }; }); } }));
+
+		expect(received).toEqual([{ messageId: "m-2", artifactRevisionId: "revision-2", ordinal: 0 }, { messageId: "m-1", artifactRevisionId: "revision-1", ordinal: 1 }]);
+		expect(compiled.messages).toHaveLength(2);
+	});
+
+	it("rejects attachment coordinates outside the selected transcript before any repository read", async function _rejectsMalformedAttachmentCoordinates()
+	{
+		const repositories = _repositories({
+			loadPersonaInstructions: async function _unexpectedRead(): Promise<string> { throw new Error("must not read"); },
+		});
+
+		await expect(__CompileRunInput(_snapshot({ messageIds: [], messageArtifactAttachments: [{ messageId: "m-1", artifactRevisionId: "revision-1", ordinal: 0 }] }), repositories)).rejects.toThrow(/invalid message artifact attachment coordinates/);
 	});
 
 	it("orders tools by name regardless of grant iteration order", async function _ordersTools()

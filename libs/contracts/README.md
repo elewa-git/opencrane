@@ -38,7 +38,8 @@ Two halves:
 Invariant: the client's types are a faithful projection of the server's published spec — regenerate
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
-verified identity provenance; it carries only immutable coordinates and canonical JSON, never
+verified identity provenance; its `messageArtifactAttachments` separately pins the immutable artifact
+revisions introduced by exact transcript messages, and it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects.
 
 ## Public surface
@@ -51,7 +52,8 @@ provider credentials or mutable source objects.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`, `MemoryFactReference`, `TenantModelSet`, and
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`MessageArtifactAttachmentReference`,
+  `CompiledRunInput`/`CompiledMessageAttachment`, `MemoryFactReference`, `TenantModelSet`, and
   domain-topology host builders. A memory fact reference pins an immutable content digest and its
   provenance rather than a mutable revision counter.
 - `AGENT_RUNTIME_PROTOCOL_V1`, `AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE`,

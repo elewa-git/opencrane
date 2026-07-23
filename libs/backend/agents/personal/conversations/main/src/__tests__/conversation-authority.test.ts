@@ -21,4 +21,5 @@ describe("conversation authority", function ()
 		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
 		expect(appendRunEventAtomically).not.toHaveBeenCalled();
 	});
+
 });

@@ -38,6 +38,19 @@ export interface CompiledMessage
 	readonly role: "system" | "user" | "assistant" | "tool";
 	/** Literal turn content compiled from the persisted message. */
 	readonly content: string;
+	/** Immutable multimodal artifact revisions introduced by this exact conversation turn. */
+	readonly attachments: readonly CompiledMessageAttachment[];
+}
+
+/** Runtime-ready, pinned metadata for one message artifact reference. */
+export interface CompiledMessageAttachment
+{
+	/** Immutable artifact revision selected when the run snapshot was admitted. */
+	readonly artifactRevisionId: string;
+	/** Published media type the runtime/preprocessor must handle. */
+	readonly mediaType: string;
+	/** Content-addressed bytes reference; never a mutable file path or download URL. */
+	readonly contentAddress: string;
 }
 
 /** One resolved tool definition the bounded model loop may propose calling. */

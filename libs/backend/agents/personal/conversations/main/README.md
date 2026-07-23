@@ -35,12 +35,20 @@ an event is stored only when the run exists, is not yet terminal, and its sequen
 one expected. If any of those is wrong the append is denied with a stable reason (`sequence_conflict`,
 `terminal`, `run_not_found`) — a caller can never mistake a rejected replay for a retryable slot.
 
+The package also owns a normalized immutable reference from a pending user-input message to an exact
+published `ArtifactRevision`. It never stores file paths, copied bytes, content addresses, or media
+metadata in transcript JSON. The artifact authority remains responsible for all byte and revision
+lifecycle decisions.
+
 ## Public surface
 
 - `__AppendRunEvent(repository, command)` — the single use case: validate, then append one event atomically.
 - `AppendRunEventCommand` / `AppendRunEventResult` — the request and the stable allow/deny outcome.
 - `AtomicAppendRunEventResult` — the raw persistence outcome the repository returns.
 - `ConversationAuthorityRepository` — the persistence port a caller must implement (or inject).
+- `ConversationMessageArtifactAttachment` — the normalized immutable storage relation later used by
+  the atomic user-input submission authority. It is deliberately not a standalone append endpoint:
+  an attachment must be created in the same transaction as its user message.
 
 ## Boundary
 
@@ -52,13 +60,17 @@ out of order, or arriving after the run ended is refused rather than coerced.
 ## Dependency direction
 
 Tagged `scope:personal-conversations`: it may depend only on `scope:agents` (shared agent models),
-`scope:personal-conversations`, and `scope:shared` — never on apps or sibling domains.
+`scope:personal-conversations`, and `scope:shared` — never on apps or sibling domains. Its attachment
+relation references the canonical ArtifactRevision database contract; it does not import or own an
+artifact-library implementation.
 
 ## Data & persistence
 
 Persists canonical `RunEvent` rows (typed by `@opencrane/models/agents`) through the injected
-repository; the append and its fencing commit as one atomic step. The Postgres-level guarantees are
-exercised by the `test:sql` target (`tests/conversation-authority.sql`).
+repository; the append and its fencing commit as one atomic step. It also owns the normalized
+`ConversationMessageArtifactAttachment` relation while artifacts retain ownership of
+`ArtifactRevision`. The Postgres-level guarantees are exercised by the `test:sql` target
+(`tests/conversation-authority.sql`).
 
 ## See also
 

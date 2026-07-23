@@ -83,7 +83,9 @@ OpenClaw compatibility path, a cancellation side authority, or a second durable 
 ## Data & persistence
 
 The compiler adapter reads the immutable persona, conversation, artifact, skill, and model-route
-records needed to compile a dispatch. The dispatch adapter owns two Postgres models in
+records needed to compile a dispatch. For a multimodal transcript entry it re-proves the frozen
+message-to-revision association and resolves only an active, published revision, so a raw revision
+ID cannot be reassigned to a different message while compiling a retry. The dispatch adapter owns two Postgres models in
 `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the

@@ -191,6 +191,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 		personaRevisionId: snapshot.personaRevisionId,
 		threadId: snapshot.threadId,
 		messageIds: [...snapshot.messageIds],
+		messageArtifactAttachments: _json(snapshot.messageArtifactAttachments),
 		preferenceFactIds: [...snapshot.preferenceFactIds],
 		artifactRevisionIds: [...snapshot.artifactRevisionIds],
 		memoryFacts: _json(snapshot.memoryFacts),
@@ -208,7 +209,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 }
 
 /** Maps one persisted snapshot row back into the immutable cross-domain contract. */
-function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; toolGrantIds: string[]; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; messageArtifactAttachments: Prisma.JsonValue; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; toolGrantIds: string[]; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId,
@@ -218,6 +219,7 @@ function _snapshot(row: { runId: string; siloId: string; agentServiceId: string;
 		snapshotVersion: row.snapshotVersion,
 		threadId: row.threadId,
 		messageIds: row.messageIds,
+		messageArtifactAttachments: row.messageArtifactAttachments as unknown as RunInputSnapshot["messageArtifactAttachments"],
 		personaRevisionId: row.personaRevisionId,
 		preferenceFactIds: row.preferenceFactIds,
 		artifactRevisionIds: row.artifactRevisionIds,

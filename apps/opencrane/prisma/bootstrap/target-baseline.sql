@@ -776,6 +776,17 @@ CREATE TABLE "conversation_messages" (
 );
 
 -- CreateTable
+CREATE TABLE "conversation_message_artifact_attachments" (
+    "message_id" TEXT NOT NULL,
+    "artifact_revision_id" TEXT NOT NULL,
+    "ordinal" INTEGER NOT NULL,
+    "attached_by" TEXT NOT NULL,
+    "attached_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "conversation_message_artifact_attachments_pkey" PRIMARY KEY ("message_id","ordinal")
+);
+
+-- CreateTable
 CREATE TABLE "conversation_run_events" (
     "run_id" TEXT NOT NULL,
     "sequence" INTEGER NOT NULL,
@@ -1370,6 +1381,7 @@ CREATE TABLE "run_input_snapshots" (
     "persona_revision_id" TEXT,
     "thread_id" TEXT,
     "message_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "message_artifact_attachments" JSONB NOT NULL,
     "preference_fact_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "artifact_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_facts" JSONB NOT NULL,
@@ -1918,6 +1930,12 @@ CREATE INDEX "conversation_messages_thread_id_created_at_id_idx" ON "conversatio
 
 -- CreateIndex
 CREATE INDEX "conversation_messages_run_id_idx" ON "conversation_messages"("run_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "conversation_message_artifact_attachments_message_id_artifact_revision_id_key" ON "conversation_message_artifact_attachments"("message_id", "artifact_revision_id");
+
+-- CreateIndex
+CREATE INDEX "conversation_message_artifact_attachments_artifact_revision_id_idx" ON "conversation_message_artifact_attachments"("artifact_revision_id");
 
 -- CreateIndex
 CREATE INDEX "conversation_run_events_run_id_occurred_at_idx" ON "conversation_run_events"("run_id", "occurred_at");
@@ -2532,6 +2550,12 @@ ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_persona_profile_
 ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_source_message_id_fkey" FOREIGN KEY ("source_message_id") REFERENCES "conversation_messages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "conversation_message_artifact_attachments" ADD CONSTRAINT "conversation_message_artifact_attachments_message_id_fkey" FOREIGN KEY ("message_id") REFERENCES "conversation_messages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "conversation_message_artifact_attachments" ADD CONSTRAINT "conversation_message_artifact_attachments_artifact_revision_id_fkey" FOREIGN KEY ("artifact_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "preference_facts" ADD CONSTRAINT "preference_facts_source_interview_id_fkey" FOREIGN KEY ("source_interview_id") REFERENCES "persona_interviews"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2597,6 +2621,7 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
     ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
     ("thread_id" IS NULL OR btrim("thread_id") <> '')
+    AND jsonb_typeof("message_artifact_attachments") = 'array'
     AND btrim("capability_set_digest") <> ''
     AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
     AND jsonb_typeof("memory_facts") = 'array'
@@ -3538,6 +3563,25 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_conversation_message_artifact_attachment"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE message_silo_id TEXT; message_user_id TEXT; message_role "ConversationMessageRole"; message_source TEXT; message_state "ConversationMessageState"; message_thread_id TEXT; participant_thread_id TEXT; artifact_silo_id TEXT; artifact_owner_id TEXT; artifact_state "ArtifactState"; revision_state "ArtifactRevisionState";
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'ConversationMessageArtifactAttachment rows are immutable'; END IF;
+    SELECT thread."silo_id", message."user_id", message."role", message."source", message."state", message."thread_id"
+      INTO message_silo_id, message_user_id, message_role, message_source, message_state, message_thread_id
+      FROM "conversation_messages" message JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
+      WHERE message."id" = NEW."message_id" FOR UPDATE OF message, thread;
+    IF message_silo_id IS NULL OR message_user_id IS DISTINCT FROM NEW."attached_by" OR message_role <> 'user' OR message_source <> 'user_input' OR message_state <> 'pending' THEN RAISE EXCEPTION 'ConversationMessageArtifactAttachment requires a pending exact user-input message'; END IF;
+    SELECT participant."thread_id" INTO participant_thread_id FROM "conversation_participants" participant WHERE participant."thread_id" = message_thread_id AND participant."user_id" = NEW."attached_by" FOR UPDATE;
+    IF participant_thread_id IS NULL THEN RAISE EXCEPTION 'ConversationMessageArtifactAttachment requires a participating user'; END IF;
+    SELECT artifact."silo_id", artifact."owner_principal_id", artifact."state", revision."state"
+      INTO artifact_silo_id, artifact_owner_id, artifact_state, revision_state
+      FROM "artifact_revisions" revision JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
+      WHERE revision."id" = NEW."artifact_revision_id" FOR UPDATE OF revision, artifact;
+    IF artifact_silo_id IS DISTINCT FROM message_silo_id OR artifact_owner_id IS DISTINCT FROM NEW."attached_by" OR artifact_state <> 'active' OR revision_state <> 'published' THEN RAISE EXCEPTION 'ConversationMessageArtifactAttachment requires an active same-owner published revision'; END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     previous_sequence INTEGER;
@@ -3964,6 +4008,7 @@ BEGIN
         IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
             RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
         END IF;
+        IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "conversation_message_artifact_attachments" WHERE "artifact_revision_id" = NEW."id") THEN RAISE EXCEPTION 'ArtifactRevision attached to a conversation cannot leave Published'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -3974,6 +4019,7 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Artifact rows use authorized deletion lifecycle'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."retention_policy" IS DISTINCT FROM OLD."retention_policy" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'Artifact identity and retention are immutable'; END IF;
     IF TG_OP = 'UPDATE' AND NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'deleted')) OR (OLD."state" = 'deleted' AND NEW."state" = 'deleted')) THEN RAISE EXCEPTION 'invalid Artifact lifecycle transition'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" <> 'active' AND EXISTS (SELECT 1 FROM "artifact_revisions" revision JOIN "conversation_message_artifact_attachments" attachment ON attachment."artifact_revision_id" = revision."id" WHERE revision."artifact_id" = NEW."id") THEN RAISE EXCEPTION 'Artifact with conversation-attached revisions cannot be deleted'; END IF;
     IF NEW."current_revision_id" IS NOT NULL THEN
         SELECT "state" INTO revision_state FROM "artifact_revisions" WHERE "id" = NEW."current_revision_id" AND "artifact_id" = NEW."id" FOR UPDATE;
         IF revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'current Artifact revision must be Published'; END IF;
@@ -4432,6 +4478,7 @@ ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_identity
 ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_user_check" CHECK (btrim("user_id") <> '');
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_source_check" CHECK ("source" IN ('user_input', 'model_output', 'tool_result', 'platform'));
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array');
+ALTER TABLE "conversation_message_artifact_attachments" ADD CONSTRAINT "conversation_message_artifact_attachments_coordinates_check" CHECK ("ordinal" >= 0 AND btrim("attached_by") <> '');
 ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_provenance_check" CHECK (
         ("source" = 'user_input' AND "user_id" IS NOT NULL AND "run_id" IS NULL) OR
         ("source" <> 'user_input' AND "user_id" IS NULL)
@@ -4653,6 +4700,8 @@ CREATE TRIGGER "highest_accepted_fleet_memberships_monotonic" BEFORE INSERT OR U
 CREATE TRIGGER "audit_decisions_append_only" BEFORE UPDATE OR DELETE ON "audit_decisions" FOR EACH ROW EXECUTE FUNCTION "reject_audit_decision_mutation"();
 CREATE TRIGGER "conversation_messages_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_messages"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_message_lifecycle"();
+CREATE TRIGGER "conversation_message_artifact_attachments_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_message_artifact_attachments"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_message_artifact_attachment"();
 CREATE TRIGGER "conversation_run_events_contiguous" BEFORE INSERT ON "conversation_run_events"
     FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_run_event_append"();
 CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"

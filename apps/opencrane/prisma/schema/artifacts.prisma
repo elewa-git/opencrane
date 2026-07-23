@@ -105,6 +105,7 @@ model ArtifactRevision {
   parents           ArtifactRevisionParent[] @relation("ArtifactRevisionChildren")
   children          ArtifactRevisionParent[] @relation("ArtifactRevisionParents")
   outboxEvents      ArtifactOutboxEvent[]
+  conversationMessageAttachments ConversationMessageArtifactAttachment[]
 
   @@unique([artifactId, revision])
   @@unique([artifactId, id])

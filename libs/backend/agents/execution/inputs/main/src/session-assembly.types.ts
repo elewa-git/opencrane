@@ -1,4 +1,4 @@
-import type { MemoryFactReference, RunInputSnapshot } from "@opencrane/contracts";
+import type { MemoryFactReference, MessageArtifactAttachmentReference, RunInputSnapshot } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
@@ -25,6 +25,8 @@ export interface ThreadContextInput
 {
 	/** Ordered message identifiers included in the runtime prompt. */
 	messageIds: readonly MessageId[];
+	/** Ordered immutable artifact revisions introduced by the selected messages. */
+	messageArtifactAttachments: readonly MessageArtifactAttachmentReference[];
 }
 
 /** Durable preference fact chosen for transparent prompt personalization. */

@@ -22,6 +22,17 @@ export interface RunInputSnapshotIdentity
   fleetMembershipTrustedUntil: string;
 }
 
+/** One immutable artifact revision introduced by a particular conversation message. */
+export interface MessageArtifactAttachmentReference
+{
+  /** Message that introduced this exact multimodal input. */
+  readonly messageId: MessageId;
+  /** Published artifact revision selected at admission, never a mutable artifact pointer. */
+  readonly artifactRevisionId: ArtifactRevisionId;
+  /** Zero-based order among artifact references on the message. */
+  readonly ordinal: number;
+}
+
 /** Deterministic, immutable inputs compiled before a runtime assignment. */
 export interface RunInputSnapshot
 {
@@ -39,6 +50,8 @@ export interface RunInputSnapshot
   threadId: ThreadId | null;
   /** Ordered persisted messages included in the prompt. */
   messageIds: readonly MessageId[];
+  /** Ordered immutable artifact references introduced by the selected message history. */
+  messageArtifactAttachments: readonly MessageArtifactAttachmentReference[];
   /** Approved persona revision compiled into the prompt, when personal. */
   personaRevisionId: PersonaRevisionId | null;
   /** Ordered durable preference facts considered for this run. */

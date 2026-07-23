@@ -23,7 +23,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		personalConfiguration: { materialize: async function _materialize() { return { outcome: "loaded", value: { state: "unchanged" } } as const; } },
 		runAuthority: { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } } as const; } },
 		approvedPersona: { load: async function _load() { return { outcome: "loaded", value: { personaRevisionId } } as const; } },
-		threadContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"] } } as const; } },
+		threadContext: { load: async function _load() { return { outcome: "loaded", value: { messageIds: ["message-2", "message-1"], messageArtifactAttachments: [] } } as const; } },
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, memoryFacts: [{ datasetId: "dataset-b", factId: "fact-2", contentDigest: `sha256:${"1".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-2", capturedAt: "2026-07-19T11:59:00.000Z" }] }, { datasetId: "dataset-a", factId: "fact-1", contentDigest: `sha256:${"2".repeat(64)}`, provenance: [{ sourceKind: "explicit-user-fact", sourceId: "preference-1", sourceUserId: "user-1", capturedAt: "2026-07-19T11:58:00.000Z" }] }] } } as const; } },
 		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, toolGrantIds: ["grant-2", "grant-1"], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
@@ -56,6 +56,36 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 
 		expect(result).toEqual({ outcome: "denied", reason: "persona_unavailable" });
 		expect(admitted).toBe(false);
+	});
+
+	it("keeps only selected message attachments in transcript order and ordinal order", async function _ordersSelectedMessageAttachments()
+	{
+		const snapshots: RunInputSnapshot[] = [];
+		const authorities = _Authorities(function _accept(snapshot) { snapshots.push(snapshot); return "accepted"; });
+		authorities.threadContext = {
+			load: async function _load()
+			{
+				return {
+					outcome: "loaded",
+					value: {
+						messageIds: ["message-2", "message-1"],
+						messageArtifactAttachments: [
+							{ messageId: "message-1", artifactRevisionId: "revision-2", ordinal: 1 },
+							{ messageId: "message-outside-snapshot", artifactRevisionId: "revision-ignored", ordinal: 0 },
+							{ messageId: "message-2", artifactRevisionId: "revision-1", ordinal: 1 },
+							{ messageId: "message-2", artifactRevisionId: "revision-0", ordinal: 0 },
+						],
+					},
+				} as const;
+			},
+		};
+
+		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual(expect.objectContaining({ outcome: "assembled" }));
+		expect(snapshots[0]?.messageArtifactAttachments).toEqual([
+			{ messageId: "message-2", artifactRevisionId: "revision-0", ordinal: 0 },
+			{ messageId: "message-2", artifactRevisionId: "revision-1", ordinal: 1 },
+			{ messageId: "message-1", artifactRevisionId: "revision-2", ordinal: 1 },
+		]);
 	});
 
 	it("fails closed before persistence when a managed service carries an approved persona", async function _deniesManagedPersona()
@@ -96,7 +126,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	it("accepts a non-conversational run only when it has no transcript messages", async function _assemblesNonConversationalRun()
 	{
 		const authorities = _Authorities(function _accept() { return "accepted"; });
-		authorities.threadContext = { load: async function _load() { return { outcome: "loaded", value: { messageIds: [] } } as const; } };
+		authorities.threadContext = { load: async function _load() { return { outcome: "loaded", value: { messageIds: [], messageArtifactAttachments: [] } } as const; } };
 
 		const result = await __AssembleRunInputSnapshot({ ..._COMMAND, threadId: null }, authorities);
 
@@ -107,7 +137,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	it("returns the snapshot selected by an earlier admission without compiling a later request timestamp", async function _returnsIdempotentSnapshot()
 	{
 		let sourceLoads = 0;
-		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
+		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], messageArtifactAttachments: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
 		const authorities = _Authorities(function _accept() { return "accepted"; });
 		authorities.admission = { admit: async function _admit() { return { outcome: "idempotent", snapshot: previous } as const; } };
 		authorities.runAuthority = { load: async function _load() { sourceLoads += 1; return { outcome: "denied", reason: "run_not_admittable" } as const; } };

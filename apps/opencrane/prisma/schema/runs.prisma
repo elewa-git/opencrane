@@ -100,6 +100,7 @@ model RunInputSnapshot {
   personaRevisionId       String?  @map("persona_revision_id")
   threadId                String?  @map("thread_id")
   messageIds              String[] @default([]) @map("message_ids")
+  messageArtifactAttachments Json  @map("message_artifact_attachments")
   preferenceFactIds       String[] @default([]) @map("preference_fact_ids")
   artifactRevisionIds     String[] @default([]) @map("artifact_revision_ids")
   memoryFacts             Json     @map("memory_facts")

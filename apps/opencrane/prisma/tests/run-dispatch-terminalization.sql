@@ -36,11 +36,11 @@ INSERT INTO "agent_runs" (
 );
 INSERT INTO "run_input_snapshots" (
     "run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id",
-    "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route",
+    "effective_contract_digest", "thread_id", "message_artifact_attachments", "memory_facts", "identity_snapshot", "model_route",
     "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest"
 ) VALUES (
     'dispatch-terminal-run', 1, 'dispatch-terminal-silo', 'dispatch-terminal-service',
-    'dispatch-terminal-revision', 'sha256:' || repeat('b', 64), 'dispatch-terminal-thread', '[]',
+    'dispatch-terminal-revision', 'sha256:' || repeat('b', 64), 'dispatch-terminal-thread', '[]', '[]',
     '{"executionSubjectId":"dispatch-terminal-user","fleetMembershipTrustedUntil":"2026-07-20T00:00:00.000Z"}',
     '{}', '{}', '{}', 'sha256:' || repeat('d', 64), 'prompt-v1', 'sha256:' || repeat('c', 64)
 );

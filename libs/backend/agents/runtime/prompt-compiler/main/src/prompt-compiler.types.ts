@@ -1,4 +1,4 @@
-import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, MessageArtifactAttachmentReference, CompiledToolDefinition } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -14,7 +14,7 @@ export interface PromptCompilerRepositories
 	/** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */
 	loadPersonaInstructions(personaRevisionId: string | null): Promise<string>;
 	/** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
-	loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]>;
+	loadMessages(messageIds: readonly string[], messageArtifactAttachments: readonly MessageArtifactAttachmentReference[]): Promise<readonly CompiledMessage[]>;
 	/**
 	 * Resolve the tool schemas exposed by the immutable tool grants for the executed revision.
 	 *

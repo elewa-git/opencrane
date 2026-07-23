@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledMessageAttachment, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, MessageArtifactAttachmentReference, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/runtime/prompt-compiler";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/runtime/prompt-compiler";
@@ -32,7 +32,7 @@ function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRep
 {
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
-		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
+		loadMessages(messageIds: readonly string[], messageArtifactAttachments: readonly MessageArtifactAttachmentReference[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds, messageArtifactAttachments); },
 		loadToolDefinitions(toolGrantIds: readonly string[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(transaction, toolGrantIds); },
 		// Durable fact text lives in Cognee behind the memory gateway (a network read); the immutable
 		// fact references stay on the snapshot and are not inlined by this offline compile step.
@@ -62,18 +62,64 @@ async function _loadPersonaInstructions(transaction: Prisma.TransactionClient, p
 }
 
 /** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
-async function _loadMessages(transaction: Prisma.TransactionClient, messageIds: readonly string[]): Promise<readonly CompiledMessage[]>
+async function _loadMessages(transaction: Prisma.TransactionClient, messageIds: readonly string[], messageArtifactAttachments: readonly MessageArtifactAttachmentReference[]): Promise<readonly CompiledMessage[]>
 {
+	const selectedMessageIds = new Set(messageIds);
+	if (messageArtifactAttachments.some(function _outsideSnapshot(attachment): boolean { return !selectedMessageIds.has(attachment.messageId); })) throw new Error("snapshot message artifact attachment is outside the selected transcript");
 	if (messageIds.length === 0) return [];
+	const attachments = await _loadMessageAttachments(transaction, messageArtifactAttachments);
 	const rows = await transaction.conversationMessage.findMany({ where: { id: { in: [...messageIds] } } });
 	const byId = new Map(rows.map(function _entry(row) { return [row.id, row] as const; }));
 	const compiled: CompiledMessage[] = [];
 	for (const id of messageIds)
 	{
 		const row = byId.get(id);
-		if (row) compiled.push({ role: _MESSAGE_ROLE[row.role] ?? "user", content: _messageContent(row.blocks) });
+		if (row) compiled.push({ role: _MESSAGE_ROLE[row.role] ?? "user", content: _messageContent(row.blocks), attachments: attachments.get(id) ?? [] });
 	}
 	return compiled;
+}
+
+/** Resolve only the immutable associations frozen into the snapshot, rejecting a later purge or coordinate mismatch. */
+async function _loadMessageAttachments(transaction: Prisma.TransactionClient, references: readonly MessageArtifactAttachmentReference[]): Promise<ReadonlyMap<string, readonly CompiledMessageAttachment[]>>
+{
+	if (references.length === 0) return new Map();
+	const requested = new Set(references.map(_attachmentKey));
+	if (requested.size !== references.length) throw new Error("snapshot contains duplicate message artifact attachment coordinates");
+	const attachments = await transaction.conversationMessageArtifactAttachment.findMany({
+		where: {
+			OR: references.map(function _reference(reference) { return { messageId: reference.messageId, artifactRevisionId: reference.artifactRevisionId, ordinal: reference.ordinal }; }),
+		},
+		select: {
+			messageId: true,
+			artifactRevisionId: true,
+			ordinal: true,
+			artifactRevision: {
+				select: {
+					mediaType: true,
+					contentAddress: true,
+					state: true,
+					artifact: { select: { state: true } },
+				},
+			},
+		},
+	});
+	const byCoordinate = new Map(attachments.map(function _attachment(attachment) { return [_attachmentKey(attachment), attachment] as const; }));
+	const grouped = new Map<string, CompiledMessageAttachment[]>();
+	for (const reference of references)
+	{
+		const attachment = byCoordinate.get(_attachmentKey(reference));
+		if (attachment === undefined || attachment.artifactRevision.state !== "Published" || attachment.artifactRevision.artifact.state !== "Active") throw new Error(`snapshot message artifact ${reference.artifactRevisionId} is unavailable`);
+		const values = grouped.get(reference.messageId) ?? [];
+		values.push({ artifactRevisionId: attachment.artifactRevisionId, mediaType: attachment.artifactRevision.mediaType, contentAddress: attachment.artifactRevision.contentAddress });
+		grouped.set(reference.messageId, values);
+	}
+	return grouped;
+}
+
+/** Create an unambiguous composite map key for one immutable message-to-revision reference. */
+function _attachmentKey(reference: MessageArtifactAttachmentReference): string
+{
+	return `${reference.messageId}\u0000${reference.artifactRevisionId}\u0000${reference.ordinal}`;
 }
 
 /** Flatten a message's block payload into deterministic plain text for the compiled prompt. */

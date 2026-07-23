@@ -8,7 +8,10 @@ This package is part of the **shared execution flow** used by both personal and 
 Before an agent runtime executes a run, the platform freezes *everything* that run is allowed to see
 and use into one immutable record — the
 **`RunInputSnapshot`**: which messages, which persona, which memory facts, which tools and budgets,
-and which verified identity. This package owns the **assembly** of that snapshot: it gathers each
+which message-to-artifact references, and which verified identity. A user-uploaded image, document,
+or other multimodal input is recorded as an immutable `ArtifactRevision` attached to the exact
+conversation message that introduced it; it is not hidden in message JSON or mixed into the separate
+agent-policy artifact list. This package owns the **assembly** of that snapshot: it gathers each
 input from an injected authority, validates the combination, and hands the finished snapshot to the
 run-admission transaction that persists it. After that instant nothing about the run's input can
 change — a retry, an audit, or a replay all see the exact same record, identified by its digest
@@ -54,6 +57,8 @@ caller input.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
   `MemoryScopeSource`, `ToolPolicySource`, `BudgetPolicySource`, `IdentityEnvelopeSource`,
   `CapabilitySetDigestSource` — the per-input ports the OpenCrane app implements with real adapters.
+- `ThreadContextInput.messageArtifactAttachments` — immutable, ordered message-to-`ArtifactRevision`
+  coordinates. Only references for transcript messages selected into the snapshot are retained.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
 
