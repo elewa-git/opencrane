@@ -18,7 +18,7 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/ret
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/knowledge/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
@@ -30,11 +30,13 @@ import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbo
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
+import { __CreateArtifactPreprocessorRouter, PrismaArtifactPreprocessRepository, type ArtifactPreprocessorTokenReviewer, type ReviewedArtifactPreprocessorIdentity } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _log } from "./log.js";
+import { _CreateArtifactPreprocessorCrypto } from "../infra/artifacts/artifact-upload.factory.js";
 
 /** Read a bounded, server-owned seconds setting and return milliseconds. */
 function _ReadBoundedSeconds(name: string, fallbackSeconds: number, minimumSeconds: number, maximumSeconds: number): number
@@ -128,6 +130,20 @@ function _CreateAgentControllerTokenReviewer(authApi: k8s.AuthenticationV1Api, s
 		{
 			const status = await _ReviewProjectedToken(authApi, token, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE);
 			return status ? _ParseAgentControllerSubject(status.user?.username ?? "", serverNamespace, status.audiences ?? []) : null;
+		},
+	};
+}
+
+/** Builds the app-owned TokenReview adapter for the sole PDF preprocessing ServiceAccount. */
+function _CreateArtifactPreprocessorTokenReviewer(authApi: k8s.AuthenticationV1Api, serverNamespace: string): ArtifactPreprocessorTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<ReviewedArtifactPreprocessorIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE);
+			const username = status?.user?.username ?? "";
+			const expectedUsername = `system:serviceaccount:${serverNamespace}:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`;
+			return status !== null && username === expectedUsername ? { username, namespace: serverNamespace, serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: status.audiences ?? [] } : null;
 		},
 	};
 }
@@ -279,6 +295,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
 	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const artifactPreprocessorCrypto = _CreateArtifactPreprocessorCrypto();
 	const replayRouteId = _ReadChannelReplayRouteId();
 	if (replayRouteId !== null)
 	{
@@ -286,6 +303,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 		app.use("/api/internal/conversation-replay", __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }));
 	}
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
+	app.use("/api/internal/artifact-preprocessor", __CreateArtifactPreprocessorRouter({ tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: new PrismaArtifactPreprocessRepository(prisma), signer: artifactPreprocessorCrypto.signer, receipts: artifactPreprocessorCrypto.receipts, logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
   app.use("/api/internal/tenant-models", _RegisterInternalTenantModels(prisma));

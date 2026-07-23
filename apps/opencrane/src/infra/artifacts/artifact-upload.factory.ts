@@ -4,9 +4,9 @@ import { Readable } from "node:stream";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/agents/artifacts";
-import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
+import type { ArtifactPreprocessCapabilitySigner, ArtifactPreprocessorReceiptVerifier, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 
 /** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
@@ -23,6 +23,21 @@ export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: 
 				verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, receiptPublicKey); },
 				digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; },
 			}, command);
+		},
+	};
+}
+
+/** Build the server-only signer and receipt verifier for the dedicated preprocessing authority. */
+export function _CreateArtifactPreprocessorCrypto(environment: NodeJS.ProcessEnv = process.env): { readonly signer: ArtifactPreprocessCapabilitySigner; readonly receipts: ArtifactPreprocessorReceiptVerifier }
+{
+	return {
+		signer: {
+			signReadLease(claims) { return __SignArtifactReadLease(claims, _ReadPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH"), Math.floor(Date.now() / 1_000)); },
+			signWriteLease(claims) { return __SignArtifactWriteLease(claims, _ReadPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH"), Math.floor(Date.now() / 1_000)); },
+		},
+		receipts: {
+			verifyReceipt(compact) { return __VerifyArtifactPromotionReceipt(compact, _ReadPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH")); },
+			digestReceipt(compact) { return `sha256:${createHash("sha256").update(compact, "utf8").digest("hex")}`; },
 		},
 	};
 }

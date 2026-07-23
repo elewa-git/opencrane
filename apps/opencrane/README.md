@@ -95,6 +95,14 @@ candidate wakes local streams to check the durable command state immediately; a 
 check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of
 truth for the command, its order, replay, and fence.
 
+The internal listener also serves the dedicated `artifact-preprocessor` worker. Its projected
+ServiceAccount is TokenReview-bound to a separate audience before it can claim work. The worker sees
+only one immutable PDF source address plus a short-lived read lease; after conversion it can request
+one exact `text/plain` write lease, then submit the ArtifactStore receipt. The server owns output
+artifact allocation, receipt verification, source lineage, and finalization in one catalog
+transaction. The worker has no database access, signing key, byte-store volume, or generic upload
+authority.
+
 When a controller has registered a current `events.read` route for a conversation service, the
 internal listener can also serve `/api/internal/conversation-replay`. The channel proxy presents a
 single-use context on that route; the replay library verifies the exact registered route and returns
@@ -156,6 +164,8 @@ Read from the environment at startup.
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
 | `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
 | `CHANNEL_REPLAY_ROUTE_ID` | Controller-registered `events.read` route accepted by the internal replay endpoint; unset disables replay | *(unset)* |
+| `ARTIFACT_LEASE_PRIVATE_KEY_PATH` | Read-only mounted Ed25519 key that signs exact ArtifactStore read/write leases | *(required for artifact preprocessing)* |
+| `ARTIFACT_RECEIPT_PUBLIC_KEY_PATH` | Read-only mounted ArtifactStore receipt-verification public key | *(required for artifact preprocessing)* |
 | `WATCH_NAMESPACE` | Namespace member workspaces are seeded into | falls back to `NAMESPACE` |
 | `FLEET_INTERNAL_URL` | Fleet membership write-through URL; empty = standalone silo | *(empty)* |
 | `OPENCRANE_API_TOKEN` | Token for fleet-internal calls | *(empty)* |
