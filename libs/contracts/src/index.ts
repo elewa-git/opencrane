@@ -1,6 +1,8 @@
 export { ___CreateControlPlaneClient, type paths } from "./client.js";
 export { type ControlPlaneClient } from "./client.types.js";
 export { AG_UI_PROJECTION_VERSION, type AgUiCustomEvent, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiPublicEventPayload, type AgUiSseRecord, type AgUiTextMessageContentEvent, type AgUiTextMessageEndEvent, type AgUiTextMessageStartEvent, type AgUiToolCallArgsEvent, type AgUiToolCallEndEvent, type AgUiToolCallResultEvent, type AgUiToolCallStartEvent } from "./ag-ui-projection.types.js";
+export { __EncodeAgUiSseRecord } from "./ag-ui-sse.js";
+export { __ProjectAgUiEvent } from "./ag-ui-projector.js";
 export { type AgentRevision, type AgentRevisionId, type AgentRevisionState, type AgentRun, type AgentRunId, type AgentRunState, type AgentService, type AgentServiceId, type AgentServiceKind, type AgentServiceState, type Message, type MessageId, type MessageRole, type PersonaInterview, type PersonaInterviewAnswer, type PersonaInterviewQuestion, type PersonaInterviewQuestionSet, type PersonaOnboarding, type PersonaRevision, type PersonaRevisionId, type RunEvent, type RunEventType, type SiloId, type SoulTemplate, type Thread, type ThreadId, type UserId } from "@opencrane/models/agents";
 export { ApprovalStatus, type Approval, type ApprovalId } from "./approval.types.js";
 export { type Artifact, type ArtifactContentReference, type ArtifactId, type ArtifactRevision, type ArtifactRevisionId, type ArtifactRevisionReference, type SkillRevision, type SkillRevisionId } from "@opencrane/models/artifacts";

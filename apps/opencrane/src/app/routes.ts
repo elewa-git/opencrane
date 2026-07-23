@@ -26,6 +26,8 @@ import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __Creat
 import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
+import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
@@ -50,6 +52,13 @@ function _ReadBoundedInteger(name: string, fallback: number, minimum: number, ma
 	const value = Number(raw);
 	if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`${name} must be an integer from ${minimum} through ${maximum}`);
 	return value;
+}
+
+/** Read the controller-registered route identity, leaving replay unreachable until it is configured. */
+function _ReadChannelReplayRouteId(): string | null
+{
+	const routeId = process.env.CHANNEL_REPLAY_ROUTE_ID?.trim();
+	return routeId || null;
 }
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
@@ -248,6 +257,12 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
 	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, __CreatePrismaRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const replayRouteId = _ReadChannelReplayRouteId();
+	if (replayRouteId !== null)
+	{
+		// The registered route ID pins this PEP to one controller-selected internal endpoint.
+		app.use("/api/internal/conversation-replay", __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }));
+	}
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.

@@ -19,6 +19,9 @@
       "@opencrane/backend/server/agents/channel-targets": [
         "./libs/backend/server/agents/channel-targets/main/src/index.ts"
       ],
+      "@opencrane/backend/server/agents/conversation-replay": [
+        "./libs/backend/server/agents/conversation-replay/main/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/artifacts": [
         "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],

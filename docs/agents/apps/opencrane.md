@@ -54,7 +54,11 @@ CRUD + notable actions:
 **Control-plane ownership:** ClusterTenant lifecycle, org membership, DNS, and Zitadel
 administration are local target authorities. There is no external membership mirror.
 
-**Internal (`/api/internal`, no `___AuthMiddleware`):** `contract/:name` (pod re-pull, TokenReview) and `awareness/participation` (TokenReview). Plus projection drift/repair helpers.
+**Internal (`/api/internal`, no `___AuthMiddleware`):** `contract/:name` (pod re-pull, TokenReview),
+`awareness/participation` (TokenReview), and an optional `conversation-replay` target. Replay is
+mounted only when `CHANNEL_REPLAY_ROUTE_ID` names the controller-registered `events.read` endpoint;
+the channel proxy supplies a one-use context and the handler returns display-safe AG-UI SSE records.
+Plus projection drift/repair helpers.
 
 ## Auth subsystem
 
@@ -96,7 +100,8 @@ true), `MANAGE_OWN_DOMAIN` (default true), `CLUSTER_TENANT_SEED_NAME`/`_DISPLAY_
 `COGNEE_ENDPOINT`, `LITELLM_ENDPOINT`/`_MASTER_KEY`,
 `OPENCRANE_PROJECTION_REPAIR_INTERVAL_SECONDS`,
 `OPENCRANE_PROJECTION_DRIFT_ALERT_THRESHOLD`/`_DRIFT_WEBHOOK_URL`, and
-`OPENCRANE_FORCE_HTTPS`. Artifact bytes are reached through the internal ArtifactStore service;
+`OPENCRANE_FORCE_HTTPS`, and `CHANNEL_REPLAY_ROUTE_ID` (unset means no replay endpoint).
+Artifact bytes are reached through the internal ArtifactStore service;
 the server has no OCI-registry configuration.
 
 ## Deployment topology

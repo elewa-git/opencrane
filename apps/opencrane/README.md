@@ -91,6 +91,12 @@ candidate wakes local streams to check the durable command state immediately; a 
 check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of
 truth for the command, its order, replay, and fence.
 
+When a controller has registered a current `events.read` route for a conversation service, the
+internal listener can also serve `/api/internal/conversation-replay`. The channel proxy presents a
+single-use context on that route; the replay library verifies the exact registered route and returns
+only display-safe Agent User Interface (AG-UI) server-sent events. The route stays disabled unless
+its controller-issued route identifier is configured, so the server never guesses a destination.
+
 Organisation administrators can also use `/api/v1/agent-services` to create a managed agent, edit
 its next immutable revision, inspect what changed, and publish a reviewed revision. A managed agent
 is a shared, organisation-owned agent rather than one person's personal agent; its allowed knowledge
@@ -145,6 +151,7 @@ Read from the environment at startup.
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
 | `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
+| `CHANNEL_REPLAY_ROUTE_ID` | Controller-registered `events.read` route accepted by the internal replay endpoint; unset disables replay | *(unset)* |
 | `WATCH_NAMESPACE` | Namespace member workspaces are seeded into | falls back to `NAMESPACE` |
 | `FLEET_INTERNAL_URL` | Fleet membership write-through URL; empty = standalone silo | *(empty)* |
 | `OPENCRANE_API_TOKEN` | Token for fleet-internal calls | *(empty)* |

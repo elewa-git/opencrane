@@ -54,7 +54,6 @@ without a canonical conversation or a durable delivery key.
 
 - `__ForwardCommand(request, dependencies)` — validate, authorise, rate-limit, then forward one bounded POST command.
 - `__RelayEvents(request, dependencies)` — the same gate, then relay a bounded SSE event stream from its replay cursor.
-- `__ProjectAgUiEvent` / `__EncodeAgUiSseRecord` — a pure, versioned AG-UI mapping for a future server-authorized replay reader. It has no route, database access, or approval command surface here.
 - `__ValidateOrigin` / `__HasForgedIdentityHeaders` — the origin-policy and forged-header checks.
 - `__FixedWindowRateLimiter` — a per-subject fixed-window rate limiter.
 - `__OpenCraneTargetResolver` / `__CHANNEL_PROXY_TOKEN_PATH` — the workload-authenticated client for OpenCrane's target authority, and its default token path.
@@ -67,10 +66,8 @@ It makes no authorization decisions of its own — identity, membership, and res
 delegated to OpenCrane via the resolver — and it never interprets the user's credentials, only forwards
 them. It fails closed on every malformed authority response or target.
 
-The AG-UI helper is deliberately offline until OpenCrane owns an authorized replay source. That source
-must select safe fields from canonical events before calling the helper; this package never reads
-canonical events or forwards raw event payloads. Its current `CUSTOM` events are display signals,
-not approval interrupts or resume commands.
+AG-UI projection is a shared contract owned by `@opencrane/contracts`; this proxy only relays the
+already-authorised SSE bytes. It never reads canonical events or forwards raw event payloads.
 
 ## Dependency direction
 
