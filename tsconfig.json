@@ -241,6 +241,9 @@
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
       ],
+      "@opencrane/state/conversation/ag-ui": [
+        "./libs/frontend/state/conversation/ag-ui/src/index.ts"
+      ],
       "@opencrane/state/settings/adapter": [
         "./libs/frontend/state/settings/adapter/src/index.ts"
       ],
