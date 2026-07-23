@@ -1,9 +1,10 @@
 import { mkdir } from "node:fs/promises";
 import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
+import { once } from "node:events";
 
 import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesystem";
-import { __SignArtifactPromotionReceipt, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
 import { __PromoteArtifactUpload } from "@opencrane/backend/artifacts/store";
 import type { ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "@opencrane/backend/artifacts/store";
 import { ___DoWithTrace } from "@opencrane/observability";
@@ -29,12 +30,20 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 		const path = new URL(request.url ?? "/", "http://localhost").pathname;
 		void ___DoWithTrace("artifact-service.request", { method: request.method ?? "UNKNOWN", path }, async function _handleRequest()
 		{
+			// 1. Keep health probes unauthenticated because they reveal no catalog or byte state.
 			if (path === "/livez" || path === "/readyz")
 			{
 				response.writeHead(204);
 				response.end();
 				return;
 			}
+			// 2. Verify a read lease before looking up an address so unknown callers learn no CAS existence facts.
+			if (path.startsWith("/v1/artifacts/read/") && request.method === "GET")
+			{
+				await _writeReadOutcome(response, store, path.slice("/v1/artifacts/read/".length), request.headers["x-opencrane-artifact-lease"], config.leasePublicKeyPem);
+				return;
+			}
+			// 3. Keep promotion on its exact verb/path pair to avoid widening the byte-write surface.
 			if (path !== "/v1/artifacts/promote" || request.method !== "POST")
 			{
 				response.writeHead(404, { "content-type": "application/json" });
@@ -54,6 +63,42 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 			response.destroy(err instanceof Error ? err : new Error("artifact service request failed"));
 		});
 	});
+}
+
+/** Verify one exact read lease, then stream only its matching canonical object to the caller. */
+async function _writeReadOutcome(response: ServerResponse, store: ArtifactStore, requestedContentAddress: string, compactLeaseHeader: string | string[] | undefined, leasePublicKeyPem: string): Promise<void>
+{
+	const compactLease = typeof compactLeaseHeader === "string" ? compactLeaseHeader : null;
+	const lease = compactLease === null ? null : __VerifyArtifactReadLease(compactLease, leasePublicKeyPem, Math.floor(Date.now() / 1_000));
+	if (lease === null || lease.contentAddress !== requestedContentAddress)
+	{
+		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "invalid_artifact_lease" }));
+		return;
+	}
+	const bytes = await store.read(lease.contentAddress);
+	if (bytes === null)
+	{
+		response.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "artifact_not_found" }));
+		return;
+	}
+	response.writeHead(200, {
+		"content-type": lease.mediaType,
+		"cache-control": "no-store",
+		// X-Content-Type-Options: prevents MIME sniffing of an authorized but untrusted artifact body.
+		// @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options
+		"x-content-type-options": "nosniff",
+	});
+	for await (const chunk of bytes)
+	{
+		if (!response.write(chunk))
+		{
+			await Promise.race([once(response, "drain"), once(response, "close")]);
+			if (response.destroyed) return;
+		}
+	}
+	response.end();
 }
 
 /** Adapts the app-owned OpenCrane public key to the storage-neutral lease verifier port. */

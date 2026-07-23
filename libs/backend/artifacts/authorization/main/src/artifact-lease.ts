@@ -2,10 +2,11 @@ import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
 import { ___CanonicalizeJson } from "@opencrane/util";
 
-import type { ArtifactPromotionReceiptClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
+import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
 
 const _LEASE_AUDIENCE = "artifact-service";
 const _LEASE_TYPE = "opencrane.artifact-write-lease";
+const _READ_LEASE_TYPE = "opencrane.artifact-read-lease";
 const _RECEIPT_AUDIENCE = "opencrane";
 const _RECEIPT_TYPE = "opencrane.artifact-promotion-receipt";
 
@@ -24,6 +25,23 @@ export function __VerifyArtifactWriteLease(compact: string, publicKeyPem: string
 	if (payload === null || payload.typ !== _LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds + 300) return null;
 	const claims = _leaseFromPayload(payload);
 	return claims !== null && _isLease(claims, nowEpochSeconds) ? claims : null;
+}
+
+/** Sign one exact short-lived canonical-byte read lease with an OpenCrane Ed25519 private key. */
+export function __SignArtifactReadLease(claims: ArtifactReadLeaseClaims, privateKeyPem: string, nowEpochSeconds: number): string
+{
+	if (!_isReadLease(claims, nowEpochSeconds)) throw new Error("invalid artifact read lease claims");
+	return _sign({ typ: _READ_LEASE_TYPE, aud: _LEASE_AUDIENCE, iat: nowEpochSeconds, ...claims }, privateKeyPem);
+}
+
+/** Verify an artifact-service read lease before exposing any canonical bytes. */
+export function __VerifyArtifactReadLease(compact: string, publicKeyPem: string, nowEpochSeconds: number): ArtifactReadLeaseClaims | null
+{
+	const payload = _verify(compact, publicKeyPem);
+	const issuedAt = payload?.iat;
+	if (payload === null || payload.typ !== _READ_LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds + 300) return null;
+	const claims = _readLeaseFromPayload(payload);
+	return claims !== null && _isReadLease(claims, nowEpochSeconds) ? claims : null;
 }
 
 /** Sign promotion facts with the service's distinct Ed25519 receipt key. */
@@ -71,6 +89,12 @@ function _leaseFromPayload(value: Record<string, unknown>): ArtifactWriteLeaseCl
 	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.artifactId === "string" && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && (typeof value.expectedContentAddress === "string" || value.expectedContentAddress === null) && (Number.isSafeInteger(value.expectedByteLength) || value.expectedByteLength === null) && typeof value.mediaType === "string" ? value as unknown as ArtifactWriteLeaseClaims : null;
 }
 
+/** Decode only the strict field set of a read lease after its signature and envelope are valid. */
+function _readLeaseFromPayload(value: Record<string, unknown>): ArtifactReadLeaseClaims | null
+{
+	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.operationId === "string" && typeof value.contentAddress === "string" && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && typeof value.mediaType === "string" ? value as unknown as ArtifactReadLeaseClaims : null;
+}
+
 function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionReceiptClaims | null
 {
 	return typeof value.leaseId === "string" && typeof value.contentAddress === "string" && Number.isSafeInteger(value.byteLength) && typeof value.mediaType === "string" && Number.isSafeInteger(value.issuedAtEpochSeconds) ? value as unknown as ArtifactPromotionReceiptClaims : null;
@@ -79,6 +103,12 @@ function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionR
 function _isLease(value: ArtifactWriteLeaseClaims, now: number): boolean
 {
 	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && value.mediaType.includes("/");
+}
+
+/** Validate the narrow coordinates that bind one signed read to one immutable CAS object. */
+function _isReadLease(value: ArtifactReadLeaseClaims, now: number): boolean
+{
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.operationId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.mediaType.includes("/");
 }
 
 function _isReceipt(value: ArtifactPromotionReceiptClaims): boolean
