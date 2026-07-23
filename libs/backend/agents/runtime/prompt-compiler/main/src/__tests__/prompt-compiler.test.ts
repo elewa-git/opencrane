@@ -54,6 +54,7 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
 		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
 		loadMemoryFactStatements: async function _memory(ids): Promise<readonly string[]> { return ids.map(function _fact(id): string { return `remembered ${id}`; }); },
+		loadPreferenceFactStatements: async function _preferences(ids): Promise<readonly string[]> { return ids.map(function _fact(id): string { return `preference ${id}`; }); },
 		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
 		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
 		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },
@@ -65,7 +66,7 @@ describe("__CompileRunInput", function _describeCompiler()
 {
 	it("stamps the compiler version and preserves message order", async function _stampsVersion()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot({ preferenceFactIds: ["preference-2", "preference-1"] }), _repositories());
 
 		expect(compiled.promptCompilerVersion).toBe(PROMPT_COMPILER_VERSION);
 		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
@@ -92,12 +93,13 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.budget).toEqual({ maxTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
 	});
 
-	it("assembles persona, memory, artifact, and skill sections in canonical order", async function _assembles()
+	it("assembles persona, preferences, memory, artifact, and skill sections in canonical order", async function _assembles()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot({ preferenceFactIds: ["preference-2", "preference-1"] }), _repositories());
 
 		expect(compiled.instructions).toBe(
 			"You are a careful assistant.\n\n"
+			+ "Approved personal preferences:\n- preference preference-1\n- preference preference-2\n\n"
 			+ "Durable memory available for this run:\n- remembered fact-1\n- remembered fact-2\n\n"
 			+ "Artifacts available for this run:\n- artifact art-1\n- artifact art-2\n\n"
 			+ "Skills available for this run:\n- skill skill-1",

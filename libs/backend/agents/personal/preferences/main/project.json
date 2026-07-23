@@ -1,0 +1,12 @@
+{
+  "name": "backend-agents-personal-preferences",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/personal/preferences/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:personal-preferences"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/personal/preferences/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/personal/preferences/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/preference-authority.sql", "cwd": "libs/backend/agents/personal/preferences/main" } }
+  }
+}

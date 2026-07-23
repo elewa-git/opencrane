@@ -8,6 +8,7 @@
 | [configuration](./configuration/main/README.md) | Provenance for changes that apply only to a future run snapshot. |
 | [memory](./memory/main/README.md) | Personal memory facts and consent. |
 | [personas](./personas/main/README.md) | Interview-backed, approved persona revisions. |
+| [preferences](./preferences/main/README.md) | User-controlled prompt preferences, corrections, and forgetting. |
 | [revisions](./revisions/main/README.md) | Transaction-fenced personal model-revision materialisation. |
 
 ```

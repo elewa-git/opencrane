@@ -37,10 +37,20 @@ function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRep
 		// Durable fact text lives in Cognee behind the memory gateway (a network read); the immutable
 		// fact references stay on the snapshot and are not inlined by this offline compile step.
 		loadMemoryFactStatements(): Promise<readonly string[]> { return Promise.resolve([]); },
+		loadPreferenceFactStatements(preferenceFactIds: readonly string[]): Promise<readonly string[]> { return _loadPreferenceFactStatements(transaction, preferenceFactIds); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
 		resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, modelRoute); },
 	};
+}
+
+/** Resolve retained statements in snapshot order so historical corrected or forgotten facts remain reproducible. */
+async function _loadPreferenceFactStatements(transaction: Prisma.TransactionClient, preferenceFactIds: readonly string[]): Promise<readonly string[]>
+{
+	if (preferenceFactIds.length === 0) return [];
+	const facts = await transaction.preferenceFact.findMany({ where: { id: { in: [...preferenceFactIds] } }, select: { id: true, statement: true } });
+	const statements = new Map(facts.map(function _fact(fact) { return [fact.id, fact.statement] as const; }));
+	return preferenceFactIds.map(function _statement(id): string { return statements.get(id) ?? ""; }).filter(function _notMissing(statement): boolean { return statement.length > 0; });
 }
 
 /** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */
