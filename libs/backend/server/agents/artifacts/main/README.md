@@ -30,6 +30,12 @@ genuine and has not already been used.
  skills / agent revisions reference the exact ArtifactRevision by content address
 ```
 
+When that immutable source is a PDF, the same transaction also records exactly one
+`pdf-to-text/v1` preprocessing job and an `artifact.preprocessing_requested` outbox event. It does
+not run a converter in the server or store extracted text in a JSON column. A subsequent fenced
+worker claim will create one generated text ArtifactVersion, preserve immutable source lineage, and
+publish normal revision evidence for downstream indexing.
+
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
 Invariant: this domain never touches artifact bytes — no upload, no download, no hashing of content
@@ -61,9 +67,12 @@ server domains.
 
 ## Data & persistence
 
-Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLease`, and
-`ArtifactOutboxEvent` in `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority
-test lives in `tests/artifact-authority.sql`.
+Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLease`,
+`ArtifactPreprocessJob`, and `ArtifactOutboxEvent` in
+`apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test lives in
+`tests/artifact-authority.sql`. Preprocess jobs are distinct from the outbox: a job has its own
+attempt, claim fence, expiry, output coordinate, and retry/terminal state, while an outbox event only
+records publication for independent downstream consumers.
 
 ## See also
 

@@ -5,6 +5,9 @@ import { ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/cli
 import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
 
+/** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
+const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
+
 /** Postgres authority for receipt consumption, immutable revision publication, and outbox creation. */
 export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
 {
@@ -79,9 +82,20 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 					data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy },
 				});
 				await transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
+				// 3. Schedule the one deterministic PDF derivative before the source publication becomes observable.
+				if (command.promotion.mediaType === "application/pdf")
+				{
+					await transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
+				}
+
+				// 4. Commit publication evidence after the revision and any derived-work record exist together.
 				await transaction.artifactOutboxEvent.create({
 					data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } },
 				});
+				if (command.promotion.mediaType === "application/pdf")
+				{
+					await transaction.artifactOutboxEvent.create({ data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "PreprocessingRequested", idempotencyKey: `${command.idempotencyKey}:pdf-to-text`, payload: { pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } } });
+				}
 				await transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: new Date() } });
 				return { status: "finalized" } as const;
 			});
