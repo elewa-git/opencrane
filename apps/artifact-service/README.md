@@ -12,11 +12,12 @@ image, a generated report.
 
 ## What it owns
 
-It owns the write side of **content-addressed storage** (CAS — files are stored and named by a hash of
+It owns the byte boundary of **content-addressed storage** (CAS — files are stored and named by a hash of
 their own bytes, so identical content is stored once and every stored object is tamper-evident). Callers
-never write to that store directly. Instead the OpenCrane server first issues a signed **write lease** —
-a short-lived permission slip saying "these exact bytes, up to this size, may be stored" — and this
-service is what checks the slip and does the write.
+never mount or browse that store directly. Instead the OpenCrane server issues a signed **write lease** —
+a short-lived permission slip saying "these exact bytes, up to this size, may be stored" — or a signed
+**read lease** bound to one exact stored address and a future run/worker operation. This service checks
+that slip before it writes or streams a byte.
 
 It is one step in the artifact-promotion flow, composing three artifact libraries:
 [`store`](../../libs/backend/artifacts/store/main/README.md) (the promotion protocol),
@@ -51,15 +52,21 @@ can only refuse a legitimate upload; it can never store bytes that were not cove
 `Entrypoint: src/index.ts` (`_Main`) — reads config, prepares the mounted CAS root (mode `0700`), opens
 the listener, and binds bounded `SIGTERM`/`SIGINT` shutdown that drains requests and flushes telemetry.
 
-HTTP endpoints: `POST /v1/artifacts/promote` (the one write operation) and `/livez` · `/readyz` probes.
-Any other path or method is `404`.
+HTTP endpoints: `POST /v1/artifacts/promote` writes under a signed write lease; `GET
+/v1/artifacts/read/:contentAddress` streams one matching canonical object only under a signed read lease;
+`/livez` · `/readyz` are probes. Any other path or method is `404`.
 
 ## Boundary
 
-Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), does not
-read or list artifacts, and does not accept raw secrets as environment variables — signing keys are
-mounted PEM files, not env values. Verification and signing are delegated to the artifacts libraries;
-this process is only the HTTP adapter and byte pump around them.
+Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), list
+artifacts, or expose the disk as a file server. A read can only name the exact address signed into its
+lease. The chart currently admits **only the OpenCrane server** through the artifact-service
+NetworkPolicy; no worker is wired to this endpoint yet. The preprocessor slice must add one named
+consumer's matching egress and this chart's matching ingress before it can use a read lease, without
+widening access to arbitrary pods. That future worker will therefore not need direct PVC access. This
+process does not accept raw secrets as environment variables — signing keys are mounted PEM files, not
+env values. Verification and signing are delegated to the artifacts libraries; this process is only the
+HTTP adapter and byte pump around them.
 
 ## Dependency direction
 
