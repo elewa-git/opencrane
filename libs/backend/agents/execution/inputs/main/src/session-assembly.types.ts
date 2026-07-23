@@ -169,7 +169,7 @@ export interface SessionAssemblyAuthorities
 	preferenceFacts: PreferenceFactSource;
 	/** Memory-scope authority. */
 	memoryScope: MemoryScopeSource;
-	/** Tool and model-policy authority. */
+	/** Tool and registered model-definition authority. */
 	toolPolicy: ToolPolicySource;
 	/** Future-admission skill eligibility authority. */
 	skillEligibility: SkillRevisionEligibilitySource;

@@ -1,5 +1,8 @@
 BEGIN;
 
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT)
 RETURNS VOID
 LANGUAGE plpgsql AS $$
@@ -55,12 +58,38 @@ SELECT pg_temp.expect_failure(
 
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_policy_id", "budget", "authored_by"
+    "prompt_policy_version", "model_definition_id", "budget", "authored_by"
 ) VALUES
     ('rev-published', 'svc-main', 1, 'draft', 'sha256:' || repeat('a', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1'),
+     'prompt-v1', 'phase-d-model', '{}', 'user-1'),
     ('rev-draft', 'svc-main', 2, 'draft', 'sha256:' || repeat('b', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1');
+     'prompt-v1', 'phase-d-model', '{}', 'user-1');
+
+SELECT pg_temp.expect_failure(
+    'referenced model definition cannot change routing identity',
+    $statement$
+        UPDATE "model_definitions"
+        SET "public_model_name" = 'changed-model'
+        WHERE "id" = 'phase-d-model'
+    $statement$,
+    'A ModelDefinition referenced by an AgentRevision is immutable'
+);
+
+INSERT INTO "model_definitions" ("id", "scope", "cluster_tenant", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('foreign-phase-d-model', 'clusterTenant', 'silo-other', 'foreign-phase-d-model', 'litellm-foreign-phase-d-model', 'foreign-phase-d-model', clock_timestamp());
+SELECT pg_temp.expect_failure(
+    'foreign tenant model definition is unavailable',
+    $statement$
+        INSERT INTO "agent_revisions" (
+            "id", "agent_service_id", "revision", "state", "digest",
+            "prompt_policy_version", "model_definition_id", "budget", "authored_by"
+        ) VALUES (
+            'foreign-model-revision', 'svc-main', 3, 'draft', 'sha256:' || repeat('c', 64),
+            'prompt-v1', 'foreign-phase-d-model', '{}', 'user-1'
+        )
+    $statement$,
+    'AgentRevision model definition is unavailable to its service tenant'
+);
 
 SELECT pg_temp.expect_failure(
     'unpublished AgentService activation is rejected',
@@ -152,12 +181,12 @@ INSERT INTO "agent_services" (
 
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_policy_id", "budget", "authored_by", "published_at"
+    "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES
     ('rev-never-published', 'svc-lifecycle', 1, 'draft', 'sha256:' || repeat('e', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1', NULL),
+     'prompt-v1', 'phase-d-model', '{}', 'user-1', NULL),
     ('rev-retirable', 'svc-lifecycle', 2, 'published', 'sha256:' || repeat('f', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1', '2026-01-01T00:00:00Z');
+     'prompt-v1', 'phase-d-model', '{}', 'user-1', '2026-01-01T00:00:00Z');
 
 SELECT pg_temp.expect_failure(
     'Draft revision cannot retire without publication evidence',
@@ -194,10 +223,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_policy_id", "budget", "authored_by", "published_at"
+    "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
     'rev-run-retirement', 'svc-run-retirement', 1, 'published', 'sha256:' || repeat('7', 64),
-    'prompt-v1', 'model-v1', '{}', 'user-1', clock_timestamp()
+    'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()
 );
 UPDATE "agent_services"
 SET "active_revision_id" = 'rev-run-retirement', "state" = 'active'
@@ -257,12 +286,12 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
     "id", "agent_service_id", "revision", "state", "digest",
-    "prompt_policy_version", "model_policy_id", "budget", "authored_by", "published_at"
+    "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES
     ('rev-run-rollover-1', 'svc-run-rollover', 1, 'published', 'sha256:' || repeat('8', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1', clock_timestamp()),
+     'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp()),
     ('rev-run-rollover-2', 'svc-run-rollover', 2, 'published', 'sha256:' || repeat('9', 64),
-     'prompt-v1', 'model-v1', '{}', 'user-1', clock_timestamp());
+     'prompt-v1', 'phase-d-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services"
 SET "active_revision_id" = 'rev-run-rollover-1', "state" = 'active'
 WHERE "id" = 'svc-run-rollover';

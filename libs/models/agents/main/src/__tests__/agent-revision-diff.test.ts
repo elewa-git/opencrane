@@ -17,7 +17,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 		digest: "sha256:base",
 		promptPolicyVersion: "line-one\nline-two",
 		personaRevisionId: null,
-		modelPolicyId: "model-a",
+	modelDefinitionId: "model-definition-a",
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read"] }],
 		scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }],
