@@ -9,7 +9,7 @@ general: a personal assistant and a future managed agent both need an identity, 
 safe execution boundary.
 
 `personal/` is the current specialization. It owns the employee-specific persistence and policy — a
-person's conversations, memory facts, and approved persona. It is deliberately distinct from
+person's conversations, configuration-change provenance, memory facts, and approved persona. It is deliberately distinct from
 [`libs/backend/server`](../server/README.md), the operator **control plane** that governs people,
 tenancy, gateways, and fleet-wide services. The execution and runtime packages below remain shared
 agent principles rather than becoming personal-only by proximity.
@@ -29,7 +29,7 @@ agent principles rather than becoming personal-only by proximity.
 
 ```
  personal specialization                shared agent execution
-conversations · memory · personas · configuration  ──► inputs ──► runs ──► protocol ──► runtime Job
+ conversations · memory · personas · configuration  ──► inputs ──► runs ──► protocol ──► runtime Job
  employee-specific state                  frozen input  attempt   bounded executor boundary
 ```
 
