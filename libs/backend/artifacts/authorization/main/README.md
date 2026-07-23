@@ -1,4 +1,4 @@
-# @opencrane/backend/artifacts/authorization — artifact write-lease & receipt authority
+# @opencrane/backend/artifacts/authorization — artifact lease & receipt authority
 
 > [backend](../../../README.md) › [artifacts](../../README.md) › authorization
 
@@ -11,9 +11,11 @@ content). Writing one is a two-party dance between OpenCrane and a separate uplo
 tokens that make that trust concrete.
 
 A **write lease** is a short-lived signed permission slip: "this silo (one tenant's isolated running environment) may write this artifact, up to
-this size, matching this hash, until this moment." A **promotion receipt** is the signed proof that
-comes back: "the bytes with this hash and length were stored." Both are compact signed tokens (JWS
-using EdDSA, a standard signature scheme) that only OpenCrane's keys can produce and verify.
+this size, matching this hash, until this moment." A **read lease** is equally narrow: "this one
+run or worker operation may read exactly this canonical address until this moment." A **promotion
+receipt** is the signed proof that comes back: "the bytes with this hash and length were stored."
+All are compact signed tokens (JWS using EdDSA, a standard signature scheme) that only OpenCrane's
+keys can produce and verify.
 
 ```
  OpenCrane catalog wants to store an artifact
@@ -22,7 +24,8 @@ using EdDSA, a standard signature scheme) that only OpenCrane's keys can produce
  ┌──────────────────────────────┐
  │   authorization  ◄── HERE     │  sign lease  →  ... upload happens ...  →  verify receipt
  └──────────────────────────────┘
-          │  lease ──► artifact-service verifies it, then stages & promotes bytes
+          │  write lease ──► artifact-service verifies it, then stages & promotes bytes
+          │  read lease ───► artifact-service streams only that exact CAS address
           │  receipt ◄── artifact-service signs the stored facts
           ▼
  catalog finalises the artifact only after __VerifyArtifactPromotionReceipt
@@ -41,8 +44,9 @@ forged receipt can never finalise a catalog entry.
 ## Public surface
 
 - `__SignArtifactWriteLease(claims, privateKeyPem, now)` / `__VerifyArtifactWriteLease(compact, publicKeyPem, now)` — mint and check the pre-upload permission slip.
+- `__SignArtifactReadLease(claims, privateKeyPem, now)` / `__VerifyArtifactReadLease(compact, publicKeyPem, now)` — mint and check the operation-bound permission to stream one exact canonical address.
 - `__SignArtifactPromotionReceipt(claims, privateKeyPem)` / `__VerifyArtifactPromotionReceipt(compact, publicKeyPem)` — mint and check the post-upload proof.
-- `ArtifactWriteLeaseClaims` / `ArtifactPromotionReceiptClaims` — the exact fields carried by each token.
+- `ArtifactWriteLeaseClaims` / `ArtifactReadLeaseClaims` / `ArtifactPromotionReceiptClaims` — the exact fields carried by each token.
 
 ## Boundary
 
@@ -50,6 +54,11 @@ Used by OpenCrane (to sign leases and verify receipts) and by `artifact-service`
 sign receipts). It is pure signing and verification: it holds no filesystem, no database, and no HTTP.
 It does not decide *whether* a caller should get a lease — that authorisation happens upstream; this
 package only makes the decision unforgeable.
+
+The signed read-leases form the private contract for the future preprocessor/dispatch consumer. This
+package does not grant that workload network access or issue its lease today; the consumer's app chart,
+explicit NetworkPolicies, and server-side issuance authority are a subsequent slice. Until then,
+artifact-service remains reachable only from the OpenCrane server.
 
 ## Dependency direction
 
