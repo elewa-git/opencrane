@@ -19,6 +19,7 @@ agent principles rather than becoming personal-only by proximity.
 | Package | What it owns |
 | --- | --- |
 | [`personal/conversations`](./personal/conversations/main/README.md) | Personal specialization: append-only user-visible event history. |
+| [`personal/configuration`](./personal/configuration/main/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
 | [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: memory-fact catalogue and policy. |
 | [`personal/personas`](./personal/personas/main/README.md) | Personal specialization: persona approval process. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
@@ -28,7 +29,7 @@ agent principles rather than becoming personal-only by proximity.
 
 ```
  personal specialization                shared agent execution
- conversations · memory · personas  ──► inputs ──► runs ──► protocol ──► runtime Job
+conversations · memory · personas · configuration  ──► inputs ──► runs ──► protocol ──► runtime Job
  employee-specific state                  frozen input  attempt   bounded executor boundary
 ```
 
@@ -39,7 +40,8 @@ owns the model loop or a second run/event store.
 ## Dependency rule for this tier
 
 Each domain carries `layer:backend` and its own scope (`scope:execution-runs`,
-`scope:personal-conversations`, `scope:personal-memory`, `scope:personal-personas`). A domain may
+`scope:personal-conversations`, `scope:personal-configuration`, `scope:personal-memory`,
+`scope:personal-personas`). A domain may
 import the shared models it needs — the agent model (`scope:agents`), and for runs the authorization
 model, for memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
 It may **not** import an unrelated specialization or a control-plane (`libs/backend/server`) domain.

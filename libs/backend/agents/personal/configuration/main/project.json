@@ -1,0 +1,12 @@
+{
+  "name": "backend-agents-personal-configuration",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/personal/configuration/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:personal-configuration"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/personal/configuration/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/personal/configuration/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/personal-configuration-authority.sql", "cwd": "libs/backend/agents/personal/configuration/main" } }
+  }
+}

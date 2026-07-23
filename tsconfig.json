@@ -58,6 +58,9 @@
       "@opencrane/backend/agents/personal/conversations": [
         "./libs/backend/agents/personal/conversations/main/src/index.ts"
       ],
+      "@opencrane/backend/agents/personal/configuration": [
+        "./libs/backend/agents/personal/configuration/main/src/index.ts"
+      ],
       "@opencrane/backend/server/tenancy/contract": [
         "./libs/backend/server/tenancy/contract/main/src/index.ts"
       ],
