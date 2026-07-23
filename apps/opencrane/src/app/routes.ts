@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import * as k8s from "@kubernetes/client-node";
-import { ActionExecutionState, type PrismaClient } from "@prisma/client";
+import { ActionExecutionState, AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { aiBudgetRouter, tokenUsageRouter, spendRouter } from "@opencrane/backend/server/reporting/spend";
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
@@ -11,21 +11,25 @@ import { _RegisterInternalParticipation, awarenessRolloutRouter, awarenessPartic
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
 import { metricsRouter, prometheusMetricsRouter } from "@opencrane/backend/server/reporting/metrics";
 import { policiesRouter } from "@opencrane/backend/server/iam/policies";
-import { providerKeysRouter, providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
+import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { tenantsRouter } from "@opencrane/backend/server/tenancy/tenants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/knowledge/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
-import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
+import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
+import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
+import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
 import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
+import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
@@ -50,6 +54,13 @@ function _ReadBoundedInteger(name: string, fallback: number, minimum: number, ma
 	const value = Number(raw);
 	if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`${name} must be an integer from ${minimum} through ${maximum}`);
 	return value;
+}
+
+/** Read the controller-registered route identity, leaving replay unreachable until it is configured. */
+function _ReadChannelReplayRouteId(): string | null
+{
+	const routeId = process.env.CHANNEL_REPLAY_ROUTE_ID?.trim();
+	return routeId || null;
 }
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
@@ -152,6 +163,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
 function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActionRunner
 {
 	const repository = new PrismaToolInvocationRepository(prisma);
+	const personalConfiguration = new PrismaPersonalConfigurationChangeRepository(prisma);
 	const obotCustody = new __UnavailableObotCustodyAdapter();
 	const sandboxExecutor = new __UnavailableSandboxJobExecutor();
 	const memoryGateway = new __UnavailableMemoryGatewayClient();
@@ -164,7 +176,9 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			let executor;
 			try
 			{
-				executor = __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
+				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
+					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{
@@ -180,6 +194,23 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			}
 			return { outcome: "completed" as const };
 		},
+	};
+}
+
+/** Compile normal grants, then add the sealed first-party upgrade intent only to personal sessions. */
+function _CreatePersonalRunInputCompiler(): RunInputCompiler
+{
+	const compile = __CreatePrismaRunInputCompiler();
+	return async function _compilePersonalInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	{
+		// 1. Compile the immutable snapshot normally before composition adds any built-in descriptor.
+		const input = await compile(snapshot, transaction);
+		// 2. Exclude non-conversation and non-persona snapshots without inferring a personal service.
+		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
+		// 3. Prove the current service kind in the same compiler transaction; snapshot fields alone are insufficient.
+		const service = await transaction.agentService.findFirst({ where: { id: snapshot.agentServiceId, siloId: snapshot.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
+		// 4. Append and re-seal only the proven first-party tool, preserving the immutable snapshot itself.
+		return service === null ? input : __AppendCompiledTool(input, UPGRADE_SESSION_TOOL);
 	};
 }
 
@@ -247,7 +278,13 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const commandTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
-	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, __CreatePrismaRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const replayRouteId = _ReadChannelReplayRouteId();
+	if (replayRouteId !== null)
+	{
+		// The registered route ID pins this PEP to one controller-selected internal endpoint.
+		app.use("/api/internal/conversation-replay", __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }));
+	}
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
@@ -271,7 +308,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
     authority: runtimeDispatchAuthority,
     maxBodyBytes: 64 * 1024,
     heartbeatMilliseconds: 15_000,
-    commandPollMilliseconds: 1_000,
+	commandRecoveryMilliseconds: _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
   }));
 }
 
@@ -315,7 +352,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/awareness/rollout", awarenessRolloutRouter(prisma));
   app.use("/api/v1/awareness/participation", awarenessParticipationRouter(prisma));
   app.use("/api/v1/spend", spendRouter(prisma));
-  app.use("/api/v1/providers/keys", providerKeysRouter(prisma));
   app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
   // BYOK raw-key path — writes the silo's provider key Secret in the operator's own namespace
   // (POD_NAMESPACE, downward-API populated; "default" fallback mirrors config._readOwnNamespace).

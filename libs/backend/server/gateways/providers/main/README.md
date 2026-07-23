@@ -40,7 +40,7 @@ but never corrupts the stored key.
 
 ## Public surface
 
-- `providerByokRouter`, `providerCredentialsRouter`, `providerKeysRouter`, `modelRegistryRouter` —
+- `providerByokRouter`, `providerCredentialsRouter`, `modelRegistryRouter` —
   the routers, mounted at `/api/v1/providers/*` and `/api/v1/models`.
 - `_ProvidersOpenapiPaths` — the OpenAPI (REST API description) path fragments for this surface.
 
@@ -59,7 +59,7 @@ domains.
 
 ## Data & persistence
 
-Owns `ProviderApiKey`, `ProviderCredential`, and `ModelDefinition` in
+Owns `ProviderCredential` and `ModelDefinition` in
 `apps/opencrane/prisma/schema/providers.prisma`.
 
 ## See also

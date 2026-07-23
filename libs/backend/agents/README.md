@@ -9,7 +9,7 @@ general: a personal assistant and a future managed agent both need an identity, 
 safe execution boundary.
 
 `personal/` is the current specialization. It owns the employee-specific persistence and policy — a
-person's conversations, memory facts, and approved persona. It is deliberately distinct from
+person's conversations, configuration-change provenance, memory facts, and approved persona. It is deliberately distinct from
 [`libs/backend/server`](../server/README.md), the operator **control plane** that governs people,
 tenancy, gateways, and fleet-wide services. The execution and runtime packages below remain shared
 agent principles rather than becoming personal-only by proximity.
@@ -19,6 +19,7 @@ agent principles rather than becoming personal-only by proximity.
 | Package | What it owns |
 | --- | --- |
 | [`personal/conversations`](./personal/conversations/main/README.md) | Personal specialization: append-only user-visible event history. |
+| [`personal/configuration`](./personal/configuration/main/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
 | [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: memory-fact catalogue and policy. |
 | [`personal/personas`](./personal/personas/main/README.md) | Personal specialization: persona approval process. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
@@ -28,19 +29,19 @@ agent principles rather than becoming personal-only by proximity.
 
 ```
  personal specialization                shared agent execution
- conversations · memory · personas  ──► inputs ──► runs ──► protocol ──► runtime Job
+ conversations · memory · personas · configuration  ──► inputs ──► runs ──► protocol ──► runtime Job
  employee-specific state                  frozen input  attempt   bounded executor boundary
 ```
 
 The diagram intentionally leaves room for future managed specializations without inventing packages
-before they exist. `execution/` and `runtime/` define the reusable boundary a managed attempt will
-use when that flow is enabled; today they serve personal attempts only. Neither owns the model loop
-or a second run/event store.
+before they exist. `execution/` and `runtime/` are shared by personal and managed attempts. Neither
+owns the model loop or a second run/event store.
 
 ## Dependency rule for this tier
 
 Each domain carries `layer:backend` and its own scope (`scope:execution-runs`,
-`scope:personal-conversations`, `scope:personal-memory`, `scope:personal-personas`). A domain may
+`scope:personal-conversations`, `scope:personal-configuration`, `scope:personal-memory`,
+`scope:personal-personas`). A domain may
 import the shared models it needs — the agent model (`scope:agents`), and for runs the authorization
 model, for memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
 It may **not** import an unrelated specialization or a control-plane (`libs/backend/server`) domain.

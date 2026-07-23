@@ -36,6 +36,14 @@ export async function __CompileRunInput(snapshot: RunInputSnapshot, repositories
 	});
 }
 
+/** Add one first-party tool to an already compiled input and reseal its canonical payload. */
+export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledToolDefinition): CompiledRunInput
+{
+	if (input.tools.some(function _sameTool(existing): boolean { return existing.toolRevisionId === tool.toolRevisionId || existing.name === tool.name; })) throw new Error(`compiled input already contains tool ${tool.name} or revision ${tool.toolRevisionId}`);
+	const unsealed = { ...input, tools: _orderTools([...input.tools, tool]) };
+	return { ...unsealed, digest: _digest(unsealed) };
+}
+
 /** Verify the snapshot's compiler version, then assemble and seal the compiled input. */
 async function _compileVerified(snapshot: RunInputSnapshot, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
 {
@@ -117,6 +125,5 @@ function _optionalCount(value: JsonValue | undefined): number | null
 /** Seal the compiled payload with a SHA-256 digest over its canonical serialization. */
 function _digest(unsealed: Omit<CompiledRunInput, "digest">): `sha256:${string}`
 {
-	const canonical = ___CanonicalizeJson(unsealed as unknown as JsonValue);
-	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
+	return `sha256:${createHash("sha256").update(___CanonicalizeJson(unsealed as unknown as JsonValue), "utf8").digest("hex")}`;
 }

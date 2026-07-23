@@ -144,6 +144,7 @@ grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.requests.me
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity("1000m")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity("1Gi")) == 0' "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env.size() == 5" "$ADMISSION"
+grep -Fq "!has(object.spec.template.spec.containers[0].envFrom)" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNTIME_LITELLM_BASE_URL'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].volumeMounts.size() == 4" "$ADMISSION"
 grep -Fq 'SERVER_INTERNAL_PORT="$4"' "$CONFORMANCE"

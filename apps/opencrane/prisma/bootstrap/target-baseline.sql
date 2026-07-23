@@ -140,6 +140,9 @@ CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed', 'retake
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
 
 -- CreateEnum
+CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
+
+-- CreateEnum
 CREATE TYPE "ModelRoutingScope" AS ENUM ('global', 'clusterTenant');
 
 -- CreateEnum
@@ -1175,6 +1178,31 @@ CREATE TABLE "persona_insights" (
 );
 
 -- CreateTable
+CREATE TABLE "personal_configuration_changes" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "source_thread_id" TEXT NOT NULL,
+    "source_run_id" TEXT NOT NULL,
+    "source_message_id" TEXT,
+    "requested_patch" JSONB NOT NULL,
+    "requested_patch_digest" TEXT NOT NULL,
+    "expected_persona_revision_id" TEXT,
+    "expected_agent_revision_id" TEXT,
+    "applied_persona_revision_id" TEXT,
+    "applied_agent_revision_id" TEXT,
+    "state" "PersonalConfigurationChangeState" NOT NULL DEFAULT 'proposed',
+    "proposed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decided_at" TIMESTAMP(3),
+    "decided_by" TEXT,
+    "rejection_reason" TEXT,
+
+    CONSTRAINT "personal_configuration_changes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "access_policies" (
     "name" TEXT NOT NULL,
     "description" TEXT,
@@ -1186,15 +1214,6 @@ CREATE TABLE "access_policies" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "access_policies_pkey" PRIMARY KEY ("name")
-);
-
--- CreateTable
-CREATE TABLE "provider_api_keys" (
-    "provider" TEXT NOT NULL,
-    "key_value" TEXT NOT NULL,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "provider_api_keys_pkey" PRIMARY KEY ("provider")
 );
 
 -- CreateTable
@@ -2044,6 +2063,15 @@ CREATE UNIQUE INDEX "persona_revisions_persona_profile_id_id_key" ON "persona_re
 
 -- CreateIndex
 CREATE INDEX "persona_insights_answer_id_interview_id_question_set_id_que_idx" ON "persona_insights"("answer_id", "interview_id", "question_set_id", "question_set_version", "question_id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "persona_insights_persona_revision_id_id_key" ON "persona_insights"("persona_revision_id", "id");
@@ -3640,6 +3668,54 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
+        run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'proposed' THEN RAISE EXCEPTION 'PersonalConfigurationChange must begin as Proposed'; END IF;
+        SELECT "silo_id", "user_id", "active_revision_id" INTO profile_silo, profile_user, active_persona
+          FROM "persona_profiles" WHERE "id" = NEW."persona_profile_id" FOR UPDATE;
+        SELECT "silo_id", "agent_service_id" INTO thread_silo, thread_service
+          FROM "conversation_threads" WHERE "id" = NEW."source_thread_id" FOR UPDATE;
+        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "thread_id" = NEW."source_thread_id" AND "user_id" = NEW."user_id") THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange source thread requires the initiating participant';
+        END IF;
+        SELECT "silo_id", "thread_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_thread, run_service, run_user
+          FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
+        SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
+          FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
+        IF profile_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id"
+           OR thread_silo IS DISTINCT FROM NEW."silo_id" OR thread_service IS DISTINCT FROM NEW."agent_service_id"
+           OR run_silo IS DISTINCT FROM NEW."silo_id" OR run_thread IS DISTINCT FROM NEW."source_thread_id"
+           OR run_service IS DISTINCT FROM NEW."agent_service_id" OR run_user IS DISTINCT FROM NEW."user_id"
+           OR service_silo IS DISTINCT FROM NEW."silo_id" OR service_kind IS DISTINCT FROM 'personal'
+           OR active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" OR active_agent IS DISTINCT FROM NEW."expected_agent_revision_id" THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange provenance or active-revision fence conflict';
+        END IF;
+        IF NEW."source_message_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "conversation_messages" WHERE "id" = NEW."source_message_id" AND "thread_id" = NEW."source_thread_id") THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange source message must belong to its source thread';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
+       OR NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
+       OR NEW."source_thread_id" IS DISTINCT FROM OLD."source_thread_id" OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
+       OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."requested_patch" IS DISTINCT FROM OLD."requested_patch"
+       OR NEW."requested_patch_digest" IS DISTINCT FROM OLD."requested_patch_digest" OR NEW."expected_persona_revision_id" IS DISTINCT FROM OLD."expected_persona_revision_id"
+       OR NEW."expected_agent_revision_id" IS DISTINCT FROM OLD."expected_agent_revision_id" OR NEW."proposed_at" IS DISTINCT FROM OLD."proposed_at" THEN
+        RAISE EXCEPTION 'PersonalConfigurationChange proposal evidence is immutable';
+    END IF;
+    IF OLD."state" <> 'proposed' AND (NEW."decided_at" IS DISTINCT FROM OLD."decided_at" OR NEW."decided_by" IS DISTINCT FROM OLD."decided_by" OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason") THEN
+        RAISE EXCEPTION 'PersonalConfigurationChange decision evidence is immutable';
+    END IF;
+    IF NOT (OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected')) THEN
+        RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_artifact_revision_silo_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE artifact_silo_id TEXT; source_silo_id TEXT;
 BEGIN
@@ -4145,6 +4221,27 @@ ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_approval_check
     );
 ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_history_check" CHECK ("previous_revision_id" IS NULL OR "previous_revision_id" <> "id");
 ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_statement_check" CHECK (btrim("statement") <> '');
+ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configuration_changes_valid_check" CHECK (
+        btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
+        AND btrim("agent_service_id") <> '' AND btrim("source_thread_id") <> '' AND btrim("source_run_id") <> ''
+        AND ("requested_patch" = '{"kind":"persona_refresh"}'::jsonb
+             OR ("requested_patch"->>'kind' = 'model_alias'
+                 AND jsonb_typeof("requested_patch"->'modelAlias') = 'string'
+                 AND "requested_patch"->>'modelAlias' ~ '[^[:space:]]'
+                 AND length("requested_patch"->>'modelAlias') <= 200
+                 AND ("requested_patch" - ARRAY['kind', 'modelAlias']) = '{}'::jsonb))
+        AND "requested_patch_digest" ~ '^sha256:[0-9a-f]{64}$'
+        AND (("state" = 'proposed' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "rejection_reason" IS NULL
+              AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
+             OR ("state" = 'accepted' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
+                 AND "rejection_reason" IS NULL AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
+             OR ("state" = 'applied' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
+                 AND "rejection_reason" IS NULL AND ("applied_persona_revision_id" IS NOT NULL OR "applied_agent_revision_id" IS NOT NULL))
+             OR ("state" = 'rejected' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> '' AND btrim("rejection_reason") <> ''
+                 AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
+             OR ("state" = 'superseded' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
+                 AND "rejection_reason" IS NULL AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL))
+    );
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("owner_principal_id") <> '');
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_retention_check" CHECK ("retention_policy" = 'until_authorized_deletion');
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_deletion_check" CHECK (("state" = 'deleted' AND "deleted_at" IS NOT NULL) OR ("state" <> 'deleted' AND "deleted_at" IS NULL));
@@ -4303,6 +4400,8 @@ CREATE CONSTRAINT TRIGGER "personal_agent_revisions_require_approved_persona" AF
     DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "enforce_personal_agent_persona"();
 CREATE TRIGGER "persona_profiles_active_revision_approved" BEFORE INSERT OR UPDATE OF "active_revision_id" ON "persona_profiles"
     FOR EACH ROW EXECUTE FUNCTION "enforce_active_persona_revision"();
+CREATE TRIGGER "personal_configuration_changes_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "personal_configuration_changes"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_personal_configuration_change_lifecycle"();
 CREATE TRIGGER "artifact_revisions_silo_provenance" BEFORE INSERT OR UPDATE OF "artifact_id", "source_run_id", "source_message_id" ON "artifact_revisions"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_silo_provenance"();
 CREATE TRIGGER "artifact_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_lifecycle"();

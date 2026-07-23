@@ -103,14 +103,6 @@ All API routes are prefixed with `/api/v1`. Infrastructure routes (`/healthz`, `
 | `PUT` | `/third-party-sources/{id}` | Update a source |
 | `DELETE` | `/third-party-sources/{id}` | Remove a source |
 
-### Provider Keys
-
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/providers/keys` | List configured provider API keys |
-| `PUT` | `/providers/keys` | Set a provider API key |
-| `DELETE` | `/providers/keys/{provider}` | Remove a provider key |
-
 ### BYOK provider keys
 
 Org-admin–gated raw upstream provider key management. The key is stored in a Kubernetes Secret and registered with LiteLLM; the raw value is never returned by read endpoints.

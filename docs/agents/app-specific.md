@@ -42,7 +42,7 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 The control plane and extracted runtime capabilities are split into NX packages
 (`backend-server-<d>` at `libs/backend/server/<group>/<d>/main`). The six navigational groups are
 IAM (identity, membership, authorization, policies, grants, groups, access-tokens, audit), managed
-agents (agent-services, skills, artifacts, channel-targets), gateway governance (mcp, integrations,
+agents (agent-services, skills, artifacts, channel-targets, conversation-replay), gateway governance (mcp, integrations,
 providers, model-routing), knowledge (retrieval, company-docs), tenancy (tenants, cluster-tenants,
 projection, contract, connections), and reporting (metrics, spend, awareness). `api-spec` remains
 at `libs/backend/server/api-spec/main` because it aggregates all groups. The separate
@@ -56,8 +56,8 @@ schema/baseline ownership in [`prisma.md`](./prisma.md).
 ## Personal-agent and execution domains (`libs/backend/agents/{personal,execution}/*`)
 
 Personal-agent product capabilities use the `backend-agents-personal-<d>` NX namespace under
-`libs/backend/agents/personal/<d>/main`: personas, conversations, and memory. They own a person's
-approved persona, conversation events, and memory catalogue. Shared execution capabilities use
+`libs/backend/agents/personal/<d>/main`: personas, conversations, memory, and configuration. They own a person's
+approved persona, conversation events, memory catalogue, and future-snapshot configuration proposals. Shared execution capabilities use
 `backend-agents-execution-<d>` under `libs/backend/agents/execution/`: `inputs/main` assembles one
 immutable `RunInputSnapshot`, `runs/main` owns the run lifecycle, and `protocol` admits runtime
 commands and candidate output. This grouping keeps the product state separate from the reusable

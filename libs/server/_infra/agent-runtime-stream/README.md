@@ -13,7 +13,9 @@ inbound requests, without becoming an authority over runs, commands, or agent ou
 The transport first asks an injected TokenReview adapter which Kubernetes Pod presented the
 credential. It then validates the stream opening frame, emits only commands supplied by an injected
 domain authority, and forwards runtime candidates back to that authority for acceptance or refusal.
-Heartbeats keep an idle connection alive without inventing work.
+After an accepted candidate it wakes local idle streams to re-check the durable authority. A bounded
+recovery wait re-checks even if that disposable wake-up signal is lost. Heartbeats keep the
+connection alive without inventing work.
 
 ```text
  agent-runtime Pod
@@ -47,8 +49,10 @@ The package does not repair identity, choose a run, mint a command, or persist a
 - `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
   runtime-instance binding.
-- `RuntimeStreamTransportOptions` — fixed body, heartbeat, and polling limits plus the two authority
-  ports.
+- `RuntimeCommandWakeup` — process-local hint fan-out for waking idle streams; it stores no command
+  and never authorizes work.
+- `RuntimeStreamTransportOptions` — fixed body, heartbeat, recovery, and wake-up limits plus the
+  two authority ports.
 
 ## Boundary
 
@@ -70,9 +74,11 @@ import apps, Prisma, or backend persistence implementations.
 
 ## Runtime & config
 
-The composing app supplies maximum request bytes, heartbeat interval, command-poll interval, runtime
-namespace, and command/candidate authority. This library reads no environment variables and opens no
-listener by itself.
+The composing app supplies maximum request bytes, heartbeat interval, recovery interval, runtime
+namespace, and command/candidate authority. The recovery interval is deliberately much slower than
+the old one-second poll: accepted candidates wake streams promptly, while the durable recovery read
+keeps a lost local signal from losing a command. This library reads no environment variables and
+opens no listener by itself.
 
 ## See also
 

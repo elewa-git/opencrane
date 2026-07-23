@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
+import type { AgentRevisionLifecycleDenial, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick.js";
 import type { AgentServiceSchedule, ScheduleTickDependencies } from "../schedule-tick.types.js";
@@ -31,7 +31,7 @@ class _DedupingAdmission
 /** Admission port that always fails with a fixed reason, for denial/backoff coverage. */
 class _DenyingAdmission
 {
-	constructor(private readonly reason: string) {}
+	constructor(private readonly reason: AgentRevisionLifecycleDenial) {}
 	readonly commands: ManagedRunNowCommand[] = [];
 	async admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
 	{

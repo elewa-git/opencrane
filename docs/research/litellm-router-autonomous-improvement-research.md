@@ -1,6 +1,6 @@
 # Autonomous Improvement of Model Routers — State of the Art + OpenCrane Application
 
-*Companion to `litellm-byok-byom-research.md`. Answers: what is the state of the art for a "nightly job that reviews the router's choices, critically assesses them, and improves them," and how model choice fits OpenCrane's skills-development infra. All claims web-verified against primary sources (arXiv, official repos/docs); citations inline.*
+*Research into a future job that reviews routing choices, critically assesses them, and proposes improvements. It assumes OpenCrane's current provider-credential boundary: runtimes receive only their scoped LiteLLM access, while provider credentials stay outside tenant workloads. All claims are web-verified against primary sources (arXiv, official repositories and official documentation); citations are inline.*
 
 ---
 

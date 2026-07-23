@@ -1,7 +1,6 @@
 import * as k8s from "@kubernetes/client-node";
 
 import { _ResolveOwnClusterTenantName, _SeedOwnClusterTenant, _SeedOwnDefaultTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
-import { _ProvisionByokKey } from "@opencrane/backend/server/gateways/model-routing";
 import { PolicyOperator } from "@opencrane/backend/server/iam/policies";
 import { GatewayProxyServer } from "@opencrane/server/_infra/channel-proxy";
 import { CogneeLiteLlmKey } from "./reconcilers/tenants/internal/cognee-litellm-key.js";
@@ -38,10 +37,9 @@ export class OpenClawTenantLifecycle
     const { kubeConfig, customApi, coreApi, prisma, publicPort, loadConfig, buildHostingAdapter, log } = this.options;
     try
     {
-      // 1. Parse the app-owned environment and prepare provider credentials before tenant seed.
+      // 1. Parse the app-owned environment before tenant seed.
       const config = loadConfig();
       log.info({ watchNamespace: config.watchNamespace }, "starting in-silo controllers");
-      await this._bootstrapProviderKey(config);
 
       // 2. Assemble the tenant reconciler and run standalone-only authority seeds.
       const tenantOperator = _CreateTenantOperator(kubeConfig, config, buildHostingAdapter(config), log);
@@ -72,25 +70,6 @@ export class OpenClawTenantLifecycle
     }
     this.idleChecker?.stop();
     await this.channelProxy?.stop();
-  }
-
-  /** Provision an optional boot-time OpenAI BYOK key through the existing domain path. */
-  private async _bootstrapProviderKey(config: OpenClawTenantOperatorConfig): Promise<void>
-  {
-    const apiKey = process.env.OPENCRANE_BOOTSTRAP_OPENAI_KEY?.trim();
-    if (!apiKey)
-    {
-      return;
-    }
-    try
-    {
-      const result = await _ProvisionByokKey({ prisma: this.options.prisma, coreApi: this.options.coreApi, operatorNamespace: config.operatorNamespace, provider: "openai", apiKey, log: this.options.log });
-      this.options.log.info({ provider: "openai", litellmRegistered: result.litellmRegistered }, "bootstrap provider key provisioned for silo");
-    }
-    catch (err)
-    {
-      this.options.log.warn({ err }, "bootstrap provider key provisioning failed; continuing boot");
-    }
   }
 
   /** Run the standalone ClusterTenant and default workspace seeds asynchronously. */

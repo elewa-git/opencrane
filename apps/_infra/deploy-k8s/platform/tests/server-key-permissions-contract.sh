@@ -43,4 +43,11 @@ if grep -Fq '            defaultMode: 0400' <<<"$server_manifest"; then
   exit 1
 fi
 
+# Provider credentials are owned by LiteLLM. The control plane may administer references, but it
+# must never receive a bootstrap key or a broad provider-secret environment projection.
+if grep -Eq 'OPENCRANE_BOOTSTRAP_OPENAI_KEY|OPENAI_API_KEY|ANTHROPIC_API_KEY|envFrom:' <<<"$server_manifest"; then
+  echo "opencrane-server renders a provider credential outside the LiteLLM boundary" >&2
+  exit 1
+fi
+
 echo "opencrane-server key permissions contract: PASS"

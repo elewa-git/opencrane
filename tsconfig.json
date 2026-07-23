@@ -19,6 +19,9 @@
       "@opencrane/backend/server/agents/channel-targets": [
         "./libs/backend/server/agents/channel-targets/main/src/index.ts"
       ],
+      "@opencrane/backend/server/agents/conversation-replay": [
+        "./libs/backend/server/agents/conversation-replay/main/src/index.ts"
+      ],
       "@opencrane/backend/server/agents/artifacts": [
         "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],
@@ -54,6 +57,9 @@
       ],
       "@opencrane/backend/agents/personal/conversations": [
         "./libs/backend/agents/personal/conversations/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/personal/configuration": [
+        "./libs/backend/agents/personal/configuration/main/src/index.ts"
       ],
       "@opencrane/backend/server/tenancy/contract": [
         "./libs/backend/server/tenancy/contract/main/src/index.ts"
@@ -240,6 +246,9 @@
       ],
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
+      ],
+      "@opencrane/state/conversation/ag-ui": [
+        "./libs/frontend/state/conversation/ag-ui/src/index.ts"
       ],
       "@opencrane/state/settings/adapter": [
         "./libs/frontend/state/settings/adapter/src/index.ts"

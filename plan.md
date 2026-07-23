@@ -212,7 +212,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#128](https://github.com/italanta/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
 | [#129](https://github.com/italanta/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
 | [#133](https://github.com/italanta/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#135](https://github.com/italanta/opencrane/issues/135) | Remove broad provider-secret broadcast with the owning legacy path |
+| [#353](https://github.com/italanta/opencrane/issues/353) | Remove provider-secret broadcast and obsolete plaintext provider-key paths |
 | [#136](https://github.com/italanta/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
 | [#150](https://github.com/italanta/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
 | [#154](https://github.com/italanta/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |

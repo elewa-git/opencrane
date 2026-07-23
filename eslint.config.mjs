@@ -125,8 +125,10 @@ export default [
             { sourceTag: "scope:agent-controller", onlyDependOnLibsWithTags: ["scope:agent-controller", "scope:agent-runtime-controller", "scope:shared"] },
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
             { sourceTag: "scope:company-docs", onlyDependOnLibsWithTags: ["scope:auth", "scope:company-docs", "scope:shared"] },
+			{ sourceTag: "scope:conversation-replay", onlyDependOnLibsWithTags: ["scope:channel-targets", "scope:conversation-replay", "scope:shared"] },
             { sourceTag: "scope:connections", onlyDependOnLibsWithTags: ["scope:auth", "scope:connections", "scope:shared"] },
             { sourceTag: "scope:personal-conversations", onlyDependOnLibsWithTags: ["scope:agents", "scope:personal-conversations", "scope:shared"] },
+			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:personal-configuration", "scope:shared"] },
             {
               sourceTag: "scope:contract",
               onlyDependOnLibsWithTags: [
