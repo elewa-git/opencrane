@@ -59,6 +59,8 @@ caller input.
   `CapabilitySetDigestSource` — the per-input ports the OpenCrane app implements with real adapters.
 - `ThreadContextInput.messageArtifactAttachments` — immutable, ordered message-to-`ArtifactRevision`
   coordinates. Only references for transcript messages selected into the snapshot are retained.
+- `PrismaThreadContextSource` — locks the exact active thread and participant inside admission, then
+  reads completed messages and their attachment coordinates in canonical order.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
 

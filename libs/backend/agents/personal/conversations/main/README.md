@@ -40,6 +40,10 @@ published `ArtifactRevision`. It never stores file paths, copied bytes, content 
 metadata in transcript JSON. The artifact authority remains responsible for all byte and revision
 lifecycle decisions.
 
+User input becomes visible only after one transaction has created its pending message and every
+ordered attachment, then completed that message. The same thread lock used by snapshot assembly
+means a run can freeze either the preceding transcript or the whole input—never a partial upload.
+
 ## Public surface
 
 - `__AppendRunEvent(repository, command)` — the single use case: validate, then append one event atomically.
@@ -49,6 +53,9 @@ lifecycle decisions.
 - `ConversationMessageArtifactAttachment` — the normalized immutable storage relation later used by
   the atomic user-input submission authority. It is deliberately not a standalone append endpoint:
   an attachment must be created in the same transaction as its user message.
+- `__SubmitConversationUserInput` / `PrismaConversationUserInputRepository` — create a completed
+  user-input message and every ordered ArtifactRevision reference in one transaction. The shared
+  thread lock means a snapshot sees the prior transcript or the whole new input, never a partial row.
 
 ## Boundary
 
