@@ -35,7 +35,7 @@ export class PrismaConversationUserInputRepository implements ConversationUserIn
 					const requestedIds = [...command.artifactRevisionIds].sort();
 					const revisions = requestedIds.length === 0 ? [] : await transaction.$queryRaw<readonly { readonly id: string; readonly state: string; readonly artifactState: string; readonly siloId: string; readonly ownerPrincipalId: string }[]>(Prisma.sql`SELECT revision."id", revision."state"::text AS "state", artifact."state"::text AS "artifactState", artifact."silo_id" AS "siloId", artifact."owner_principal_id" AS "ownerPrincipalId" FROM "artifact_revisions" revision JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE revision."id" IN (${Prisma.join(requestedIds)}) ORDER BY revision."id" FOR UPDATE OF revision, artifact`);
 					if (revisions.length !== requestedIds.length || revisions.some(function _unavailable(revision): boolean { return revision.state !== "published" || revision.artifactState !== "active" || revision.siloId !== command.siloId || revision.ownerPrincipalId !== command.userId; })) return { status: "artifact_unavailable" } as const;
-					const message = await transaction.conversationMessage.create({ data: { id: command.messageId, threadId: command.threadId, userId: command.userId, role: "User", state: "Pending", source: "user_input", blocks: command.text.trim().length === 0 ? [] : [{ id: "text-1", type: "text", value: command.text }], artifactAttachments: { create: command.artifactRevisionIds.map(function _attachment(artifactRevisionId, ordinal) { return { artifactRevisionId, ordinal, attachedBy: command.userId }; }) } } });
+					const message = await transaction.conversationMessage.create({ data: { id: command.messageId, threadId: command.threadId, userId: command.userId, role: "User", state: "Pending", source: "user_input", blocks: _blocks(command), artifactAttachments: { create: command.artifactRevisionIds.map(function _attachment(artifactRevisionId, ordinal) { return { artifactRevisionId, ordinal, attachedBy: command.userId }; }) } } });
 					await transaction.conversationMessage.update({ where: { id: message.id }, data: { state: "Completed", completedAt: new Date() } });
 					return { status: "submitted" } as const;
 				});
@@ -44,7 +44,30 @@ export class PrismaConversationUserInputRepository implements ConversationUserIn
 		catch (error)
 		{
 			this.logger.error({ err: error, operation: "personal_conversation.submit_input", siloId: command.siloId, threadId: command.threadId, userId: command.userId, messageId: command.messageId }, "Conversation user input persistence failed");
-			return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002" ? { status: "conflict" } : { status: "persistence_unavailable" };
+			if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") return _recoverDuplicate(this.prisma, command);
+			return { status: "persistence_unavailable" };
 		}
+	}
+}
+
+/** Build the sole allowed user-text block without encoding artifact metadata in transcript JSON. */
+function _blocks(command: SubmitConversationUserInputCommand): readonly { readonly id: string; readonly type: "text"; readonly value: string }[]
+{
+	return command.text.trim().length === 0 ? [] : [{ id: "text-1", type: "text", value: command.text }];
+}
+
+/** Recover a lost successful response only when the persisted message is byte-for-byte this request. */
+async function _recoverDuplicate(prisma: PrismaClient, command: SubmitConversationUserInputCommand): Promise<AtomicSubmitConversationUserInputResult>
+{
+	try
+	{
+		const existing = await prisma.conversationMessage.findUnique({ where: { id: command.messageId }, include: { artifactAttachments: { orderBy: { ordinal: "asc" } } } });
+		if (existing === null || existing.threadId !== command.threadId || existing.userId !== command.userId || existing.role !== "User" || existing.source !== "user_input" || existing.state !== "Completed" || JSON.stringify(existing.blocks) !== JSON.stringify(_blocks(command)) || existing.artifactAttachments.length !== command.artifactRevisionIds.length) return { status: "conflict" };
+		const exactAttachments = existing.artifactAttachments.every(function _matches(attachment, ordinal): boolean { return attachment.ordinal === ordinal && attachment.artifactRevisionId === command.artifactRevisionIds[ordinal] && attachment.attachedBy === command.userId; });
+		return exactAttachments ? { status: "submitted" } : { status: "conflict" };
+	}
+	catch
+	{
+		return { status: "persistence_unavailable" };
 	}
 }
