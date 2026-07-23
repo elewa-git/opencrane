@@ -3802,6 +3802,7 @@ $$;
 CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
         run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
+        applied_service TEXT; applied_parent TEXT; applied_state "AgentRevisionState"; applied_model TEXT; applied_model_name TEXT; previous_model TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -3841,7 +3842,42 @@ BEGIN
     IF OLD."state" <> 'proposed' AND (NEW."decided_at" IS DISTINCT FROM OLD."decided_at" OR NEW."decided_by" IS DISTINCT FROM OLD."decided_by" OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason") THEN
         RAISE EXCEPTION 'PersonalConfigurationChange decision evidence is immutable';
     END IF;
-    IF NOT (OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected')) THEN
+    IF OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected') THEN
+        RETURN NEW;
+    END IF;
+    IF OLD."state" = 'accepted' AND NEW."state" = 'superseded'
+       AND NEW."applied_persona_revision_id" IS NULL AND NEW."applied_agent_revision_id" IS NULL THEN
+        RETURN NEW;
+    END IF;
+    IF OLD."state" = 'accepted' AND NEW."state" = 'applied' THEN
+        IF OLD."requested_patch"->>'kind' <> 'model_alias'
+           OR NEW."applied_persona_revision_id" IS NULL OR NEW."applied_agent_revision_id" IS NULL THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange application requires a model-alias revision pair';
+        END IF;
+        SELECT "silo_id", "user_id", "active_revision_id" INTO profile_silo, profile_user, active_persona
+          FROM "persona_profiles" WHERE "id" = OLD."persona_profile_id" FOR UPDATE;
+        SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
+          FROM "agent_services" WHERE "id" = OLD."agent_service_id" FOR UPDATE;
+        SELECT revision."agent_service_id", revision."parent_revision_id", revision."state", revision."model_definition_id", model."public_model_name"
+          INTO applied_service, applied_parent, applied_state, applied_model, applied_model_name
+          FROM "agent_revisions" revision JOIN "model_definitions" model ON model."id" = revision."model_definition_id"
+          WHERE revision."id" = NEW."applied_agent_revision_id" FOR UPDATE OF revision, model;
+        SELECT "model_definition_id" INTO previous_model FROM "agent_revisions" WHERE "id" = OLD."expected_agent_revision_id" FOR KEY SHARE;
+        IF profile_silo IS DISTINCT FROM OLD."silo_id" OR profile_user IS DISTINCT FROM OLD."user_id"
+           OR active_persona IS DISTINCT FROM OLD."expected_persona_revision_id"
+           OR NEW."applied_persona_revision_id" IS DISTINCT FROM active_persona
+           OR service_silo IS DISTINCT FROM OLD."silo_id" OR service_kind IS DISTINCT FROM 'personal'
+           OR active_agent IS DISTINCT FROM NEW."applied_agent_revision_id"
+           OR applied_service IS DISTINCT FROM OLD."agent_service_id"
+           OR applied_parent IS DISTINCT FROM OLD."expected_agent_revision_id"
+           OR applied_state IS DISTINCT FROM 'published'::"AgentRevisionState"
+           OR applied_model IS NULL OR applied_model IS NOT DISTINCT FROM previous_model
+           OR applied_model_name IS DISTINCT FROM OLD."requested_patch"->>'modelAlias' THEN
+            RAISE EXCEPTION 'PersonalConfigurationChange application fence conflict';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF OLD."state" IS DISTINCT FROM NEW."state" OR NEW."applied_persona_revision_id" IS DISTINCT FROM OLD."applied_persona_revision_id" OR NEW."applied_agent_revision_id" IS DISTINCT FROM OLD."applied_agent_revision_id" THEN
         RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
     END IF;
     RETURN NEW;

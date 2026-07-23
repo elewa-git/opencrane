@@ -59,7 +59,10 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 					}
 				}
 
-				// 2. Lock the service before every source revalidates its inputs, preserving the established run lock order.
+				// 2. Lock the personal profile before the service so proposal and materialisation flows share one lock order.
+				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "persona_profiles" WHERE "silo_id" = ${command.siloId} AND "user_id" = ${command.executionSubjectId} FOR UPDATE`);
+
+				// 3. Lock the service before every source revalidates its inputs after the profile lock is settled.
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${command.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 				const admittedAtDate = clock.now();
 				const admittedAt = admittedAtDate.toISOString();
@@ -67,7 +70,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				if (compiled.outcome === "denied") return compiled;
 				if (!_matchesCommand(compiled.value, command) || !_matchesInteractiveDelegation(compiled.value.authority, command)) return { outcome: "denied", reason: "authority_conflict" };
 
-				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
+				// 4. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
 				return { outcome: "accepted", snapshot: compiled.value.snapshot };
 			});
