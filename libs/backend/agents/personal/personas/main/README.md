@@ -6,8 +6,8 @@
 
 This package is part of the **personal-agent product**. A **persona** is the saved personality and
 instructions an agent runs with — who it is and how it should behave. A user builds one through an
-onboarding interview, producing a **draft**. This package owns the **approval process** end to end:
-the checks that turn a fully evidenced draft into the single live persona, atomically.
+onboarding interview, producing a **draft**. This package owns the **draft and approval process**:
+derive a draft from interview evidence, then turn a fully evidenced draft into the live persona.
 
 ```
  draft persona
@@ -38,7 +38,11 @@ persona intact, never a half-approved one.
 
 ## Public surface
 
-- `__ApprovePersona(repository, command)` — the single use case: validate evidence, then approve and activate atomically.
+- `__CreatePersonaDraft(repository, command)` — derives the selected template, next revision, and
+  answer provenance from a completed interview; callers supply only reviewable insight statements.
+- `PrismaPersonaDraftRepository` — locks profile and interview evidence, then persists the derived
+  template and three-to-five answer-bound insights as one draft.
+- `__ApprovePersona(repository, command)` — validates evidence, then approves and activates atomically.
 - `ApprovePersonaCommand` / `ApprovePersonaResult` — the request and the stable allow/deny outcome.
 - `PersonaApprovalSnapshot` — the consistent evidence read before the decision.
 - `AtomicApprovePersonaCommand` / `AtomicApprovePersonaResult` — the commit command carrying the accepted preconditions, and its raw result.
@@ -48,8 +52,9 @@ persona intact, never a half-approved one.
 
 ## Boundary
 
-Consumed by the persona-onboarding path. It only approves — it does not run the interview, generate
-insights, or execute the agent. It never activates a draft that is not fully evidenced, and it never
+Consumed by the persona-onboarding path. It does not run the interview or execute the agent. It only
+accepts explicit reviewable insight statements and derives every durable coordinate itself. It never
+activates a draft that is not fully evidenced, and it never
 mints an editable runtime persona file. Storage is injected through `PersonaAuthorityRepository`.
 
 ## Dependency direction
