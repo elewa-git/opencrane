@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { Prisma, SkillWorkloadState, type PrismaClient } from "@prisma/client";
 
-import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadClaimsRepository, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
+import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadClaimsRepository, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
 /** Postgres authority for controller-only claim generations and immutable Job identity binding. */
 export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsRepository
@@ -76,25 +76,30 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 		});
 	}
 
-	/** Claims one assigned bootstrap-ready workload for an exact Kubernetes release. */
+	/** Claims release work, including an unregistered released Job after a controller crash. */
 	async claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>
 	{
 		const lease = this.claimLeaseMilliseconds;
 		return this.prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<SkillWorkloadReleaseClaim | null>
 		{
-			const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT workload."id" FROM "skill_workloads" workload JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id" WHERE workload."state" = 'assigned'::"SkillWorkloadState" AND workload."released_at" IS NULL AND bootstrap."consumed_at" IS NULL AND bootstrap."expires_at" > clock_timestamp() AND (workload."release_claimed_at" IS NULL OR workload."release_claimed_at" <= clock_timestamp() - (${lease} * interval '1 millisecond')) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF workload, bootstrap SKIP LOCKED`);
+			const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT workload."id" FROM "skill_workloads" workload JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id" WHERE workload."state" = 'assigned'::"SkillWorkloadState" AND workload."registered_pod_uid" IS NULL AND bootstrap."consumed_at" IS NULL AND bootstrap."expires_at" > clock_timestamp() AND (workload."released_at" IS NOT NULL OR workload."release_claimed_at" IS NULL OR workload."release_claimed_at" <= clock_timestamp() - (${lease} * interval '1 millisecond')) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF workload, bootstrap SKIP LOCKED`);
 			const id = rows[0]?.id;
 			if (!id) return null;
 			const workload = await transaction.skillWorkload.findUnique({ where: { id } });
 			const bootstrap = await transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: id } });
 			const nowRows = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 			const now = nowRows[0]?.now;
-			if (!workload || !bootstrap || !now || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || !workload.workloadUid) return null;
+			if (!workload || !bootstrap || !now || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || !workload.workloadUid || workload.registeredPodUid !== null) return null;
+			if (workload.releasedAt !== null)
+			{
+				if (!workload.releaseClaimedAt || workload.releaseDeliveryCount < 1) throw new Error("released skill workload is missing its durable release fence");
+				return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: workload.releaseClaimedAt.toISOString(), releaseDeliveryCount: workload.releaseDeliveryCount, expiresAt: bootstrap.expiresAt.toISOString() };
+			}
 			const claimedAt = new Date(Math.max(now.getTime(), (workload.releaseClaimedAt?.getTime() ?? -1) + 1));
 			const deliveryCount = workload.releaseDeliveryCount + 1;
 			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount: deliveryCount } });
 			if (updated.count !== 1) throw new Error("skill workload release claim lost its fence");
-			return { workloadId: workload.id, workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime())).toISOString() };
+			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime())).toISOString() };
 		});
 	}
 
@@ -116,6 +121,24 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			if (!now || !bootstrap || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid !== command.workloadUid || workload.releaseClaimedAt?.getTime() !== Date.parse(command.releaseClaimedAt) || workload.releaseDeliveryCount !== command.releaseDeliveryCount || now.getTime() >= workload.releaseClaimedAt.getTime() + lease) return "conflict";
 			const updated = await transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releasedAt: now } });
 			return updated.count === 1 ? "released" : "conflict";
+		});
+	}
+
+	/** Records the first exact Job-owned Pod only after the same durable release fence committed. */
+	async registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
+	{
+		if (!workloadId || !command.workloadUid || !command.podUid || !Number.isSafeInteger(command.releaseDeliveryCount) || command.releaseDeliveryCount < 1 || !Number.isFinite(Date.parse(command.releaseClaimedAt))) return "conflict";
+		return this.prisma.$transaction(async function _registerFirstPod(transaction: Prisma.TransactionClient): Promise<"registered" | "idempotent" | "conflict">
+		{
+			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
+			const workload = await transaction.skillWorkload.findUnique({ where: { id: workloadId } });
+			if (!workload) return "conflict";
+			if (workload.registeredPodUid !== null)
+			{
+				return workload.registeredPodUid === command.podUid && workload.workloadUid === command.workloadUid && workload.releaseClaimedAt?.getTime() === Date.parse(command.releaseClaimedAt) && workload.releaseDeliveryCount === command.releaseDeliveryCount ? "idempotent" : "conflict";
+			}
+			const updated = await transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: { not: null }, registeredPodUid: null, releaseClaimedAt: new Date(command.releaseClaimedAt), releaseDeliveryCount: command.releaseDeliveryCount }, data: { registeredPodUid: command.podUid } });
+			return updated.count === 1 ? "registered" : "conflict";
 		});
 	}
 }

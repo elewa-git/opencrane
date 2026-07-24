@@ -12,9 +12,10 @@ Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim the
 that exact Job and register the unique first Pod.
 
 The same process also projects governed skill workloads into the authoring and tool-runner
-namespaces. Those Jobs are always created suspended and their UID is committed to the durable skill
-record. This app has only `get/create` Job access there: it cannot patch, release, inspect Pods, or
-write Secrets in either skill namespace.
+namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
+A separate database release fence permits exactly one UID-and-resource-version-fenced unsuspend
+patch, followed by a list-only lookup that records the sole Job-owned worker Pod. It has no Secret,
+update, delete, watch, policy, or cross-namespace access in either skill namespace.
 
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
@@ -47,7 +48,7 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 ## Public surface
 
 `Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
+OpenCrane and Kubernetes adapters, runs the runtime assignment/release and skill assignment/release
 poll loops, and flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
@@ -60,8 +61,10 @@ LiteLLM key Secret, owned by its Job so it is garbage-collected with it. It cann
 read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any Pod. The minted
 virtual key rides the claim response and is written straight into the Secret; the controller never
 holds the LiteLLM master key. Its ServiceAccount and Deployment remain in the server namespace, so
-compromising a runtime Pod does not place it beside the controller identity. The projected bootstrap
-reference is an opaque lookup key, not a credential, and the controller never logs it.
+compromising a runtime Pod does not place it beside the controller identity. Separate Roles in each
+skill namespace grant only `get/create/patch` for Jobs and `list` for Pods; a fail-closed admission
+policy limits that patch to the fixed one-time release transition. The projected bootstrap reference
+is an opaque lookup key, not a credential, and the controller never logs it.
 
 ## Dependency direction
 

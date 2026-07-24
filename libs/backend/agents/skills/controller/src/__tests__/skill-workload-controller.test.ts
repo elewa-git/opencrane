@@ -2,7 +2,7 @@ import type { V1Job } from "@kubernetes/client-node";
 import { type Logger } from "@opencrane/observability";
 import { describe, expect, it } from "vitest";
 
-import { __ReconcileNextSkillWorkload, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";
+import { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";
 import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions } from "../skill-workload-controller.types.js";
 
 /** Silent structured logger used by focused reconciliation tests. */
@@ -26,13 +26,13 @@ function _Claim()
 /** Compose an authority with fail-fast defaults for operations a test does not use. */
 function _Authority(overrides: Partial<SkillWorkloadControllerAuthority>): SkillWorkloadControllerAuthority
 {
-	return { async __Claim() { return null; }, async __CommitAssignment() { throw new Error("unexpected assignment commit"); }, ...overrides };
+	return { async __Claim() { return null; }, async __CommitAssignment() { throw new Error("unexpected assignment commit"); }, async __ClaimRelease() { return null; }, async __CommitRelease() { throw new Error("unexpected release commit"); }, async __RegisterFirstPod() { throw new Error("unexpected Pod registration"); }, ...overrides };
 }
 
 /** Compose a Kubernetes port with a fail-fast default. */
 function _Kubernetes(overrides: Partial<SkillWorkloadControllerKubernetesStore>): SkillWorkloadControllerKubernetesStore
 {
-	return { async __EnsureSuspendedJob() { throw new Error("unexpected Job"); }, ...overrides };
+	return { async __EnsureSuspendedJob() { throw new Error("unexpected Job"); }, async __EnsureSkillJobReleased() { throw new Error("unexpected skill Job release"); }, async __FindFirstSkillWorkloadPod() { throw new Error("unexpected skill Pod lookup"); }, ...overrides };
 }
 
 /** Compose reconciler options from focused fake ports. */
@@ -85,5 +85,26 @@ describe("governed skill workload controller", function _DescribeController()
 	{
 		expect(function _MissingRunner() { __ValidateSkillWorkloadControllerProfiles({ authoring: _Profiles().authoring }); }).toThrow(/exactly authoring and tool-runner/);
 		expect(function _WrongKind() { __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring: { ..._Profiles().authoring, kind: "tool-runner" } }); }).toThrow(/wrong workload class/);
+	});
+
+	it("releases only the durable Job UID then records its uniquely selected first Pod", async function _ReleasesAndRegistersFirstPod()
+	{
+		const calls: string[] = [];
+		const releaseClaim = { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:01:00.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:30.000Z" };
+		const authority = _Authority({ async __ClaimRelease() { calls.push("claim"); return releaseClaim; }, async __CommitRelease(workloadId, command) { calls.push("release"); expect(workloadId).toBe("workload_1"); expect(command).toEqual({ releaseClaimedAt: releaseClaim.releaseClaimedAt, releaseDeliveryCount: 1, workloadUid: "job-uid-1" }); return "released"; }, async __RegisterFirstPod(workloadId, command) { calls.push("register"); expect(workloadId).toBe("workload_1"); expect(command).toEqual({ releaseClaimedAt: releaseClaim.releaseClaimedAt, releaseDeliveryCount: 1, workloadUid: "job-uid-1", podUid: "pod-uid-1" }); return "registered"; } });
+		const kubernetes = _Kubernetes({ async __EnsureSkillJobReleased(job, workloadUid, expiresAt) { calls.push("job"); expect(job.spec?.suspend).toBe(true); expect(workloadUid).toBe("job-uid-1"); expect(expiresAt).toBe(releaseClaim.expiresAt); return { ...job, metadata: { ...job.metadata, uid: workloadUid }, spec: { ...job.spec!, suspend: false } }; }, async __FindFirstSkillWorkloadPod(job, workloadUid, serviceAccountName) { calls.push("pod"); expect(workloadUid).toBe("job-uid-1"); expect(serviceAccountName).toBe("skill-authoring-default"); const name = job.metadata?.name; const namespace = job.metadata?.namespace; if (!name || !namespace) throw new Error("test Job must have coordinates"); return { metadata: { uid: "pod-uid-1", namespace, labels: { ...job.spec?.template.metadata?.labels, "batch.kubernetes.io/controller-uid": workloadUid, "batch.kubernetes.io/job-name": name, "controller-uid": workloadUid, "job-name": name }, ownerReferences: [{ apiVersion: "batch/v1", kind: "Job", name, uid: workloadUid, controller: true }] }, spec: { serviceAccountName, containers: [] } }; } });
+
+		expect(await __ReconcileNextSkillWorkloadRelease(_Options(authority, kubernetes), new AbortController().signal)).toEqual({ outcome: "registered", workloadId: "workload_1", workloadUid: "job-uid-1", podUid: "pod-uid-1" });
+		expect(calls).toEqual(["claim", "job", "release", "pod", "register"]);
+	});
+
+	it("does not register a Pod before the durable release commit succeeds", async function _FailsClosedBeforeRegistration()
+	{
+		let podLookups = 0;
+		const authority = _Authority({ async __ClaimRelease() { return { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:01:00.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:30.000Z" }; }, async __CommitRelease() { return "conflict"; } });
+		const kubernetes = _Kubernetes({ async __EnsureSkillJobReleased(job) { return job; }, async __FindFirstSkillWorkloadPod() { podLookups += 1; return null; } });
+
+		await expect(__ReconcileNextSkillWorkloadRelease(_Options(authority, kubernetes), new AbortController().signal)).rejects.toThrow(/lost its database claim fence/);
+		expect(podLookups).toBe(0);
 	});
 });

@@ -167,11 +167,15 @@ metadata:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-controller
 rules:
-  # A governed skill Job is created or exact-adopted while suspended. No patch, Pod, Secret, or
-  # delete permission exists in these namespaces, so this controller cannot release or alter work.
+  # A governed skill Job is created while suspended, then one UID/resourceVersion-fenced patch may
+  # release it. Pod list is required solely to bind the first exact Job-owned worker identity.
+  # There is intentionally no Secret, update, delete, watch, or cross-namespace permission.
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["get", "create"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -655,5 +659,7 @@ spec:
     namespaceSelector:
       matchLabels:
         opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+---
+{{ include "opencrane.agentController.skillWorkloadAdmission" . }}
 {{- end }}
 {{- end }}

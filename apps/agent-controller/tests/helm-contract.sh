@@ -93,12 +93,15 @@ test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
 
-# Governed skill namespaces are derived from their owning charts. Their controller Roles can only
-# exact-adopt or create suspended Jobs: no patch permission can release or modify a worker.
+# Governed skill namespaces are derived from their owning charts. Their controller Roles can create
+# or exact-adopt a Job, make only the admission-fenced release patch, and list the first exact Pod.
 grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
 grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
-if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(patch|delete|update|watch|list)"'; then
-  echo "skill workload Roles exceed get/create Job authority" >&2
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["get", "create", "patch"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["list"]'
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(delete|update|watch)"|resources: \["(secrets|configmaps|networkpolicies)"'; then
+  echo "skill workload Roles exceed release and first-Pod authority" >&2
   exit 1
 fi
 
@@ -190,6 +193,10 @@ fi
 grep -Fq "object.spec.selector.matchLabels.all" "$ADMISSION"
 grep -Fq "'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name'" "$ADMISSION"
 grep -Fq "object.spec.template == oldObject.spec.template" "$ADMISSION"
+grep -Fq "governed-skill-namespaces" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'POD_UID'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-skill-authoring'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-tool-runner'" "$ADMISSION"
 grep -Fq 'validationActions: [Deny]' "$MANIFEST"
 
 # Disabled still tells OpenCrane the deployment-owned namespace boundary, but renders no namespace,

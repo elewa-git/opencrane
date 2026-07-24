@@ -4,7 +4,7 @@ import { isAbsolute } from "node:path";
 import { ___DoWithTrace } from "@opencrane/observability";
 import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim } from "@opencrane/contracts";
 
-import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";
+import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerPodRegistrationCommand, SkillWorkloadControllerReleaseClaim, SkillWorkloadControllerReleaseCommand, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";
 
 /** Maximum JSON response accepted from one internal controller authority call. */
 const _MAX_RESPONSE_BYTES = 16 * 1024;
@@ -75,6 +75,30 @@ function _ParseAssignment(value: unknown, workloadId: string, command: AgentCont
 	return result.outcome;
 }
 
+/** Parse the exact database-fenced release coordinates without accepting controller policy. */
+function _ParseReleaseClaim(value: unknown): SkillWorkloadControllerReleaseClaim
+{
+	const claim = _AsObject(value);
+	if (!claim || !_IsIdentifier(claim.workloadId) || !_IsIdentifier(claim.siloId) || (claim.kind !== "authoring" && claim.kind !== "tool-runner") || !_IsIdentifier(claim.workloadUid) || !_IsTime(claim.releaseClaimedAt) || !_IsPositiveInteger(claim.releaseDeliveryCount) || !_IsTime(claim.expiresAt))
+	{
+		throw new Error("OpenCrane returned a malformed skill workload release claim");
+	}
+	return { workloadId: claim.workloadId, siloId: claim.siloId, kind: claim.kind, workloadUid: claim.workloadUid, releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, expiresAt: claim.expiresAt };
+}
+
+/** Parse a release or Pod-registration result tied to every submitted immutable coordinate. */
+function _ParseReleaseResult(value: unknown, workloadId: string, command: SkillWorkloadControllerReleaseCommand, podUid?: string): "released" | "registered" | "idempotent"
+{
+	const result = _AsObject(value);
+	const outcomeIsValid = result?.outcome === "released" || result?.outcome === "registered" || result?.outcome === "idempotent";
+	if (!result || result.workloadId !== workloadId || result.workloadUid !== command.workloadUid || (podUid !== undefined && result.podUid !== podUid) || !outcomeIsValid)
+	{
+		throw new Error("OpenCrane returned a mismatched skill workload release result");
+	}
+	if (result.outcome === "released" || result.outcome === "registered" || result.outcome === "idempotent") return result.outcome;
+	throw new Error("OpenCrane returned an invalid skill workload release outcome");
+}
+
 /** Read the latest rotated projected token from its mounted file. */
 function _CreateTokenReader(path: string): SkillWorkloadControllerTokenReader
 {
@@ -137,6 +161,42 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload assignment failed with HTTP ${response.status}`);
 				return _ParseAssignment(await _ReadJson(response), workloadId, command);
+			});
+		},
+		async __ClaimRelease(signal: AbortSignal): Promise<SkillWorkloadControllerReleaseClaim | null>
+		{
+			return ___DoWithTrace("agent_controller.skill_workload.release_claim", {}, async function _ClaimRelease(): Promise<SkillWorkloadControllerReleaseClaim | null>
+			{
+				const response = await fetchRequest(new URL("/api/internal/agent-controller/skill-workloads:release-claim", baseUrl), { method: "POST", headers: _Headers(await readToken()), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
+				if (response.status === 204) return null;
+				if (response.status !== 200) throw new Error(`OpenCrane skill workload release claim failed with HTTP ${response.status}`);
+				return _ParseReleaseClaim(await _ReadJson(response));
+			});
+		},
+		async __CommitRelease(workloadId: string, command: SkillWorkloadControllerReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">
+		{
+			return ___DoWithTrace("agent_controller.skill_workload.release", { workloadId, workloadUid: command.workloadUid }, async function _CommitRelease(): Promise<"released" | "idempotent" | "conflict">
+			{
+				if (!_IsIdentifier(workloadId)) throw new Error("skill workload release requires one valid workload id");
+				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/release`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
+				if (response.status === 409) return "conflict";
+				if (response.status !== 200) throw new Error(`OpenCrane skill workload release failed with HTTP ${response.status}`);
+				const outcome = _ParseReleaseResult(await _ReadJson(response), workloadId, command);
+				if (outcome === "registered") throw new Error("OpenCrane returned a Pod-registration outcome for a Job release");
+				return outcome;
+			});
+		},
+		async __RegisterFirstPod(workloadId: string, command: SkillWorkloadControllerPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">
+		{
+			return ___DoWithTrace("agent_controller.skill_workload.pod_registration", { workloadId, workloadUid: command.workloadUid, podUid: command.podUid }, async function _RegisterFirstPod(): Promise<"registered" | "idempotent" | "conflict">
+			{
+				if (!_IsIdentifier(workloadId) || !_IsIdentifier(command.podUid)) throw new Error("skill workload Pod registration requires valid workload and Pod identifiers");
+				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/pod-registration`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
+				if (response.status === 409) return "conflict";
+				if (response.status !== 200) throw new Error(`OpenCrane skill workload Pod registration failed with HTTP ${response.status}`);
+				const outcome = _ParseReleaseResult(await _ReadJson(response), workloadId, command, command.podUid);
+				if (outcome === "released") throw new Error("OpenCrane returned a Job-release outcome for Pod registration");
+				return outcome;
 			});
 		},
 	};

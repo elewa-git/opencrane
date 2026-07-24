@@ -7,7 +7,9 @@
 This package owns the database-fenced claim and assignment contract for isolated candidate-skill and
 tenant-tool Jobs. The OpenCrane server gives the agent controller a single authenticated internal
 route; the controller claims a workload, creates a still-suspended Job, then returns the
-Kubernetes-issued Job UID for an exact durable assignment.
+Kubernetes-issued Job UID for an exact durable assignment. It also owns the separate release claim
+and first-Pod registration fence, so a worker cannot become a bootstrap identity until Postgres has
+recorded the exact released Job and the exact Kubernetes Pod UID.
 
 ```
  durable SkillWorkload ──► controller-only API ──► claim generation
@@ -34,6 +36,8 @@ complete tool invocations. Those responsibilities remain downstream of the durab
 
 - `SkillWorkloadClaim` — one database-issued delivery generation.
 - `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID and opaque-reference fence.
+- `SkillWorkloadReleaseClaim` and `SkillWorkloadReleaseCommand` — the separate, retry-safe Job release fence.
+- `SkillWorkloadPodRegistrationCommand` — first-Pod identity evidence bound to the released Job.
 - `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 
@@ -52,7 +56,7 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 
 ## Data & persistence
 
-The package owns the claim and assignment transitions on `SkillWorkload`. The clean target baseline
+The package owns the claim, assignment, release, and first-Pod registration transitions on `SkillWorkload`. The clean target baseline
 enforces its pending → assigned state fence, monotonic delivery generation, immutable Job UID, and
 terminal cancellation independently of this TypeScript adapter. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
