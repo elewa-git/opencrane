@@ -19,7 +19,7 @@ describe("governed skill workload Job", function _describeJob()
 	it("is deterministic, one-shot, unprivileged, and carries no source or credential material", function _builds()
 	{
 		const job = __BuildGovernedSkillWorkloadJob(_Assignment(), _Profile());
-		expect(job.spec).toMatchObject({ backoffLimit: 0, parallelism: 1, completions: 1, ttlSecondsAfterFinished: 0 });
+		expect(job.spec).toMatchObject({ suspend: true, backoffLimit: 0, parallelism: 1, completions: 1, ttlSecondsAfterFinished: 0 });
 		expect(job.spec?.template.spec).toMatchObject({ automountServiceAccountToken: false, restartPolicy: "Never", securityContext: { runAsNonRoot: true } });
 		expect(job.spec?.template.spec?.containers[0]?.securityContext).toMatchObject({ allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: ["ALL"] } });
 		expect(JSON.stringify(job)).not.toContain("artifactContentAddress");
