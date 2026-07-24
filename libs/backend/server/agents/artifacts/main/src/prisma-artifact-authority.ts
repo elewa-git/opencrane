@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import { ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/client";
 
+import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
 import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
 
 /** Postgres authority for receipt consumption, immutable revision publication, and outbox creation. */
-export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
+export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactReadLeaseRepository, ArtifactUploadLeaseRepository
 {
 	/** Canonical OpenCrane catalog database client. */
 	private readonly prisma: PrismaClient;
@@ -15,6 +16,17 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
+	}
+
+	/** Loads only an active artifact's exact published revision as a storage-neutral read target. */
+	async loadPublishedReadTarget(command: IssueArtifactReadLeaseCommand): Promise<PublishedArtifactReadTarget | null>
+	{
+		const revision = await this.prisma.artifactRevision.findFirst({
+			where: { id: command.artifactRevisionId, artifactId: command.artifactId, state: "Published", artifact: { siloId: command.siloId, state: "Active" } },
+			select: { id: true, artifactId: true, contentAddress: true, byteLength: true, mediaType: true, artifact: { select: { siloId: true } } },
+		});
+		if (revision === null || revision.byteLength > BigInt(Number.MAX_SAFE_INTEGER)) return null;
+		return { siloId: revision.artifact.siloId, artifactId: revision.artifactId, artifactRevisionId: revision.id, contentAddress: revision.contentAddress, byteLength: Number(revision.byteLength), mediaType: revision.mediaType };
 	}
 
 	/** Creates or returns the one durable, proof-bound lease for one exact capability JTI. */

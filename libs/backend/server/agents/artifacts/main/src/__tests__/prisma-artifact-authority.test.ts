@@ -9,6 +9,15 @@ function _command()
 
 describe("Prisma artifact authority", function _suite()
 {
+	it("loads a read target only through the active artifact and exact published revision relation", async function _loadsReadTarget()
+	{
+		const artifactRevision = { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12n, mediaType: "text/plain", artifact: { siloId: "silo-1" } }) };
+		const repository = new PrismaArtifactAuthorityRepository({ artifactRevision } as never);
+
+		expect(await repository.loadPublishedReadTarget({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" })).toEqual({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "text/plain" });
+		expect(artifactRevision.findFirst).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: "Published", artifact: { siloId: "silo-1", state: "Active" } }) }));
+	});
+
 	it("commits promotion receipt, immutable revision, current pointer, outbox, and final lease state together", async function _finalize()
 	{
 		const transaction = {
