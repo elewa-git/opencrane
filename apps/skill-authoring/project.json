@@ -1,0 +1,11 @@
+{
+  "name": "skill-authoring",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/skill-authoring",
+  "tags": ["type:app", "layer:entrypoint", "scope:skill-authoring"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "helm template skill-authoring helm >/dev/null", "cwd": "apps/skill-authoring" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/skill-authoring/tests/helm-contract.sh", "cwd": "." } }
+  }
+}

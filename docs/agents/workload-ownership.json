@@ -8,6 +8,8 @@
     "artifact-service",
     "agent-controller",
     "agent-runtime",
+    "skill-authoring",
+    "tool-runner",
     "cognee",
     "litellm",
     "obot-gateway-controller",
@@ -94,6 +96,11 @@
       "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
       "anchor": "kind: \"Job\"",
       "workloadIds": ["agent-runtime"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["skill-authoring", "tool-runner"]
     },
     {
       "path": "libs/backend/agents/runtime/controller/src/kubernetes-agent-controller-store.ts",
@@ -258,6 +265,26 @@
       "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" },
       "classification": "survivor",
       "reason": "The agent controller creates one suspended, zero-retry Job per durable run attempt."
+    },
+    {
+      "id": "skill-authoring",
+      "podClass": "Job/skill-authoring-attempt",
+      "image": "ghcr.io/italanta/opencrane-skill-authoring@sha256:<release-digest>",
+      "owner": "apps/skill-authoring",
+      "localOwner": true,
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "classification": "survivor",
+      "reason": "The agent controller will create isolated draft-capability authoring Jobs only after a durable claim exists."
+    },
+    {
+      "id": "tool-runner",
+      "podClass": "Job/tool-runner-invocation",
+      "image": "ghcr.io/italanta/opencrane-tool-runner@sha256:<release-digest>",
+      "owner": "apps/tool-runner",
+      "localOwner": true,
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "classification": "survivor",
+      "reason": "The agent controller will create isolated capability-bound tool Jobs only after a durable claim and reply protocol exists."
     },
     {
       "id": "cognee",

@@ -265,6 +265,30 @@ channelProxy:
       cpu: 250m
       memory: 256Mi
 
+# -- Isolated capability-only candidate-skill authoring Job plane. It contains no standing worker.
+# The dependency name is intentional: Helm passes its contents to the child chart.
+opencrane-skill-authoring:
+  skillAuthoring:
+    namespace: opencrane-skill-authoring
+    serviceAccountName: skill-authoring-default
+    quota:
+      pods: "10"
+      jobs: "10"
+      cpu: "2"
+      memory: 2Gi
+
+# -- Isolated capability-only tenant tool Job plane. It contains no standing worker.
+# The dependency name is intentional: Helm passes its contents to the child chart.
+opencrane-tool-runner:
+  toolRunner:
+    namespace: opencrane-tools
+    serviceAccountName: tool-runner-default
+    quota:
+      pods: "10"
+      jobs: "10"
+      cpu: "2"
+      memory: 2Gi
+
 # -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
 # release-local PVC; OpenCrane remains the catalog and authorization authority.
 artifactService:

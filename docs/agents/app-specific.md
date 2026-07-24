@@ -22,6 +22,8 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 | _(apps/agent-runtime)_ | [apps/agent-runtime/README.md](../../apps/agent-runtime/README.md) | Controller-assigned one-attempt Job image. Its current Python shell opens only a projected-token-authenticated stream; no listener, model/tool driver, or durable tenant storage. |
 | _(apps/agent-controller)_ | [apps/agent-controller/README.md](../../apps/agent-controller/README.md) | Thin outbound-only process and app-owned least-privilege boundary for suspended-Job assignment, fenced release, and first-Pod registration. |
 | _(apps/managed-agent-runtime)_ | [apps/managed-agent-runtime/README.md](../../apps/managed-agent-runtime/README.md) | Chart/deploy-only managed (central) agent plane: dedicated namespace, connector-scoped `managed-agent-runtime-*` ServiceAccount (`automountServiceAccountToken:false`), default-deny + explicit-egress NetworkPolicies. Reuses the `agent-runtime` image; ships no source. |
+| _(apps/skill-authoring)_ | [README](../../apps/skill-authoring/README.md) | Deployment-only isolated candidate-skill Job plane: restricted namespace, exact zero-RBAC identity, quota, and default-deny policy. |
+| _(apps/tool-runner)_ | [README](../../apps/tool-runner/README.md) | Deployment-only isolated tenant-tool Job plane: restricted namespace, exact zero-RBAC identity, quota, and default-deny policy. |
 
 ## Libs (`libs/`)
 
