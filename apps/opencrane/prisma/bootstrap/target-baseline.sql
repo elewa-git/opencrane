@@ -3912,12 +3912,14 @@ CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE pl
 DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin Pending without cancellation evidence'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'cancelled' AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'cancelled SkillWorkload is terminal'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
     IF NEW."delivery_count" < 0 OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
@@ -3934,11 +3936,11 @@ CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE p
 BEGIN
     IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state"='pending' AND "skill_revision_id"=NEW."id"
+          WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
             AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
     ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" <> 'reserved' THEN
         UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state"='pending' AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
+          WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
     END IF;
     RETURN NULL;
 END;

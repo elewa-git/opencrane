@@ -27,3 +27,12 @@ export interface SkillWorkloadAssignmentCommand
 	/** API-issued immutable Kubernetes Job UID. */
 	readonly workloadUid: string;
 }
+
+/** Persistence authority for controller-only workload claim and suspended-Job assignment. */
+export interface SkillWorkloadClaimsRepository
+{
+	/** Claims one pending workload or returns no current controller work. */
+	claimNextAtomically(): Promise<SkillWorkloadClaim | null>;
+	/** Binds one exact claim generation to the Kubernetes-issued immutable Job UID. */
+	commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">;
+}
