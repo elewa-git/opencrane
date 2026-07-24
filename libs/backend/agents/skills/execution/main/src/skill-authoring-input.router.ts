@@ -7,7 +7,14 @@ import type { SkillAuthoringInputRouterDependencies } from "./skill-authoring-in
 /** Fixed projected-token audience for the isolated authoring worker class. */
 const _AUTHORING_AUDIENCE = "opencrane-skill-authoring";
 
-/** Build the authoring-only immutable skill-input boundary. */
+/** Maximum compressed candidate bundle sent through the authoring-only input path. */
+const _MAX_AUTHORING_ARCHIVE_BYTES = 16 * 1024 * 1024;
+
+/**
+ * Build the projected-token and NetworkPolicy-protected authoring-only immutable skill-input boundary.
+ * @see apps/opencrane/helm/templates/_networkpolicy.tpl — sole worker-to-server egress allowance.
+ * @see apps/agent-controller/helm/templates/_skill-workload-admission.tpl — admitted Job identity contract.
+ */
 export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringInputRouterDependencies): Router
 {
 	const router = Router();
@@ -34,10 +41,15 @@ export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringIn
 				response.status(404).json({ error: "authoring_input_unavailable" });
 				return;
 			}
+			if (input.byteLength > _MAX_AUTHORING_ARCHIVE_BYTES)
+			{
+				response.status(404).json({ error: "authoring_input_unavailable" });
+				return;
+			}
 			const bytes = await dependencies.artifactReader.read(input);
 			const reader = bytes.getReader();
 			const first = await reader.read();
-			response.status(200).set({ "content-type": input.mediaType, "content-length": String(input.byteLength), "cache-control": "no-store" });
+			response.status(200).set({ "content-type": input.mediaType, "content-length": String(input.byteLength), "x-opencrane-content-address": input.contentAddress, "cache-control": "no-store" });
 			const stream = Readable.from(_ReadBytes(reader, first));
 			/** Terminate a half-written protected response without serialising its broker failure. */
 			function _AbortStream(err: Error): void

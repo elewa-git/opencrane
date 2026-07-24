@@ -30,7 +30,9 @@ filesystem, bounded temporary scratch space, no auto-mounted service-account tok
 code, artifact bytes, arguments, or credentials embedded in the manifest. The controller releases it
 only after it has durably committed the exact Kubernetes identity. The Job receives an audience-bound
 projected token and an opaque bootstrap reference in separate read-only files; the worker can use them
-only to acknowledge its own bootstrap endpoint.
+only to acknowledge its own bootstrap endpoint. Authoring Jobs require at least
+64 MiB of scratch: a future validator uses that space for a bounded archive, an extracted tree, and
+fixed offline checks without borrowing persistent storage.
 
 ## Public surface
 

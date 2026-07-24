@@ -8,6 +8,9 @@ import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job.js";
 /** Maximum size of the non-authoritative scratch filesystem. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
 
+/** Minimum scratch capacity for safe authoring archive extraction and offline validation output. */
+const _MIN_AUTHORING_SCRATCH_BYTES = 67_108_864n;
+
 /** Maximum wall-clock lifetime granted to one untrusted governed-skill Job. */
 const _MAX_ACTIVE_DEADLINE_SECONDS = 900;
 
@@ -70,7 +73,7 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
+	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || (profile.kind === "authoring" && scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES) || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
 	{
 		throw new Error("governed skill Job profile requires one fixed bootstrap endpoint, fixed audience and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}

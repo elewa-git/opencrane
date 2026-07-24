@@ -14,6 +14,12 @@ function _Assignment()
 	return { jobId: "tool-job-1", siloId: "silo-1", namespace: "opencrane-tools", capabilityReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
 }
 
+/** Builds the stricter authoring profile that reserves scratch for archive validation. */
+function _AuthoringProfile()
+{
+	return { ..._Profile(), kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"b".repeat(64)}`, namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring" };
+}
+
 describe("governed skill workload Job", function _describeJob()
 {
 	it("is deterministic, one-shot, unprivileged, and carries no source or credential material", function _builds()
@@ -45,5 +51,12 @@ describe("governed skill workload Job", function _describeJob()
 		const job = __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "opencrane-authoring" }, profile);
 		expect(job.metadata?.name).toMatch(/^skill-author-/);
 		expect(job.spec?.template.metadata?.labels).toMatchObject({ "app.kubernetes.io/component": "skill-authoring" });
+	});
+
+	it("reserves the fixed extraction and validation scratch budget for authoring Jobs", function _reservesAuthoringScratch()
+	{
+		const assignment = { ..._Assignment(), namespace: "opencrane-skill-authoring" };
+		expect(function _smallScratch() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "32Mi" }); }).toThrow(/bounded resources/);
+		expect(__BuildGovernedSkillWorkloadJob(assignment, _AuthoringProfile()).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "64Mi" } })]));
 	});
 });
