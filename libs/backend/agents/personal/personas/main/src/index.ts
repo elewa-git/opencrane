@@ -7,3 +7,7 @@ export type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, Cr
 export { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "./persona-interview-authority.js";
 export type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
 export { PrismaPersonaInterviewRepository } from "./prisma-persona-interview-repository.js";
+export { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
+export { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository.js";
+export type { CreatePersonaOnboardingRouter, PersonaOnboardingCaller, PersonaOnboardingQuestion, PersonaOnboardingQuestionSet, PersonaOnboardingRouterDependencies, PersonaOnboardingSourceRepository, PersonaProfileRepository } from "./persona-onboarding.types.js";
+export { _PersonaOnboardingOpenapiPaths } from "./openapi.js";

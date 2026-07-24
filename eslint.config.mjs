@@ -104,6 +104,7 @@ export default [
                 "scope:mcp",
                 "scope:metrics",
                 "scope:model-routing",
+                "scope:personal-personas",
                 "scope:policies",
                 "scope:projection",
                 "scope:providers",

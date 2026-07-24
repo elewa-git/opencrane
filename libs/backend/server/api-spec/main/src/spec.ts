@@ -27,6 +27,7 @@ import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/mo
 import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
+import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -684,6 +685,32 @@ export const spec = {
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
+      PersonaOnboardingQuestionSet: {
+        type: "object",
+        required: ["id", "version", "questions"],
+        properties: {
+          id: { type: "string", description: "Reviewed question-set identifier selected by the server." },
+          version: { type: "integer", minimum: 1, description: "Exact immutable reviewed source revision." },
+          questions: { type: "array", items: { type: "object", required: ["id", "category", "prompt", "ordinal"], properties: { id: { type: "string" }, category: { type: "string", enum: ["RelationshipRole", "ToneLanguage", "AnswerStructure", "ChallengeSupport", "Initiative", "ApprovalRisk", "WorkingHabits", "MemoryBoundaries"] }, prompt: { type: "string" }, ordinal: { type: "integer", minimum: 1 } } } },
+        },
+      },
+      PersonaInterviewStart: {
+        type: "object",
+        required: ["interviewId", "reused", "questionSet"],
+        properties: { interviewId: { type: "string" }, reused: { type: "boolean" }, questionSet: { $ref: "#/components/schemas/PersonaOnboardingQuestionSet" } },
+      },
+      PersonaInterviewAnswerInput: {
+        type: "object",
+        additionalProperties: false,
+        required: ["questionId", "value"],
+        properties: { questionId: { type: "string" }, value: { type: "string", minLength: 1, maxLength: 4000 } },
+      },
+      PersonaDraftInput: {
+        type: "object",
+        additionalProperties: false,
+        required: ["insights"],
+        properties: { insights: { type: "array", minItems: 3, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["answerId", "statement"], properties: { answerId: { type: "string" }, statement: { type: "string", minLength: 1, maxLength: 4000 } } } } },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -768,6 +795,7 @@ export const spec = {
     ..._SpendOpenapiPaths,
     ..._AuditOpenapiPaths,
     ..._MetricsOpenapiPaths,
+    ..._PersonaOnboardingOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

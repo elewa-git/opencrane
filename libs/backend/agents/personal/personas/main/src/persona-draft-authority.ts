@@ -21,7 +21,7 @@ function _isValidCommand(command: CreatePersonaDraftCommand): boolean
 	const answerIds = new Set<string>();
 	return command.insights.every(function _isValidInsight(insight)
 	{
-		if (!insight.answerId.trim() || !insight.statement.trim() || answerIds.has(insight.answerId)) return false;
+		if (!insight.answerId.trim() || !insight.statement.trim() || insight.statement.length > 4_000 || answerIds.has(insight.answerId)) return false;
 		answerIds.add(insight.answerId);
 		return true;
 	});

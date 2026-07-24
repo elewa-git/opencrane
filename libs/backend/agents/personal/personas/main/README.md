@@ -69,14 +69,23 @@ fails closed and a crash leaves the previous active persona intact, never a half
   `PersonaAuthorityRepository` — the consistent evidence and injected approval persistence boundary.
 - `PrismaPersonaAuthorityRepository` — the target Postgres implementation; it locks the profile,
   approves the checked draft, and moves the active pointer in one transaction.
+- `__CreatePersonaOnboardingRouter` — the authenticated HTTP composition for reading the reviewed
+  questions, starting and answering an interview, deriving a draft, and approving it. It receives
+  the OIDC subject and host-derived silo from the app; none of those ownership coordinates are HTTP
+  inputs.
+- `PrismaPersonaOnboardingRepository` — resolves the one profile for that server-derived caller and
+  reads the clean-build reviewed onboarding source (`personal-agent-onboarding`, version 1).
 
 ## Boundary
 
 Consumed by the persona-onboarding path. It owns the interview lifecycle and approval, but does not
-generate insights or execute the agent. It accepts only reviewable insight statements and derives
-template selection plus every other durable draft coordinate from the completed interview. It never
-activates a draft that is not fully evidenced, and it never mints an editable runtime persona file.
-Storage is injected through its three authority repositories.
+ generate insights or execute the agent. Its HTTP router is deliberately only a parser and identity
+ composition layer: it derives the person from the authenticated session, derives the silo from the
+ request host, verifies an active membership in that exact silo, and resolves the profile server-side.
+ It accepts only reviewable insight statements
+and derives template selection plus every other durable draft coordinate from the completed
+interview. It never activates a draft that is not fully evidenced, and it never mints an editable
+runtime persona file. Storage is injected through its authority repositories.
 
 ## Dependency direction
 

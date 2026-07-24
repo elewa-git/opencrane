@@ -30,6 +30,14 @@ function _Prisma(rawResults: readonly unknown[]): PrismaClient
 
 describe("persona draft authority", function _describePersonaDraftAuthority()
 {
+	it("rejects an insight statement beyond the durable four-thousand-character limit", async function _RejectsOversizedInsight()
+	{
+		const createAtomically = vi.fn();
+		const repository = { createAtomically };
+		const result = await __CreatePersonaDraft(repository, { ..._COMMAND, insights: [{ answerId: "answer-1", statement: "a".repeat(4_001) }, ..._COMMAND.insights.slice(1)] });
+		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(createAtomically).not.toHaveBeenCalled();
+	});
 	it("does not call persistence for duplicate answer evidence", async function _rejectsDuplicateAnswer()
 	{
 		const createAtomically = vi.fn();
