@@ -12,7 +12,7 @@ image, a generated report.
 
 ## What it owns
 
-It owns the write side of **content-addressed storage** (CAS — files are stored and named by a hash of
+It owns the private read and write side of **content-addressed storage** (CAS — files are stored and named by a hash of
 their own bytes, so identical content is stored once and every stored object is tamper-evident). Callers
 never write to that store directly. Instead the OpenCrane server first issues a signed **write lease** —
 a short-lived permission slip saying "these exact bytes, up to this size, may be stored" — and this
@@ -51,13 +51,15 @@ can only refuse a legitimate upload; it can never store bytes that were not cove
 `Entrypoint: src/index.ts` (`_Main`) — reads config, prepares the mounted CAS root (mode `0700`), opens
 the listener, and binds bounded `SIGTERM`/`SIGINT` shutdown that drains requests and flushes telemetry.
 
-HTTP endpoints: `POST /v1/artifacts/promote` (the one write operation) and `/livez` · `/readyz` probes.
-Any other path or method is `404`.
+HTTP endpoints: `POST /v1/artifacts/promote` writes bounded bytes; `GET /v1/artifacts/content/:sha256`
+streams only the exact canonical bytes named by a separately signed immutable-read lease; and `/livez`
+· `/readyz` probes. Any other path or method is `404`.
 
 ## Boundary
 
-Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), does not
-read or list artifacts, and does not accept raw secrets as environment variables — signing keys are
+Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), list
+artifacts, or accept a caller-selected content address: a read path must equal the signed lease. It
+does not accept raw secrets as environment variables — signing keys are
 mounted PEM files, not env values. Verification and signing are delegated to the artifacts libraries;
 this process is only the HTTP adapter and byte pump around them.
 
