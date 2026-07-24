@@ -114,6 +114,12 @@ uncertainty fails closed.
 
 ## Public surface
 
+- `__AuthorizeGovernedChildRunSpawn(parent, request, childCount, policy, delegation)` — pure
+  fail-closed child-run authorization gate. It preserves one same-silo run tree, bounds depth and
+  fan-out, requires a legal target-service/capability delegation, permits only an explicit subset of
+  the parent's frozen snapshot, and checks that the child's budget fits within the parent's remaining
+  allowance. It binds every reviewed request field for the following transaction; it neither reserves
+  budget or fan-out nor creates a run. The durable adapter must lock, count, reserve, and persist.
 - `__StartNextRunAttempt(repository, command)` — start the next attempt of a run via compare-and-swap.
 - `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
