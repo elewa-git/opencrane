@@ -12,6 +12,7 @@ builder using only a draft capability.
 ## Public surface
 
 - `deploy/Dockerfile` — builds the authoring worker image from the shared acknowledgement client.
+- `src/authoring_worker.py` — private, not-yet-invoked intake primitives that verify and safely extract a candidate bundle.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 
 ## Boundary
