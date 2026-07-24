@@ -27,6 +27,20 @@ workload data. This image does not execute tenant tools yet.
 This app owns the tool-runner image root and deployment contract. Its image copies the dependency-free
 skill worker module; no library imports this app.
 
+## Runtime & config
+
+The existing `Validate and publish affected deployables` workflow builds this image whenever this
+package changes on an integration branch. It publishes `ghcr.io/italanta/opencrane-tool-runner` under
+a commit-derived tag. The workflow does not promote it: the release operator retrieves the manifest
+`sha256:` value from that published GitHub Container Registry package version and records it in a
+separate values review. A tag, local image ID, or Dockerfile base digest is never a valid substitute
+for that final published digest.
+
+The controller stays disabled until one review supplies exact immutable digests for the controller,
+personal runtime, authoring worker, and tool-runner worker; an exact Kubernetes API Service CIDR;
+Kubernetes 1.30 or later; and an instance-local LiteLLM deployment. Only then may it set
+`agentController.enabled=true`. Publishing this image alone cannot create a tenant tool Job.
+
 ## See also
 
 - Job builder: [skills k8s launcher](../../libs/backend/agents/skills/k8s-launcher/README.md)
