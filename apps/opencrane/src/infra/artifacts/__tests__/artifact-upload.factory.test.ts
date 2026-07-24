@@ -1,6 +1,11 @@
+import { generateKeyPairSync } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactServicePromotionPort, _CreateArtifactServiceReadPort, _CreateArtifactUploadGateway } from "../artifact-upload.factory.js";
+import { _CreateArtifactServicePromotionPort, _CreateArtifactServiceReadPort, _CreateArtifactUploadGateway, _CreateSkillAuthoringArtifactReader } from "../artifact-upload.factory.js";
 
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";
 
@@ -51,5 +56,23 @@ describe("artifact upload app composition", function _suite()
 		await expect(port.read("signed-read-lease", address)).resolves.toBeInstanceOf(Response);
 		expect(fetchMock).toHaveBeenCalledWith(`${_serviceUrl}/v1/artifacts/content/${"a".repeat(64)}`, { redirect: "error", headers: { "x-opencrane-artifact-lease": "signed-read-lease" } });
 		await expect(port.read("signed-read-lease", "../../etc/passwd")).rejects.toThrow("canonical content address");
+	});
+
+	it("refuses artifact bytes whose transport metadata does not match the fenced revision", async function _rejectsMismatchedMetadata()
+	{
+		const directory = mkdtempSync(join(tmpdir(), "opencrane-artifact-read-"));
+		const keyPath = join(directory, "lease.pem");
+		const key = generateKeyPairSync("ed25519").privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+		writeFileSync(keyPath, key, "utf8");
+		try
+		{
+			vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("artifact", { status: 200, headers: { "content-length": "8", "content-type": "text/plain" } })));
+			const reader = _CreateSkillAuthoringArtifactReader({ ARTIFACT_SERVICE_URL: _serviceUrl, ARTIFACT_LEASE_PRIVATE_KEY_PATH: keyPath });
+			await expect(reader.read({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 9, mediaType: "application/gzip" })).rejects.toThrow("metadata did not match");
+		}
+		finally
+		{
+			rmSync(directory, { recursive: true, force: true });
+		}
 	});
 });

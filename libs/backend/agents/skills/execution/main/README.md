@@ -29,12 +29,13 @@ already projected into the Job and creates the one-use bootstrap record. This or
 safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
 cannot attach a different Job or replace its reference.
 
-It does not create Kubernetes resources, grant a worker capability, read ArtifactStore bytes, or
-complete tool invocations. It exposes the narrow one-use acknowledgement route: the shared worker
+It does not create Kubernetes resources, grant a worker capability, hold ArtifactStore credentials,
+or complete tool invocations. It exposes the narrow one-use acknowledgement route: the shared worker
 can consume its hash-addressed record only after TokenReview confirms the exact registered Pod. It
-also accepts the authoring worker's terminal test-and-scan report, but only as two bounded review
-records on the already-selected draft revision. A tool-runner result remains a separate authority:
-it must complete its linked `ToolInvocation`, not write authoring evidence.
+also selects a pinned, active source artifact for that same Pod and asks an app-owned broker to stream
+the bytes; the worker never learns an ArtifactStore lease or endpoint. The authoring terminal route
+accepts only two bounded review records on the already-selected draft revision. A tool-runner result
+remains a separate authority: it must complete its linked `ToolInvocation`, not write authoring evidence.
 
 ## Public surface
 
@@ -46,6 +47,8 @@ it must complete its linked `ToolInvocation`, not write authoring evidence.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 - `PrismaSkillAuthoringCompletionRepository` — one-time Draft skill evidence and terminal-workload transaction.
 - `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only completion API with strict report validation.
+- `PrismaSkillAuthoringInputRepository` — exact-worker selection of an active, published, pinned source artifact.
+- `__CreateSkillAuthoringInputRouter` — authoring-audience-only byte broker route with no ArtifactStore credential response.
 
 ## Boundary
 
@@ -69,8 +72,10 @@ terminal records independently of this TypeScript adapter. It also owns the one-
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
 one consuming Pod UID. The later authoring completion must present that same reviewed Pod identity
-and can write only passed, bounded test and scan reports. It cannot turn the record into a general
-artifact or runtime credential.
+and can write only passed, bounded test and scan reports. The input query also binds that draft
+revision's three artifact coordinates to an active Artifact and published ArtifactRevision in the same
+silo, before the app signs a short-lived read lease and validates the returned metadata. It cannot turn
+the record into a general artifact or runtime credential.
 
 ## See also
 

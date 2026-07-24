@@ -21,7 +21,7 @@ import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
-import { PrismaSkillAuthoringCompletionRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
+import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
 import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
@@ -34,6 +34,7 @@ import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/serve
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
+import { _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _log } from "./log.js";
 
@@ -305,6 +306,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
 	app.use("/api/internal/agent-controller", __CreateSkillWorkloadDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: skillWorkloadClaimsRepository, logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }));
+	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringInputRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(), logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringCompletionRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.

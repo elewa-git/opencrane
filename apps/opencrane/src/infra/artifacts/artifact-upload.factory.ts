@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
 
@@ -7,6 +7,7 @@ import type { PrismaClient } from "@prisma/client";
 import { __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/agents/artifacts";
 import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
+import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 
 /** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
@@ -61,6 +62,23 @@ export function _CreateArtifactReadLeaseSigner(environment: NodeJS.ProcessEnv = 
 {
 	const leasePrivateKey = _ReadPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
 	return function _SignReadLease(claims): string { return __SignArtifactReadLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); };
+}
+
+/** Build the only server-side bridge from a fenced authoring input to verified ArtifactStore bytes. */
+export function _CreateSkillAuthoringArtifactReader(environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+{
+	return {
+		async read(input: SkillAuthoringInputRecord): Promise<ReadableStream<Uint8Array>>
+		{
+			const serviceUrl = _InternalServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
+			const signLease = _CreateArtifactReadLeaseSigner(environment);
+			const readPort = _CreateArtifactServiceReadPort(serviceUrl);
+			const lease = signLease({ leaseId: randomUUID(), siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId, contentAddress: input.contentAddress, byteLength: input.byteLength, mediaType: input.mediaType, action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60 });
+			const response = await readPort.read(lease, input.contentAddress);
+			if (response.headers.get("content-length") !== String(input.byteLength) || response.headers.get("content-type") !== input.mediaType) throw new Error("artifact service read metadata did not match the fenced revision");
+			return response.body as ReadableStream<Uint8Array>;
+		},
+	};
 }
 
 /** Require a credential-free, cluster-local HTTP endpoint. */
