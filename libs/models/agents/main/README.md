@@ -13,7 +13,8 @@ It owns two kinds of thing:
 - **Types** for an `AgentService` (a named, reusable agent), its immutable `AgentRevision`
   (a published, frozen version of that agent, carrying revision lineage — `parentRevisionId`,
   `sourceRevisionId`, `changeMessage` — and revision-scoped `RevisionScopeAttachment`s over the
-  canonical `GrantScope`/`GrantSubjectType` vocabulary), an `AgentRun` (one execution attempt), the
+  canonical `GrantScope`/`GrantSubjectType` vocabulary, and a positive per-run cost ceiling in USD
+  micros), an `AgentRun` (one execution attempt), the
   conversation record — `Thread`, `Message`, `RunEvent` — and the `Persona` family (the saved
   personality and onboarding interview an agent runs with).
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic

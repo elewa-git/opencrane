@@ -31,7 +31,7 @@ describe("refresh persona authorities", function _describeRefreshAuthorities()
 			personaRevision: { findFirst: vi.fn().mockResolvedValue({ id: "persona-2", interviewId: "interview-2" }), update: vi.fn().mockResolvedValue({}) },
 			personaProfile: { findUnique: vi.fn().mockResolvedValue({ activeRevisionId: "persona-1" }), update: vi.fn().mockResolvedValue({}) },
 			agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", activeRevisionId: "agent-1" }), update: vi.fn().mockResolvedValue({}) },
-			agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "agent-1", agentServiceId: "service-1", revision: 1, promptPolicyVersion: "prompt-v1", personaRevisionId: "persona-1", modelDefinitionId: "model-1", budget: {}, skillAssignments: [], integrationAssignments: [], scopeAttachments: [] }), create, update: vi.fn().mockResolvedValue({}) },
+			agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "agent-1", agentServiceId: "service-1", revision: 1, promptPolicyVersion: "prompt-v1", personaRevisionId: "persona-1", modelDefinitionId: "model-1", budget: { maxTurns: 4, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 60_000 }, skillAssignments: [], integrationAssignments: [], scopeAttachments: [] }), create, update: vi.fn().mockResolvedValue({}) },
 			personalConfigurationChange: { update: vi.fn().mockResolvedValue({}) },
 		};
 		const result = await new PrismaPersonaRefreshApprovalRepository(_Prisma(transaction)).approveRefreshAtomically({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", personaRevisionId: "persona-2", approvedAt: "2026-07-23T12:05:00.000Z" });
@@ -39,5 +39,24 @@ describe("refresh persona authorities", function _describeRefreshAuthorities()
 		expect(result).toEqual({ status: "approved", agentRevisionId: "agent-2" });
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ personaRevisionId: "persona-2", parentRevision: { connect: { id: "agent-1" } } }) }));
 		expect(transaction.personalConfigurationChange.update).toHaveBeenCalledWith({ where: { id: "change-1" }, data: { state: "Applied", appliedPersonaRevisionId: "persona-2", appliedAgentRevisionId: "agent-2" } });
+	});
+
+	it("refuses persona refresh approval before it can publish from an incomplete active budget", async function _invalidBudget()
+	{
+		const create = vi.fn().mockResolvedValue({ id: "agent-2" });
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValueOnce([{ id: "profile-1" }]).mockResolvedValueOnce([{ id: "change-1", agentServiceId: "service-1", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1" }]).mockResolvedValue([]),
+			personaRevision: { findFirst: vi.fn().mockResolvedValue({ id: "persona-2", interviewId: "interview-2" }), update: vi.fn().mockResolvedValue({}) },
+			personaProfile: { findUnique: vi.fn().mockResolvedValue({ activeRevisionId: "persona-1" }), update: vi.fn().mockResolvedValue({}) },
+			agentService: { findFirst: vi.fn().mockResolvedValue({ id: "service-1", activeRevisionId: "agent-1" }), update: vi.fn().mockResolvedValue({}) },
+			agentRevision: { findFirst: vi.fn().mockResolvedValue({ id: "agent-1", agentServiceId: "service-1", revision: 1, promptPolicyVersion: "prompt-v1", personaRevisionId: "persona-1", modelDefinitionId: "model-1", budget: { maxTurns: 4, maxTokens: 1000, maxDurationMs: 60_000 }, skillAssignments: [], integrationAssignments: [], scopeAttachments: [] }), create, update: vi.fn().mockResolvedValue({}) },
+			personalConfigurationChange: { update: vi.fn().mockResolvedValue({}) },
+		};
+
+		const result = await new PrismaPersonaRefreshApprovalRepository(_Prisma(transaction)).approveRefreshAtomically({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", personaRevisionId: "persona-2", approvedAt: "2026-07-23T12:05:00.000Z" });
+
+		expect(result).toEqual({ status: "conflict" });
+		expect(create).not.toHaveBeenCalled();
+		expect(transaction.personaRevision.update).not.toHaveBeenCalled();
 	});
 });

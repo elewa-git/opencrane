@@ -27,8 +27,10 @@ heads and records the applied revision pair.
 
 At most one accepted `model_alias` request can advance per admission. This first session seam uses
 only globally registered models because its command has no trusted ClusterTenant identity; a scoped
-model is never inferred from a silo ID. A stale request or an alias no longer globally registered
-becomes `Superseded`; it never changes a prior run. A `persona_refresh` first starts a linked
+model is never inferred from a silo ID. A stale request, an alias no longer globally registered, or
+an active revision without every positive run ceiling (including USD-micro cost) becomes `Superseded`;
+the refresh-approval path instead refuses before it changes the persona. Neither path can publish an
+incomplete revision or change a prior run. A `persona_refresh` first starts a linked
 interview, then uses the ordinary reviewed interview and draft evidence. Its special approval step
 does not invent SOUL content: it atomically approves the evidenced persona, publishes a clone of the
 current personal agent revision with that persona, and marks the linked change applied.

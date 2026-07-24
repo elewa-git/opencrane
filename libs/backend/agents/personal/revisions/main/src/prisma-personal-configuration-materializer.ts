@@ -2,7 +2,7 @@ import { AgentRevisionState, AgentServiceKind, Prisma } from "@prisma/client";
 import type { PersonalConfigurationMaterializationSource, SessionAssemblyCommand, SessionAssemblyLoad } from "@opencrane/backend/agents/execution/inputs";
 import type { RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import { __CreatePersonalRevisionCloneData, _PERSONAL_REVISION_INCLUDE } from "./personal-revision-clone.js";
+import { __CreatePersonalRevisionCloneData, __IsValidPersonalRevisionBudget, _PERSONAL_REVISION_INCLUDE } from "./personal-revision-clone.js";
 import type { PersonalConfigurationMaterializationResult } from "./personal-configuration-materializer.types.js";
 
 /** Prisma implementation that consumes one accepted model choice in the caller's admission transaction. */
@@ -45,7 +45,7 @@ export class PrismaPersonalConfigurationMaterializer implements PersonalConfigur
 				continue;
 			}
 			const head = await prisma.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id }, include: _PERSONAL_REVISION_INCLUDE });
-			if (head === null || head.personaRevisionId === null || head.modelDefinitionId === modelDefinitionId)
+			if (head === null || head.personaRevisionId === null || head.modelDefinitionId === modelDefinitionId || !__IsValidPersonalRevisionBudget(head.budget))
 			{
 				await _supersede(prisma, change.id);
 				continue;
@@ -61,7 +61,6 @@ export class PrismaPersonalConfigurationMaterializer implements PersonalConfigur
 		}
 	}
 }
-
 
 /** Returns a successful no-op result when no accepted model change can advance this admission. */
 function _unchanged(): SessionAssemblyLoad<PersonalConfigurationMaterializationResult>

@@ -40,7 +40,8 @@ models, credentials, or a neighbouring scope.
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). The model is a foreign-key reference to the gateway-owned
+and positive turn/token/cost/duration budgets). Cost is expressed as positive USD micros, so the
+immutable revision and its resulting run snapshot carry the same enforceable spend ceiling. The model is a foreign-key reference to the gateway-owned
 catalogue, so an author cannot turn an arbitrary provider alias into executable behaviour. A model
 is available only when it is platform-global or belongs to the service's tenant scope; the database
 checks the same rule as the application. The publish and the pointer flip happen as a single compare-and-swap,

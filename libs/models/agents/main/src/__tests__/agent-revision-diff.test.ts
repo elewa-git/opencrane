@@ -21,7 +21,7 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read"] }],
 		scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }],
-		budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 },
+		budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-20T00:00:00.000Z",
 		publishedAt: null,
@@ -52,7 +52,7 @@ describe("agent revision diff", function _suite()
 				{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read", "write"] },
 				{ integrationId: "int-b", custodyReferenceId: "cust-2", allowedTools: ["send"] },
 			],
-			budget: { maxTurns: 20, maxTokens: 1000, maxDurationMs: 30000 },
+			budget: { maxTurns: 20, maxTokens: 1000, maxCostUsdMicros: 1_000_000, maxDurationMs: 30000 },
 		});
 		const diff = __DiffAgentRevisions(_revision(), target);
 		const kinds = diff.widenings.map(function _kind(widening) { return widening.kind; });
@@ -64,8 +64,15 @@ describe("agent revision diff", function _suite()
 
 	it("does not flag budget widening when a ceiling is lowered", function _narrower()
 	{
-		const diff = __DiffAgentRevisions(_revision(), _revision({ budget: { maxTurns: 2, maxTokens: 1000, maxDurationMs: 30000 } }));
+		const diff = __DiffAgentRevisions(_revision(), _revision({ budget: { maxTurns: 2, maxTokens: 1000, maxCostUsdMicros: 500_000, maxDurationMs: 30000 } }));
 		expect(diff.widenings).toEqual([]);
 		expect(diff.scalarChanges).toContainEqual({ field: "budget.maxTurns", before: "5", after: "2" });
+	});
+
+	it("reports a raised cost ceiling as both a semantic change and a budget widening", function _costWidening()
+	{
+		const diff = __DiffAgentRevisions(_revision(), _revision({ budget: { maxTurns: 5, maxTokens: 1000, maxCostUsdMicros: 750_000, maxDurationMs: 30000 } }));
+		expect(diff.scalarChanges).toContainEqual({ field: "budget.maxCostUsdMicros", before: "500000", after: "750000" });
+		expect(diff.widenings).toContainEqual({ kind: "budget", field: "budget.maxCostUsdMicros", detail: "budget.maxCostUsdMicros raised from 500000 to 750000" });
 	});
 });

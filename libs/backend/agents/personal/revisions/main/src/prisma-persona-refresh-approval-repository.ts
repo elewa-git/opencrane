@@ -1,6 +1,6 @@
 import { AgentRevisionState, AgentServiceKind, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
 
-import { __CreatePersonalRevisionCloneData, _PERSONAL_REVISION_INCLUDE } from "./personal-revision-clone.js";
+import { __CreatePersonalRevisionCloneData, __IsValidPersonalRevisionBudget, _PERSONAL_REVISION_INCLUDE } from "./personal-revision-clone.js";
 import type { ApprovePersonaRefreshCommand, PersonaRefreshApprovalRepository } from "./persona-refresh-interview.types.js";
 
 /** Prisma authority that atomically approves a refresh persona and rolls the personal agent revision forward. */
@@ -37,7 +37,7 @@ export class PrismaPersonaRefreshApprovalRepository implements PersonaRefreshApp
 				const service = await transaction.agentService.findFirst({ where: { id: refresh.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal }, select: { id: true, activeRevisionId: true } });
 				if (profile?.activeRevisionId !== refresh.expectedPersonaRevisionId || service === null || service.activeRevisionId === null || service.activeRevisionId !== refresh.expectedAgentRevisionId) return { status: "conflict" } as const;
 				const head = await transaction.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id }, include: _PERSONAL_REVISION_INCLUDE });
-				if (head === null) return { status: "conflict" } as const;
+				if (head === null || !__IsValidPersonalRevisionBudget(head.budget)) return { status: "conflict" } as const;
 
 				// 3. Approve the evidenced persona, publish its cloned agent revision, and seal the accepted change before commit.
 				const approvedAt = new Date(command.approvedAt);

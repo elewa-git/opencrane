@@ -14,6 +14,7 @@ describe("harvesting central-agent definition", function _DefinitionSuite()
 		expect(definition.content.personaRevisionId).toBeNull();
 		expect(definition.content.budget.maxTurns).toBeGreaterThan(0);
 		expect(definition.content.budget.maxTokens).toBeGreaterThan(0);
+		expect(definition.content.budget.maxCostUsdMicros).toBeGreaterThan(0);
 		expect(definition.content.integrationAssignments).toHaveLength(1);
 		expect(definition.content.integrationAssignments[0].allowedTools.length).toBeGreaterThan(0);
 		expect(definition.content.integrationAssignments[0].custodyReferenceId).toBe("obot-ref-slack-opaque");

@@ -7,6 +7,23 @@ import type { PersonalRevisionCloneSource } from "./personal-configuration-mater
 /** Complete immutable assignment shape loaded before cloning one personal AgentRevision. */
 export const _PERSONAL_REVISION_INCLUDE = { skillAssignments: true, integrationAssignments: true, scopeAttachments: true } as const;
 
+/** Returns whether persisted JSON carries every positive, safe per-run ceiling required for publication. */
+export function __IsValidPersonalRevisionBudget(value: Prisma.JsonValue): boolean
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+	const budget = value as Record<string, unknown>;
+	return _isPositiveSafeInteger(budget.maxTurns)
+		&& _isPositiveSafeInteger(budget.maxTokens)
+		&& _isPositiveSafeInteger(budget.maxCostUsdMicros)
+		&& _isPositiveSafeInteger(budget.maxDurationMs);
+}
+
+/** Returns whether one persisted JSON value is a finite, positive safe integer. */
+function _isPositiveSafeInteger(value: unknown): value is number
+{
+	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
 /** Builds a draft clone changing only the supplied immutable persona and model coordinates. */
 export function __CreatePersonalRevisionCloneData(head: PersonalRevisionCloneSource, target: { readonly modelDefinitionId: string; readonly personaRevisionId: string; readonly authoredBy: string; readonly changeMessage: string; readonly createdAt: Date }): Prisma.AgentRevisionCreateInput
 {

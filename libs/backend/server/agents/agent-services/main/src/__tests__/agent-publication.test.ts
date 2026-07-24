@@ -38,7 +38,7 @@ function _revision(): AgentRevision
 		skills: [],
 		integrationAssignments: [],
 		scopeAttachments: [],
-		budget: { maxTurns: 10, maxTokens: 10000, maxDurationMs: 60000 },
+		budget: { maxTurns: 10, maxTokens: 10000, maxCostUsdMicros: 500_000, maxDurationMs: 60000 },
 		authoredBy: "user-1",
 		createdAt: "2026-07-18T00:00:00.000Z",
 		publishedAt: null,
@@ -187,5 +187,21 @@ describe("agent revision publication", function _suite()
 
 		expect(result).toEqual({ outcome: "denied", reason: "revision_not_found" });
 		expect(repository.publicationCallCount).toBe(0);
+	});
+
+	it("denies a draft without a positive immutable cost ceiling before publication", async function _missingCostCeiling()
+	{
+		const repository = new _PublicationRepository();
+		const getRevision = repository.getRevision.bind(repository);
+		repository.getRevision = async function _getMalformed(): Promise<AgentRevision>
+		{
+			return { ..._revision(), budget: { ..._revision().budget, maxCostUsdMicros: 0 } };
+		};
+
+		const result = await __PublishAgentRevision(repository, { siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", expectedActiveRevisionId: null, publishedAt: "2026-07-18T01:00:00.000Z" });
+
+		expect(result).toEqual({ outcome: "denied", reason: "invalid_revision" });
+		expect(repository.publicationCallCount).toBe(0);
+		repository.getRevision = getRevision;
 	});
 });

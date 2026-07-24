@@ -10,7 +10,7 @@ export interface AgentRevisionContent
 	/** Registered model-definition reference; carries no provider secret. */
 	readonly modelDefinitionId: string;
 	/** Immutable resource ceilings applied to each run. */
-	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxDurationMs: number };
+	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxCostUsdMicros: number; readonly maxDurationMs: number };
 	/** Immutable skill revisions exposed to the runtime. */
 	readonly skills: readonly { readonly skillId: string; readonly revisionId: string }[];
 	/** Immutable integration and tool assignments exposed to the runtime. */

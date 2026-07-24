@@ -25,14 +25,14 @@ function _parseContent(raw: unknown): AgentRevisionContent | null
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
 	if (!_isNonEmptyString(body.promptPolicyVersion) || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
-	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
+	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxCostUsdMicros !== "number" || typeof budget.maxDurationMs !== "number") return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
 	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
 	const skills = _parseSkills(body.skills);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
 	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxCostUsdMicros: budget.maxCostUsdMicros, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
 }
 
 /** Parses the optional skill-reference array. */

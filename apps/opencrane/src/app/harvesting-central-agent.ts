@@ -31,7 +31,7 @@ export function _HarvestingCentralAgentDefinition(obotCustodyReference: string, 
 			// A managed (central) agent never carries a persona.
 			personaRevisionId: null,
 			modelDefinitionId,
-			budget: { maxTurns: 20, maxTokens: 200_000, maxDurationMs: 900_000 },
+			budget: { maxTurns: 20, maxTokens: 200_000, maxCostUsdMicros: 5_000_000, maxDurationMs: 900_000 },
 			skills: [],
 			// One Obot MCP integration with a strict tool allow-list; only these tools are invocable.
 			integrationAssignments: [{ integrationId: "slack", custodyReferenceId: obotCustodyReference, allowedTools: [...HARVESTING_ALLOWED_TOOLS] }],
