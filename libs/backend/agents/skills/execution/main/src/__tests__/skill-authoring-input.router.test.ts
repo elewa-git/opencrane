@@ -33,10 +33,20 @@ describe("skill authoring input router", function _DescribeAuthoringInput()
 		expect(response.status).toBe(200);
 		expect(response.headers["content-type"]).toBe("application/gzip");
 		expect(response.headers["content-length"]).toBe("13");
+		expect(response.headers["x-opencrane-content-address"]).toBe(_INPUT.contentAddress);
 		expect(response.body.toString()).toBe("skill archive");
 		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-skill-authoring");
 		expect(dependencies.repository.loadForWorker).toHaveBeenCalledWith("workload-1", { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
 		expect(dependencies.artifactReader.read).toHaveBeenCalledWith(_INPUT);
+	});
+
+	it("refuses an oversized archive before the server mints a private read lease", async function _RejectsOversizedArchive()
+	{
+		const { app, dependencies } = _App({ repository: { loadForWorker: vi.fn().mockResolvedValue({ ..._INPUT, byteLength: 16 * 1024 * 1024 + 1 }) } });
+		const response = await request(app).get("/skill-authoring-workloads/workload-1/input").set("authorization", "Bearer projected-token");
+
+		expect(response.status).toBe(404);
+		expect(dependencies.artifactReader.read).not.toHaveBeenCalled();
 	});
 
 	it("denies absent or unreviewed Pod identity before selecting an artifact", async function _RejectsIdentity()

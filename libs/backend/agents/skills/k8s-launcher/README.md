@@ -28,7 +28,9 @@ It guarantees a suspended, zero-retry, terminally cleaned, non-privileged Job wi
 filesystem, bounded temporary scratch space, no auto-mounted service-account token, and no source
 code, artifact bytes, arguments, or credentials embedded in the manifest. The controller can release
 it only after it has durably committed the exact Kubernetes identity. The only input it projects is an
-opaque capability reference for later exchange by a worker protocol.
+opaque capability reference for later exchange by a worker protocol. Authoring Jobs require at least
+64 MiB of scratch: a future validator uses that space for a bounded archive, an extracted tree, and
+fixed offline checks without borrowing persistent storage.
 
 ## Public surface
 

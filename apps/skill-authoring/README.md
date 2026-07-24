@@ -21,8 +21,11 @@ Kubernetes API access to the worker identity. Its default-deny namespace permits
 Pod only cluster DNS and the OpenCrane internal listener for its bootstrap acknowledgement, server-brokered
 input, and terminal completion. Every endpoint TokenReviews the fixed projected-token audience and
 registered Pod UID. The worker receives no ArtifactStore endpoint, credential, or signed lease; the server
-selects and streams only the immutable source artifact pinned on its assigned draft revision. This image
-does not author or execute a skill yet.
+selects and streams only the immutable source artifact pinned on its assigned draft revision. The server
+refuses compressed candidate bundles larger than 16 MiB before it mints an ArtifactStore read lease,
+and returns the pinned SHA-256 address alongside the length so the future validator can verify the
+downloaded bytes. The admitted Job reserves at least 64 MiB of ephemeral `/tmp` space for bounded
+extraction and offline validation. This image does not author or execute a skill yet.
 
 ## Dependency direction
 
