@@ -89,6 +89,9 @@ Starts, appends answers to, and completes `PersonaInterview` and `PersonaIntervi
 canonical product database. It also reads a joined approval snapshot (profile · revision · interview
 · template · insights) and commits approval plus the active-persona pointer in one transaction.
 Postgres-level lifecycle behaviour is exercised by the `test:sql` target (`tests/persona-authority.sql`).
+On a clean database, the target baseline supplies one reviewed eight-question onboarding set and two
+reviewed `SOUL.md` templates. The relationship and challenge answers select the direct or supportive
+template deterministically; profiles and interview evidence remain user-owned runtime records.
 
 ## See also
 

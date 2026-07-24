@@ -4623,3 +4623,21 @@ CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
 AFTER INSERT OR UPDATE OF "run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
+
+-- Clean-build persona onboarding sources. They are created as Draft, populated, and reviewed in
+-- this immutable baseline so no runtime path can edit questions or SOUL.md template rules.
+INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES ('personal-agent-onboarding', 1);
+INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "question_id", "category", "prompt", "ordinal") VALUES
+    ('personal-agent-onboarding', 1, 'relationship-role', 'relationship_role', 'What role should your agent take? Choose: A thoughtful partner.', 1),
+    ('personal-agent-onboarding', 1, 'tone-language', 'tone_language', 'Which tone and language should it normally use?', 2),
+    ('personal-agent-onboarding', 1, 'answer-structure', 'answer_structure', 'How should it structure answers: concise first, detailed first, or another approach?', 3),
+    ('personal-agent-onboarding', 1, 'challenge-support', 'challenge_support', 'How should it challenge you? Choose: Challenge me directly, or Start supportively, then challenge me.', 4),
+    ('personal-agent-onboarding', 1, 'initiative', 'initiative', 'When may it take initiative instead of waiting for a request?', 5),
+    ('personal-agent-onboarding', 1, 'approval-risk', 'approval_risk', 'Which external actions always require your approval?', 6),
+    ('personal-agent-onboarding', 1, 'working-habits', 'working_habits', 'Which working habits should it reinforce?', 7),
+    ('personal-agent-onboarding', 1, 'memory-boundaries', 'memory_boundaries', 'What should it remember, and what must it not retain?', 8);
+UPDATE "persona_question_sets" SET "state" = 'reviewed', "reviewed_by" = 'opencrane-clean-build', "reviewed_at" = clock_timestamp()
+WHERE "question_set_id" = 'personal-agent-onboarding' AND "version" = 1;
+INSERT INTO "persona_soul_templates" ("template_id", "version", "digest", "content", "selection_rules", "reviewed_by", "reviewed_at") VALUES
+    ('direct-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"direct-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Challenge me directly"}}]', 'opencrane-clean-build', clock_timestamp()),
+    ('supportive-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"supportive-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Start supportively, then challenge me"}}]', 'opencrane-clean-build', clock_timestamp());
