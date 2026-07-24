@@ -119,17 +119,6 @@ export function _BuildDeployment(config: OpenClawTenantOperatorConfig, stateVolu
       },
     });
 
-    // OpenClaw requires OPENAI_API_KEY for its internal OpenAI translator engine fallback
-    envVars.push({
-      name: "OPENAI_API_KEY",
-      valueFrom: {
-        secretKeyRef: {
-          name: `openclaw-${name}-openai-key`,
-          key: "apiKey",
-          optional: true,
-        },
-      },
-    });
   }
 
   // 2. Volume mounts — the state volume mount comes from the adapter;

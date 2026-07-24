@@ -75,7 +75,8 @@ the channel-proxy infra lib through the app root.
 Driven by the app-owned operator environment (`OpenClawTenantOperatorConfig`): watch namespace,
 deployment mode (standalone vs fleet-managed), standalone seed identity, Cognee endpoint, and the
 optional in-process gateway proxy (`GATEWAY_PROXY_ENABLED`). It never accepts or provisions an
-upstream provider key at boot.
+upstream provider key at boot. When LiteLLM is enabled, a tenant workload receives only its own
+LiteLLM virtual key and proxy endpoint; it never receives a direct upstream-provider credential.
 
 ## See also
 

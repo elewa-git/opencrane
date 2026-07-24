@@ -424,6 +424,24 @@ describe("TenantResourceBuilder", () =>
     )).toBe(true);
   });
 
+  it("exposes only the tenant LiteLLM virtual key when model routing is enabled", () =>
+  {
+    const tenant = _makeTenant("litellm-only");
+    const stateVolume = onPremAdapter.buildStateVolume("litellm-only");
+    const deployment = _BuildDeployment({ ...defaultConfig, liteLlmEnabled: true }, stateVolume, tenant, "default");
+    const envVars = deployment.spec?.template?.spec?.containers?.[0]?.env ?? [];
+    const liteLlmKey = envVars.find((entry) => entry.name === "LITELLM_API_KEY");
+    const secretBackedEnvVars = envVars.filter((entry) => entry.valueFrom?.secretKeyRef !== undefined);
+
+    expect(envVars.map((entry) => entry.name)).not.toContain("OPENAI_API_KEY");
+    expect(secretBackedEnvVars.map((entry) => entry.name)).toEqual(["LITELLM_API_KEY"]);
+    expect(liteLlmKey?.valueFrom?.secretKeyRef).toEqual({
+      name: "openclaw-litellm-only-litellm-key",
+      key: "apiKey",
+      optional: true,
+    });
+  });
+
   it("builds a NetworkPolicy locking the gateway port to the in-operator proxy (CONN.4)", () =>
   {
     const tenant = _makeTenant("sarah");
