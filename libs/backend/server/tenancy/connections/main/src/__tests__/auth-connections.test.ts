@@ -139,7 +139,7 @@ describe("POST /auth/pod-token (OpenClaw connection broker)", function _suite()
 
 		expect(res.status).toBe(200);
 		expect(res.body).toMatchObject({
-			gatewayUrl: "wss://alex.oc.example.com/gateway",
+			gatewayUrl: "ws://alex.oc.example.com/gateway",
 			tenant: "alex.oc",
 			ingressHost: "alex.oc.example.com",
 		});
@@ -154,7 +154,7 @@ describe("POST /auth/pod-token (OpenClaw connection broker)", function _suite()
 
 		expect(res.status).toBe(200);
 		// Same-origin hosting: the SPA owns `/`, so the WS is exposed at `/gateway`.
-		expect(res.body.gatewayUrl).toBe("wss://alex.oc.example.com/gateway");
+		expect(res.body.gatewayUrl).toBe("ws://alex.oc.example.com/gateway");
 	});
 
 	it("returns 401 without a session", async function _noSession()

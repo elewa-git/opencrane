@@ -109,8 +109,9 @@ export function _ConnectionsAuthRouter(prisma: PrismaClient): Router
       }
 
       // 4. Return coordinates only; trusted-proxy authentication happens at the ingress.
+      const scheme = req.protocol === "http" ? "ws" : "wss";
       res.status(200).json({
-        gatewayUrl: `wss://${tenant.ingressHost}${_OPENCLAW_GATEWAY_WS_PATH}`,
+        gatewayUrl: `${scheme}://${tenant.ingressHost}${_OPENCLAW_GATEWAY_WS_PATH}`,
         tenant: tenant.name,
         ingressHost: tenant.ingressHost,
       });
