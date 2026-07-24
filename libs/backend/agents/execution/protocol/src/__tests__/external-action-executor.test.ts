@@ -1,5 +1,5 @@
 import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
+import { __FakeObotMcpInvocationAdapter, __UnavailableObotCustodyAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { describe, expect, it } from "vitest";
@@ -13,7 +13,7 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 }
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
 
 describe("composition-root external action executor", function _suite()
 {
@@ -21,6 +21,12 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("mcp-server:server-1"), DEPENDENCIES);
 		await expect(executor.execute()).rejects.toThrow(/Obot custody authority is unavailable/);
+	});
+
+	it("resolves a revision integration and invokes only its allowed tool through Obot", async function _integration()
+	{
+		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new __FakeObotMcpInvocationAdapter({ content: { result: "ok" } }) });
+		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
 	});
 
 	it("fails closed for a sandbox tool call when no sandbox transport is available", async function _sandbox()

@@ -23,6 +23,14 @@ function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string)
 	return typeof value === "string" ? value : null;
 }
 
+/** Parse the exact integration/tool identity minted by the target prompt compiler. */
+function _integrationTool(toolRevisionId: string): { readonly integrationId: string; readonly toolName: string } | null
+{
+	const parts = toolRevisionId.split(":");
+	if (parts.length !== 3 || parts[0] !== "integration" || !parts[1] || !parts[2]) return null;
+	return { integrationId: parts[1], toolName: parts[2] };
+}
+
 /**
  * Build the concrete external-action executor for one admitted candidate, in the composition root.
  *
@@ -44,6 +52,14 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 		async execute(): Promise<JsonValue>
 		{
 			const toolRevisionId = candidate.toolRevisionId;
+			const integrationTool = _integrationTool(toolRevisionId);
+			if (integrationTool !== null)
+			{
+				const resolved = await dependencies.integrations.resolveAssignment({ siloId: dependencies.siloId, agentRevisionId: dependencies.agentRevisionId, integrationId: integrationTool.integrationId });
+				if (resolved.outcome !== "resolved") throw new UnsupportedExternalActionError(toolRevisionId);
+				const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
+				return result.content;
+			}
 			if (toolRevisionId.startsWith("mcp-server:"))
 			{
 				// An MCP tool call needs Obot-held custody first; the unavailable adapter fails closed here.

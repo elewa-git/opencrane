@@ -27,6 +27,8 @@ import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepositor
 import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
 import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
+import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
+import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
@@ -184,6 +186,8 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 	const repository = new PrismaToolInvocationRepository(prisma);
 	const personalConfiguration = new PrismaPersonalConfigurationChangeRepository(prisma);
 	const obotCustody = new __UnavailableObotCustodyAdapter();
+	const obotMcpInvocation = new __UnavailableObotMcpInvocationAdapter();
+	const integrations = new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock());
 	const sandboxExecutor = new __UnavailableSandboxJobExecutor();
 	const memoryGateway = new __UnavailableMemoryGatewayClient();
 	return {
@@ -197,7 +201,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			{
 				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
 					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
-					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, agentRevisionId: snapshot.agentRevisionId, integrations, obotMcpInvocation, obotCustody, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{
