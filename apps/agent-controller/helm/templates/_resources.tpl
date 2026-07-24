@@ -38,6 +38,12 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.runtimeProfile.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 agentController.runtimeProfile.image.digest" }}
 {{- end }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.authoring.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 authoring worker image digest" }}
+{{- end }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 tool-runner worker image digest" }}
+{{- end }}
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
@@ -49,6 +55,13 @@
 {{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
 {{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
+{{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
+{{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
+{{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
+{{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
+{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) }}
+{{- fail "governed skill workload namespaces must be distinct from the server and from each other" }}
+{{- end }}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 apiVersion: v1
@@ -144,6 +157,41 @@ roleRef:
   kind: Role
   name: {{ $controllerName }}
 ---
+{{- range $namespace := (list $authoringNamespace $toolRunnerNamespace) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $controllerName }}-skill-workloads
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+rules:
+  # A governed skill Job is created or exact-adopted while suspended. No patch, Pod, Secret, or
+  # delete permission exists in these namespaces, so this controller cannot release or alter work.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $controllerName }}-skill-workloads
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ $controllerName }}
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $controllerName }}-skill-workloads
+---
+{{- end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -197,6 +245,8 @@ spec:
               value: {{ .Values.agentController.outboxPruneIntervalMs | quote }}
             - name: AGENT_CONTROLLER_PROFILES_JSON
               value: {{ dict .Values.agentController.runtimeProfile.name (dict "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) | toJson | quote }}
+            - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
+              value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token

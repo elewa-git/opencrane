@@ -1,6 +1,7 @@
 import { isAbsolute } from "node:path";
 
 import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
+import { __ValidateSkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
 
 import type { AgentControllerProcessConfig } from "./config.types.js";
 
@@ -37,6 +38,19 @@ function _Json(value: string): unknown
 	}
 }
 
+/** Parse skill profile JSON while keeping its configuration failure distinct from runtime profiles. */
+function _SkillProfilesJson(value: string): unknown
+{
+	try
+	{
+		return JSON.parse(value) as unknown;
+	}
+	catch
+	{
+		throw new Error("AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON must contain valid JSON");
+	}
+}
+
 /** Read and fail-closed validate the complete agent-controller process configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): AgentControllerProcessConfig
 {
@@ -52,6 +66,7 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 
 	// 3. Validate the runtime/server namespace split and every immutable Job profile at startup.
 	const profiles = __ValidateAgentControllerRuntimeProfiles(_Json(_Required(environment, "AGENT_CONTROLLER_PROFILES_JSON")), runtimeNamespace);
+	const skillWorkloadProfiles = __ValidateSkillWorkloadControllerProfiles(_SkillProfilesJson(_Required(environment, "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON")));
 	return {
 		openCraneInternalUrl: _Required(environment, "OPENCRANE_INTERNAL_URL"),
 		controllerTokenPath,
@@ -60,5 +75,6 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 		outboxPruneIntervalMilliseconds: _Integer(environment, "AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS", 3_600_000, 60_000, 86_400_000),
 		requestTimeoutMilliseconds: _Integer(environment, "AGENT_CONTROLLER_REQUEST_TIMEOUT_MS", 10_000, 1_000, 60_000),
 		profiles,
+		skillWorkloadProfiles,
 	};
 }

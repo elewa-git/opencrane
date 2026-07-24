@@ -22,10 +22,19 @@ function _ProfilesJson(serverNamespace = "silo-a"): string
 	});
 }
 
+/** Return both Helm-equivalent governed skill workload profiles. */
+function _SkillProfilesJson(): string
+{
+	return JSON.stringify({
+		authoring: { kind: "authoring", image: `ghcr.io/italanta/opencrane-skill-authoring@sha256:${"a".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", scratchSize: "64Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "256Mi" } } },
+		"tool-runner": { kind: "tool-runner", image: `ghcr.io/italanta/opencrane-tool-runner@sha256:${"b".repeat(64)}`, imagePullPolicy: "IfNotPresent", serverNamespace: "silo-a", namespace: "opencrane-tools", serviceAccountName: "tool-runner-default", capabilityTokenAudience: "opencrane-tool-runner", scratchSize: "64Mi", activeDeadlineSeconds: 300, ttlSecondsAfterFinished: 0, resources: { requests: { cpu: "100m", memory: "128Mi" }, limits: { cpu: "500m", memory: "256Mi" } } },
+	});
+}
+
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_RUNTIME_NAMESPACE: "silo-a-runtime", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_RUNTIME_NAMESPACE: "silo-a-runtime", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson() };
 }
 
 describe("agent-controller process config", function _Suite()
@@ -39,12 +48,14 @@ describe("agent-controller process config", function _Suite()
 		expect(config.requestTimeoutMilliseconds).toBe(10_000);
 		expect(config.outboxPruneIntervalMilliseconds).toBe(3_600_000);
 		expect(config.profiles["personal-default"]?.serviceAccountName).toBe("agent-runtime-default");
+		expect(config.skillWorkloadProfiles.authoring.serviceAccountName).toBe("skill-authoring-default");
 	});
 
 	it("rejects a collapsed namespace or moving image tag", function _RejectsUnsafeConfig()
 	{
 		expect(function _SameNamespace() { _ReadConfig({ ..._Environment(), AGENT_RUNTIME_NAMESPACE: "silo-a" }); }).toThrow(/namespaces separate/);
 		expect(function _MovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable image/);
+		expect(function _SkillProfileWrongClass() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson().replace("\"kind\":\"authoring\"", "\"kind\":\"tool-runner\"") }); }).toThrow(/wrong workload class/);
 	});
 
 	it("rejects an outbox-retention cadence outside the safe maintenance range", function _RejectsUnsafeRetentionInterval()

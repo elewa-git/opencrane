@@ -1,2 +1,3 @@
 export { __ReconcileNextSkillWorkload, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "./skill-workload-controller.js";
-export type { SkillWorkloadControllerAuthority, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult } from "./skill-workload-controller.types.js";
+export { __CreateHttpSkillWorkloadControllerAuthority } from "./http-skill-workload-authority.js";
+export type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";

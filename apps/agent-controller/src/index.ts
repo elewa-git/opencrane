@@ -3,6 +3,7 @@ import "./instrument.js";
 import * as k8s from "@kubernetes/client-node";
 
 import { __CreateHttpAgentControllerAuthority, __CreateKubernetesAgentControllerStore, __RunAgentController } from "@opencrane/backend/agents/runtime/controller";
+import { __CreateHttpSkillWorkloadControllerAuthority, __RunSkillWorkloadController } from "@opencrane/backend/agents/skills/controller";
 import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/observability";
 
 import { _ReadConfig } from "./config.js";
@@ -22,6 +23,7 @@ async function _Main(): Promise<void>
 		const kubeConfig = new k8s.KubeConfig();
 		kubeConfig.loadFromCluster();
 		const authority = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
+		const skillWorkloadAuthority = __CreateHttpSkillWorkloadControllerAuthority({ openCraneInternalUrl: config.openCraneInternalUrl, tokenPath: config.controllerTokenPath, requestTimeoutMilliseconds: config.requestTimeoutMilliseconds });
 		const kubernetes = __CreateKubernetesAgentControllerStore({ batchApi: kubeConfig.makeApiClient(k8s.BatchV1Api), coreApi: kubeConfig.makeApiClient(k8s.CoreV1Api), requestTimeoutMilliseconds: config.requestTimeoutMilliseconds, shutdownSignal: shutdown.signal });
 
 		// 3. Convert both Kubernetes termination signals into one abortable poll loop.
@@ -34,7 +36,10 @@ async function _Main(): Promise<void>
 		process.once("SIGTERM", function _sigterm() { _Shutdown("SIGTERM"); });
 		process.once("SIGINT", function _sigint() { _Shutdown("SIGINT"); });
 		log.info({ runtimeNamespace: config.runtimeNamespace, profiles: Object.keys(config.profiles) }, "agent controller started");
-		await __RunAgentController({ authority, kubernetes, profiles: config.profiles, runtimeNamespace: config.runtimeNamespace, pollIntervalMilliseconds: config.pollIntervalMilliseconds, outboxPruneIntervalMilliseconds: config.outboxPruneIntervalMilliseconds, log }, shutdown.signal);
+		await Promise.all([
+			__RunAgentController({ authority, kubernetes, profiles: config.profiles, runtimeNamespace: config.runtimeNamespace, pollIntervalMilliseconds: config.pollIntervalMilliseconds, outboxPruneIntervalMilliseconds: config.outboxPruneIntervalMilliseconds, log }, shutdown.signal),
+			__RunSkillWorkloadController({ authority: skillWorkloadAuthority, kubernetes, profiles: config.skillWorkloadProfiles, pollIntervalMilliseconds: config.pollIntervalMilliseconds, log }, shutdown.signal),
+		]);
 	}
 	finally
 	{

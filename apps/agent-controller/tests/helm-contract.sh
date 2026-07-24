@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
+SOURCE_CHART_ROOT="$(mktemp -d)"
 CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
@@ -16,7 +17,13 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+
+# The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
+# this contract always renders the source template under test without refreshing remote dependencies.
+cp -R "$CHART_ROOT/." "$SOURCE_CHART_ROOT"
+helm package "$ROOT/apps/agent-controller/helm" --destination "$SOURCE_CHART_ROOT/charts" >/dev/null
+CHART_ROOT="$SOURCE_CHART_ROOT"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \
@@ -24,6 +31,8 @@ render_enabled() {
     --set agentController.enabled=true \
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+    --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set agentController.kubernetesApiServerEndpointPort=6443 \
@@ -83,6 +92,15 @@ fi
 test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
+
+# Governed skill namespaces are derived from their owning charts. Their controller Roles can only
+# exact-adopt or create suspended Jobs: no patch permission can release or modify a worker.
+grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(patch|delete|update|watch|list)"'; then
+  echo "skill workload Roles exceed get/create Job authority" >&2
+  exit 1
+fi
 
 # Both processes receive the literal cross-namespace contract; neither infers it from Pod metadata.
 grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$MANIFEST" | grep -Fq 'value: "oc-opencrane-runtime"'
@@ -181,7 +199,7 @@ grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -Fq 'port: 443'
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
 grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
-if grep -Eq 'kind: ValidatingAdmissionPolicy|kind: Namespace|name: agent-controller|opencrane.ai/runtime-release' "$DISABLED"; then
+if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
 fi
