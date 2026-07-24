@@ -22,7 +22,7 @@ else. It owns the durability and integrity of the write, and the safety of every
  └─────────────────────────────────────────────────────────┘
           │  canonical immutable object (created: true/false)
           ▼
- read(address) streams it back · purge(address) removes it
+ byteLength(address) confirms immutable size · read(address) streams it back · purge(address) removes it
 ```
 
 **In this flow:** [store](../../store/main/README.md) *(defines the `ArtifactStore` port and validates every command)* ·
@@ -43,7 +43,7 @@ in to read or overwrite a file outside the mounted volume, and stored bytes alwa
 
 ## Public surface
 
-- `__FilesystemArtifactStore` — the POSIX `ArtifactStore` adapter (`stage` · `promote` · `read` · `purge`).
+- `__FilesystemArtifactStore` — the POSIX `ArtifactStore` adapter (`stage` · `promote` · `byteLength` · `read` · `purge`).
 - `FilesystemArtifactStoreOptions` — construction options (the absolute `rootPath` of the mounted volume).
 
 ## Boundary

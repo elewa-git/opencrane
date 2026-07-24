@@ -44,7 +44,7 @@ forged receipt can never finalise a catalog entry.
 ## Public surface
 
 - `__SignArtifactWriteLease(claims, privateKeyPem, now)` / `__VerifyArtifactWriteLease(compact, publicKeyPem, now)` — mint and check the pre-upload permission slip.
-- `__SignArtifactReadLease(claims, privateKeyPem, now)` / `__VerifyArtifactReadLease(compact, publicKeyPem, now)` — mint and check the operation-bound permission to stream one exact canonical address.
+- `__SignArtifactReadLease(claims, privateKeyPem, now)` / `__VerifyArtifactReadLease(compact, publicKeyPem, now)` — mint and check a five-minute permission to stream one exact canonical address, catalog artifact revision, byte length, and media type.
 - `__SignArtifactPromotionReceipt(claims, privateKeyPem)` / `__VerifyArtifactPromotionReceipt(compact, publicKeyPem)` — mint and check the post-upload proof.
 - `ArtifactWriteLeaseClaims` / `ArtifactReadLeaseClaims` / `ArtifactPromotionReceiptClaims` — the exact fields carried by each token.
 

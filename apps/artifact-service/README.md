@@ -53,14 +53,14 @@ can only refuse a legitimate upload; it can never store bytes that were not cove
 the listener, and binds bounded `SIGTERM`/`SIGINT` shutdown that drains requests and flushes telemetry.
 
 HTTP endpoints: `POST /v1/artifacts/promote` writes under a signed write lease; `GET
-/v1/artifacts/read/:contentAddress` streams one matching canonical object only under a signed read lease;
+/v1/artifacts/read` streams the one canonical object named inside a signed read lease;
 `/livez` · `/readyz` are probes. Any other path or method is `404`.
 
 ## Boundary
 
 Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), list
-artifacts, or expose the disk as a file server. A read can only name the exact address signed into its
-lease. The chart currently admits **only the OpenCrane server** through the artifact-service
+artifacts, or expose the disk as a file server. A read has no address in its URL: the signed lease
+supplies the exact immutable address, catalog artifact revision, byte length, and media type. The chart currently admits **only the OpenCrane server** through the artifact-service
 NetworkPolicy; no worker is wired to this endpoint yet. The preprocessor slice must add one named
 consumer's matching egress and this chart's matching ingress before it can use a read lease, without
 widening access to arbitrary pods. That future worker will therefore not need direct PVC access. This

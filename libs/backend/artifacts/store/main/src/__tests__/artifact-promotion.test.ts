@@ -66,6 +66,7 @@ function _store(): TestStore
 				return { ...staged, created: true };
 			},
 			async read() { return null; },
+			async byteLength() { return null; },
 			async purge() { return { purged: false }; },
 		},
 		stageCount() { return stageCount; },

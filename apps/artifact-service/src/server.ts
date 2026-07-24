@@ -38,9 +38,9 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 				return;
 			}
 			// 2. Verify a read lease before looking up an address so unknown callers learn no CAS existence facts.
-			if (path.startsWith("/v1/artifacts/read/") && request.method === "GET")
+			if (path === "/v1/artifacts/read" && request.method === "GET")
 			{
-				await _writeReadOutcome(response, store, path.slice("/v1/artifacts/read/".length), request.headers["x-opencrane-artifact-lease"], config.leasePublicKeyPem);
+				await _writeReadOutcome(response, store, request.headers["x-opencrane-artifact-read-lease"], config.leasePublicKeyPem);
 				return;
 			}
 			// 3. Keep promotion on its exact verb/path pair to avoid widening the byte-write surface.
@@ -66,11 +66,18 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 }
 
 /** Verify one exact read lease, then stream only its matching canonical object to the caller. */
-async function _writeReadOutcome(response: ServerResponse, store: ArtifactStore, requestedContentAddress: string, compactLeaseHeader: string | string[] | undefined, leasePublicKeyPem: string): Promise<void>
+async function _writeReadOutcome(response: ServerResponse, store: ArtifactStore, compactLeaseHeader: string | string[] | undefined, leasePublicKeyPem: string): Promise<void>
 {
 	const compactLease = typeof compactLeaseHeader === "string" ? compactLeaseHeader : null;
 	const lease = compactLease === null ? null : __VerifyArtifactReadLease(compactLease, leasePublicKeyPem, Math.floor(Date.now() / 1_000));
-	if (lease === null || lease.contentAddress !== requestedContentAddress)
+	if (lease === null)
+	{
+		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "invalid_artifact_lease" }));
+		return;
+	}
+	const byteLength = await store.byteLength(lease.contentAddress);
+	if (byteLength === null || byteLength !== lease.byteLength)
 	{
 		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
 		response.end(JSON.stringify({ error: "invalid_artifact_lease" }));
@@ -79,24 +86,37 @@ async function _writeReadOutcome(response: ServerResponse, store: ArtifactStore,
 	const bytes = await store.read(lease.contentAddress);
 	if (bytes === null)
 	{
-		response.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
-		response.end(JSON.stringify({ error: "artifact_not_found" }));
+		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "invalid_artifact_lease" }));
 		return;
 	}
 	response.writeHead(200, {
 		"content-type": lease.mediaType,
+		"content-length": String(lease.byteLength),
 		"cache-control": "no-store",
 		// X-Content-Type-Options: prevents MIME sniffing of an authorized but untrusted artifact body.
 		// @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options
 		"x-content-type-options": "nosniff",
 	});
+	let streamedByteLength = 0;
 	for await (const chunk of bytes)
 	{
+		streamedByteLength += chunk.byteLength;
+		if (streamedByteLength > lease.byteLength)
+		{
+			response.destroy(new Error("artifact byte stream exceeded its signed read lease length"));
+			return;
+		}
 		if (!response.write(chunk))
 		{
 			await Promise.race([once(response, "drain"), once(response, "close")]);
 			if (response.destroyed) return;
 		}
+	}
+	if (streamedByteLength !== lease.byteLength)
+	{
+		response.destroy(new Error("artifact byte stream did not match its signed read lease length"));
+		return;
 	}
 	response.end();
 }
