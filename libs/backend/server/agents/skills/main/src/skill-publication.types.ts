@@ -55,6 +55,32 @@ export interface SkillAuthorityRepository
 	publishAtomically(command: PublishSkillRevisionCommand): Promise<AtomicPublishSkillRevisionResult>;
 }
 
+/** Request to revoke one exact published SkillRevision for future admissions. */
+export interface RevokeSkillRevisionCommand
+{
+	/** Trusted ClusterTenant scope derived by the application from the request host. */
+	readonly siloId: string;
+	/** Stable logical skill containing the revision. */
+	readonly skillId: string;
+	/** Immutable published revision being withdrawn from future use. */
+	readonly skillRevisionId: string;
+	/** Trusted server-side instant at which the revision became unavailable. */
+	readonly revokedAt: string;
+}
+
+/** Atomic persistence outcome from revoking a published SkillRevision. */
+export type AtomicRevokeSkillRevisionResult = { readonly status: "revoked" } | { readonly status: "conflict" } | { readonly status: "not_found" } | { readonly status: "not_published" };
+
+/** Persistence boundary for the future-only skill-revision revocation transition. */
+export interface SkillRevocationRepository
+{
+	/** Revokes one exact published revision and clears its current pointer when applicable. */
+	revokeAtomically(command: RevokeSkillRevisionCommand): Promise<AtomicRevokeSkillRevisionResult>;
+}
+
+/** Stable result of attempting to revoke one skill revision. */
+export type RevokeSkillRevisionResult = { readonly outcome: "revoked" } | { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "not_published" | "conflict" };
+
 /** Stable result of skill publication. */
 export type PublishSkillRevisionResult =
 	| { readonly outcome: "published" }

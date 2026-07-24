@@ -60,4 +60,23 @@ describe("PrismaSkillAuthorityRepository", function _DescribePrismaSkillAuthorit
 		expect(transaction.skillRevision.updateMany).not.toHaveBeenCalled();
 		expect(transaction.skill.updateMany).not.toHaveBeenCalled();
 	});
+
+	it("locks the scoped skill and revision before revoking a published current revision", async function _revokesCurrentRevision()
+	{
+		const { prisma, transaction } = _Prisma({ revision: { id: "skill-revision-1", state: SkillRevisionState.Published } });
+		const result = await new PrismaSkillAuthorityRepository(prisma).revokeAtomically({ siloId: "silo-1", skillId: "skill-1", skillRevisionId: "skill-revision-1", revokedAt: "2026-07-23T12:00:00.000Z" });
+		expect(result).toEqual({ status: "revoked" });
+		expect(transaction.$queryRaw).toHaveBeenCalledTimes(2);
+		expect(transaction.skillRevision.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ state: SkillRevisionState.Published }), data: { state: SkillRevisionState.Revoked, revokedAt: new Date("2026-07-23T12:00:00.000Z") } }));
+		expect(transaction.skill.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "skill-1", siloId: "silo-1", currentRevisionId: "skill-revision-1" }, data: { currentRevisionId: null } }));
+	});
+
+	it("does not mutate a draft or already revoked revision", async function _rejectsNonPublishedRevocation()
+	{
+		const { prisma, transaction } = _Prisma({ revision: { id: "skill-revision-1", state: SkillRevisionState.Revoked } });
+		const result = await new PrismaSkillAuthorityRepository(prisma).revokeAtomically({ siloId: "silo-1", skillId: "skill-1", skillRevisionId: "skill-revision-1", revokedAt: "2026-07-23T12:00:00.000Z" });
+		expect(result).toEqual({ status: "not_published" });
+		expect(transaction.skillRevision.updateMany).not.toHaveBeenCalled();
+		expect(transaction.skill.updateMany).not.toHaveBeenCalled();
+	});
 });

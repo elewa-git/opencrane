@@ -8,7 +8,7 @@ import type { JsonValue } from "@opencrane/util";
 export type SessionAssemblyCommand = RunAdmissionCommand;
 
 /** Typed refusal that stops assembly before a partial snapshot can be persisted. */
-export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittable" | "revision_unavailable" | "persona_unavailable" | "thread_unavailable" | "memory_scope_unavailable" | "tool_policy_unavailable" | "budget_unavailable" | "membership_stale" | "identity_unavailable" | "persistence_unavailable";
+export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittable" | "revision_unavailable" | "persona_unavailable" | "thread_unavailable" | "memory_scope_unavailable" | "tool_policy_unavailable" | "skill_unavailable" | "budget_unavailable" | "membership_stale" | "identity_unavailable" | "persistence_unavailable";
 
 /** One source read either resolves an exact input or declines it with a stable reason. */
 export type SessionAssemblyLoad<T> = { readonly outcome: "loaded"; readonly value: T } | { readonly outcome: "denied"; readonly reason: Exclude<SessionAssemblyRefusalReason, "invalid_command" | "persistence_unavailable"> };
@@ -133,6 +133,13 @@ export interface ToolPolicySource
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ToolPolicyInput>>;
 }
 
+/** Revalidates every assigned skill revision immediately before immutable snapshot persistence. */
+export interface SkillRevisionEligibilitySource
+{
+	/** Refuses a run when its tool policy omits, crosses scope with, or references a non-published skill revision. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, toolPolicy: ToolPolicyInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<null>>;
+}
+
 /** Reads effective resource limits for one run. */
 export interface BudgetPolicySource
 {
@@ -164,6 +171,8 @@ export interface SessionAssemblyAuthorities
 	memoryScope: MemoryScopeSource;
 	/** Tool and model-policy authority. */
 	toolPolicy: ToolPolicySource;
+	/** Future-admission skill eligibility authority. */
+	skillEligibility: SkillRevisionEligibilitySource;
 	/** Budget authority. */
 	budgetPolicy: BudgetPolicySource;
 	/** Identity and membership authority. */
