@@ -17,6 +17,9 @@ agent controller and capability-bound policy.
 
 The agent controller remains the only Kubernetes mutator. No worker gets automatic Kubernetes API
 credentials, and default-deny means a future execution path must declare every permitted destination.
+The only current exception is cluster DNS plus the OpenCrane internal listener for a one-use bootstrap
+acknowledgement. The endpoint TokenReviews the registered Pod identity and returns no capability or
+workload data.
 
 ## Dependency direction
 

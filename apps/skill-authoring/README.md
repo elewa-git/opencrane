@@ -16,7 +16,10 @@ builder using only a draft capability.
 ## Boundary
 
 The agent controller is the only Kubernetes mutator. This chart deliberately exposes no route and
-does not grant Kubernetes API access to the worker identity.
+does not grant Kubernetes API access to the worker identity. Its default-deny namespace permits a
+released authoring Pod only cluster DNS and the OpenCrane internal listener for a one-use bootstrap
+acknowledgement. That endpoint TokenReviews the fixed projected-token audience and registered Pod
+UID; it returns no capability or workload data.
 
 ## Dependency direction
 

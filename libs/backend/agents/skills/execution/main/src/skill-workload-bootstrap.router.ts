@@ -43,7 +43,7 @@ export function __CreateSkillWorkloadBootstrapRouter(dependencies: SkillWorkload
 				response.status(409).json({ error: "bootstrap_unavailable" });
 				return;
 			}
-			response.status(200).json({ workloadId: record.workloadId, acknowledged: true });
+			response.status(200).json({ acknowledged: true });
 		}
 		catch (err)
 		{
