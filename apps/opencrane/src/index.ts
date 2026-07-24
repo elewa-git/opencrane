@@ -22,6 +22,7 @@ import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
 import { OpenClawTenantLifecycle } from "@opencrane/backend/feat-openclaw-tenant";
+import { TenantProjectionRepairer } from "@opencrane/backend/server/tenancy/projection";
 
 // In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
 // namespace, so a silo stands on its own; the fleet-manager watches only the cluster-scoped
@@ -190,6 +191,15 @@ const openClawTenantLifecycle = new OpenClawTenantLifecycle({
 });
 void openClawTenantLifecycle.start();
 
+/** Tenant projection repairer to sync CRDs to Postgres (closes the dual-write gap). */
+const tenantProjectionRepairer = new TenantProjectionRepairer(
+  customApi,
+  prisma,
+  process.env.POD_NAMESPACE ?? "opencrane-system",
+  log
+);
+tenantProjectionRepairer.start();
+
 /**
  * Gracefully drain the server, disconnect Prisma, flush telemetry, and restore
  * console before exiting. A hard-exit timer guards against a stuck close so the
@@ -206,6 +216,7 @@ async function _shutdown(signal: string): Promise<void>
 
   // Stop the schedule ticker and the in-silo controller before disconnecting their DB dependencies.
   if (schedulerHandle !== null) clearInterval(schedulerHandle);
+  tenantProjectionRepairer.stop();
   await openClawTenantLifecycle.stop();
 
   try

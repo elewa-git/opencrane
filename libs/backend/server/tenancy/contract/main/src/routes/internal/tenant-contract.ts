@@ -24,7 +24,10 @@ function _ParseTenantNameFromSubject(subject: string): string | null
   {
     return null;
   }
-  return parts[3] ?? null;
+  const saName = parts[3] ?? null;
+  // The operator names tenant ServiceAccounts `openclaw-<tenant-name>` — strip
+  // the prefix so the returned value matches the Tenant CRD name.
+  return saName?.startsWith("openclaw-") ? saName.slice("openclaw-".length) : saName;
 }
 
 /**
