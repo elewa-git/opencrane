@@ -194,7 +194,7 @@ CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_pytho
 CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
 
 -- CreateEnum
-CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'cancelled');
+CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'cancelled');
 
 -- CreateTable
 CREATE TABLE "agent_services" (
@@ -1546,6 +1546,9 @@ CREATE TABLE "skill_workloads" (
     "state" "SkillWorkloadState" NOT NULL DEFAULT 'pending',
     "skill_revision_id" TEXT NOT NULL,
     "tool_invocation_id" TEXT,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "workload_uid" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "cancelled_at" TIMESTAMP(3),
 
@@ -2272,6 +2275,9 @@ CREATE UNIQUE INDEX "skill_revisions_id_artifact_revision_id_artifact_content_ad
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("workload_uid");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
@@ -3859,7 +3865,8 @@ BEGIN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'cancelled' AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'cancelled SkillWorkload is terminal'; END IF;
-    IF NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching cancellation evidence'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
+    IF NEW."delivery_count" < 0 OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
