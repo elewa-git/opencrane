@@ -49,6 +49,7 @@ _DEFAULT_LITELLM_KEY_PATH = "/var/run/opencrane/litellm/key"
 _DEFAULT_CHECKPOINT_DIR = "/tmp/opencrane/checkpoints"
 _CHECKPOINT_VERSION = 1
 _CHECKPOINT_FILENAME = "checkpoint.enc"
+_RUNTIME_BUDGET_STATE_KEY = "_opencraneRuntimeBudgetState"
 _MAX_FRAME_BYTES = 65_536
 _MAX_CANDIDATE_RETRY_DELAY_SECONDS = 30.0
 
@@ -377,6 +378,63 @@ def _non_negative_int(value: object) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
 
 
+def _required_budget_limit(compiled_input: dict[str, object], name: str) -> int:
+    """Read one required positive integer ceiling from trusted compiled runtime input.
+
+    The control plane only dispatches an input after admission has frozen every revision ceiling.
+    Treating a missing or malformed ceiling as unlimited would turn a contract or transport defect
+    into extra model work, so the runtime fails closed before it issues another model request.
+    """
+    budget = compiled_input.get("budget")
+    value = budget.get(name) if isinstance(budget, dict) else None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise RuntimeError(f"compiled input is missing a positive {name} budget")
+    return value
+
+
+def _assert_model_request_within_budget(compiled_input: dict[str, object], turns_started: int, now_epoch_ms: int) -> int:
+    """Permit the next model request only when its turn and wall-clock ceilings still hold.
+
+    ``turns_started`` is restored from the local encrypted checkpoint when a deferred tool result
+    resumes an attempt. The count is persisted before the provider call, so neither a resume nor a
+    crash after dispatch can create another request beyond the accepted ceiling.
+    """
+    max_turns = _required_budget_limit(compiled_input, "maxTurns")
+    deadline = _required_budget_limit(compiled_input, "wallClockDeadlineEpochMs")
+    if now_epoch_ms >= deadline:
+        raise RuntimeError("runtime wall-clock budget exhausted")
+    if turns_started >= max_turns:
+        raise RuntimeError("runtime turn budget exhausted")
+    return turns_started + 1
+
+
+def _checkpoint_turns_started(state: object) -> int:
+    """Read a non-negative persisted model-turn count or reject a malformed checkpoint state."""
+    value = state.get("turnsStarted") if isinstance(state, dict) else None
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise RuntimeError("checkpoint is missing a valid model-turn count")
+    return value
+
+
+def _runtime_turns_started(compiled_input: dict[str, object]) -> int:
+    """Read the current in-process model-turn count attached by the attempt executor."""
+    state = compiled_input.get(_RUNTIME_BUDGET_STATE_KEY)
+    return _checkpoint_turns_started(state)
+
+
+def _record_started_model_turn(compiled_input: dict[str, object], turns_started: int) -> None:
+    """Persist the next model-turn count before the provider call can consume the allowance."""
+    state = compiled_input.get(_RUNTIME_BUDGET_STATE_KEY)
+    if not isinstance(state, dict):
+        raise RuntimeError("runtime is missing its model-turn state")
+    state["turnsStarted"] = turns_started
+    checkpoint = state.get("checkpoint")
+    if not callable(checkpoint):
+        raise RuntimeError("runtime is missing its model-turn checkpoint writer")
+    if checkpoint() is not True:
+        raise RuntimeError("runtime could not persist the next model-turn count")
+
+
 def _process_cipher() -> object:
     """Return the process-lifetime symmetric cipher, generating its key in memory on first use.
 
@@ -554,11 +612,14 @@ def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: t
 
     async def _collect() -> list[dict[str, object]]:
         events: list[dict[str, object]] = []
+        turns_started = _runtime_turns_started(compiled_input)
         async with agent.iter(_prompt(compiled_input)) as run:
             async for node in run:
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
+                    turns_started = _assert_model_request_within_budget(compiled_input, turns_started, int(time.time() * 1_000))
+                    _record_started_model_turn(compiled_input, turns_started)
                     # Safe pre-model boundary: absorb any buffered steering into the next request
                     # context. Steering arriving after this point waits for the next boundary.
                     _apply_steering_to_request(node, _absorb_steering(steering_buffer))
@@ -609,6 +670,7 @@ def _pydantic_ai_resume_source(run_id: str, attempt: int, input_generation: obje
 
     async def _collect() -> list[dict[str, object]]:
         events: list[dict[str, object]] = []
+        turns_started = _checkpoint_turns_started(state)
         # The control-plane-authorized deferred results are injected as prior tool results so the
         # bounded loop continues from the approval boundary; the runtime decides no approval.
         async with agent.iter(_prompt(compiled_input), deferred_tool_results=deferred_tool_results) as run:
@@ -616,6 +678,9 @@ def _pydantic_ai_resume_source(run_id: str, attempt: int, input_generation: obje
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
+                    turns_started = _assert_model_request_within_budget(compiled_input, turns_started, int(time.time() * 1_000))
+                    if not _try_write_budget_checkpoint(run_id, attempt, input_generation, compiled_input, turns_started, checkpoint_cipher):
+                        raise RuntimeError("runtime could not persist the next model-turn count")
                     for steer in _absorb_steering(steering_buffer):
                         run.ctx.deps.steering.append(steer) if hasattr(getattr(run.ctx, "deps", None), "steering") else None
                     async with node.stream(run.ctx) as request_stream:
@@ -695,17 +760,34 @@ def _snapshot_input_generation(payload: dict[str, object]) -> object:
     return 0
 
 
-def _try_write_checkpoint(coordinates: dict[str, object], payload: dict[str, object], compiled_input: dict[str, object], cipher: object | None) -> None:
+def _checkpoint_compiled_input(compiled_input: dict[str, object]) -> dict[str, object]:
+    """Copy compiled input without transient callbacks before serializing the local checkpoint."""
+    return {name: value for name, value in compiled_input.items() if name != _RUNTIME_BUDGET_STATE_KEY}
+
+
+def _try_write_budget_checkpoint(run_id: str, attempt: int, input_generation: object, compiled_input: dict[str, object], turns_started: int, cipher: object | None) -> bool:
+    """Best-effort persist of the local model-turn count before a provider request starts.
+
+    This state is only a resume optimisation: it has no authority over server state. If it cannot be
+    written, a later resume fails closed because there is no agreeing checkpoint from which to recover
+    the exact count.
+    """
+    try:
+        _write_checkpoint(run_id, attempt, input_generation, {"compiledInput": _checkpoint_compiled_input(compiled_input), "turnsStarted": turns_started}, cipher=cipher)
+        return True
+    except Exception:  # noqa: BLE001 - a subordinate checkpoint never becomes load-bearing
+        _log("checkpoint_skipped", runId=run_id, attempt=attempt)
+        return False
+
+
+def _try_write_checkpoint(coordinates: dict[str, object], payload: dict[str, object], compiled_input: dict[str, object], cipher: object | None, turns_started: int = 0) -> bool:
     """Best-effort write of the SUBORDINATE local resume checkpoint; never blocks or fails the attempt.
 
     The checkpoint is a local optimisation only (never a source of truth). Any failure — including the
     absence of the crypto backend offline — is swallowed and logged so a missing checkpoint never
     turns a live attempt into an error.
     """
-    try:
-        _write_checkpoint(coordinates["runId"], coordinates["attempt"], _snapshot_input_generation(payload), {"compiledInput": compiled_input}, cipher=cipher)
-    except Exception:  # noqa: BLE001 - the checkpoint is a subordinate optimisation, never load-bearing
-        _log("checkpoint_skipped", runId=coordinates.get("runId"), attempt=coordinates.get("attempt"))
+    return _try_write_budget_checkpoint(coordinates["runId"], coordinates["attempt"], _snapshot_input_generation(payload), compiled_input, turns_started, cipher)
 
 
 def _recover_compiled_input(coordinates: dict[str, object], input_generation: object, cipher: object | None) -> dict[str, object]:
@@ -784,7 +866,15 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
         return
     post_candidate(_candidate(coordinates, "run.started", {"promptCompilerVersion": compiled_input.get("promptCompilerVersion")}))
     _run_evidence(coordinates, "started")
-    _try_write_checkpoint(coordinates, payload if isinstance(payload, dict) else {}, compiled_input, checkpoint_cipher)
+    runtime_budget_state: dict[str, object] = {"turnsStarted": 0}
+
+    def _checkpoint_budget_state() -> bool:
+        """Persist the incremented turn count before a live provider request begins."""
+        return _try_write_checkpoint(coordinates, payload if isinstance(payload, dict) else {}, compiled_input, checkpoint_cipher, _checkpoint_turns_started(runtime_budget_state))
+
+    runtime_budget_state["checkpoint"] = _checkpoint_budget_state
+    compiled_input[_RUNTIME_BUDGET_STATE_KEY] = runtime_budget_state
+    _checkpoint_budget_state()
     steering_buffer: list[str] = []
     with _trace("agent_runtime.start_attempt", runId=coordinates["runId"], attempt=coordinates["attempt"]):
         try:
@@ -797,6 +887,8 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
             if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.error", {"reason": "executor_failed", "errorType": type(error).__name__})):
                 _run_evidence(coordinates, "error", reason="executor_failed", errorType=type(error).__name__)
+        finally:
+            compiled_input.pop(_RUNTIME_BUDGET_STATE_KEY, None)
 
 
 def _execute_resume_attempt(command: dict[str, object], runtime_instance_id: str, post_candidate: Callable[[dict[str, object]], None], resume_event_source: Callable[..., Iterable[dict[str, object]]] = _pydantic_ai_resume_source, cancel_event: threading.Event | None = None, checkpoint_cipher: object | None = None, terminal_gate: "_TerminalGate | None" = None) -> None:

@@ -61,7 +61,7 @@ def _compiled_input() -> dict:
             {"name": "write", "toolRevisionId": "rev-write", "description": "", "parametersSchema": {}},
         ],
         "model": {"modelAlias": "silo-default", "maxOutputTokens": None},
-        "budget": {"maxCostUsdMicros": 5_000_000},
+        "budget": {"maxTurns": 4, "maxTotalTokens": 16_384, "maxCostUsdMicros": 5_000_000, "maxToolInvocations": None, "wallClockDeadlineEpochMs": 4_102_444_800_000},
         "digest": "sha256:conformance",
     }
 

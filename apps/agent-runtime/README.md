@@ -21,6 +21,11 @@ loop) and `cancel_attempt` (a positive signal that kills the active task and ack
 server-chosen reason), absorbs steering only at pre-model-request boundaries, and writes an encrypted,
 version-tagged, replaceable local checkpoint subordinate to canonical server state.
 
+Before every provider request, the runtime checks the immutable turn and wall-clock ceilings in the
+compiled snapshot. It writes the incremented turn count to that local checkpoint before dispatch, so
+an approved deferred-tool resume cannot regain a spent model turn. A restart cannot decrypt the old
+process-local checkpoint and therefore fails closed rather than resuming with an unknown count.
+
 ```text
  durable run attempt
         │  controller creates and assigns the suspended Job

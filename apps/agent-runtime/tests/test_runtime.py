@@ -51,7 +51,7 @@ def _compiled_input() -> dict:
             {"name": "zulu", "toolRevisionId": "rev-zulu", "description": "", "parametersSchema": {}},
         ],
         "model": {"modelAlias": "silo-default", "maxOutputTokens": None},
-        "budget": {},
+        "budget": {"maxTurns": 4, "maxTotalTokens": 16_384, "maxCostUsdMicros": 5_000_000, "maxToolInvocations": None, "wallClockDeadlineEpochMs": 4_102_444_800_000},
         "digest": "sha256:x",
     }
 
@@ -307,6 +307,35 @@ class RuntimeSteeringTests(unittest.TestCase):
         buffer.append("do Y")
         self.assertEqual(_absorb_steering(buffer), ["do Y"])
         self.assertEqual(_absorb_steering(buffer), [])
+
+
+class RuntimeBudgetBoundaryTests(unittest.TestCase):
+    """Validate model requests cannot cross the frozen turn or deadline ceilings."""
+
+    def test_next_model_turn_is_permitted_before_the_accepted_limits(self) -> None:
+        """A request below both ceilings consumes exactly one of the persisted model turns."""
+        compiled_input = _compiled_input()
+        self.assertEqual(runtime._assert_model_request_within_budget(compiled_input, 2, 4_102_444_799_999), 3)
+
+    def test_exhausted_turn_or_deadline_fails_closed_before_a_model_request(self) -> None:
+        """A ceiling reached at the boundary rejects the next request instead of treating it as unlimited."""
+        compiled_input = _compiled_input()
+        with self.assertRaisesRegex(RuntimeError, "turn budget exhausted"):
+            runtime._assert_model_request_within_budget(compiled_input, 4, 4_102_444_799_999)
+        with self.assertRaisesRegex(RuntimeError, "wall-clock budget exhausted"):
+            runtime._assert_model_request_within_budget(compiled_input, 0, 4_102_444_800_000)
+
+    def test_turn_count_is_checkpointed_before_the_model_request(self) -> None:
+        """The request counter is written before dispatch so a resume cannot regain spent turns."""
+        compiled_input = _compiled_input()
+        checkpointed: list[int] = []
+        compiled_input[runtime._RUNTIME_BUDGET_STATE_KEY] = {
+            "turnsStarted": 0,
+            "checkpoint": lambda: (checkpointed.append(runtime._runtime_turns_started(compiled_input)) or True),
+        }
+        runtime._record_started_model_turn(compiled_input, 1)
+        self.assertEqual(checkpointed, [1])
+        self.assertEqual(runtime._runtime_turns_started(compiled_input), 1)
 
 
 class RuntimeCheckpointTests(unittest.TestCase):
