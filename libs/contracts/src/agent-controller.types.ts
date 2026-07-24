@@ -17,6 +17,36 @@ export interface AgentControllerRunAttemptClaimLease
 	readonly expiresAt: string;
 }
 
+/** One database-fenced governed skill workload claim exposed only to the agent controller. */
+export interface AgentControllerSkillWorkloadClaim
+{
+	/** Durable workload record identifier. */
+	readonly workloadId: string;
+	/** Silo owning the immutable SkillRevision. */
+	readonly siloId: string;
+	/** Isolated authoring or tool-runner Job class. */
+	readonly kind: "authoring" | "tool-runner";
+	/** Immutable revision selected by the skill-work authority. */
+	readonly skillRevisionId: string;
+	/** Exact database claim instant. */
+	readonly claimedAt: string;
+	/** Monotonic generation that fences stale controller replicas. */
+	readonly deliveryCount: number;
+	/** Database-derived instant after which this claim is invalid. */
+	readonly expiresAt: string;
+}
+
+/** Exact suspended Job evidence submitted for one governed skill workload claim. */
+export interface AgentControllerSkillWorkloadAssignmentCommand
+{
+	/** Exact claim instant returned by the authority. */
+	readonly claimedAt: string;
+	/** Exact claim generation returned by the authority. */
+	readonly deliveryCount: number;
+	/** Immutable Kubernetes UID of the controller-created suspended Job. */
+	readonly workloadUid: string;
+}
+
 /** Narrow desired-state projection needed to build one suspended runtime Job. */
 export interface AgentControllerRunAttemptProjection
 {
