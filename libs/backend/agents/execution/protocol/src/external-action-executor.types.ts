@@ -1,6 +1,8 @@
 import type { ObotCustodyPort } from "@opencrane/server/_infra/obot-custody";
+import type { ObotMcpInvocationPort } from "@opencrane/server/_infra/obot-custody";
 import type { SandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import type { MemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
 
 /** Concrete transport ports the composition root injects into the external-action router. */
 export interface ExternalActionExecutorDependencies
@@ -11,6 +13,12 @@ export interface ExternalActionExecutorDependencies
 	readonly subjectId: string;
 	/** Gateway dataset frozen in the admitted snapshot, or null when this run cannot recall personal memory. */
 	readonly cogneeDatasetId: string | null;
+	/** Immutable revision whose integration assignment the action must resolve through. */
+	readonly agentRevisionId: string;
+	/** Credential-free authority resolving an active revision integration assignment. */
+	readonly integrations: IntegrationAuthorityRepository;
+	/** Obot MCP invocation transport enforcing the resolved assignment's allow-list. */
+	readonly obotMcpInvocation: ObotMcpInvocationPort;
 	/** Obot credential-custody transport backing MCP tool calls (fail-closed until verified). */
 	readonly obotCustody: ObotCustodyPort;
 	/** Sandbox Job transport backing sandboxed tool calls (fail-closed until verified). */
