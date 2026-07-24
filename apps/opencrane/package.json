@@ -12,7 +12,8 @@
     "start": "node ../../dist/apps/opencrane/index.js",
     "test": "vitest run",
     "lint": "tsc --noEmit",
-    "db:generate": "prisma generate"
+    "db:generate": "prisma generate",
+    "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
