@@ -109,7 +109,8 @@ export abstract class OidcAuthServiceBase
         return void next();
       }
 
-      const expected = `${req.protocol}://${req.hostname}`;
+      const expectedHost = req.get("X-Forwarded-Host") ?? req.get("Host") ?? req.hostname;
+      const expected = new URL(`${req.protocol}://${expectedHost}`).origin;
       const origin = req.headers.origin;
       const referer = req.headers.referer;
 
