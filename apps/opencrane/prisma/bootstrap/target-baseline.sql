@@ -1550,6 +1550,9 @@ CREATE TABLE "skill_workloads" (
     "delivery_count" INTEGER NOT NULL DEFAULT 0,
     "workload_uid" TEXT,
     "worker_pod_uid" TEXT,
+    "release_claimed_at" TIMESTAMP(3),
+    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "released_at" TIMESTAMP(3),
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "cancelled_at" TIMESTAMP(3),
 
@@ -2299,6 +2302,9 @@ CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("wor
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_worker_pod_uid_key" ON "skill_workloads"("worker_pod_uid");
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_state_release_claimed_at_idx" ON "skill_workloads"("state", "release_claimed_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
@@ -3945,7 +3951,7 @@ CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE pl
 DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."released_at" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
@@ -3954,9 +3960,12 @@ BEGIN
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
     IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned workload'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned') THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration follows assignment'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") THEN RAISE EXCEPTION 'SkillWorkload release requires an exact prior release claim'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") AND (NEW."release_claimed_at" IS NULL OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
-    IF NEW."delivery_count" < 0 OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, and cancellation evidence'; END IF;
+    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR (NEW."released_at" IS NOT NULL AND (NEW."state" <> 'assigned' OR NEW."release_claimed_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, release, registration, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;

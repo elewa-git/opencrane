@@ -13,7 +13,7 @@ function _App(overrides: Partial<SkillWorkloadDispatchRouterDependencies> = {})
 	const dependencies: SkillWorkloadDispatchRouterDependencies = {
 		namespace: "silo-a",
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue({ username: "system:serviceaccount:silo-a:agent-controller", namespace: "silo-a", serviceAccountName: "agent-controller", audiences: [AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE] }) },
-		repository: { claimNextAtomically: vi.fn().mockResolvedValue(null), commitAssignmentAtomically: vi.fn().mockResolvedValue("conflict") },
+		repository: { claimNextAtomically: vi.fn().mockResolvedValue(null), commitAssignmentAtomically: vi.fn().mockResolvedValue("conflict"), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn() },
 		logger: { error: vi.fn() },
 		...overrides,
 	};
@@ -73,7 +73,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 	it("forwards exact assignment evidence and rejects caller-selected extensions", async function _CommitsAssignment()
 	{
 		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}`, namespace: "tenant-a-authoring" };
-		const repository = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const) };
+		const repository = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn() };
 		const { app } = _App({ repository });
 
 		const response = await request(app).put("/skill-workloads/workload-1/assignment").set("authorization", "Bearer projected-token").send(command);

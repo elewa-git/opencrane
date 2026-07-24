@@ -92,6 +92,9 @@ model SkillWorkload {
   deliveryCount    Int                @default(0) @map("delivery_count")
   workloadUid      String?            @unique @map("workload_uid")
   workerPodUid     String?            @unique @map("worker_pod_uid")
+  releaseClaimedAt DateTime?          @map("release_claimed_at")
+  releaseDeliveryCount Int             @default(0) @map("release_delivery_count")
+  releasedAt        DateTime?          @map("released_at")
   createdAt        DateTime           @default(now()) @map("created_at")
   cancelledAt      DateTime?          @map("cancelled_at")
   skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
@@ -99,6 +102,7 @@ model SkillWorkload {
   bootstrap        SkillWorkloadBootstrap?
 
   @@index([siloId, state, createdAt])
+  @@index([state, releaseClaimedAt])
   @@map("skill_workloads")
 }
 
