@@ -18,14 +18,18 @@ export interface ArtifactReadLeaseClaims
 	readonly leaseId: string;
 	/** Silo in which the source artifact remains authoritative. */
 	readonly siloId: string;
-	/** Exact run or worker operation that may consume the bytes. */
-	readonly operationId: string;
+	/** Exact catalog artifact whose published revision owns the bytes. */
+	readonly artifactId: string;
+	/** Exact published catalog revision that approved this immutable content. */
+	readonly artifactRevisionId: string;
 	/** Exact immutable CAS address that may be read. */
 	readonly contentAddress: string;
 	/** Exact capability action accepted by artifact-service. */
 	readonly action: "artifact.read";
 	/** Epoch-second expiry after which the byte stream must not begin. */
 	readonly expiresAtEpochSeconds: number;
+	/** Exact byte count that artifact-service must stream, never infer from a pathname. */
+	readonly byteLength: number;
 	/** Catalog-approved media type returned with the canonical bytes. */
 	readonly mediaType: string;
 }

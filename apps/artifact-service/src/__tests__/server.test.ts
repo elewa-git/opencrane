@@ -79,13 +79,14 @@ describe("artifact-service promotion endpoint", function _suite()
 			const address = `sha256:${(await import("node:crypto")).createHash("sha256").update(bytes).digest("hex")}`;
 			const writeLease = __SignArtifactWriteLease({ leaseId: "lease-read-source", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, expectedContentAddress: address, expectedByteLength: bytes.byteLength, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
 			await fetch(`http://127.0.0.1:${port}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": writeLease }, body: bytes });
-			const readLease = __SignArtifactReadLease({ leaseId: "lease-read-1", siloId: "silo-1", operationId: "run-1", contentAddress: address, action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
+			const readLease = __SignArtifactReadLease({ leaseId: "lease-read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: address, action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, byteLength: bytes.byteLength, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
 
-			const allowed = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read/${address}`, { headers: { "x-opencrane-artifact-lease": readLease } });
+			const allowed = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-read-lease": readLease } });
 			expect(allowed.status).toBe(200);
 			expect(allowed.headers.get("content-type")).toBe("text/plain");
+			expect(allowed.headers.get("content-length")).toBe(String(bytes.byteLength));
 			expect(await allowed.text()).toBe(bytes.toString());
-			const denied = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read/sha256:${"b".repeat(64)}`, { headers: { "x-opencrane-artifact-lease": readLease } });
+			const denied = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-lease": readLease } });
 			expect(denied.status).toBe(403);
 		}
 		finally

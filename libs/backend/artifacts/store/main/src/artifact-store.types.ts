@@ -147,6 +147,8 @@ export interface ArtifactStore
 	promote(staged: StagedArtifact): Promise<ArtifactStorePromotion>;
 	/** Reads canonical bytes by an already-authorized immutable content address. */
 	read(contentAddress: string): Promise<ArtifactByteStream | null>;
+	/** Returns the immutable canonical byte count without opening a stream, or null when absent. */
+	byteLength(contentAddress: string): Promise<number | null>;
 	/** Removes bytes only after the OpenCrane authority proved no active lease or reference remains. */
 	purge(contentAddress: string): Promise<ArtifactStorePurgeResult>;
 }

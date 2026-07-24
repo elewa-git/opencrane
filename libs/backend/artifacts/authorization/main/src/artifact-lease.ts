@@ -7,6 +7,7 @@ import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactW
 const _LEASE_AUDIENCE = "artifact-service";
 const _LEASE_TYPE = "opencrane.artifact-write-lease";
 const _READ_LEASE_TYPE = "opencrane.artifact-read-lease";
+const _MAX_READ_LEASE_SECONDS = 300;
 const _RECEIPT_AUDIENCE = "opencrane";
 const _RECEIPT_TYPE = "opencrane.artifact-promotion-receipt";
 
@@ -92,7 +93,7 @@ function _leaseFromPayload(value: Record<string, unknown>): ArtifactWriteLeaseCl
 /** Decode only the strict field set of a read lease after its signature and envelope are valid. */
 function _readLeaseFromPayload(value: Record<string, unknown>): ArtifactReadLeaseClaims | null
 {
-	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.operationId === "string" && typeof value.contentAddress === "string" && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && typeof value.mediaType === "string" ? value as unknown as ArtifactReadLeaseClaims : null;
+	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.artifactId === "string" && typeof value.artifactRevisionId === "string" && typeof value.contentAddress === "string" && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && Number.isSafeInteger(value.byteLength) && typeof value.mediaType === "string" ? value as unknown as ArtifactReadLeaseClaims : null;
 }
 
 function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionReceiptClaims | null
@@ -108,7 +109,7 @@ function _isLease(value: ArtifactWriteLeaseClaims, now: number): boolean
 /** Validate the narrow coordinates that bind one signed read to one immutable CAS object. */
 function _isReadLease(value: ArtifactReadLeaseClaims, now: number): boolean
 {
-	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.operationId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.mediaType.includes("/");
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.expiresAtEpochSeconds <= now + _MAX_READ_LEASE_SECONDS && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && value.mediaType.includes("/");
 }
 
 function _isReceipt(value: ArtifactPromotionReceiptClaims): boolean

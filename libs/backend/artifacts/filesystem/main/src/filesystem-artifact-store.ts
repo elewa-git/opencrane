@@ -135,6 +135,26 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 	}
 
+	/** Returns one canonical regular file's byte count without exposing its path or directory. */
+	async byteLength(contentAddress: string): Promise<number | null>
+	{
+		if (!___IsSha256ContentAddress(contentAddress))
+		{
+			throw new Error("invalid ArtifactStore content address");
+		}
+		try
+		{
+			const metadata = await stat(this._contentPath(contentAddress));
+			if (!metadata.isFile()) throw new Error("ArtifactStore canonical object is not a regular file");
+			return metadata.size;
+		}
+		catch (error)
+		{
+			if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+			throw error;
+		}
+	}
+
 	/** Physically purges one address after the catalog authority has completed its reference-safe gate. */
 	async purge(contentAddress: string): Promise<ArtifactStorePurgeResult>
 	{
