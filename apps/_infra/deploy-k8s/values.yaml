@@ -275,7 +275,7 @@ opencrane-skill-authoring:
       pods: "10"
       jobs: "10"
       cpu: "2"
-      memory: 2Gi
+      memory: 4Gi
 
 # -- Isolated capability-only tenant tool Job plane. It contains no standing worker.
 # The dependency name is intentional: Helm passes its contents to the child chart.
@@ -404,8 +404,8 @@ agentController:
       scratchSize: 128Mi
       activeDeadlineSeconds: 300
       resources:
-        requests: { cpu: 100m, memory: 128Mi }
-        limits: { cpu: 500m, memory: 256Mi }
+        requests: { cpu: 500m, memory: 3Gi }
+        limits: { cpu: "2", memory: 4Gi }
     toolRunner:
       image:
         repository: ghcr.io/italanta/opencrane-tool-runner

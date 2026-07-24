@@ -9,6 +9,12 @@ const _MAX_SCRATCH_BYTES = 1_073_741_824n;
 /** Minimum scratch capacity for safe authoring archive extraction and offline validation output. */
 const _MIN_AUTHORING_SCRATCH_BYTES = 134_217_728n;
 
+/** Minimum reserved memory required to load the pinned offline ClamAV signature engine. */
+const _MIN_AUTHORING_MEMORY_BYTES = 3_221_225_472n;
+
+/** Minimum memory limit required to keep the offline scan below its declared hard ceiling. */
+const _MIN_AUTHORING_MEMORY_LIMIT_BYTES = 4_294_967_296n;
+
 /** Maximum wall-clock lifetime granted to one untrusted governed-skill Job. */
 const _MAX_ACTIVE_DEADLINE_SECONDS = 900;
 
@@ -16,7 +22,7 @@ const _MAX_ACTIVE_DEADLINE_SECONDS = 900;
 const _MAX_CPU_MILLICORES = 2_000;
 
 /** Maximum memory limit granted to one untrusted governed-skill Job in bytes. */
-const _MAX_MEMORY_BYTES = 2_147_483_648n;
+const _MAX_MEMORY_BYTES = 4_294_967_296n;
 
 /** Read-only path of the rotating projected capability token. */
 const _CAPABILITY_TOKEN_PATH = "/var/run/opencrane/tokens/capability.token";
@@ -77,7 +83,7 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace !== expectedNamespace || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || (profile.kind === "authoring" && scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES) || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
+	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace !== expectedNamespace || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || (profile.kind === "authoring" && scratchBytes < _MIN_AUTHORING_SCRATCH_BYTES) || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES || (profile.kind === "authoring" && (requestedMemory < _MIN_AUTHORING_MEMORY_BYTES || limitedMemory < _MIN_AUTHORING_MEMORY_LIMIT_BYTES)))
 	{
 		throw new Error("governed skill Job profile requires fixed bootstrap endpoint and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}

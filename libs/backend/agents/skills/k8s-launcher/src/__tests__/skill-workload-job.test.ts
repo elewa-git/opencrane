@@ -17,7 +17,7 @@ function _Assignment()
 /** Builds the stricter authoring profile that reserves scratch for archive validation. */
 function _AuthoringProfile()
 {
-	return { ..._Profile(), kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"b".repeat(64)}`, namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring" };
+	return { ..._Profile(), kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"b".repeat(64)}`, namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring", resources: { requests: { cpu: "500m", memory: "3Gi" }, limits: { cpu: "2", memory: "4Gi" } } };
 }
 
 describe("governed skill workload Job", function _describeJob()
@@ -49,6 +49,7 @@ describe("governed skill workload Job", function _describeJob()
 	{
 		const assignment = { ..._Assignment(), namespace: "opencrane-skill-authoring" };
 		expect(function _smallScratch() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "32Mi" }); }).toThrow(/bounded resources/);
+		expect(function _smallMemory() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), resources: { requests: { cpu: "500m", memory: "2Gi" }, limits: { cpu: "2", memory: "2Gi" } } }); }).toThrow(/bounded resources/);
 		expect(__BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "128Mi" }).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "128Mi" } })]));
 	});
 });
