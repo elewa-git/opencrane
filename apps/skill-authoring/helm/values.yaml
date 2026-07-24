@@ -1,0 +1,8 @@
+skillAuthoring:
+  namespace: opencrane-skill-authoring
+  serviceAccountName: skill-authoring-default
+  quota:
+    pods: "10"
+    jobs: "10"
+    cpu: "2"
+    memory: 2Gi

@@ -19,6 +19,8 @@ testing on its own, it belongs in a library, not here.
 | [`agent-runtime`](./agent-runtime/README.md) | Outbound-only personal-agent process prepared as one suspended Job per run attempt. |
 | [`managed-agent-runtime`](./managed-agent-runtime/README.md) | Chart/deploy-only plane for managed (central) agents: dedicated namespace, connector-scoped identity, and network fences (reuses the `agent-runtime` image). |
 | [`agent-controller`](./agent-controller/README.md) | Sole Kubernetes mutator for personal-runtime attempt resources. |
+| [`skill-authoring`](./skill-authoring/README.md) | Chart-only isolated candidate-skill Job plane with no standing worker. |
+| [`tool-runner`](./tool-runner/README.md) | Chart-only isolated tenant-tool Job plane with no standing worker. |
 | [`feat-central-agents`](./feat-central-agents/README.md) | The Slack-to-Cognee ingestion worker. *(deletion gated on the managed-agent live-Obot proof, #337)* |
 | [`feat-openclaw-tenant`](./feat-openclaw-tenant/README.md) | The OpenClaw tenant runtime image. *(blue/frozen — deletion target)* |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |

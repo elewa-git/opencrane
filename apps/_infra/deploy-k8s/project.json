@@ -10,7 +10,8 @@
         "commands": [
           "bash apps/_infra/deploy-k8s/platform/tests/server-key-permissions-contract.sh",
           "bash apps/_infra/deploy-k8s/platform/tests/server-network-policy-contract.sh",
-          "bash apps/_infra/deploy-k8s/platform/tests/platform-network-policy-contract.sh"
+          "bash apps/_infra/deploy-k8s/platform/tests/platform-network-policy-contract.sh",
+          "bash apps/_infra/deploy-k8s/platform/tests/skill-workload-contract.sh"
         ],
         "parallel": false
       }

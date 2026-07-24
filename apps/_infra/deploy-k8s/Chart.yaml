@@ -38,6 +38,12 @@ dependencies:
   - name: opencrane-agent-controller
     version: 0.1.0
     repository: "file://../../agent-controller/helm"
+  - name: opencrane-skill-authoring
+    version: 0.1.0
+    repository: "file://../../skill-authoring/helm"
+  - name: opencrane-tool-runner
+    version: 0.1.0
+    repository: "file://../../tool-runner/helm"
   - name: opencrane-cognee
     version: 0.1.0
     repository: "file://../cognee/helm"

@@ -11,8 +11,8 @@
 This is the **install root** for one **silo** — one customer's isolated slice of OpenCrane. The
 trusted services run in the release namespace; untrusted personal-agent Jobs run in a sibling runtime
 namespace owned by the same release. Nothing is shared with other customers. Everything else under `apps/` ships a small
-Helm named-template library; this app is the **umbrella chart** (`opencrane-silo`) that pulls those
-libraries together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
+Helm chart; this app is the **umbrella chart** (`opencrane-silo`) that pulls those deployment
+contracts together into one release, plus `deploy.sh`, the entrypoint that installs and upgrades it.
 
 Think of it as the assembly point: each app owns its own workload templates, and this chart composes
 them — unchanged — with one shared release context. It renders nothing customer-specific itself; it just
@@ -26,7 +26,8 @@ wires the pieces and the per-silo networking together.
  │  opencrane-silo umbrella chart  ◄── HERE                     │
  │    composes app-owned template libraries into one release:   │
  │    server · opencrane-ui · channel-proxy · artifact-service  │
-  │    · agent-controller · cognee · litellm · obot · langfuse   │
+ │    · agent-controller · skill-authoring · tool-runner         │
+ │    · cognee · litellm · obot · langfuse                       │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
@@ -35,7 +36,8 @@ wires the pieces and the per-silo networking together.
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
-· [agent-controller](../../agent-controller/README.md)
+· [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
+· [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md) · [langfuse](../langfuse/README.md)
 
@@ -79,6 +81,10 @@ package imports it.
   empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
+- `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
+  and aggregate Job quota; it contains no standing worker.
+- `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
+  Job quota; it contains no standing worker.
 - `crds.install` — defaults `true` (standalone: this chart installs the ClusterTenant/Tenant/AccessPolicy
   CRDs); set `false` when running under a fleet that installs its own CRDs.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
@@ -97,6 +103,7 @@ package imports it.
 - Composed apps: [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
   · [agent-controller](../../agent-controller/README.md)
+  · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
   · [postgres](../../postgres/README.md)
 - Composed infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md) ·
   [obot](../obot/README.md) · [langfuse](../langfuse/README.md)
