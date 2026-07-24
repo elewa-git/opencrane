@@ -24,8 +24,9 @@ enum SkillWorkloadKind {
 
 /// Durable disposition before controller assignment and worker reply are introduced.
 enum SkillWorkloadState {
-  Pending   @map("pending")
-  Cancelled @map("cancelled")
+  Pending    @map("pending")
+  Assigned   @map("assigned")
+  Cancelled  @map("cancelled")
 }
 
 model Skill {
@@ -87,6 +88,9 @@ model SkillWorkload {
   state            SkillWorkloadState @default(Pending)
   skillRevisionId  String             @map("skill_revision_id")
   toolInvocationId String?            @unique @map("tool_invocation_id")
+  claimedAt        DateTime?          @map("claimed_at")
+  deliveryCount    Int                @default(0) @map("delivery_count")
+  workloadUid      String?            @unique @map("workload_uid")
   createdAt        DateTime           @default(now()) @map("created_at")
   cancelledAt      DateTime?          @map("cancelled_at")
   skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
