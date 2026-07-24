@@ -455,6 +455,8 @@ silo_args=(
   --set
   "litellm.databaseSecretKey=DATABASE_URL"
   --set-string
+  "tenant.gateway.trustedProxies[0]=auto"
+  --set-string
   "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string
   "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"

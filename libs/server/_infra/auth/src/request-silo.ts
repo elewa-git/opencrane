@@ -16,6 +16,8 @@
 export function _ClusterTenantFromHost(host: string | undefined): string | undefined
 {
   if (!host) return undefined;
-  const firstLabel = host.split(":")[0].trim().toLowerCase().split(".")[0];
+  const hostname = host.split(":")[0].trim().toLowerCase();
+  if (!hostname.includes(".")) return undefined;
+  const firstLabel = hostname.split(".")[0];
   return firstLabel || undefined;
 }

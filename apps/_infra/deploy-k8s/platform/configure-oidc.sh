@@ -207,8 +207,9 @@ helm_args+=(--set-string "clustertenantManager.oidc.rolesClaim=$ROLES_CLAIM")
 [[ -n "$ORG_ADMIN_GROUPS" ]] && helm_args+=(--set-string "clustertenantManager.oidc.orgAdminGroups=$ORG_ADMIN_GROUPS")
 
 if [[ "$INSECURE_COOKIES" -eq 1 ]]; then
-  warn "Disabling Secure cookie requirement (OIDC_COOKIE_SECURE=false) for local HTTP development."
+  log "WARNING: Using --insecure-cookies. This forces OIDC_COOKIE_SECURE=false for local plaintext HTTP dev."
   helm_args+=(--set-string "clustertenantManager.oidc.cookieSecure=false")
+  helm_args+=(--set-string "tenant.gateway.trustedProxies[0]=auto")
 fi
 
 # ── Cross-org guardrail: platform-operator grants are EXPLICIT + loudly warned.
