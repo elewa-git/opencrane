@@ -39,6 +39,8 @@ result instead of creating a duplicate. A stale, replayed, or already-consumed r
 
 ## Public surface
 
+- `__IssueArtifactReadLease` — re-checks one active artifact's exact published revision before issuing a five-minute internal read lease; it exposes no HTTP route or storage path.
+
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
 - `__UploadArtifact` — orchestrate the full verified upload (lease → promote → finalize).
 - `PrismaArtifactAuthorityRepository` — the Postgres-backed persistence adapter.
