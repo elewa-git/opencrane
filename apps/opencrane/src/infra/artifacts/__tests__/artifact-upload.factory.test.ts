@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { _CreateArtifactServicePromotionPort, _CreateArtifactUploadGateway } from "../artifact-upload.factory.js";
+import { _CreateArtifactServicePromotionPort, _CreateArtifactServiceReadPort, _CreateArtifactUploadGateway } from "../artifact-upload.factory.js";
 
 const _serviceUrl = "http://opencrane-artifact-service.default.svc.cluster.local:8080";
 
@@ -39,5 +39,17 @@ describe("artifact upload app composition", function _suite()
 		await expect(port.promote("signed-lease", _bytes())).rejects.toThrow("promotion failed with 403");
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 201 })));
 		await expect(port.promote("signed-lease", _bytes())).rejects.toThrow("returned no receipt");
+	});
+
+	it("uses a signed server lease only for the exact canonical read path", async function _readsPinnedArtifact()
+	{
+		const fetchMock = vi.fn().mockResolvedValue(new Response("artifact", { status: 200 }));
+		vi.stubGlobal("fetch", fetchMock);
+		const port = _CreateArtifactServiceReadPort(_serviceUrl);
+		const address = `sha256:${"a".repeat(64)}`;
+
+		await expect(port.read("signed-read-lease", address)).resolves.toBeInstanceOf(Response);
+		expect(fetchMock).toHaveBeenCalledWith(`${_serviceUrl}/v1/artifacts/content/${"a".repeat(64)}`, { redirect: "error", headers: { "x-opencrane-artifact-lease": "signed-read-lease" } });
+		await expect(port.read("signed-read-lease", "../../etc/passwd")).rejects.toThrow("canonical content address");
 	});
 });
