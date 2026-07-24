@@ -14,6 +14,8 @@
 #         inside the handler is the identity check, this is defence-in-depth).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
+#       - Governed skill Jobs: a one-use bootstrap acknowledgement only. Their default-deny namespaces
+#         permit this single server destination and DNS; TokenReview binds the request to the registered Pod.
 #   The operator's own /api/internal/tenant-models fetch is a localhost call within the
 #   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
 #
@@ -75,6 +77,28 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/component: agent-runtime
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    # Governed skill Jobs have no general network access. Admission fixes their component,
+    # ServiceAccount and projected-token audience; the route TokenReviews the registered Pod UID.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-skill-authoring").skillAuthoring.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: skill-authoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-tool-runner").toolRunner.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: tool-runner
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
@@ -229,5 +253,57 @@ spec:
         - protocol: TCP
           port: {{ .Values.artifactService.service.port }}
 ---
+{{- end }}
+{{- if .Values.agentController.enabled }}
+# Worker charts own namespace-wide default-deny. The server owns this strictly additive path because
+# it is the bootstrap endpoint's identity authority and knows the internal listener contract.
+{{- $serverSelector := include "opencrane.selectorLabels" . }}
+{{- $internalPort := .Values.clustertenantManager.service.internalPort }}
+{{- range $worker := (list
+  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")
+  (dict "name" "tool-runner-bootstrap" "namespace" (index $.Values "opencrane-tool-runner").toolRunner.namespace "component" "tool-runner")) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-%s" (include "opencrane.fullname" $) $worker.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $worker.namespace | quote }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $worker.component }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $worker.component }}
+  policyTypes:
+    - Egress
+  egress:
+    # A worker can acknowledge its one-use bootstrap only to the internal server listener.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- $serverSelector | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ $internalPort }}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+---
+{{- end }}
 {{- end }}
 {{- end }}

@@ -31,7 +31,7 @@ describe("governed skill worker bootstrap router", function _DescribeBootstrap()
 		const response = await request(app).post("/skill-workloads:bootstrap").set("authorization", "Bearer projected-token").send({ bootstrapReference: _REFERENCE });
 
 		expect(response.status).toBe(200);
-		expect(response.body).toEqual({ workloadId: "workload-1", acknowledged: true });
+		expect(response.body).toEqual({ acknowledged: true });
 		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-skill-authoring");
 		expect(dependencies.repository.consumeAtomically).toHaveBeenCalledWith(expect.stringMatching(/^sha256:[a-f0-9]{64}$/), { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
 	});

@@ -80,7 +80,9 @@ authority for those facts. The runtime stream separately accepts the
 `opencrane-agent-runtime` audience and bounded runtime-profile ServiceAccount grammar in the
 explicit, separate runtime namespace. Durable assignment remains the authority for the exact
 ServiceAccount, Job, Pod, run, and revision; the projected bootstrap reference and a ServiceAccount
-name alone are never sufficient.
+name alone are never sufficient. Governed skill workers can reach the internal listener only to
+acknowledge their one-use bootstrap reference: their default-deny namespaces receive an additive
+egress rule for this listener and DNS, and the response contains no workload identity or capability.
 The runtime stream mints the full `start_attempt`, `resume_attempt`, and `cancel_attempt` command
 lifecycle and admits candidates, so a verified Pod runs its bounded model/tool loop, proposes
 external actions through the reserve-before-dispatch tool-invocation authority, pauses for deferred

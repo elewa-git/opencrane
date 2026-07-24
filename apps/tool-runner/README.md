@@ -32,10 +32,11 @@ shape)* · OpenCrane *(future capability exchange and result authority)*
 
 ## Boundary
 
-No worker gets Kubernetes API credentials, and default-deny means a future execution path must
-declare every permitted destination. No controller currently has RBAC or a profile to create this
-Job; the later durable-claim slice must give the agent controller that narrow authority before it
-becomes the sole Kubernetes mutator. Until then, this is an inert deployment boundary.
+The agent controller remains the only Kubernetes mutator. No worker gets automatic Kubernetes API
+credentials, and default-deny means a future execution path must declare every permitted destination.
+The only current exception is cluster DNS plus the OpenCrane internal listener for a one-use bootstrap
+acknowledgement. The endpoint TokenReviews the canonical worker Pod identity and returns no capability or
+workload data.
 
 ## Dependency direction
 
