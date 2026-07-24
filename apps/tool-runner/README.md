@@ -42,6 +42,14 @@ workload data.
 
 An app entrypoint owns only this workload's deployment contract; it imports no libraries.
 
+## Runtime & config
+
+Tool execution has no image or publication workflow yet. The controller therefore remains disabled
+until a later, separate tool-runner implementation supplies an independently reviewed immutable image
+digest together with the controller, personal-runtime, and authoring-worker digests; an exact
+Kubernetes API Service CIDR; Kubernetes 1.30 or later; and an instance-local LiteLLM deployment.
+No tag, local image ID, or Dockerfile base digest can substitute for a final published image digest.
+
 ## See also
 
 - Job builder: [skills k8s launcher](../../libs/backend/agents/skills/k8s-launcher/README.md)
