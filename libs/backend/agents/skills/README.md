@@ -4,6 +4,7 @@
 
 | Package | What it owns |
 |---|---|
+| [controller](./controller/README.md) | The outbound reconciliation that turns a fenced workload claim into an exact still-suspended Job. |
 | [execution](./execution/main/README.md) | The controller-only Postgres claim and immutable suspended-Job assignment fence. |
 | [k8s-launcher](./k8s-launcher/README.md) | Pure, policy-validating Kubernetes Job shapes for isolated skill authoring and tool execution. |
 
@@ -14,7 +15,7 @@ talks to a registry, or grants Kubernetes API access to a worker.
 ```
  SkillRevision authority ──► execution fence ──► controller ──► k8s-launcher
                                                    │
-                                                   └──► authoring / tool Job
+                                                   └──► suspended authoring / tool Job
 ```
 
 ## See also
