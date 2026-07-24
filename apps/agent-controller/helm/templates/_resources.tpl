@@ -38,6 +38,12 @@
 {{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.runtimeProfile.image.digest) }}
 {{- fail "agentController.enabled=true requires an immutable sha256 agentController.runtimeProfile.image.digest" }}
 {{- end }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.authoring.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 authoring worker image digest" }}
+{{- end }}
+{{- if not (regexMatch "^sha256:[a-f0-9]{64}$" .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest) }}
+{{- fail "agentController.enabled=true requires an immutable sha256 tool-runner worker image digest" }}
+{{- end }}
 {{- $controllerName := "agent-controller" -}}
 {{- $runtimeNamespace := include "opencrane.agentController.runtimeNamespace" . -}}
 {{- $runtimeNamespaceLabel := include "opencrane.agentController.runtimeNamespaceLabelValue" . -}}
@@ -49,8 +55,16 @@
 {{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
 {{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
+{{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
+{{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
+{{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
+{{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
+{{- if or (eq $authoringNamespace .Release.Namespace) (eq $toolRunnerNamespace .Release.Namespace) (eq $authoringNamespace $toolRunnerNamespace) }}
+{{- fail "governed skill workload namespaces must be distinct from the server and from each other" }}
+{{- end }}
 {{- $controllerImage := printf "%s@%s" .Values.agentController.image.repository .Values.agentController.image.digest -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
+{{- $skillAdmissionName := printf "%s-skill-workloads" (include "opencrane.agentController.admissionName" .) -}}
 apiVersion: v1
 kind: Namespace
 metadata:
@@ -144,6 +158,41 @@ roleRef:
   kind: Role
   name: {{ $controllerName }}
 ---
+{{- range $namespace := (list $authoringNamespace $toolRunnerNamespace) }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ $controllerName }}-skill-workloads
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+rules:
+  # A governed skill Job is created or exact-adopted while suspended. No patch, Pod, Secret, or
+  # delete permission exists in these namespaces, so this controller cannot release or alter work.
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ $controllerName }}-skill-workloads
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: agent-controller
+subjects:
+  - kind: ServiceAccount
+    name: {{ $controllerName }}
+    namespace: {{ $.Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ $controllerName }}-skill-workloads
+---
+{{- end }}
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -197,6 +246,8 @@ spec:
               value: {{ .Values.agentController.outboxPruneIntervalMs | quote }}
             - name: AGENT_CONTROLLER_PROFILES_JSON
               value: {{ dict .Values.agentController.runtimeProfile.name (dict "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) | toJson | quote }}
+            - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
+              value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token
@@ -374,6 +425,154 @@ spec:
           port: 53
         - protocol: TCP
           port: 53
+---
+# The skill controller has Job create/get in these two namespaces only. Admission makes that generic
+# Kubernetes verb safe: it can create only the exact suspended worker envelopes produced by the
+# governed-skill builder, never arbitrary or immediately executable Jobs.
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicy
+metadata:
+  name: {{ $skillAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: governed-skill-workloads
+spec:
+  failurePolicy: Fail
+  matchConstraints:
+    matchPolicy: Exact
+    resourceRules:
+      - apiGroups: ["batch"]
+        apiVersions: ["v1"]
+        operations: ["CREATE"]
+        resources: ["jobs"]
+        scope: "Namespaced"
+    namespaceSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/component
+          operator: In
+          values: ["skill-authoring", "tool-runner"]
+  validations:
+    - expression: >-
+        request.userInfo.username == {{ $controllerUsername | toJson }}
+      message: only this release's controller ServiceAccount may create governed skill Jobs
+    - expression: >-
+        ((object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
+          object.metadata.name.matches('^skill-author-[a-f0-9]{24}$') &&
+          object.metadata.labels.size() == 3 &&
+          object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-skill-authoring' &&
+          object.metadata.labels['app.kubernetes.io/component'] == 'skill-authoring') ||
+         (object.metadata.namespace == {{ $toolRunnerNamespace | toJson }} &&
+          object.metadata.name.matches('^tool-run-[a-f0-9]{24}$') &&
+          object.metadata.labels.size() == 3 &&
+          object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-tool-runner' &&
+          object.metadata.labels['app.kubernetes.io/component'] == 'tool-runner')) &&
+        object.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.name &&
+        object.metadata.annotations.size() == 3 &&
+        object.metadata.annotations['opencrane.ai/silo-id'].size() > 0 &&
+        object.metadata.annotations['opencrane.ai/job-id'].size() > 0 &&
+        object.metadata.annotations['opencrane.ai/capability-reference'] == 'skill-workload-v1:' + object.metadata.annotations['opencrane.ai/job-id'] &&
+        (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
+        (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
+        (!has(object.metadata.generateName) || object.metadata.generateName == '')
+      message: governed skill Job identity must exactly match its isolated workload class
+    - expression: >-
+        object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
+        object.spec.backoffLimit == 0 && object.spec.ttlSecondsAfterFinished == 0 &&
+        ((object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
+          object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds }} &&
+          object.spec.template.spec.serviceAccountName == 'skill-authoring-default' &&
+          object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'skill-authoring' &&
+          object.spec.template.spec.containers[0].name == 'skill-authoring' &&
+          object.spec.template.spec.containers[0].image == {{ $authoringImage | toJson }} &&
+          object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.requests.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.memory == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.requests.memory | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.memory | toString | toJson }} &&
+          object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-skill-authoring' &&
+          quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) ||
+         (object.metadata.namespace == {{ $toolRunnerNamespace | toJson }} &&
+          object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds }} &&
+        object.spec.template.spec.serviceAccountName == 'tool-runner-default' &&
+          object.spec.template.metadata.labels['app.kubernetes.io/component'] == 'tool-runner' &&
+          object.spec.template.spec.containers[0].name == 'tool-runner' &&
+          object.spec.template.spec.containers[0].image == {{ $toolRunnerImage | toJson }} &&
+          object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.cpu == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.requests.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.requests.memory == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.requests.memory | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.limits.cpu | toString | toJson }} &&
+          object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.limits.memory | toString | toJson }} &&
+          object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-tool-runner' &&
+          quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize | toJson }})) == 0)) &&
+        object.spec.template.spec.containers.size() == 1 &&
+        (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
+        (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
+        object.spec.template.spec.automountServiceAccountToken == false &&
+        object.spec.template.spec.enableServiceLinks == false &&
+        object.spec.template.spec.restartPolicy == 'Never' &&
+        object.spec.template.spec.securityContext.runAsNonRoot == true &&
+        object.spec.template.spec.securityContext.runAsUser == 65532 &&
+        object.spec.template.spec.securityContext.runAsGroup == 65532 &&
+        object.spec.template.spec.securityContext.fsGroup == 65532 &&
+        object.spec.template.spec.securityContext.seccompProfile.type == 'RuntimeDefault' &&
+        object.spec.template.spec.terminationGracePeriodSeconds == 0 &&
+        object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
+        object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
+        object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
+        (!has(object.spec.template.spec.containers[0].securityContext.capabilities.add) || object.spec.template.spec.containers[0].securityContext.capabilities.add.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
+        (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
+        !has(object.spec.template.spec.containers[0].lifecycle) &&
+        !has(object.spec.template.spec.containers[0].livenessProbe) &&
+        !has(object.spec.template.spec.containers[0].readinessProbe) &&
+        !has(object.spec.template.spec.containers[0].startupProbe) &&
+        !has(object.spec.template.spec.containers[0].envFrom) &&
+        object.spec.template.spec.containers[0].env.size() == 1 &&
+        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' &&
+        object.spec.template.spec.containers[0].env[0].valueFrom.fieldRef.fieldPath == "metadata.annotations['opencrane.ai/capability-reference']" &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 2 &&
+        object.spec.template.spec.containers[0].volumeMounts[0].name == 'capability-token' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
+        object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/tmp' &&
+        object.spec.template.spec.volumes.size() == 2 &&
+        object.spec.template.spec.volumes[0].name == 'capability-token' &&
+        object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
+        object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'capability.token' &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
+        object.spec.template.spec.volumes[1].name == 'scratch' &&
+        object.spec.template.metadata.labels.size() == 2 &&
+        object.spec.template.metadata.labels['app.kubernetes.io/component'] == object.metadata.labels['app.kubernetes.io/component'] &&
+        object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload'] &&
+        object.spec.template.metadata.annotations.size() == 3 &&
+        object.spec.template.metadata.annotations['opencrane.ai/silo-id'] == object.metadata.annotations['opencrane.ai/silo-id'] &&
+        object.spec.template.metadata.annotations['opencrane.ai/job-id'] == object.metadata.annotations['opencrane.ai/job-id'] &&
+        object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference'] &&
+        (!has(object.spec.template.metadata.ownerReferences) || object.spec.template.metadata.ownerReferences.size() == 0) &&
+        (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0) &&
+        (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
+        (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '')
+      message: governed skill Job must remain the exact suspended, class-bounded worker shape
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingAdmissionPolicyBinding
+metadata:
+  name: {{ $skillAdmissionName }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: governed-skill-workloads
+spec:
+  policyName: {{ $skillAdmissionName }}
+  validationActions: [Deny]
+  matchResources:
+    namespaceSelector:
+      matchExpressions:
+        - key: app.kubernetes.io/component
+          operator: In
+          values: ["skill-authoring", "tool-runner"]
 ---
 # The policy is cluster-scoped only because Kubernetes admission policies are cluster-scoped. Its
 # namespace selector binds it to this one Helm-owned namespace label; no controller RBAC covers it.

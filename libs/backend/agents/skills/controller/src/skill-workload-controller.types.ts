@@ -23,6 +23,27 @@ export interface SkillWorkloadControllerKubernetesStore
 	__EnsureSuspendedJob(expected: V1Job): Promise<V1Job>;
 }
 
+/** Fetch-compatible function injected into the internal HTTP authority adapter. */
+export type SkillWorkloadControllerFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** Rotating projected-token reader injected into the internal HTTP authority adapter. */
+export type SkillWorkloadControllerTokenReader = () => Promise<string>;
+
+/** Configuration for the projected-token-authenticated governed skill authority adapter. */
+export interface SkillWorkloadControllerHttpAuthorityOptions
+{
+	/** Internal OpenCrane base URL with no path, query, or credentials. */
+	readonly openCraneInternalUrl: string;
+	/** Absolute path of the rotating projected controller token. */
+	readonly tokenPath: string;
+	/** Hard timeout for one HTTP exchange. */
+	readonly requestTimeoutMilliseconds: number;
+	/** Optional fetch seam used by focused tests. */
+	readonly fetch?: SkillWorkloadControllerFetch;
+	/** Optional rotating-token seam used by focused tests. */
+	readonly readToken?: SkillWorkloadControllerTokenReader;
+}
+
 /** Fixed policy and adapters for one governed skill workload reconciliation. */
 export interface SkillWorkloadControllerOptions
 {

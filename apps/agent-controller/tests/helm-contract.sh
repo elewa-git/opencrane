@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
+SOURCE_CHART_ROOT="$(mktemp -d)"
 CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
@@ -16,7 +17,13 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+
+# The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
+# this contract always renders the source template under test without refreshing remote dependencies.
+cp -R "$CHART_ROOT/." "$SOURCE_CHART_ROOT"
+helm package "$ROOT/apps/agent-controller/helm" --destination "$SOURCE_CHART_ROOT/charts" >/dev/null
+CHART_ROOT="$SOURCE_CHART_ROOT"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \
@@ -24,6 +31,8 @@ render_enabled() {
     --set agentController.enabled=true \
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+    --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set agentController.kubernetesApiServerEndpointPort=6443 \
@@ -84,6 +93,15 @@ test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
 
+# Governed skill namespaces are derived from their owning charts. Their controller Roles can only
+# exact-adopt or create suspended Jobs: no patch permission can release or modify a worker.
+grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(patch|delete|update|watch|list)"'; then
+  echo "skill workload Roles exceed get/create Job authority" >&2
+  exit 1
+fi
+
 # Both processes receive the literal cross-namespace contract; neither infers it from Pod metadata.
 grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$MANIFEST" | grep -Fq 'value: "oc-opencrane-runtime"'
 grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$MANIFEST" | grep -Fq 'value: "oc-opencrane-runtime"'
@@ -124,6 +142,20 @@ grep -A2 -F '  matchConstraints:' "$ADMISSION" | grep -Fq '    matchPolicy: Exac
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq 'resources: ["jobs"]' "$ADMISSION"
 grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-controller"' "$ADMISSION"
+# Skill namespaces also receive controller Job create/get, so their own fail-closed admission policy
+# must bind the same identity to the exact suspended, class-specific worker envelopes.
+grep -Eq 'name: .*skill-workloads' "$ADMISSION"
+grep -Fq 'values: ["skill-authoring", "tool-runner"]' "$ADMISSION"
+grep -Fq 'operations: ["CREATE"]' "$ADMISSION"
+grep -Fq "object.spec.suspend == true" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].name == 'tool-runner'" "$ADMISSION"
+grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'] == 'skill-workload-v1:' + object.metadata.annotations['opencrane.ai/job-id']" "$ADMISSION"
+grep -Fq "object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
+grep -Fq 'object.spec.template.metadata.labels.size() == 2' "$ADMISSION"
+grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload']" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/italanta/opencrane-skill-authoring@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/italanta/opencrane-tool-runner@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"" "$ADMISSION"
 if grep -Fq 'request.subResource' "$ADMISSION"; then
   echo "Job-only admission must not dereference the optional subResource request field" >&2
   exit 1
@@ -181,7 +213,7 @@ grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -Fq 'port: 443'
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
 grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
-if grep -Eq 'kind: ValidatingAdmissionPolicy|kind: Namespace|name: agent-controller|opencrane.ai/runtime-release' "$DISABLED"; then
+if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
 fi

@@ -11,6 +11,13 @@ and reports the
 Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim then lets it release
 that exact Job and register the unique first Pod.
 
+The same process also projects governed skill workloads into the authoring and tool-runner
+namespaces. Those Jobs are always created suspended and their UID is committed to the durable skill
+record. This app has only `get/create` Job access there: it cannot patch, release, inspect Pods, or
+write Secrets in either skill namespace. A separate fail-closed admission policy permits that
+create verb only for the pinned, class-specific suspended worker shape, so the controller cannot use
+its Job permission to create arbitrary work.
+
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
 only projects that decision into the one restricted runtime namespace named by its RoleBinding.
@@ -42,7 +49,8 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 ## Public surface
 
 `Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the assignment and release poll loop, and flushes telemetry
+OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
+poll loops, and flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
 ## Boundary
@@ -76,6 +84,8 @@ outside the app root.
   OpenCrane and Kubernetes request; default 10 seconds. Process shutdown cancels either request type
   immediately, and each retry receives a fresh deadline.
 - `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name.
+- `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
+  profile, each using a class-bound ServiceAccount and projected-token audience.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to
