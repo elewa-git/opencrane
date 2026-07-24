@@ -21,7 +21,7 @@ import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
-import { PrismaSkillWorkloadClaimsRepository, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
+import { PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
 import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
@@ -129,6 +129,21 @@ function _CreateAgentControllerTokenReviewer(authApi: k8s.AuthenticationV1Api, s
 		{
 			const status = await _ReviewProjectedToken(authApi, token, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE);
 			return status ? _ParseAgentControllerSubject(status.user?.username ?? "", serverNamespace, status.audiences ?? []) : null;
+		},
+	};
+}
+
+/** Build the TokenReview adapter for a worker identity chosen only by durable bootstrap authority. */
+function _CreateSkillWorkloadTokenReviewer(authApi: k8s.AuthenticationV1Api): SkillWorkloadBootstrapTokenReviewer
+{
+	return {
+		async __Review(token: string, audience: string): Promise<SkillWorkloadBootstrapIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, audience);
+			const username = status?.user?.username ?? "";
+			const match = /^system:serviceaccount:([a-z0-9]([-a-z0-9]*[a-z0-9])?):([a-z0-9]([-a-z0-9]*[a-z0-9])?)$/.exec(username);
+			const podUid = status?.user?.extra?.["authentication.kubernetes.io/pod-uid"]?.[0];
+			return match && podUid ? { namespace: match[1], serviceAccountName: match[3], podUid } : null;
 		},
 	};
 }
@@ -289,6 +304,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	}
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
 	app.use("/api/internal/agent-controller", __CreateSkillWorkloadDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: skillWorkloadClaimsRepository, logger: _log }));
+	app.use("/api/internal/agent-runtime", __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
   app.use("/api/internal/tenant-models", _RegisterInternalTenantModels(prisma));
