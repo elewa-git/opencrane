@@ -79,6 +79,7 @@ PLATFORM_OPERATOR_GROUPS=""
 PLATFORM_OPERATOR_SEED_EMAIL=""
 DISABLE=0
 DRY_RUN=0
+INSECURE_COOKIES=0
 
 log()  { echo -e "\033[0;32m[configure-oidc]\033[0m $1"; }
 warn() { echo -e "\033[1;33m[configure-oidc]\033[0m $1"; }
@@ -102,6 +103,7 @@ while [[ $# -gt 0 ]]; do
     --namespace)                   NAMESPACE="$2"; shift 2 ;;
     --release)                     RELEASE="$2"; shift 2 ;;
     --chart)                       CHART_DIR="$2"; shift 2 ;;
+    --insecure-cookies)            INSECURE_COOKIES=1; shift ;;
     --disable)                     DISABLE=1; shift ;;
     --dry-run)                     DRY_RUN=1; shift ;;
     -h|--help)                     grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
@@ -150,7 +152,7 @@ if [[ "$DISABLE" -eq 1 ]]; then
   warn "Disabling OIDC on release '$RELEASE' (context: $_active_context) — opencrane-ui reverts to token/dev auth."
   helm_args+=(--set-string "clustertenantManager.oidc.issuerUrl=")
   helm "${helm_args[@]}"
-  [[ "$DRY_RUN" -eq 0 ]] && kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-clustertenant-manager --timeout=180s
+  [[ "$DRY_RUN" -eq 0 ]] && kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-opencrane-server --timeout=180s || kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-clustertenant-manager --timeout=180s || true
   log "OIDC disabled."
   exit 0
 fi
@@ -204,6 +206,11 @@ helm_args+=(--set-string "clustertenantManager.oidc.rolesClaim=$ROLES_CLAIM")
 # overrides a previously-configured group via --reuse-values.
 [[ -n "$ORG_ADMIN_GROUPS" ]] && helm_args+=(--set-string "clustertenantManager.oidc.orgAdminGroups=$ORG_ADMIN_GROUPS")
 
+if [[ "$INSECURE_COOKIES" -eq 1 ]]; then
+  warn "Disabling Secure cookie requirement (OIDC_COOKIE_SECURE=false) for local HTTP development."
+  helm_args+=(--set-string "clustertenantManager.oidc.cookieSecure=false")
+fi
+
 # ── Cross-org guardrail: platform-operator grants are EXPLICIT + loudly warned.
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
   warn "Granting PLATFORM-OPERATOR (cross-ClusterTenant) to group(s): $PLATFORM_OPERATOR_GROUPS — these can manage EVERY org."
@@ -221,7 +228,23 @@ log "helm upgrade '$RELEASE' (existing values preserved, OIDC layered on top)…
 helm "${helm_args[@]}"
 
 if [[ "$DRY_RUN" -eq 0 ]]; then
-  kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-clustertenant-manager --timeout=180s
+  kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-opencrane-server --timeout=180s || kubectl ${KCTL[@]+"${KCTL[@]}"} -n "$NAMESPACE" rollout status deploy/"$RELEASE"-clustertenant-manager --timeout=180s || true
+  
+  if [[ -n "$PLATFORM_OPERATOR_SEED_EMAIL" ]]; then
+    log "Seeding default Tenant for $PLATFORM_OPERATOR_SEED_EMAIL..."
+    cat <<EOF | kubectl ${KCTL[@]+"${KCTL[@]}"} apply -f -
+apiVersion: opencrane.io/v1alpha1
+kind: Tenant
+metadata:
+  name: default-workspace
+  namespace: $NAMESPACE
+spec:
+  displayName: "Default Workspace"
+  email: "$PLATFORM_OPERATOR_SEED_EMAIL"
+  team: "engineering"
+EOF
+  fi
+
   log "OIDC configured. Issuer: $ISSUER_URL  ·  redirect: $REDIRECT_URI  ·  context: $_active_context"
   log "Verify discovery is reachable from the opencrane-ui and that '${ISSUER_URL%/}/.well-known/openid-configuration' resolves."
 else

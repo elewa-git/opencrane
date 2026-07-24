@@ -139,6 +139,13 @@ spec:
             - name: OIDC_ROLES_CLAIM
               value: {{ .rolesClaim | quote }}
             {{- end }}
+            {{- if typeIs "bool" .cookieSecure }}
+            - name: OIDC_COOKIE_SECURE
+              value: {{ .cookieSecure | quote }}
+            {{- else if .cookieSecure }}
+            - name: OIDC_COOKIE_SECURE
+              value: {{ .cookieSecure | quote }}
+            {{- end }}
             {{- if .platformOperatorGroups }}
             - name: OPENCRANE_PLATFORM_OPERATOR_GROUPS
               value: {{ .platformOperatorGroups | quote }}
