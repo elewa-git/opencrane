@@ -26,6 +26,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		preferenceFacts: { load: async function _load() { return { outcome: "loaded", value: [{ id: "preference-2" }, { id: "preference-1" }] } as const; } },
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, memoryFacts: [{ datasetId: "dataset-b", factId: "fact-2", contentDigest: `sha256:${"1".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-2", capturedAt: "2026-07-19T11:59:00.000Z" }] }, { datasetId: "dataset-a", factId: "fact-1", contentDigest: `sha256:${"2".repeat(64)}`, provenance: [{ sourceKind: "explicit-user-fact", sourceId: "preference-1", sourceUserId: "user-1", capturedAt: "2026-07-19T11:58:00.000Z" }] }] } } as const; } },
 		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, toolGrantIds: ["grant-2", "grant-1"], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
+		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
 		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { executionSubjectId: "user-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
 	};
@@ -78,6 +79,18 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		const result = await __AssembleRunInputSnapshot(_COMMAND, authorities);
 
 		expect(result).toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		expect(admitted).toBe(false);
+	});
+
+	it("fails closed when an assigned skill revision is no longer eligible for a future admission", async function _deniesUnavailableSkill()
+	{
+		let admitted = false;
+		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
+		authorities.skillEligibility = { load: async function _load() { return { outcome: "denied", reason: "skill_unavailable" } as const; } };
+
+		const result = await __AssembleRunInputSnapshot(_COMMAND, authorities);
+
+		expect(result).toEqual({ outcome: "denied", reason: "skill_unavailable" });
 		expect(admitted).toBe(false);
 	});
 

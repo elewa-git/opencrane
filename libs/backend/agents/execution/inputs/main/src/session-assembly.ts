@@ -49,6 +49,8 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
+		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
+		if (skills.outcome === "denied") return skills;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
 		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);

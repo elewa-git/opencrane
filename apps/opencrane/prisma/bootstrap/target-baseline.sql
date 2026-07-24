@@ -3891,9 +3891,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "protect_assigned_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION "protect_current_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "agent_revision_skill_assignments" WHERE "skill_revision_id" = NEW."id") THEN RAISE EXCEPTION 'assigned SkillRevision must remain Published'; END IF;
+    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "skills" WHERE "id" = NEW."skill_id" AND "current_revision_id" = NEW."id") THEN
+        RAISE EXCEPTION 'current SkillRevision must remain Published';
+    END IF;
     RETURN NULL;
 END;
 $$;
@@ -4470,7 +4472,7 @@ CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
-CREATE CONSTRAINT TRIGGER "assigned_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_assigned_skill_revision"();
+CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "skill_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions"
     DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_skill_artifact_revision"();
 CREATE TRIGGER "agent_revision_skill_assignments_same_silo" BEFORE INSERT OR UPDATE ON "agent_revision_skill_assignments"

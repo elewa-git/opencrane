@@ -20,7 +20,7 @@ change — a retry, an audit, or a replay all see the exact same record, identif
           ▼
  ┌─────────────────────────────────────────┐
  │   execution/inputs  ◄── HERE              │  load run/persona/thread/preferences/
- │   · orchestrates 8 authority loads        │  memory/tools/budget/identity, all inside
+ │   · orchestrates 9 authority loads        │  memory/tools/skill eligibility/budget/identity,
  │   · compiles + digests the one snapshot   │  the runs package's admission transaction
  └─────────────────────────────────────────┘
           │  ready (authority + snapshot) / denied (one precise reason)
@@ -34,7 +34,9 @@ function, and the durable rows)* · [membership](../../../../server/iam/membersh
 
 Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, …) inside the
 **same database transaction** that admits the run, so a permission revoked or a membership expired a
-millisecond before commit can never leak into the frozen record. One refusal anywhere denies the
+millisecond before commit can never leak into the frozen record. In particular, the required
+`SkillRevisionEligibilitySource` locks every skill assignment and verifies that each skill returned
+after effective-grant intersection is an assigned, same-silo, still-published, non-revoked revision. One refusal anywhere denies the
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
 
@@ -49,10 +51,13 @@ caller input.
 - `FleetMembershipIdentityEnvelopeSource` — the identity port implementation: accepts only a
   cryptographically verified fleet-membership assertion (never caller-supplied claims) and a
   same-transaction capability-set digest.
+- `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
+  at admission and refuses an invented, foreign, revoked, or unpublished revision with
+  `skill_unavailable`.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
-  `MemoryScopeSource`, `ToolPolicySource`, `BudgetPolicySource`, `IdentityEnvelopeSource`,
+  `MemoryScopeSource`, `ToolPolicySource`, `SkillRevisionEligibilitySource`, `BudgetPolicySource`, `IdentityEnvelopeSource`,
   `CapabilitySetDigestSource` — the per-input ports the OpenCrane app implements with real adapters.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.

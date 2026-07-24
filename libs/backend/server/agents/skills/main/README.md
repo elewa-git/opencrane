@@ -27,7 +27,7 @@ session flag.
  └──────────────────────────────────┘
         │  publish the immutable SkillRevision + advance the current pointer  (atomically)
         ▼
- agent revisions assign the published skill
+agent revisions assign the published skill ──► admission confirms it remains published
 ```
 
 **In this flow:** [artifacts](../../artifacts/main/README.md) *(holds the bundle)* · [agent-services](../../agent-services/main/README.md) *(assigns the skill)*
@@ -37,13 +37,19 @@ Invariant: publication is bound to an *exact* artifact revision. The skill bytes
 registry protocol. It publishes only when the revision is in the `review` state, the referenced
 artifact is still published, and the pinned content address matches, all read from one consistent
 snapshot; the publish and pointer advance happen atomically. A mismatched or unpublished artifact,
-or a revision not in review, fails closed with a stable reason.
+or a revision not in review, fails closed with a stable reason. A published revision can later be
+revoked: revocation atomically changes `published → revoked`, clears the current pointer only when
+it targets that exact revision, and prevents new run admissions from freezing it. It never mutates
+or invalidates inputs already accepted for a run.
 
 ## Public surface
 
 - `__PublishSkillRevision` — the use case: verify evidence and artifact, then publish atomically.
 - `PrismaSkillAuthorityRepository` — locks the scoped skill, revision, and exact artifact before it
   changes `review → published` and advances the current-revision pointer in one transaction.
+- `__RevokeSkillRevision` — the future-only withdrawal use case for an exact published revision.
+- `PrismaSkillAuthorityRepository.revokeAtomically` — shares the publication lock order, changes
+  `published → revoked`, and conditionally clears the live current-revision pointer.
 - Types: `SkillAuthorityRepository` (the persistence boundary), `PublishSkillRevisionCommand`,
   `PublishSkillRevisionResult`, `SkillPublicationEvidence`, `SkillPublicationSnapshot`, and the
   atomic result `AtomicPublishSkillRevisionResult`.
@@ -54,7 +60,8 @@ The application layer supplies the Prisma-backed `SkillAuthorityRepository` and 
 This package does not author, test, scan, or sign bundles, and it does not store bytes — it only
 records that a reviewed revision is now published, consistently with the artifact authority.
 It is not an OCI/package registry, has no internal bundle-download route, and does not configure or
-communicate with the retired `feat-skill-registry` workload.
+communicate with the retired `feat-skill-registry` workload. It does not re-evaluate or cancel
+already accepted runs; their immutable snapshots remain the audit record.
 
 ## Dependency direction
 
