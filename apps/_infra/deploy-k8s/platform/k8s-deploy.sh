@@ -678,14 +678,14 @@ if [[ -z "$POSTGRES_KUBERNETES_API_SERVICE_IP" || -z "$POSTGRES_KUBERNETES_API_S
   err "Kubernetes API Service and endpoint addresses are required for bounded PostgreSQL pooler egress."
   exit 1
 fi
-POSTGRES_KUBERNETES_API_ARGS=(
+KUBERNETES_API_ARGS=(
   --set-string "networkPolicy.kubernetesApiServerCidrs[0]=$(_postgres_api_host_cidr "$POSTGRES_KUBERNETES_API_SERVICE_IP")"
   --set "networkPolicy.kubernetesApiServerPort=$POSTGRES_KUBERNETES_API_SERVICE_PORT"
   --set "networkPolicy.kubernetesApiServerEndpointPort=$POSTGRES_KUBERNETES_API_ENDPOINT_PORT")
 POSTGRES_KUBERNETES_API_ENDPOINT_INDEX=0
 while IFS= read -r postgres_api_endpoint_ip; do
   [[ -z "$postgres_api_endpoint_ip" ]] && continue
-  POSTGRES_KUBERNETES_API_ARGS+=(--set-string "networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]=$(_postgres_api_host_cidr "$postgres_api_endpoint_ip")")
+  KUBERNETES_API_ARGS+=(--set-string "networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]=$(_postgres_api_host_cidr "$postgres_api_endpoint_ip")")
   POSTGRES_KUBERNETES_API_ENDPOINT_INDEX=$((POSTGRES_KUBERNETES_API_ENDPOINT_INDEX + 1))
 done < <(kubectl get endpoints kubernetes -n default -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
 if [[ "$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX" -eq 0 ]]; then
@@ -709,7 +709,7 @@ _install_postgres_server() {
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=$POSTGRES_BASELINE_CONFIG_MAP"
     --set-string "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql"
     --set-json "pooler.clientPodSelectors=$pooler_client_selectors_json"
-    "${POSTGRES_KUBERNETES_API_ARGS[@]}")
+    "${KUBERNETES_API_ARGS[@]}")
   [[ -n "$POSTGRES_VALUES_FILE" ]] && postgres_args+=(--values "$POSTGRES_VALUES_FILE")
   [[ -n "$STORAGE_CLASS" ]] && postgres_args+=(--set-string "storage.storageClass=$STORAGE_CLASS")
   if helm status "$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
@@ -1183,6 +1183,8 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
+  "${KUBERNETES_API_ARGS[@]}"
+  --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"

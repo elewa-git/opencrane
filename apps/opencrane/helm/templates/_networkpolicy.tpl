@@ -99,29 +99,29 @@ spec:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
   egress:
-    {{- if .Values.agentController.kubernetesApiServerCidrs }}
+    {{- if .Values.networkPolicy.kubernetesApiServerCidrs }}
     # TokenReview is the application-layer identity gate for controller and runtime calls. Keep the
     # server's API-server path on the same exact Service-IP allow-list as the controller.
     - to:
-        {{- range .Values.agentController.kubernetesApiServerCidrs }}
+        {{- range .Values.networkPolicy.kubernetesApiServerCidrs }}
         - ipBlock:
             cidr: {{ . | quote }}
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.agentController.kubernetesApiServerPort }}
+          port: {{ .Values.networkPolicy.kubernetesApiServerPort }}
     {{- end }}
-    {{- if .Values.agentController.kubernetesApiServerEndpointCidrs }}
+    {{- if .Values.networkPolicy.kubernetesApiServerEndpointCidrs }}
     # Mirror the controller's post-Service-translation API endpoint rule for the
     # in-process reconcilers and TokenReview calls owned by this server.
     - to:
-        {{- range .Values.agentController.kubernetesApiServerEndpointCidrs }}
+        {{- range .Values.networkPolicy.kubernetesApiServerEndpointCidrs }}
         - ipBlock:
             cidr: {{ . | quote }}
         {{- end }}
       ports:
         - protocol: TCP
-          port: {{ .Values.agentController.kubernetesApiServerEndpointPort }}
+          port: {{ .Values.networkPolicy.kubernetesApiServerEndpointPort }}
     {{- end }}
     # Every application connection goes through the CNPG-owned PgBouncer pooler.
     # The database Secret binds the exact authority while the pooler owns the

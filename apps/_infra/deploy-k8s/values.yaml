@@ -329,13 +329,7 @@ agentController:
   kubernetesTokenTtlSeconds: 600
   # -- Exact Kubernetes Service IP CIDRs admitted by the controller's app-owned NetworkPolicy.
   # For a single API Service use its /32 (IPv4) or /128 (IPv6); never use a whole pod/service range.
-  kubernetesApiServerCidrs: []
-  kubernetesApiServerPort: 443
-  # -- Exact backing endpoint CIDRs and port for CNIs that enforce NetworkPolicy after
-  # Service destination translation. Kubernetes leaves pre/post-translation policy behavior
   # implementation-defined, so portable installs should supply both the Service and endpoint paths.
-  kubernetesApiServerEndpointCidrs: []
-  kubernetesApiServerEndpointPort: 443
   # -- Aggregate ceiling for the dedicated runtime namespace. Per-Job admission fixes the shape;
   # this quota limits how many conforming Jobs a compromised controller can consume concurrently.
   runtimeQuota:
@@ -1136,6 +1130,14 @@ projectedIdentity:
 # for internal platform services)
 networkPolicy:
   enabled: true
+  # -- Exact CNPG-managed Pooler identity admitted by application egress policies.
+  # Defaults to `<release>-postgres-pooler`; deploy tooling sets it explicitly so a
+  # recovery smoke can point the application at a separately named restored cluster.
+  postgresPoolerName: ""
+  kubernetesApiServerCidrs: []
+  kubernetesApiServerPort: 443
+  kubernetesApiServerEndpointCidrs: []
+  kubernetesApiServerEndpointPort: 443
   # -- Allow DNS resolution (still consumed by the multi-instance cross-namespace policy)
   allowDNS: true
   # -- Reserved for a future FQDN egress policy (requires Cilium). The per-silo egress

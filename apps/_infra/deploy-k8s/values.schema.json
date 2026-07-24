@@ -47,7 +47,7 @@
     },
     "agentController": {
       "type": "object",
-      "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort", "runtimeQuota", "runtimeProfile"],
+      "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "runtimeQuota", "runtimeProfile"],
       "properties": {
         "enabled": { "type": "boolean" },
         "runtimeNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
@@ -62,18 +62,7 @@
             "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
           }
         },
-        "kubernetesApiServerCidrs": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
-          "uniqueItems": true
-        },
-        "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
-        "kubernetesApiServerEndpointCidrs": {
-          "type": "array",
-          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
-          "uniqueItems": true
-        },
-        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+
         "runtimeQuota": {
           "type": "object",
           "required": ["pods", "jobs", "requests", "limits"],
@@ -196,7 +185,19 @@
             "enabled": { "type": "boolean" },
             "allowOtelEgress": { "type": "boolean" }
           }
-        }
+        },
+        "kubernetesApiServerCidrs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "kubernetesApiServerEndpointCidrs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
       }
     }
   },
@@ -215,7 +216,7 @@
         "properties": {
           "agentController": {
             "properties": {
-              "kubernetesApiServerCidrs": { "minItems": 1 },
+
               "image": {
                 "properties": {
                   "digest": { "pattern": "^sha256:[a-f0-9]{64}$" }

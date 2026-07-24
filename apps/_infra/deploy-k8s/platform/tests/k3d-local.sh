@@ -239,7 +239,7 @@ KUBERNETES_API_SERVICE_IP="$(kubectl get service kubernetes -n default -o jsonpa
 KUBERNETES_API_SERVICE_PORT="$(kubectl get service kubernetes -n default -o jsonpath='{.spec.ports[0].port}')"
 KUBERNETES_API_ENDPOINT_IP="$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].addresses[0].ip}')"
 KUBERNETES_API_ENDPOINT_PORT="$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].ports[0].port}')"
-POSTGRES_KUBERNETES_API_ARGS=(
+KUBERNETES_API_ARGS=(
   --set-string "networkPolicy.kubernetesApiServerCidrs[0]=$(_kubernetes_api_host_cidr "$KUBERNETES_API_SERVICE_IP")"
   --set "networkPolicy.kubernetesApiServerPort=$KUBERNETES_API_SERVICE_PORT"
   --set-string "networkPolicy.kubernetesApiServerEndpointCidrs[0]=$(_kubernetes_api_host_cidr "$KUBERNETES_API_ENDPOINT_IP")"
@@ -255,7 +255,7 @@ function _install_postgres_server()
   echo "[local] Installing one PostgreSQL server with isolated logical databases"
   helm upgrade --install "$POSTGRES_RELEASE_NAME" "$ROOT_DIR/apps/postgres/helm" \
     --namespace "$NAMESPACE" \
-    "${POSTGRES_KUBERNETES_API_ARGS[@]}" \
+    "${KUBERNETES_API_ARGS[@]}" \
     --set-json "databases=$databases_json" \
     --set-string "databaseAdmin.name=$POSTGRES_ADMIN_NAME" \
     --set-string "databaseAdmin.credentialsSecret=$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
@@ -448,6 +448,9 @@ silo_args=(
   "$VALUES_FILE"
   --set
   "clustertenantManager.database.existingSecret=${OPENCRANE_POSTGRES_APP_SECRET}"
+  --set-string
+  "networkPolicy.postgresPoolerName=${POSTGRES_RELEASE_NAME}-pooler"
+  "${KUBERNETES_API_ARGS[@]}"
   --set
   "clustertenantManager.database.secretKey=uri"
   --set
