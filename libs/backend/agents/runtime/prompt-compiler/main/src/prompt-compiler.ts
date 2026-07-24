@@ -109,6 +109,7 @@ function _resolveBudget(budgetPolicy: JsonValue): CompiledBudget
 {
 	const policy: { readonly [key: string]: JsonValue } = budgetPolicy && typeof budgetPolicy === "object" && !Array.isArray(budgetPolicy) ? budgetPolicy as { readonly [key: string]: JsonValue } : {};
 	return {
+		maxTurns: _optionalCount(policy["maxTurns"]),
 		maxTotalTokens: _optionalCount(policy["maxTotalTokens"]),
 		maxCostUsdMicros: _optionalCount(policy["maxCostUsdMicros"]),
 		maxToolInvocations: _optionalCount(policy["maxToolInvocations"]),

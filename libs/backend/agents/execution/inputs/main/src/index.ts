@@ -4,4 +4,5 @@ export { PrismaSkillRevisionEligibilitySource } from "./prisma-skill-revision-el
 export { PrismaRootRunAuthoritySource } from "./prisma-root-run-authority-source.js";
 export { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
 export { PrismaThreadContextSource } from "./prisma-thread-context-source.js";
+export { PrismaRevisionBudgetPolicySource } from "./prisma-revision-budget-policy-source.js";
 export type { ApprovedPersonaInput, ApprovedPersonaSource, AssembleRunInputSnapshotResult, BudgetPolicyInput, BudgetPolicySource, CapabilitySetDigestSource, IdentityEnvelopeInput, IdentityEnvelopeSource, MemoryScopeInput, MemoryScopeSource, PersonalConfigurationMaterialization, PersonalConfigurationMaterializationSource, PreferenceFactInput, PreferenceFactSource, RunAuthoritySource, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyLoad, SessionAssemblyRefusalReason, SkillRevisionEligibilitySource, ThreadContextInput, ThreadContextSource, ToolPolicyInput, ToolPolicySource } from "./session-assembly.types.js";

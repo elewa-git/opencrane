@@ -7,7 +7,8 @@
 This package is the single TypeScript authority that turns an immutable `RunInputSnapshot` — which
 holds only ID references plus a `promptCompilerVersion` — into the literal `CompiledRunInput` the
 runtime executes. It dereferences persona, message, tool, memory, artifact, and skill records
-through injected control-plane read ports, resolves the model route and literal budget numbers,
+through injected control-plane read ports, resolves the model route and literal turn, token, cost,
+tool, and time budget numbers,
 orders every collection canonically, stamps its own version, and seals the result with a SHA-256
 digest over the canonical payload.
 

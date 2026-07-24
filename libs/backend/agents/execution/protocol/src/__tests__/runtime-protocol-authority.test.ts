@@ -34,7 +34,7 @@ function _snapshot(): RunInputSnapshot
 /** Returns the compiled literal input carried alongside the snapshot on a start command. */
 function _compiledInput(): CompiledRunInput
 {
-	return { promptCompilerVersion: "v1", runId: "run-1", attempt: 1, instructions: "", messages: [], tools: [], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: "sha256:compiled" };
+	return { promptCompilerVersion: "v1", runId: "run-1", attempt: 1, instructions: "", messages: [], tools: [], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: "sha256:compiled" };
 }
 
 /** Returns a valid start command bound to the current authority. */

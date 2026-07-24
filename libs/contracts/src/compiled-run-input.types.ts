@@ -67,6 +67,8 @@ export interface CompiledModelRoute
 /** Literal aggregate limits OpenCrane enforces over the bounded loop. */
 export interface CompiledBudget
 {
+	/** Maximum model turns across the attempt, or null when uncapped. */
+	readonly maxTurns: number | null;
 	/** Maximum total tokens across the attempt, or null when uncapped. */
 	readonly maxTotalTokens: number | null;
 	/** Maximum spend in micro-US-dollars across the attempt, or null when uncapped. */

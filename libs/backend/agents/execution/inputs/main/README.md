@@ -61,6 +61,8 @@ caller input.
   execution subject's active approved persona revision inside the final admission transaction.
 - `PrismaThreadContextSource` — freezes completed message identifiers only after proving the exact
   active thread belongs to the selected service and includes the execution subject as a participant.
+- `PrismaRevisionBudgetPolicySource` — locks and rereads the selected published revision, then
+  freezes its turn, token, USD-micro cost, and wall-clock ceilings without a fallback default.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,

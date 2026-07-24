@@ -37,7 +37,8 @@ Two halves:
 
 Invariant: the client's types are a faithful projection of the server's published spec — regenerate
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
-record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
+record of one run's frozen persona, transcript, memory references, tools, budgets (turn, token,
+cost, tool, and time ceilings), model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects.
 

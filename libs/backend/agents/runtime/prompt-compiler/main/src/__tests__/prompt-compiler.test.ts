@@ -25,7 +25,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		memoryQueryPolicy: {},
 		toolGrantIds: ["grant-b", "grant-a"],
 		modelRoute: { alias: "silo-default" },
-		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
+		budgetPolicy: { maxTurns: 4, maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
 		capabilitySetDigest: "sha256:cap",
 		effectiveContractDigest: "sha256:contract",
@@ -82,14 +82,14 @@ describe("__CompileRunInput", function _describeCompiler()
 	{
 		const compiled = await __CompileRunInput(_snapshot(), _repositories());
 
-		expect(compiled.budget).toEqual({ maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
+		expect(compiled.budget).toEqual({ maxTurns: 4, maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
 	});
 
 	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
 	{
 		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), _repositories());
 
-		expect(compiled.budget).toEqual({ maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
+		expect(compiled.budget).toEqual({ maxTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
 	});
 
 	it("assembles persona, memory, artifact, and skill sections in canonical order", async function _assembles()
