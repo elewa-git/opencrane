@@ -8,6 +8,7 @@ import sys
 import tarfile
 import tempfile
 import unittest
+from unittest import mock
 
 
 _ROOT = pathlib.Path(__file__).parents[3]
@@ -235,6 +236,132 @@ class AuthoringWorkerTests(unittest.TestCase):
             invalid = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": True}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
             with self.assertRaisesRegex(RuntimeError, "command is invalid"):
                 _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), invalid)
+
+    def test_runs_one_server_selected_bundle_to_a_bounded_success_and_erases_its_workspace(self) -> None:
+        """The lifecycle joins only the fixed worker primitives and leaves no candidate bytes behind."""
+        captured: dict[str, object] = {}
+
+        def download(base_url: str, workload_id: str, token_path: str, destination: pathlib.Path) -> pathlib.Path:
+            captured["download"] = (base_url, workload_id, token_path)
+            destination.write_bytes(b"bundle")
+            return destination
+
+        def extract(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+            destination.mkdir()
+            (destination / "SKILL.md").write_text("# Example", encoding="utf-8")
+            return destination
+
+        def validate(destination: pathlib.Path) -> tuple[dict[str, object], dict[str, object]]:
+            captured["workspace"] = destination.parent
+            return ({"passed": True, "summary": "checks passed", "checksRun": 3}, {"passed": True, "summary": "scan passed", "checksRun": 3})
+
+        def complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            captured["completion"] = (base_url, workload_id, token_path, command)
+
+        result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", download, extract, validate, complete)
+        self.assertEqual(result, 0)
+        self.assertEqual(captured["download"], ("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token"))
+        self.assertEqual(captured["completion"], ("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}))
+        self.assertFalse(captured["workspace"].exists())
+
+    def test_replaces_every_validator_failure_with_one_stable_terminal_code(self) -> None:
+        """A failed archive check cannot leak its local reason or suppress the terminal transition."""
+        completions: list[dict[str, object]] = []
+
+        def unavailable(base_url: str, workload_id: str, token_path: str, destination: pathlib.Path) -> pathlib.Path:
+            raise RuntimeError("candidate path and raw output must not cross the boundary")
+
+        def complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            completions.append(command)
+
+        result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", unavailable, _AUTHORING.extract_bundle, _AUTHORING.validate_bundle, complete)
+        self.assertEqual(result, 1)
+        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
+
+    def test_main_bootstraps_before_it_can_run_the_authoring_lifecycle(self) -> None:
+        """The image entrypoint cannot choose a workload or start validation before server acknowledgement."""
+        with mock.patch.object(_AUTHORING.bootstrap, "_required_environment", side_effect=["http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "/token", "/reference"]), mock.patch.object(_AUTHORING.bootstrap, "acknowledge", return_value="workload-1") as acknowledge, mock.patch.object(_AUTHORING, "run_authoring_workload", return_value=0) as run:
+            self.assertEqual(_AUTHORING.main(), 0)
+        acknowledge.assert_called_once_with("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "/token", "/reference")
+        run.assert_called_once_with("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token")
+
+    def test_reports_a_terminal_failure_when_the_ephemeral_workspace_cannot_be_created(self) -> None:
+        """An acknowledged workload cannot be stranded by a local disk or permission failure."""
+        completions: list[dict[str, object]] = []
+
+        def complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            completions.append(command)
+
+        with mock.patch.object(_AUTHORING.tempfile, "mkdtemp", side_effect=OSError("disk unavailable")):
+            result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", complete=complete)
+        self.assertEqual(result, 1)
+        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}])
+
+    def test_does_not_replace_an_uncertain_success_with_a_contradictory_failure(self) -> None:
+        """A dropped acknowledgement after durable success can fail the Job but must not change its outcome."""
+        completions: list[dict[str, object]] = []
+
+        def download(base_url: str, workload_id: str, token_path: str, destination: pathlib.Path) -> pathlib.Path:
+            destination.write_bytes(b"bundle")
+            return destination
+
+        def extract(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+            destination.mkdir()
+            return destination
+
+        def validate(destination: pathlib.Path) -> tuple[dict[str, object], dict[str, object]]:
+            return ({"passed": True, "summary": "checks passed", "checksRun": 3}, {"passed": True, "summary": "scan passed", "checksRun": 3})
+
+        def uncertain_complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            completions.append(command)
+            raise RuntimeError("connection closed after server commit")
+
+        with mock.patch.object(_AUTHORING, "_write_event") as write_event:
+            result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", download, extract, validate, uncertain_complete)
+        self.assertEqual(result, 1)
+        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scan passed", "checksRun": 3}}] * 3)
+        write_event.assert_called_once_with("completion_uncertain")
+
+    def test_erases_a_candidate_tree_even_when_its_checks_remove_owner_directory_access(self) -> None:
+        """Candidate tests cannot turn a successful result into residual `/tmp` source bytes by chmodding its workspace root."""
+        captured: dict[str, pathlib.Path] = {}
+
+        def download(base_url: str, workload_id: str, token_path: str, destination: pathlib.Path) -> pathlib.Path:
+            destination.write_bytes(b"bundle")
+            return destination
+
+        def extract(archive: pathlib.Path, destination: pathlib.Path) -> pathlib.Path:
+            destination.mkdir()
+            (destination / "candidate.py").write_text("pass", encoding="utf-8")
+            captured["workspace"] = destination.parent
+            destination.parent.chmod(0)
+            return destination
+
+        def validate(destination: pathlib.Path) -> tuple[dict[str, object], dict[str, object]]:
+            return ({"passed": True, "summary": "checks passed", "checksRun": 3}, {"passed": True, "summary": "scan passed", "checksRun": 3})
+
+        def complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            return None
+
+        result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", download, extract, validate, complete)
+        self.assertEqual(result, 0)
+        self.assertFalse(captured["workspace"].exists())
+
+    def test_retries_a_transient_failure_to_deliver_one_unchanged_terminal_outcome(self) -> None:
+        """A momentary completion outage does not strand an acknowledged workload or alter its failure code."""
+        completions: list[dict[str, object]] = []
+
+        def unavailable(base_url: str, workload_id: str, token_path: str, destination: pathlib.Path) -> pathlib.Path:
+            raise RuntimeError("validator unavailable")
+
+        def eventually_complete(base_url: str, workload_id: str, token_path: str, command: dict[str, object]) -> None:
+            completions.append(command)
+            if len(completions) == 1:
+                raise RuntimeError("temporary authority outage")
+
+        result = _AUTHORING.run_authoring_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", "/token", unavailable, _AUTHORING.extract_bundle, _AUTHORING.validate_bundle, eventually_complete)
+        self.assertEqual(result, 1)
+        self.assertEqual(completions, [{"workloadId": "workload-1", "outcome": "failed", "failureCode": "offline_validation_failed"}] * 2)
 
 
 if __name__ == "__main__":

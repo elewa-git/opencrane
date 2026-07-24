@@ -23,4 +23,5 @@ RUN mkdir -p /opt/opencrane/clamav-db /opt/opencrane/bin \
 # The upstream image starts freshclam/clamd by default. This one-shot Job must never update or listen.
 ENTRYPOINT []
 USER 65532:65532
-CMD ["python", "-B", "/app/bootstrap.py"]
+# The controller has no authoring image digest until this immutable image is published and promoted.
+CMD ["python", "-B", "/app/authoring_worker.py"]

@@ -26,8 +26,8 @@ OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
-- `deploy/Dockerfile` — builds an inactive one-shot worker image from immutable ClamAV and Python bases. It carries a hash-locked formatter/type/test toolchain and a read-only copied malware-signature database. It starts neither the upstream FreshClam updater nor ClamD scanner daemon.
-- `src/authoring_worker.py` — private, not-yet-invoked intake, offline-validator, and terminal-completion primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and can submit only bounded success evidence or a stable failure code to the fixed internal completion route.
+- `deploy/Dockerfile` — builds a one-shot validation worker image from immutable ClamAV and Python bases. It carries a hash-locked formatter/type/test toolchain and a read-only copied malware-signature database. Its default entrypoint runs the bounded lifecycle, but starts neither the upstream FreshClam updater nor ClamD scanner daemon.
+- `src/authoring_worker.py` — private authoring intake, offline-validator, and terminal-completion lifecycle. It rejects candidate dependencies and plaintext secrets, uses only fixed image-owned commands, and can submit only bounded success evidence or a stable failure code to the fixed internal completion route.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 - `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, resource, and
   lifecycle values remain controller-owned.
@@ -45,9 +45,10 @@ and returns the pinned SHA-256 address alongside the length so the future valida
 downloaded bytes. The admitted Job reserves at least 128 MiB of ephemeral `/tmp` space: 16 MiB
 compressed input, 32 MiB extracted source, and validation work cannot safely share the old 64 MiB
 budget. The authoring Job also reserves 3 GiB and caps at 4 GiB of memory because the pinned ClamAV
-signature engine must load before it can scan. The validator code remains deliberately inactive until
-a release promotes this tested image by its final digest into the controller profile. It cannot report
-successful validation before that promotion.
+signature engine must load before it can scan. Deployment remains fail-closed even though the image
+has an active default entrypoint: the controller is disabled and the authoring profile has no final
+image digest. Helm refuses to enable the controller until a release promotes this tested image by its
+final digest, so an unreviewed local build cannot become an executable tenant workload.
 
 The `container` target builds the image and proves that `clamscan`, the three fixed validator tools,
 and its read-only database work without networking for UID 65532. It scans both a clean fixture and
@@ -56,6 +57,14 @@ needs the resulting final image digest in the controller profile;
 the Dockerfile's source digests are not a substitute for that release digest.
 The database never updates in a running Job: refresh it only by building, smoke-testing, and promoting
 a new pinned image.
+
+Once a release supplies that final digest, each Job performs one closed lifecycle: it acknowledges its
+server-selected workload, downloads that workload's immutable archive, extracts it below `/tmp`, runs
+the four fixed offline checks, and submits either the two compact passing reports or one stable
+technical failure code. The worker deletes its temporary archive and extracted files on every path.
+It never sends validator output, candidate source, or file paths to the control plane.
+It retries the same terminal command a small fixed number of times for a transient authority outage;
+it never changes a possible success into a failure when delivery is uncertain.
 
 ## Dependency direction
 

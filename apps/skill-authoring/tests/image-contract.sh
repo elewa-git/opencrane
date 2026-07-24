@@ -12,6 +12,7 @@ grep -Fq 'cp -a /var/lib/clamav/. /opt/opencrane/clamav-db/' "$dockerfile"
 grep -Fq 'ln -s /usr/bin/clamscan /opt/opencrane/bin/clamscan' "$dockerfile"
 grep -Fq 'chmod -R a-w /opt/opencrane/clamav-db' "$dockerfile"
 grep -Fxq 'ENTRYPOINT []' "$dockerfile"
+grep -Fxq 'CMD ["python", "-B", "/app/authoring_worker.py"]' "$dockerfile"
 rg -q 'upstream image starts freshclam/clamd' "$dockerfile"
 rg -Fq 'bash apps/skill-authoring/tests/image-smoke.sh' apps/skill-authoring/project.json
 if ! rg -q -- '--hash=sha256:' apps/skill-authoring/deploy/validator.requirements.txt; then
