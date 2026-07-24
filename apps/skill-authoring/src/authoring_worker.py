@@ -9,9 +9,12 @@ import hashlib
 import os
 import re
 import secrets
+import signal
+import subprocess
 import tarfile
+import tomllib
 from pathlib import Path
-from typing import Callable, Protocol
+from typing import Callable, Protocol, Sequence
 from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
@@ -24,6 +27,15 @@ _MAX_ARCHIVE_ENTRIES = 1_000
 _MAX_FILE_BYTES = 8 * 1024 * 1024
 _READ_CHUNK_BYTES = 64 * 1024
 _CONTENT_ADDRESS_HEADER = "x-opencrane-content-address"
+_VALIDATOR_TIMEOUT_SECONDS = 60
+_VALIDATOR_DATABASE = Path("/opt/opencrane/clamav-db")
+_VALIDATOR_COMMANDS = (
+    ("/opt/opencrane/bin/ruff", "format", "--check", "."),
+    ("/opt/opencrane/bin/mypy", "."),
+    ("/opt/opencrane/bin/pytest", "-q", "tests"),
+)
+_MALWARE_COMMAND = ("/opt/opencrane/bin/clamscan", "--database=/opt/opencrane/clamav-db", "--infected", "--no-summary", "--recursive", ".")
+_SECRET_PATTERN = re.compile(r"(?i)(?:api[_-]?key|secret|token|password)\s*[=:]\s*['\"][^'\"]{8,}['\"]")
 
 
 class _InputResponse(Protocol):
@@ -134,6 +146,78 @@ def _content_address(response: _InputResponse) -> str | None:
     """Accept only the canonical SHA-256 address from the server-owned immutable revision selection."""
     value = getattr(response.headers, "get", lambda _: None)(_CONTENT_ADDRESS_HEADER)
     return value if isinstance(value, str) and re.fullmatch(r"sha256:[a-f0-9]{64}", value) else None
+
+
+def validate_bundle(destination: Path, execute: Callable[[Sequence[str], Path, int], int] | None = None, database: Path = _VALIDATOR_DATABASE) -> tuple[dict[str, object], dict[str, object]]:
+    """Run only fixed offline checks over one extracted bundle and return completion-safe evidence."""
+    if execute is None:
+        execute = _run_command
+    _assert_dependency_policy(destination / "pyproject.toml")
+    _assert_no_plaintext_secrets(destination)
+    _assert_validator_layout(database)
+    test_checks = 0
+    for command in _VALIDATOR_COMMANDS:
+        if execute(command, destination, _VALIDATOR_TIMEOUT_SECONDS) != 0:
+            return _report(False, "offline validation check failed", test_checks + 1), _report(False, "offline scan was not completed", 0)
+        test_checks += 1
+    if execute(_MALWARE_COMMAND, destination, _VALIDATOR_TIMEOUT_SECONDS) != 0:
+        return _report(True, "format, type, and test checks passed", test_checks), _report(False, "offline malware scan found a problem", 3)
+    return _report(True, "format, type, and test checks passed", test_checks), _report(True, "dependency policy, secret scan, and offline malware scan passed", 3)
+
+
+def _assert_dependency_policy(project: Path) -> None:
+    """Reject every candidate dependency declaration until OpenCrane ships a pinned offline wheelhouse policy."""
+    try:
+        with project.open("rb") as source:
+            data = tomllib.load(source)
+    except (OSError, tomllib.TOMLDecodeError) as error:
+        raise RuntimeError("authoring bundle dependency policy could not be read") from error
+    project_table = data.get("project")
+    if not isinstance(project_table, dict) or _contains_dependency_declaration(data):
+        raise RuntimeError("authoring bundle declares unsupported dependencies")
+
+
+def _assert_no_plaintext_secrets(destination: Path) -> None:
+    """Reject straightforward credential assignments before untrusted tests are allowed to start."""
+    for source in destination.rglob("*"):
+        if source.is_file() and _SECRET_PATTERN.search(source.read_text(encoding="utf-8", errors="ignore")):
+            raise RuntimeError("authoring bundle contains a plaintext secret")
+
+
+def _assert_validator_layout(database: Path) -> None:
+    """Require the image-owned validator tools and a non-empty read-only signature database before scanning."""
+    if not all(Path(command[0]).is_file() and os.access(command[0], os.X_OK) for command in (*_VALIDATOR_COMMANDS, _MALWARE_COMMAND)) or not database.is_dir() or not any(path.is_file() and path.suffix in {".cvd", ".cld"} for path in database.iterdir()):
+        raise RuntimeError("offline validator image is not provisioned")
+
+
+def _run_command(command: Sequence[str], destination: Path, timeout: int) -> int:
+    """Run one fixed image-owned command without a shell, candidate arguments, captured output, or unbounded duration."""
+    try:
+        process = subprocess.Popen(tuple(command), cwd=destination, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, shell=False, start_new_session=True)
+        return process.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        process.wait()
+        return 1
+    except OSError:
+        return 1
+
+
+def _report(passed: bool, summary: str, checks_run: int) -> dict[str, object]:
+    """Create the small, non-sensitive evidence shape accepted by the terminal completion route."""
+    return {"passed": passed, "summary": summary, "checksRun": checks_run}
+
+
+def _contains_dependency_declaration(value: object) -> bool:
+    """Reject dependency metadata at every TOML nesting level, including Poetry-style tables and build-system requirements."""
+    if isinstance(value, dict):
+        return any(key in {"dependencies", "optional-dependencies", "requires", "dynamic"} or _contains_dependency_declaration(child) for key, child in value.items())
+    if isinstance(value, list):
+        return any(_contains_dependency_declaration(child) for child in value)
+    return False
 
 
 def _safe_member_path(value: str) -> str:
