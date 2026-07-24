@@ -54,6 +54,13 @@ caller input.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
+- `PrismaRootRunAuthoritySource` — revalidates an active service and its published revision at the
+  final admission fence, then fixes root-run lineage. It intentionally cannot admit a child run;
+  child lineage requires a dedicated locked parent authority.
+- `PrismaApprovedPersonaSource` — returns no persona for managed work and otherwise accepts only the
+  execution subject's active approved persona revision inside the final admission transaction.
+- `PrismaThreadContextSource` — freezes completed message identifiers only after proving the exact
+  active thread belongs to the selected service and includes the execution subject as a participant.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
