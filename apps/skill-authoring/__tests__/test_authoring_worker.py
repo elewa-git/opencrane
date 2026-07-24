@@ -129,6 +129,58 @@ class AuthoringWorkerTests(unittest.TestCase):
             with self.assertRaisesRegex(RuntimeError, "unsafe entry"):
                 _AUTHORING.extract_bundle(archive, directory / "oversized")
 
+    def test_runs_only_fixed_offline_validator_commands_after_dependency_and_secret_checks(self) -> None:
+        """A candidate cannot choose a command, add dependencies, or receive raw validator output in its report."""
+        with tempfile.TemporaryDirectory() as raw:
+            directory = pathlib.Path(raw)
+            (directory / "SKILL.md").write_text("# Example", encoding="utf-8")
+            (directory / "pyproject.toml").write_text("[project]\nname='example'\nversion='1.0.0'", encoding="utf-8")
+            (directory / "tests").mkdir()
+            calls: list[tuple[str, ...]] = []
+            tools = directory / "tools"
+            tools.mkdir()
+            database = directory / "database"
+            database.mkdir()
+            (database / "main.cvd").write_bytes(b"database")
+            original_commands = _AUTHORING._VALIDATOR_COMMANDS
+            original_malware = _AUTHORING._MALWARE_COMMAND
+            try:
+                _AUTHORING._VALIDATOR_COMMANDS = tuple((str(tools / f"tool-{index}"), "check") for index in range(3))
+                _AUTHORING._MALWARE_COMMAND = (str(tools / "scanner"), "scan")
+                for command in (*_AUTHORING._VALIDATOR_COMMANDS, _AUTHORING._MALWARE_COMMAND):
+                    path = pathlib.Path(command[0])
+                    path.write_text("tool", encoding="utf-8")
+                    path.chmod(0o700)
+                reports = _AUTHORING.validate_bundle(directory, lambda command, cwd, timeout: calls.append(tuple(command)) or 0, database)
+            finally:
+                _AUTHORING._VALIDATOR_COMMANDS = original_commands
+                _AUTHORING._MALWARE_COMMAND = original_malware
+            self.assertEqual(len(calls), 4)
+            self.assertEqual(reports, ({"passed": True, "summary": "format, type, and test checks passed", "checksRun": 3}, {"passed": True, "summary": "dependency policy, secret scan, and offline malware scan passed", "checksRun": 3}))
+
+    def test_rejects_candidate_dependencies_and_plaintext_secrets_before_tests_start(self) -> None:
+        """The initial policy is intentionally stricter than a networked package audit: candidates have no dependencies at all."""
+        with tempfile.TemporaryDirectory() as raw:
+            directory = pathlib.Path(raw)
+            (directory / "pyproject.toml").write_text("[project]\nname='example'\ndependencies=['requests']", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsupported dependencies"):
+                _AUTHORING.validate_bundle(directory)
+            (directory / "pyproject.toml").write_text("[project]\nname='example'", encoding="utf-8")
+            (directory / "skill.py").write_text("api_key = 'not-a-real-secret-but-long'", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "plaintext secret"):
+                _AUTHORING.validate_bundle(directory)
+
+    def test_rejects_nested_or_build_time_dependency_metadata(self) -> None:
+        """No alternate Python packaging table can bypass the initial zero-dependency policy."""
+        with tempfile.TemporaryDirectory() as raw:
+            project = pathlib.Path(raw) / "pyproject.toml"
+            project.write_text("[project]\nname='example'\n[build-system]\nrequires=['setuptools']", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsupported dependencies"):
+                _AUTHORING._assert_dependency_policy(project)
+            project.write_text("[project]\nname='example'\n[tool.poetry]\ndependencies={ requests = '^2.0' }", encoding="utf-8")
+            with self.assertRaisesRegex(RuntimeError, "unsupported dependencies"):
+                _AUTHORING._assert_dependency_policy(project)
+
 
 if __name__ == "__main__":
     unittest.main()

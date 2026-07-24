@@ -26,7 +26,7 @@ OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
- - `src/authoring_worker.py` — private, not-yet-invoked intake primitives that verify and safely extract a candidate bundle.
+ - `src/authoring_worker.py` — private, not-yet-invoked intake and offline-validator primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and return bounded evidence.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 - `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, resource, and
   lifecycle values remain controller-owned.
@@ -41,8 +41,11 @@ registered Pod UID. The worker receives no ArtifactStore endpoint, credential, o
 selects and streams only the immutable source artifact pinned on its assigned draft revision. The server
 refuses compressed candidate bundles larger than 16 MiB before it mints an ArtifactStore read lease,
 and returns the pinned SHA-256 address alongside the length so the future validator can verify the
-downloaded bytes. The admitted Job reserves at least 64 MiB of ephemeral `/tmp` space for bounded
-extraction and offline validation. This image does not author or execute a skill yet.
+downloaded bytes. The admitted Job reserves at least 128 MiB of ephemeral `/tmp` space: 16 MiB
+compressed input, 32 MiB extracted source, and validation work cannot safely share the old 64 MiB
+budget. The validator code is deliberately inactive while the image still lacks its digest-pinned
+scanner, compatible baked signature database, and fixed validator toolchain. It does not report a
+successful validation until an offline image smoke test proves those ingredients.
 
 ## Dependency direction
 

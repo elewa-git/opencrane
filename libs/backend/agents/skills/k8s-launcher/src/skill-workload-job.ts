@@ -9,7 +9,7 @@ import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job.js";
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
 
 /** Minimum scratch capacity for safe authoring archive extraction and offline validation output. */
-const _MIN_AUTHORING_SCRATCH_BYTES = 67_108_864n;
+const _MIN_AUTHORING_SCRATCH_BYTES = 134_217_728n;
 
 /** Maximum wall-clock lifetime granted to one untrusted governed-skill Job. */
 const _MAX_ACTIVE_DEADLINE_SECONDS = 900;

@@ -57,6 +57,6 @@ describe("governed skill workload Job", function _describeJob()
 	{
 		const assignment = { ..._Assignment(), namespace: "opencrane-skill-authoring" };
 		expect(function _smallScratch() { __BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "32Mi" }); }).toThrow(/bounded resources/);
-		expect(__BuildGovernedSkillWorkloadJob(assignment, _AuthoringProfile()).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "64Mi" } })]));
+		expect(__BuildGovernedSkillWorkloadJob(assignment, { ..._AuthoringProfile(), scratchSize: "128Mi" }).spec?.template.spec?.volumes).toEqual(expect.arrayContaining([expect.objectContaining({ name: "scratch", emptyDir: { sizeLimit: "128Mi" } })]));
 	});
 });
