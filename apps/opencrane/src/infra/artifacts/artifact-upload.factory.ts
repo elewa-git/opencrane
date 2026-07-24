@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/agents/artifacts";
 import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 
@@ -40,6 +40,27 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 			return { receipt: body.receipt };
 		},
 	};
+}
+
+/** Build the server-only HTTP client that retrieves bytes covered by one immutable read lease. */
+export function _CreateArtifactServiceReadPort(serviceUrl: string): { read(lease: string, contentAddress: string): Promise<Response> }
+{
+	return {
+		async read(lease: string, contentAddress: string): Promise<Response>
+		{
+			if (!/^sha256:[a-f0-9]{64}$/u.test(contentAddress)) throw new Error("artifact read requires a canonical content address");
+			const response = await fetch(`${serviceUrl}/v1/artifacts/content/${contentAddress.slice("sha256:".length)}`, { redirect: "error", headers: { "x-opencrane-artifact-lease": lease } });
+			if (!response.ok || response.body === null) throw new Error(`artifact service read failed with ${response.status}`);
+			return response;
+		},
+	};
+}
+
+/** Mint one read lease from server-owned mounted key material; workers never receive this token. */
+export function _CreateArtifactReadLeaseSigner(environment: NodeJS.ProcessEnv = process.env): (claims: Parameters<typeof __SignArtifactReadLease>[0]) => string
+{
+	const leasePrivateKey = _ReadPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
+	return function _SignReadLease(claims): string { return __SignArtifactReadLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); };
 }
 
 /** Require a credential-free, cluster-local HTTP endpoint. */
