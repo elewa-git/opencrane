@@ -28,6 +28,7 @@ import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
+import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -711,6 +712,12 @@ export const spec = {
         required: ["insights"],
         properties: { insights: { type: "array", minItems: 3, maxItems: 5, items: { type: "object", additionalProperties: false, required: ["answerId", "statement"], properties: { answerId: { type: "string" }, statement: { type: "string", minLength: 1, maxLength: 4000 } } } } },
       },
+      PersonalConfigurationDecisionInput: {
+        oneOf: [
+          { type: "object", additionalProperties: false, required: ["decision"], properties: { decision: { type: "string", const: "accepted" } } },
+          { type: "object", additionalProperties: false, required: ["decision", "rejectionReason"], properties: { decision: { type: "string", const: "rejected" }, rejectionReason: { type: "string", minLength: 1, maxLength: 200 } } },
+        ],
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -796,6 +803,7 @@ export const spec = {
     ..._AuditOpenapiPaths,
     ..._MetricsOpenapiPaths,
     ..._PersonaOnboardingOpenapiPaths,
+    ..._PersonalConfigurationOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

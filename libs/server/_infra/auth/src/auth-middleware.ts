@@ -63,5 +63,5 @@ function _resolveAuth(
   }
 
   // 4. A real deployment requires a verified OIDC browser session.
-  res.status(401).json({ error: "OIDC session required" });
+  res.status(401).json({ error: "OIDC session required", code: "authentication_required" });
 }

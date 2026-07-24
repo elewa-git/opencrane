@@ -19,10 +19,11 @@ snapshot and only while the recorded active revisions still match.
 **In this flow:** [conversations](../../conversations/main/README.md) · [personas](../../personas/main/README.md) · [execution inputs](../../../execution/inputs/main/README.md)
 
 The invariant is that a proposal is durable provenance, not mutable session state. Missing or
-cross-owner source coordinates fail closed. This first foundation does not itself approve, apply,
-or expose a browser/API control. Its first-party `upgrade_session` descriptor is always callable in
-a personal conversation, but its call records only a proposed change in this same journal; it never
-means the request is already user-approved or applied.
+cross-owner source coordinates fail closed. The public owner-decision API may mark a proposal
+`Accepted` or `Rejected`, but cannot apply it or mutate a current run. Its first-party
+`upgrade_session` descriptor is always callable in a personal conversation, but its call records
+only a proposed change in this same journal; it never means the request is already user-approved or
+applied.
 
 ## Public surface
 
@@ -32,6 +33,9 @@ means the request is already user-approved or applied.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
 - `__DecidePersonalConfigurationChange` records the owner's `Accepted` or `Rejected` decision but
   never applies a patch itself.
+- `__CreatePersonalConfigurationDecisionRouter` is the public, authenticated decision API. It
+  derives the OIDC subject and host silo in app composition, requires active membership, and accepts
+  only an exact accept or reject decision for the caller's own opaque change identifier.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview

@@ -1167,6 +1167,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/personal-configuration-changes/{changeId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Accept or reject the caller's future-session configuration proposal */
+        post: operations["decidePersonalConfigurationChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1846,6 +1863,14 @@ export interface components {
                 answerId: string;
                 statement: string;
             }[];
+        };
+        PersonalConfigurationDecisionInput: {
+            /** @constant */
+            decision: "accepted";
+        } | {
+            /** @constant */
+            decision: "rejected";
+            rejectionReason: string;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -5392,6 +5417,80 @@ export interface operations {
             };
             /** @description Draft evidence no longer permits approval. */
             409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decidePersonalConfigurationChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PersonalConfigurationDecisionInput"];
+            };
+        };
+        responses: {
+            /** @description Owner decision recorded; the accepted change still applies only during later snapshot materialisation. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        decision: "accepted" | "rejected";
+                    };
+                };
+            };
+            /** @description Invalid exact decision input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No active membership for the host silo. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Change unavailable or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Change has already been decided. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Membership or configuration authority unavailable. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
