@@ -23,6 +23,12 @@ export interface SkillWorkloadJobProfile
 	readonly serviceAccountName: string;
 	/** Audience for the sole projected capability token mounted into the Job. */
 	readonly capabilityTokenAudience: string;
+	/** Fixed internal OpenCrane base path for the acknowledgement-only bootstrap exchange. */
+	readonly bootstrapUrl: string;
+	/** Fixed absolute path of the rotating projected capability token. */
+	readonly capabilityTokenPath: string;
+	/** Fixed absolute path of the read-only downward-API bootstrap reference. */
+	readonly bootstrapReferencePath: string;
 	/** Bounded non-authoritative scratch volume quantity. */
 	readonly scratchSize: string;
 	/** Maximum wall-clock lifetime of the one-shot Job. */

@@ -11,6 +11,7 @@ agent controller and capability-bound policy.
 
 ## Public surface
 
+- `deploy/Dockerfile` — builds the tool-runner worker image from the shared acknowledgement client.
 - Helm chart — restricted namespace, `tool-runner-default` ServiceAccount, quota, and default-deny policy.
 
 ## Boundary
@@ -19,11 +20,12 @@ The agent controller remains the only Kubernetes mutator. No worker gets automat
 credentials, and default-deny means a future execution path must declare every permitted destination.
 The only current exception is cluster DNS plus the OpenCrane internal listener for a one-use bootstrap
 acknowledgement. The endpoint TokenReviews the registered Pod identity and returns no capability or
-workload data.
+workload data. This image does not execute tenant tools yet.
 
 ## Dependency direction
 
-An app entrypoint owns only this workload's deployment contract; it imports no libraries.
+This app owns the tool-runner image root and deployment contract. Its image copies the dependency-free
+skill worker module; no library imports this app.
 
 ## See also
 

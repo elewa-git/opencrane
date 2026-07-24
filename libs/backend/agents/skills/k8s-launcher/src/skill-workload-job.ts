@@ -15,6 +15,15 @@ const _MAX_CPU_MILLICORES = 2_000;
 /** Maximum memory limit granted to one untrusted governed-skill Job in bytes. */
 const _MAX_MEMORY_BYTES = 2_147_483_648n;
 
+/** Read-only path of the rotating projected capability token. */
+const _CAPABILITY_TOKEN_PATH = "/var/run/opencrane/tokens/capability.token";
+
+/** Read-only path of the opaque bootstrap reference projected through the downward API. */
+const _BOOTSTRAP_REFERENCE_PATH = "/var/run/opencrane/bootstrap/reference";
+
+/** Pod annotation that holds the opaque, non-secret bootstrap reference. */
+const _BOOTSTRAP_REFERENCE_ANNOTATION = "opencrane.ai/capability-reference";
+
 /** Validate an opaque identifier before it is projected into Kubernetes metadata. */
 function _IsBoundedCoordinate(value: string): boolean
 {
@@ -39,6 +48,21 @@ function _ParseCpuMillis(value: string): number | null
 	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 
+/** Validate the fixed in-cluster internal bootstrap base URL and its legal TCP port. */
+function _IsBootstrapUrl(value: string): boolean
+{
+	if (!/^http:\/\/[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.svc\.cluster\.local:[1-9][0-9]{0,4}\/api\/internal\/agent-runtime$/.test(value)) return false;
+	try
+	{
+		const port = Number(new URL(value).port);
+		return Number.isSafeInteger(port) && port >= 1 && port <= 65_535;
+	}
+	catch
+	{
+		return false;
+	}
+}
+
 /** Validate deployment-owned limits before a controller can submit the worker Job. */
 function _AssertProfile(profile: SkillWorkloadJobProfile): void
 {
@@ -50,9 +74,9 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || profile.namespace !== expectedNamespace || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
+	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace !== expectedNamespace || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
 	{
-		throw new Error("governed skill Job profile requires fixed audience, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
+		throw new Error("governed skill Job profile requires fixed bootstrap endpoint and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}
 }
 
@@ -82,7 +106,7 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 	// 2. Derive metadata without placing source, artifact bytes, arguments, or credentials in the manifest.
 	const name = _JobName(assignment, profile);
 	const component = profile.kind === "authoring" ? "skill-authoring" : "tool-runner";
-	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, "opencrane.ai/capability-reference": assignment.capabilityReference };
+	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, [_BOOTSTRAP_REFERENCE_ANNOTATION]: assignment.capabilityReference };
 
 	// 3. Return a zero-retry, terminally cleaned Job; its worker exchanges the opaque reference at runtime.
 	return {
@@ -105,8 +129,8 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 					restartPolicy: "Never",
 					terminationGracePeriodSeconds: 0,
 					securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } },
-					containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_CAPABILITY_REFERENCE", valueFrom: { fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } } }, { name: "POD_UID", valueFrom: { fieldRef: { fieldPath: "metadata.uid" } } }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
-					volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
+					containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_BOOTSTRAP_URL", value: profile.bootstrapUrl }, { name: "OPENCRANE_SKILL_TOKEN_PATH", value: profile.capabilityTokenPath }, { name: "OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH", value: profile.bootstrapReferencePath }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "bootstrap-reference", mountPath: "/var/run/opencrane/bootstrap", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
+					volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "bootstrap-reference", downwardAPI: { defaultMode: 0o440, items: [{ path: "reference", fieldRef: { fieldPath: `metadata.annotations['${_BOOTSTRAP_REFERENCE_ANNOTATION}']` } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
 				},
 			},
 		},

@@ -8,6 +8,7 @@ CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
+OVERRIDDEN_INTERNAL_URL="$(mktemp)"
 ROLE="$(mktemp)"
 BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
@@ -17,7 +18,7 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$OVERRIDDEN_INTERNAL_URL" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 
 # The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
 # this contract always renders the source template under test without refreshing remote dependencies.
@@ -41,6 +42,7 @@ render_enabled() {
 
 render_enabled > "$MANIFEST"
 render_enabled --set agentController.enabled=false > "$DISABLED"
+render_enabled --set-string agentController.openCraneInternalUrl=http://override.example:8081 > "$OVERRIDDEN_INTERNAL_URL"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
@@ -194,7 +196,21 @@ grep -Fq "object.spec.selector.matchLabels.all" "$ADMISSION"
 grep -Fq "'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name'" "$ADMISSION"
 grep -Fq "object.spec.template == oldObject.spec.template" "$ADMISSION"
 grep -Fq "governed-skill-namespaces" "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'POD_UID'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env.size() == 3" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$ADMISSION"
+grep -Fq "metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
+if grep -Fq 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' "$ADMISSION" || grep -Fq "env[1].name == 'POD_UID'" "$ADMISSION"; then
+  echo "admission retains an environment-projected bootstrap reference or unused Pod UID" >&2
+  exit 1
+fi
+grep -Fq 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' "$OVERRIDDEN_INTERNAL_URL"
+if grep -Fq 'http://override.example:8081/api/internal/agent-runtime' "$OVERRIDDEN_INTERNAL_URL" && grep -A50 -F "name: governed-skill-workload" "$OVERRIDDEN_INTERNAL_URL" | grep -Fq 'http://override.example:8081/api/internal/agent-runtime'; then
+  echo "governed skill bootstrap inherited the mutable controller endpoint" >&2
+  exit 1
+fi
 grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-skill-authoring'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-tool-runner'" "$ADMISSION"
 grep -Fq 'validationActions: [Deny]' "$MANIFEST"

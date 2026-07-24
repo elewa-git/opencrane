@@ -4,6 +4,7 @@
 {{- $toolRunnerNamespace := (index .Values "opencrane-tool-runner").toolRunner.namespace -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
+{{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $controllerUsername := printf "system:serviceaccount:%s:%s" .Release.Namespace $controllerName -}}
 {{- $suffix := printf "%s/%s" .Release.Namespace .Release.Name | sha256sum | trunc 10 -}}
 {{- $policyName := printf "%s-skill-workloads-%s" (include "opencrane.fullname" .) $suffix | trunc 63 | trimSuffix "-" -}}
@@ -92,26 +93,36 @@ spec:
            quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.limits.memory | toJson }})) == 0)) &&
          (!has(object.spec.template.spec.containers[0].command) || object.spec.template.spec.containers[0].command.size() == 0) &&
          (!has(object.spec.template.spec.containers[0].args) || object.spec.template.spec.containers[0].args.size() == 0) &&
-         object.spec.template.spec.containers[0].env.size() == 2 &&
-         object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' &&
-         object.spec.template.spec.containers[0].env[0].valueFrom.fieldRef.fieldPath == "metadata.annotations['opencrane.ai/capability-reference']" &&
-         object.spec.template.spec.containers[0].env[1].name == 'POD_UID' &&
-         object.spec.template.spec.containers[0].env[1].valueFrom.fieldRef.fieldPath == 'metadata.uid' &&
-         object.spec.template.spec.volumes.size() == 2 && object.spec.template.spec.volumes[0].name == 'capability-token' &&
+         object.spec.template.spec.containers[0].env.size() == 3 &&
+         object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL' &&
+         object.spec.template.spec.containers[0].env[0].value == {{ $skillBootstrapUrl | toJson }} &&
+         object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH' &&
+         object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/capability.token' &&
+         object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH' &&
+         object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/bootstrap/reference' &&
+         object.spec.template.spec.volumes.size() == 3 && object.spec.template.spec.volumes[0].name == 'capability-token' &&
          object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
          object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
          object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'capability.token' &&
          object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
-         object.spec.template.spec.volumes[1].name == 'scratch' &&
-         has(object.spec.template.spec.volumes[1].emptyDir) && !has(object.spec.template.spec.volumes[1].hostPath) &&
-         ((object.metadata.namespace == {{ $authoringNamespace | toJson }} && quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) ||
-          (object.metadata.namespace == {{ $toolRunnerNamespace | toJson }} && quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize | toJson }})) == 0)) &&
-         object.spec.template.spec.containers[0].volumeMounts.size() == 2 &&
+         object.spec.template.spec.volumes[1].name == 'bootstrap-reference' &&
+         object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+         object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+         object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+         object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/capability-reference']" &&
+         object.spec.template.spec.volumes[2].name == 'scratch' &&
+         has(object.spec.template.spec.volumes[2].emptyDir) && !has(object.spec.template.spec.volumes[2].hostPath) &&
+         ((object.metadata.namespace == {{ $authoringNamespace | toJson }} && quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) ||
+          (object.metadata.namespace == {{ $toolRunnerNamespace | toJson }} && quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize | toJson }})) == 0)) &&
+         object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
          object.spec.template.spec.containers[0].volumeMounts[0].name == 'capability-token' &&
          object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
          object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
-         object.spec.template.spec.containers[0].volumeMounts[1].name == 'scratch' &&
-         object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/tmp')
+         object.spec.template.spec.containers[0].volumeMounts[1].name == 'bootstrap-reference' &&
+         object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
+         object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+         object.spec.template.spec.containers[0].volumeMounts[2].name == 'scratch' &&
+         object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/tmp')
       message: governed skill Job execution, token projection, Pod identity, and scratch shape must be fixed
     - expression: >-
         request.operation == 'CREATE' ||

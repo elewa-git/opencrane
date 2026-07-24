@@ -29,8 +29,10 @@ already projected into the Job and creates the one-use bootstrap record. This or
 safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
 cannot attach a different Job or replace its reference.
 
-It does not create Kubernetes resources, exchange worker capabilities, read ArtifactStore bytes, or
-complete tool invocations. Those responsibilities remain downstream of the durable authority.
+It does not create Kubernetes resources, grant a worker capability, read ArtifactStore bytes, or
+complete tool invocations. It does expose the narrow one-use acknowledgement route: the shared worker
+can consume its hash-addressed record only after TokenReview confirms the exact registered Pod. All
+execution and result responsibilities remain downstream of this durable authority.
 
 ## Public surface
 

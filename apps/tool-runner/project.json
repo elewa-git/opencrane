@@ -5,7 +5,9 @@
   "sourceRoot": "apps/tool-runner",
   "tags": ["type:app", "layer:entrypoint", "scope:tool-runner"],
   "targets": {
+    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -c 'import ast, pathlib; ast.parse(pathlib.Path(\"libs/backend/agents/skills/worker/src/bootstrap.py\").read_text())'", "cwd": "." } },
     "lint": { "executor": "nx:run-commands", "options": { "command": "helm template tool-runner helm >/dev/null", "cwd": "apps/tool-runner" } },
-    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/tool-runner/tests/helm-contract.sh", "cwd": "." } }
+    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/tool-runner/tests/helm-contract.sh", "cwd": "." } },
+    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/tool-runner/deploy/Dockerfile ." } }
   }
 }

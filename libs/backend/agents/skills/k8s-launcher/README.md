@@ -39,7 +39,9 @@ opaque capability reference for later exchange by a worker protocol.
 ## Boundary
 
 The agent controller consumes this builder. It does not make a tool executable, contact the
-ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
+ArtifactStore, or provide a result protocol. It projects the opaque bootstrap reference only as a
+read-only downward-API file and pins the one allowed acknowledgement endpoint; the worker transport
+itself belongs to the separate worker module.
 Malformed identity, image, lifetime, namespace, resource, or bootstrap-reference inputs fail before
 Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so durable workload
 identifiers are never copied into the Job annotation.
