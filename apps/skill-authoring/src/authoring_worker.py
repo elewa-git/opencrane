@@ -6,6 +6,7 @@ bootstrap client from becoming a tool-runner dependency.
 """
 
 import hashlib
+import json
 import os
 import re
 import secrets
@@ -36,6 +37,7 @@ _VALIDATOR_COMMANDS = (
 )
 _MALWARE_COMMAND = ("/opt/opencrane/bin/clamscan", "--database=/opt/opencrane/clamav-db", "--infected", "--no-summary", "--recursive", ".")
 _SECRET_PATTERN = re.compile(r"(?i)(?:api[_-]?key|secret|token|password)\s*[=:]\s*['\"][^'\"]{8,}['\"]")
+_MAX_COMPLETION_BODY_BYTES = 4_096
 
 
 class _InputResponse(Protocol):
@@ -54,6 +56,12 @@ def _input_url(base_url: str, workload_id: str) -> str:
         raise RuntimeError("authoring workload identifier is invalid")
     bootstrap._acknowledgement_url(base_url)
     return f"{base_url}/skill-authoring-workloads/{workload_id}/input"
+
+
+def _completion_url(base_url: str) -> str:
+    """Derive the sole terminal authoring completion URL after validating the deployment-owned internal base URL."""
+    bootstrap._acknowledgement_url(base_url)
+    return f"{base_url}/skill-authoring-workloads:complete"
 
 
 def download_bundle(base_url: str, workload_id: str, token_path: str, destination: Path, open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> Path:
@@ -165,6 +173,29 @@ def validate_bundle(destination: Path, execute: Callable[[Sequence[str], Path, i
     return _report(True, "format, type, and test checks passed", test_checks), _report(True, "dependency policy, secret scan, and offline malware scan passed", 3)
 
 
+def complete_workload(base_url: str, workload_id: str, token_path: str, command: dict[str, object], open_request: Callable[[Request, float], _InputResponse] = bootstrap._open) -> None:
+    """Send one exact bounded terminal outcome using a freshly read projected token and reject every ambiguous response."""
+    if not bootstrap._workload_id(workload_id) or not _completion_command(command, workload_id):
+        raise RuntimeError("authoring completion command is invalid")
+    token = bootstrap._read_single_line(token_path, "capability token")
+    request = Request(_completion_url(base_url), data=json.dumps(command, separators=(",", ":")).encode("utf-8"), headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json", "Accept": "application/json"}, method="POST")
+    try:
+        response = open_request(request, 10.0)
+        body = response.read(_MAX_COMPLETION_BODY_BYTES + 1)
+        if len(body) > _MAX_COMPLETION_BODY_BYTES:
+            raise RuntimeError("authoring completion response exceeded its bound")
+        payload = json.loads(body.decode("utf-8"))
+    except HTTPError as error:
+        try:
+            raise RuntimeError(f"authoring completion was denied ({error.code})") from error
+        finally:
+            error.close()
+    except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise RuntimeError("authoring completion is unavailable") from error
+    if response.status != 200 or payload != {"completed": True}:
+        raise RuntimeError("authoring completion was rejected")
+
+
 def _assert_dependency_policy(project: Path) -> None:
     """Reject every candidate dependency declaration until OpenCrane ships a pinned offline wheelhouse policy."""
     try:
@@ -218,6 +249,25 @@ def _contains_dependency_declaration(value: object) -> bool:
     if isinstance(value, list):
         return any(_contains_dependency_declaration(child) for child in value)
     return False
+
+
+def _completion_command(command: dict[str, object], workload_id: str) -> bool:
+    """Keep completion payloads within the server-owned two-outcome contract and never forward raw validator output."""
+    if command.get("workloadId") != workload_id:
+        return False
+    if command.get("outcome") == "failed":
+        failure_code = command.get("failureCode")
+        return set(command) == {"workloadId", "outcome", "failureCode"} and isinstance(failure_code, str) and re.fullmatch(r"[a-z][a-z0-9_]{0,63}", failure_code) is not None
+    if command.get("outcome") == "succeeded":
+        return set(command) == {"workloadId", "outcome", "testReport", "scanResult"} and _completion_report(command.get("testReport")) and _completion_report(command.get("scanResult"))
+    return False
+
+
+def _completion_report(value: object) -> bool:
+    """Validate the exact bounded report shape enforced by the completion router before any network call starts."""
+    if not isinstance(value, dict) or set(value) != {"passed", "summary", "checksRun"}:
+        return False
+    return value.get("passed") is True and isinstance(value.get("summary"), str) and 0 < len(value["summary"]) <= 2_000 and not any(character in value["summary"] for character in "\x00\n\r") and type(value.get("checksRun")) is int and 0 <= value["checksRun"] <= 10_000
 
 
 def _safe_member_path(value: str) -> str:
