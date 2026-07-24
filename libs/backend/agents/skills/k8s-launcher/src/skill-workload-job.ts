@@ -60,9 +60,9 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 /** Validate controller-supplied durable coordinates before they become labels or annotations. */
 function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): void
 {
-	if (![assignment.jobId, assignment.siloId, assignment.namespace, assignment.capabilityReference].every(function _isValid(value): boolean { return _IsBoundedCoordinate(value); }) || assignment.namespace !== profile.namespace)
+	if (![assignment.jobId, assignment.siloId, assignment.namespace, assignment.capabilityReference].every(function _isValid(value): boolean { return _IsBoundedCoordinate(value); }) || !/^skill-bootstrap-v1_[a-f0-9]{64}$/.test(assignment.capabilityReference) || assignment.namespace !== profile.namespace)
 	{
-		throw new Error("governed skill Job assignment requires bounded coordinates and its deployment-owned namespace");
+		throw new Error("governed skill Job assignment requires bounded coordinates, an opaque bootstrap reference, and its deployment-owned namespace");
 	}
 }
 

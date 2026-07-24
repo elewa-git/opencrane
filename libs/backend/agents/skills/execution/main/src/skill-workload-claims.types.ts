@@ -26,6 +26,10 @@ export interface SkillWorkloadAssignmentCommand
 	readonly deliveryCount: number;
 	/** API-issued immutable Kubernetes Job UID. */
 	readonly workloadUid: string;
+	/** Opaque reference received transiently from the controller and persisted only as a hash. */
+	readonly bootstrapReference: string;
+	/** Deployment-owned namespace selected by the reviewed controller profile. */
+	readonly namespace: string;
 }
 
 /** Persistence authority for controller-only workload claim and suspended-Job assignment. */

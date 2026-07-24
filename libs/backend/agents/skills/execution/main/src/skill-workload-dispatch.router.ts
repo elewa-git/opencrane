@@ -120,10 +120,10 @@ function _ParseAssignmentCommand(value: unknown): AgentControllerSkillWorkloadAs
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
 	const body = value as Record<string, unknown>;
-	const expectedKeys = ["claimedAt", "deliveryCount", "workloadUid"];
+	const expectedKeys = ["claimedAt", "deliveryCount", "workloadUid", "bootstrapReference", "namespace"];
 	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _HasExpectedKey(key): boolean { return key in body; })) return null;
-	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["workloadUid"] !== "string") return null;
-	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], workloadUid: body["workloadUid"] };
+	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["workloadUid"] !== "string" || typeof body["bootstrapReference"] !== "string" || typeof body["namespace"] !== "string") return null;
+	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], workloadUid: body["workloadUid"], bootstrapReference: body["bootstrapReference"], namespace: body["namespace"] };
 }
 
 /** Write one bounded, non-sensitive internal problem response. */

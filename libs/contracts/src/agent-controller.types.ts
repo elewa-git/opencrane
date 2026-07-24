@@ -45,6 +45,10 @@ export interface AgentControllerSkillWorkloadAssignmentCommand
 	readonly deliveryCount: number;
 	/** Immutable Kubernetes UID of the controller-created suspended Job. */
 	readonly workloadUid: string;
+	/** Opaque stable reference projected into the Job and stored only as a database hash. */
+	readonly bootstrapReference: string;
+	/** Deployment-owned namespace selected by the controller's reviewed workload profile. */
+	readonly namespace: string;
 }
 
 /** Narrow desired-state projection needed to build one suspended runtime Job. */
