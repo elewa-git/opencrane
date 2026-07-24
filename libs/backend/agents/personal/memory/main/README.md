@@ -46,6 +46,9 @@ idempotency key, while a retired dataset or a conflicting correction fails close
 - `MemoryFactSource` — the one-of-three provenance reference (artifact revision · message · explicit statement).
 - `AtomicRecordMemoryFactResult` — the raw persistence outcome the repository returns.
 - `MemoryCatalogRepository` — the persistence port a caller must implement (or inject).
+- `PrismaMemoryScopeSource` — the admission-time adapter that freezes only active, consented facts
+  recorded by the personal-run owner. Its policy is explicitly `pinned-only`: this slice never gives
+  the runtime a broad dataset search capability.
 
 ## Boundary
 
