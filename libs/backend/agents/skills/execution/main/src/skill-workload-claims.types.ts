@@ -30,6 +30,32 @@ export interface SkillWorkloadAssignmentCommand
 	readonly bootstrapReference: string;
 }
 
+/** Database-fenced release claim for one already assigned governed skill Job. */
+export interface SkillWorkloadReleaseClaim
+{
+	/** Stable workload identifier. */
+	readonly workloadId: string;
+	/** Immutable Job UID that Kubernetes must release. */
+	readonly workloadUid: string;
+	/** Database-issued release-claim instant. */
+	readonly releaseClaimedAt: string;
+	/** Monotonic release generation that fences stale controllers. */
+	readonly releaseDeliveryCount: number;
+	/** Absolute database-derived release-claim expiry. */
+	readonly expiresAt: string;
+}
+
+/** Exact Kubernetes release evidence committed only after the Job patch succeeds. */
+export interface SkillWorkloadReleaseCommand
+{
+	/** Exact release claim instant returned by the authority. */
+	readonly releaseClaimedAt: string;
+	/** Exact release generation returned by the authority. */
+	readonly releaseDeliveryCount: number;
+	/** Immutable Kubernetes UID observed during release. */
+	readonly workloadUid: string;
+}
+
 /** Persistence authority for controller-only workload claim and suspended-Job assignment. */
 export interface SkillWorkloadClaimsRepository
 {
@@ -37,4 +63,8 @@ export interface SkillWorkloadClaimsRepository
 	claimNextAtomically(): Promise<SkillWorkloadClaim | null>;
 	/** Binds one exact claim generation to the Kubernetes-issued immutable Job UID. */
 	commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">;
+	/** Claims one assigned, bootstrap-ready Job for a fenced Kubernetes unsuspend operation. */
+	claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>;
+	/** Records an exact successful unsuspend or its idempotent replay. */
+	commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
 }

@@ -3,6 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type AgentControllerSkillWorkloadAssignmentCommand } from "@opencrane/contracts";
 
 import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types.js";
+import type { SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
 /**
  * Build the controller-authenticated internal API for governed skill workloads.
@@ -75,6 +76,61 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 		}
 	});
 
+	router.post("/skill-workloads:release-claim", async function _ClaimRelease(request: Request, response: Response): Promise<void>
+	{
+		if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+		{
+			_RespondProblem(response, 401, "controller_identity_denied");
+			return;
+		}
+		try
+		{
+			const claim = await dependencies.repository.claimNextReleaseAtomically();
+			if (claim === null)
+			{
+				response.status(204).end();
+				return;
+			}
+			response.status(200).json(claim);
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "agent_controller.skill_workload_release_claim" }, "Agent-controller skill workload release claim failed");
+			_RespondProblem(response, 503, "skill_workload_authority_unavailable");
+		}
+	});
+
+	router.put("/skill-workloads/:workloadId/release", async function _Release(request: Request, response: Response): Promise<void>
+	{
+		if (!await _IsController(request, dependencies))
+		{
+			_RespondProblem(response, 401, "controller_identity_denied");
+			return;
+		}
+		const command = _ParseReleaseCommand(request.body);
+		const workloadId = request.params["workloadId"];
+		if (command === null || typeof workloadId !== "string" || workloadId.length === 0)
+		{
+			_RespondProblem(response, 400, "invalid_release");
+			return;
+		}
+		try
+		{
+			const outcome = await dependencies.repository.commitReleaseAtomically(workloadId, command);
+			if (outcome === "conflict")
+			{
+				_RespondProblem(response, 409, "stale_or_conflicting_release");
+				return;
+			}
+			response.status(200).json({ outcome, workloadId, workloadUid: command.workloadUid });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "agent_controller.skill_workload_release" }, "Agent-controller skill workload release commit failed");
+			_RespondProblem(response, 503, "skill_workload_authority_unavailable");
+		}
+	});
+
 	return router;
 }
 
@@ -118,6 +174,17 @@ function _ParseAssignmentCommand(value: unknown): AgentControllerSkillWorkloadAs
 	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _HasExpectedKey(key): boolean { return key in body; })) return null;
 	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["workloadUid"] !== "string" || typeof body["bootstrapReference"] !== "string") return null;
 	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], workloadUid: body["workloadUid"], bootstrapReference: body["bootstrapReference"] };
+}
+
+/** Parse the exact release fence without accepting controller-selected policy or expiry. */
+function _ParseReleaseCommand(value: unknown): SkillWorkloadReleaseCommand | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const body = value as Record<string, unknown>;
+	const expectedKeys = ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid"];
+	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _hasExpectedKey(key): boolean { return key in body; })) return null;
+	if (typeof body["releaseClaimedAt"] !== "string" || typeof body["releaseDeliveryCount"] !== "number" || typeof body["workloadUid"] !== "string") return null;
+	return { releaseClaimedAt: body["releaseClaimedAt"], releaseDeliveryCount: body["releaseDeliveryCount"], workloadUid: body["workloadUid"] };
 }
 
 /** Write one bounded, non-sensitive internal problem response. */
