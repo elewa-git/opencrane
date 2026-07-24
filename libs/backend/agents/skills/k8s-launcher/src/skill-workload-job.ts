@@ -89,6 +89,7 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 		kind: "Job",
 		metadata: { name, namespace: assignment.namespace, labels: { "app.kubernetes.io/name": `opencrane-${component}`, "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
 		spec: {
+			suspend: true,
 			backoffLimit: 0,
 			completions: 1,
 			parallelism: 1,
