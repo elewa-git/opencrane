@@ -26,7 +26,8 @@ OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
- - `src/authoring_worker.py` — private, not-yet-invoked intake, offline-validator, and terminal-completion primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and can submit only bounded success evidence or a stable failure code to the fixed internal completion route.
+- `deploy/Dockerfile` — builds an inactive one-shot worker image from immutable ClamAV and Python bases. It carries a hash-locked formatter/type/test toolchain and a read-only copied malware-signature database. It starts neither the upstream FreshClam updater nor ClamD scanner daemon.
+- `src/authoring_worker.py` — private, not-yet-invoked intake, offline-validator, and terminal-completion primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and can submit only bounded success evidence or a stable failure code to the fixed internal completion route.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 - `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, resource, and
   lifecycle values remain controller-owned.
@@ -43,9 +44,18 @@ refuses compressed candidate bundles larger than 16 MiB before it mints an Artif
 and returns the pinned SHA-256 address alongside the length so the future validator can verify the
 downloaded bytes. The admitted Job reserves at least 128 MiB of ephemeral `/tmp` space: 16 MiB
 compressed input, 32 MiB extracted source, and validation work cannot safely share the old 64 MiB
-budget. The validator code is deliberately inactive while the image still lacks its digest-pinned
-scanner, compatible baked signature database, and fixed validator toolchain. It does not report a
-successful validation until an offline image smoke test proves those ingredients.
+budget. The authoring Job also reserves 3 GiB and caps at 4 GiB of memory because the pinned ClamAV
+signature engine must load before it can scan. The validator code remains deliberately inactive until
+a release promotes this tested image by its final digest into the controller profile. It cannot report
+successful validation before that promotion.
+
+The `container` target builds the image and proves that `clamscan`, the three fixed validator tools,
+and its read-only database work without networking for UID 65532. It scans both a clean fixture and
+the EICAR test signature, and proves no updater or scanner daemon is running. Image promotion also
+needs the resulting final image digest in the controller profile;
+the Dockerfile's source digests are not a substitute for that release digest.
+The database never updates in a running Job: refresh it only by building, smoke-testing, and promoting
+a new pinned image.
 
 ## Dependency direction
 

@@ -5,4 +5,4 @@ skillAuthoring:
     pods: "10"
     jobs: "10"
     cpu: "2"
-    memory: 2Gi
+    memory: 4Gi

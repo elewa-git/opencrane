@@ -14,8 +14,8 @@
 {{- if not (regexMatch "^([1-9][0-9]?[0-9]?m|1|2)$" (toString $v.quota.cpu)) -}}
 {{- fail "skillAuthoring.quota.cpu must be positive and no greater than 2 cores" -}}
 {{- end -}}
-{{- if not (regexMatch "^([1-9][0-9]?[0-9]?Mi|1Gi|2Gi)$" (toString $v.quota.memory)) -}}
-{{- fail "skillAuthoring.quota.memory must be positive and no greater than 2Gi" -}}
+{{- if not (regexMatch "^([1-9][0-9]?[0-9]?Mi|[1-4]Gi)$" (toString $v.quota.memory)) -}}
+{{- fail "skillAuthoring.quota.memory must be positive and no greater than 4Gi" -}}
 {{- end -}}
 apiVersion: v1
 kind: Namespace
