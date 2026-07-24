@@ -33,6 +33,10 @@ export function _LoadOperatorConfig(): OpenClawTenantOperatorConfig
     _readEnvValue<string>("GATEWAY_TRUSTED_PROXIES", "string", false, ""),
   ));
 
+  if (trustedProxies.trustNothing) {
+    throw new Error("GATEWAY_TRUSTED_PROXIES is empty or unresolvable; openclaw requires at least one trusted proxy CIDR for trusted-proxy auth to function.");
+  }
+
   // 2c. The clean target is a self-contained control plane. An installation always owns
   //     its ClusterTenant lifecycle; no environment variable can switch it back to an
   //     external-fleet topology.

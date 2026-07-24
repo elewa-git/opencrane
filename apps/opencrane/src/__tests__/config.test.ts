@@ -12,6 +12,8 @@ const _BASE_ENV: Record<string, string> = {
 	LITELLM_ENABLED: "false",
 	LITELLM_ENDPOINT: "http://litellm:4000",
 	LITELLM_DEFAULT_MONTHLY_BUDGET_USD: "100",
+	GATEWAY_TRUSTED_PROXIES: "auto",
+	POD_IP: "10.0.0.1",
 };
 
 describe("_LoadOperatorConfig multi-instance fail-closed guard (MI.1 / brief B2)", function _suite()
@@ -101,20 +103,16 @@ describe("_LoadOperatorConfig trusted-proxy fail-closed wiring (OC-2 / CONN.4)",
 		process.env = _saved;
 	});
 
-	it("resolves an unset GATEWAY_TRUSTED_PROXIES to trust-nothing (never trust-all)", function _unset()
+	it("crashes config load on an unset GATEWAY_TRUSTED_PROXIES (fail-closed, never trust-all)", function _unset()
 	{
-		// GATEWAY_TRUSTED_PROXIES intentionally absent from _BASE_ENV.
-		const config = _LoadOperatorConfig();
-		expect(config.gatewayTrustedProxies).toEqual([]);
-		expect(config.gatewayTrustNothing).toBe(true);
+		delete process.env.GATEWAY_TRUSTED_PROXIES;
+		expect(function _load() { _LoadOperatorConfig(); }).toThrow(/GATEWAY_TRUSTED_PROXIES is empty or unresolvable/);
 	});
 
-	it("resolves an empty GATEWAY_TRUSTED_PROXIES to trust-nothing", function _empty()
+	it("crashes config load on an empty GATEWAY_TRUSTED_PROXIES (fail-closed)", function _empty()
 	{
 		process.env.GATEWAY_TRUSTED_PROXIES = "  ";
-		const config = _LoadOperatorConfig();
-		expect(config.gatewayTrustedProxies).toEqual([]);
-		expect(config.gatewayTrustNothing).toBe(true);
+		expect(function _load() { _LoadOperatorConfig(); }).toThrow(/GATEWAY_TRUSTED_PROXIES is empty or unresolvable/);
 	});
 
 	it("parses a configured CIDR allowlist and clears the trust-nothing flag", function _configured()
@@ -165,27 +163,24 @@ describe("_LoadOperatorConfig auto trusted-proxy derivation (task_845dd617)", fu
 		expect(config.gatewayTrustedProxies).toEqual(["172.20.0.0/16"]);
 	});
 
-	it("drops `auto` to trust-nothing when POD_IP is missing (stays fail-closed, never trust-all)", function _missingPodIp()
+	it("crashes config load when `auto` derivation drops the token and leaves an empty list (missing POD_IP)", function _missingPodIp()
 	{
 		process.env.GATEWAY_TRUSTED_PROXIES = "auto";
-		// POD_IP intentionally absent.
-		const config = _LoadOperatorConfig();
-		expect(config.gatewayTrustedProxies).toEqual([]);
-		expect(config.gatewayTrustNothing).toBe(true);
+		delete process.env.POD_IP; // POD_IP intentionally absent.
+		expect(function _load() { _LoadOperatorConfig(); }).toThrow(/GATEWAY_TRUSTED_PROXIES is empty or unresolvable/);
 	});
 
-	it("drops `auto` to trust-nothing when POD_IP is not a valid IPv4 address", function _invalidPodIp()
+	it("crashes config load when `auto` derivation drops the token and leaves an empty list (invalid POD_IP)", function _invalidPodIp()
 	{
 		process.env.GATEWAY_TRUSTED_PROXIES = "auto";
 		process.env.POD_IP = "fd00::1";
-		const config = _LoadOperatorConfig();
-		expect(config.gatewayTrustNothing).toBe(true);
+		expect(function _load() { _LoadOperatorConfig(); }).toThrow(/GATEWAY_TRUSTED_PROXIES is empty or unresolvable/);
 	});
 
 	it("keeps explicit CIDRs when `auto` derivation fails (partial fallback, no trust-all)", function _mixedFallback()
 	{
 		process.env.GATEWAY_TRUSTED_PROXIES = "auto, 10.0.0.0/8";
-		// POD_IP absent ⇒ the auto token is dropped, the explicit CIDR remains.
+		delete process.env.POD_IP; // POD_IP absent ⇒ the auto token is dropped, the explicit CIDR remains.
 		const config = _LoadOperatorConfig();
 		expect(config.gatewayTrustedProxies).toEqual(["10.0.0.0/8"]);
 		expect(config.gatewayTrustNothing).toBe(false);
