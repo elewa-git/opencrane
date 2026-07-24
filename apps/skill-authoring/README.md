@@ -32,11 +32,13 @@ OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Boundary
 
-The agent controller is the only Kubernetes mutator. This chart deliberately exposes no route and
-does not grant Kubernetes API access to the worker identity. Its default-deny namespace permits a
-released authoring Pod only cluster DNS and the OpenCrane internal listener for a one-use bootstrap
-acknowledgement. That endpoint TokenReviews the fixed projected-token audience and canonical worker Pod
-UID; it returns no capability or workload data.
+The agent controller is the only Kubernetes mutator. This app exposes no listener and grants no
+Kubernetes API access to the worker identity. Its default-deny namespace permits a released authoring
+Pod only cluster DNS and the OpenCrane internal listener for its bootstrap acknowledgement, server-brokered
+input, and terminal completion. Every endpoint TokenReviews the fixed projected-token audience and
+registered Pod UID. The worker receives no ArtifactStore endpoint, credential, or signed lease; the server
+selects and streams only the immutable source artifact pinned on its assigned draft revision. This image
+does not author or execute a skill yet.
 
 ## Dependency direction
 

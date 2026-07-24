@@ -27,11 +27,13 @@ already projected into the Job and creates the one-use bootstrap record. This or
 safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
 cannot attach a different Job or replace its reference.
 
-It does not create Kubernetes resources, issue worker capabilities, read ArtifactStore bytes, or
-complete tool invocations. A released worker may acknowledge its one-use bootstrap only after its
-projected-token identity matches the canonical Pod UID recorded for the Job. An authoring worker can
-then write one terminal receipt: a passed bounded test-and-scan report, or a stable failure code.
-Tool-runner results remain a separate ToolInvocation authority.
+It does not create Kubernetes resources, grant a worker capability, hold ArtifactStore credentials,
+or complete tool invocations. It exposes the narrow one-use acknowledgement route: the shared worker
+can consume its hash-addressed record only after TokenReview confirms the exact registered Pod. It
+also selects a pinned, active source artifact for that same Pod and asks an app-owned broker to stream
+the bytes; the worker never learns an ArtifactStore lease or endpoint. The authoring terminal route
+accepts only two bounded review records on the already-selected draft revision. A tool-runner result
+remains a separate authority: it must complete its linked `ToolInvocation`, not write authoring evidence.
 
 ## Public surface
 
@@ -43,6 +45,8 @@ Tool-runner results remain a separate ToolInvocation authority.
   exact TokenReview-confirmed worker Pod.
 - `PrismaSkillAuthoringCompletionRepository` — atomic authoring receipt and Draft-evidence write.
 - `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only receipt API with strict input bounds.
+- `PrismaSkillAuthoringInputRepository` — exact-worker selection of an active, published, pinned source artifact.
+- `__CreateSkillAuthoringInputRouter` — authoring-audience-only byte broker route with no ArtifactStore credential response.
 
 ## Boundary
 
@@ -68,8 +72,10 @@ TypeScript adapter. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
 the controller-registered canonical worker Pod UID. A successful authoring receipt can write only
-two passed bounded reports to its still-Draft revision; it cannot turn the record into a general
-artifact or runtime credential.
+two passed bounded reports to its still-Draft revision. The input query also binds that draft
+revision's three artifact coordinates to an active Artifact and published ArtifactRevision in the same
+silo before the app signs a short-lived read lease and validates returned metadata. It cannot turn the
+record into a general artifact or runtime credential.
 
 ## See also
 

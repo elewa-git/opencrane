@@ -14,8 +14,9 @@
 #         inside the handler is the identity check, this is defence-in-depth).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
-#       - Governed skill Jobs: a one-use bootstrap acknowledgement only. Their default-deny namespaces
-#         permit this single server destination and DNS; TokenReview binds the request to the registered Pod.
+#       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
+#         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
+#         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
 #   The operator's own /api/internal/tenant-models fetch is a localhost call within the
 #   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
 #
@@ -256,7 +257,8 @@ spec:
 {{- end }}
 {{- if .Values.agentController.enabled }}
 # Worker charts own namespace-wide default-deny. The server owns this strictly additive path because
-# it is the bootstrap endpoint's identity authority and knows the internal listener contract.
+# it owns the worker-facing bootstrap, authoring-input, and completion identity boundaries and knows the
+# internal listener contract.
 {{- $serverSelector := include "opencrane.selectorLabels" . }}
 {{- $internalPort := .Values.clustertenantManager.service.internalPort }}
 {{- range $worker := (list
@@ -277,7 +279,7 @@ spec:
   policyTypes:
     - Egress
   egress:
-    # A worker can acknowledge its one-use bootstrap only to the internal server listener.
+    # A worker can bootstrap, read its server-brokered authoring input, and complete only through the internal listener.
     - to:
         - namespaceSelector:
             matchLabels:
