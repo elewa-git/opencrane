@@ -91,11 +91,32 @@ model SkillWorkload {
   claimedAt        DateTime?          @map("claimed_at")
   deliveryCount    Int                @default(0) @map("delivery_count")
   workloadUid      String?            @unique @map("workload_uid")
+  workerPodUid     String?            @unique @map("worker_pod_uid")
   createdAt        DateTime           @default(now()) @map("created_at")
   cancelledAt      DateTime?          @map("cancelled_at")
   skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
   toolInvocation   ToolInvocation?    @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  bootstrap        SkillWorkloadBootstrap?
 
   @@index([siloId, state, createdAt])
   @@map("skill_workloads")
+}
+
+/// One hashed, one-use worker bootstrap bound to an assigned governed skill Job.
+model SkillWorkloadBootstrap {
+  id                 String        @id @default(cuid())
+  skillWorkloadId    String        @unique @map("skill_workload_id")
+  referenceHash      String        @unique @map("reference_hash")
+  audience           String
+  serviceAccountName String        @map("service_account_name")
+  namespace          String
+  workloadUid        String        @map("workload_uid")
+  expiresAt          DateTime      @map("expires_at")
+  consumedAt         DateTime?     @map("consumed_at")
+  consumedByPodUid   String?       @map("consumed_by_pod_uid")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  skillWorkload      SkillWorkload @relation(fields: [skillWorkloadId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("skill_workload_bootstraps")
 }
