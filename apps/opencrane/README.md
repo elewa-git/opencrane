@@ -72,9 +72,11 @@ public and internal listeners, starts the projection and OpenClaw-tenant lifecyc
 
 The internal controller routes TokenReview only the fixed `agent-controller` ServiceAccount in the
 server namespace and `opencrane-agent-controller` audience. They let that process claim a
-database-fenced run attempt and commit only the immutable UID of the suspended Job it created. A
-separate durable release route lets the controller conditionally unsuspend that assigned Job and
-register its exact first Pod UID. The runtime stream separately accepts the
+database-fenced run attempt or governed skill workload, and commit only the immutable UID of the
+suspended Job it created. A separate durable runtime release route lets the controller conditionally
+unsuspend that assigned Job and register its exact first Pod UID. The skill route accepts no
+caller-chosen namespace, image, capability, or workload profile; its database record remains the
+authority for those facts. The runtime stream separately accepts the
 `opencrane-agent-runtime` audience and bounded runtime-profile ServiceAccount grammar in the
 explicit, separate runtime namespace. Durable assignment remains the authority for the exact
 ServiceAccount, Job, Pod, run, and revision; the projected bootstrap reference and a ServiceAccount
