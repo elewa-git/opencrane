@@ -166,6 +166,9 @@
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
       ],
+      "@opencrane/backend/agents/skills/k8s-launcher": [
+        "./libs/backend/agents/skills/k8s-launcher/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/controller": [
         "./libs/backend/agents/runtime/controller/src/index.ts"
       ],
