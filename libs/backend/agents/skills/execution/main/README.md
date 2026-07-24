@@ -22,8 +22,10 @@ Kubernetes-issued Job UID for an exact durable assignment.
 [agent controller](../../../../../../../apps/agent-controller/README.md).
 
 A claim identifies one durable delivery generation; an assignment can bind only the Kubernetes Job
-UID created for that exact generation. This order makes a crash safe: an uncommitted Job remains
-suspended and is safe to adopt later, while a stale controller cannot attach a different Job.
+UID created for that exact generation. At that same durable step it hashes the opaque reference
+already projected into the Job and creates the one-use bootstrap record. This order makes a crash
+safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
+cannot attach a different Job or replace its reference.
 
 It does not create Kubernetes resources, exchange worker capabilities, read ArtifactStore bytes, or
 complete tool invocations. Those responsibilities remain downstream of the durable authority.
@@ -31,7 +33,7 @@ complete tool invocations. Those responsibilities remain downstream of the durab
 ## Public surface
 
 - `SkillWorkloadClaim` — one database-issued delivery generation.
-- `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID fence.
+- `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID and opaque-reference fence.
 - `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 

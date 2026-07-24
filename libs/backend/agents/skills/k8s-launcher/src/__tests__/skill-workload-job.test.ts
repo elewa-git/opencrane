@@ -11,7 +11,7 @@ function _Profile()
 /** Builds the opaque authority coordinates for one worker Job. */
 function _Assignment()
 {
-	return { jobId: "tool-job-1", siloId: "silo-1", namespace: "opencrane-tools", capabilityReference: "tool-capability-1" };
+	return { jobId: "tool-job-1", siloId: "silo-1", namespace: "opencrane-tools", capabilityReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
 }
 
 describe("governed skill workload Job", function _describeJob()
@@ -30,7 +30,9 @@ describe("governed skill workload Job", function _describeJob()
 	{
 		expect(function _wrongIdentity() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), serviceAccountName: "skill-authoring-default" }); }).toThrow(/class-bounded identity/);
 		expect(function _foreignNamespace() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "other-silo-tools" }, _Profile()); }).toThrow(/deployment-owned namespace/);
+		expect(function _wrongProfileNamespace() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), namespace: "other-silo-tools" }); }).toThrow(/class-bounded identity/);
 		expect(function _wrongAudience() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), capabilityTokenAudience: "opencrane-server" }); }).toThrow(/fixed audience/);
 		expect(function _oversizedResources() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), activeDeadlineSeconds: 901, resources: { requests: { cpu: "3", memory: "3Gi" }, limits: { cpu: "3", memory: "3Gi" } } }); }).toThrow(/bounded resources/);
+		expect(function _nonOpaqueReference() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), capabilityReference: "workload-identifier" }, _Profile()); }).toThrow(/opaque bootstrap reference/);
 	});
 });

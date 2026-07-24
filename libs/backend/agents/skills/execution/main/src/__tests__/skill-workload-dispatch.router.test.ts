@@ -59,7 +59,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 
 	it("forwards exact assignment evidence and rejects caller-selected extensions", async function _CommitsAssignment()
 	{
-		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1" };
+		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
 		const repository = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const) };
 		const { app } = _App({ repository });
 

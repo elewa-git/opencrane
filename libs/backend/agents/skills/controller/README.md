@@ -7,7 +7,8 @@
 This package is the outbound reconciliation step between the durable skill-work authority and
 Kubernetes. A **reconciler** repeatedly makes an external system match a durable desired state. It
 claims one authorised workload, builds a hardened but still-suspended Job from its fixed class
-profile, and commits only the Kubernetes-issued Job UID back to OpenCrane.
+profile, and commits the Kubernetes-issued Job UID plus the Job's stable opaque reference back to
+OpenCrane.
 
 ```
  Postgres workload claim ──► controller ◄── HERE ──► suspended Job

@@ -40,8 +40,9 @@ opaque capability reference for later exchange by a worker protocol.
 
 The agent controller consumes this builder. It does not make a tool executable, contact the
 ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
-Malformed identity, image, lifetime, namespace, or resource inputs fail before Kubernetes sees a
-manifest.
+Malformed identity, image, lifetime, namespace, resource, or bootstrap-reference inputs fail before
+Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so durable workload
+identifiers are never copied into the Job annotation.
 
 ## Dependency direction
 

@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { Prisma, SkillWorkloadState, type PrismaClient } from "@prisma/client";
 
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadClaimsRepository } from "./skill-workload-claims.types.js";
@@ -5,6 +7,8 @@ import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadC
 /** Postgres authority for controller-only claim generations and immutable Job identity binding. */
 export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsRepository
 {
+	/** Maximum worker lifetime and bootstrap-reference validity after assignment. */
+	private static readonly bootstrapLifetimeMilliseconds = 900_000;
 	/** Canonical OpenCrane authority database. */
 	private readonly prisma: PrismaClient;
 	/** Maximum time a controller may hold one uncommitted claim. */
@@ -42,19 +46,45 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 	/** Commits only one unexpired exact claim generation, or returns its immutable replay result. */
 	async commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
-		if (!workloadId || !command.workloadUid || !Number.isSafeInteger(command.deliveryCount) || command.deliveryCount < 1 || !Number.isFinite(Date.parse(command.claimedAt))) return "conflict";
+		if (!workloadId || !command.workloadUid || command.bootstrapReference !== _BootstrapReference(workloadId) || !Number.isSafeInteger(command.deliveryCount) || command.deliveryCount < 1 || !Number.isFinite(Date.parse(command.claimedAt))) return "conflict";
 		const lease = this.claimLeaseMilliseconds;
 		return this.prisma.$transaction(async function _commit(transaction: Prisma.TransactionClient): Promise<"assigned" | "idempotent" | "conflict">
 		{
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
 			const workload = await transaction.skillWorkload.findUnique({ where: { id: workloadId } });
 			if (!workload) return "conflict";
-			if (workload.state === SkillWorkloadState.Assigned) return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount ? "idempotent" : "conflict";
+			if (workload.state === SkillWorkloadState.Assigned)
+			{
+				const bootstrap = await transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
+				return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && bootstrap?.referenceHash === _ReferenceHash(command.bootstrapReference) ? "idempotent" : "conflict";
+			}
 			const nowRows = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 			const now = nowRows[0]?.now;
 			if (!now || workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.deliveryCount !== command.deliveryCount || now.getTime() >= workload.claimedAt.getTime() + lease) return "conflict";
 			const updated = await transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
-			return updated.count === 1 ? "assigned" : "conflict";
+			if (updated.count !== 1) return "conflict";
+			await transaction.skillWorkloadBootstrap.create({ data: {
+				skillWorkloadId: workloadId,
+				referenceHash: _ReferenceHash(command.bootstrapReference),
+				audience: workload.kind === "Authoring" ? "opencrane-skill-authoring" : "opencrane-tool-runner",
+				serviceAccountName: workload.kind === "Authoring" ? "skill-authoring-default" : "tool-runner-default",
+				namespace: workload.kind === "Authoring" ? "opencrane-skill-authoring" : "opencrane-tools",
+				workloadUid: command.workloadUid,
+				expiresAt: new Date(now.getTime() + PrismaSkillWorkloadClaimsRepository.bootstrapLifetimeMilliseconds),
+			} });
+			return "assigned";
 		});
 	}
+}
+
+/** Convert the transient controller reference into the only durable bootstrap lookup coordinate. */
+function _ReferenceHash(reference: string): string
+{
+	return `sha256:${createHash("sha256").update(reference, "utf8").digest("hex")}`;
+}
+
+/** Derive the one deterministic opaque reference that the server accepts for a skill workload. */
+function _BootstrapReference(workloadId: string): string
+{
+	return `skill-bootstrap-v1_${createHash("sha256").update(workloadId, "utf8").digest("hex")}`;
 }

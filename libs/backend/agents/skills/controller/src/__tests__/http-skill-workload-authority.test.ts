@@ -27,7 +27,7 @@ describe("HTTP governed skill workload authority", function _DescribeAuthority()
 
 	it("binds an assignment response to the submitted workload and immutable Job UID", async function _Commits()
 	{
-		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1" };
+		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}` };
 		const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ outcome: "assigned", workloadId: "workload-1", workloadUid: "job-uid-1" }), { status: 200 }));
 		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(fetch));
 
@@ -39,6 +39,6 @@ describe("HTTP governed skill workload authority", function _DescribeAuthority()
 		const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ outcome: "assigned", workloadId: "workload-1", workloadUid: "other-job" }), { status: 200 }));
 		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(fetch));
 
-		await expect(authority.__CommitAssignment("workload-1", { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1" }, new AbortController().signal)).rejects.toThrow(/mismatched/);
+		await expect(authority.__CommitAssignment("workload-1", { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}` }, new AbortController().signal)).rejects.toThrow(/mismatched/);
 	});
 });

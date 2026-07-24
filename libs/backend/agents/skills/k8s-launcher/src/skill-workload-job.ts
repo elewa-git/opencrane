@@ -44,12 +44,13 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 {
 	const expectedServiceAccountName = profile.kind === "authoring" ? "skill-authoring-default" : "tool-runner-default";
 	const expectedAudience = profile.kind === "authoring" ? "opencrane-skill-authoring" : "opencrane-tool-runner";
+	const expectedNamespace = profile.kind === "authoring" ? "opencrane-skill-authoring" : "opencrane-tools";
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);
 	const requestedCpu = _ParseCpuMillis(String(profile.resources.requests?.cpu ?? ""));
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
+	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || profile.namespace !== expectedNamespace || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
 	{
 		throw new Error("governed skill Job profile requires fixed audience, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}
@@ -58,9 +59,9 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 /** Validate controller-supplied durable coordinates before they become labels or annotations. */
 function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): void
 {
-	if (![assignment.jobId, assignment.siloId, assignment.namespace, assignment.capabilityReference].every(function _isValid(value): boolean { return _IsBoundedCoordinate(value); }) || assignment.namespace !== profile.namespace)
+	if (![assignment.jobId, assignment.siloId, assignment.namespace].every(function _isValid(value): boolean { return _IsBoundedCoordinate(value); }) || !/^skill-bootstrap-v1_[a-f0-9]{64}$/.test(assignment.capabilityReference) || assignment.namespace !== profile.namespace)
 	{
-		throw new Error("governed skill Job assignment requires bounded coordinates and its deployment-owned namespace");
+		throw new Error("governed skill Job assignment requires bounded coordinates, an opaque bootstrap reference, and its deployment-owned namespace");
 	}
 }
 

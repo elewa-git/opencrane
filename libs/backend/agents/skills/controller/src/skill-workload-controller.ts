@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+
 import { __BuildGovernedSkillWorkloadJob, type SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/observability";
 
@@ -13,14 +15,14 @@ function _RequireWorkloadUid(uid: string | undefined): string
 	return uid;
 }
 
-/** Derive a stable non-secret reference that a future worker exchange can bind to its Job identity. */
+/** Derive a stable opaque reference without projecting the workload's durable identifier into Kubernetes. */
 function _CapabilityReference(workloadId: string): string
 {
 	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(workloadId))
 	{
 		throw new Error("governed skill workload id is not safe to project into a capability reference");
 	}
-	return `skill-workload-v1:${workloadId}`;
+	return `skill-bootstrap-v1_${createHash("sha256").update(workloadId, "utf8").digest("hex")}`;
 }
 
 /** Validate both fixed deployment profiles through the canonical hardened Job builder. */
@@ -43,7 +45,7 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 		{
 			throw new Error(`skill workload controller ${kind} profile has the wrong workload class`);
 		}
-		__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: "skill-workload-v1:profile-validation" }, profile);
+		__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: _CapabilityReference("profile-validation") }, profile);
 		profiles[kind] = profile;
 	}
 	return profiles;
@@ -67,7 +69,7 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 		const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
 		// 4. Commit the same database claim generation; a stale replica can never assign this Job.
-		const outcome = await options.authority.__CommitAssignment(claim.workloadId, { claimedAt: claim.claimedAt, deliveryCount: claim.deliveryCount, workloadUid }, signal);
+		const outcome = await options.authority.__CommitAssignment(claim.workloadId, { claimedAt: claim.claimedAt, deliveryCount: claim.deliveryCount, workloadUid, bootstrapReference: _CapabilityReference(claim.workloadId) }, signal);
 		if (outcome === "conflict")
 		{
 			throw new Error("governed skill workload assignment lost its database claim fence");

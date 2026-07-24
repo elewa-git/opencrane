@@ -43,7 +43,7 @@ function _Options(authority: SkillWorkloadControllerAuthority, kubernetes: Skill
 
 describe("governed skill workload controller", function _DescribeController()
 {
-	it("creates a suspended Job and commits only its API-issued UID for the exact claim generation", async function _AssignsSuspendedJob()
+	it("creates a suspended Job and atomically binds its API-issued UID and opaque bootstrap reference", async function _AssignsSuspendedJob()
 	{
 		const calls: string[] = [];
 		let committed: unknown = null;
@@ -57,8 +57,8 @@ describe("governed skill workload controller", function _DescribeController()
 		expect(calls).toEqual(["claim", "job", "commit"]);
 		expect(built.spec?.suspend).toBe(true);
 		expect(built.metadata?.namespace).toBe("opencrane-skill-authoring");
-		expect(built.metadata?.annotations?.["opencrane.ai/capability-reference"]).toBe("skill-workload-v1:workload_1");
-		expect(committed).toEqual({ claimedAt: _Claim().claimedAt, deliveryCount: 2, workloadUid: "job-uid-1" });
+		expect(built.metadata?.annotations?.["opencrane.ai/capability-reference"]).toMatch(/^skill-bootstrap-v1_[a-f0-9]{64}$/);
+		expect(committed).toEqual({ claimedAt: _Claim().claimedAt, deliveryCount: 2, workloadUid: "job-uid-1", bootstrapReference: built.metadata?.annotations?.["opencrane.ai/capability-reference"] });
 		expect(result).toEqual({ outcome: "assigned", workloadId: "workload_1", workloadUid: "job-uid-1" });
 	});
 
