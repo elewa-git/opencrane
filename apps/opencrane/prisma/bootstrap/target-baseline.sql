@@ -194,7 +194,7 @@ CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_pytho
 CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
 
 -- CreateEnum
-CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'cancelled');
+CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'succeeded', 'failed', 'cancelled');
 
 -- CreateTable
 CREATE TABLE "agent_services" (
@@ -1554,6 +1554,8 @@ CREATE TABLE "skill_workloads" (
     "released_at" TIMESTAMP(3),
     "registered_pod_uid" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completed_at" TIMESTAMP(3),
+    "failure_code" TEXT,
     "cancelled_at" TIMESTAMP(3),
 
     CONSTRAINT "skill_workloads_pkey" PRIMARY KEY ("id")
@@ -3898,18 +3900,20 @@ CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE pl
 DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass"; invocation_silo_id TEXT; invocation_state "ActionExecutionState";
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."released_at" IS NOT NULL OR NEW."registered_pod_uid" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."released_at" IS NOT NULL OR NEW."registered_pod_uid" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'cancelled' AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'cancelled SkillWorkload is terminal'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."registered_pod_uid" IS NOT NULL AND NEW."registered_pod_uid" IS DISTINCT FROM OLD."registered_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload registered Pod identity is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") THEN RAISE EXCEPTION 'SkillWorkload release requires an exact prior release claim'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count") AND (NEW."release_claimed_at" IS NULL OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
-    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR (NEW."released_at" IS NOT NULL AND (NEW."state" <> 'assigned' OR NEW."release_claimed_at" IS NULL OR NEW."release_delivery_count" < 1)) OR (NEW."registered_pod_uid" IS NOT NULL AND NEW."released_at" IS NULL) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, release, registration, and cancellation evidence'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."registered_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
+    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed') OR NEW."release_claimed_at" IS NULL OR NEW."release_delivery_count" < 1)) OR (NEW."registered_pod_uid" IS NOT NULL AND NEW."released_at" IS NULL) OR (NEW."state" = 'succeeded' AND (NEW."failure_code" IS NOT NULL OR NEW."completed_at" IS NULL)) OR (NEW."state" = 'failed' AND (NEW."completed_at" IS NULL OR NEW."failure_code" IS NULL OR btrim(NEW."failure_code") = '')) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" IN ('succeeded', 'failed') AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
@@ -3918,6 +3922,11 @@ BEGIN
             SELECT "silo_id", "state" INTO invocation_silo_id, invocation_state FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
             IF NEW."tool_invocation_id" IS NULL OR invocation_silo_id IS DISTINCT FROM NEW."silo_id" OR invocation_state IS DISTINCT FROM 'reserved' OR revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'tool-runner SkillWorkload requires same-silo Reserved ToolInvocation and Published revision'; END IF;
         END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN
+        IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" bootstrap WHERE bootstrap."skill_workload_id" = NEW."id" AND bootstrap."consumed_at" IS NOT NULL AND bootstrap."consumed_by_pod_uid" = OLD."registered_pod_uid") THEN RAISE EXCEPTION 'SkillWorkload completion requires its consumed registered bootstrap'; END IF;
+        IF NEW."kind" <> 'authoring' THEN RAISE EXCEPTION 'tool runner completion has its own ToolInvocation authority'; END IF;
+        IF NEW."state" = 'succeeded' AND NOT EXISTS (SELECT 1 FROM "skill_revisions" revision WHERE revision."id" = NEW."skill_revision_id" AND revision."state" = 'draft' AND jsonb_typeof(revision."test_report") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."test_report")) = 3 AND revision."test_report" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."test_report"->'summary') = 'string' AND length(revision."test_report"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."test_report"->'checksRun') = 'number' AND (revision."test_report"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$' AND jsonb_typeof(revision."scan_result") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."scan_result")) = 3 AND revision."scan_result" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."scan_result"->'summary') = 'string' AND length(revision."scan_result"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."scan_result"->'checksRun') = 'number' AND (revision."scan_result"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$') THEN RAISE EXCEPTION 'authoring completion requires bounded passed draft test and scan reports'; END IF;
     END IF;
     RETURN NEW;
 END;

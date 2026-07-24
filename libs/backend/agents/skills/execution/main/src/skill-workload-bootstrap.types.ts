@@ -21,7 +21,7 @@ export interface SkillWorkloadBootstrapTokenReviewer
 /** Durable bootstrap facts that select the sole accepted projected-token identity. */
 export interface SkillWorkloadBootstrapRecord
 {
-	/** Stable workload identifier used only in the response receipt. */
+	/** Stable workload identifier used by the server-side bootstrap authority only. */
 	readonly workloadId: string;
 	/** Hash-only lookup coordinate for the submitted opaque reference. */
 	readonly referenceHash: string;

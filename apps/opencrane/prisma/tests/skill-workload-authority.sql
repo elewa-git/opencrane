@@ -38,9 +38,18 @@ UPDATE "skill_workloads" SET "registered_pod_uid"='pod-uid-1' WHERE "id"='author
 SELECT pg_temp.expect_failure('bootstrap consumption requires exact registered Pod', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='other-pod' WHERE "id"='bootstrap-1'$statement$, 'released registered Pod');
 UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-1' WHERE "id"='bootstrap-1';
 SELECT pg_temp.expect_failure('consumed bootstrap is terminal', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_by_pod_uid"='other-pod' WHERE "id"='bootstrap-1'$statement$, 'consumed SkillWorkloadBootstrap is terminal');
+SELECT pg_temp.expect_failure('completion needs passed evidence', $statement$UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work'$statement$, 'passed draft test and scan reports');
+UPDATE "skill_revisions" SET "test_report"='{"passed":true,"summary":"checks passed","checksRun":1,"output":"must not persist"}', "scan_result"='{"passed":true,"summary":"scan passed","checksRun":1,"output":"must not persist"}' WHERE "id"='work-draft';
+SELECT pg_temp.expect_failure('completion rejects extended reports', $statement$UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work'$statement$, 'bounded passed draft test and scan reports');
+UPDATE "skill_revisions" SET "test_report"='{"passed":true,"summary":"checks passed","checksRun":1}', "scan_result"='{"passed":true,"summary":"scan passed","checksRun":1}' WHERE "id"='work-draft';
+SELECT pg_temp.expect_failure('completion cannot rewrite registered pod', $statement$UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp(), "registered_pod_uid"='attacker-pod' WHERE "id"='authoring-work'$statement$, 'registered Pod identity is immutable');
+UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work';
+SELECT pg_temp.expect_failure('completed workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='failed', "failure_code"='late_failure' WHERE "id"='authoring-work'$statement$, 'terminal SkillWorkload is immutable');
 SELECT pg_temp.expect_failure('workload source is immutable', $statement$UPDATE "skill_workloads" SET "silo_id"='other-silo' WHERE "id"='authoring-work'$statement$, 'source coordinates are immutable');
-UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp() WHERE "id"='authoring-work';
-SELECT pg_temp.expect_failure('cancelled workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='pending', "cancelled_at"=NULL WHERE "id"='authoring-work'$statement$, 'cancelled SkillWorkload is terminal');
+INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-2','work-skill',2,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
+INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('cancelled-work','work-silo','authoring','work-draft-2');
+UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp() WHERE "id"='cancelled-work';
+SELECT pg_temp.expect_failure('cancelled workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='pending', "cancelled_at"=NULL WHERE "id"='cancelled-work'$statement$, 'terminal SkillWorkload is immutable');
 SELECT pg_temp.expect_failure('workload evidence cannot be deleted', $statement$DELETE FROM "skill_workloads" WHERE "id"='authoring-work'$statement$, 'SkillWorkload rows cannot be deleted');
 
 UPDATE "skill_revisions" SET "state"='review' WHERE "id"='work-draft';

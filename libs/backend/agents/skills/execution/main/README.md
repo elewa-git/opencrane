@@ -30,9 +30,11 @@ safe: an uncommitted Job remains suspended and is safe to adopt later, while a s
 cannot attach a different Job or replace its reference.
 
 It does not create Kubernetes resources, grant a worker capability, read ArtifactStore bytes, or
-complete tool invocations. It does expose the narrow one-use acknowledgement route: the shared worker
-can consume its hash-addressed record only after TokenReview confirms the exact registered Pod. All
-execution and result responsibilities remain downstream of this durable authority.
+complete tool invocations. It exposes the narrow one-use acknowledgement route: the shared worker
+can consume its hash-addressed record only after TokenReview confirms the exact registered Pod. It
+also accepts the authoring worker's terminal test-and-scan report, but only as two bounded review
+records on the already-selected draft revision. A tool-runner result remains a separate authority:
+it must complete its linked `ToolInvocation`, not write authoring evidence.
 
 ## Public surface
 
@@ -42,6 +44,8 @@ execution and result responsibilities remain downstream of this durable authorit
 - `SkillWorkloadPodRegistrationCommand` — first-Pod identity evidence bound to the released Job.
 - `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
+- `PrismaSkillAuthoringCompletionRepository` — one-time Draft skill evidence and terminal-workload transaction.
+- `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only completion API with strict report validation.
 
 ## Boundary
 
@@ -58,13 +62,15 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 
 ## Data & persistence
 
-The package owns the claim, assignment, release, and first-Pod registration transitions on `SkillWorkload`. The clean target baseline
-enforces its pending → assigned state fence, monotonic delivery generation, immutable Job UID, and
-terminal cancellation independently of this TypeScript adapter. It also owns the one-use
+The package owns the claim, assignment, release, first-Pod registration, and authoring terminal
+transitions on `SkillWorkload`. The clean target baseline enforces its pending → assigned → terminal
+fence, monotonic delivery generation, immutable Job UID, consumed-bootstrap binding, and immutable
+terminal records independently of this TypeScript adapter. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
-one consuming Pod UID. The later worker exchange may consume that record, but cannot turn it into a
-general artifact or runtime credential.
+one consuming Pod UID. The later authoring completion must present that same reviewed Pod identity
+and can write only passed, bounded test and scan reports. It cannot turn the record into a general
+artifact or runtime credential.
 
 ## See also
 

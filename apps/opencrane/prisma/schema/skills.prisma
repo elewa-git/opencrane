@@ -22,10 +22,12 @@ enum SkillWorkloadKind {
   ToolRunner @map("tool_runner")
 }
 
-/// Durable disposition before controller assignment and worker reply are introduced.
+/// Durable lifecycle of one governed worker request; Kubernetes reports identity, never terminal state.
 enum SkillWorkloadState {
   Pending    @map("pending")
   Assigned   @map("assigned")
+  Succeeded  @map("succeeded")
+  Failed     @map("failed")
   Cancelled  @map("cancelled")
 }
 
@@ -96,6 +98,8 @@ model SkillWorkload {
   releasedAt        DateTime?          @map("released_at")
   registeredPodUid  String?            @unique @map("registered_pod_uid")
   createdAt        DateTime           @default(now()) @map("created_at")
+  completedAt      DateTime?          @map("completed_at")
+  failureCode      String?            @map("failure_code")
   cancelledAt      DateTime?          @map("cancelled_at")
   skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
   toolInvocation   ToolInvocation?    @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
