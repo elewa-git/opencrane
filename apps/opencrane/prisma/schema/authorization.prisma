@@ -153,6 +153,7 @@ model ToolInvocation {
   completedAt        DateTime?            @map("completed_at")
   run                AgentRun             @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
   approvalRequests   ApprovalRequest[]
+  skillWorkload      SkillWorkload?
 
   @@unique([runId, attempt, toolInvocationId])
   @@index([runId, attempt, state])

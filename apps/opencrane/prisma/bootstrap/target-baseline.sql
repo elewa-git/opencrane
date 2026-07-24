@@ -190,6 +190,12 @@ CREATE TYPE "SkillRevisionState" AS ENUM ('draft', 'review', 'published', 'rejec
 -- CreateEnum
 CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_python');
 
+-- CreateEnum
+CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
+
+-- CreateEnum
+CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'cancelled');
+
 -- CreateTable
 CREATE TABLE "agent_services" (
     "id" TEXT NOT NULL,
@@ -1533,6 +1539,20 @@ CREATE TABLE "skill_revisions" (
 );
 
 -- CreateTable
+CREATE TABLE "skill_workloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "kind" "SkillWorkloadKind" NOT NULL,
+    "state" "SkillWorkloadState" NOT NULL DEFAULT 'pending',
+    "skill_revision_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "cancelled_at" TIMESTAMP(3),
+
+    CONSTRAINT "skill_workloads_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "tenant_litellm_keys" (
     "id" TEXT NOT NULL,
     "tenant" TEXT NOT NULL,
@@ -2251,6 +2271,15 @@ CREATE UNIQUE INDEX "skill_revisions_skill_id_id_key" ON "skill_revisions"("skil
 CREATE UNIQUE INDEX "skill_revisions_id_artifact_revision_id_artifact_content_ad_key" ON "skill_revisions"("id", "artifact_revision_id", "artifact_content_address");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"("silo_id", "state", "created_at");
+
+-- CreateIndex
 CREATE INDEX "tenant_litellm_keys_tenant_idx" ON "tenant_litellm_keys"("tenant");
 
 -- CreateIndex
@@ -2504,6 +2533,12 @@ ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tenant_litellm_keys" ADD CONSTRAINT "tenant_litellm_keys_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3867,6 +3902,27 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass"; invocation_silo_id TEXT; invocation_state "ActionExecutionState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
+        RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'cancelled' AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'cancelled SkillWorkload is terminal'; END IF;
+    IF NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL) OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching cancellation evidence'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
+        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
+        IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
+        IF NEW."kind" = 'tool_runner' THEN
+            SELECT "silo_id", "state" INTO invocation_silo_id, invocation_state FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
+            IF NEW."tool_invocation_id" IS NULL OR invocation_silo_id IS DISTINCT FROM NEW."silo_id" OR invocation_state IS DISTINCT FROM 'reserved' OR revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'tool-runner SkillWorkload requires same-silo Reserved ToolInvocation and Published revision'; END IF;
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Skill rows cannot be deleted'; END IF;
@@ -4329,6 +4385,7 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "test_report" @> '{"passed":true}'::jsonb AND "scan_result" @> '{"passed":true}'::jsonb
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("organization_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_scope_check" CHECK (
         ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
@@ -4470,6 +4527,7 @@ CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON 
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
+CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
