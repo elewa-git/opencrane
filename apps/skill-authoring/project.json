@@ -5,7 +5,8 @@
   "sourceRoot": "apps/skill-authoring",
   "tags": ["type:app", "layer:entrypoint", "scope:skill-authoring"],
   "targets": {
+    "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -c 'import ast, pathlib; [ast.parse(pathlib.Path(path).read_text()) for path in [\"libs/backend/agents/skills/worker/src/bootstrap.py\", \"apps/skill-authoring/src/authoring_worker.py\"]]'", "cwd": "." } },
     "lint": { "executor": "nx:run-commands", "options": { "command": "helm template skill-authoring helm >/dev/null", "cwd": "apps/skill-authoring" } },
-    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/skill-authoring/tests/helm-contract.sh", "cwd": "." } }
+    "test": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m unittest discover -s apps/skill-authoring/__tests__ && bash apps/skill-authoring/tests/helm-contract.sh", "cwd": "." } }
   }
 }

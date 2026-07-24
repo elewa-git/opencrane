@@ -26,6 +26,7 @@ OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
+ - `src/authoring_worker.py` — private, not-yet-invoked intake primitives that verify and safely extract a candidate bundle.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 - `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, resource, and
   lifecycle values remain controller-owned.
