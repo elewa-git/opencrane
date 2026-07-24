@@ -51,13 +51,14 @@ class GovernedSkillBootstrapTests(unittest.TestCase):
             captured["body"] = request.data
             captured["authorization"] = request.get_header("Authorization")
             captured["timeout"] = timeout
-            return _Response(200, {"acknowledged": True})
+            return _Response(200, {"acknowledged": True, "workloadId": "workload-1"})
 
-        _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", token_path, reference_path, open_request)
+        workload_id = _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", token_path, reference_path, open_request)
         self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-workloads:bootstrap")
         self.assertEqual(json.loads(captured["body"]), {"bootstrapReference": "skill-bootstrap-v1_" + "a" * 64})
         self.assertEqual(captured["authorization"], "Bearer projected-token")
         self.assertEqual(captured["timeout"], 10.0)
+        self.assertEqual(workload_id, "workload-1")
 
     def test_rejects_missing_or_malformed_projected_inputs_before_network(self) -> None:
         """An absent token or malformed reference cannot trigger a best-effort request."""
@@ -71,7 +72,7 @@ class GovernedSkillBootstrapTests(unittest.TestCase):
         """Only the exact acknowledgement succeeds; redirects cannot broaden the authority."""
         token_path, reference_path = self._paths()
         with self.assertRaisesRegex(RuntimeError, "rejected"):
-            _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", token_path, reference_path, lambda request, timeout: _Response(200, {"acknowledged": True, "workloadId": "leak"}))
+            _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", token_path, reference_path, lambda request, timeout: _Response(200, {"acknowledged": True, "workloadId": "leak", "extra": "rejected"}))
         with self.assertRaisesRegex(RuntimeError, r"denied \(302\)"):
             _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", token_path, reference_path, lambda request, timeout: (_ for _ in ()).throw(HTTPError(request.full_url, 302, "redirect", {}, None)))
 

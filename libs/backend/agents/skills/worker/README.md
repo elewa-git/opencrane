@@ -7,22 +7,23 @@
 This small Python module is the common first process step for the isolated skill-authoring and
 tool-runner images. A worker reads its short-lived Kubernetes projected token and its opaque
 bootstrap reference from read-only files, then sends exactly one acknowledgement to the OpenCrane
-internal service. The acknowledgement proves that the released, registered Pod has started; it does
-not grant a capability, return a workload identity, or start skill execution.
+internal service. The acknowledgement proves that the released, registered Pod has started and
+returns only its opaque workload ID for a later class-specific completion report. It does not grant
+a capability, return source or arguments, or start skill execution.
 
 ## Public surface
 
 - `bootstrap.py` — command-line entrypoint and dependency-free acknowledgement client used by both
   worker images.
-- `acknowledge(...)` — focused test seam that sends the fixed request and accepts only the minimal
-  acknowledgement response.
+- `acknowledge(...)` — focused test seam that sends the fixed request and returns only its bounded
+  completion coordinate.
 
 ## Boundary
 
 The module has no listener, Kubernetes client, database connection, ArtifactStore client, result
 protocol, execution engine, or general HTTP facility. Redirects, missing projected files, non-200
-responses, and any response other than `{ "acknowledged": true }` fail the Job. The server remains
-the authority for the one-use consume and exact Pod identity check.
+responses, and any response other than `{ "acknowledged": true, "workloadId": "…" }` fail the Job.
+The server remains the authority for the one-use consume and exact Pod identity check.
 
 ## Dependency direction
 

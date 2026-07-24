@@ -2,7 +2,8 @@
 
 The client is intentionally not a skill executor. It reads one downward-API reference and one
 audience-bound projected token at send time, acknowledges that exact worker to the OpenCrane
-internal authority, then exits. It has no Kubernetes, ArtifactStore, database, or result protocol.
+internal authority, then returns only the already-bound opaque workload ID. It has no Kubernetes,
+ArtifactStore, database, or result protocol.
 """
 
 import json
@@ -70,8 +71,8 @@ def _open(request: Request, timeout: float) -> _Response:
     return build_opener(_NoRedirect()).open(request, timeout=timeout)  # type: ignore[return-value]
 
 
-def acknowledge(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> None:
-    """Post the exact opaque reference once and accept only the minimal success receipt."""
+def acknowledge(base_url: str, token_path: str, reference_path: str, open_request: Callable[[Request, float], _Response] = _open) -> str:
+    """Post the exact opaque reference once and return only its server-bound workload coordinate."""
     token = _read_single_line(token_path, "capability token")
     reference = _read_single_line(reference_path, "bootstrap reference")
     if len(reference) != len("skill-bootstrap-v1_") + 64 or not reference.startswith("skill-bootstrap-v1_") or any(character not in "0123456789abcdef" for character in reference.removeprefix("skill-bootstrap-v1_")):
@@ -92,8 +93,14 @@ def acknowledge(base_url: str, token_path: str, reference_path: str, open_reques
             error.close()
     except (OSError, URLError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RuntimeError("bootstrap acknowledgement is unavailable") from error
-    if response.status != 200 or payload != {"acknowledged": True}:
+    if response.status != 200 or not isinstance(payload, dict) or set(payload) != {"acknowledged", "workloadId"} or payload.get("acknowledged") is not True or not _workload_id(payload.get("workloadId")):
         raise RuntimeError("bootstrap acknowledgement was rejected")
+    return payload["workloadId"]
+
+
+def _workload_id(value: object) -> bool:
+    """Accept the bounded opaque coordinate required by the later class-specific completion report."""
+    return isinstance(value, str) and 0 < len(value) <= 256 and not any(character in value for character in "\x00\n\r")
 
 
 def main() -> int:
