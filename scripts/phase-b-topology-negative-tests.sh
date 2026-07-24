@@ -18,15 +18,24 @@ ARCHIVE_PROBE="$ROOT/apps/_infra/deploy-k8s/charts/.phase-b-langfuse-probe.tgz"
 GENERATED_DIST_PROBE="$ROOT/apps/opencrane/dist/phase-b-generated-guard-probe.js"
 GENERATED_CACHE_PROBE="$ROOT/apps/opencrane/node_modules/.cache/phase-b-generated-guard-probe.mjs"
 
-cleanup()
+cleanup_probes()
 {
   rm -f "$RENDER_PROBE" "$COMPUTED_KIND_PROBE" "$RUNTIME_PROBE" "$RUNTIME_COMMAND_PROBE"
   rm -f "$RUNTIME_DUPLICATE_PROBE" "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
   rm -f "$APP_SOURCE_PROBE" "$BUILD_SOURCE_PROBE" "$ARCHIVE_PROBE"
   rm -f "$GENERATED_DIST_PROBE" "$GENERATED_CACHE_PROBE"
   rmdir "$(dirname "$BUILD_SOURCE_PROBE")" 2>/dev/null || true
+}
+
+cleanup()
+{
+  cleanup_probes
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then rm -rf "$TMP_DIR"; fi
 }
+
+# Remove only this suite's fixed probe names before the initial positive check.
+# This lets a new invocation recover safely if a prior invocation was interrupted.
+cleanup_probes
 trap cleanup EXIT
 
 expect_failure()

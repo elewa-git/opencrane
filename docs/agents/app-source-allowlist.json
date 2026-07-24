@@ -11,6 +11,7 @@
   ],
   "allowedFiles": [
     { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
+    { "path": "apps/opencrane/prisma/bootstrap/verify-persona-source-seeds.mjs", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
     { "path": "apps/opencrane/src/__tests__/config.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/__tests__/index.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
@@ -80,6 +81,9 @@
     { "path": "apps/agent-runtime/tests/test_conformance.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
     { "path": "apps/agent-runtime/tests/test_fault_matrix.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
     { "path": "apps/agent-runtime/tests/test_runtime.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
+
+    { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
+    { "path": "apps/skill-authoring/__tests__/test_authoring_worker.py", "owner": "apps/skill-authoring", "classification": "composition-test" },
 
     { "path": "apps/feat-central-agents/src/__tests__/connectors/slack.connector.test.ts", "owner": "apps/feat-central-agents", "classification": "delete" },
     { "path": "apps/feat-central-agents/src/__tests__/ingestion.test.ts", "owner": "apps/feat-central-agents", "classification": "delete" },

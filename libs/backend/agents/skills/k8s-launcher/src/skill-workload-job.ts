@@ -114,14 +114,19 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 
 	// 2. Derive metadata without placing source, artifact bytes, arguments, or credentials in the manifest.
 	const name = _JobName(assignment, profile);
+	/** Keep the container name aligned with the exact, profile-selected workload identity. */
 	const component = profile.kind === "authoring" ? "skill-authoring" : "tool-runner";
+	/** Keep the two workload identities explicit so each job class has one auditable product owner. */
+	const labels = profile.kind === "authoring"
+		? { "app.kubernetes.io/name": "opencrane-skill-authoring", "app.kubernetes.io/component": "skill-authoring", "opencrane.ai/skill-workload": name }
+		: { "app.kubernetes.io/name": "opencrane-tool-runner", "app.kubernetes.io/component": "tool-runner", "opencrane.ai/skill-workload": name };
 	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, [_BOOTSTRAP_REFERENCE_ANNOTATION]: assignment.capabilityReference };
 
 	// 3. Return a zero-retry, terminally cleaned Job; its worker exchanges the opaque reference at runtime.
 	return {
 		apiVersion: "batch/v1",
 		kind: "Job",
-		metadata: { name, namespace: assignment.namespace, labels: { "app.kubernetes.io/name": `opencrane-${component}`, "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
+		metadata: { name, namespace: assignment.namespace, labels, annotations },
 		spec: {
 			suspend: true,
 			backoffLimit: 0,
@@ -130,7 +135,7 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 			activeDeadlineSeconds: profile.activeDeadlineSeconds,
 			ttlSecondsAfterFinished: 0,
 			template: {
-				metadata: { labels: { "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
+				metadata: { labels, annotations },
 				spec: {
 					serviceAccountName: profile.serviceAccountName,
 					automountServiceAccountToken: false,

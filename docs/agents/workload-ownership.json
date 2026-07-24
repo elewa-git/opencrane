@@ -56,7 +56,9 @@
         "agentController.enabled=true",
         "agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32",
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
       ],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-s3",
@@ -100,6 +102,11 @@
     {
       "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts",
       "anchor": "kind: \"Job\"",
+      "workloadIds": ["skill-authoring", "tool-runner"]
+    },
+    {
+      "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
       "workloadIds": ["skill-authoring", "tool-runner"]
     },
     {
@@ -272,7 +279,7 @@
       "image": "ghcr.io/italanta/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
       "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "\"app.kubernetes.io/component\": \"skill-authoring\"" },
       "classification": "survivor",
       "reason": "The agent controller will create isolated draft-capability authoring Jobs only after a durable claim exists."
     },
@@ -282,7 +289,7 @@
       "image": "ghcr.io/italanta/opencrane-tool-runner@sha256:<release-digest>",
       "owner": "apps/tool-runner",
       "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts", "anchor": "\"app.kubernetes.io/component\": \"tool-runner\"" },
       "classification": "survivor",
       "reason": "The agent controller will create isolated capability-bound tool Jobs only after a durable claim and reply protocol exists."
     },
