@@ -52,7 +52,11 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 
 The package owns the claim and assignment transitions on `SkillWorkload`. The clean target baseline
 enforces its pending → assigned state fence, monotonic delivery generation, immutable Job UID, and
-terminal cancellation independently of this TypeScript adapter.
+terminal cancellation independently of this TypeScript adapter. It also owns the one-use
+`SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
+bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
+one consuming Pod UID. The later worker exchange may consume that record, but cannot turn it into a
+general artifact or runtime credential.
 
 ## See also
 

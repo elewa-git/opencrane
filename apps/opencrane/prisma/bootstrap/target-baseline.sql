@@ -1556,6 +1556,23 @@ CREATE TABLE "skill_workloads" (
 );
 
 -- CreateTable
+CREATE TABLE "skill_workload_bootstraps" (
+    "id" TEXT NOT NULL,
+    "skill_workload_id" TEXT NOT NULL,
+    "reference_hash" TEXT NOT NULL,
+    "audience" TEXT NOT NULL,
+    "service_account_name" TEXT NOT NULL,
+    "namespace" TEXT NOT NULL,
+    "workload_uid" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "consumed_at" TIMESTAMP(3),
+    "consumed_by_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_workload_bootstraps_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "tenant_litellm_keys" (
     "id" TEXT NOT NULL,
     "tenant" TEXT NOT NULL,
@@ -2286,6 +2303,15 @@ CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_w
 CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"("silo_id", "state", "created_at");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "skill_workload_bootstraps_skill_workload_id_key" ON "skill_workload_bootstraps"("skill_workload_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workload_bootstraps_reference_hash_key" ON "skill_workload_bootstraps"("reference_hash");
+
+-- CreateIndex
+CREATE INDEX "skill_workload_bootstraps_expires_at_idx" ON "skill_workload_bootstraps"("expires_at");
+
+-- CreateIndex
 CREATE INDEX "tenant_litellm_keys_tenant_idx" ON "tenant_litellm_keys"("tenant");
 
 -- CreateIndex
@@ -2542,6 +2568,9 @@ ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_
 
 -- AddForeignKey
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tenant_litellm_keys" ADD CONSTRAINT "tenant_litellm_keys_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3882,6 +3911,22 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_skill_workload_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; transition_time TIMESTAMP(3) := clock_timestamp();
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN RAISE EXCEPTION 'a new SkillWorkloadBootstrap must begin unconsumed'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."skill_workload_id" IS DISTINCT FROM OLD."skill_workload_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash" OR NEW."audience" IS DISTINCT FROM OLD."audience" OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NOT NULL AND (NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at" OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid") THEN RAISE EXCEPTION 'consumed SkillWorkloadBootstrap is terminal'; END IF;
+    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap may be consumed exactly once'; END IF;
+    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at" OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL) OR (NEW."consumed_at" IS NOT NULL AND (NEW."consumed_at" < NEW."created_at" OR btrim(NEW."consumed_by_pod_uid") = '')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires hashed reference, positive expiry, and paired consumption evidence'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."consumed_at" > transition_time OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap must be consumed at a current time before expiry'; END IF;
+    SELECT "kind", "state", "workload_uid" INTO workload_kind, workload_state, assigned_uid FROM "skill_workloads" WHERE "id" = NEW."skill_workload_id" FOR UPDATE;
+    IF workload_state IS DISTINCT FROM 'assigned' OR assigned_uid IS DISTINCT FROM NEW."workload_uid" THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires its exact assigned workload UID'; END IF;
+    IF (workload_kind = 'authoring' AND (NEW."audience" <> 'opencrane-skill-authoring' OR NEW."service_account_name" <> 'skill-authoring-default' OR NEW."namespace" <> 'opencrane-skill-authoring')) OR (workload_kind = 'tool_runner' AND (NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default' OR NEW."namespace" <> 'opencrane-tools')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match its workload class'; END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Skill rows cannot be deleted'; END IF;
@@ -4481,6 +4526,7 @@ CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
 CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
+CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
