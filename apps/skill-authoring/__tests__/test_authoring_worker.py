@@ -38,6 +38,19 @@ class _Response:
         return self._body.read(amount)
 
 
+class _CompletionResponse:
+    """In-memory response seam for the fixed terminal completion route."""
+
+    def __init__(self, body: bytes = b'{"completed":true}', status: int = 200):
+        """Build one terminal authority reply without including source or credential material."""
+        self.status = status
+        self._body = io.BytesIO(body)
+
+    def read(self, amount: int = -1) -> bytes:
+        """Read the bounded JSON response body."""
+        return self._body.read(amount)
+
+
 class AuthoringWorkerTests(unittest.TestCase):
     """Prove authoring bundle bytes cannot escape their server-selected integrity and archive bounds."""
 
@@ -180,6 +193,48 @@ class AuthoringWorkerTests(unittest.TestCase):
             project.write_text("[project]\nname='example'\n[tool.poetry]\ndependencies={ requests = '^2.0' }", encoding="utf-8")
             with self.assertRaisesRegex(RuntimeError, "unsupported dependencies"):
                 _AUTHORING._assert_dependency_policy(project)
+
+    def test_posts_only_a_bounded_terminal_outcome_to_the_fixed_completion_route(self) -> None:
+        """Completion rereads the projected token and accepts only the server's exact acknowledgement shape."""
+        with tempfile.TemporaryDirectory() as raw:
+            directory = pathlib.Path(raw)
+            captured: dict[str, object] = {}
+
+            def open_request(request: object, timeout: float) -> _CompletionResponse:
+                captured["url"] = request.full_url
+                captured["authorization"] = request.get_header("Authorization")
+                captured["body"] = request.data
+                captured["timeout"] = timeout
+                return _CompletionResponse()
+
+            command = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), command, open_request)
+            self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-authoring-workloads:complete")
+            self.assertEqual(captured["authorization"], "Bearer projected-token")
+            self.assertEqual(captured["body"], b'{"workloadId":"workload-1","outcome":"succeeded","testReport":{"passed":true,"summary":"checks passed","checksRun":3},"scanResult":{"passed":true,"summary":"scans passed","checksRun":3}}')
+            self.assertEqual(captured["timeout"], 10.0)
+
+    def test_refuses_unbounded_completion_evidence_or_a_noncanonical_authority_reply(self) -> None:
+        """The worker neither sends raw validator output nor turns an ambiguous terminal reply into success."""
+        with tempfile.TemporaryDirectory() as raw:
+            directory = pathlib.Path(raw)
+            command = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed\nraw output", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            with self.assertRaisesRegex(RuntimeError, "command is invalid"):
+                _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), command)
+            failed = {"workloadId": "workload-1", "outcome": "failed", "failureCode": "validator_unavailable"}
+            with self.assertRaisesRegex(RuntimeError, "completion was rejected"):
+                _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), failed, lambda request, timeout: _CompletionResponse(b'{"completed":false}'))
+
+    def test_rejects_oversized_authority_replies_and_boolean_check_counts(self) -> None:
+        """The completion exchange keeps both incoming authority data and outgoing evidence within their exact bounds."""
+        with tempfile.TemporaryDirectory() as raw:
+            directory = pathlib.Path(raw)
+            succeeded = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": 3}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            with self.assertRaisesRegex(RuntimeError, "response exceeded"):
+                _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), succeeded, lambda request, timeout: _CompletionResponse(b"x" * 4097))
+            invalid = {"workloadId": "workload-1", "outcome": "succeeded", "testReport": {"passed": True, "summary": "checks passed", "checksRun": True}, "scanResult": {"passed": True, "summary": "scans passed", "checksRun": 3}}
+            with self.assertRaisesRegex(RuntimeError, "command is invalid"):
+                _AUTHORING.complete_workload("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", "workload-1", self._token(directory), invalid)
 
 
 if __name__ == "__main__":

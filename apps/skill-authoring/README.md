@@ -12,7 +12,7 @@ builder using only a draft capability.
 ## Public surface
 
 - `deploy/Dockerfile` — builds the authoring worker image from the shared acknowledgement client.
-- `src/authoring_worker.py` — private, not-yet-invoked intake and offline-validator primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and return bounded evidence.
+- `src/authoring_worker.py` — private, not-yet-invoked intake, offline-validator, and terminal-completion primitives. They reject candidate dependencies and plaintext secrets, use only fixed image-owned commands, and can submit only bounded success evidence or a stable failure code to the fixed internal completion route.
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
 
 ## Boundary
