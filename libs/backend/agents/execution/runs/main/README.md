@@ -175,6 +175,12 @@ a pure admission gate so a later repository can lock the parent, count existing 
 the budget, persist one derived child snapshot, and record lineage atomically. Until that boundary
 exists, no child-run runtime command is exposed.
 
+`ChildRunReservation` is the durable record that this later boundary will write beside a child run.
+It freezes the exact parent and root identifiers, child depth, and the turns, tokens, and duration
+carved out for that child. The database rejects a reservation whose child is not already bound to
+that same parent/root/silo and rejects every later mutation. This lets a parent-locked transaction
+derive remaining capacity from durable allocations instead of trusting a mutable counter.
+
 ## Dependency direction
 
 Tagged `scope:execution-runs`: it may depend only on `scope:agents` (shared run models),
@@ -192,6 +198,9 @@ transaction. First-Pod registration publishes the release event atomically, leav
 Pod is trusted but its release command can be reclaimed.
 Cancellation reuses the same outbox with `RunCancellationRequested` and
 `RunWorkloadCleanupRequested`; no second cleanup queue or revocation authority exists.
+
+`ChildRunReservation` is also owned here. It is one-to-one with its child run and references its
+immediate parent; it is append-only after the transaction that creates the derived child run.
 
 ## See also
 

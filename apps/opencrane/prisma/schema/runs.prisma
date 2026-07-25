@@ -76,6 +76,8 @@ model AgentRun {
   executionReceipts       ActionExecutionReceipt[]
   toolInvocations         ToolInvocation[]
   outboxEvents            OutboxEvent[]
+  spawnedChildReservations ChildRunReservation[] @relation("ChildRunReservationParent")
+  childReservation         ChildRunReservation?  @relation("ChildRunReservationChild")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -87,6 +89,28 @@ model AgentRun {
   @@index([threadId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// Immutable budget allocation and lineage proof for one governed child run.
+///
+/// The row is written with the child run in the parent's locked transaction. It makes each
+/// reservation independently auditable and lets later spawns sum only durable allocations rather
+/// than trusting a mutable counter or caller-provided remaining capacity.
+model ChildRunReservation {
+  childRunId          String   @id @map("child_run_id")
+  parentRunId         String   @map("parent_run_id")
+  rootRunId           String   @map("root_run_id")
+  depth               Int
+  maxModelTurns       Int      @map("max_model_turns")
+  maxTotalTokens      Int      @map("max_total_tokens")
+  maxDurationMs       Int      @map("max_duration_ms")
+  createdAt           DateTime @default(now()) @map("created_at")
+  parentRun           AgentRun @relation("ChildRunReservationParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+  childRun            AgentRun @relation("ChildRunReservationChild", fields: [childRunId], references: [id], onDelete: Restrict)
+
+  @@index([parentRunId])
+  @@index([rootRunId])
+  @@map("child_run_reservations")
 }
 
 model RunInputSnapshot {

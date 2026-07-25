@@ -93,4 +93,35 @@ BEGIN
 END;
 $$;
 
+INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_id", "thread_id", "trigger", "request_idempotency_key", "root_run_id", "parent_run_id", "effective_contract_digest", "input_snapshot_digest")
+VALUES ('snapshot-child-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', NULL, 'managed_invocation', 'snapshot-child-request', 'snapshot-run', 'snapshot-run', 'sha256:' || repeat('9', 64), 'sha256:' || repeat('0', 64));
+INSERT INTO "run_input_snapshots" ("run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
+VALUES ('snapshot-child-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('9', 64), NULL, '[]', '{}', '{}', '{}', '{}', 'sha256:' || repeat('a', 64), 'prompt-v1', 'sha256:' || repeat('0', 64));
+INSERT INTO "child_run_reservations" ("child_run_id", "parent_run_id", "root_run_id", "depth", "max_model_turns", "max_total_tokens", "max_duration_ms")
+VALUES ('snapshot-child-run', 'snapshot-run', 'snapshot-run', 1, 1, 100, 1000);
+SET CONSTRAINTS ALL IMMEDIATE;
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM "child_run_reservations" WHERE "child_run_id" = 'snapshot-child-run' AND "parent_run_id" = 'snapshot-run' AND "root_run_id" = 'snapshot-run') THEN
+        RAISE EXCEPTION 'FAIL: child reservation did not retain exact lineage';
+    END IF;
+    RAISE NOTICE 'PASS: a child reservation binds exact durable lineage and limits';
+END;
+$$;
+DO $$
+DECLARE
+    actual_message TEXT;
+BEGIN
+    BEGIN
+        UPDATE "child_run_reservations" SET "max_total_tokens" = 101 WHERE "child_run_id" = 'snapshot-child-run';
+    EXCEPTION WHEN raise_exception THEN
+        GET STACKED DIAGNOSTICS actual_message = MESSAGE_TEXT;
+        IF strpos(actual_message, 'ChildRunReservation rows are immutable') = 0 THEN RAISE EXCEPTION 'FAIL: expected immutable reservation rejection, got %', actual_message; END IF;
+        RAISE NOTICE 'PASS: a child reservation is immutable after durable admission';
+        RETURN;
+    END;
+    RAISE EXCEPTION 'FAIL: a child reservation unexpectedly mutated';
+END;
+$$;
+
 ROLLBACK;
