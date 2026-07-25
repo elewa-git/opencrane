@@ -47,6 +47,15 @@ rejected with `admission_concurrency_limited`; it does not turn a hot service ro
 unbounded connection pool. The production entrypoint must use this gate before calling
 `PrismaRunAdmissionRepository.admit()` and must keep its policy aligned with the database pool budget.
 
+`__AuthorizeGovernedChildRunSpawn` is the first gate for a future governed child run. It accepts
+only parent facts that a repository has already locked, checks that a child stays in the same silo
+and under the root, bounds depth and fan-out, and asks an injected authority to prove that the
+child's capability set narrows the parent's. It permits only transcript messages, memory facts,
+artifact revisions, and skill revisions already frozen in the parent snapshot, then verifies that a
+finite child budget fits the parent remainder. It returns a detached authorization, **not a child
+run**: the following persistence slice must atomically reserve that budget, save lineage and
+idempotency facts, and compile the child snapshot before any runtime command can exist.
+
 `__StartNextRunAttempt` is a **compare-and-swap** retry state machine: it reads the run and its
 AgentService authority as one snapshot, refuses unless the run is in a retryable terminal state and the
 service is active with the exact revision the run pins, then atomically increments the attempt while
@@ -121,6 +130,11 @@ uncertainty fails closed.
 - `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
+- `__AuthorizeGovernedChildRunSpawn(parent, request, existingChildCount, policy, delegation)` —
+  fail closed unless a proposed child stays within its locked parent's silo, hierarchy, selected
+  snapshot inputs, capability subset, fan-out, and finite budget; this does not persist a run.
+- `GovernedChildRun*` — typed parent, request, policy, capability-verifier, authorization, and
+  refusal vocabulary for the subsequent transaction-fenced child reservation boundary.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
   run, snapshot and ordered outbox events around a caller-supplied assembly callback.
 - `RunAdmissionConcurrencyGate` — bound active and queued admissions for one silo and AgentService
@@ -155,6 +169,11 @@ Kubernetes itself. It owns only durable admission, attempts, dispatch leases, as
 integrity, release delivery, first-Pod registration, cancellation fencing, and cleanup
 confirmation. Kubernetes inspection and mutation remain in dedicated runtime processes; this
 package only says which exact work may be removed.
+
+It also does not yet reserve or create child runs. `__AuthorizeGovernedChildRunSpawn` is deliberately
+a pure admission gate so a later repository can lock the parent, count existing children, reserve
+the budget, persist one derived child snapshot, and record lineage atomically. Until that boundary
+exists, no child-run runtime command is exposed.
 
 ## Dependency direction
 
