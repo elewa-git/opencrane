@@ -59,7 +59,9 @@ provider credentials or mutable source objects.
   `RuntimeCandidate` — the private workload protocol for a personal-agent process that opens its own
   authenticated stream. The opening frame binds the runtime instance to the Pod UID independently
   verified from its Kubernetes credential. The audience constant and shared validator keep Job
-  issuance and TokenReview admission on one bounded identity grammar.
+  issuance and TokenReview admission on one bounded identity grammar. A `child_run_spawn` candidate
+  can only request a separately governed child; it carries no child identifier or authority to write
+  one, so the control plane must verify a narrower capability set and reserve the child atomically.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

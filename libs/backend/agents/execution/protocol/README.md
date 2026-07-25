@@ -11,7 +11,7 @@ through the language-neutral `AgentRuntimeProtocol v1`.
 
 Before a command reaches an executor, it checks that the command belongs to the currently assigned
 run attempt, carries the exact frozen input snapshot, arrives in order, and is still inside its lease.
-When the executor proposes an event or outside action, it performs the mirror check before another
+When the executor proposes an event, outside action, or child run, it performs the mirror check before another
 domain may persist or execute that proposal.
 
 This package owns both that pure decision and the Prisma-backed adapter that drives it. The adapter
@@ -57,7 +57,7 @@ authorities to accept or reject.
 ## Public surface
 
 - `__AdmitRuntimeCommand` — validates a control-plane command before stream delivery.
-- `__AdmitRuntimeCandidate` — validates a runtime-proposed event or deferred action.
+- `__AdmitRuntimeCandidate` — validates a runtime-proposed event, deferred action, or governed child-run request.
 - `PrismaRuntimeDispatchAuthority` — the durable adapter the app injects into the stream transport;
   it loads assignment authority, mints and advances commands, admits candidates, and releases the
   runtime-instance binding on stream loss.
@@ -65,6 +65,9 @@ authorities to accept or reject.
   Prisma reads used by the dispatch transaction.
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected MCP custody,
   sandbox, or memory port and fails closed for unsupported revisions.
+- `RuntimeChildRunSpawnRunner` — app-owned port that verifies a child request can only narrow the
+  parent’s authority, derives its frozen input, and reserves it atomically; without this port the
+  protocol rejects child-run candidates before recording them.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
@@ -88,7 +91,9 @@ records needed to compile a dispatch. The dispatch adapter owns two Postgres mod
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
 attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
-baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
+baseline. `RuntimeChildRunSpawnDispatch` is created as pending in the same transaction as candidate
+admission, then stores the terminal completion or refusal; a reconnect sees pending or replays that
+exact outcome instead of reconsidering it. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
 conversation domains but never writes those authorities.
 
 ## Dependency direction

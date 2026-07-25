@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeChildRunSpawnCandidate, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 
 /**
  * Injected control-plane compiler that hydrates an immutable snapshot into the literal compiled
@@ -63,6 +63,19 @@ export interface RuntimeExternalActionRunner
 {
 	/** Reserve and dispatch one admitted external-action candidate against its validated tools. */
 	run(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[]): Promise<RuntimeExternalActionRunnerResult>;
+}
+
+/** Composition-root port that authorizes, reserves, and starts one admitted child-run candidate. */
+export interface RuntimeChildRunSpawnRunner
+{
+	/**
+	 * Resolve the candidate against live parent authority and persist its child run atomically.
+	 *
+	 * The runner must derive the child identifier and idempotency key from the parent run and
+	 * candidate identifier; it must independently verify capability narrowing, build the frozen child
+	 * snapshot under the parent lock, and return `denied` for every refused or unavailable outcome.
+	 */
+	run(candidate: RuntimeChildRunSpawnCandidate, snapshot: RunInputSnapshot): Promise<{ readonly outcome: "completed" | "denied" }>;
 }
 
 /** Stable result returned after a candidate reaches the authoritative run boundary. */

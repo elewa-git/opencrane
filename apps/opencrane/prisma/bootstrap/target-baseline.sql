@@ -1502,6 +1502,18 @@ CREATE TABLE "runtime_external_action_retries" (
 );
 
 -- CreateTable
+CREATE TABLE "runtime_child_run_spawn_dispatches" (
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "candidate_id" TEXT NOT NULL,
+    "outcome" TEXT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "runtime_child_run_spawn_dispatches_pkey" PRIMARY KEY ("run_id", "attempt", "candidate_id")
+);
+
+-- CreateTable
 CREATE TABLE "runtime_steering_boundaries" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -2396,6 +2408,9 @@ ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_ser
 
 -- AddForeignKey
 ALTER TABLE "runtime_external_action_retries" ADD CONSTRAINT "runtime_external_action_retries_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_child_run_spawn_dispatches" ADD CONSTRAINT "runtime_child_run_spawn_dispatches_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;

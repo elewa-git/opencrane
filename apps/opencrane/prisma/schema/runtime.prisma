@@ -32,6 +32,7 @@ model RuntimeCommandStream {
   updatedAt           DateTime                    @updatedAt @map("updated_at")
   commands             RuntimeDispatchedCommand[]
   externalActionRetries RuntimeExternalActionRetry[]
+  childRunSpawnDispatches RuntimeChildRunSpawnDispatch[]
 
   @@id([runId, attempt])
   @@map("runtime_command_streams")
@@ -53,6 +54,21 @@ model RuntimeExternalActionRetry {
   @@id([runId, attempt, candidateId])
   @@index([runId, attempt, retryDeadlineAt])
   @@map("runtime_external_action_retries")
+}
+
+/// Terminal result of one admitted child-run spawn candidate. The receipt survives reconnects, so
+/// the same candidate can never turn a prior refusal into a later child reservation.
+model RuntimeChildRunSpawnDispatch {
+  runId       String               @map("run_id")
+  attempt     Int
+  candidateId String               @map("candidate_id")
+  outcome     String
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+  stream      RuntimeCommandStream @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict)
+
+  @@id([runId, attempt, candidateId])
+  @@map("runtime_child_run_spawn_dispatches")
 }
 
 /// Ordered steering-boundary ledger for one attempt. The runtime claims a boundary only at a safe

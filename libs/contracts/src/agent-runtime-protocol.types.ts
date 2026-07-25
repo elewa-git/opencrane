@@ -168,5 +168,48 @@ export interface RuntimeExternalActionCandidate extends RuntimeCandidateCoordina
 	readonly arguments: JsonValue;
 }
 
+/** Immutable context references a runtime requests for one governed child run. */
+export interface RuntimeChildRunContextSelection
+{
+	/** Ordered parent transcript messages copied into the child snapshot. */
+	readonly messageIds: readonly string[];
+	/** Parent-pinned memory facts copied into the child snapshot. */
+	readonly memoryFactIds: readonly string[];
+	/** Parent-pinned artifact revisions copied into the child snapshot. */
+	readonly artifactRevisionIds: readonly string[];
+	/** Parent-pinned skill revisions copied into the child snapshot. */
+	readonly skillRevisionIds: readonly string[];
+}
+
+/** Finite resource allocation a runtime requests for one governed child run. */
+export interface RuntimeChildRunBudget
+{
+	/** Maximum model turns the child may consume. */
+	readonly maxModelTurns: number;
+	/** Maximum provider tokens the child may consume. */
+	readonly maxTotalTokens: number;
+	/** Maximum provider cost in integer USD micros the child may consume. */
+	readonly maxCostUsdMicros: number;
+	/** Maximum wall-clock duration the child may occupy. */
+	readonly maxDurationMs: number;
+}
+
+/** Runtime request for a separately governed child run, never a direct child-run write. */
+export interface RuntimeChildRunSpawnCandidate extends RuntimeCandidateCoordinates
+{
+	/** Candidate category requiring control-plane child-run authorization and reservation. */
+	readonly kind: "child_run_spawn";
+	/** Target AgentService the control plane must independently authorize. */
+	readonly agentServiceId: string;
+	/** Requested child capability-set digest, which the control plane must verify as a parent subset. */
+	readonly capabilitySetDigest: string;
+	/** Parent-frozen inputs requested for this one child only. */
+	readonly context: RuntimeChildRunContextSelection;
+	/** Finite allocation requested from the parent’s remaining budget. */
+	readonly budget: RuntimeChildRunBudget;
+	/** JSON-safe task provenance the control plane validates and persists with the reservation. */
+	readonly task: JsonValue;
+}
+
 /** Candidate union returned by the runtime to the control-plane authority. */
-export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate;
+export type RuntimeCandidate = RuntimeEventCandidate | RuntimeExternalActionCandidate | RuntimeChildRunSpawnCandidate;

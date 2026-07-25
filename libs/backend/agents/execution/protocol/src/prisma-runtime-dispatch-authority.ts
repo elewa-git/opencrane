@@ -2,16 +2,19 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeChildRunSpawnCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeChildRunSpawnRunner, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Fixed retry delay returned before an admitted action has a durable invocation receipt. */
 const _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS = 1_000;
+
+/** Maximum time a child-spawn receipt may remain pending before replay reconciles it to refusal. */
+const _CHILD_RUN_SPAWN_PENDING_TIMEOUT_MILLISECONDS = 300_000;
 
 /** Immutable durable facts loaded and locked for one connected runtime Pod. */
 interface RuntimeDispatchContext
@@ -96,17 +99,20 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly compileRunInput: RunInputCompiler;
 	/** Optional composition-root runner that reserves and dispatches admitted external actions. */
 	private readonly externalActionRunner: RuntimeExternalActionRunner | null;
+	/** Optional composition-root runner that authorizes and reserves admitted child-run requests. */
+	private readonly childRunSpawnRunner: RuntimeChildRunSpawnRunner | null;
 	/** Structured logger for dispatch failures that must be retried by the runtime. */
 	private readonly log: Logger;
 
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"), childRunSpawnRunner?: RuntimeChildRunSpawnRunner)
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires a bounded namespace and command lifetime");
 		this.prisma = prisma;
 		this.config = config;
 		this.compileRunInput = compileRunInput;
 		this.externalActionRunner = externalActionRunner ?? null;
+		this.childRunSpawnRunner = childRunSpawnRunner ?? null;
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.log = log;
 	}
@@ -134,9 +140,13 @@ export class PrismaRuntimeDispatchAuthority
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
 		const externalActionRunner = this.externalActionRunner;
+		const childRunSpawnRunner = this.childRunSpawnRunner;
 		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
+			// A child request cannot become an accepted no-op: no runner means this deployment has no
+			// live capability verifier, snapshot compiler, and transactional reservation boundary.
+			if (candidate.kind === "child_run_spawn" && childRunSpawnRunner === null) return { accepted: false, reason: "child_run_spawn_unavailable" };
 			const admission = await _admitCandidate(prisma, clock, identity, candidate);
 			// After the fence-checked admission commits, dispatch accepted external actions outside the
 			// admission transaction. Only an explicit runner result that proves no ToolInvocation exists can
@@ -152,7 +162,25 @@ export class PrismaRuntimeDispatchAuthority
 					return retry.result;
 				}
 			}
-			return admission;
+			if (candidate.kind === "child_run_spawn" && admission.replayed)
+			{
+				const receipt = await _childRunSpawnReceipt(prisma, candidate);
+				if (receipt?.outcome === "completed") return { accepted: true };
+				if (receipt?.outcome === "denied") return { accepted: false, reason: "child_run_spawn_dispatch_denied" };
+				if (receipt !== null && receipt.createdAt.getTime() <= clock.nowEpochMs() - _CHILD_RUN_SPAWN_PENDING_TIMEOUT_MILLISECONDS)
+				{
+					const reconciled = await _reconcileExpiredChildRunSpawnReceipt(prisma, candidate, log);
+					if (reconciled) return { accepted: false, reason: "child_run_spawn_dispatch_denied" };
+				}
+				return { accepted: false, reason: "child_run_spawn_in_progress", retryable: true, retryAfterMilliseconds: _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS };
+			}
+			if (admission.accepted && candidate.kind === "child_run_spawn" && childRunSpawnRunner !== null)
+			{
+				const outcome = await _dispatchChildRunSpawn(prisma, childRunSpawnRunner, identity, candidate, log);
+				const persisted = await _recordChildRunSpawnReceipt(prisma, candidate, outcome.outcome, log);
+				if (!persisted || outcome.outcome === "denied") return { accepted: false, reason: "child_run_spawn_dispatch_denied" };
+			}
+			return admission.replayed ? { accepted: true } : admission;
 		});
 	}
 
@@ -165,6 +193,68 @@ export class PrismaRuntimeDispatchAuthority
 		{
 			await _releaseStream(prisma, identity, open);
 		});
+	}
+}
+
+/** Returns the exact durable child-spawn outcome for an idempotent runtime replay. */
+async function _childRunSpawnReceipt(prisma: PrismaClient, candidate: RuntimeChildRunSpawnCandidate): Promise<{ readonly outcome: "pending" | "completed" | "denied"; readonly createdAt: Date } | null>
+{
+	const receipt = await prisma.runtimeChildRunSpawnDispatch.findUnique({ where: { runId_attempt_candidateId: { runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId } }, select: { outcome: true, createdAt: true } });
+	if (receipt === null || (receipt.outcome !== "pending" && receipt.outcome !== "completed" && receipt.outcome !== "denied")) return null;
+	return { outcome: receipt.outcome, createdAt: receipt.createdAt };
+}
+
+/** Persists a terminal child-spawn result so a reconnect cannot recompute or reverse it. */
+async function _recordChildRunSpawnReceipt(prisma: PrismaClient, candidate: RuntimeChildRunSpawnCandidate, outcome: "completed" | "denied", log: Logger): Promise<boolean>
+{
+	try
+	{
+		const updated = await prisma.runtimeChildRunSpawnDispatch.updateMany({ where: { runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, outcome: "pending" }, data: { outcome } });
+		if (updated.count === 1) return true;
+		const receipt = await _childRunSpawnReceipt(prisma, candidate);
+		return receipt !== null && receipt.outcome === outcome;
+	}
+	catch (error)
+	{
+		log.error({ err: error, runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, outcome, failureKind: "child_run_spawn_receipt_persistence_failed" }, "runtime child-run spawn receipt persistence failed");
+		return false;
+	}
+}
+
+/** Converts an orphaned pending receipt into a durable refusal instead of allowing an unbounded retry. */
+async function _reconcileExpiredChildRunSpawnReceipt(prisma: PrismaClient, candidate: RuntimeChildRunSpawnCandidate, log: Logger): Promise<boolean>
+{
+	try
+	{
+		const updated = await prisma.runtimeChildRunSpawnDispatch.updateMany({ where: { runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, outcome: "pending" }, data: { outcome: "denied" } });
+		return updated.count === 1;
+	}
+	catch (error)
+	{
+		log.error({ err: error, runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, failureKind: "child_run_spawn_receipt_reconciliation_failed" }, "runtime child-run spawn receipt reconciliation failed");
+		return false;
+	}
+}
+
+/** Reloads the immutable parent snapshot before the composition root reserves one child run. */
+async function _dispatchChildRunSpawn(prisma: PrismaClient, runner: RuntimeChildRunSpawnRunner, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeChildRunSpawnCandidate, log: Logger): ReturnType<RuntimeChildRunSpawnRunner["run"]>
+{
+	try
+	{
+		// 1. Reload the durable parent so an admitted frame cannot be applied to a replaced snapshot.
+		const context = await _loadContext(prisma, identity);
+		if (context === null || context.runId !== candidate.runId || context.attempt !== candidate.attempt || context.snapshot.digest !== context.inputSnapshotDigest)
+		{
+			return { outcome: "denied" };
+		}
+		// 2. Delegate only the sealed parent snapshot to the app-owned authorization and reservation boundary.
+		return await runner.run(candidate, context.snapshot);
+	}
+	catch (error)
+	{
+		// 3. A composition failure cannot escape as a stream error or silently authorize a child run.
+		log.error({ err: error, runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, agentServiceId: candidate.agentServiceId, failureKind: "child_run_spawn_dispatch_failed" }, "runtime child-run spawn dispatch failed");
+		return { outcome: "denied" };
 	}
 }
 
@@ -239,9 +329,9 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 }
 
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateDispatchResult & { readonly replayed?: boolean }>
 {
-	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
+	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult & { readonly replayed?: boolean }>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
 		const context = await _loadContext(transaction, identity);
@@ -253,12 +343,13 @@ async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock
 
 		// 2. Delegate the allow-or-deny decision to the pure candidate authority.
 		const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
-		if (admission.outcome === "idempotent") return { accepted: true };
+		if (admission.outcome === "idempotent") return { accepted: true, replayed: true };
 		if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
 
 		// 3. Append the accepted candidate id monotonically under the held stream lock.
 		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 		if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
+		if (candidate.kind === "child_run_spawn") await transaction.runtimeChildRunSpawnDispatch.create({ data: { runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, outcome: "pending" } });
 		return { accepted: true };
 	});
 }

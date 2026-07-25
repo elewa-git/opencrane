@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeChildRunSpawnRunner, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Fixed reviewed identity for the registered runtime Pod under test. */
@@ -74,6 +74,21 @@ interface FakeExternalActionRetryRow
 	retryDeadlineAt: Date;
 }
 
+/** Mutable terminal receipt for one governed child-run spawn candidate. */
+interface FakeChildRunSpawnDispatchRow
+{
+	/** Logical parent run identifier. */
+	runId: string;
+	/** Positive parent attempt identifier. */
+	attempt: number;
+	/** Idempotent runtime candidate identifier. */
+	candidateId: string;
+	/** Terminal or in-progress state of the child-run reservation. */
+	outcome: "pending" | "completed" | "denied";
+	/** Instant at which the pending receipt became authoritative. */
+	createdAt: Date;
+}
+
 /** Options controlling the durable state the fake exposes to the adapter. */
 interface FakeOptions
 {
@@ -85,6 +100,8 @@ interface FakeOptions
 	readonly assignmentState?: string;
 	/** Optional composition-root runner invoked for an admitted external-action candidate. */
 	readonly externalActionRunner?: RuntimeExternalActionRunner;
+	/** Optional composition-root runner invoked for an admitted child-run spawn candidate. */
+	readonly childRunSpawnRunner?: RuntimeChildRunSpawnRunner;
 	/** Optional structured logger injected to assert handled dispatch failures remain observable. */
 	readonly logger?: Logger;
 	/** Optional trusted clock for retry-window expiry assertions. */
@@ -94,11 +111,12 @@ interface FakeOptions
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; childRunSpawnDispatches: FakeChildRunSpawnDispatchRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const retries: FakeExternalActionRetryRow[] = [];
+	const childRunSpawnDispatches: FakeChildRunSpawnDispatchRow[] = [];
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
@@ -166,6 +184,25 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 				return { count: 1 };
 			},
 		},
+		runtimeChildRunSpawnDispatch: {
+			async findUnique(args: { where: { runId_attempt_candidateId: { runId: string; attempt: number; candidateId: string } } })
+			{
+				const key = args.where.runId_attempt_candidateId;
+				return childRunSpawnDispatches.find(row => row.runId === key.runId && row.attempt === key.attempt && row.candidateId === key.candidateId) ?? null;
+			},
+			async create(args: { data: FakeChildRunSpawnDispatchRow })
+			{
+				childRunSpawnDispatches.push({ ...args.data, createdAt: new Date("2026-07-20T00:01:00.000Z") });
+				return args.data;
+			},
+			async updateMany(args: { where: { runId: string; attempt: number; candidateId: string; outcome: "pending" }; data: { outcome: "completed" | "denied" } })
+			{
+				const row = childRunSpawnDispatches.find(candidate => candidate.runId === args.where.runId && candidate.attempt === args.where.attempt && candidate.candidateId === args.where.candidateId && candidate.outcome === args.where.outcome);
+				if (row === undefined) return { count: 0 };
+				row.outcome = args.data.outcome;
+				return { count: 1 };
+			},
+		},
 		approvalRequest: {
 			async findMany() { return approvals.filter(row => row.resumeTokenHash !== null); },
 			async updateMany(args: { where: { id: { in: string[] } }; data: { resumeTokenHash: null } })
@@ -176,7 +213,7 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 			},
 		},
 	};
-	return { prisma: client as unknown as PrismaClient, streams, commands, retries, approvals };
+	return { prisma: client as unknown as PrismaClient, streams, commands, retries, childRunSpawnDispatches, approvals };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -189,13 +226,19 @@ const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Pr
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.clock ?? _clock, options.logger), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.clock ?? _clock, options.logger, options.childRunSpawnRunner), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
 function _candidate(commandId: string): RuntimeCandidate
 {
 	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId, candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.attempt_acknowledged", payload: {} };
+}
+
+/** Build a governed child-run candidate bound to a dispatched command. */
+function _childRunSpawnCandidate(commandId: string): RuntimeCandidate
+{
+	return { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId, candidateId: "candidate-child", runId: "run-1", attempt: 1, fence: 1, kind: "child_run_spawn", agentServiceId: "svc-child", capabilitySetDigest: "sha256:child", context: { messageIds: [], memoryFactIds: [], artifactRevisionIds: [], skillRevisionIds: [] }, budget: { maxModelTurns: 1, maxTotalTokens: 100, maxCostUsdMicros: 1_000, maxDurationMs: 1_000 }, task: { objective: "Summarise the supplied facts." } };
 }
 
 describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
@@ -305,6 +348,77 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 
 		expect(result.accepted).toBe(true);
 		expect(ran).toBe(1);
+	});
+
+	it("rejects a child-run candidate before admission when the app has no governed spawn runner", async function _rejectsUnavailableChildRunner()
+	{
+		const context = _authority({ runState: "Running" });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(await context.authority.__AdmitCandidate(_identity, _childRunSpawnCandidate(start?.commandId ?? "command-1"))).toEqual({ accepted: false, reason: "child_run_spawn_unavailable" });
+		expect(context.streams[0]?.acceptedCandidateIds).toEqual([]);
+	});
+
+	it("dispatches an admitted child-run candidate only through the injected governed runner", async function _runsChildSpawn()
+	{
+		let ran = 0;
+		const context = _authority({ runState: "Running", childRunSpawnRunner: { async run() { ran += 1; return { outcome: "completed" as const }; } } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(await context.authority.__AdmitCandidate(_identity, _childRunSpawnCandidate(start?.commandId ?? "command-1"))).toEqual({ accepted: true });
+		expect(ran).toBe(1);
+	});
+
+	it("turns a governed child-run refusal into a terminal candidate denial", async function _deniesChildSpawn()
+	{
+		const context = _authority({ runState: "Running", childRunSpawnRunner: { async run() { return { outcome: "denied" as const }; } } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+
+		const candidate = _childRunSpawnCandidate(start?.commandId ?? "command-1");
+		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+		expect(context.childRunSpawnDispatches).toEqual([expect.objectContaining({ runId: "run-1", attempt: 1, candidateId: "candidate-child", outcome: "denied" })]);
+	});
+
+	it("returns only in-progress or terminal outcomes while a governed child-run candidate is being dispatched", async function _serializesChildSpawnReplay()
+	{
+		const gates: { releaseRunner: (() => void) | null; enteredRunner: (() => void) | null } = { releaseRunner: null, enteredRunner: null };
+		const runnerEntered = new Promise<void>(function _runnerEntered(resolve) { gates.enteredRunner = resolve; });
+		const runnerRelease = new Promise<void>(function _runnerRelease(resolve) { gates.releaseRunner = resolve; });
+		const context = _authority({ runState: "Running", childRunSpawnRunner: { async run() { gates.enteredRunner?.(); await runnerRelease; return { outcome: "denied" as const }; } } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate = _childRunSpawnCandidate(start?.commandId ?? "command-1");
+
+		const initial = context.authority.__AdmitCandidate(_identity, candidate);
+		await runnerEntered;
+		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "child_run_spawn_in_progress", retryable: true, retryAfterMilliseconds: 1_000 });
+		gates.releaseRunner?.();
+		expect(await initial).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+	});
+
+	it("reconciles an orphaned pending child-run receipt to a durable refusal", async function _reconcilesExpiredChildSpawn()
+	{
+		const nowEpochMs = Date.parse("2026-07-20T00:01:00.000Z");
+		const clock = { nowEpochMs(): number { return nowEpochMs; } };
+		const context = _authority({ runState: "Running", clock, childRunSpawnRunner: { async run() { return { outcome: "denied" as const }; } } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate = _childRunSpawnCandidate(start?.commandId ?? "command-1");
+		context.childRunSpawnDispatches.push({ runId: "run-1", attempt: 1, candidateId: "candidate-child", outcome: "pending", createdAt: new Date("2026-07-19T23:56:00.000Z") });
+		if (context.streams[0] !== undefined) context.streams[0].acceptedCandidateIds.push("candidate-child");
+		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+		expect(context.childRunSpawnDispatches[0]?.outcome).toBe("denied");
+	});
+
+	it("fails closed and records structured context when the governed child-run runner throws", async function _handlesChildSpawnFailure()
+	{
+		const error = new Error("child reservation unavailable");
+		const logger = { error: vi.fn() } as unknown as Logger;
+		const context = _authority({ runState: "Running", logger, childRunSpawnRunner: { async run() { throw error; } } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+
+		expect(await context.authority.__AdmitCandidate(_identity, _childRunSpawnCandidate(start?.commandId ?? "command-1"))).toEqual({ accepted: false, reason: "child_run_spawn_dispatch_denied" });
+		expect(logger.error).toHaveBeenCalledWith({ err: error, runId: "run-1", attempt: 1, candidateId: "candidate-child", agentServiceId: "svc-child", failureKind: "child_run_spawn_dispatch_failed" }, "runtime child-run spawn dispatch failed");
 	});
 
 	it("retries only an explicit pre-reservation runner failure within its durable server budget", async function _surfacesExternalActionFailure()
