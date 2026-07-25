@@ -137,6 +137,7 @@ model RunInputSnapshot {
   memoryQueryPolicy       Json     @map("memory_query_policy")
   budgetPolicy            Json     @map("budget_policy")
   capabilitySetDigest     String   @map("capability_set_digest")
+  capabilitySet           Json     @map("capability_set")
   promptCompilerVersion   String   @map("prompt_compiler_version")
   digest                  String   @unique @map("input_digest")
   compiledAt              DateTime @default(now()) @map("created_at")

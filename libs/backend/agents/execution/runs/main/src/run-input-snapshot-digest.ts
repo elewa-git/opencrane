@@ -45,6 +45,17 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 		budgetPolicy: snapshot.budgetPolicy,
 		identitySnapshot: snapshot.identitySnapshot,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
+		capabilitySet: snapshot.capabilitySet.map(function _capability(capability): JsonValue
+		{
+			return {
+				catalog: {
+					catalogId: capability.catalog.catalogId,
+					revision: capability.catalog.revision,
+					digest: capability.catalog.digest,
+				},
+				capabilityId: capability.capabilityId,
+			};
+		}),
 		effectiveContractDigest: snapshot.effectiveContractDigest,
 		promptCompilerVersion: snapshot.promptCompilerVersion,
 		compiledAt: snapshot.compiledAt,

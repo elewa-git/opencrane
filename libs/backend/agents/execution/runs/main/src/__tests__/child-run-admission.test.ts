@@ -1,10 +1,13 @@
 import { describe, expect, it } from "vitest";
+import { __CreateCapabilitySet } from "@opencrane/backend/server/iam/authorization";
 
 import { __AuthorizeGovernedChildRunSpawn } from "../child-run-admission.js";
 import type { GovernedChildRunCapabilityDelegation, GovernedChildRunParent, GovernedChildRunSpawnRequest } from "../child-run-admission.types.js";
 
-const _PARENT_CAPABILITY_DIGEST = `sha256:${"a".repeat(64)}`;
-const _CHILD_CAPABILITY_DIGEST = `sha256:${"b".repeat(64)}`;
+const _PARENT_CAPABILITY_SET = __CreateCapabilitySet([{ catalog: { catalogId: "catalog-1", revision: 1, digest: `sha256:${"a".repeat(64)}` }, capabilityId: "artifact.read" }, { catalog: { catalogId: "catalog-1", revision: 1, digest: `sha256:${"a".repeat(64)}` }, capabilityId: "artifact.write" }])!;
+const _CHILD_CAPABILITY_SET = __CreateCapabilitySet([_PARENT_CAPABILITY_SET.capabilities[0]!])!;
+const _PARENT_CAPABILITY_DIGEST = _PARENT_CAPABILITY_SET.digest;
+const _CHILD_CAPABILITY_DIGEST = _CHILD_CAPABILITY_SET.digest;
 
 /** Builds a parent whose immutable snapshot deliberately exposes several selectable inputs. */
 function _Parent(overrides: Partial<GovernedChildRunParent> = {}): GovernedChildRunParent
@@ -18,7 +21,7 @@ function _Parent(overrides: Partial<GovernedChildRunParent> = {}): GovernedChild
 			threadId: "thread-1", messageIds: ["message-1", "message-2"], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"],
 			memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"c".repeat(64)}`, provenance: [] }], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {},
 			identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-26T00:00:00.000Z" },
-			capabilitySetDigest: _PARENT_CAPABILITY_DIGEST, effectiveContractDigest: `sha256:${"e".repeat(64)}`, promptCompilerVersion: "test-v1", digest: `sha256:${"f".repeat(64)}`, compiledAt: "2026-07-25T00:00:00.000Z",
+			capabilitySetDigest: _PARENT_CAPABILITY_DIGEST, capabilitySet: _PARENT_CAPABILITY_SET.capabilities, effectiveContractDigest: `sha256:${"e".repeat(64)}`, promptCompilerVersion: "test-v1", digest: `sha256:${"f".repeat(64)}`, compiledAt: "2026-07-25T00:00:00.000Z",
 		},
 		depth: 0,
 		remainingBudget: { maxModelTurns: 4, maxTotalTokens: 400, maxCostUsdMicros: 4000000, maxDurationMs: 60000 },
@@ -42,9 +45,9 @@ function _Request(overrides: Partial<GovernedChildRunSpawnRequest> = {}): Govern
 
 /** Proves only the expected service and child digest narrow the selected parent capability set. */
 const _Delegation: GovernedChildRunCapabilityDelegation = {
-	allows(parentCapabilitySetDigest, childAgentServiceId, childCapabilitySetDigest): boolean
+	resolve(parentCapabilitySet, childAgentServiceId, childCapabilitySetDigest)
 	{
-		return parentCapabilitySetDigest === _PARENT_CAPABILITY_DIGEST && childAgentServiceId === "child-service" && childCapabilitySetDigest === _CHILD_CAPABILITY_DIGEST;
+		return parentCapabilitySet.digest === _PARENT_CAPABILITY_DIGEST && childAgentServiceId === "child-service" && childCapabilitySetDigest === _CHILD_CAPABILITY_DIGEST ? _CHILD_CAPABILITY_SET : null;
 	},
 };
 
@@ -59,7 +62,7 @@ describe("__AuthorizeGovernedChildRunSpawn", function _DescribeChildAdmission()
 			outcome: "authorized",
 			authorization: {
 				siloId: "silo-a", rootRunId: "root-run", parentRunId: "parent-run", depth: 1,
-				capabilitySetDigest: _CHILD_CAPABILITY_DIGEST, agentServiceId: "child-service",
+				capabilitySetDigest: _CHILD_CAPABILITY_DIGEST, capabilitySet: _CHILD_CAPABILITY_SET, agentServiceId: "child-service",
 				context: request.context, budget: request.budget, task: request.task,
 			},
 		});
@@ -69,6 +72,7 @@ describe("__AuthorizeGovernedChildRunSpawn", function _DescribeChildAdmission()
 		(request.task as { prompt: string }).prompt = "Mutated after authorization.";
 		expect(result.authorization.context.messageIds).toEqual(["message-1"]);
 		expect(result.authorization.task).toEqual({ prompt: "Summarise the selected evidence." });
+		expect(result.authorization.capabilitySet.capabilities).toEqual([_PARENT_CAPABILITY_SET.capabilities[0]]);
 	});
 
 	it("rejects context not already and uniquely frozen in the parent snapshot", function _RejectContext()
@@ -87,7 +91,7 @@ describe("__AuthorizeGovernedChildRunSpawn", function _DescribeChildAdmission()
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ siloId: "silo-b" }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "cross_silo" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent({ depth: 1 }), _Request(), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "depth_exceeded" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request(), 1, policy, _Delegation)).toEqual({ outcome: "denied", reason: "fanout_exceeded" });
-		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request(), 0, policy, { allows: function _Deny(): boolean { return false; } })).toEqual({ outcome: "denied", reason: "capability_escalation" });
+		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request(), 0, policy, { resolve: function _Deny() { return null; } })).toEqual({ outcome: "denied", reason: "capability_escalation" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ budget: { maxModelTurns: 5, maxTotalTokens: 200, maxCostUsdMicros: 2000000, maxDurationMs: 30000 } }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "budget_exceeded" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ budget: { maxModelTurns: 2, maxTotalTokens: 200, maxCostUsdMicros: 4000001, maxDurationMs: 30000 } }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "budget_exceeded" });
 	});

@@ -1,4 +1,5 @@
 import { ___CloneCanonicalJson } from "@opencrane/util";
+import { __CreateCapabilitySet, __IsCapabilitySetSubset } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
 
 import type { GovernedChildRunBudget, GovernedChildRunCapabilityDelegation, GovernedChildRunContextSelection, GovernedChildRunParent, GovernedChildRunPolicy, GovernedChildRunSpawnAuthorizationResult, GovernedChildRunSpawnRequest } from "./child-run-admission.types.js";
@@ -25,7 +26,10 @@ export function __AuthorizeGovernedChildRunSpawn(parent: GovernedChildRunParent,
 	if (existingChildCount >= policy.maximumChildrenPerParent) return { outcome: "denied", reason: "fanout_exceeded" };
 
 	// 4. Let only an independent capability authority prove a narrowing delegation to the target service.
-	if (!delegation.allows(parent.snapshot.capabilitySetDigest, normalized.agentServiceId, normalized.capabilitySetDigest)) return { outcome: "denied", reason: "capability_escalation" };
+	const parentCapabilitySet = __CreateCapabilitySet(parent.snapshot.capabilitySet);
+	const childCapabilitySet = parentCapabilitySet === null ? null : delegation.resolve(parentCapabilitySet, normalized.agentServiceId, normalized.capabilitySetDigest);
+	if (parentCapabilitySet === null || childCapabilitySet === null || childCapabilitySet.digest !== normalized.capabilitySetDigest) return { outcome: "denied", reason: "capability_escalation" };
+	if (!__IsCapabilitySetSubset(parentCapabilitySet, childCapabilitySet)) return { outcome: "denied", reason: "capability_escalation" };
 
 	// 5. Preserve sibling isolation by copying only coordinates already pinned into the parent's snapshot.
 	if (!_IsParentReadableContext(parent, normalized.context)) return { outcome: "denied", reason: "context_not_parent_readable" };
@@ -33,7 +37,7 @@ export function __AuthorizeGovernedChildRunSpawn(parent: GovernedChildRunParent,
 	// 6. Carve finite resources before durable reservation so a child cannot overdraw its parent.
 	if (!_FitsBudget(normalized.budget, parent.remainingBudget)) return { outcome: "denied", reason: "budget_exceeded" };
 
-	return { outcome: "authorized", authorization: { siloId: parent.siloId, rootRunId: parent.rootRunId, parentRunId: parent.runId, depth: parent.depth + 1, capabilitySetDigest: normalized.capabilitySetDigest, agentServiceId: normalized.agentServiceId, context: normalized.context, budget: normalized.budget, task: normalized.task } };
+	return { outcome: "authorized", authorization: { siloId: parent.siloId, rootRunId: parent.rootRunId, parentRunId: parent.runId, depth: parent.depth + 1, capabilitySetDigest: normalized.capabilitySetDigest, capabilitySet: childCapabilitySet, agentServiceId: normalized.agentServiceId, context: normalized.context, budget: normalized.budget, task: normalized.task } };
 }
 
 /** Produces a detached candidate request only when every caller-controlled field has the closed shape. */

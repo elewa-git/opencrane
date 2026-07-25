@@ -198,6 +198,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 		memoryQueryPolicy: _json(snapshot.memoryQueryPolicy),
 		budgetPolicy: _json(snapshot.budgetPolicy),
 		capabilitySetDigest: snapshot.capabilitySetDigest,
+		capabilitySet: _json(snapshot.capabilitySet),
 		promptCompilerVersion: snapshot.promptCompilerVersion,
 		digest: snapshot.digest,
 		compiledAt: new Date(snapshot.compiledAt),
@@ -205,7 +206,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 }
 
 /** Maps one persisted snapshot row back into the immutable cross-domain contract. */
-function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; capabilitySet: Prisma.JsonValue; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId,
@@ -226,6 +227,7 @@ function _snapshot(row: { runId: string; siloId: string; agentServiceId: string;
 		budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"],
 		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshot["identitySnapshot"],
 		capabilitySetDigest: row.capabilitySetDigest,
+		capabilitySet: row.capabilitySet as unknown as RunInputSnapshot["capabilitySet"],
 		effectiveContractDigest: row.effectiveContractDigest,
 		promptCompilerVersion: row.promptCompilerVersion,
 		digest: row.digest,

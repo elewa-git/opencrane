@@ -1,6 +1,6 @@
 import type { FleetMembershipSignatureVerifier } from "@opencrane/backend/server/iam/membership";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { CapabilitySetDigestSource, SessionAssemblyCommand } from "../session-assembly.types.js";
+import type { CapabilitySetSource, SessionAssemblyCommand } from "../session-assembly.types.js";
 import { describe, expect, it, vi } from "vitest";
 
 import { FleetMembershipIdentityEnvelopeSource } from "../fleet-membership-identity-envelope-source.js";
@@ -50,12 +50,12 @@ class _Verifier implements FleetMembershipSignatureVerifier
 }
 
 /** Capability source that returns a precomputed proof-bound digest without leaving the transaction. */
-class _CapabilitySet implements CapabilitySetDigestSource
+class _CapabilitySet implements CapabilitySetSource
 {
-	/** Returns the one valid digest used by this admission fixture. */
+	/** Returns the one valid empty set used by this admission fixture. */
 	async load()
 	{
-		return { outcome: "loaded", value: `sha256:${"c".repeat(64)}` } as const;
+		return { outcome: "loaded", value: [] } as const;
 	}
 }
 
@@ -66,14 +66,14 @@ describe("FleetMembershipIdentityEnvelopeSource", function _describeIdentityEnve
 		const source = new FleetMembershipIdentityEnvelopeSource({ trustedIssuerId: "fleet-1", assertionId: "assertion-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" }, maximumStalenessMs: 3000 }, new _Verifier(), new _CapabilitySet());
 		const transaction = _transaction();
 
-		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { executionSubjectId: "user-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: `sha256:${"c".repeat(64)}` } });
+		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { executionSubjectId: "user-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945", capabilitySet: [] } });
 		expect(transaction.prisma.$queryRaw).toHaveBeenCalledOnce();
 		expect(transaction.prisma.highestAcceptedFleetMembership.upsert).toHaveBeenCalledOnce();
 	});
 
 	it("fails closed when the capability digest is not a canonical SHA-256 value", async function _deniesInvalidCapabilityDigest()
 	{
-		const invalidCapabilitySet: CapabilitySetDigestSource = { load: async function _load() { return { outcome: "loaded", value: "not-a-digest" } as const; } };
+		const invalidCapabilitySet: CapabilitySetSource = { load: async function _load() { return { outcome: "loaded", value: [{ catalog: { catalogId: "catalog-1", revision: 0, digest: `sha256:${"c".repeat(64)}` }, capabilityId: "read" }] } as const; } };
 		const source = new FleetMembershipIdentityEnvelopeSource({ trustedIssuerId: "fleet-1", assertionId: "assertion-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" }, maximumStalenessMs: 3000 }, new _Verifier(), invalidCapabilitySet);
 
 		await expect(source.load(_command(), _run(), _transaction())).resolves.toEqual({ outcome: "denied", reason: "identity_unavailable" });

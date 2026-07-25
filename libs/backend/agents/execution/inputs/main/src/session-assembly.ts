@@ -108,6 +108,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 			fleetMembershipTrustedUntil: identity.fleetMembershipTrustedUntil,
 		},
 		capabilitySetDigest: identity.capabilitySetDigest,
+		capabilitySet: identity.capabilitySet,
 		effectiveContractDigest: run.effectiveContractDigest,
 		promptCompilerVersion: run.promptCompilerVersion,
 		compiledAt: admittedAt,

@@ -2,6 +2,7 @@ import type { MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegration
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
+import type { CapabilityReference } from "@opencrane/models/authorization";
 import type { JsonValue } from "@opencrane/util";
 
 /** Coordinates supplied by run admission; loaders obtain every durable input themselves. */
@@ -82,13 +83,15 @@ export interface IdentityEnvelopeInput
 	fleetMembershipTrustedUntil: string;
 	/** Digest of the effective capability set bound to the run. */
 	capabilitySetDigest: string;
+	/** Exact canonical capabilities bound to the digest and available for durable snapshot evidence. */
+	capabilitySet: readonly CapabilityReference[];
 }
 
-/** Capability-set digest loaded from the same transaction that verifies membership. */
-export interface CapabilitySetDigestSource
+/** Capability-set evidence loaded from the same transaction that verifies membership. */
+export interface CapabilitySetSource
 {
-	/** Resolves the exact proof-bound capability digest accepted for this initial run. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<string>>;
+	/** Resolves the exact proof-bound capability references accepted for this initial run. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly CapabilityReference[]>>;
 }
 
 /** Reads run, AgentService, and published revision facts in the assembly transaction. */

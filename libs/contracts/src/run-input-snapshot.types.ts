@@ -1,4 +1,5 @@
 import type { AgentRevisionId, AgentRunId, AgentServiceId, MessageId, PersonaRevisionId, ThreadId } from "@opencrane/models/agents";
+import type { CapabilityReference } from "@opencrane/models/authorization";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
@@ -68,8 +69,10 @@ export interface RunInputSnapshot
   budgetPolicy: JsonValue;
   /** Execution identity and verified fleet-membership evidence. */
   identitySnapshot: RunInputSnapshotIdentity;
-  /** Digest of the effective proof-bound capability set. */
-  capabilitySetDigest: string;
+	/** Digest of the effective proof-bound capability set. */
+	capabilitySetDigest: string;
+	/** Exact canonical capability references whose content is bound by `capabilitySetDigest`. */
+	capabilitySet: readonly CapabilityReference[];
   /** Digest of the effective contract accepted at run admission. */
   effectiveContractDigest: string;
   /** Version of the deterministic prompt compiler that will consume this input. */

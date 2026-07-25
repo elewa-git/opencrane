@@ -29,6 +29,7 @@ export function __DeriveChildRunSnapshot(command: ChildRunSnapshotCommand): RunI
 		budgetPolicy: { maxModelTurns: budget.maxModelTurns, maxTotalTokens: budget.maxTotalTokens, maxCostUsdMicros: budget.maxCostUsdMicros, wallClockDeadlineEpochMs: Date.parse(command.compiledAt) + budget.maxDurationMs },
 		identitySnapshot: { executionSubjectId: parent.identitySnapshot.executionSubjectId, fleetMembershipRevision: parent.identitySnapshot.fleetMembershipRevision, fleetMembershipIssuer: parent.identitySnapshot.fleetMembershipIssuer, fleetMembershipIssuerKeyId: parent.identitySnapshot.fleetMembershipIssuerKeyId, fleetMembershipAssertionId: parent.identitySnapshot.fleetMembershipAssertionId, fleetMembershipPayloadDigest: parent.identitySnapshot.fleetMembershipPayloadDigest, fleetMembershipTrustedUntil: parent.identitySnapshot.fleetMembershipTrustedUntil },
 		capabilitySetDigest: command.authorization.capabilitySetDigest,
+		capabilitySet: command.authorization.capabilitySet.capabilities,
 		effectiveContractDigest: command.effectiveContractDigest,
 		promptCompilerVersion: command.promptCompilerVersion,
 		compiledAt: command.compiledAt,

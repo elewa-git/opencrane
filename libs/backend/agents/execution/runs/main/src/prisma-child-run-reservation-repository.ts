@@ -226,7 +226,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 		effectiveContractDigest: snapshot.effectiveContractDigest, personaRevisionId: snapshot.personaRevisionId, threadId: snapshot.threadId, messageIds: [...snapshot.messageIds],
 		preferenceFactIds: [...snapshot.preferenceFactIds], artifactRevisionIds: [...snapshot.artifactRevisionIds], memoryFacts: _json(snapshot.memoryFacts), identitySnapshot: _json(snapshot.identitySnapshot),
 		modelRoute: _json(snapshot.modelRoute), integrationAssignments: _json(snapshot.integrationAssignments), skillRevisionIds: [...snapshot.skillRevisionIds], memoryQueryPolicy: _json(snapshot.memoryQueryPolicy),
-		budgetPolicy: _json(snapshot.budgetPolicy), capabilitySetDigest: snapshot.capabilitySetDigest, promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt),
+		budgetPolicy: _json(snapshot.budgetPolicy), capabilitySetDigest: snapshot.capabilitySetDigest, capabilitySet: _json(snapshot.capabilitySet), promptCompilerVersion: snapshot.promptCompilerVersion, digest: snapshot.digest, compiledAt: new Date(snapshot.compiledAt),
 	};
 }
 
@@ -237,14 +237,14 @@ function _json(value: unknown): Prisma.InputJsonValue
 }
 
 /** Maps one persisted snapshot row back into the immutable cross-domain contract. */
-function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; capabilitySet: Prisma.JsonValue; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId, siloId: row.siloId, agentServiceId: row.agentServiceId, agentRevisionId: row.agentRevisionId, snapshotVersion: row.snapshotVersion, threadId: row.threadId,
 		messageIds: row.messageIds, personaRevisionId: row.personaRevisionId, preferenceFactIds: row.preferenceFactIds, artifactRevisionIds: row.artifactRevisionIds, skillRevisionIds: row.skillRevisionIds,
 		memoryFacts: row.memoryFacts as unknown as RunInputSnapshot["memoryFacts"], memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"], integrationAssignments: row.integrationAssignments as unknown as RunInputSnapshot["integrationAssignments"],
 		modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"], budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"], identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshot["identitySnapshot"],
-		capabilitySetDigest: row.capabilitySetDigest, effectiveContractDigest: row.effectiveContractDigest, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString(),
+		capabilitySetDigest: row.capabilitySetDigest, capabilitySet: row.capabilitySet as unknown as RunInputSnapshot["capabilitySet"], effectiveContractDigest: row.effectiveContractDigest, promptCompilerVersion: row.promptCompilerVersion, digest: row.digest, compiledAt: row.compiledAt.toISOString(),
 	};
 }
 

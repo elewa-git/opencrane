@@ -1,4 +1,5 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { CapabilitySet } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
 
 /** Finite resource allocation carved from one parent's remaining immutable run policy. */
@@ -73,8 +74,8 @@ export interface GovernedChildRunPolicy
 /** Capability authority that proves a child can only narrow the parent's effective authority. */
 export interface GovernedChildRunCapabilityDelegation
 {
-	/** Returns true only when the exact child service and digest are a verified subset of the parent. */
-	allows(parentCapabilitySetDigest: string, childAgentServiceId: string, childCapabilitySetDigest: string): boolean;
+	/** Resolves the verifier-produced exact child set only when it is allowed for the target service. */
+	resolve(parentCapabilitySet: CapabilitySet, childAgentServiceId: string, childCapabilitySetDigest: string): CapabilitySet | null;
 }
 
 /** Fully derived authorization supplied to the later transactional reservation and persistence boundary. */
@@ -90,6 +91,8 @@ export interface GovernedChildRunSpawnAuthorization
 	readonly depth: number;
 	/** Verified child capability-set digest. */
 	readonly capabilitySetDigest: string;
+	/** Exact canonical references whose digest is bound to this child run. */
+	readonly capabilitySet: CapabilitySet;
 	/** Target AgentService approved by the capability authority. */
 	readonly agentServiceId: string;
 	/** Context subset proven readable by the parent. */

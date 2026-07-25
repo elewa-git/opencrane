@@ -1363,6 +1363,7 @@ CREATE TABLE "run_input_snapshots" (
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
     "capability_set_digest" TEXT NOT NULL,
+    "capability_set" JSONB NOT NULL,
     "prompt_compiler_version" TEXT NOT NULL,
     "input_digest" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

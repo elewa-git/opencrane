@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
+import { __CreateCapabilitySet, __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,7 @@ import { PrismaChildRunReservationRepository } from "../prisma-child-run-reserva
 function _snapshot(runId: string, agentServiceId: string, agentRevisionId: string, digest: string): RunInputSnapshot
 {
 	return {
-		runId, siloId: "silo-1", agentServiceId, agentRevisionId, snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["tool-1"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1000, maxCostUsdMicros: 500000, wallClockDeadlineEpochMs: Date.parse("2026-07-20T00:02:00.000Z") }, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest, compiledAt: "2026-07-20T00:00:00.000Z",
+		runId, siloId: "silo-1", agentServiceId, agentRevisionId, snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["tool-1"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxModelTurns: 4, maxTotalTokens: 1000, maxCostUsdMicros: 500000, wallClockDeadlineEpochMs: Date.parse("2026-07-20T00:02:00.000Z") }, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: "sha256:4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945", capabilitySet: [], effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest, compiledAt: "2026-07-20T00:00:00.000Z",
 	};
 }
 
@@ -22,9 +22,10 @@ function _childSnapshot(): RunInputSnapshot
 /** Creates one detached child-run authority that exactly matches the test parent. */
 function _command()
 {
+	const capabilitySet = __CreateCapabilitySet([])!;
 	return {
 		childRunId: "child-run-1", requestIdempotencyKey: "child-request-1", parentRunId: "parent-run-1", parentSnapshotDigest: `sha256:${"c".repeat(64)}`, maximumChildrenPerParent: 2,
-		authorization: { siloId: "silo-1", rootRunId: "root-run-1", parentRunId: "parent-run-1", depth: 1, capabilitySetDigest: `sha256:${"a".repeat(64)}`, agentServiceId: "child-service-1", context: { messageIds: ["message-1"], memoryFactIds: ["fact-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"] }, budget: { maxModelTurns: 2, maxTotalTokens: 300, maxCostUsdMicros: 200000, maxDurationMs: 60000 }, task: { goal: "research" } },
+		authorization: { siloId: "silo-1", rootRunId: "root-run-1", parentRunId: "parent-run-1", depth: 1, capabilitySetDigest: capabilitySet.digest, capabilitySet, agentServiceId: "child-service-1", context: { messageIds: ["message-1"], memoryFactIds: ["fact-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"] }, budget: { maxModelTurns: 2, maxTotalTokens: 300, maxCostUsdMicros: 200000, maxDurationMs: 60000 }, task: { goal: "research" } },
 	} as const;
 }
 
