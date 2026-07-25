@@ -186,7 +186,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 	return {
 		async run(candidate, snapshot, compiledTools)
 		{
-			// The approval requirement is per-tool, derived from the resolved compiled tool grant.
+			// The approval requirement is per-tool, derived from the resolved integration allowance.
 			const tool = compiledTools.find(function _match(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
 			const approvalRequired = tool?.requiresApproval ?? false;
 			let executor;

@@ -93,10 +93,13 @@ async function _loadToolDefinitions(transaction: Prisma.TransactionClient, assig
 	const integrationIds = assignments.map(function _integrationId(assignment) { return assignment.integrationId; });
 	const integrations = await transaction.integration.findMany({ where: { id: { in: integrationIds }, state: "Active" } });
 	const activeIds = new Set(integrations.map(function _id(integration) { return integration.id; }));
+	if (activeIds.size !== new Set(integrationIds).size)
+	{
+		throw new Error("snapshot integration assignment is no longer active");
+	}
 	const definitions: CompiledToolDefinition[] = [];
 	for (const assignment of assignments)
 	{
-		if (!activeIds.has(assignment.integrationId)) continue;
 		for (const tool of assignment.allowedTools)
 		{
 			definitions.push({ name: `integration:${assignment.integrationId}:${tool}`, toolRevisionId: `integration:${assignment.integrationId}:${tool}`, description: `Approved tool ${tool} from integration ${assignment.integrationId}`, requiresApproval: true, parametersSchema: { type: "object" } });

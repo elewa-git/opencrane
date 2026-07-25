@@ -13,10 +13,10 @@ export interface ExecuteExternalActionCommand
 {
 	/** Runtime-proposed external action, never a direct tool call. */
 	readonly candidate: RuntimeExternalActionCandidate;
-	/** Immutable input snapshot that fixed the attempt's tool grants. */
+	/** Immutable input snapshot that fixed the attempt's integration allowances. */
 	readonly snapshot: RunInputSnapshot;
 	/**
-	 * Compiled tool definitions resolved from the snapshot's tool grants. Their `toolRevisionId`
+	 * Compiled tool definitions resolved from the snapshot's integration allowances. Their `toolRevisionId`
 	 * values are the only revisions the attempt may invoke, so the candidate's revision must be one
 	 * of them or the action is denied before any reservation.
 	 */

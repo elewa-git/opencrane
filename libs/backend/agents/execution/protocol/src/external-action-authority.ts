@@ -47,7 +47,7 @@ export async function __ExecuteExternalAction<TResult>(repository: ToolInvocatio
 	const candidate = command.candidate;
 	if (candidate.runId !== command.snapshot.runId) return { outcome: "denied", reason: "run_attempt_mismatch" };
 
-	// 2. The candidate revision must be one the snapshot's tool grants actually compiled to.
+	// 2. The candidate revision must be one the snapshot's integration allowances actually compiled to.
 	if (!command.compiledTools.some(function _granted(tool) { return tool.toolRevisionId === candidate.toolRevisionId; })) return { outcome: "denied", reason: "tool_revision_not_granted" };
 
 	// 3. Revalidate the arguments by recomputing their canonical digest; a mismatch is fail-closed.
