@@ -17,6 +17,7 @@ its frozen inputs.
  ┌──────────────────────────────────────────┐
  │   runs  ◄── HERE                          │  run + one snapshot + ordered outbox
  │   · PrismaRunAdmissionRepository          │  duplicate returns the first snapshot
+	│   · PrismaChildRunReservationRepository    │  parent-fenced child reservation
  │   · RunAdmissionConcurrencyGate            │  bounded wait before a DB connection
  │   · PrismaRunCancellationRepository       │  fence first; clean exact Job; then terminal
  │   · __StartNextRunAttempt                 │  terminal run: attempt N → N+1
@@ -137,6 +138,8 @@ uncertainty fails closed.
   refusal vocabulary for the subsequent transaction-fenced child reservation boundary.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
   run, snapshot and ordered outbox events around a caller-supplied assembly callback.
+- `PrismaChildRunReservationRepository` — lock a parent, validate its frozen snapshot and detached
+  child authority, then atomically persist the child run, snapshot, reservation and initial outbox.
 - `RunAdmissionConcurrencyGate` — bound active and queued admissions for one silo and AgentService
   before the caller can acquire a persistence connection.
 - `RunAdmissionRepository`, `RunAdmissionCommand`, `RunAdmissionTransaction`,
@@ -170,10 +173,10 @@ integrity, release delivery, first-Pod registration, cancellation fencing, and c
 confirmation. Kubernetes inspection and mutation remain in dedicated runtime processes; this
 package only says which exact work may be removed.
 
-It also does not yet reserve or create child runs. `__AuthorizeGovernedChildRunSpawn` is deliberately
-a pure admission gate so a later repository can lock the parent, count existing children, reserve
-the budget, persist one derived child snapshot, and record lineage atomically. Until that boundary
-exists, no child-run runtime command is exposed.
+`__AuthorizeGovernedChildRunSpawn` is deliberately a pure admission gate. Its detached authority
+reaches `PrismaChildRunReservationRepository`, which locks the parent, rechecks the parent digest
+and lineage coordinates, and persists one child snapshot and allocation atomically. Until an app
+composes that repository into a runtime entrypoint, no child-run runtime command is exposed.
 
 `ChildRunReservation` is the durable record that this later boundary will write beside a child run.
 It freezes the exact parent and root identifiers, child depth, and the turns, tokens, and duration

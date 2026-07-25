@@ -1378,7 +1378,10 @@ CREATE TABLE "child_run_reservations" (
     "depth" INTEGER NOT NULL,
     "max_model_turns" INTEGER NOT NULL,
     "max_total_tokens" INTEGER NOT NULL,
+    "max_cost_usd_micros" BIGINT NOT NULL,
     "max_duration_ms" INTEGER NOT NULL,
+    "task" JSONB NOT NULL,
+    "task_digest" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
@@ -2592,7 +2595,9 @@ ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_posi
     "depth" > 0
     AND "max_model_turns" > 0
     AND "max_total_tokens" > 0
+    AND "max_cost_usd_micros" > 0
     AND "max_duration_ms" > 0
+    AND "task_digest" ~ '^sha256:[0-9a-f]{64}$'
 );
 
 -- Channel-target constraints cannot be represented by Prisma relations/indexes alone.

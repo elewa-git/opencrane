@@ -103,7 +103,10 @@ model ChildRunReservation {
   depth               Int
   maxModelTurns       Int      @map("max_model_turns")
   maxTotalTokens      Int      @map("max_total_tokens")
+  maxCostUsdMicros    BigInt   @map("max_cost_usd_micros")
   maxDurationMs       Int      @map("max_duration_ms")
+  task                Json
+  taskDigest          String   @map("task_digest")
   createdAt           DateTime @default(now()) @map("created_at")
   parentRun           AgentRun @relation("ChildRunReservationParent", fields: [parentRunId], references: [id], onDelete: Restrict)
   childRun            AgentRun @relation("ChildRunReservationChild", fields: [childRunId], references: [id], onDelete: Restrict)

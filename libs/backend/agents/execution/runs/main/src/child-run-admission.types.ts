@@ -8,6 +8,8 @@ export interface GovernedChildRunBudget
 	readonly maxModelTurns: number;
 	/** Maximum provider tokens the child may consume. */
 	readonly maxTotalTokens: number;
+	/** Maximum provider cost in integer USD micros the child may consume. */
+	readonly maxCostUsdMicros: number;
 	/** Maximum wall-clock duration the child may occupy. */
 	readonly maxDurationMs: number;
 }

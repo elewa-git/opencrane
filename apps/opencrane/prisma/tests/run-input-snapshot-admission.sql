@@ -97,8 +97,8 @@ INSERT INTO "agent_runs" ("id", "silo_id", "agent_service_id", "agent_revision_i
 VALUES ('snapshot-child-run', 'silo-snapshot', 'snapshot-service', 'snapshot-revision', NULL, 'managed_invocation', 'snapshot-child-request', 'snapshot-run', 'snapshot-run', 'sha256:' || repeat('9', 64), 'sha256:' || repeat('0', 64));
 INSERT INTO "run_input_snapshots" ("run_id", "snapshot_version", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest", "thread_id", "memory_facts", "identity_snapshot", "model_route", "memory_query_policy", "budget_policy", "capability_set_digest", "prompt_compiler_version", "input_digest")
 VALUES ('snapshot-child-run', 1, 'silo-snapshot', 'snapshot-service', 'snapshot-revision', 'sha256:' || repeat('9', 64), NULL, '[]', '{}', '{}', '{}', '{}', 'sha256:' || repeat('a', 64), 'prompt-v1', 'sha256:' || repeat('0', 64));
-INSERT INTO "child_run_reservations" ("child_run_id", "parent_run_id", "root_run_id", "depth", "max_model_turns", "max_total_tokens", "max_duration_ms")
-VALUES ('snapshot-child-run', 'snapshot-run', 'snapshot-run', 1, 1, 100, 1000);
+INSERT INTO "child_run_reservations" ("child_run_id", "parent_run_id", "root_run_id", "depth", "max_model_turns", "max_total_tokens", "max_cost_usd_micros", "max_duration_ms", "task", "task_digest")
+VALUES ('snapshot-child-run', 'snapshot-run', 'snapshot-run', 1, 1, 100, 100000, 1000, '{"goal":"test"}', 'sha256:' || repeat('f', 64));
 SET CONSTRAINTS ALL IMMEDIATE;
 DO $$
 BEGIN

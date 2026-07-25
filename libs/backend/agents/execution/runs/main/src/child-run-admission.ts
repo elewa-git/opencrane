@@ -63,7 +63,7 @@ function _Context(value: Record<string, unknown>): GovernedChildRunContextSelect
 /** Returns one finite budget carve-out after validating its primitive fields. */
 function _Budget(value: Record<string, unknown>): GovernedChildRunBudget | null
 {
-	return _IsPositiveInteger(value.maxModelTurns) && _IsPositiveInteger(value.maxTotalTokens) && _IsPositiveInteger(value.maxDurationMs) ? { maxModelTurns: value.maxModelTurns, maxTotalTokens: value.maxTotalTokens, maxDurationMs: value.maxDurationMs } : null;
+	return _IsPositiveInteger(value.maxModelTurns) && _IsPositiveInteger(value.maxTotalTokens) && _IsPositiveInteger(value.maxCostUsdMicros) && _IsPositiveInteger(value.maxDurationMs) ? { maxModelTurns: value.maxModelTurns, maxTotalTokens: value.maxTotalTokens, maxCostUsdMicros: value.maxCostUsdMicros, maxDurationMs: value.maxDurationMs } : null;
 }
 
 /** Returns whether a request is structurally consistent with one loaded parent and bounded policy. */
@@ -97,13 +97,14 @@ function _Subset(allowed: ReadonlySet<string>, selected: readonly string[]): boo
 /** Returns whether a child uses only finite capacity contained by its parent's remaining allocation. */
 function _FitsBudget(child: GovernedChildRunBudget, parent: GovernedChildRunBudget): boolean
 {
-	return child.maxModelTurns <= parent.maxModelTurns && child.maxTotalTokens <= parent.maxTotalTokens && child.maxDurationMs <= parent.maxDurationMs;
+	return child.maxModelTurns <= parent.maxModelTurns && child.maxTotalTokens <= parent.maxTotalTokens
+		&& child.maxCostUsdMicros <= parent.maxCostUsdMicros && child.maxDurationMs <= parent.maxDurationMs;
 }
 
 /** Returns whether one budget contains only positive safe-integer capacity. */
 function _IsBudgetValid(value: GovernedChildRunBudget): boolean
 {
-	return _IsPositiveInteger(value.maxModelTurns) && _IsPositiveInteger(value.maxTotalTokens) && _IsPositiveInteger(value.maxDurationMs);
+	return _IsPositiveInteger(value.maxModelTurns) && _IsPositiveInteger(value.maxTotalTokens) && _IsPositiveInteger(value.maxCostUsdMicros) && _IsPositiveInteger(value.maxDurationMs);
 }
 
 /** Returns whether one unknown value is a JSON record rather than null or an array. */
@@ -123,6 +124,7 @@ function _IsPositiveInteger(value: unknown): value is number
 {
 	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
 }
+
 
 /** Returns whether an identifier contains a non-whitespace value. */
 function _Present(value: string): boolean

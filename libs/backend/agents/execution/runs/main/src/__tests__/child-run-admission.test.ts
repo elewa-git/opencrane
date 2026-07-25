@@ -21,7 +21,7 @@ function _Parent(overrides: Partial<GovernedChildRunParent> = {}): GovernedChild
 			capabilitySetDigest: _PARENT_CAPABILITY_DIGEST, effectiveContractDigest: `sha256:${"e".repeat(64)}`, promptCompilerVersion: "test-v1", digest: `sha256:${"f".repeat(64)}`, compiledAt: "2026-07-25T00:00:00.000Z",
 		},
 		depth: 0,
-		remainingBudget: { maxModelTurns: 4, maxTotalTokens: 400, maxDurationMs: 60000 },
+		remainingBudget: { maxModelTurns: 4, maxTotalTokens: 400, maxCostUsdMicros: 4000000, maxDurationMs: 60000 },
 		...overrides,
 	};
 }
@@ -34,7 +34,7 @@ function _Request(overrides: Partial<GovernedChildRunSpawnRequest> = {}): Govern
 		agentServiceId: "child-service",
 		capabilitySetDigest: _CHILD_CAPABILITY_DIGEST,
 		context: { messageIds: ["message-1"], memoryFactIds: ["fact-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"] },
-		budget: { maxModelTurns: 2, maxTotalTokens: 200, maxDurationMs: 30000 },
+		budget: { maxModelTurns: 2, maxTotalTokens: 200, maxCostUsdMicros: 2000000, maxDurationMs: 30000 },
 		task: { prompt: "Summarise the selected evidence." },
 		...overrides,
 	};
@@ -88,7 +88,8 @@ describe("__AuthorizeGovernedChildRunSpawn", function _DescribeChildAdmission()
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent({ depth: 1 }), _Request(), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "depth_exceeded" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request(), 1, policy, _Delegation)).toEqual({ outcome: "denied", reason: "fanout_exceeded" });
 		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request(), 0, policy, { allows: function _Deny(): boolean { return false; } })).toEqual({ outcome: "denied", reason: "capability_escalation" });
-		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ budget: { maxModelTurns: 5, maxTotalTokens: 200, maxDurationMs: 30000 } }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "budget_exceeded" });
+		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ budget: { maxModelTurns: 5, maxTotalTokens: 200, maxCostUsdMicros: 2000000, maxDurationMs: 30000 } }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "budget_exceeded" });
+		expect(__AuthorizeGovernedChildRunSpawn(_Parent(), _Request({ budget: { maxModelTurns: 2, maxTotalTokens: 200, maxCostUsdMicros: 4000001, maxDurationMs: 30000 } }), 0, policy, _Delegation)).toEqual({ outcome: "denied", reason: "budget_exceeded" });
 	});
 
 	it("fails closed on malformed candidate data before it reaches the capability verifier", function _RejectMalformed()
