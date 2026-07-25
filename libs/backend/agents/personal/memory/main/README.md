@@ -39,13 +39,21 @@ the rest of the system a fact was recorded) commit together in one transaction, 
 never claim a fact Cognee does not have. Repeat deliveries are treated as success (idempotent) via the
 idempotency key, while a retired dataset or a conflicting correction fails closed.
 
+For an explicit statement, the command also carries the authenticated statement author's id. The
+catalog requires that id to match both `recordedBy` and the provenance's `sourceUserId`; it therefore
+cannot turn one user's statement into a preference for another user's run. A successor fact emits
+`memory.fact_corrected` rather than `memory.fact_recorded`, so consumers can distinguish a correction
+from a first learned preference.
+
 ## Public surface
 
 - `__RecordMemoryFact(repository, command)` — the single use case: validate provenance, then record catalog metadata atomically.
 - `RecordMemoryFactCommand` / `RecordMemoryFactResult` — the request and the stable allow/deny outcome.
 - `MemoryFactSource` — the one-of-three provenance reference (artifact revision · message · explicit statement).
 - `AtomicRecordMemoryFactResult` — the raw persistence outcome the repository returns.
-- `MemoryCatalogRepository` — the persistence port a caller must implement (or inject).
+- `MemoryCatalogRepository` — the persistence port a caller may inject.
+- `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
+  metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
 
 ## Boundary
 
@@ -61,7 +69,11 @@ revision as a source), `scope:personal-memory`, and `scope:shared` — never on 
 ## Data & persistence
 
 Persists catalog metadata and a Cognee-outbox intent in one transaction through the injected
-repository. Postgres-level behaviour is exercised by the `test:sql` target (`tests/memory-authority.sql`).
+repository. The shipped `PrismaMemoryCatalogRepository` is that canonical product-database adapter;
+it deliberately accepts only metadata returned after Cognee has durably accepted the content. It does
+not create a personal dataset, call Cognee, or dispatch the outbox. Those are separate boundaries so a
+network failure can never make Postgres claim content that Cognee did not accept. Postgres-level
+behaviour is exercised by the `test:sql` target (`tests/memory-authority.sql`).
 
 ## See also
 
