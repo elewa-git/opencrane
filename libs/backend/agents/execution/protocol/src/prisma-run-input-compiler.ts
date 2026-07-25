@@ -129,9 +129,10 @@ async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRo
 {
 	const route: { readonly [key: string]: JsonValue } = modelRoute && typeof modelRoute === "object" && !Array.isArray(modelRoute) ? modelRoute as { readonly [key: string]: JsonValue } : {};
 	const modelDefinitionId = typeof route["modelDefinitionId"] === "string" ? route["modelDefinitionId"] : "";
+	const litellmModelId = typeof route["litellmModelId"] === "string" ? route["litellmModelId"] : "";
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
-	if (modelDefinitionId.trim().length === 0) throw new Error("compiled model route requires an exact model definition");
+	if (modelDefinitionId.trim().length === 0 || litellmModelId.trim().length === 0) throw new Error("compiled model route requires an exact sealed model deployment");
 	const definition = await transaction.modelDefinition.findUnique({ where: { id: modelDefinitionId } });
-	if (definition === null) throw new Error("compiled model route references an unavailable model definition");
-	return { modelAlias: definition.litellmModelId, maxOutputTokens };
+	if (definition === null || definition.litellmModelId !== litellmModelId) throw new Error("compiled model route references a changed or unavailable model definition");
+	return { modelAlias: litellmModelId, maxOutputTokens };
 }

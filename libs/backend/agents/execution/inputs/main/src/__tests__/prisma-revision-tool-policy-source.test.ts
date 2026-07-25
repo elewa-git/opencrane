@@ -18,7 +18,7 @@ function _transaction(revision: unknown, skills: unknown[] = [], artifacts: unkn
 /** Builds a current revision with one live integration and one published skill artifact. */
 function _revision(overrides: Record<string, unknown> = {})
 {
-	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", allowedTools: ["calendar.read"], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-26T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
+	return { modelDefinition: { id: "model-definition-1", scope: ModelRoutingScope.ClusterTenant, clusterTenant: "silo-1", publicModelName: "tenant-model", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", siloId: "silo-1", allowedTools: ["calendar.read"], integration: { state: IntegrationState.Active }, custodyReference: { state: IntegrationCustodyState.Ready, expiresAt: new Date("2026-07-26T00:00:00.000Z") } }], skillAssignments: [{ skillRevisionId: "skill-revision-1" }], budget: { maxTurns: 4, maxTokens: 1024, maxDurationMs: 60_000 }, ...overrides };
 }
 
 /** Builds one published skill revision that still belongs to an active silo-owned skill. */
@@ -32,7 +32,7 @@ describe("PrismaRevisionToolPolicySource", function _suite()
 	it("freezes only live revision-owned model, integration, skill, and artifact references", async function _loads()
 	{
 		const result = await new PrismaRevisionToolPolicySource().load(_COMMAND, _RUN, _transaction(_revision(), [_skill()], [{ id: "artifact-revision-1", state: ArtifactRevisionState.Published }]));
-		expect(result).toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["calendar.read"] }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
+		expect(result).toEqual({ outcome: "loaded", value: { modelRoute: { alias: "tenant-model", modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-1" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["calendar.read"] }], skillRevisionIds: ["skill-revision-1"], artifactRevisionIds: ["artifact-revision-1"] } });
 	});
 
 	it("refuses expired custody and unpublished skills before snapshot assembly", async function _refuses()

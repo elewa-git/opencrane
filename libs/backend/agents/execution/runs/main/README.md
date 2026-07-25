@@ -66,6 +66,9 @@ model-routing gateway, which holds the LiteLLM master key) using the alias and b
 snapshot, and attaches the transient virtual key to the claim response only — it is never written to
 Postgres. Minting happens outside the database transaction so no external call holds a lock. That commit also creates an
 unconsumed bootstrap record and a second durable command asking the controller to release the Job.
+Before minting, dispatch compares the snapshot's sealed LiteLLM deployment ID with the currently
+registered definition. A changed or unavailable definition terminally fails the attempt; it never
+mints a budgeted key for a replacement deployment.
 The bootstrap reference is an opaque label, not a password: it grants nothing without the exact
 projected workload identity, assigned Job and registered first Pod. The stored integrity digest binds
 the label to every immutable assignment field, including the selected workload profile.

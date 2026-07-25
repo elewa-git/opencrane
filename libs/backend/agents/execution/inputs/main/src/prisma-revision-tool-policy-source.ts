@@ -25,7 +25,7 @@ export class PrismaRevisionToolPolicySource implements ToolPolicySource
 		const artifacts = await transaction.prisma.artifactRevision.findMany({ where: { id: { in: artifactRevisionIds }, state: ArtifactRevisionState.Published, artifact: { is: { siloId: command.siloId, state: "Active" } } }, select: { id: true } });
 		if (artifacts.length !== artifactRevisionIds.length) return { outcome: "denied", reason: "tool_policy_unavailable" };
 
-		return { outcome: "loaded", value: { modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id }, integrationAssignments: revision.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, allowedTools: [...assignment.allowedTools] })), skillRevisionIds, artifactRevisionIds } };
+		return { outcome: "loaded", value: { modelRoute: { alias: revision.modelDefinition.publicModelName, modelDefinitionId: revision.modelDefinition.id, litellmModelId: revision.modelDefinition.litellmModelId }, integrationAssignments: revision.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, allowedTools: [...assignment.allowedTools] })), skillRevisionIds, artifactRevisionIds } };
 	}
 
 	/** Returns whether a model definition is global or belongs to the admission silo. */

@@ -124,10 +124,11 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 
 			// 3. Resolve the frozen definition ID under this claim lock; an alias alone can collide by scope.
 			const modelDefinitionId = _SnapshotModelDefinitionId(snapshot.modelRoute);
+			const sealedLiteLlmModelId = _SnapshotLiteLlmModelId(snapshot.modelRoute);
 			const maxBudgetUsd = _SnapshotMaxBudgetUsd(snapshot.budgetPolicy);
 			const modelDefinition = modelDefinitionId === null ? null : await transaction.modelDefinition.findUnique({ where: { id: modelDefinitionId } });
 			const modelAlias = _AttemptKeyModelId(modelDefinition, run.siloId);
-			if (modelAlias === null || maxBudgetUsd === null)
+			if (modelAlias === null || sealedLiteLlmModelId === null || modelAlias !== sealedLiteLlmModelId || maxBudgetUsd === null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MODEL_ROUTE_INVALID", AgentRunTerminalReason.InvalidInput);
 				return { status: "none" };
@@ -736,6 +737,15 @@ function _SnapshotModelDefinitionId(modelRoute: unknown): string | null
 	const route = modelRoute as Record<string, unknown>;
 	const modelDefinitionId = typeof route["modelDefinitionId"] === "string" ? route["modelDefinitionId"] : "";
 	return modelDefinitionId.trim().length > 0 && modelDefinitionId.length <= 256 ? modelDefinitionId : null;
+}
+
+/** Extract the exact LiteLLM deployment identifier sealed at snapshot admission. */
+function _SnapshotLiteLlmModelId(modelRoute: unknown): string | null
+{
+	if (!modelRoute || typeof modelRoute !== "object" || Array.isArray(modelRoute)) return null;
+	const route = modelRoute as Record<string, unknown>;
+	const litellmModelId = typeof route["litellmModelId"] === "string" ? route["litellmModelId"] : "";
+	return litellmModelId.trim().length > 0 && litellmModelId.length <= 256 ? litellmModelId : null;
 }
 
 /** Derive the one LiteLLM deployment ID that the claimed attempt may call in its own silo. */
