@@ -37,9 +37,11 @@ describe("ArtifactStore signed internal protocol", function _suite()
 		const address = `sha256:${"a".repeat(64)}`;
 		const compact = __SignArtifactReadLease({ leaseId: "read-lease-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: address, action: "artifact.read", expiresAtEpochSeconds: 1_750_000_060, byteLength: 12, mediaType: "application/pdf" }, _leasePrivateKey, 1_750_000_000);
 		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, 1_750_000_001)).toMatchObject({ leaseId: "read-lease-1", artifactRevisionId: "revision-1", contentAddress: address, byteLength: 12 });
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, 1_750_000_061)).toBeNull();
 		expect(__VerifyArtifactReadLease(compact, _receiptPublicKey, 1_750_000_001)).toBeNull();
 		expect(__VerifyArtifactWriteLease(compact, _leasePublicKey, 1_750_000_001)).toBeNull();
 		expect(function _overlongReadLease() { __SignArtifactReadLease({ leaseId: "read-lease-long", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: address, action: "artifact.read", expiresAtEpochSeconds: 1_750_000_301, byteLength: 12, mediaType: "application/pdf" }, _leasePrivateKey, 1_750_000_000); }).toThrow(/invalid artifact read lease claims/);
+		expect(function _headerInjectionMediaType() { __SignArtifactReadLease({ leaseId: "read-lease-invalid-media", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: address, action: "artifact.read", expiresAtEpochSeconds: 1_750_000_060, byteLength: 12, mediaType: "text/plain\r\nx-injected: value" }, _leasePrivateKey, 1_750_000_000); }).toThrow(/invalid artifact read lease claims/);
 	});
 
 	it("keeps service promotion receipts distinct from write-lease authority", function _receiptRoundTrip()

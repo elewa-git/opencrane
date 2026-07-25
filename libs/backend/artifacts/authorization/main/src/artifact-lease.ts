@@ -103,16 +103,22 @@ function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionR
 
 function _isLease(value: ArtifactWriteLeaseClaims, now: number): boolean
 {
-	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && value.mediaType.includes("/");
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && _isSafeMediaType(value.mediaType);
 }
 
 /** Validate the narrow coordinates that bind one signed read to one immutable CAS object. */
 function _isReadLease(value: ArtifactReadLeaseClaims, now: number): boolean
 {
-	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.expiresAtEpochSeconds <= now + _MAX_READ_LEASE_SECONDS && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && value.mediaType.includes("/");
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.expiresAtEpochSeconds <= now + _MAX_READ_LEASE_SECONDS && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && _isSafeMediaType(value.mediaType);
+}
+
+/** Accept an RFC 9110 token subtype only, never text that could alter an HTTP header. */
+function _isSafeMediaType(value: string): boolean
+{
+	return /^[!#$%&'*+.^_`|~0-9A-Za-z-]+\/[!#$%&'*+.^_`|~0-9A-Za-z-]+$/u.test(value);
 }
 
 function _isReceipt(value: ArtifactPromotionReceiptClaims): boolean
 {
-	return value.leaseId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && value.mediaType.includes("/") && Number.isSafeInteger(value.issuedAtEpochSeconds) && value.issuedAtEpochSeconds >= 0;
+	return value.leaseId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && _isSafeMediaType(value.mediaType) && Number.isSafeInteger(value.issuedAtEpochSeconds) && value.issuedAtEpochSeconds >= 0;
 }
