@@ -80,6 +80,8 @@ whole provisioning transaction.
 - `PERSONA_ONBOARDING_QUESTION_SET_ID`, `PERSONA_ONBOARDING_QUESTION_SET_VERSION`,
   `PERSONA_ONBOARDING_QUESTIONS`, and `PERSONA_ONBOARDING_SOUL_TEMPLATES` — the reviewed catalogue
   source: eight key questions and three role-selected SOUL.md starting templates.
+- `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts an interview,
+  records one answer, and completes it using only session-and-host-derived ownership.
 
 ## Boundary
 

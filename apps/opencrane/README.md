@@ -70,6 +70,11 @@ public and internal listeners, starts the projection and OpenClaw-tenant lifecyc
 - `createInternalApp(prisma, authApi)` — builds the internal-only Express app; each mounted route
   declares projected-workload TokenReview or explicit NetworkPolicy-only trust.
 
+The public API also mounts `/api/v1/me/persona`: a self-only persona onboarding surface. Its routes
+derive the user from the signed-in session and the silo from the request host, then choose the
+reviewed interview catalogue on the server. A browser may submit an answer, but never a profile,
+silo, template, or catalogue revision.
+
 The internal controller routes TokenReview only the fixed `agent-controller` ServiceAccount in the
 server namespace and `opencrane-agent-controller` audience. They let that process claim a
 database-fenced run attempt or governed skill workload, and commit only the immutable UID of the

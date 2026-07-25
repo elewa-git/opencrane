@@ -5,9 +5,11 @@ export { PrismaPersonaDraftRepository } from "./prisma-persona-draft-repository.
 export type { ApprovePersonaCommand, ApprovePersonaResult, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 export type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, CreatePersonaDraftResult, PersonaDraftInsightCommand, PersonaDraftRepository } from "./persona-draft-authority.types.js";
 export { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "./persona-interview-authority.js";
-export type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
+export type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
 export { PrismaPersonaInterviewRepository } from "./prisma-persona-interview-repository.js";
 export { __EnsurePersonaOnboarding } from "./persona-onboarding-authority.js";
 export { PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION, PERSONA_ONBOARDING_TEMPLATE_ANSWERS } from "./persona-onboarding-catalogue.js";
 export type { EnsurePersonaOnboardingCommand, EnsurePersonaOnboardingResult, PersonaOnboardingQuestionSet, PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
 export { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-repository.js";
+export { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
+export type { PersonaOnboardingCaller, PersonaOnboardingClock, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";

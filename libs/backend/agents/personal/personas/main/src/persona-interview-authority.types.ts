@@ -70,3 +70,10 @@ export interface PersonaInterviewRepository
 	/** Completes a fully answered owner interview once and freezes its evidence. */
 	completeAtomically(command: CompletePersonaInterviewCommand): Promise<{ readonly status: "completed" } | { readonly status: "not_found_or_wrong_owner" | "not_in_progress" | "incomplete_answers" | "persistence_unavailable" }>;
 }
+
+/** Read boundary for the immutable question-set revision pinned to one owner interview. */
+export interface PersonaInterviewQuestionReader
+{
+	/** Loads the exact frozen questions for one owner interview, or null when it is not visible. */
+	getQuestions(interviewId: string, personaProfileId: string, userId: string): Promise<readonly { readonly id: string; readonly category: string; readonly prompt: string; readonly ordinal: number }[] | null>;
+}
