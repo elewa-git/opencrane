@@ -31,6 +31,8 @@ export function _HarvestingCentralAgentDefinition(obotCustodyReference: string, 
 			// A managed (central) agent never carries a persona.
 			personaRevisionId: null,
 			modelDefinitionId,
+			// The packaged harvester cannot delegate or invoke capability-catalog actions until one is explicitly published for it.
+			capabilityCeiling: [],
 			budget: { maxTurns: 20, maxTokens: 200_000, maxDurationMs: 900_000 },
 			skills: [],
 			// One Obot MCP integration with a strict tool allow-list; only these tools are invocable.

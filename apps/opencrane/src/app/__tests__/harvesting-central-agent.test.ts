@@ -12,6 +12,7 @@ describe("harvesting central-agent definition", function _DefinitionSuite()
 	{
 		const definition = _HarvestingCentralAgentDefinition("obot-ref-slack-opaque", "global-model-definition");
 		expect(definition.content.personaRevisionId).toBeNull();
+		expect(definition.content.capabilityCeiling).toEqual([]);
 		expect(definition.content.budget.maxTurns).toBeGreaterThan(0);
 		expect(definition.content.budget.maxTokens).toBeGreaterThan(0);
 		expect(definition.content.integrationAssignments).toHaveLength(1);
