@@ -12,7 +12,8 @@ derives a draft from selected-template evidence, and then approves a fully evide
 single live persona.
 
 ```
- reviewed question set
+server-owned reviewed question set
+     │ 0. provision          create one owner profile and load the current product catalogue
      │ 1. start              bind one exact reviewed version to the owner profile
      ▼
  interview in progress
@@ -69,6 +70,16 @@ fails closed and a crash leaves the previous active persona intact, never a half
   `PersonaAuthorityRepository` — the consistent evidence and injected approval persistence boundary.
 - `PrismaPersonaAuthorityRepository` — the target Postgres implementation; it locks the profile,
   approves the checked draft, and moves the active pointer in one transaction.
+- `__EnsurePersonaOnboarding` — validates the authenticated owner coordinates before provisioning the
+  owner profile and current reviewed interview source.
+- `PersonaOnboardingRepository` / `PrismaPersonaOnboardingRepository` — the provisioning port and
+target Postgres implementation. It creates the initial product catalogue only as `Draft`, fills all
+required questions, then reviews it; a conflicting source identity fails closed. Its app-supplied
+logger records handled database failures with the silo and error details, while a trace covers the
+whole provisioning transaction.
+- `PERSONA_ONBOARDING_QUESTION_SET_ID`, `PERSONA_ONBOARDING_QUESTION_SET_VERSION`,
+  `PERSONA_ONBOARDING_QUESTIONS`, and `PERSONA_ONBOARDING_SOUL_TEMPLATES` — the reviewed catalogue
+  source: eight key questions and three role-selected SOUL.md starting templates.
 
 ## Boundary
 
@@ -76,7 +87,8 @@ Consumed by the persona-onboarding path. It owns the interview lifecycle and app
 generate insights or execute the agent. It accepts only reviewable insight statements and derives
 template selection plus every other durable draft coordinate from the completed interview. It never
 activates a draft that is not fully evidenced, and it never mints an editable runtime persona file.
-Storage is injected through its three authority repositories.
+Storage is injected through its three authority repositories; the provisioning adapter also receives
+the composing app's structured logger rather than creating a second logging root.
 
 ## Dependency direction
 
@@ -85,9 +97,11 @@ Tagged `scope:personal-personas`: it may depend only on `scope:personal-personas
 
 ## Data & persistence
 
-Starts, appends answers to, and completes `PersonaInterview` and `PersonaInterviewAnswer` rows in the
-canonical product database. It also reads a joined approval snapshot (profile · revision · interview
-· template · insights) and commits approval plus the active-persona pointer in one transaction.
+Provisions one `PersonaProfile` for each authenticated `(silo, user)` pair and the initial immutable
+`PersonaQuestionSet` / `PersonaQuestion` / `PersonaSoulTemplate` catalogue in the canonical product
+database. It also starts, appends answers to, and completes `PersonaInterview` and
+`PersonaInterviewAnswer` rows; reads a joined approval snapshot (profile · revision · interview ·
+template · insights); and commits approval plus the active-persona pointer in one transaction.
 Postgres-level lifecycle behaviour is exercised by the `test:sql` target (`tests/persona-authority.sql`).
 
 ## See also
