@@ -1,4 +1,4 @@
-import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, CompiledToolDefinition, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 /**
@@ -16,13 +16,13 @@ export interface PromptCompilerRepositories
 	/** Resolve ordered conversation turns for the exact message references, preserving snapshot order. */
 	loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]>;
 	/**
-	 * Resolve the tool schemas exposed by the immutable tool grants for the executed revision.
+	 * Resolve the tool schemas exposed by immutable revision-selected integration assignments.
 	 *
 	 * The returned order is not significant: the compiler re-sorts tool definitions by name before
 	 * sealing the compiled output, so grant/repository iteration order can never change the compiled
 	 * payload or its digest.
 	 */
-	loadToolDefinitions(toolGrantIds: readonly string[]): Promise<readonly CompiledToolDefinition[]>;
+	loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]>;
 	/** Resolve durable memory-fact statements included in the prompt for the given references. */
 	loadMemoryFactStatements(memoryFactIds: readonly string[]): Promise<readonly string[]>;
 	/** Resolve retained preference statements frozen by the snapshot, including historical corrected facts. */

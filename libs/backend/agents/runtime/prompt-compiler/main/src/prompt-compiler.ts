@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
 import { ___CanonicalizeJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
@@ -12,7 +13,7 @@ import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";
  * snapshot compiled by one version is never silently consumed by another. Every snapshot declares
  * the version its compiler must match; a mismatch fails closed.
  */
-export const PROMPT_COMPILER_VERSION = "opencrane.prompt-compiler/2026-07-23.1";
+export { PROMPT_COMPILER_VERSION };
 
 /**
  * Hydrate an immutable {@link RunInputSnapshot} into the literal {@link CompiledRunInput} the runtime
@@ -56,7 +57,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 	// 2. Dereference every immutable record the literal input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.toolGrantIds));
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.integrationAssignments));
 	const preferenceStatements = await repositories.loadPreferenceFactStatements([...snapshot.preferenceFactIds].sort());
 	const memoryStatements = await repositories.loadMemoryFactStatements(_orderedFactIds(snapshot));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());

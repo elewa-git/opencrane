@@ -1,4 +1,5 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState } from "@prisma/client";
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 
 import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
@@ -25,7 +26,8 @@ export class PrismaRootRunAuthoritySource implements RunAuthoritySource
 		if (service.kind === AgentServiceKind.Personal && command.threadId === null) return { outcome: "denied", reason: "run_not_admittable" };
 		if (service.kind === AgentServiceKind.Managed && command.threadId !== null) return { outcome: "denied", reason: "run_not_admittable" };
 		if (service.kind === AgentServiceKind.Managed && service.activeRevision.personaRevisionId !== null) return { outcome: "denied", reason: "run_not_admittable" };
+		if (service.activeRevision.promptPolicyVersion !== PROMPT_COMPILER_VERSION) return { outcome: "denied", reason: "revision_unavailable" };
 		// 3. Freeze root lineage at the caller-provided run ID; only a dedicated child authority may inherit it.
-		return { outcome: "loaded", value: { agentServiceId: service.id, agentRevisionId: service.activeRevision.id, agentKind: service.kind === AgentServiceKind.Personal ? "personal" : "managed", effectiveContractDigest: service.activeRevision.digest, promptCompilerVersion: service.activeRevision.promptPolicyVersion, trigger: service.kind === AgentServiceKind.Personal ? "interactive" : "managed_invocation", delegatedUserId: service.kind === AgentServiceKind.Personal ? command.executionSubjectId : null, rootRunId: command.runId, parentRunId: null } };
+		return { outcome: "loaded", value: { agentServiceId: service.id, agentRevisionId: service.activeRevision.id, agentKind: service.kind === AgentServiceKind.Personal ? "personal" : "managed", effectiveContractDigest: service.activeRevision.digest, promptCompilerVersion: PROMPT_COMPILER_VERSION, trigger: service.kind === AgentServiceKind.Personal ? "interactive" : "managed_invocation", delegatedUserId: service.kind === AgentServiceKind.Personal ? command.executionSubjectId : null, rootRunId: command.runId, parentRunId: null } };
 	}
 }

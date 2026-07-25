@@ -22,6 +22,15 @@ export interface RunInputSnapshotIdentity
   fleetMembershipTrustedUntil: string;
 }
 
+/** Immutable integration tool allowance selected by the executing AgentRevision. */
+export interface RunInputSnapshotIntegrationAssignment
+{
+  /** Integration selected by the revision. */
+  integrationId: string;
+  /** Exact tool names the revision permits through that integration. */
+  allowedTools: readonly string[];
+}
+
 /** Deterministic, immutable inputs compiled before a runtime assignment. */
 export interface RunInputSnapshot
 {
@@ -51,8 +60,8 @@ export interface RunInputSnapshot
   memoryFacts: readonly MemoryFactReference[];
   /** Authorised memory retrieval policy selected for this run. */
   memoryQueryPolicy: JsonValue;
-  /** Immutable grants that expose tools to the selected revision. */
-  toolGrantIds: readonly string[];
+  /** Immutable third-party integration tool allowances selected by the revision. */
+  integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
   /** Server-selected model route without provider credentials. */
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */

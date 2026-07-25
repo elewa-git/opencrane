@@ -17,6 +17,12 @@ across process restarts. The compiler holds no database of its own: the app inje
 over the control-plane Prisma transaction so the runtime never re-derives prompt, persona, or tool
 assembly and never touches Postgres.
 
+Integration tool descriptors are the exception to the read-port pattern: the snapshot already pins
+the integration identifier and allowed tool names. The dispatch adapter turns those into
+`integration:<integrationId>:<toolName>` descriptors and marks every third-party action for
+approval. It does not load MCP grants or expose custody references; the action boundary performs the
+live custody recheck immediately before execution.
+
 ```
  RunInputSnapshot (ID references + promptCompilerVersion)
           │  injected control-plane read ports

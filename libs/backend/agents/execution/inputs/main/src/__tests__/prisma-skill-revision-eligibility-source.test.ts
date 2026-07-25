@@ -11,7 +11,7 @@ function _Transaction(rows: readonly unknown[])
 /** Builds the immutable tool-policy skill coordinates proposed for one future run. */
 function _ToolPolicy(skillRevisionIds: readonly string[])
 {
-	return { modelRoute: {}, toolGrantIds: [], skillRevisionIds, artifactRevisionIds: [] };
+	return { modelRoute: {}, integrationAssignments: [], skillRevisionIds, artifactRevisionIds: [] };
 }
 
 describe("PrismaSkillRevisionEligibilitySource", function _describeEligibility()

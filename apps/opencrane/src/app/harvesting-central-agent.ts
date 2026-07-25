@@ -1,4 +1,5 @@
 import type { HarvestingCentralAgentDefinition } from "./harvesting-central-agent.types.js";
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 
 /**
  * The packaged "harvesting" central agent, expressed entirely as OpenCrane definition data.
@@ -27,7 +28,7 @@ export function _HarvestingCentralAgentDefinition(obotCustodyReference: string, 
 		name: "Knowledge Harvester",
 		workloadProfile: "managed-harvester",
 		content: {
-			promptPolicyVersion: "harvester-prompt-v1",
+			promptPolicyVersion: PROMPT_COMPILER_VERSION,
 			// A managed (central) agent never carries a persona.
 			personaRevisionId: null,
 			modelDefinitionId,

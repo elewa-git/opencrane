@@ -66,7 +66,7 @@ const PROOF_KEY = { id: "proof-1", keyThumbprint: "thumb-1" };
 /** Command opening a pending deferred-tool approval for a reserved invocation. */
 function _deferCommand(): Parameters<typeof __DeferToolRequest>[1]
 {
-	return { runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", toolRevisionId: "mcp-server:server-1", argumentsDigest: "sha256:d", actionDigest: "invocation-1", effectivePolicyDigest: "sha256:cap", approverPolicyRevision: "mcp-server-requires-approval", now: NOW, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
+	return { runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", toolRevisionId: "integration:search:query", argumentsDigest: "sha256:d", actionDigest: "invocation-1", effectivePolicyDigest: "sha256:cap", approverPolicyRevision: "integration-tools-require-approval", now: NOW, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 describe("defer tool request authority", function _deferSuite()
@@ -83,7 +83,7 @@ describe("defer tool request authority", function _deferSuite()
 		const result = await __DeferToolRequest(transaction, _deferCommand());
 
 		expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
-		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "mcp-server:server-1", proofKeyId: "proof-1" }) }));
+		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", proofKeyId: "proof-1" }) }));
 	});
 
 	it("reports unavailable when the live workload or proof key is absent", async function _unavailable()

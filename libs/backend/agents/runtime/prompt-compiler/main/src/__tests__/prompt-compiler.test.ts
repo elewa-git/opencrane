@@ -23,7 +23,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		skillRevisionIds: ["skill-1"],
 		memoryFacts: [{ datasetId: "d-1", factId: "fact-2", contentDigest: "sha256:a", provenance: [] }, { datasetId: "d-1", factId: "fact-1", contentDigest: "sha256:b", provenance: [] }],
 		memoryQueryPolicy: {},
-		toolGrantIds: ["grant-b", "grant-a"],
+		integrationAssignments: [{ integrationId: "integration-b", allowedTools: ["write"] }, { integrationId: "integration-a", allowedTools: ["read"] }],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTurns: 4, maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
 		identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
@@ -72,11 +72,21 @@ describe("__CompileRunInput", function _describeCompiler()
 		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
 	});
 
-	it("orders tools by name regardless of grant iteration order", async function _ordersTools()
+	it("orders tools by name regardless of integration-assignment iteration order", async function _ordersTools()
 	{
 		const compiled = await __CompileRunInput(_snapshot(), _repositories());
 
 		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["alpha", "zulu"]);
+	});
+
+	it("passes the exact immutable integration allowance to the tool-definition port", async function _passesIntegrationAllowance()
+	{
+		let received: RunInputSnapshot["integrationAssignments"] | null = null;
+		const snapshot = _snapshot({ integrationAssignments: [{ integrationId: "integration-z", allowedTools: ["write", "read"] }] });
+
+		await __CompileRunInput(snapshot, _repositories({ loadToolDefinitions: async function _toolDefinitions(assignments): Promise<readonly CompiledToolDefinition[]> { received = assignments; return []; } }));
+
+		expect(received).toEqual([{ integrationId: "integration-z", allowedTools: ["write", "read"] }]);
 	});
 
 	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()

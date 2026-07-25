@@ -196,7 +196,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 		memoryFacts: _json(snapshot.memoryFacts),
 		identitySnapshot: _json(snapshot.identitySnapshot),
 		modelRoute: _json(snapshot.modelRoute),
-		toolGrantIds: [...snapshot.toolGrantIds],
+		integrationAssignments: _json(snapshot.integrationAssignments),
 		skillRevisionIds: [...snapshot.skillRevisionIds],
 		memoryQueryPolicy: _json(snapshot.memoryQueryPolicy),
 		budgetPolicy: _json(snapshot.budgetPolicy),
@@ -208,7 +208,7 @@ function _snapshotData(snapshot: RunInputSnapshot): Prisma.RunInputSnapshotUnche
 }
 
 /** Maps one persisted snapshot row back into the immutable cross-domain contract. */
-function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; toolGrantIds: string[]; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
+function _snapshot(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
 {
 	return {
 		runId: row.runId,
@@ -224,7 +224,7 @@ function _snapshot(row: { runId: string; siloId: string; agentServiceId: string;
 		skillRevisionIds: row.skillRevisionIds,
 		memoryFacts: row.memoryFacts as unknown as RunInputSnapshot["memoryFacts"],
 		memoryQueryPolicy: row.memoryQueryPolicy as RunInputSnapshot["memoryQueryPolicy"],
-		toolGrantIds: row.toolGrantIds,
+		integrationAssignments: row.integrationAssignments as unknown as RunInputSnapshot["integrationAssignments"],
 		modelRoute: row.modelRoute as RunInputSnapshot["modelRoute"],
 		budgetPolicy: row.budgetPolicy as RunInputSnapshot["budgetPolicy"],
 		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshot["identitySnapshot"],

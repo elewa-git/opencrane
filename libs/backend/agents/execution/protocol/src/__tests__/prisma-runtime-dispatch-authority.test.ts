@@ -102,7 +102,7 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 
 	/** Return whether a stream row satisfies the guard fields present in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
@@ -299,7 +299,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		let ran = 0;
 		const context = _authority({ runState: "Running", externalActionRunner: { async run() { ran += 1; return { outcome: "completed" as const }; } } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "mcp-server:server-1", toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { q: "a" } };
 
 		const result = await context.authority.__AdmitCandidate(_identity, candidate);
 
@@ -314,7 +314,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const logger = { error: vi.fn() } as unknown as Logger;
 		const context = _authority({ runState: "Running", logger, externalActionRunner: { async run() { attempts += 1; return { outcome: "retryable" as const, error }; } } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-retry", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "mcp-server:server-1", toolInvocationId: "invocation-retry", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-retry", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-retry", argumentsDigest: "sha256:d", arguments: { q: "a" } };
 
 		const first = await context.authority.__AdmitCandidate(_identity, candidate);
 		const replay = await context.authority.__AdmitCandidate(_identity, candidate);
@@ -323,14 +323,14 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(first).toEqual({ accepted: false, reason: "external_action_dispatch_retryable", retryable: true, retryAfterMilliseconds: 1_000 });
 		expect(replay).toEqual(first);
 		expect(context.retries).toEqual([{ runId: "run-1", attempt: 1, candidateId: "candidate-ext-retry", retryCount: 2, retryDeadlineAt: new Date("2026-07-20T00:01:30.000Z") }]);
-		expect(logger.error).toHaveBeenCalledWith({ err: error, runId: "run-1", attempt: 1, candidateId: "candidate-ext-retry", toolInvocationId: "invocation-retry", toolRevisionId: "mcp-server:server-1", retryCount: 2, failureKind: "external_action_dispatch_retryable" }, "runtime external action dispatch failed before reservation");
+		expect(logger.error).toHaveBeenCalledWith({ err: error, runId: "run-1", attempt: 1, candidateId: "candidate-ext-retry", toolInvocationId: "invocation-retry", toolRevisionId: "integration:search:query", retryCount: 2, failureKind: "external_action_dispatch_retryable" }, "runtime external action dispatch failed before reservation");
 	});
 
 	it("exhausts the durable retry budget instead of returning an unbounded retry response", async function _exhaustsExternalActionRetries()
 	{
 		const context = _authority({ runState: "Running", externalActionRunner: { async run() { return { outcome: "retryable" as const, error: new Error("compiler unavailable") }; } } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-exhausted", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "mcp-server:server-1", toolInvocationId: "invocation-exhausted", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-exhausted", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-exhausted", argumentsDigest: "sha256:d", arguments: { q: "a" } };
 
 		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
 		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
@@ -345,7 +345,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const clock = { nowEpochMs(): number { return nowEpochMs; } };
 		const context = _authority({ runState: "Running", clock, externalActionRunner: { async run() { return { outcome: "retryable" as const, error: new Error("compiler unavailable") }; } } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-expired", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "mcp-server:server-1", toolInvocationId: "invocation-expired", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-expired", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-expired", argumentsDigest: "sha256:d", arguments: { q: "a" } };
 
 		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toMatchObject({ retryable: true });
 		nowEpochMs += 30_000;
@@ -356,7 +356,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 	{
 		const context = _authority({ runState: "Running", externalActionRunner: { async run() { return { outcome: "denied" as const }; } } });
 		const start = await context.authority.__NextCommand(_identity, _open, 0);
-		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-denied", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "mcp-server:server-1", toolInvocationId: "invocation-denied", argumentsDigest: "sha256:d", arguments: { q: "a" } };
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-ext-denied", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId: "integration:search:query", toolInvocationId: "invocation-denied", argumentsDigest: "sha256:d", arguments: { q: "a" } };
 
 		expect(await context.authority.__AdmitCandidate(_identity, candidate)).toEqual({ accepted: false, reason: "external_action_dispatch_denied" });
 	});

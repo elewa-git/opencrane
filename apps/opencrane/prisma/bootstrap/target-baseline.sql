@@ -1381,7 +1381,7 @@ CREATE TABLE "run_input_snapshots" (
     "memory_facts" JSONB NOT NULL,
     "identity_snapshot" JSONB NOT NULL,
     "model_route" JSONB NOT NULL,
-    "tool_grant_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "integration_assignments" JSONB NOT NULL,
     "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,
@@ -4332,7 +4332,7 @@ CREATE FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]) RETURNS BOOLEAN LANGUAG
       SELECT 1
       FROM unnest($1) AS tool("value")
       GROUP BY tool."value"
-      HAVING tool."value" IS NULL OR btrim(tool."value") = '' OR count(*) > 1
+      HAVING tool."value" IS NULL OR btrim(tool."value") = '' OR position(':' in tool."value") > 0 OR count(*) > 1
     ),
     FALSE
   );
@@ -4716,7 +4716,7 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_prom
       OR ("state" IN ('expired', 'cancelled') AND "finalized_at" IS NULL)
     );
 ALTER TABLE "integrations" ADD CONSTRAINT "integrations_identity_nonempty" CHECK (
-    btrim("silo_id") <> '' AND btrim("obot_catalog_entry_id") <> '' AND btrim("display_name") <> ''
+    btrim("id") <> '' AND position(':' in "id") = 0 AND btrim("silo_id") <> '' AND btrim("obot_catalog_entry_id") <> '' AND btrim("display_name") <> ''
   );
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_identity_nonempty" CHECK (
     btrim("integration_id") <> '' AND btrim("silo_id") <> '' AND btrim("obot_custody_reference") <> ''
