@@ -3869,7 +3869,7 @@ BEGIN
     END IF;
     IF NEW."output_lease_id" IS NOT NULL THEN
         SELECT "artifact_id", "state", "expires_at" INTO output_lease_artifact_id, output_lease_state, output_lease_expires_at FROM "artifact_upload_leases" WHERE "id" = NEW."output_lease_id" FOR UPDATE;
-        IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease must be active and bounded by its claim'; END IF;
+        IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR (NEW."state" = 'claimed' AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at")) OR (NEW."state" = 'completed' AND output_lease_state IS DISTINCT FROM 'finalized') THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease does not match its state'; END IF;
     END IF;
     IF TG_OP = 'INSERT' THEN
         IF NEW."state" <> 'pending' OR NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending without a claim'; END IF;
@@ -3878,7 +3878,11 @@ BEGIN
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
     IF NOT ((OLD."state" IN ('pending', 'retryable_failed') AND NEW."state" = 'claimed') OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = NEW."state" AND NEW."state" IN ('completed', 'terminal_failed'))) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
     IF NEW."state" = 'claimed' AND (NEW."attempt" <> OLD."attempt" + 1 OR NEW."claim_fence" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."derived_artifact_id" IS NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob claim requires a fresh live fence'; END IF;
-    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."completed_at" IS NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its fenced output'; END IF;
+    IF OLD."state" = 'claimed' AND NEW."state" IN ('completed', 'retryable_failed', 'terminal_failed') AND (OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp() OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence") THEN RAISE EXCEPTION 'ArtifactPreprocessJob result requires its live claim fence'; END IF;
+    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."completed_at" IS NULL
+        OR NOT EXISTS (SELECT 1 FROM "artifact_revisions" WHERE "id" = NEW."derived_revision_id" AND "artifact_id" = NEW."derived_artifact_id" AND "state" = 'published' AND "media_type" = 'text/plain')
+        OR NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id")
+        OR NOT EXISTS (SELECT 1 FROM "artifact_upload_leases" lease JOIN "artifact_revisions" revision ON revision."id" = NEW."derived_revision_id" WHERE lease."id" = NEW."output_lease_id" AND lease."state" = 'finalized' AND lease."promoted_content_address" = revision."content_address" AND lease."promoted_byte_length" = revision."byte_length")) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its exact finalized output'; END IF;
     RETURN NEW;
 END;
 $$;
