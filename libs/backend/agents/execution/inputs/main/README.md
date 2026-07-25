@@ -49,6 +49,10 @@ caller input.
 - `FleetMembershipIdentityEnvelopeSource` — the identity port implementation: accepts only a
   cryptographically verified fleet-membership assertion (never caller-supplied claims) and a
   same-transaction capability-set digest.
+- `PrismaRunAuthoritySource` — the first concrete admission source: after the run repository locks
+  the service, it accepts only an active service whose exact active pointer still names a published
+  revision in the same silo. It derives the revision digest and prompt-compiler version from that
+  immutable revision; it never trusts a revision identifier from the request.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
