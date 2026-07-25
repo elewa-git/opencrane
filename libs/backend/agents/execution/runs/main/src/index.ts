@@ -1,6 +1,8 @@
 export { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "./run-authority.js";
 export { __DigestRunInputSnapshot } from "./run-input-snapshot-digest.js";
 export { __AuthorizeGovernedChildRunSpawn } from "./child-run-admission.js";
+export { __DeriveChildRunSnapshot } from "./child-run-snapshot.js";
+export type { ChildRunSnapshotCommand } from "./child-run-snapshot.types.js";
 export type { GovernedChildRunBudget, GovernedChildRunCapabilityDelegation, GovernedChildRunContextSelection, GovernedChildRunParent, GovernedChildRunPolicy, GovernedChildRunSpawnAuthorization, GovernedChildRunSpawnAuthorizationResult, GovernedChildRunSpawnRefusalReason, GovernedChildRunSpawnRequest } from "./child-run-admission.types.js";
 export type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationParent, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types.js";
 export { PrismaChildRunReservationRepository } from "./prisma-child-run-reservation-repository.js";
