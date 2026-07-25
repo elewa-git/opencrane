@@ -45,13 +45,13 @@ function _integrationTool(toolRevisionId: string): { readonly integrationId: str
 /**
  * Build the concrete external-action executor for one admitted candidate, in the composition root.
  *
- * This is the ONLY place the MCP, sandbox, and memory transports are wired together, keeping
+ * This is the ONLY place the integration, sandbox, and memory transports are wired together, keeping
  * `scope:execution-protocol` and `scope:authorization` free of any transport import. The returned executor
- * routes by the tool-revision prefix minted by the run-input compiler: `mcp-server:` goes through the
- * Obot custody port, `sandbox:` through the sandbox Job executor, and `memory:` through the memory
- * gateway. Each transport currently defaults to its fail-closed stub, so an action against an
- * unavailable dependency raises rather than fabricating a result, and `__ExecuteExternalAction` marks
- * the reserved invocation failed. An unknown revision kind is refused the same way.
+ * routes `integration:<id>:<tool>` through the Obot invocation port, `sandbox:` through the sandbox
+ * Job executor, and `memory:` through the memory gateway. Each transport currently defaults to its
+ * fail-closed stub, so an action against an unavailable dependency raises rather than fabricating a
+ * result, and `__ExecuteExternalAction` marks the reserved invocation failed. An unknown revision kind
+ * is refused the same way.
  *
  * @param candidate - Runtime external-action candidate whose tool revision selects the transport.
  * @param dependencies - Injected concrete transports and correlation identity.
@@ -70,12 +70,6 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 				if (resolved.outcome !== "resolved") throw new UnsupportedExternalActionError(toolRevisionId);
 				const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
 				return result.content;
-			}
-			if (toolRevisionId.startsWith("mcp-server:"))
-			{
-				// An MCP tool call needs Obot-held custody first; the unavailable adapter fails closed here.
-				await dependencies.obotCustody.provision({ siloId: dependencies.siloId, integrationId: toolRevisionId, obotCatalogEntryId: toolRevisionId, credential: [] });
-				throw new UnsupportedExternalActionError(toolRevisionId);
 			}
 			if (toolRevisionId.startsWith("sandbox:"))
 			{

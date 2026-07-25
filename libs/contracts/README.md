@@ -39,7 +39,13 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects.
+provider credentials or mutable source objects. Its integration assignments record only an
+integration identifier and the revision-approved tool names; a custody reference stays behind the
+server boundary and is rechecked when a tool is invoked.
+
+`PROMPT_COMPILER_VERSION` is the single version pin shared by revision authoring, admission, and
+the deterministic compiler. A revision that names another version is not admissible, preventing a
+runtime from silently interpreting a frozen snapshot with different assembly rules.
 
 ## Public surface
 
@@ -51,9 +57,12 @@ provider credentials or mutable source objects.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`, `MemoryFactReference`, `TenantModelSet`, and
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIntegrationAssignment`,
+  `MemoryFactReference`, `TenantModelSet`, and
   domain-topology host builders. A memory fact reference pins an immutable content digest and its
   provenance rather than a mutable revision counter.
+- `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
+  must name before it can admit a run.
 - `AGENT_RUNTIME_PROTOCOL_V1`, `AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE`,
   `___IsAgentRuntimeServiceAccountName`, `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and
   `RuntimeCandidate` — the private workload protocol for a personal-agent process that opens its own

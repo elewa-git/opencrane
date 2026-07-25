@@ -53,7 +53,7 @@ const _candidate: RuntimeCandidate = {
 const _externalActionCandidate: RuntimeCandidate = {
 	..._candidate,
 	kind: "external_action",
-	toolRevisionId: "mcp-server:search",
+	toolRevisionId: "integration:search:query",
 	toolInvocationId: "invocation-1",
 	argumentsDigest: "sha256:arguments",
 	arguments: { query: "example" },

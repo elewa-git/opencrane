@@ -1,4 +1,4 @@
-import type { MemoryFactReference, RunInputSnapshot } from "@opencrane/contracts";
+import type { MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
@@ -48,8 +48,8 @@ export interface ToolPolicyInput
 {
 	/** Server-selected model route without provider credentials. */
 	modelRoute: JsonValue;
-	/** Effective grant identifiers exposing tools to the runtime. */
-	toolGrantIds: readonly string[];
+	/** Exact third-party integration tools the revision permits at runtime. */
+	integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
 	/** Immutable skill revisions eligible for this run. */
 	skillRevisionIds: readonly SkillRevisionId[];
 	/** Immutable artifact revisions explicitly made available to the run. */

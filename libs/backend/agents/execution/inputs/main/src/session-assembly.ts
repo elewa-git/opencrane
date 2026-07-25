@@ -1,6 +1,6 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
 import type { InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
@@ -54,6 +54,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
+		if (!_areIntegrationAssignmentsValid(tools.value.integrationAssignments)) return { outcome: "denied", reason: "tool_policy_unavailable" } as const;
 		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
 		if (skills.outcome === "denied") return skills;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
@@ -98,7 +99,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
 		memoryFacts: _CanonicalMemoryFacts(memory.memoryFacts),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
-		toolGrantIds: ___SortBy([...tools.toolGrantIds]),
+		integrationAssignments: _canonicalIntegrationAssignments(tools.integrationAssignments),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: {
@@ -118,4 +119,27 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Canonicalises revision-selected integration tools before sealing them into a snapshot. */
+function _canonicalIntegrationAssignments(assignments: readonly RunInputSnapshotIntegrationAssignment[]): readonly RunInputSnapshotIntegrationAssignment[]
+{
+	return [...assignments]
+		.map(function _assignment(assignment): RunInputSnapshotIntegrationAssignment
+		{
+			return { integrationId: assignment.integrationId, allowedTools: ___SortBy([...new Set(assignment.allowedTools)]) };
+		})
+		.sort(function _byIntegration(left, right): number { return left.integrationId.localeCompare(right.integrationId); });
+}
+
+/** Rejects integration allowances that cannot form one unambiguous runtime tool-revision identifier. */
+function _areIntegrationAssignmentsValid(assignments: readonly RunInputSnapshotIntegrationAssignment[]): boolean
+{
+	return assignments.every(function _assignment(assignment): boolean
+	{
+		return assignment.integrationId.trim().length > 0
+			&& !assignment.integrationId.includes(":")
+			&& assignment.allowedTools.length > 0
+			&& assignment.allowedTools.every(function _tool(tool): boolean { return tool.trim().length > 0 && !tool.includes(":"); });
+	});
 }

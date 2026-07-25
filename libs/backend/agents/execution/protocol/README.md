@@ -52,10 +52,11 @@ executor error. Once a runner records a durable refusal or result, that outcome 
 fail closed.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
-Its external-action adapter routes an admitted action through injected custody, sandbox, or memory
-ports; the app supplies those concrete ports and composes the library with the stream transport and
-the existing run/conversation authorities; a runtime can only submit candidates for those
-authorities to accept or reject.
+Its external-action adapter routes an admitted action through injected integration custody, sandbox,
+or memory ports; the app supplies those concrete ports and composes the library with the stream
+transport and the existing run/conversation authorities. An integration action has the fixed
+`integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
+are rechecked at execution, so the runtime never sees either credential or mutable permission state.
 
 ## Public surface
 
@@ -66,10 +67,11 @@ authorities to accept or reject.
   runtime-instance binding on stream loss.
 - `__CreatePrismaRunInputCompiler` — binds the deterministic prompt compiler to the control-plane
   Prisma reads used by the dispatch transaction.
-- `__CreateExternalActionExecutor` — routes one admitted action to the injected MCP custody,
-  sandbox, or memory port and fails closed for unsupported revisions. Memory recall additionally
-  requires a `scope: personal` policy and Cognee dataset identifier frozen in the admitted snapshot;
-  neither runtime tool arguments nor a subject id can choose a dataset.
+- `__CreateExternalActionExecutor` — routes one admitted action to the injected integration
+  custody, sandbox, or memory port and fails closed for unsupported revisions. Third-party tools use
+  only `integration:<integrationId>:<toolName>` identities frozen from the AgentRevision assignment.
+  Memory recall additionally requires a `scope: personal` policy and Cognee dataset identifier frozen
+  in the admitted snapshot; neither runtime tool arguments nor a subject id can choose a dataset.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results
@@ -93,7 +95,8 @@ OpenClaw compatibility path, a cancellation side authority, or a second durable 
 ## Data & persistence
 
 The compiler adapter reads the immutable persona, conversation, artifact, skill, and model-route
-records needed to compile a dispatch. The dispatch adapter owns two Postgres models in
+records needed to compile a dispatch, and turns the snapshot's integration assignments directly
+into approval-required tool descriptors. The dispatch adapter owns two Postgres models in
 `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the

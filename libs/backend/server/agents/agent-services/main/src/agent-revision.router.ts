@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from "express";
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
 import type { AgentRevisionContent, AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
@@ -18,13 +19,19 @@ function _isNonEmptyString(value: unknown): value is string
 	return typeof value === "string" && value.trim().length > 0;
 }
 
+/** Returns whether a string is safe as one segment of the runtime integration tool revision. */
+function _isToolRevisionSegment(value: unknown): value is string
+{
+	return _isNonEmptyString(value) && !value.includes(":");
+}
+
 /** Parses and validates the immutable executable content from a request body. */
 function _parseContent(raw: unknown): AgentRevisionContent | null
 {
 	if (raw === null || typeof raw !== "object") return null;
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
-	if (!_isNonEmptyString(body.promptPolicyVersion) || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
+	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
 	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
 	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
@@ -52,7 +59,7 @@ function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssi
 	const assignments = raw.map(function _assignment(entry)
 	{
 		const item = entry as Record<string, unknown>;
-		if (!_isNonEmptyString(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId) || !Array.isArray(item?.allowedTools) || !item.allowedTools.every(_isNonEmptyString)) return null;
+		if (!_isToolRevisionSegment(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId) || !Array.isArray(item?.allowedTools) || !item.allowedTools.every(_isToolRevisionSegment)) return null;
 		return { integrationId: item.integrationId, custodyReferenceId: item.custodyReferenceId, allowedTools: item.allowedTools as string[] };
 	});
 	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);

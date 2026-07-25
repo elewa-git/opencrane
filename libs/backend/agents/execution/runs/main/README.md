@@ -38,7 +38,9 @@ user is that exact subject. A same-silo key from any other authority scope fails
 exposing a run. A new request locks the AgentService, lets the session assembler
 revalidate every input inside that transaction, and commits the `AgentRun`, its only `RunInputSnapshot`, and the ordered
 `RunAccepted` and `RunAttemptRequested` outbox events together. The canonical digest covers every
-snapshot field except its own digest.
+snapshot field except its own digest. The persisted snapshot stores revision-selected integration
+tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
+is rechecked only when an action is actually attempted.
 
 `RunAdmissionConcurrencyGate` is the upstream overload boundary for a live admission entrypoint.
 It partitions capacity by `(siloId, AgentServiceId)`, starts only the configured number of admissions,

@@ -10,7 +10,7 @@ import { __ExecuteExternalAction } from "../external-action-authority.js";
 import type { ExternalActionExecutor } from "../external-action-authority.types.js";
 
 /** One granted tool revision the compiled input offers to the run. */
-const TOOL: CompiledToolDefinition = { name: "search", toolRevisionId: "mcp-server:server-1", description: "search", requiresApproval: false, parametersSchema: { type: "object" } };
+const TOOL: CompiledToolDefinition = { name: "integration:search:query", toolRevisionId: "integration:search:query", description: "search", requiresApproval: false, parametersSchema: { type: "object" } };
 
 /** Immutable snapshot facts the authority binds a candidate to. */
 function _snapshot(): RunInputSnapshot
@@ -30,7 +30,7 @@ function _candidate(args: JsonValue, overrides: Partial<RuntimeExternalActionCan
 		attempt: 1,
 		fence: 1,
 		kind: "external_action",
-		toolRevisionId: "mcp-server:server-1",
+		toolRevisionId: "integration:search:query",
 		toolInvocationId: "invocation-1",
 		argumentsDigest: __DigestCanonicalJson(args),
 		arguments: args,
@@ -101,7 +101,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository();
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { toolRevisionId: "mcp-server:other" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { toolRevisionId: "integration:search:other" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
 		expect(result).toEqual({ outcome: "denied", reason: "tool_revision_not_granted" });
 		expect(repository.reserveCalls).toBe(0);
 		expect(calls.count).toBe(0);

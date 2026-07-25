@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
@@ -33,7 +33,7 @@ function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRep
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
 		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
-		loadToolDefinitions(toolGrantIds: readonly string[]): Promise<readonly CompiledToolDefinition[]> { return _loadToolDefinitions(transaction, toolGrantIds); },
+		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return Promise.resolve(_loadToolDefinitions(integrationAssignments)); },
 		// Durable fact text lives in Cognee behind the memory gateway (a network read); the immutable
 		// fact references stay on the snapshot and are not inlined by this offline compile step.
 		loadMemoryFactStatements(): Promise<readonly string[]> { return Promise.resolve([]); },
@@ -81,26 +81,25 @@ function _messageContent(blocks: Prisma.JsonValue): string
 }
 
 /**
- * Resolve the snapshot's tool grants into the compiled tool definitions the bounded loop may propose.
+ * Resolve immutable integration allowances into compiled tool definitions the bounded loop may propose.
  *
- * Each `toolGrantId` is an {@link McpServerGrant}; a grant resolves to its granted MCP server, which
- * becomes one callable tool the model may select. The revision id is derived from the immutable
- * server id so an external-action proposal can be fixed to (and later revalidated against) the exact
- * granted tool. Per-argument JSON schemas are not modelled server-side yet, so the compiled schema is
- * a permissive object the adapter still validates; tightening it is a later enrichment. Ordering is
- * left to the prompt compiler, which sorts tools canonically by name.
+ * Each tool is named with its integration and becomes an `integration:<id>:<tool>` revision id.
+ * That exact revision id reaches the external-action boundary, which independently rechecks its
+ * live custody reference and the revision's allow-list. Third-party actions require an approval
+ * until an explicit per-tool approval policy exists. Per-argument JSON schemas are not modelled
+ * server-side yet, so the compiled schema is a permissive object the adapter still validates.
  */
-async function _loadToolDefinitions(transaction: Prisma.TransactionClient, toolGrantIds: readonly string[]): Promise<readonly CompiledToolDefinition[]>
+function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): readonly CompiledToolDefinition[]
 {
-	if (toolGrantIds.length === 0) return [];
-	const grants = await transaction.mcpServerGrant.findMany({ where: { id: { in: [...toolGrantIds] } }, include: { mcpServer: true } });
-	const byServerId = new Map<string, CompiledToolDefinition>();
-	for (const grant of grants)
+	const tools: CompiledToolDefinition[] = [];
+	for (const assignment of integrationAssignments)
 	{
-		const server = grant.mcpServer;
-		if (!byServerId.has(server.id)) byServerId.set(server.id, { name: server.name, toolRevisionId: `mcp-server:${server.id}`, description: server.description, requiresApproval: server.requiresApproval, parametersSchema: { type: "object" } });
+		for (const tool of assignment.allowedTools)
+		{
+			tools.push({ name: `integration:${assignment.integrationId}:${tool}`, toolRevisionId: `integration:${assignment.integrationId}:${tool}`, description: `Tool ${tool} from integration ${assignment.integrationId}`, requiresApproval: true, parametersSchema: { type: "object" } });
+		}
 	}
-	return [...byServerId.values()];
+	return tools;
 }
 
 /** Resolve one-line availability summaries for the immutable artifact revisions offered to the run. */

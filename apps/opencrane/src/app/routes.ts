@@ -26,7 +26,6 @@ import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaR
 import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
-import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
 import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
@@ -216,7 +215,6 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 {
 	const repository = new PrismaToolInvocationRepository(prisma);
 	const personalConfiguration = new PrismaPersonalConfigurationChangeRepository(prisma);
-	const obotCustody = new __UnavailableObotCustodyAdapter();
 	const obotMcpInvocation = new __UnavailableObotMcpInvocationAdapter();
 	const integrations = new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock());
 	const sandboxExecutor = new __UnavailableSandboxJobExecutor();
@@ -232,7 +230,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			{
 				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
 					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
-					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, cogneeDatasetId: _PersonalMemoryDatasetId(snapshot), agentRevisionId: snapshot.agentRevisionId, integrations, obotMcpInvocation, obotCustody, sandboxExecutor, memoryGateway });
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, cogneeDatasetId: _PersonalMemoryDatasetId(snapshot), agentRevisionId: snapshot.agentRevisionId, integrations, obotMcpInvocation, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{

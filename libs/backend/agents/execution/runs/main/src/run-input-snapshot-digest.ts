@@ -40,7 +40,10 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 			};
 		}),
 		memoryQueryPolicy: snapshot.memoryQueryPolicy,
-		toolGrantIds: snapshot.toolGrantIds,
+		integrationAssignments: snapshot.integrationAssignments.map(function _integration(assignment): JsonValue
+		{
+			return { integrationId: assignment.integrationId, allowedTools: assignment.allowedTools };
+		}),
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,
 		identitySnapshot: snapshot.identitySnapshot,
