@@ -3,6 +3,8 @@ import type { Logger } from "@opencrane/observability";
 
 import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from "./persona-interview-authority.types.js";
 import type { PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
+import type { PersonaAuthorityRepository } from "./persona-authority.types.js";
+import type { PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types.js";
 
 /** Authenticated browser identity resolved by the composing server, never from request input. */
 export interface PersonaOnboardingCaller
@@ -31,6 +33,10 @@ export interface PersonaOnboardingRouterDependencies
 	interviews: PersonaInterviewRepository;
 	/** Reads the interview's immutable questionnaire revision. */
 	questions: PersonaInterviewQuestionReader;
+	/** Creates a server-derived draft from completed interview evidence. */
+	drafts: PersonaDraftFromInterviewRepository;
+	/** Approves the owner-reviewed draft and moves the active persona pointer. */
+	approval: PersonaAuthorityRepository;
 	/** Supplies trusted timestamps. */
 	clock: PersonaOnboardingClock;
 	/** Records unexpected authority failures without including owner answers. */

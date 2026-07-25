@@ -40,3 +40,10 @@ export interface PersonaDraftRepository
 	/** Atomically derives and persists a draft from exact completed-interview evidence. */
 	createAtomically(command: CreatePersonaDraftCommand): Promise<CreatePersonaDraftPersistenceResult>;
 }
+
+/** Server-only boundary that derives answer-provenance-bound insights before creating a draft. */
+export interface PersonaDraftFromInterviewRepository
+{
+	/** Creates a draft using a bounded server-derived insight set from one completed owner interview. */
+	createFromInterviewAtomically(command: Omit<CreatePersonaDraftCommand, "insights">): Promise<CreatePersonaDraftPersistenceResult>;
+}
