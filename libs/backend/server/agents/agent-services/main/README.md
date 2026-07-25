@@ -7,7 +7,8 @@
 This package is part of the **managed-agent plane** — the side of OpenCrane that turns a saved
 agent definition into something the runtime can execute. An *agent service* is the stable identity
 of one agent (its name and lifecycle); an *agent revision* is one immutable, versioned snapshot of
-how that agent behaves (its prompt policy, registered model definition, budget, and the skills and
+how that agent behaves (its prompt policy, registered model definition, exact capability ceiling,
+budget, and the skills and
 integrations it may use). A service always points at exactly one *active* revision.
 
 This package owns the whole definition plane and the authoritative management API. It creates a
@@ -24,7 +25,7 @@ read/recall and inject/write for that exact scope only, and never implies skills
 models, credentials, or a neighbouring scope.
 
 ```
- author a draft AgentRevision   (prompt policy · registered model · budget · assigned skills + integrations)
+ author a draft AgentRevision   (prompt policy · registered model · capability ceiling · budget · assigned skills + integrations)
         │
         ▼
  ┌────────────────────────────────────┐
@@ -39,7 +40,8 @@ models, credentials, or a neighbouring scope.
 **In this flow:** [skills](../../skills/main/README.md) · [integrations](../../../gateways/integrations/main/README.md) *(a revision assigns these)*
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
-carries every executable field (a positive version, a digest, prompt and registered model definition,
+carries every executable field (a positive version, a digest, prompt, registered model definition,
+exact capability ceiling,
 and positive turn/token/duration budgets). The model is a foreign-key reference to the gateway-owned
 catalogue, so an author cannot turn an arbitrary provider alias into executable behaviour. A model
 is available only when it is platform-global or belongs to the service's tenant scope; the database
@@ -92,7 +94,7 @@ grants) both ride the compiler. Scope attachments remain silo-bounded and org-ad
 ## Data & persistence
 
 Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisionId`/`changeMessage`
-lineage and a required `ModelDefinition` reference), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
+lineage, a required `ModelDefinition` reference, and an immutable JSON capability ceiling whose entries use the authorization-compatible `{ catalog: { catalogId, revision, digest }, capabilityId }` shape), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
 the `GrantScope`/`GrantSubjectType` enums), `AgentRevisionSkillAssignment`,
 `AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
 enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`. The retired

@@ -1,3 +1,5 @@
+import type { CanonicalJsonSha256Digest } from "@opencrane/util";
+
 import type { AgentRevisionId, AgentServiceId, PersonaRevisionId, UserId } from "./identifiers.types.js";
 import type { RevisionScopeAttachment } from "./scope-attachment.types.js";
 
@@ -35,6 +37,26 @@ export interface AgentBudget
 	readonly maxDurationMs: number;
 }
 
+/** Immutable catalogue revision used to bound an agent capability. */
+export interface AgentRevisionCapabilityCatalogueReference
+{
+	/** Stable capability catalogue identifier. */
+	readonly catalogId: string;
+	/** Positive immutable catalogue revision number. */
+	readonly revision: number;
+	/** Digest binding the entry to its exact catalogue revision. */
+	readonly digest: CanonicalJsonSha256Digest;
+}
+
+/** Immutable catalog-qualified capability that bounds one agent revision. */
+export interface AgentRevisionCapabilityCeilingEntry
+{
+	/** Exact immutable catalogue revision defining this capability. */
+	readonly catalog: AgentRevisionCapabilityCatalogueReference;
+	/** Stable capability identifier inside the referenced catalogue. */
+	readonly capabilityId: string;
+}
+
 /** Immutable executable configuration of an agent service. */
 export interface AgentRevision
 {
@@ -60,6 +82,8 @@ export interface AgentRevision
 	readonly personaRevisionId: PersonaRevisionId | null;
 	/** Registered model definition selected for this immutable revision. */
 	readonly modelDefinitionId: string;
+	/** Immutable upper bound on capabilities that a run may receive. */
+	readonly capabilityCeiling: readonly AgentRevisionCapabilityCeilingEntry[];
 	/** Immutable skill revisions available to the runtime. */
 	readonly skills: readonly SkillRevisionReference[];
 	/** Immutable integration and tool assignments available to the runtime. */

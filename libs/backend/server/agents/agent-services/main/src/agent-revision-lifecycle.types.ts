@@ -1,4 +1,4 @@
-import type { AgentRevision, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, RevisionScopeAttachment, SiloId } from "@opencrane/models/agents";
+import type { AgentRevision, AgentRevisionCapabilityCeilingEntry, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, RevisionScopeAttachment, SiloId } from "@opencrane/models/agents";
 
 /** Immutable executable content authored for one managed-agent revision. */
 export interface AgentRevisionContent
@@ -9,6 +9,8 @@ export interface AgentRevisionContent
 	readonly personaRevisionId: string | null;
 	/** Registered model-definition reference; carries no provider secret. */
 	readonly modelDefinitionId: string;
+	/** Immutable upper capability bound; a run may only further narrow this list. */
+	readonly capabilityCeiling: readonly AgentRevisionCapabilityCeilingEntry[];
 	/** Immutable resource ceilings applied to each run. */
 	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxDurationMs: number };
 	/** Immutable skill revisions exposed to the runtime. */

@@ -21,6 +21,16 @@ function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
 	return new Set(items.map(key)).size === items.length;
 }
 
+/** Returns whether one capability ceiling entry identifies a valid exact catalogue capability. */
+function _isCapabilityCeilingEntryValid(entry: AgentRevisionContent["capabilityCeiling"][number]): boolean
+{
+	return _isPresent(entry.catalog.catalogId)
+		&& Number.isSafeInteger(entry.catalog.revision)
+		&& entry.catalog.revision > 0
+		&& /^sha256:[0-9a-f]{64}$/.test(entry.catalog.digest)
+		&& _isPresent(entry.capabilityId);
+}
+
 /**
  * Returns whether executable revision content is structurally valid before persistence.
  * Duplicate composite keys (a skill, an integration, or an exact scope attachment) are rejected
@@ -34,11 +44,13 @@ function _isContentValid(content: AgentRevisionContent): boolean
 		&& _isPositiveInteger(content.budget.maxTurns)
 		&& _isPositiveInteger(content.budget.maxTokens)
 		&& _isPositiveInteger(content.budget.maxDurationMs)
+		&& content.capabilityCeiling.every(_isCapabilityCeilingEntryValid)
 		&& content.skills.every(skill => _isPresent(skill.skillId) && _isPresent(skill.revisionId))
 		&& content.integrationAssignments.every(assignment => _isPresent(assignment.integrationId) && _isPresent(assignment.custodyReferenceId) && assignment.allowedTools.every(_isPresent))
 		&& content.scopeAttachments.every(attachment => _isPresent(attachment.subjectId))
 		&& _isUniqueBy(content.skills, skill => skill.skillId)
 		&& _isUniqueBy(content.integrationAssignments, assignment => assignment.integrationId)
+		&& _isUniqueBy(content.capabilityCeiling, entry => `${entry.catalog.catalogId}\u0000${entry.catalog.revision}\u0000${entry.catalog.digest}\u0000${entry.capabilityId}`)
 		&& _isUniqueBy(content.scopeAttachments, attachment => `${attachment.scope}\u0000${attachment.subjectType}\u0000${attachment.subjectId}`);
 }
 

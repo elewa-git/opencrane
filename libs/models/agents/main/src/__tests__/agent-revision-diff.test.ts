@@ -17,7 +17,8 @@ function _revision(overrides: Partial<AgentRevision> = {}): AgentRevision
 		digest: "sha256:base",
 		promptPolicyVersion: "line-one\nline-two",
 		personaRevisionId: null,
-	modelDefinitionId: "model-definition-a",
+		modelDefinitionId: "model-definition-a",
+		capabilityCeiling: [],
 		skills: [{ skillId: "skill-a", revisionId: "rev-1" }],
 		integrationAssignments: [{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read"] }],
 		scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }],
@@ -52,6 +53,7 @@ describe("agent revision diff", function _suite()
 				{ integrationId: "int-a", custodyReferenceId: "cust-1", allowedTools: ["read", "write"] },
 				{ integrationId: "int-b", custodyReferenceId: "cust-2", allowedTools: ["send"] },
 			],
+			capabilityCeiling: [{ catalog: { catalogId: "core", revision: 1, digest: "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa" }, capabilityId: "artifact.read" }],
 			budget: { maxTurns: 20, maxTokens: 1000, maxDurationMs: 30000 },
 		});
 		const diff = __DiffAgentRevisions(_revision(), target);
@@ -60,6 +62,7 @@ describe("agent revision diff", function _suite()
 		expect(kinds).toContain("tools");
 		expect(kinds).toContain("credentials");
 		expect(kinds).toContain("budget");
+		expect(kinds).toContain("capabilities");
 	});
 
 	it("does not flag budget widening when a ceiling is lowered", function _narrower()

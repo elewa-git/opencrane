@@ -1,6 +1,6 @@
 export { __DiffAgentRevisions } from "./agent-revision-diff.js";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types.js";
-export type { AgentBudget, AgentRevision, AgentRevisionState, IntegrationAssignmentReference, SkillRevisionReference } from "./agent-revision.types.js";
+export type { AgentBudget, AgentRevision, AgentRevisionCapabilityCatalogueReference, AgentRevisionCapabilityCeilingEntry, AgentRevisionState, IntegrationAssignmentReference, SkillRevisionReference } from "./agent-revision.types.js";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types.js";
 export type { AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types.js";
 export type { GrantScope, GrantSubjectType, RevisionScopeAttachment } from "./scope-attachment.types.js";

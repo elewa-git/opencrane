@@ -31,8 +31,26 @@ function _parseContent(raw: unknown): AgentRevisionContent | null
 	const skills = _parseSkills(body.skills);
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
-	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+	const capabilityCeiling = _parseCapabilityCeiling(body.capabilityCeiling);
+	if (skills === null || integrationAssignments === null || scopeAttachments === null || capabilityCeiling === null) return null;
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, capabilityCeiling, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+}
+
+/** Parses the optional exact-catalogue capability ceiling array. */
+function _parseCapabilityCeiling(raw: unknown): AgentRevisionContent["capabilityCeiling"] | null
+{
+	if (raw === undefined) return [];
+	if (!Array.isArray(raw)) return null;
+	const entries = raw.map(function _entry(value)
+	{
+		if (value === null || typeof value !== "object") return null;
+		const entry = value as Record<string, unknown>;
+		const catalog = entry.catalog as Record<string, unknown> | undefined;
+		const revision = catalog?.revision;
+		if (!_isNonEmptyString(catalog?.catalogId) || typeof revision !== "number" || !Number.isSafeInteger(revision) || revision <= 0 || !_isNonEmptyString(catalog?.digest) || !/^sha256:[0-9a-f]{64}$/.test(catalog.digest) || !_isNonEmptyString(entry?.capabilityId)) return null;
+		return { catalog: { catalogId: catalog.catalogId, revision, digest: catalog.digest }, capabilityId: entry.capabilityId };
+	});
+	return entries.some(entry => entry === null) ? null : entries as AgentRevisionContent["capabilityCeiling"];
 }
 
 /** Parses the optional skill-reference array. */

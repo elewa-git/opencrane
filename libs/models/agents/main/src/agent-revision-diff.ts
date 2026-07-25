@@ -83,6 +83,15 @@ function _scopeAttachmentKeys(revision: AgentRevision): string[]
 	return revision.scopeAttachments.map(function _key(attachment) { return `${attachment.scope}:${attachment.subjectType}:${attachment.subjectId}`; });
 }
 
+/** Renders a capability ceiling entry as one catalogue-qualified stable key. */
+function _capabilityCeilingKeys(revision: AgentRevision): string[]
+{
+	return revision.capabilityCeiling.map(function _key(capability)
+	{
+		return `${capability.catalog.catalogId}@${capability.catalog.revision}:${capability.catalog.digest}:${capability.capabilityId}`;
+	});
+}
+
 /** Flags a budget ceiling as widened when the target permits strictly more than the base. */
 function _budgetWidening(field: string, before: number, after: number): RevisionWidening | null
 {
@@ -122,6 +131,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 		_setChange("integrationTools", _integrationToolKeys(base), _integrationToolKeys(target)),
 		_setChange("integrationCustody", _integrationCustodyKeys(base), _integrationCustodyKeys(target)),
 		_setChange("scopeAttachments", _scopeAttachmentKeys(base), _scopeAttachmentKeys(target)),
+		_setChange("capabilityCeiling", _capabilityCeilingKeys(base), _capabilityCeilingKeys(target)),
 	].filter(_isPresent);
 
 	// 4. Flag every security-relevant widening for reviewer confirmation.
@@ -152,6 +162,11 @@ function _collectWidenings(base: AgentRevision, target: AgentRevision, setChange
 	if (toolChange && toolChange.added.length > 0)
 	{
 		widenings.push({ kind: "tools", field: "integrationTools", detail: `granted ${toolChange.added.length} integration tool(s): ${toolChange.added.join(", ")}` });
+	}
+	const capabilityChange = setChanges.find(function _capabilities(change) { return change.field === "capabilityCeiling"; });
+	if (capabilityChange && capabilityChange.added.length > 0)
+	{
+		widenings.push({ kind: "capabilities", field: "capabilityCeiling", detail: `added ${capabilityChange.added.length} capability ceiling entry/entries: ${capabilityChange.added.join(", ")}` });
 	}
 
 	// New credentials: any integration bound in the target that the base did not carry.

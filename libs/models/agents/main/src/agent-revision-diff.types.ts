@@ -32,7 +32,7 @@ export interface RevisionSetChange
 }
 
 /** Security-relevant category widened by a revision change. */
-export type RevisionWideningKind = "scope" | "tools" | "credentials" | "budget";
+export type RevisionWideningKind = "scope" | "tools" | "credentials" | "budget" | "capabilities";
 
 /** One security-relevant widening flagged for reviewer attention. */
 export interface RevisionWidening

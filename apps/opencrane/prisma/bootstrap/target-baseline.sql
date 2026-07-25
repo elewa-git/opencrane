@@ -221,6 +221,7 @@ CREATE TABLE "agent_revisions" (
     "prompt_policy_version" TEXT NOT NULL,
     "persona_revision_id" TEXT,
     "model_definition_id" TEXT NOT NULL,
+    "capability_ceiling" JSONB NOT NULL DEFAULT '[]',
     "budget" JSONB NOT NULL,
     "authored_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2631,6 +2632,7 @@ BEGIN
         OR NEW."prompt_policy_version" IS DISTINCT FROM OLD."prompt_policy_version"
         OR NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
         OR NEW."model_definition_id" IS DISTINCT FROM OLD."model_definition_id"
+        OR NEW."capability_ceiling" IS DISTINCT FROM OLD."capability_ceiling"
         OR NEW."budget" IS DISTINCT FROM OLD."budget"
         OR NEW."authored_by" IS DISTINCT FROM OLD."authored_by"
         OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
@@ -4142,6 +4144,7 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_active_revision_chec
         "state" <> 'active' OR "active_revision_id" IS NOT NULL
     );
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_revision_check" CHECK ("revision" > 0);
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_capability_ceiling_check" CHECK (jsonb_typeof("capability_ceiling") = 'array');
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("digest") <> '' AND
         btrim("prompt_policy_version") <> '' AND btrim("model_definition_id") <> '' AND

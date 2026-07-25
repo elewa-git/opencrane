@@ -56,6 +56,10 @@ function _revisionDigest(agentServiceId: string, revision: number, content: Agen
 		promptPolicyVersion: content.promptPolicyVersion,
 		personaRevisionId: content.personaRevisionId,
 		modelDefinitionId: content.modelDefinitionId,
+		capabilityCeiling: content.capabilityCeiling.map(capability => ({ catalog: { catalogId: capability.catalog.catalogId, revision: capability.catalog.revision, digest: capability.catalog.digest }, capabilityId: capability.capabilityId })).sort(function _byCapability(first, second)
+		{
+			return `${first.catalog.catalogId}\u0000${first.catalog.revision}\u0000${first.catalog.digest}\u0000${first.capabilityId}`.localeCompare(`${second.catalog.catalogId}\u0000${second.catalog.revision}\u0000${second.catalog.digest}\u0000${second.capabilityId}`);
+		}),
 		budget: { maxTurns: content.budget.maxTurns, maxTokens: content.budget.maxTokens, maxDurationMs: content.budget.maxDurationMs },
 		skills: content.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })),
 		integrationAssignments: content.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })),
@@ -78,6 +82,7 @@ function _revisionCreateData(agentServiceId: string, siloId: string, revision: n
 		promptPolicyVersion: content.promptPolicyVersion,
 		personaRevisionId: content.personaRevisionId,
 		modelDefinition: { connect: { id: content.modelDefinitionId } },
+		capabilityCeiling: content.capabilityCeiling as unknown as Prisma.InputJsonValue,
 		budget: { maxTurns: content.budget.maxTurns, maxTokens: content.budget.maxTokens, maxDurationMs: content.budget.maxDurationMs },
 		authoredBy,
 		createdAt,
@@ -88,13 +93,14 @@ function _revisionCreateData(agentServiceId: string, siloId: string, revision: n
 }
 
 /** Projects an immutable revision's persisted content back into an authoring content command. */
-function _contentFromRevision(row: { promptPolicyVersion: string; personaRevisionId: string | null; modelDefinitionId: string; budget: Prisma.JsonValue; skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>; integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }>; scopeAttachments: ReadonlyArray<{ scope: string; subjectType: string; subjectId: string }> }): AgentRevisionContent
+function _contentFromRevision(row: { promptPolicyVersion: string; personaRevisionId: string | null; modelDefinitionId: string; capabilityCeiling: Prisma.JsonValue; budget: Prisma.JsonValue; skillAssignments: ReadonlyArray<{ skillId: string; skillRevisionId: string }>; integrationAssignments: ReadonlyArray<{ integrationId: string; custodyReferenceId: string; allowedTools: string[] }>; scopeAttachments: ReadonlyArray<{ scope: string; subjectType: string; subjectId: string }> }): AgentRevisionContent
 {
 	const budget = row.budget as unknown as AgentBudget;
 	return {
 		promptPolicyVersion: row.promptPolicyVersion,
 		personaRevisionId: row.personaRevisionId,
 		modelDefinitionId: row.modelDefinitionId,
+		capabilityCeiling: row.capabilityCeiling as unknown as AgentRevisionContent["capabilityCeiling"],
 		budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs },
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
 		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })),

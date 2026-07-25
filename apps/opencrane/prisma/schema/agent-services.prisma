@@ -60,6 +60,7 @@ model AgentRevision {
   promptPolicyVersion String                         @map("prompt_policy_version")
   personaRevisionId   String?                        @map("persona_revision_id")
   modelDefinitionId   String                         @map("model_definition_id")
+  capabilityCeiling   Json                           @default("[]") @map("capability_ceiling")
   budget              Json
   authoredBy          String                         @map("authored_by")
   createdAt           DateTime                       @default(now()) @map("created_at")

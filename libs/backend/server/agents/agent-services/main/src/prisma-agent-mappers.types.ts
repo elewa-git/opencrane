@@ -28,6 +28,7 @@ export interface AgentRevisionRow
 	readonly promptPolicyVersion: string;
 	readonly personaRevisionId: string | null;
 	readonly modelDefinitionId: string;
+	readonly capabilityCeiling: Prisma.JsonValue;
 	readonly budget: Prisma.JsonValue;
 	readonly authoredBy: string;
 	readonly createdAt: Date;

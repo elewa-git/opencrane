@@ -35,6 +35,7 @@ function _revision(): AgentRevision
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
 		modelDefinitionId: "model-definition-1",
+		capabilityCeiling: [],
 		skills: [],
 		integrationAssignments: [],
 		scopeAttachments: [],
