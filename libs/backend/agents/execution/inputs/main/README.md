@@ -62,6 +62,10 @@ caller input.
 - `PrismaApprovedPersonaSource` — resolves a personal run only through the delegated user's profile
   in the same silo and accepts its current revision only while it remains approved. Managed runs carry
   no persona, and neither a service nor a caller can select another person's persona revision.
+- `PrismaPreferenceFactSource` — admits optional personalisation only from the user's active
+  `Personal` memory dataset. A fact also needs active state, explicit or confirmed consent, and
+  provenance naming that exact user; shared-scope, inferred, retired, and unproven facts never enter
+  a run snapshot.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
