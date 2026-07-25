@@ -59,6 +59,8 @@ legitimate request — never hand out access it should not.
 - `__CancelPendingRunApprovalAuthority` — closes only pending approvals for an exact run attempt on
   a caller-owned database transaction, clearing every late-resume token atomically with cancellation.
 - `__DigestCanonicalJson` — a stable hash of a request used across the checks above.
+- `__CreateCapabilitySet`, `__IsCapabilitySetSubset` — preserve an ordered, content-addressed
+  capability set for a run and prove that a child run's set can only be narrower than its parent.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,

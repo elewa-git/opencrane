@@ -1,5 +1,7 @@
 export { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof.js";
 export { __DigestCanonicalJson } from "./canonical-json-digest.js";
+export { __CreateCapabilitySet, __IsCapabilitySetSubset } from "./capability-set.js";
+export type { CapabilitySet } from "./capability-set.types.js";
 export { __ResolveEffectiveAccess } from "./effective-access.js";
 export type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, AuthorizationMembershipDecision, AuthorizationMembershipRequirement, EffectiveCapabilityEvidence, ResolveEffectiveAccessCommand, ResolveEffectiveAccessResult } from "./effective-access.types.js";
 export { __ConsumeRuntimeBootstrap, __ExecuteCapabilityAction } from "./runtime-proof.js";
