@@ -66,6 +66,9 @@ caller input.
   `Personal` memory dataset. A fact also needs active state, explicit or confirmed consent, and
   provenance naming that exact user; shared-scope, inferred, retired, and unproven facts never enter
   a run snapshot.
+- `PrismaThreadContextSource` — accepts a conversation only when its active thread is bound to the
+  exact service, silo, and authenticated participant. It freezes ordered IDs of completed messages
+  only; pending and streaming content cannot race into an immutable run input.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
