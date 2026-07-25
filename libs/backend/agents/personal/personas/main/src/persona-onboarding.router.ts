@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from "express";
 
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "./persona-interview-authority.js";
 import { __EnsurePersonaOnboarding } from "./persona-onboarding-authority.js";
+import { __CreatePersonaDraftFromInterview } from "./persona-draft-from-interview.js";
+import { __ApprovePersona } from "./persona-authority.js";
 import { PERSONA_ONBOARDING_QUESTIONS } from "./persona-onboarding-catalogue.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
 
@@ -75,6 +77,26 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			dependencies.logger.error({ err, operation: "persona_onboarding.complete", siloId: caller.siloId }, "Persona onboarding completion failed");
 			_respond(response, 503, "persona_onboarding_unavailable");
 		}
+	});
+
+	router.post("/interviews/:interviewId/draft", async function _draft(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		const interviewId = request.params["interviewId"];
+		if (caller === null) return;
+		if (typeof interviewId !== "string" || !_isEmptyObject(request.body)) { _respond(response, 400, "invalid_persona_draft"); return; }
+		try { const ready = await _ensure(caller, dependencies); if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; } const result = await __CreatePersonaDraftFromInterview(dependencies.drafts, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, authoredAt: dependencies.clock.now().toISOString() }); if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; } response.status(201).json({ personaRevisionId: result.personaRevisionId, state: "draft" }); }
+		catch (err) { dependencies.logger.error({ err, operation: "persona_onboarding.draft", siloId: caller.siloId }, "Persona onboarding draft failed"); _respond(response, 503, "persona_onboarding_unavailable"); }
+	});
+
+	router.post("/drafts/:personaRevisionId/approve", async function _approve(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		const personaRevisionId = request.params["personaRevisionId"];
+		if (caller === null) return;
+		if (typeof personaRevisionId !== "string" || !_isEmptyObject(request.body)) { _respond(response, 400, "invalid_persona_approval"); return; }
+		try { const ready = await _ensure(caller, dependencies); if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; } const result = await __ApprovePersona(dependencies.approval, { personaProfileId: ready.personaProfileId, personaRevisionId, userId: caller.userId, approvedAt: dependencies.clock.now().toISOString() }); if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; } response.status(200).json({ personaRevisionId, state: "approved" }); }
+		catch (err) { dependencies.logger.error({ err, operation: "persona_onboarding.approve", siloId: caller.siloId }, "Persona onboarding approval failed"); _respond(response, 503, "persona_onboarding_unavailable"); }
 	});
 
 	return router;
