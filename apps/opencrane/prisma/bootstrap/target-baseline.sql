@@ -29,10 +29,13 @@ CREATE TYPE "ArtifactRevisionState" AS ENUM ('published', 'deletion_pending', 'p
 CREATE TYPE "ArtifactIndexState" AS ENUM ('pending', 'indexed', 'failed', 'removal_pending', 'removed');
 
 -- CreateEnum
-CREATE TYPE "ArtifactOutboxEventKind" AS ENUM ('artifact.revision_published', 'artifact.sharing_changed', 'artifact.deletion_requested');
+CREATE TYPE "ArtifactOutboxEventKind" AS ENUM ('artifact.revision_published', 'artifact.sharing_changed', 'artifact.deletion_requested', 'artifact.preprocessing_requested', 'artifact.preprocessing_completed');
 
 -- CreateEnum
 CREATE TYPE "ArtifactUploadLeaseState" AS ENUM ('active', 'promoted', 'finalized', 'expired', 'cancelled');
+
+-- CreateEnum
+CREATE TYPE "ArtifactPreprocessJobState" AS ENUM ('pending', 'claimed', 'completed', 'retryable_failed', 'terminal_failed');
 
 -- CreateEnum
 CREATE TYPE "AuditDecisionOutcome" AS ENUM ('allow', 'deny', 'error');
@@ -330,6 +333,26 @@ CREATE TABLE "artifact_revisions" (
     "purged_at" TIMESTAMP(3),
 
     CONSTRAINT "artifact_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "artifact_preprocess_jobs" (
+    "id" TEXT NOT NULL,
+    "source_revision_id" TEXT NOT NULL,
+    "pipeline_version" TEXT NOT NULL,
+    "state" "ArtifactPreprocessJobState" NOT NULL DEFAULT 'pending',
+    "attempt" INTEGER NOT NULL DEFAULT 0,
+    "claim_fence" TEXT,
+    "claim_expires_at" TIMESTAMP(3),
+    "next_attempt_at" TIMESTAMP(3),
+    "failure_code" TEXT,
+    "derived_artifact_id" TEXT,
+    "derived_revision_id" TEXT,
+    "output_lease_id" TEXT,
+    "completed_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+    CONSTRAINT "artifact_preprocess_jobs_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1704,6 +1727,13 @@ CREATE UNIQUE INDEX "artifact_revisions_artifact_id_revision_key" ON "artifact_r
 CREATE UNIQUE INDEX "artifact_revisions_artifact_id_id_key" ON "artifact_revisions"("artifact_id", "id");
 
 -- CreateIndex
+CREATE INDEX "artifact_preprocess_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_preprocess_jobs"("state", "next_attempt_at", "claim_expires_at");
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_source_revision_id_pipeline_version_key" ON "artifact_preprocess_jobs"("source_revision_id", "pipeline_version");
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_artifact_id_key" ON "artifact_preprocess_jobs"("derived_artifact_id");
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_revision_id_key" ON "artifact_preprocess_jobs"("derived_revision_id");
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_output_lease_id_key" ON "artifact_preprocess_jobs"("output_lease_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "artifact_revisions_id_content_address_key" ON "artifact_revisions"("id", "content_address");
 
 -- CreateIndex
@@ -2300,6 +2330,12 @@ ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_arti
 
 -- AddForeignKey
 ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_artifact_id_fkey" FOREIGN KEY ("artifact_id") REFERENCES "artifacts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_source_revision_id_fkey" FOREIGN KEY ("source_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_derived_artifact_id_fkey" FOREIGN KEY ("derived_artifact_id") REFERENCES "artifacts"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_derived_revision_id_fkey" FOREIGN KEY ("derived_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_output_lease_id_fkey" FOREIGN KEY ("output_lease_id") REFERENCES "artifact_upload_leases"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "artifact_revision_parents" ADD CONSTRAINT "artifact_revision_parents_child_revision_id_fkey" FOREIGN KEY ("child_revision_id") REFERENCES "artifact_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3799,6 +3835,7 @@ BEGIN
         IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
             RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
         END IF;
+        IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") THEN RAISE EXCEPTION 'ArtifactRevision required by preprocessing cannot leave Published'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -3809,11 +3846,46 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Artifact rows use authorized deletion lifecycle'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."retention_policy" IS DISTINCT FROM OLD."retention_policy" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'Artifact identity and retention are immutable'; END IF;
     IF TG_OP = 'UPDATE' AND NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'deleted')) OR (OLD."state" = 'deleted' AND NEW."state" = 'deleted')) THEN RAISE EXCEPTION 'invalid Artifact lifecycle transition'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" <> 'active' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" job LEFT JOIN "artifact_revisions" source ON source."id" = job."source_revision_id" WHERE job."derived_artifact_id" = NEW."id" OR source."artifact_id" = NEW."id") THEN RAISE EXCEPTION 'Artifact required by preprocessing cannot be deleted'; END IF;
     IF NEW."current_revision_id" IS NOT NULL THEN
         SELECT "state" INTO revision_state FROM "artifact_revisions" WHERE "id" = NEW."current_revision_id" AND "artifact_id" = NEW."id" FOR UPDATE;
         IF revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'current Artifact revision must be Published'; END IF;
     END IF;
     RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_artifact_preprocess_job_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE source_state "ArtifactRevisionState"; source_media_type TEXT; source_silo_id TEXT; source_owner_principal_id TEXT; source_artifact_state "ArtifactState";
+        output_silo_id TEXT; output_owner_principal_id TEXT; output_kind "ArtifactKind"; output_state "ArtifactState";
+        output_lease_artifact_id TEXT; output_lease_state "ArtifactUploadLeaseState"; output_lease_expires_at TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactPreprocessJob rows cannot be deleted'; END IF;
+    SELECT revision."state", revision."media_type", artifact."silo_id", artifact."owner_principal_id", artifact."state" INTO source_state, source_media_type, source_silo_id, source_owner_principal_id, source_artifact_state
+      FROM "artifact_revisions" revision JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE revision."id" = NEW."source_revision_id" FOR UPDATE OF revision, artifact;
+    IF source_state IS DISTINCT FROM 'published' OR source_artifact_state IS DISTINCT FROM 'active' OR NEW."pipeline_version" <> 'pdf-to-text/v1' OR source_media_type <> 'application/pdf' THEN RAISE EXCEPTION 'ArtifactPreprocessJob requires an active published PDF source'; END IF;
+    IF NEW."derived_artifact_id" IS NOT NULL THEN
+        SELECT "silo_id", "owner_principal_id", "kind", "state" INTO output_silo_id, output_owner_principal_id, output_kind, output_state FROM "artifacts" WHERE "id" = NEW."derived_artifact_id" FOR UPDATE;
+        IF output_silo_id IS DISTINCT FROM source_silo_id OR output_owner_principal_id IS DISTINCT FROM source_owner_principal_id OR output_kind IS DISTINCT FROM 'generated' OR output_state IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'ArtifactPreprocessJob output must retain source silo and owner'; END IF;
+    END IF;
+    IF NEW."output_lease_id" IS NOT NULL THEN
+        SELECT "artifact_id", "state", "expires_at" INTO output_lease_artifact_id, output_lease_state, output_lease_expires_at FROM "artifact_upload_leases" WHERE "id" = NEW."output_lease_id" FOR UPDATE;
+        IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease must be active and bounded by its claim'; END IF;
+    END IF;
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending without a claim'; END IF;
+        RETURN NEW;
+    END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
+    IF NOT ((OLD."state" IN ('pending', 'retryable_failed') AND NEW."state" = 'claimed') OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = NEW."state" AND NEW."state" IN ('completed', 'terminal_failed'))) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
+    IF NEW."state" = 'claimed' AND (NEW."attempt" <> OLD."attempt" + 1 OR NEW."claim_fence" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."derived_artifact_id" IS NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob claim requires a fresh live fence'; END IF;
+    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."completed_at" IS NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its fenced output'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND "state" <> 'completed') THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with its completed job'; END IF;
+    RETURN NULL;
 END;
 $$;
 CREATE FUNCTION "protect_current_artifact_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -4308,7 +4380,12 @@ ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_deletion_che
 ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_index_check" CHECK (
         ("index_state" = 'indexed' AND "cognee_external_id" IS NOT NULL) OR
         ("index_state" <> 'indexed')
-    );
+);
+ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_identity_check" CHECK (
+    btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND "attempt" >= 0
+    AND ("claim_fence" IS NULL OR btrim("claim_fence") <> '')
+    AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND length("failure_code") <= 200))
+);
 ALTER TABLE "artifact_revision_parents" ADD CONSTRAINT "artifact_revision_parents_no_self_check" CHECK ("child_revision_id" <> "parent_revision_id");
 ALTER TABLE "artifact_outbox_events" ADD CONSTRAINT "artifact_outbox_events_valid_check" CHECK (btrim("idempotency_key") <> '' AND jsonb_typeof("payload") = 'object' AND "delivery_count" >= 0);
 ALTER TABLE "skills" ADD CONSTRAINT "skills_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("owner_principal_id") <> '' AND btrim("name") <> '');
@@ -4480,6 +4557,10 @@ CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR
 CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
 CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
+CREATE TRIGGER "artifact_preprocess_jobs_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_preprocess_jobs"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_job_lifecycle"();
+CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"
+    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"();
 CREATE TRIGGER "integrations_closed_lifecycle"
   BEFORE INSERT OR UPDATE OR DELETE ON "integrations"
   FOR EACH ROW EXECUTE FUNCTION "enforce_integration_lifecycle"();
