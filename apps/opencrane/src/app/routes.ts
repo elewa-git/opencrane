@@ -34,6 +34,7 @@ import { __CreateArtifactPreprocessorRouter, PrismaArtifactPreprocessRepository,
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
+import { _CreatePersonaOnboardingRouter } from "./persona-onboarding-wiring.js";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _log } from "./log.js";
 import { _CreateArtifactPreprocessorCrypto } from "../infra/artifacts/artifact-upload.factory.js";
@@ -358,6 +359,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
   app.use("/api/v1/groups", groupsRouter(prisma));
   app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma, runAdmission));
+  app.use("/api/v1/me/persona", _CreatePersonaOnboardingRouter(prisma));
   app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
   app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
   app.use("/api/v1/shares", sharesRouter(prisma));

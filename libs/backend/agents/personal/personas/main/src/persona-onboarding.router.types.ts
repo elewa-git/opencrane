@@ -1,0 +1,38 @@
+import type { Request } from "express";
+import type { Logger } from "@opencrane/observability";
+
+import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from "./persona-interview-authority.types.js";
+import type { PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
+
+/** Authenticated browser identity resolved by the composing server, never from request input. */
+export interface PersonaOnboardingCaller
+{
+	/** Silo selected from the authenticated request host. */
+	readonly siloId: string;
+	/** Stable subject who is the only owner of this persona flow. */
+	readonly userId: string;
+}
+
+/** Clock injected by the app so router tests never depend on the wall clock. */
+export interface PersonaOnboardingClock
+{
+	/** Return the current trusted server time. */
+	now(): Date;
+}
+
+/** Composition ports for the self-only persona onboarding HTTP surface. */
+export interface PersonaOnboardingRouterDependencies
+{
+	/** Resolves session and host identity, or null when the request is unauthenticated. */
+	resolveCaller(request: Request): PersonaOnboardingCaller | null;
+	/** Provisions the caller profile and server-owned reviewed questionnaire. */
+	onboarding: PersonaOnboardingRepository;
+	/** Owns the append-only interview lifecycle. */
+	interviews: PersonaInterviewRepository;
+	/** Reads the interview's immutable questionnaire revision. */
+	questions: PersonaInterviewQuestionReader;
+	/** Supplies trusted timestamps. */
+	clock: PersonaOnboardingClock;
+	/** Records unexpected authority failures without including owner answers. */
+	logger: Logger;
+}
