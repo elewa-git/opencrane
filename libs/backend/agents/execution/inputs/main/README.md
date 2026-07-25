@@ -73,6 +73,9 @@ caller input.
   dataset, active explicit/confirmed facts, and complete provenance-backed content digests. It bounds
   the frozen set to 100 facts and returns an explicit no-memory policy for managed or unprovisioned
   users.
+- `__CreatePrismaSessionAssemblyAuthorities` — composes every local Prisma-backed input source with
+  the app-owned `RunAdmissionRepository`. The caller must provide the signed identity-envelope
+  source explicitly; this factory never invents membership or capability evidence.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
