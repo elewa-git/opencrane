@@ -69,6 +69,10 @@ caller input.
 - `PrismaThreadContextSource` — accepts a conversation only when its active thread is bound to the
   exact service, silo, and authenticated participant. It freezes ordered IDs of completed messages
   only; pending and streaming content cannot race into an immutable run input.
+- `PrismaMemoryScopeSource` — limits personal memory to the delegated user's active `Personal`
+  dataset, active explicit/confirmed facts, and complete provenance-backed content digests. It bounds
+  the frozen set to 100 facts and returns an explicit no-memory policy for managed or unprovisioned
+  users.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
