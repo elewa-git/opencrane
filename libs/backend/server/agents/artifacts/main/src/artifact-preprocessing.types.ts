@@ -3,6 +3,8 @@ import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactW
 /** Immutable source and generated-output coordinates selected only by the catalog authority. */
 export interface ArtifactPreprocessClaimProjection
 {
+	/** Catalog Artifact that owns the source revision and read lease. */
+	readonly sourceArtifactId: string;
 	/** Durable preprocessing job identifier. */
 	readonly jobId: string;
 	/** Monotonic attempt number allocated under the current claim. */

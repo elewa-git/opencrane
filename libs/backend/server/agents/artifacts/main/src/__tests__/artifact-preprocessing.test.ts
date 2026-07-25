@@ -6,7 +6,7 @@ import type { ArtifactPreprocessRepository } from "../artifact-preprocessing.typ
 /** Fixed live claim projection used to exercise worker-facing capability shaping. */
 function _Claim()
 {
-	return { jobId: "job-1", attempt: 1, claimFence: "fence-1", claimExpiresAt: new Date("2026-07-23T12:00:00.000Z"), sourceRevisionId: "source-revision-1", siloId: "silo-1", sourceContentAddress: `sha256:${"a".repeat(64)}`, sourceByteLength: 42, derivedArtifactId: "derived-artifact-1" };
+	return { jobId: "job-1", attempt: 1, claimFence: "fence-1", claimExpiresAt: new Date("2026-07-23T12:00:00.000Z"), sourceArtifactId: "source-artifact-1", sourceRevisionId: "source-revision-1", siloId: "silo-1", sourceContentAddress: `sha256:${"a".repeat(64)}`, sourceByteLength: 42, derivedArtifactId: "derived-artifact-1" };
 }
 
 /** Builds the smallest preprocessing authority surface required by the pure workflow functions. */
@@ -31,7 +31,7 @@ describe("artifact preprocessing authority", function _DescribeAuthority()
 		const result = await __ClaimArtifactPreprocessJob(repository, signer);
 
 		expect(result).toMatchObject({ sourceRevisionId: "source-revision-1", sourceContentAddress: _Claim().sourceContentAddress, sourceMediaType: "application/pdf", sourceReadLease: "signed-read-lease" });
-		expect(signer.signReadLease).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", operationId: "job-1:1:fence-1", contentAddress: _Claim().sourceContentAddress, action: "artifact.read", mediaType: "application/pdf" }));
+		expect(signer.signReadLease).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", artifactId: "source-artifact-1", artifactRevisionId: "source-revision-1", contentAddress: _Claim().sourceContentAddress, byteLength: 42, action: "artifact.read", mediaType: "application/pdf" }));
 	});
 
 	it("does not ask the database for an invalid caller-supplied output coordinate", async function _RejectInvalidOutput()

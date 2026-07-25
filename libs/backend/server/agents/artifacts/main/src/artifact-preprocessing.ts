@@ -19,7 +19,7 @@ export async function __ClaimArtifactPreprocessJob(repository: ArtifactPreproces
 		sourceMediaType: "application/pdf",
 		sourceByteLength: claim.sourceByteLength,
 		derivedArtifactId: claim.derivedArtifactId,
-		sourceReadLease: signer.signReadLease({ leaseId: randomUUID(), siloId: claim.siloId, operationId: `${claim.jobId}:${claim.attempt}:${claim.claimFence}`, contentAddress: claim.sourceContentAddress, action: "artifact.read", expiresAtEpochSeconds, mediaType: "application/pdf" }),
+		sourceReadLease: signer.signReadLease({ leaseId: randomUUID(), siloId: claim.siloId, artifactId: claim.sourceArtifactId, artifactRevisionId: claim.sourceRevisionId, contentAddress: claim.sourceContentAddress, action: "artifact.read", expiresAtEpochSeconds, byteLength: claim.sourceByteLength, mediaType: "application/pdf" }),
 	};
 }
 
