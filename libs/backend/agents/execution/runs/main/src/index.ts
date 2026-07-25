@@ -6,6 +6,8 @@ export type { ChildRunSnapshotCommand } from "./child-run-snapshot.types.js";
 export type { GovernedChildRunBudget, GovernedChildRunCapabilityDelegation, GovernedChildRunContextSelection, GovernedChildRunParent, GovernedChildRunPolicy, GovernedChildRunSpawnAuthorization, GovernedChildRunSpawnAuthorizationResult, GovernedChildRunSpawnRefusalReason, GovernedChildRunSpawnRequest } from "./child-run-admission.types.js";
 export type { ChildRunReservationBuild, ChildRunReservationCommand, ChildRunReservationParent, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types.js";
 export { PrismaChildRunReservationRepository } from "./prisma-child-run-reservation-repository.js";
+export { PrismaRuntimeChildRunSpawnRunner } from "./prisma-runtime-child-run-spawn-runner.js";
+export type { RuntimeChildRunSpawnPolicy } from "./prisma-runtime-child-run-spawn-runner.types.js";
 export type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
 export type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 export { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";

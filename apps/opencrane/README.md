@@ -90,6 +90,13 @@ For personal conversation snapshots, this composition also adds the reserved `up
 after normal MCP grants are compiled and reseals the delivered input. The call itself is not deferred;
 it uses the same durable `ToolInvocation` ledger to record a future-only configuration proposal. A
 later explicit user decision and a later run snapshot own any actual change.
+An admitted `child_run_spawn` candidate now reaches the same control plane through a separate,
+transaction-fenced runner: it locks the spawning run and the target AgentService, derives the exact
+capability intersection from the frozen parent snapshot and published target revision, and persists
+the child run, its sealed snapshot, its finite reservation, and its first dispatch events together.
+The runtime supplies only a candidate; it cannot select a revision, expand capabilities, or create a
+child directly. `AGENT_RUNTIME_CHILD_MAX_DEPTH` (default `2`) and
+`AGENT_RUNTIME_CHILD_MAX_CHILDREN` (default `4`) bound recursive work per parent.
 Idle runtime streams do not create a database transaction every second. An accepted runtime
 candidate wakes local streams to check the durable command state immediately; a bounded recovery
 check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of
@@ -162,6 +169,8 @@ Read from the environment at startup.
 | `AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS` | Hard lifetime of a pending runtime workload assignment | `3600` |
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
+| `AGENT_RUNTIME_CHILD_MAX_DEPTH` | Maximum parent-to-child delegation edges below one root run | `2` |
+| `AGENT_RUNTIME_CHILD_MAX_CHILDREN` | Maximum direct child runs one parent may reserve | `4` |
 | `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
 | `CHANNEL_REPLAY_ROUTE_ID` | Controller-registered `events.read` route accepted by the internal replay endpoint; unset disables replay | *(unset)* |
 | `ARTIFACT_LEASE_PRIVATE_KEY_PATH` | Read-only mounted Ed25519 key that signs exact ArtifactStore read/write leases | *(required for artifact preprocessing)* |

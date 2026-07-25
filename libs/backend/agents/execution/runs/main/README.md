@@ -48,14 +48,15 @@ rejected with `admission_concurrency_limited`; it does not turn a hot service ro
 unbounded connection pool. The production entrypoint must use this gate before calling
 `PrismaRunAdmissionRepository.admit()` and must keep its policy aligned with the database pool budget.
 
-`__AuthorizeGovernedChildRunSpawn` is the first gate for a future governed child run. It accepts
+`__AuthorizeGovernedChildRunSpawn` is the pure gate for a governed child run. It accepts
 only parent facts that a repository has already locked, checks that a child stays in the same silo
 and under the root, bounds depth and fan-out, and asks an injected authority to prove that the
 child's capability set narrows the parent's. It permits only transcript messages, memory facts,
 artifact revisions, and skill revisions already frozen in the parent snapshot, then verifies that a
 finite child budget fits the parent remainder. It returns a detached authorization, **not a child
-run**: the following persistence slice must atomically reserve that budget, save lineage and
-idempotency facts, and compile the child snapshot before any runtime command can exist.
+run**: `PrismaRuntimeChildRunSpawnRunner` invokes it only after the reservation repository has
+locked the parent, derived its exact remaining capacity, and locked the target AgentService. The
+same transaction then saves the lineage, sealed snapshot, reservation, and first dispatch events.
 
 `__StartNextRunAttempt` is a **compare-and-swap** retry state machine: it reads the run and its
 AgentService authority as one snapshot, refuses unless the run is in a retryable terminal state and the
@@ -138,8 +139,12 @@ uncertainty fails closed.
   refusal vocabulary for the subsequent transaction-fenced child reservation boundary.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
   run, snapshot and ordered outbox events around a caller-supplied assembly callback.
-- `PrismaChildRunReservationRepository` — lock a parent, validate its frozen snapshot and detached
-  child authority, then atomically persist the child run, snapshot, reservation and initial outbox.
+- `PrismaChildRunReservationRepository` — lock a parent, expose only its current remaining capacity
+  to an in-transaction authorization callback, then atomically persist the verified child run,
+  snapshot, reservation and initial outbox.
+- `PrismaRuntimeChildRunSpawnRunner` — the app-composable runtime boundary: lock the active target
+  service, intersect its published capability ceiling with the frozen parent set, derive the child
+  snapshot, and reserve it in the parent transaction.
 - `RunAdmissionConcurrencyGate` — bound active and queued admissions for one silo and AgentService
   before the caller can acquire a persistence connection.
 - `RunAdmissionRepository`, `RunAdmissionCommand`, `RunAdmissionTransaction`,
@@ -174,9 +179,10 @@ confirmation. Kubernetes inspection and mutation remain in dedicated runtime pro
 package only says which exact work may be removed.
 
 `__AuthorizeGovernedChildRunSpawn` is deliberately a pure admission gate. Its detached authority
-reaches `PrismaChildRunReservationRepository`, which locks the parent, rechecks the parent digest
-and lineage coordinates, and persists one child snapshot and allocation atomically. Until an app
-composes that repository into a runtime entrypoint, no child-run runtime command is exposed.
+reaches `PrismaChildRunReservationRepository` only from `PrismaRuntimeChildRunSpawnRunner`, which
+locks the parent, rechecks the parent digest and lineage coordinates, locks the active target
+service, and persists one child snapshot and allocation atomically. The OpenCrane app composes this
+runner into the authenticated runtime stream; a runtime candidate never receives a direct write path.
 
 `ChildRunReservation` is the durable record that this later boundary will write beside a child run.
 It freezes the exact parent and root identifiers, child depth, and the turns, tokens, and duration

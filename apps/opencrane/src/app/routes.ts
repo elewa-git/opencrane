@@ -20,7 +20,7 @@ import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
-import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
+import { PrismaRunDispatchRepository, PrismaRuntimeChildRunSpawnRunner, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
 import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
@@ -292,9 +292,12 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const publishedOutboxRetentionMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000);
 	const outboxPruneBatchSize = _ReadBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000);
 	const commandTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300);
+	const childRunMaximumDepth = _ReadBoundedInteger("AGENT_RUNTIME_CHILD_MAX_DEPTH", 2, 1, 16);
+	const childRunMaximumChildren = _ReadBoundedInteger("AGENT_RUNTIME_CHILD_MAX_CHILDREN", 4, 1, 64);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
-	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const childRunSpawnRunner = new PrismaRuntimeChildRunSpawnRunner(prisma, { maximumDepth: childRunMaximumDepth, maximumChildrenPerParent: childRunMaximumChildren });
+	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma), undefined, undefined, childRunSpawnRunner);
 	const artifactPreprocessorCrypto = _CreateArtifactPreprocessorCrypto();
 	const replayRouteId = _ReadChannelReplayRouteId();
 	if (replayRouteId !== null)
