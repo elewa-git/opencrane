@@ -105,7 +105,7 @@ model RunInputSnapshot {
   memoryFacts             Json     @map("memory_facts")
   identitySnapshot        Json     @map("identity_snapshot")
   modelRoute              Json     @map("model_route")
-  toolGrantIds            String[] @default([]) @map("tool_grant_ids")
+  integrationAssignments  Json     @map("integration_assignments")
   skillRevisionIds        String[] @default([]) @map("skill_revision_ids")
   memoryQueryPolicy       Json     @map("memory_query_policy")
   budgetPolicy            Json     @map("budget_policy")

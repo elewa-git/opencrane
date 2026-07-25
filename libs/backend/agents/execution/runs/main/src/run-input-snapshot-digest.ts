@@ -40,7 +40,7 @@ export function __DigestRunInputSnapshot(snapshot: Omit<RunInputSnapshot, "diges
 			};
 		}),
 		memoryQueryPolicy: snapshot.memoryQueryPolicy,
-		toolGrantIds: snapshot.toolGrantIds,
+		integrationAssignments: snapshot.integrationAssignments,
 		modelRoute: snapshot.modelRoute,
 		budgetPolicy: snapshot.budgetPolicy,
 		identitySnapshot: snapshot.identitySnapshot,

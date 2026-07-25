@@ -1357,7 +1357,7 @@ CREATE TABLE "run_input_snapshots" (
     "memory_facts" JSONB NOT NULL,
     "identity_snapshot" JSONB NOT NULL,
     "model_route" JSONB NOT NULL,
-    "tool_grant_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
+    "integration_assignments" JSONB NOT NULL,
     "skill_revision_ids" TEXT[] DEFAULT ARRAY[]::TEXT[],
     "memory_query_policy" JSONB NOT NULL,
     "budget_policy" JSONB NOT NULL,

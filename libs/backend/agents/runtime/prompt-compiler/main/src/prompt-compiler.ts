@@ -56,7 +56,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 	// 2. Dereference every immutable record the literal input needs.
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
-	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.toolGrantIds));
+	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.integrationAssignments));
 	const memoryStatements = await repositories.loadMemoryFactStatements(_orderedFactIds(snapshot));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());

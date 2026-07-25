@@ -95,7 +95,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		skillRevisionIds: ___SortBy([...tools.skillRevisionIds]),
 		memoryFacts: _CanonicalMemoryFacts(memory.memoryFacts),
 		memoryQueryPolicy: ___CloneCanonicalJson(memory.memoryQueryPolicy),
-		toolGrantIds: ___SortBy([...tools.toolGrantIds]),
+		integrationAssignments: [...tools.integrationAssignments].sort(function _compareIntegrationAssignments(left, right) { return left.integrationId.localeCompare(right.integrationId); }).map(function _copyIntegrationAssignment(assignment) { return { integrationId: assignment.integrationId, allowedTools: ___SortBy([...assignment.allowedTools]) }; }),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: {
