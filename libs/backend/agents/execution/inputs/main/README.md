@@ -59,6 +59,9 @@ caller input.
   turns the revision's positive turn/token/duration ceilings into the frozen compiler policy. The
   model route carries its exact definition ID beside its public alias, preventing a same-named global
   or tenant model from being selected later.
+- `PrismaApprovedPersonaSource` — resolves a personal run only through the delegated user's profile
+  in the same silo and accepts its current revision only while it remains approved. Managed runs carry
+  no persona, and neither a service nor a caller can select another person's persona revision.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
