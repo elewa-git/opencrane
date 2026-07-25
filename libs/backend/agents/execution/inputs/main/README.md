@@ -53,6 +53,12 @@ caller input.
   the service, it accepts only an active service whose exact active pointer still names a published
   revision in the same silo. It derives the revision digest and prompt-compiler version from that
   immutable revision; it never trusts a revision identifier from the request.
+- `PrismaRevisionToolPolicySource` / `PrismaRevisionBudgetPolicySource` — concrete revision-input
+  sources. They accept only a current published revision with a silo-available model, live
+  integration custody, published active skills, and published artifact revisions; the budget source
+  turns the revision's positive turn/token/duration ceilings into the frozen compiler policy. The
+  model route carries its exact definition ID beside its public alias, preventing a same-named global
+  or tenant model from being selected later.
 - `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
   coordinates a caller supplies.
 - `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,

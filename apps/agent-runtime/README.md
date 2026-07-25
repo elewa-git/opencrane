@@ -18,7 +18,7 @@ candidates as the attempt runs. A model tool call is surfaced as a bounded `exte
 candidate for the control plane to authorize — the runtime never executes the tool itself. It also
 handles `resume_attempt` (feeding control-plane-authorized deferred tool results back into the paused
 loop) and `cancel_attempt` (a positive signal that kills the active task and acknowledges the
-server-chosen reason), absorbs steering only at pre-model-request boundaries, and writes an encrypted,
+server-chosen reason), enforces the compiled model-turn ceiling immediately before every provider request and durably records consumed turns in its encrypted resume checkpoint before opening that request, absorbs steering only at pre-model-request boundaries, and writes an encrypted,
 version-tagged, replaceable local checkpoint subordinate to canonical server state.
 
 ```text

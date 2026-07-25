@@ -124,12 +124,14 @@ async function _loadSkillSummaries(transaction: Prisma.TransactionClient, skillR
 	return rows.map(function _summary(row) { return `skill ${row.skillId} revision ${row.id}`; }).sort();
 }
 
-/** Resolve the server-selected model route to a literal alias and output ceiling, never a credential. */
+/** Resolve the server-selected route to the exact LiteLLM deployment ID and output ceiling. */
 async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRoute: JsonValue): Promise<CompiledModelRoute>
 {
 	const route: { readonly [key: string]: JsonValue } = modelRoute && typeof modelRoute === "object" && !Array.isArray(modelRoute) ? modelRoute as { readonly [key: string]: JsonValue } : {};
-	const requested = typeof route["alias"] === "string" ? route["alias"] : typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
+	const modelDefinitionId = typeof route["modelDefinitionId"] === "string" ? route["modelDefinitionId"] : "";
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
-	const definition = requested.length > 0 ? await transaction.modelDefinition.findFirst({ where: { publicModelName: requested } }) : null;
-	return { modelAlias: definition?.publicModelName ?? requested, maxOutputTokens };
+	if (modelDefinitionId.trim().length === 0) throw new Error("compiled model route requires an exact model definition");
+	const definition = await transaction.modelDefinition.findUnique({ where: { id: modelDefinitionId } });
+	if (definition === null) throw new Error("compiled model route references an unavailable model definition");
+	return { modelAlias: definition.litellmModelId, maxOutputTokens };
 }

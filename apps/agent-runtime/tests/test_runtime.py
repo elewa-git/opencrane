@@ -15,6 +15,7 @@ import os
 import tempfile
 import threading
 import unittest
+from unittest import mock
 from urllib.error import HTTPError
 
 from src import runtime
@@ -28,6 +29,8 @@ from src.runtime import (
     _execute_resume_attempt,
     _execute_start_attempt,
     _iter_commands,
+    _model_turn_budget,
+    _write_checkpoint_state,
     _normalize_event,
     _post_candidate_with_retry,
     _read_checkpoint,
@@ -307,6 +310,35 @@ class RuntimeSteeringTests(unittest.TestCase):
         buffer.append("do Y")
         self.assertEqual(_absorb_steering(buffer), ["do Y"])
         self.assertEqual(_absorb_steering(buffer), [])
+
+
+class RuntimeModelTurnBudgetTests(unittest.TestCase):
+    """Validate the pre-model-request request ceiling used by both start and resume loops."""
+
+    def test_turn_budget_rejects_the_first_request_past_the_compiled_ceiling(self) -> None:
+        """A tool-driven loop cannot issue a third request when the server selected two turns."""
+        budget = _model_turn_budget({"budget": {"maxModelTurns": 2}})
+        budget.consume()
+        budget.consume()
+        with self.assertRaisesRegex(RuntimeError, "model turn budget exhausted"):
+            budget.consume()
+
+    def test_turn_budget_preserves_consumption_from_a_resume_checkpoint(self) -> None:
+        """A resumed loop cannot obtain another model request after the initial loop spent its only turn."""
+        budget = _model_turn_budget({"budget": {"maxModelTurns": 1}}, used=1)
+        with self.assertRaisesRegex(RuntimeError, "model turn budget exhausted"):
+            budget.consume()
+
+    def test_turn_budget_rejects_a_malformed_ceiling_before_a_model_request(self) -> None:
+        """The runtime fails closed rather than treating a malformed authority value as unlimited."""
+        with self.assertRaisesRegex(RuntimeError, "invalid model turn budget"):
+            _model_turn_budget({"budget": {"maxModelTurns": 0}})
+
+    def test_consumed_turn_checkpoint_write_is_required_before_a_provider_request(self) -> None:
+        """A failed count update stops the loop instead of leaving a stale resume checkpoint behind."""
+        with mock.patch.object(runtime, "_write_checkpoint", side_effect=OSError("disk unavailable")):
+            with self.assertRaisesRegex(OSError, "disk unavailable"):
+                _write_checkpoint_state("run-1", 1, 2, _compiled_input(), None, 1)
 
 
 class RuntimeCheckpointTests(unittest.TestCase):

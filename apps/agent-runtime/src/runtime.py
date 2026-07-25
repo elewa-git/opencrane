@@ -377,6 +377,39 @@ def _non_negative_int(value: object) -> int:
     return value if isinstance(value, int) and value >= 0 else 0
 
 
+class _ModelTurnBudget:
+    """Count model requests locally so one compiled input cannot exceed its server-selected ceiling."""
+
+    def __init__(self, maximum: int | None, used: int) -> None:
+        """Create a bounded or unlimited counter from the immutable compiled budget."""
+        self._maximum = maximum
+        self._used = used
+
+    @property
+    def used(self) -> int:
+        """Return the number of provider requests consumed across this resumable attempt."""
+        return self._used
+
+    def consume(self) -> None:
+        """Reserve one model request, failing before a request could exceed the configured maximum."""
+        if self._maximum is not None and self._used >= self._maximum:
+            raise RuntimeError("model turn budget exhausted")
+        self._used += 1
+
+
+def _model_turn_budget(compiled_input: dict[str, object], used: int = 0) -> _ModelTurnBudget:
+    """Read the optional positive model-turn ceiling and prior checkpoint consumption."""
+    budget = compiled_input.get("budget")
+    maximum = budget.get("maxModelTurns") if isinstance(budget, dict) else None
+    if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+        raise RuntimeError("checkpoint has an invalid model turn count")
+    if maximum is None:
+        return _ModelTurnBudget(None, used)
+    if isinstance(maximum, bool) or not isinstance(maximum, int) or maximum <= 0:
+        raise RuntimeError("compiled input has an invalid model turn budget")
+    return _ModelTurnBudget(maximum, used)
+
+
 def _process_cipher() -> object:
     """Return the process-lifetime symmetric cipher, generating its key in memory on first use.
 
@@ -518,7 +551,7 @@ def _build_zero_retry_agent(
     return agent_cls(model, system_prompt=instructions, retries=settings["tool_validation_retries"], output_retries=settings["output_validation_retries"])
 
 
-def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: threading.Event, steering_buffer: list[str]) -> Iterator[dict[str, object]]:
+def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: threading.Event, steering_buffer: list[str], checkpoint_model_turns: Callable[[int], None] | None = None) -> Iterator[dict[str, object]]:
     """Drive the bounded Pydantic AI model/tool loop and yield neutral framework events.
 
     Pydantic AI is imported lazily so the outbound shell and its offline tests never require the
@@ -552,6 +585,10 @@ def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: t
     instructions = compiled_input.get("instructions")
     agent = _build_zero_retry_agent(model_alias, base_url, attempt_key, instructions if isinstance(instructions, str) else "")
 
+    # The budget is consumed immediately before each request node so a tool-driven loop cannot
+    # make an additional provider call after spending the control plane's per-run turn ceiling.
+    model_turn_budget = _model_turn_budget(compiled_input)
+
     async def _collect() -> list[dict[str, object]]:
         events: list[dict[str, object]] = []
         async with agent.iter(_prompt(compiled_input)) as run:
@@ -559,6 +596,9 @@ def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: t
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
+                    model_turn_budget.consume()
+                    if checkpoint_model_turns is not None:
+                        checkpoint_model_turns(model_turn_budget.used)
                     # Safe pre-model boundary: absorb any buffered steering into the next request
                     # context. Steering arriving after this point waits for the next boundary.
                     _apply_steering_to_request(node, _absorb_steering(steering_buffer))
@@ -607,6 +647,9 @@ def _pydantic_ai_resume_source(run_id: str, attempt: int, input_generation: obje
     instructions = compiled_input.get("instructions")
     agent = _build_zero_retry_agent(model_alias, base_url, attempt_key, instructions if isinstance(instructions, str) else "")
 
+    # Resume enters the same bounded request loop and independently rejects any malformed ceiling.
+    model_turn_budget = _model_turn_budget(compiled_input, _checkpoint_model_turns_used(state))
+
     async def _collect() -> list[dict[str, object]]:
         events: list[dict[str, object]] = []
         # The control-plane-authorized deferred results are injected as prior tool results so the
@@ -616,6 +659,8 @@ def _pydantic_ai_resume_source(run_id: str, attempt: int, input_generation: obje
                 if cancel_event.is_set():
                     break
                 if Agent.is_model_request_node(node):
+                    model_turn_budget.consume()
+                    _write_checkpoint_state(run_id, attempt, input_generation, compiled_input, checkpoint_cipher, model_turn_budget.used)
                     for steer in _absorb_steering(steering_buffer):
                         run.ctx.deps.steering.append(steer) if hasattr(getattr(run.ctx, "deps", None), "steering") else None
                     async with node.stream(run.ctx) as request_stream:
@@ -695,17 +740,37 @@ def _snapshot_input_generation(payload: dict[str, object]) -> object:
     return 0
 
 
-def _try_write_checkpoint(coordinates: dict[str, object], payload: dict[str, object], compiled_input: dict[str, object], cipher: object | None) -> None:
+def _try_write_checkpoint(coordinates: dict[str, object], payload: dict[str, object], compiled_input: dict[str, object], cipher: object | None, model_turns_used: int = 0) -> None:
     """Best-effort write of the SUBORDINATE local resume checkpoint; never blocks or fails the attempt.
 
     The checkpoint is a local optimisation only (never a source of truth). Any failure — including the
     absence of the crypto backend offline — is swallowed and logged so a missing checkpoint never
     turns a live attempt into an error.
     """
+    _try_write_checkpoint_state(coordinates["runId"], coordinates["attempt"], _snapshot_input_generation(payload), compiled_input, cipher, model_turns_used)
+
+
+def _try_write_checkpoint_state(run_id: object, attempt: object, input_generation: object, compiled_input: dict[str, object], cipher: object | None, model_turns_used: int) -> None:
+    """Best-effort persist initial local resume state before any model request has been issued."""
     try:
-        _write_checkpoint(coordinates["runId"], coordinates["attempt"], _snapshot_input_generation(payload), {"compiledInput": compiled_input}, cipher=cipher)
-    except Exception:  # noqa: BLE001 - the checkpoint is a subordinate optimisation, never load-bearing
-        _log("checkpoint_skipped", runId=coordinates.get("runId"), attempt=coordinates.get("attempt"))
+        _write_checkpoint_state(run_id, attempt, input_generation, compiled_input, cipher, model_turns_used)
+    except Exception:  # noqa: BLE001 - no model request has started, so this initial local cache remains optional
+        _log("checkpoint_skipped", runId=run_id, attempt=attempt)
+
+
+def _write_checkpoint_state(run_id: object, attempt: object, input_generation: object, compiled_input: dict[str, object], cipher: object | None, model_turns_used: int) -> None:
+    """Persist one resume state and let a per-turn caller fail closed when the write cannot complete."""
+    _write_checkpoint(run_id, attempt, input_generation, {"compiledInput": compiled_input, "modelTurnsUsed": model_turns_used}, cipher=cipher)
+
+
+def _checkpoint_model_turns_used(state: object) -> int:
+    """Read the non-negative cumulative turn count from a decrypted local checkpoint state."""
+    if not isinstance(state, dict):
+        return 0
+    used = state.get("modelTurnsUsed", 0)
+    if isinstance(used, bool) or not isinstance(used, int) or used < 0:
+        raise RuntimeError("checkpoint has an invalid model turn count")
+    return used
 
 
 def _recover_compiled_input(coordinates: dict[str, object], input_generation: object, cipher: object | None) -> dict[str, object]:
@@ -788,7 +853,15 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
     steering_buffer: list[str] = []
     with _trace("agent_runtime.start_attempt", runId=coordinates["runId"], attempt=coordinates["attempt"]):
         try:
-            for neutral_event in event_source(compiled_input, cancel_event, steering_buffer):
+            if event_source is _pydantic_ai_event_source:
+                def _checkpoint_model_turns(used: int) -> None:
+                    """Persist consumption before the next provider request can become resumable state."""
+                    _write_checkpoint_state(coordinates["runId"], coordinates["attempt"], _snapshot_input_generation(payload if isinstance(payload, dict) else {}), compiled_input, checkpoint_cipher, used)
+
+                events = event_source(compiled_input, cancel_event, steering_buffer, _checkpoint_model_turns)
+            else:
+                events = event_source(compiled_input, cancel_event, steering_buffer)
+            for neutral_event in events:
                 if cancel_event.is_set():
                     break
                 _dispatch_neutral_event(coordinates, compiled_input, neutral_event, post_candidate)

@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
+import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, ModelRoutingScope, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
@@ -25,7 +25,7 @@ interface ClaimedAttemptWithMintInputs
 	readonly attempt: Omit<AgentControllerRunAttemptProjection, "litellmKey">;
 	/** Attempt- and delivery-unique alias the minted key is bound to. */
 	readonly keyAlias: string;
-	/** Single model alias frozen into the snapshot's server-selected route. */
+	/** Exact LiteLLM deployment identifier derived from the frozen model-definition identity. */
 	readonly modelAlias: string;
 	/** Positive US-dollar spend ceiling derived from the snapshot's budget policy. */
 	readonly maxBudgetUsd: number;
@@ -122,9 +122,11 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				return { status: "none" };
 			}
 
-			// 3. Read the frozen model alias and cost ceiling; fail closed when either cannot bound a key.
-			const modelAlias = _SnapshotModelAlias(snapshot.modelRoute);
+			// 3. Resolve the frozen definition ID under this claim lock; an alias alone can collide by scope.
+			const modelDefinitionId = _SnapshotModelDefinitionId(snapshot.modelRoute);
 			const maxBudgetUsd = _SnapshotMaxBudgetUsd(snapshot.budgetPolicy);
+			const modelDefinition = modelDefinitionId === null ? null : await transaction.modelDefinition.findUnique({ where: { id: modelDefinitionId } });
+			const modelAlias = _AttemptKeyModelId(modelDefinition, run.siloId);
 			if (modelAlias === null || maxBudgetUsd === null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MODEL_ROUTE_INVALID", AgentRunTerminalReason.InvalidInput);
@@ -727,13 +729,22 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 	}
 }
 
-/** Extract the single model alias frozen into the snapshot's server-selected route. */
-function _SnapshotModelAlias(modelRoute: unknown): string | null
+/** Extract the immutable model-definition identity frozen into the snapshot's server-selected route. */
+function _SnapshotModelDefinitionId(modelRoute: unknown): string | null
 {
 	if (!modelRoute || typeof modelRoute !== "object" || Array.isArray(modelRoute)) return null;
 	const route = modelRoute as Record<string, unknown>;
-	const alias = typeof route["alias"] === "string" ? route["alias"] : typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
-	return alias.trim().length > 0 && alias.length <= 128 ? alias : null;
+	const modelDefinitionId = typeof route["modelDefinitionId"] === "string" ? route["modelDefinitionId"] : "";
+	return modelDefinitionId.trim().length > 0 && modelDefinitionId.length <= 256 ? modelDefinitionId : null;
+}
+
+/** Derive the one LiteLLM deployment ID that the claimed attempt may call in its own silo. */
+function _AttemptKeyModelId(modelDefinition: { readonly scope: ModelRoutingScope; readonly clusterTenant: string | null; readonly litellmModelId: string } | null, siloId: string): string | null
+{
+	if (modelDefinition === null) return null;
+	if (modelDefinition.scope !== ModelRoutingScope.Global && (modelDefinition.scope !== ModelRoutingScope.ClusterTenant || modelDefinition.clusterTenant !== siloId)) return null;
+	const modelId = modelDefinition.litellmModelId.trim();
+	return modelId.length > 0 && modelId.length <= 256 ? modelId : null;
 }
 
 /** Derive the positive US-dollar spend ceiling from the snapshot's micro-dollar cost policy. */
