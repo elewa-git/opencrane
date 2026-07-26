@@ -1,12 +1,12 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/client";
+import { ArtifactIndexState, ArtifactKind, ArtifactState, ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/client";
 
-import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types.js";
+import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
 
 /** Postgres authority for receipt consumption, immutable revision publication, and outbox creation. */
-export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
+export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository, PersonalArtifactCatalogueRepository
 {
 	/** Canonical OpenCrane catalog database client. */
 	private readonly prisma: PrismaClient;
@@ -15,6 +15,16 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
+	}
+
+	/** List only safe metadata from non-deleted assets owned in the exact trusted silo. */
+	async listOwnedCatalogue(siloId: string, ownerPrincipalId: string): Promise<readonly PersonalArtifactEntry[]>
+	{
+		const artifacts = await this.prisma.artifact.findMany({ where: { siloId, ownerPrincipalId, state: { not: ArtifactState.Deleted } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
+		return artifacts.map(function _toPersonalEntry(artifact): PersonalArtifactEntry
+		{
+			return { id: artifact.id, kind: _ToKind(artifact.kind), state: artifact.state === ArtifactState.Active ? "active" : "deletion_pending", currentRevisionId: artifact.currentRevisionId, mediaType: artifact.currentRevision?.mediaType ?? null, byteLength: artifact.currentRevision === null ? null : artifact.currentRevision.byteLength.toString(), indexState: artifact.currentRevision === null ? null : _ToIndexState(artifact.currentRevision.indexState), createdAt: artifact.createdAt.toISOString(), updatedAt: artifact.updatedAt.toISOString() };
+		});
 	}
 
 	/** Creates or returns the one durable, proof-bound lease for one exact capability JTI. */
@@ -91,5 +101,30 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return { status: "conflict" };
 			throw error;
 		}
+	}
+}
+
+/** Converts generated artifact-kind values into the stable browser vocabulary. */
+function _ToKind(kind: ArtifactKind): PersonalArtifactEntry["kind"]
+{
+	switch (kind)
+	{
+		case ArtifactKind.Document: return "document";
+		case ArtifactKind.Generated: return "generated";
+		case ArtifactKind.Skill: return "skill";
+		case ArtifactKind.Upload: return "upload";
+	}
+}
+
+/** Converts generated index values into the stable browser vocabulary. */
+function _ToIndexState(state: ArtifactIndexState): NonNullable<PersonalArtifactEntry["indexState"]>
+{
+	switch (state)
+	{
+		case ArtifactIndexState.Pending: return "pending";
+		case ArtifactIndexState.Indexed: return "indexed";
+		case ArtifactIndexState.Failed: return "failed";
+		case ArtifactIndexState.RemovalPending: return "removal_pending";
+		case ArtifactIndexState.Removed: return "removed";
 	}
 }
