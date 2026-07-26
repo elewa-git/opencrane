@@ -80,3 +80,26 @@ if ! grep -Fq "legacy execution TypeScript alias must not exist" <<<"$output" ||
 fi
 
 printf '%s\n' "Phase D execution metadata negative test passed."
+
+node --input-type=module - "$TMP_DIR" <<'NODE'
+import { readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+
+const root = process.argv[2];
+const tsconfigPath = join(root, "tsconfig.json");
+const tsconfig = JSON.parse(readFileSync(tsconfigPath, "utf8"));
+tsconfig.compilerOptions.paths["@opencrane/backend/agents/runtime"] = ["./legacy-runtime.ts"];
+writeFileSync(tsconfigPath, `${JSON.stringify(tsconfig, null, "\t")}\n`);
+NODE
+
+set +e
+output="$(PHASE_D_AGENT_NAMESPACE_ROOT="$TMP_DIR" "$GUARD" 2>&1)"
+status=$?
+set -e
+
+if [[ $status -eq 0 ]] || ! grep -Fq "legacy execution TypeScript alias must not exist: @opencrane/backend/agents/runtime" <<<"$output"; then
+	printf '%s\n%s\n' "Expected Phase D namespace guard to reject the retired runtime authority alias:" "$output" >&2
+	exit 1
+fi
+
+printf '%s\n' "Phase D runtime authority alias negative test passed."

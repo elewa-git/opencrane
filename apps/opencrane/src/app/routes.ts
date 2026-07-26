@@ -24,7 +24,7 @@ import { PrismaRunDispatchRepository, PrismaRuntimeTerminalReporter, __CreateAge
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
 import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
+import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
 import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";

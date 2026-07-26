@@ -178,9 +178,6 @@
       "@opencrane/backend/agents/runtime/controller": [
         "./libs/backend/agents/runtime/controller/src/index.ts"
       ],
-      "@opencrane/backend/agents/runtime/prompt-compiler": [
-        "./libs/backend/agents/runtime/prompt-compiler/main/src/index.ts"
-      ],
       "@opencrane/server/_infra/http": [
         "./libs/server/_infra/http/src/index.ts"
       ],
