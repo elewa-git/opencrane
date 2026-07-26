@@ -44,12 +44,13 @@ class BootstrapTests(unittest.TestCase):
                 captured["body"] = request.data
                 captured["authorization"] = request.get_header("Authorization")
                 captured["timeout"] = timeout
-                return _Response(200, {"acknowledged": True})
+                return _Response(200, {"acknowledged": True, "workloadId": "workload-1"})
 
-            _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
+            workload_id = _WORKER.acknowledge("http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime", str(token), str(reference), _Open)
             self.assertEqual(captured["url"], "http://opencrane-server.silo.svc.cluster.local:8081/api/internal/agent-runtime/skill-workloads:bootstrap")
             self.assertEqual(json.loads(captured["body"]), {"bootstrapReference": "skill-bootstrap-v1_" + "a" * 64})
             self.assertEqual(captured["authorization"], "Bearer projected-token")
+            self.assertEqual(workload_id, "workload-1")
 
     def test_rejects_an_external_bootstrap_endpoint(self) -> None:
         """A worker profile must never redirect the acknowledgement to an arbitrary host."""

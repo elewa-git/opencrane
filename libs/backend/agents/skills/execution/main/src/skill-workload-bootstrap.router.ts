@@ -45,14 +45,14 @@ export function __CreateSkillWorkloadBootstrapRouter(dependencies: SkillWorkload
 				return;
 			}
 
-			// 3. Consume under the same reviewed identity; no secret or capability is returned by this gate.
+			// 3. Consume under the same reviewed identity; return only the already-bound completion coordinate.
 			const outcome = await dependencies.repository.consumeAtomically(hash, identity);
 			if (outcome !== "consumed")
 			{
 				response.status(409).json({ error: "bootstrap_unavailable" });
 				return;
 			}
-			response.status(200).json({ acknowledged: true });
+			response.status(200).json({ acknowledged: true, workloadId: record.workloadId });
 		}
 		catch (err)
 		{

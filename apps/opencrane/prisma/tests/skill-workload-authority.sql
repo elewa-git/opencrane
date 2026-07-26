@@ -41,7 +41,20 @@ UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consume
 SELECT pg_temp.expect_failure('consumed bootstrap is terminal', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_by_pod_uid"='other-pod' WHERE "id"='bootstrap-1'$statement$, 'consumed SkillWorkloadBootstrap is terminal');
 SELECT pg_temp.expect_failure('worker Pod identity is immutable', $statement$UPDATE "skill_workloads" SET "worker_pod_uid"='other-pod' WHERE "id"='authoring-work'$statement$, 'worker Pod identity is immutable');
 
-INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-unconsumed','work-skill',2,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
+INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-completion','work-skill',2,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
+INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work-completion','work-silo','authoring','work-draft-completion');
+UPDATE "skill_workloads" SET "claimed_at"=clock_timestamp(), "delivery_count"=1 WHERE "id"='authoring-work-completion';
+UPDATE "skill_workloads" SET "state"='assigned', "workload_uid"='job-uid-completion' WHERE "id"='authoring-work-completion';
+INSERT INTO "skill_workload_bootstraps" ("id", "skill_workload_id", "reference_hash", "audience", "service_account_name", "namespace", "workload_uid", "expires_at") VALUES ('bootstrap-completion','authoring-work-completion','sha256:'||repeat('f',64),'opencrane-skill-authoring','skill-authoring-default','opencrane-skill-authoring','job-uid-completion',clock_timestamp()+interval '5 minutes');
+UPDATE "skill_workloads" SET "release_claimed_at"=clock_timestamp(), "release_delivery_count"=1, "release_expires_at"=clock_timestamp()+interval '1 minute' WHERE "id"='authoring-work-completion';
+UPDATE "skill_workloads" SET "released_at"=clock_timestamp(), "worker_pod_uid"='pod-uid-completion' WHERE "id"='authoring-work-completion';
+UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-completion' WHERE "id"='bootstrap-completion';
+SELECT pg_temp.expect_failure('completion requires passed bounded evidence', $statement$UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work-completion'$statement$, 'bounded passed draft test and scan reports');
+UPDATE "skill_revisions" SET "test_report"='{"passed":true,"summary":"checks passed","checksRun":1}', "scan_result"='{"passed":true,"summary":"scan passed","checksRun":1}' WHERE "id"='work-draft-completion';
+UPDATE "skill_workloads" SET "state"='succeeded', "completed_at"=clock_timestamp() WHERE "id"='authoring-work-completion';
+SELECT pg_temp.expect_failure('completed workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='failed', "failure_code"='late_failure' WHERE "id"='authoring-work-completion'$statement$, 'terminal SkillWorkload is immutable');
+
+INSERT INTO "skill_revisions" ("id", "skill_id", "revision", "artifact_id", "artifact_revision_id", "artifact_content_address", "manifest", "requirements", "trust_class", "authored_by") VALUES ('work-draft-unconsumed','work-skill',3,'work-artifact','work-artifact-revision','sha256:'||repeat('a',64),'{}','{}','sandboxed_python','user-1');
 INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-work-unconsumed','work-silo','authoring','work-draft-unconsumed');
 UPDATE "skill_workloads" SET "claimed_at"=clock_timestamp(), "delivery_count"=1 WHERE "id"='authoring-work-unconsumed';
 UPDATE "skill_workloads" SET "state"='assigned', "workload_uid"='job-uid-2' WHERE "id"='authoring-work-unconsumed';

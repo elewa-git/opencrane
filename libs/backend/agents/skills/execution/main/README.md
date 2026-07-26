@@ -29,7 +29,9 @@ cannot attach a different Job or replace its reference.
 
 It does not create Kubernetes resources, issue worker capabilities, read ArtifactStore bytes, or
 complete tool invocations. A released worker may acknowledge its one-use bootstrap only after its
-projected-token identity matches the canonical Pod UID recorded for the Job.
+projected-token identity matches the canonical Pod UID recorded for the Job. An authoring worker can
+then write one terminal receipt: a passed bounded test-and-scan report, or a stable failure code.
+Tool-runner results remain a separate ToolInvocation authority.
 
 ## Public surface
 
@@ -39,6 +41,8 @@ projected-token identity matches the canonical Pod UID recorded for the Job.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 - `__CreateSkillWorkloadBootstrapRouter` — consumes one opaque bootstrap reference only for the
   exact TokenReview-confirmed worker Pod.
+- `PrismaSkillAuthoringCompletionRepository` — atomic authoring receipt and Draft-evidence write.
+- `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only receipt API with strict input bounds.
 
 ## Boundary
 
@@ -57,13 +61,15 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 
 ## Data & persistence
 
-The package owns the claim and assignment transitions on `SkillWorkload`. The clean target baseline
-enforces its pending → assigned state fence, monotonic delivery generation, immutable Job UID, and
-terminal cancellation independently of this TypeScript adapter. It also owns the one-use
+The package owns the claim, assignment, and authoring terminal transitions on `SkillWorkload`. The
+clean target baseline enforces its pending → assigned → terminal state fence, monotonic delivery
+generation, immutable Job UID, canonical worker Pod, and terminal receipt independently of this
+TypeScript adapter. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
-the controller-registered canonical worker Pod UID. The later worker exchange may consume that record, but cannot turn it into a
-general artifact or runtime credential.
+the controller-registered canonical worker Pod UID. A successful authoring receipt can write only
+two passed bounded reports to its still-Draft revision; it cannot turn the record into a general
+artifact or runtime credential.
 
 ## See also
 
