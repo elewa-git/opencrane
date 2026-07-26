@@ -90,20 +90,25 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 		{
 			return await this.prisma.$transaction(async function _materialize(transaction)
 			{
-				// 1. Lock the proposal first so duplicate owner requests cannot create competing future revisions.
+				// 1. Discover the immutable profile coordinate, then follow the shared profile-before-proposal lock order.
+				const candidate = await transaction.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { personaProfileId: true } });
+				if (candidate === null) return { status: "not_found_or_not_owner" } as const;
+				const profiles = await transaction.$queryRaw<readonly { readonly activeRevisionId: string | null }[]>(Prisma.sql`SELECT "active_revision_id" AS "activeRevisionId" FROM "persona_profiles" WHERE "id" = ${candidate.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "personal_configuration_changes" WHERE "id" = ${command.changeId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
-				const change = await transaction.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { state: true, agentServiceId: true, expectedAgentRevisionId: true, requestedPatch: true } });
+				const change = await transaction.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { state: true, personaProfileId: true, agentServiceId: true, expectedPersonaRevisionId: true, expectedAgentRevisionId: true, requestedPatch: true, appliedAgentRevisionId: true } });
 				if (change === null) return { status: "not_found_or_not_owner" } as const;
-				if (change.state !== PersonalConfigurationChangeState.Accepted) return { status: "not_accepted" } as const;
 				const patch = change.requestedPatch as unknown;
 				if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== "model_alias") return { status: "not_applicable" } as const;
+				if (change.state === PersonalConfigurationChangeState.Applied && change.appliedAgentRevisionId !== null) return { status: "applied", agentRevisionId: change.appliedAgentRevisionId } as const;
+				if (change.state !== PersonalConfigurationChangeState.Accepted) return { status: "not_accepted" } as const;
+				if (change.personaProfileId !== candidate.personaProfileId || profiles[0]?.activeRevisionId !== change.expectedPersonaRevisionId) return { status: "stale_proposal" } as const;
 
 				// 2. Lock the service and prove the proposal still describes its active personal revision.
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${change.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 				const service = await transaction.agentService.findFirst({ where: { id: change.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active }, select: { id: true, activeRevisionId: true } });
 				if (service === null || service.activeRevisionId !== change.expectedAgentRevisionId || service.activeRevisionId === null) return { status: "stale_proposal" } as const;
 				const base = await transaction.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id, state: AgentRevisionState.Published }, include: { skillAssignments: true, integrationAssignments: true, scopeAttachments: true } });
-				if (base === null) return { status: "stale_proposal" } as const;
+				if (base === null || base.personaRevisionId !== change.expectedPersonaRevisionId) return { status: "stale_proposal" } as const;
 
 				// 3. Resolve the caller-visible alias in this silo, preferring its tenant definition over a global default.
 				const models = await transaction.modelDefinition.findMany({ where: { publicModelName: patch.modelAlias.trim(), OR: [{ scope: ModelRoutingScope.ClusterTenant, clusterTenant: command.siloId }, { scope: ModelRoutingScope.Global, clusterTenant: null }] }, select: { id: true, scope: true } });

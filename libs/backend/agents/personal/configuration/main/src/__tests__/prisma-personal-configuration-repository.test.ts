@@ -59,4 +59,23 @@ describe("Prisma personal configuration repository", function _Suite()
 		await expect(repository.listOwned("silo-1", "user-1")).resolves.toEqual([{ changeId: "change-1", requestedPatch: { kind: "model_alias", modelAlias: "careful-model" }, state: "proposed", sourceThreadId: "thread-1", sourceRunId: "run-1", proposedAt: "2026-07-23T00:00:00.000Z", decidedAt: null, rejectionReason: null }]);
 		expect(findMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", userId: "user-1" }, orderBy: [{ proposedAt: "desc" }, { id: "desc" }], take: 50, select: { id: true, requestedPatch: true, state: true, sourceThreadId: true, sourceRunId: true, proposedAt: true, decidedAt: true, rejectionReason: true } });
 	});
+
+	it("returns the applied revision when the owner retries after losing the success response", async function _ReplaysAppliedMaterialization()
+	{
+		const findFirst = vi.fn().mockResolvedValueOnce({ personaProfileId: "profile-1" }).mockResolvedValueOnce({ state: "Applied", personaProfileId: "profile-1", agentServiceId: "service-1", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", requestedPatch: { kind: "model_alias", modelAlias: "careful-model" }, appliedAgentRevisionId: "agent-2" });
+		const transaction = { $queryRaw: vi.fn().mockResolvedValueOnce([{ activeRevisionId: "persona-2" }]).mockResolvedValue([]), personalConfigurationChange: { findFirst } };
+		const repository = new PrismaPersonalConfigurationChangeRepository({ $transaction: async function _transaction(callback: (value: unknown) => Promise<unknown>) { return callback(transaction); } } as never);
+
+		await expect(repository.materializeAtomically({ siloId: "silo-1", userId: "user-1", changeId: "change-1", materializedAt: "2026-07-23T00:00:00.000Z" })).resolves.toEqual({ status: "applied", agentRevisionId: "agent-2" });
+	});
+
+	it("refuses an accepted model proposal after a newer persona becomes active", async function _RejectsStalePersona()
+	{
+		const findFirst = vi.fn().mockResolvedValueOnce({ personaProfileId: "profile-1" }).mockResolvedValueOnce({ state: "Accepted", personaProfileId: "profile-1", agentServiceId: "service-1", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", requestedPatch: { kind: "model_alias", modelAlias: "careful-model" }, appliedAgentRevisionId: null });
+		const transaction = { $queryRaw: vi.fn().mockResolvedValueOnce([{ activeRevisionId: "persona-2" }]).mockResolvedValue([]), personalConfigurationChange: { findFirst }, agentService: { findFirst: vi.fn() } };
+		const repository = new PrismaPersonalConfigurationChangeRepository({ $transaction: async function _transaction(callback: (value: unknown) => Promise<unknown>) { return callback(transaction); } } as never);
+
+		await expect(repository.materializeAtomically({ siloId: "silo-1", userId: "user-1", changeId: "change-1", materializedAt: "2026-07-23T00:00:00.000Z" })).resolves.toEqual({ status: "stale_proposal" });
+		expect(transaction.agentService.findFirst).not.toHaveBeenCalled();
+	});
 });

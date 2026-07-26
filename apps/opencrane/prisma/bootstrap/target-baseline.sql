@@ -4104,6 +4104,13 @@ BEGIN
             IF NEW."applied_persona_revision_id" IS NOT NULL OR NEW."applied_agent_revision_id" IS NULL THEN
                 RAISE EXCEPTION 'model_alias requires a published personal AgentRevision only';
             END IF;
+            SELECT profile."active_revision_id" INTO active_persona
+              FROM "persona_profiles" profile
+              WHERE profile."id" = NEW."persona_profile_id" AND profile."silo_id" = NEW."silo_id" AND profile."user_id" = NEW."user_id"
+              FOR UPDATE OF profile;
+            IF active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" THEN
+                RAISE EXCEPTION 'applied model_alias must preserve the proposal persona revision';
+            END IF;
             SELECT revision."agent_service_id", revision."parent_revision_id", definition."public_model_name"
               INTO applied_revision_service, applied_revision_parent, applied_model_alias
               FROM "agent_revisions" revision JOIN "model_definitions" definition ON definition."id" = revision."model_definition_id"
@@ -4118,7 +4125,7 @@ BEGIN
                 WHERE child."id" = NEW."applied_agent_revision_id" AND (
                     child."prompt_policy_version" IS DISTINCT FROM parent."prompt_policy_version"
                     OR child."persona_revision_id" IS DISTINCT FROM parent."persona_revision_id"
-                    OR child."capability_ceiling" IS DISTINCT FROM parent."capability_ceiling"
+                    OR child."persona_revision_id" IS DISTINCT FROM active_persona
                     OR child."budget" IS DISTINCT FROM parent."budget"
                 )
             ) OR EXISTS (
