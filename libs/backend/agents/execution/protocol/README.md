@@ -64,7 +64,9 @@ authorities to accept or reject.
 - `__CreatePrismaRunInputCompiler` — binds the deterministic prompt compiler to the control-plane
   Prisma reads used by the dispatch transaction.
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected MCP custody,
-  sandbox, or memory port and fails closed for unsupported revisions.
+  sandbox, or memory port and fails closed for unsupported revisions. Memory recall additionally
+  requires a `scope: personal` policy and Cognee dataset identifier frozen in the admitted snapshot;
+  neither runtime tool arguments nor a subject id can choose a dataset.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run

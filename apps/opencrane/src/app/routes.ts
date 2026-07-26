@@ -196,7 +196,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			{
 				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
 					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
-					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, cogneeDatasetId: _PersonalMemoryDatasetId(snapshot), obotCustody, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{
@@ -213,6 +213,17 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			return { outcome: "completed" as const };
 		},
 	};
+}
+
+/** Returns the personal Cognee dataset frozen in a snapshot, or null for every other scope. */
+function _PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
+{
+	const policy = snapshot.memoryQueryPolicy;
+	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
+	const record = policy as Readonly<Record<string, unknown>>;
+	if (record["scope"] !== "personal") return null;
+	const candidate = record["cogneeDatasetId"];
+	return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : null;
 }
 
 /** Compile normal grants, then add the sealed first-party upgrade intent only to personal sessions. */

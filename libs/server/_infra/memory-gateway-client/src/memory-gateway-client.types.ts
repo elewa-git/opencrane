@@ -12,6 +12,8 @@ export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
 	readonly siloId: string;
+	/** Gateway-native personal dataset identifier frozen in the admitted run snapshot. */
+	readonly cogneeDatasetId: string;
 	/** Subject whose personal memory is being queried. */
 	readonly subjectId: string;
 	/** Free-text recall query. */

@@ -5,7 +5,9 @@
 ## What it owns
 
 This library owns the **boundary for a subject's personal memory** — recalling, correcting, and
-forgetting stored facts through the memory gateway instead of calling Cognee directly. The *memory
+forgetting stored facts through the memory gateway instead of calling Cognee directly. A recall also
+names the gateway-native dataset that OpenCrane froze in the admitted run snapshot; a subject id is
+never enough to select a dataset. The *memory
 gateway* is the green-side authority that fronts org/personal memory; routing every read and write
 through this port is what lets the platform stop reaching into Cognee from scattered call sites (see
 the org-memory wiring notes). This package is a **port** — a runtime-neutral contract (a TypeScript
@@ -14,7 +16,7 @@ interface) that says *what* memory operations exist, with the real transport wir
 It sits between the personal-agent backend and the remote memory gateway:
 
 ```
- personal-agent backend  (recall / record / correct / forget on a subject's memory)
+ personal-agent backend  (recall / record / correct / forget in an admitted personal dataset)
           │  MemoryQueryCommand · PersonalMemoryRecordCommand · MemoryCorrectionCommand · MemoryForgetCommand
           ▼
  ┌────────────────────────────────────┐
@@ -65,9 +67,11 @@ complete provenance.
 Consumed by the personal-agent backend. It defines the memory contract and a safe default; it does
 not talk to the gateway or Cognee itself yet — a concrete, authenticated client is wired when the
 gateway API contract is confirmed. It stores nothing and holds no fact beyond the single in-flight
-call. In particular, the record command uses the gateway-native dataset id, while the OpenCrane
-memory catalog's internal id stays at the catalog boundary. That prevents a caller from treating an
-OpenCrane row as proof that the gateway accepted the fact content.
+call. In particular, record and query commands use the gateway-native dataset id, while the OpenCrane
+memory catalog's internal id stays at the catalog boundary. A runtime supplies that query id only
+from its immutable personal-memory policy; no tool argument or subject id may select another
+dataset. That prevents a caller from treating an OpenCrane row as proof that the gateway accepted
+the fact content.
 
 ## Dependency direction
 

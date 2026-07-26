@@ -16,7 +16,7 @@ describe("unavailable memory gateway client", function _suite()
 	it("fails closed instead of returning an empty recall", async function _query()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.query({ siloId: "silo-1", subjectId: "subject-1", query: "what do I know", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.query({ siloId: "silo-1", cogneeDatasetId: "cognee-personal-1", subjectId: "subject-1", query: "what do I know", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("fails closed rather than minting a personal-memory fact identifier", async function _recordPersonalFact()

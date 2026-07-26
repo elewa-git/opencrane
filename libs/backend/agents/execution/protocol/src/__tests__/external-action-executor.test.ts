@@ -4,7 +4,7 @@ import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbo
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { describe, expect, it } from "vitest";
 
-import { __CreateExternalActionExecutor, UnsupportedExternalActionError } from "../external-action-executor.js";
+import { __CreateExternalActionExecutor, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
 
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
@@ -13,7 +13,7 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 }
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
 
 describe("composition-root external action executor", function _suite()
 {
@@ -33,6 +33,12 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), DEPENDENCIES);
 		await expect(executor.execute()).rejects.toThrow(/Memory gateway is unavailable/);
+	});
+
+	it("refuses a memory tool call when the admitted snapshot did not select a personal dataset", async function _deniesMissingMemoryScope()
+	{
+		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, cogneeDatasetId: null });
+		await expect(executor.execute()).rejects.toBeInstanceOf(MemoryScopeUnavailableError);
 	});
 
 	it("refuses a tool revision that names no wired transport kind", async function _unsupported()
