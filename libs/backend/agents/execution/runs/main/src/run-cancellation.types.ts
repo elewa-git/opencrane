@@ -55,7 +55,7 @@ export interface RunWorkloadCleanupProjection
 	/** Whether cleanup has an exact assignment UID or must first verify a suspended orphan. */
 	readonly mode: RunWorkloadCleanupMode;
 	/** Why cleanup exists; cancellation finalises the run while failure only removes residue. */
-	readonly reason: "cancellation" | "dispatch_failure";
+	readonly reason: "cancellation" | "dispatch_failure" | "runtime_lease_expired";
 }
 
 /** Database claim generation fencing one cleanup worker delivery. */
@@ -84,6 +84,9 @@ export interface RunWorkloadCleanupClaim
 export type ClaimNextRunWorkloadCleanupResult =
 	| { readonly status: "claimed"; readonly claim: RunWorkloadCleanupClaim }
 	| { readonly status: "none" };
+
+/** Outcome of one server-owned expired-runtime repair pass. */
+export type RepairExpiredRunResult = { readonly status: "repaired"; readonly runId: string; readonly attempt: number } | { readonly status: "none" };
 
 /** Exact cleaner evidence submitted after UID-preconditioned deletion or authoritative absence. */
 export interface ConfirmRunWorkloadCleanupCommand
@@ -117,4 +120,6 @@ export interface RunCancellationRepository
 	claimNextWorkloadCleanupAtomically(): Promise<ClaimNextRunWorkloadCleanupResult>;
 	/** Confirms exact deletion or authoritative absence and finalises Cancelling when applicable. */
 	confirmWorkloadCleanupAtomically(eventId: string, command: ConfirmRunWorkloadCleanupCommand): Promise<ConfirmRunWorkloadCleanupResult>;
+	/** Fence and terminalise one expired registered runtime attempt without trusting runtime output. */
+	repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>;
 }

@@ -23,6 +23,7 @@ import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
 import { _CreateManagedRunAdmissionPort, _ReadRunAdmissionConcurrencyPolicy } from "./app/run-admission-wiring.js";
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
+import { PrismaRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { OpenClawTenantLifecycle } from "@opencrane/backend/feat-openclaw-tenant";
 
 // In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
@@ -183,6 +184,13 @@ const schedulerHandle = process.env.OPENCRANE_SCHEDULER_ENABLED === "true"
   : null;
 schedulerHandle?.unref();
 
+/** Server-owned repair loop that terminalises runtime attempts after their signed workload lease expires. */
+const runtimeRepairNamespace = process.env.AGENT_RUNTIME_NAMESPACE?.trim();
+if (!runtimeRepairNamespace) throw new Error("AGENT_RUNTIME_NAMESPACE must be configured for runtime repair");
+const runtimeRepairRepository = new PrismaRunCancellationRepository(prisma, { namespace: runtimeRepairNamespace, claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+const runtimeRepairHandle = setInterval(function _repair() { void runtimeRepairRepository.repairNextExpiredRunAtomically().catch(function _onError(err: unknown) { log.error({ err }, "runtime terminal repair failed"); }); }, 30_000);
+runtimeRepairHandle.unref();
+
 /** Frozen-blue OpenClaw tenant runtime composed behind its library lifecycle contract. */
 const openClawTenantLifecycle = new OpenClawTenantLifecycle({
   kubeConfig: kc,
@@ -212,6 +220,7 @@ async function _shutdown(signal: string): Promise<void>
 
   // Stop the schedule ticker and the in-silo controller before disconnecting their DB dependencies.
   if (schedulerHandle !== null) clearInterval(schedulerHandle);
+	clearInterval(runtimeRepairHandle);
   await openClawTenantLifecycle.stop();
 
   try

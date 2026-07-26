@@ -5,7 +5,7 @@ import { AgentRunState, AgentRunTerminalReason, Prisma, RunOutboxEventKind, Work
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
+import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 
 /** Non-locking cleanup coordinates used only to establish canonical lock order. */
 interface CleanupCandidateRow
@@ -161,6 +161,35 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			return { status: "confirmed", runId: run.id, attempt: event.attempt, runFinalized };
 		});
 	}
+
+	/** Fail one registered attempt whose server-issued workload lease expired without a terminal report. */
+	async repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>
+	{
+		return this.prisma.$transaction(async function _repair(transaction: Prisma.TransactionClient): Promise<RepairExpiredRunResult>
+		{
+			const rows = await transaction.$queryRaw<Array<{ runId: string; agentServiceId: string }>>(Prisma.sql`SELECT run."id" AS "runId", run."agent_service_id" AS "agentServiceId" FROM "agent_runs" run JOIN "workload_assignments" assignment ON assignment."run_id" = run."id" AND assignment."attempt" = run."attempt" WHERE run."state" = 'running'::"AgentRunState" AND assignment."state" = 'registered'::"WorkloadAssignmentState" AND assignment."expires_at" <= clock_timestamp() ORDER BY assignment."expires_at", run."id" LIMIT 1`);
+			const candidate = rows[0];
+			if (!candidate) return { status: "none" };
+			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${candidate.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${candidate.runId} FOR UPDATE`);
+			const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
+			const assignment = run === null ? null : await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });
+			const service = run === null ? null : await transaction.agentService.findUnique({ where: { id: run.agentServiceId } });
+			const bootstrap = run === null ? null : await transaction.workloadBootstrap.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });
+			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
+			if (!run || !assignment || !service || !now || run.state !== AgentRunState.Running || assignment.state !== WorkloadAssignmentState.Registered || assignment.expiresAt > now) return { status: "none" };
+			const failed = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.Failed, terminalReason: AgentRunTerminalReason.RuntimeFailure, finishedAt: now } });
+			const revoked = await transaction.workloadAssignment.updateMany({ where: { runId: run.id, attempt: run.attempt, state: WorkloadAssignmentState.Registered }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: now } });
+			if (failed.count !== 1 || revoked.count !== 1) throw new Error("expired runtime repair lost its lifecycle fence");
+			await transaction.runProofKey.updateMany({ where: { runId: run.id, attempt: run.attempt, revokedAt: null }, data: { revokedAt: now } });
+			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
+			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence: (maximum._max.sequence ?? 0) + 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, idempotencyKey: `${run.id}:cleanup:${run.attempt}`, payload: _CleanupProjection(run, assignment, bootstrap?.id ?? `runtime-repair:${run.id}:${run.attempt}`, service.workloadProfile, assignment.namespace, "runtime_lease_expired") as unknown as Prisma.InputJsonObject, availableAt: now } });
+			await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
+			if (run.threadId !== null) { const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } }); await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_RUNTIME_LEASE_EXPIRED" }, occurredAt: now } }); }
+			return { status: "repaired", runId: run.id, attempt: run.attempt };
+		});
+	}
 }
 
 /** Validate repository configuration before it reaches SQL or Kubernetes coordinates. */
@@ -198,7 +227,7 @@ function _ParseCleanupProjection(value: Prisma.JsonValue | undefined): RunWorklo
 	if (typeof item["runId"] !== "string" || typeof item["attempt"] !== "number" || typeof item["siloId"] !== "string" || typeof item["agentServiceId"] !== "string" || typeof item["agentRevisionId"] !== "string" || typeof item["namespace"] !== "string" || typeof item["workloadProfile"] !== "string" || typeof item["bootstrapReference"] !== "string") return null;
 	if (item["workloadUid"] !== null && typeof item["workloadUid"] !== "string") return null;
 	if (item["mode"] !== "assigned" && item["mode"] !== "unassigned_orphan") return null;
-	if (item["reason"] !== "cancellation" && item["reason"] !== "dispatch_failure") return null;
+	if (item["reason"] !== "cancellation" && item["reason"] !== "dispatch_failure" && item["reason"] !== "runtime_lease_expired") return null;
 	return { runId: item["runId"], attempt: item["attempt"], siloId: item["siloId"], agentServiceId: item["agentServiceId"], agentRevisionId: item["agentRevisionId"], namespace: item["namespace"], workloadProfile: item["workloadProfile"], bootstrapReference: item["bootstrapReference"], workloadUid: item["workloadUid"], mode: item["mode"], reason: item["reason"] };
 }
 
@@ -207,7 +236,7 @@ function _CleanupClaimIsCurrent(event: OutboxEvent, run: AgentRun, workload: Run
 {
 	return event.kind === RunOutboxEventKind.RunWorkloadCleanupRequested && event.runId === run.id && event.attempt === run.attempt && workload.runId === run.id && workload.attempt === run.attempt
 		&& event.publishedAt === null && event.failedAt === null && event.availableAt.getTime() <= now.getTime() && (event.claimedAt === null || event.claimedAt.getTime() <= now.getTime() - claimLeaseMilliseconds)
-		&& (workload.reason === "dispatch_failure" || run.state === AgentRunState.Cancelling);
+		&& (workload.reason === "dispatch_failure" || workload.reason === "runtime_lease_expired" || run.state === AgentRunState.Cancelling);
 }
 
 /** Validate confirmation syntax before loading durable authority. */
