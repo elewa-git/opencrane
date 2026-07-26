@@ -41,8 +41,13 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				}
 
 				// 3. Reuse a still-active interview; a different refresh may not hijack unreviewed answers.
-				const existing = await transaction.personaInterview.findFirst({ where: { personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, select: { id: true } });
-				if (existing !== null) return command.refreshConfigurationChangeId === null ? { status: "already_in_progress", interviewId: existing.id } as const : { status: "refresh_interview_conflict" } as const;
+				const existing = await transaction.personaInterview.findFirst({ where: { personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, select: { id: true, refreshConfigurationChangeId: true } });
+				if (existing !== null)
+				{
+					return command.refreshConfigurationChangeId === null || existing.refreshConfigurationChangeId === command.refreshConfigurationChangeId
+						? { status: "already_in_progress", interviewId: existing.id } as const
+						: { status: "refresh_interview_conflict" } as const;
+				}
 
 				// 4. Accept only an exact reviewed question-set revision before recording the interview attempt.
 				const questionSet = await transaction.personaQuestionSet.findUnique({ where: { id_version: { id: command.questionSetId, version: command.questionSetVersion } }, select: { state: true } });

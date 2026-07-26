@@ -71,6 +71,21 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		expect(transaction.personaInterview.create).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", userId: "user-1", questionSetId: "onboarding", questionSetVersion: 1 }), select: { id: true } });
 	});
 
+	it("replays the same proposal-bound refresh interview after a lost start response", async function _ReplaysRefreshStart()
+	{
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValue([{ id: "profile-1" }]),
+			personalConfigurationChange: { findFirst: vi.fn().mockResolvedValue({ id: "change-1" }) },
+			personaInterview: { findFirst: vi.fn().mockResolvedValue({ id: "interview-existing", refreshConfigurationChangeId: "change-1" }), create: vi.fn() },
+			personaQuestionSet: { findUnique: vi.fn() },
+		};
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction));
+
+		await expect(repository.startAtomically({ ..._startCommand(), refreshConfigurationChangeId: "change-1" })).resolves.toEqual({ status: "already_in_progress", interviewId: "interview-existing" });
+		expect(transaction.personaInterview.create).not.toHaveBeenCalled();
+		expect(transaction.personaQuestionSet.findUnique).not.toHaveBeenCalled();
+	});
+
 	it("accepts PostgreSQL's in_progress label while appending an answer", async function _acceptsDatabaseLifecycleLabel()
 	{
 		const transaction = {

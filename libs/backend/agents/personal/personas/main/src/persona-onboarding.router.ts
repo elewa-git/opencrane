@@ -61,7 +61,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			response.status(200).json({ interviewId: result.interviewId, state: "in_progress", questions });
+				response.status(200).json({ interviewId: result.interviewId, state: "in_progress", reused: result.outcome === "already_in_progress", questions });
 		}
 		catch (err)
 		{

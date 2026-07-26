@@ -66,6 +66,17 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(dependencies.interviews.startAtomically).toHaveBeenCalledWith(expect.objectContaining({ personaProfileId: "profile-1", refreshConfigurationChangeId: "change-1" }));
 	});
 
+	it("returns the existing questions when a lost refresh-start response is retried", async function _ReplaysRefreshStart()
+	{
+		const dependencies = _dependencies({ interviews: { startAtomically: vi.fn().mockResolvedValue({ status: "already_in_progress", interviewId: "interview-existing" }), recordAnswerAtomically: vi.fn(), completeAtomically: vi.fn() } });
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/refreshes/change-1/interview").send({});
+
+		expect(response.status).toBe(200);
+		expect(response.body).toMatchObject({ interviewId: "interview-existing", state: "in_progress", reused: true });
+		expect(response.body.questions).toHaveLength(1);
+		expect(dependencies.questions.getQuestions).toHaveBeenCalledWith("interview-existing", "profile-1", "user-1");
+	});
+
 	it("rejects a role value that cannot select one reviewed SOUL template", async function _rejectsUnsupportedRole()
 	{
 		const dependencies = _dependencies();

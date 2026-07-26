@@ -33,10 +33,12 @@ server-owned reviewed question set
 **In this flow:** [runs](../../runs/main/README.md) *(runs execute against the persona this activates)*
 
 The interview half locks the profile while it starts, so duplicate browser requests reuse the one
-in-progress interview instead of discarding answers. It locks that interview again for each answer
-and for completion, ensuring a late answer cannot race a completed record. Answers name the exact
-question-set revision and question they answered; completion is refused until every question in that
-reviewed revision has exactly one answer.
+in-progress interview instead of discarding answers. A retry of the same proposal-bound refresh
+returns that interview and its frozen questions again; a different refresh proposal receives a
+conflict instead of hijacking it. The authority locks the interview again for each answer and for
+completion, ensuring a late answer cannot race a completed record. Answers name the exact question-set
+revision and question they answered; completion is refused until every question in that reviewed
+revision has exactly one answer.
 
 The approval half takes one consistent database snapshot and confirms the caller owns the profile;
 the revision is still a `draft`; the interview is `completed`; there are between **three and five**
