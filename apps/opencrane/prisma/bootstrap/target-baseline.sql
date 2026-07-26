@@ -3903,9 +3903,10 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass"; invocation_silo_id TEXT; invocation_state "ActionExecutionState";
+DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin Pending without cancellation evidence'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
@@ -3916,11 +3917,23 @@ BEGIN
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
         IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
         IF NEW."kind" = 'tool_runner' THEN
-            SELECT "silo_id", "state" INTO invocation_silo_id, invocation_state FROM "tool_invocations" WHERE "id" = NEW."tool_invocation_id" FOR UPDATE;
-            IF NEW."tool_invocation_id" IS NULL OR invocation_silo_id IS DISTINCT FROM NEW."silo_id" OR invocation_state IS DISTINCT FROM 'reserved' OR revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'tool-runner SkillWorkload requires same-silo Reserved ToolInvocation and Published revision'; END IF;
+            RAISE EXCEPTION 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority';
         END IF;
     END IF;
     RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
+        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
+          WHERE "state"='pending' AND "skill_revision_id"=NEW."id"
+            AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
+    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" <> 'reserved' THEN
+        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
+          WHERE "state"='pending' AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
+    END IF;
+    RETURN NULL;
 END;
 $$;
 CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -4528,6 +4541,8 @@ CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
 CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
+CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
+CREATE TRIGGER "cancel_ineligible_skill_workloads_on_invocation" AFTER UPDATE OF "state" ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
