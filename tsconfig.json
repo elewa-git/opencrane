@@ -265,6 +265,7 @@
       "@opencrane/state/provider-key/adapter": [
         "./libs/frontend/state/provider-key/adapter/src/index.ts"
       ],
+		"@opencrane/state/assets/adapter": ["./libs/frontend/state/assets/adapter/src/index.ts"],
       "@opencrane/state/tenant/adapter": [
         "./libs/frontend/state/tenant/adapter/src/index.ts"
       ],
