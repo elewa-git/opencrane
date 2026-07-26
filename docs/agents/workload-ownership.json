@@ -98,9 +98,14 @@
       "workloadIds": ["agent-runtime"]
     },
     {
-      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-workload-job.ts",
+      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts",
       "anchor": "kind: \"Job\"",
-      "workloadIds": ["skill-authoring", "tool-runner"]
+      "workloadIds": ["skill-authoring"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["tool-runner"]
     },
     {
       "path": "libs/backend/agents/runtime/controller/src/kubernetes-agent-controller-store.ts",
@@ -272,7 +277,7 @@
       "image": "ghcr.io/italanta/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
       "localOwner": true,
-      "source": { "type": "file", "path": "apps/skill-authoring/project.json", "anchor": "\"name\": \"skill-authoring\"" },
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" },
       "classification": "survivor",
       "reason": "The agent controller will create isolated draft-capability authoring Jobs only after a durable claim exists."
     },
@@ -282,7 +287,7 @@
       "image": "ghcr.io/italanta/opencrane-tool-runner@sha256:<release-digest>",
       "owner": "apps/tool-runner",
       "localOwner": true,
-      "source": { "type": "file", "path": "apps/tool-runner/project.json", "anchor": "\"name\": \"tool-runner\"" },
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" },
       "classification": "survivor",
       "reason": "The agent controller will create isolated capability-bound tool Jobs only after a durable claim and reply protocol exists."
     },

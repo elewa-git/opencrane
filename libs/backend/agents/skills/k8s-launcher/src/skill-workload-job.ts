@@ -1,7 +1,9 @@
 import { createHash } from "node:crypto";
 import type { V1Job } from "@kubernetes/client-node";
 
+import { __BuildSkillAuthoringWorkloadJob } from "./skill-authoring-workload-job.js";
 import type { SkillWorkloadJobAssignment, SkillWorkloadJobProfile } from "./skill-workload-job.types.js";
+import { __BuildToolRunnerWorkloadJob } from "./tool-runner-workload-job.js";
 
 /** Maximum size of the non-authoritative scratch filesystem. */
 const _MAX_SCRATCH_BYTES = 1_073_741_824n;
@@ -65,7 +67,7 @@ function _AssertAssignment(assignment: SkillWorkloadJobAssignment, profile: Skil
 }
 
 /** Derive a selector-safe, collision-resistant one-shot Job name without leaking authority ids. */
-function _JobName(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): string
+export function __SkillWorkloadJobName(assignment: SkillWorkloadJobAssignment, profile: SkillWorkloadJobProfile): string
 {
 	const digest = createHash("sha256").update(`${profile.kind}\u0000${assignment.siloId}\u0000${assignment.jobId}`).digest("hex").slice(0, 24);
 	return `${profile.kind === "authoring" ? "skill-author" : "tool-run"}-${digest}`;
@@ -78,35 +80,31 @@ export function __BuildGovernedSkillWorkloadJob(assignment: SkillWorkloadJobAssi
 	_AssertProfile(profile);
 	_AssertAssignment(assignment, profile);
 
-	// 2. Derive metadata without placing source, artifact bytes, arguments, or credentials in the manifest.
-	const name = _JobName(assignment, profile);
-	const component = profile.kind === "authoring" ? "skill-authoring" : "tool-runner";
-	const annotations = { "opencrane.ai/silo-id": assignment.siloId, "opencrane.ai/job-id": assignment.jobId, "opencrane.ai/capability-reference": assignment.capabilityReference };
+	// 2. Select one app-owned Job class so the workload registry can inspect distinct construction anchors.
+	return profile.kind === "authoring" ? __BuildSkillAuthoringWorkloadJob(assignment, profile) : __BuildToolRunnerWorkloadJob(assignment, profile);
+}
 
-	// 3. Return a zero-retry, terminally cleaned Job; its worker exchanges the opaque reference at runtime.
+/** Build the shared hardened Job spec after an app-specific function constructed the Job envelope. */
+export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, component: "skill-authoring" | "tool-runner", name: string, annotations: Readonly<Record<string, string>>): NonNullable<V1Job["spec"]>
+{
 	return {
-		apiVersion: "batch/v1",
-		kind: "Job",
-		metadata: { name, namespace: assignment.namespace, labels: { "app.kubernetes.io/name": `opencrane-${component}`, "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
-		spec: {
-			suspend: true,
-			backoffLimit: 0,
-			completions: 1,
-			parallelism: 1,
-			activeDeadlineSeconds: profile.activeDeadlineSeconds,
-			ttlSecondsAfterFinished: 0,
-			template: {
-				metadata: { labels: { "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
-				spec: {
-					serviceAccountName: profile.serviceAccountName,
-					automountServiceAccountToken: false,
-					enableServiceLinks: false,
-					restartPolicy: "Never",
-					terminationGracePeriodSeconds: 0,
-					securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } },
-					containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_CAPABILITY_REFERENCE", valueFrom: { fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } } }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
-					volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
-				},
+		suspend: true,
+		backoffLimit: 0,
+		completions: 1,
+		parallelism: 1,
+		activeDeadlineSeconds: profile.activeDeadlineSeconds,
+		ttlSecondsAfterFinished: 0,
+		template: {
+			metadata: { labels: { "app.kubernetes.io/component": component, "opencrane.ai/skill-workload": name }, annotations },
+			spec: {
+				serviceAccountName: profile.serviceAccountName,
+				automountServiceAccountToken: false,
+				enableServiceLinks: false,
+				restartPolicy: "Never",
+				terminationGracePeriodSeconds: 0,
+				securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } },
+				containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_CAPABILITY_REFERENCE", valueFrom: { fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } } }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
+				volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
 			},
 		},
 	};

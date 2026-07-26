@@ -27,7 +27,7 @@ shape)* · OpenCrane *(future capability exchange and result authority)*
 ## Public surface
 
 - Helm chart — restricted namespace, `tool-runner-default` ServiceAccount, quota, and default-deny policy.
-- `values.yaml` — only the namespace name and standard chart labels; controller-owned image,
+- `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; controller-owned image,
   capability, resource, and lifecycle values stay unavailable until durable claims exist.
 
 ## Boundary
