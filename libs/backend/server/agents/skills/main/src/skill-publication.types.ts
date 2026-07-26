@@ -33,6 +33,10 @@ export interface PublishSkillRevisionCommand
 /** Consistent publication authority snapshot. */
 export interface SkillPublicationSnapshot
 {
+	/** Logical skill lifecycle state at the instant the publication preflight reads it. */
+	readonly skillState: "active" | "retired";
+	/** Current published revision observed before the compare-and-swap publication attempt. */
+	readonly currentRevisionId: string | null;
 	/** Current SkillRevision lifecycle state. */
 	readonly state: "draft" | "review" | "published" | "rejected" | "revoked";
 	/** Whether the referenced artifact is still published. */
@@ -51,11 +55,11 @@ export interface SkillAuthorityRepository
 {
 	/** Loads revision and artifact authority from one consistent snapshot. */
 	getPublicationSnapshot(command: PublishSkillRevisionCommand): Promise<SkillPublicationSnapshot | null>;
-	/** Publishes and advances the current pointer only while snapshot facts still match. */
-	publishAtomically(command: PublishSkillRevisionCommand): Promise<AtomicPublishSkillRevisionResult>;
+	/** Publishes and advances the pointer only when its observed current revision remains unchanged. */
+	publishAtomically(command: PublishSkillRevisionCommand, expectedCurrentRevisionId: string | null): Promise<AtomicPublishSkillRevisionResult>;
 }
 
 /** Stable result of skill publication. */
 export type PublishSkillRevisionResult =
 	| { readonly outcome: "published" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "not_in_review" | "artifact_unpublished" | "artifact_mismatch" | "review_evidence_missing" | "conflict" };
+	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "skill_retired" | "not_in_review" | "artifact_unpublished" | "artifact_mismatch" | "review_evidence_missing" | "conflict" };
