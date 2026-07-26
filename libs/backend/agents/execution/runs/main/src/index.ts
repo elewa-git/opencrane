@@ -1,6 +1,6 @@
 export { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "./run-authority.js";
 export { __PrepareChildRunAdmission } from "./child-run-admission.js";
-export { PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository.js";
+export { __DeliverChildRunCompletionInTransaction, PrismaChildRunCompletionRepository } from "./prisma-child-run-completion-repository.js";
 export { PrismaChildRunReservationRepository } from "./prisma-child-run-reservation-repository.js";
 export { __DigestRunInputSnapshot } from "./run-input-snapshot-digest.js";
 export type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";

@@ -138,6 +138,9 @@ uncertainty fails closed.
   sibling allocations, and atomically persist the child run, snapshot, reservation, and dispatch.
 - `PrismaChildRunCompletionRepository` — append one terminal child outcome to its direct parent's
   conversation stream, or durably record why no parent stream can receive it.
+- `__DeliverChildRunCompletionInTransaction(transaction, command)` — use the same delivery fence
+  from a terminal-state transaction, so cancellation and dispatch failures cannot leave a child
+  closed without its parent notification.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial

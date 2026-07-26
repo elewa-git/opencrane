@@ -5,6 +5,7 @@ import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceSt
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
+import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer, ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, PrunePublishedRunOutboxResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
@@ -467,6 +468,7 @@ async function _TerminalizeUndispatchableAttempt(transaction: Prisma.Transaction
 	const failedEvent = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount: event.deliveryCount + 1, failedAt: claimedAt, failureCode } });
 	const failedRun = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: { in: [AgentRunState.Accepted, AgentRunState.Queued] } }, data: { state: AgentRunState.Failed, terminalReason, finishedAt: now } });
 	if (failedEvent.count !== 1 || failedRun.count !== 1) throw new Error("undispatchable run attempt lost its terminal failure fence");
+	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 
 	// 2. Conversation-bound runs require their contiguous canonical terminal event in this transaction.
 	if (run.threadId !== null)
@@ -703,6 +705,7 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 	const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
 	const failed = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount: event.deliveryCount + 1, failedAt: claimedAt, failureCode } });
 	if ((assignment !== null && revoked.count !== 1) || failedRun.count !== 1 || failed.count !== 1) throw new Error("poisoned run workload release lost its terminal failure fence");
+	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 
 	// 3. A committed assignment always receives exact physical cleanup authority; TTL cannot remove a suspended Job.
 	if (assignment !== null)

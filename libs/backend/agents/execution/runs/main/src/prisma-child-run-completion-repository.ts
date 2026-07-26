@@ -27,32 +27,7 @@ export class PrismaChildRunCompletionRepository implements ChildRunCompletionRep
 		{
 			return await this.prisma.$transaction(async function _deliver(transaction): Promise<ChildRunCompletionResult>
 			{
-				// 1. Lock immutable child evidence before deriving any cross-run notification.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.childRunId}, 0))`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.childRunId} FOR UPDATE`);
-				const child = await transaction.agentRun.findUnique({ where: { id: command.childRunId } });
-				if (child === null) return { outcome: "ignored", reason: "child_not_found" };
-				if (!_isTerminal(child.state)) return { outcome: "ignored", reason: "child_not_terminal" };
-				if (child.parentRunId === null) return { outcome: "denied", reason: "not_child_run" };
-				const replay = await transaction.childRunCompletionDelivery.findUnique({ where: { childRunId: child.id } });
-				if (replay !== null) return _replay(child.parentRunId, replay);
-
-				// 2. Lock the direct parent stream before choosing its next sequence or terminal outcome.
-				await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${child.parentRunId}, 0))`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${child.parentRunId} FOR UPDATE`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "child_run_id" FROM "child_run_reservations" WHERE "child_run_id" = ${child.id} FOR UPDATE`);
-				const parent = await transaction.agentRun.findUnique({ where: { id: child.parentRunId } });
-				const reservation = await transaction.childRunReservation.findUnique({ where: { childRunId: child.id } });
-				if (parent === null || reservation === null || !_hasExactLineage(child, parent, reservation)) return { outcome: "denied", reason: "lineage_conflict" };
-				if (parent.threadId === null) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.NoParentStream);
-				const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: parent.id }, _max: { sequence: true } });
-				if (_hasTerminalEvent(await transaction.conversationRunEvent.findMany({ where: { runId: parent.id, type: { in: ["run.completed", "run.failed", "run.cancelled"] } }, select: { type: true } }))) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.ParentStreamTerminal);
-
-				// 3. Append the parent-visible event and ledger entry together, so a retry cannot create a second sequence.
-				const sequence = (maximum._max.sequence ?? 0) + 1;
-				await transaction.childRunCompletionDelivery.create({ data: { childRunId: child.id, parentRunId: parent.id, parentEventSequence: sequence, outcome: ChildRunCompletionDeliveryOutcome.Delivered } });
-				await transaction.conversationRunEvent.create({ data: { runId: parent.id, sequence, type: _eventType(child.state), payload: { childRunId: child.id, childAttempt: child.attempt, childState: _state(child.state), terminalReason: child.terminalReason, finishedAt: child.finishedAt?.toISOString() ?? null }, occurredAt: new Date() } });
-				return { outcome: "delivered", parentRunId: parent.id, parentEventSequence: sequence };
+				return __DeliverChildRunCompletionInTransaction(transaction, command);
 			});
 		}
 		catch (error)
@@ -61,6 +36,38 @@ export class PrismaChildRunCompletionRepository implements ChildRunCompletionRep
 			return { outcome: "denied", reason: "persistence_unavailable" };
 		}
 	}
+}
+
+/** Delivers a terminal child through an already-open authority transaction. */
+export async function __DeliverChildRunCompletionInTransaction(transaction: Prisma.TransactionClient, command: ChildRunCompletionCommand): Promise<ChildRunCompletionResult>
+{
+	if (command.childRunId.trim().length === 0) return { outcome: "denied", reason: "not_child_run" };
+	// 1. Lock immutable child evidence before deriving any cross-run notification.
+	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${command.childRunId}, 0))`);
+	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${command.childRunId} FOR UPDATE`);
+	const child = await transaction.agentRun.findUnique({ where: { id: command.childRunId } });
+	if (child === null) return { outcome: "ignored", reason: "child_not_found" };
+	if (!_isTerminal(child.state)) return { outcome: "ignored", reason: "child_not_terminal" };
+	if (child.parentRunId === null) return { outcome: "denied", reason: "not_child_run" };
+	const replay = await transaction.childRunCompletionDelivery.findUnique({ where: { childRunId: child.id } });
+	if (replay !== null) return _replay(child.parentRunId, replay);
+
+	// 2. Lock the direct parent stream before choosing its next sequence or terminal outcome.
+	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${child.parentRunId}, 0))`);
+	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${child.parentRunId} FOR UPDATE`);
+	await transaction.$queryRaw(Prisma.sql`SELECT "child_run_id" FROM "child_run_reservations" WHERE "child_run_id" = ${child.id} FOR UPDATE`);
+	const parent = await transaction.agentRun.findUnique({ where: { id: child.parentRunId } });
+	const reservation = await transaction.childRunReservation.findUnique({ where: { childRunId: child.id } });
+	if (parent === null || reservation === null || !_hasExactLineage(child, parent, reservation)) return { outcome: "denied", reason: "lineage_conflict" };
+	if (parent.threadId === null) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.NoParentStream);
+	const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: parent.id }, _max: { sequence: true } });
+	if (_hasTerminalEvent(await transaction.conversationRunEvent.findMany({ where: { runId: parent.id, type: { in: ["run.completed", "run.failed", "run.cancelled"] } }, select: { type: true } }))) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.ParentStreamTerminal);
+
+	// 3. Write the ledger before its matching parent event; the deferred database constraint makes the pair inseparable.
+	const sequence = (maximum._max.sequence ?? 0) + 1;
+	await transaction.childRunCompletionDelivery.create({ data: { childRunId: child.id, parentRunId: parent.id, parentEventSequence: sequence, outcome: ChildRunCompletionDeliveryOutcome.Delivered } });
+	await transaction.conversationRunEvent.create({ data: { runId: parent.id, sequence, type: _eventType(child.state), payload: { childRunId: child.id, childAttempt: child.attempt, childState: _state(child.state), terminalReason: child.terminalReason, finishedAt: child.finishedAt?.toISOString() ?? null }, occurredAt: new Date() } });
+	return { outcome: "delivered", parentRunId: parent.id, parentEventSequence: sequence };
 }
 
 /** Records a durable reason why the parent cannot receive a child completion event. */

@@ -4,6 +4,7 @@ import { AgentRunState, AgentRunTerminalReason, Prisma, RunOutboxEventKind, Work
 
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
+import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 
 /** Non-locking cleanup coordinates used only to establish canonical lock order. */
@@ -226,6 +227,7 @@ async function _FinalizeCancelledRun(transaction: Prisma.TransactionClient, run:
 {
 	const finalized = await transaction.agentRun.updateMany({ where: { id: run.id, attempt: run.attempt, state: AgentRunState.Cancelling }, data: { state: AgentRunState.Cancelled, terminalReason: AgentRunTerminalReason.UserCancelled, finishedAt: now } });
 	if (finalized.count !== 1) throw new Error("run cancellation lost its cleanup confirmation fence");
+	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 	if (run.threadId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
