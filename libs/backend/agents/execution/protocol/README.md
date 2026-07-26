@@ -114,9 +114,11 @@ browser connection therefore cannot drop an instruction or force a model turn to
 
 ## Dependency direction
 
-Tagged `scope:execution-protocol` (`layer:backend`): it may depend on runtime-controller ports,
-agent, execution-run, personal-conversation, authorization, the three injected transport-port scopes, and shared
-contracts. It never imports an app, concrete transport adapter, model driver, or legacy runtime package.
+Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent and execution-input
+contracts, authorization, the integration authority, the three injected transport-port scopes, and
+shared contracts. The integration edge is read-only: it resolves and rechecks the revision's live
+custody reference before the Obot invocation port executes an allowed tool. The package never imports
+an app, a concrete transport adapter, a model driver, or a legacy runtime package.
 
 ## See also
 

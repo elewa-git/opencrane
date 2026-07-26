@@ -40,12 +40,15 @@ models, credentials, or a neighbouring scope.
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
 carries every executable field (a positive version, a digest, prompt and registered model definition,
-and positive turn/token/duration budgets). The model is a foreign-key reference to the gateway-owned
-catalogue, so an author cannot turn an arbitrary provider alias into executable behaviour. A model
-is available only when it is platform-global or belongs to the service's tenant scope; the database
-checks the same rule as the application. The publish and the pointer flip happen as a single compare-and-swap,
-so two people publishing at once cannot both win — the second sees a conflict, and a crash never
-leaves a half-published service. Anything missing or stale is refused with a plain reason.
+and positive turn/token/duration budgets). Every assigned integration and allowed tool name must also
+be a non-empty, unambiguous identifier: colons are rejected because the runtime compiles the frozen
+assignment into `integration:<integrationId>:<toolName>`. The model is a foreign-key reference to the
+gateway-owned catalogue, so an author cannot turn an arbitrary provider alias into executable
+behaviour. A model is available only when it is platform-global or belongs to the service's tenant
+scope; the database checks the same rule as the application. The publish and the pointer flip happen
+as a single compare-and-swap, so two people publishing at once cannot both win — the second sees a
+conflict, and a crash never leaves a half-published service. Anything missing or stale is refused
+with a plain reason.
 
 ## Public surface
 
