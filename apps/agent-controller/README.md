@@ -19,6 +19,12 @@ Secrets or choose a worker identity in either skill namespace. A separate fail-c
 policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
 permission to create arbitrary work.
 
+Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
+through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
+Service; it does not inherit the controller's configurable runtime endpoint. The worker can only
+acknowledge that reference, and the server TokenReviews the exact first worker Pod before consuming
+it once.
+
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
 only projects that decision into the one restricted runtime namespace named by its RoleBinding.
@@ -86,7 +92,8 @@ outside the app root.
   immediately, and each retry receives a fresh deadline.
 - `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
-  profile, each using a class-bound ServiceAccount and projected-token audience.
+  profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
+  file paths and same-silo acknowledgement URL.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

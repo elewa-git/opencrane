@@ -6,11 +6,11 @@
 
 This deployment-only package owns the isolated namespace and zero-RBAC identity for one-off Python
 Jobs that validate candidate skill bundles. It does not publish a skill, execute a tenant tool, store
-bundle bytes, or run a standing service. A later controller claim creates each Job from the hardened
-builder using only a draft capability.
+bundle bytes, or run a standing service. The controller creates each Job from the hardened builder
+only after a durable workload claim and exact Pod registration.
 
 ```
- OpenCrane control plane ── durable claim (later slice) ──► agent controller
+ OpenCrane control plane ── durable claim ──► agent controller
                                                             │ creates a suspended Job
                                                             ▼
                                                 skill-authoring namespace
@@ -20,15 +20,15 @@ builder using only a draft capability.
                                                 bounded validation result
 ```
 
-**In this flow:** [agent controller](../agent-controller/README.md) *(future sole Kubernetes
-mutator)* · [skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job
-shape)* · OpenCrane *(future capability exchange and result authority)*
+**In this flow:** [agent controller](../agent-controller/README.md) *(sole Kubernetes mutator)* ·
+[skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job shape)* ·
+OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
 - Helm chart — restricted namespace, `skill-authoring-default` ServiceAccount, quota, and default-deny policy.
-- `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, capability,
-  resource, and lifecycle values remain controller-owned until the durable claim slice enables them.
+- `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; image, resource, and
+  lifecycle values remain controller-owned.
 
 ## Boundary
 

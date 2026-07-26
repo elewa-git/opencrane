@@ -6,11 +6,11 @@
 
 This deployment-only package owns the isolated namespace and zero-RBAC identity for one-off Python
 Jobs that run an already-authorized tenant tool. It does not accept user traffic, invoke a tool, or
-choose network destinations. The later durable worker protocol will create exact Jobs through the
-agent controller and capability-bound policy.
+choose network destinations. The controller creates exact Jobs through the durable claim and
+capability-bound policy.
 
 ```
- OpenCrane control plane ── durable claim (later slice) ──► agent controller
+ OpenCrane control plane ── durable claim ──► agent controller
                                                             │ creates a suspended Job
                                                             ▼
                                                     tool-runner namespace
@@ -20,15 +20,15 @@ agent controller and capability-bound policy.
                                                     bounded tool-result reply
 ```
 
-**In this flow:** [agent controller](../agent-controller/README.md) *(future sole Kubernetes
-mutator)* · [skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job
-shape)* · OpenCrane *(future capability exchange and result authority)*
+**In this flow:** [agent controller](../agent-controller/README.md) *(sole Kubernetes mutator)* ·
+[skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job shape)* ·
+OpenCrane *(bootstrap acknowledgement authority)*
 
 ## Public surface
 
 - Helm chart — restricted namespace, `tool-runner-default` ServiceAccount, quota, and default-deny policy.
 - `values.yaml` — namespace, worker ServiceAccount, and quota defaults only; controller-owned image,
-  capability, resource, and lifecycle values stay unavailable until durable claims exist.
+  resource, and lifecycle values stay outside the tenant-controlled chart contract.
 
 ## Boundary
 

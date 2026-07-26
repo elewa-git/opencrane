@@ -23,6 +23,12 @@ export interface SkillWorkloadJobProfile
 	readonly serviceAccountName: string;
 	/** Audience for the sole projected capability token mounted into the Job. */
 	readonly capabilityTokenAudience: string;
+	/** Fixed same-silo internal route where the worker may acknowledge its bootstrap. */
+	readonly bootstrapUrl: string;
+	/** Fixed read-only projected-token path used by the worker client. */
+	readonly capabilityTokenPath: string;
+	/** Fixed read-only downward-API reference path used by the worker client. */
+	readonly bootstrapReferencePath: string;
 	/** Bounded non-authoritative scratch volume quantity. */
 	readonly scratchSize: string;
 	/** Maximum wall-clock lifetime of the one-shot Job. */

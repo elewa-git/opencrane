@@ -36,6 +36,7 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 | `libs/server/_infra/agent-runtime-stream` | [README](../../libs/server/_infra/agent-runtime-stream/README.md) | Runtime-initiated projected-token HTTP/SSE transport. It never owns assignments or durable run state. |
 | `libs/backend/agents/runtime/k8s-launcher` | [README](../../libs/backend/agents/runtime/k8s-launcher/README.md) | Pure suspended-Job projection; Helm owns the dedicated runtime namespace and its network policy. |
 | `libs/backend/agents/skills/k8s-launcher` | [README](../../libs/backend/agents/skills/k8s-launcher/README.md) | Pure hardened Job projection for isolated skill authoring and tool execution; the controller remains the only Kubernetes mutator. |
+| `libs/backend/agents/skills/worker` | [README](../../libs/backend/agents/skills/worker/README.md) | Dependency-free Python bootstrap acknowledgement client for the governed authoring and tool-runner worker-image build. |
 | `libs/backend/agents/runtime/controller` | [README](../../libs/backend/agents/runtime/controller/README.md) | Crash-safe controller orchestration: exact assignment, conditional Job release, and strict first-Pod registration. Composed only by `apps/agent-controller`. |
 | `libs/server/_infra/tenant-hosting` | — | GCP and on-prem tenant-storage adapters owned by the OpenCrane server runtime; the app retains only factory composition. |
 | _(libs/onboarding)_ | — | **Empty placeholder** — not registered as an NX project and has no code yet. |

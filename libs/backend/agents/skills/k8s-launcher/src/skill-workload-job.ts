@@ -16,6 +16,25 @@ const _MAX_CPU_MILLICORES = 2_000;
 
 /** Maximum memory limit granted to one untrusted governed-skill Job in bytes. */
 const _MAX_MEMORY_BYTES = 2_147_483_648n;
+/** Fixed read-only projected token path for the bootstrap worker. */
+const _CAPABILITY_TOKEN_PATH = "/var/run/opencrane/tokens/capability.token";
+/** Fixed read-only downward-API bootstrap reference path. */
+const _BOOTSTRAP_REFERENCE_PATH = "/var/run/opencrane/bootstrap/reference";
+
+/** Validate the one deployment-owned same-silo bootstrap endpoint. */
+function _IsBootstrapUrl(value: string): boolean
+{
+	try
+	{
+		const parsed = new URL(value);
+		const port = Number(parsed.port);
+		return parsed.protocol === "http:" && /^[a-z0-9]([a-z0-9.-]*[a-z0-9])?\.svc\.cluster\.local$/.test(parsed.hostname) && Number.isSafeInteger(port) && port >= 1 && port <= 65_535 && parsed.pathname === "/api/internal/agent-runtime" && !parsed.username && !parsed.password && !parsed.search && !parsed.hash;
+	}
+	catch
+	{
+		return false;
+	}
+}
 
 /** Validate an opaque identifier before it is projected into Kubernetes metadata. */
 function _IsBoundedCoordinate(value: string): boolean
@@ -51,9 +70,9 @@ function _AssertProfile(profile: SkillWorkloadJobProfile): void
 	const limitedCpu = _ParseCpuMillis(String(profile.resources.limits?.cpu ?? ""));
 	const requestedMemory = _ParseBinaryBytes(String(profile.resources.requests?.memory ?? ""));
 	const limitedMemory = _ParseBinaryBytes(String(profile.resources.limits?.memory ?? ""));
-	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
+	if (!/^[a-z0-9][a-z0-9._:/-]*@sha256:[a-f0-9]{64}$/.test(profile.image) || !["Always", "IfNotPresent", "Never"].includes(profile.imagePullPolicy) || profile.serviceAccountName !== expectedServiceAccountName || profile.capabilityTokenAudience !== expectedAudience || !_IsBootstrapUrl(profile.bootstrapUrl) || profile.capabilityTokenPath !== _CAPABILITY_TOKEN_PATH || profile.bootstrapReferencePath !== _BOOTSTRAP_REFERENCE_PATH || profile.namespace.length > 63 || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.namespace) || profile.namespace === profile.serverNamespace || !scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.activeDeadlineSeconds > _MAX_ACTIVE_DEADLINE_SECONDS || profile.ttlSecondsAfterFinished !== 0 || !requestedCpu || !limitedCpu || requestedCpu > limitedCpu || limitedCpu > _MAX_CPU_MILLICORES || !requestedMemory || !limitedMemory || requestedMemory > limitedMemory || limitedMemory > _MAX_MEMORY_BYTES)
 	{
-		throw new Error("governed skill Job profile requires fixed audience, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
+		throw new Error("governed skill Job profile requires one fixed bootstrap endpoint, fixed audience and paths, class-bounded identity, immutable image, bounded resources, scratch, and lifetime");
 	}
 }
 
@@ -103,8 +122,8 @@ export function __BuildSkillWorkloadJobSpec(profile: SkillWorkloadJobProfile, co
 				restartPolicy: "Never",
 				terminationGracePeriodSeconds: 0,
 				securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, seccompProfile: { type: "RuntimeDefault" } },
-				containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_CAPABILITY_REFERENCE", valueFrom: { fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } } }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
-				volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
+				containers: [{ name: component, image: profile.image, imagePullPolicy: profile.imagePullPolicy, securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true }, env: [{ name: "OPENCRANE_SKILL_BOOTSTRAP_URL", value: profile.bootstrapUrl }, { name: "OPENCRANE_SKILL_TOKEN_PATH", value: profile.capabilityTokenPath }, { name: "OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH", value: profile.bootstrapReferencePath }], resources: structuredClone(profile.resources), volumeMounts: [{ name: "capability-token", mountPath: "/var/run/opencrane/tokens", readOnly: true }, { name: "bootstrap-reference", mountPath: "/var/run/opencrane/bootstrap", readOnly: true }, { name: "scratch", mountPath: "/tmp" }] }],
+				volumes: [{ name: "capability-token", projected: { defaultMode: 0o440, sources: [{ serviceAccountToken: { path: "capability.token", audience: profile.capabilityTokenAudience, expirationSeconds: 600 } }] } }, { name: "bootstrap-reference", downwardAPI: { defaultMode: 0o440, items: [{ path: "reference", fieldRef: { fieldPath: "metadata.annotations['opencrane.ai/capability-reference']" } }] } }, { name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } }],
 			},
 		},
 	};

@@ -22,15 +22,15 @@ the only process allowed to submit its result to Kubernetes.
 ```
 
 **In this flow:** [skill catalog authority](../../../server/agents/skills/main/README.md) ·
-[agent controller](../../../../../apps/agent-controller/README.md) *(future sole Job mutator once
-durable claims grant it narrow RBAC)* · [agent runtime launcher](../../runtime/k8s-launcher/README.md).
+[agent controller](../../../../../apps/agent-controller/README.md) *(sole Job mutator with narrow
+RBAC)* · [agent runtime launcher](../../runtime/k8s-launcher/README.md).
 
 It guarantees a suspended, zero-retry, terminally cleaned, non-privileged Job with a read-only root
 filesystem, bounded temporary scratch space, no auto-mounted service-account token, and no source
-code, artifact bytes, arguments, or credentials embedded in the manifest. A later controller slice
-may release it only after it has durably committed the exact Kubernetes identity and received a
-narrow workload-class RBAC/profile grant. The only input it projects is an opaque capability
-reference for later exchange by a worker protocol.
+code, artifact bytes, arguments, or credentials embedded in the manifest. The controller releases it
+only after it has durably committed the exact Kubernetes identity. The Job receives an audience-bound
+projected token and an opaque bootstrap reference in separate read-only files; the worker can use them
+only to acknowledge its own bootstrap endpoint.
 
 ## Public surface
 
@@ -44,7 +44,7 @@ The agent controller consumes this builder. It does not make a tool executable, 
 ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
 Malformed identity, image, lifetime, namespace, resource, or bootstrap-reference inputs fail before
 Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so durable workload
-identifiers are never copied into the Job annotation.
+identifiers are never copied into the Job annotation or environment.
 
 ## Dependency direction
 

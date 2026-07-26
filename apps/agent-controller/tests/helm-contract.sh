@@ -13,11 +13,12 @@ BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
 RUNTIME_QUOTA="$(mktemp)"
 ADMISSION="$(mktemp)"
+SKILL_URL_OVERRIDE="$(mktemp)"
 SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 
 # The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
 # this contract always renders the source template under test without refreshing remote dependencies.
@@ -41,6 +42,7 @@ render_enabled() {
 
 render_enabled > "$MANIFEST"
 render_enabled --set agentController.enabled=false > "$DISABLED"
+render_enabled --set-string agentController.openCraneInternalUrl=http://override.example:8081 > "$SKILL_URL_OVERRIDE"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
@@ -153,12 +155,28 @@ grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq "object.spec.suspend == true" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].name == 'tool-runner'" "$ADMISSION"
-grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'] == 'skill-workload-v1:' + object.metadata.annotations['opencrane.ai/job-id']" "$ADMISSION"
+grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'].matches('^skill-bootstrap-v1_[a-f0-9]{64}$')" "$ADMISSION"
 grep -Fq "object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
 grep -Fq 'object.spec.template.metadata.labels.size() == 2' "$ADMISSION"
 grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload']" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/italanta/opencrane-skill-authoring@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/italanta/opencrane-tool-runner@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env.size() == 3" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/capability-reference']\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[2].name == 'scratch'" "$ADMISSION"
+grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime'
+if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://override.example:8081'; then
+  echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2
+  exit 1
+fi
+if grep -Fq 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' "$ADMISSION"; then
+  echo "governed worker admission must project its opaque reference through a read-only file" >&2
+  exit 1
+fi
 if grep -Fq 'request.subResource' "$ADMISSION"; then
   echo "Job-only admission must not dereference the optional subResource request field" >&2
   exit 1

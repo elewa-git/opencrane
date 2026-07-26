@@ -53,6 +53,7 @@
 {{- end -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
 {{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
+{{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
@@ -250,7 +251,7 @@ spec:
             - name: AGENT_CONTROLLER_PROFILES_JSON
               value: {{ dict .Values.agentController.runtimeProfile.name (dict "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
-              value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
+              value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
           volumeMounts:
             - name: opencrane-token
@@ -473,7 +474,7 @@ spec:
         object.metadata.annotations.size() == 3 &&
         object.metadata.annotations['opencrane.ai/silo-id'].size() > 0 &&
         object.metadata.annotations['opencrane.ai/job-id'].size() > 0 &&
-        object.metadata.annotations['opencrane.ai/capability-reference'] == 'skill-workload-v1:' + object.metadata.annotations['opencrane.ai/job-id'] &&
+        object.metadata.annotations['opencrane.ai/capability-reference'].matches('^skill-bootstrap-v1_[a-f0-9]{64}$') &&
         (!has(object.metadata.ownerReferences) || object.metadata.ownerReferences.size() == 0) &&
         (!has(object.metadata.finalizers) || object.metadata.finalizers.size() == 0) &&
         (!has(object.metadata.generateName) || object.metadata.generateName == '')
@@ -493,7 +494,7 @@ spec:
           object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.cpu | toString | toJson }} &&
           object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillWorkloadProfiles.authoring.resources.limits.memory | toString | toJson }} &&
           object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-skill-authoring' &&
-          quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) ||
+          quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.authoring.scratchSize | toJson }})) == 0) ||
          (object.metadata.namespace == {{ $toolRunnerNamespace | toJson }} &&
           object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds }} &&
         object.spec.template.spec.serviceAccountName == 'tool-runner-default' &&
@@ -506,7 +507,7 @@ spec:
           object.spec.template.spec.containers[0].resources.limits.cpu == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.limits.cpu | toString | toJson }} &&
           object.spec.template.spec.containers[0].resources.limits.memory == {{ .Values.agentController.skillWorkloadProfiles.toolRunner.resources.limits.memory | toString | toJson }} &&
           object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-tool-runner' &&
-          quantity(object.spec.template.spec.volumes[1].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize | toJson }})) == 0)) &&
+          quantity(object.spec.template.spec.volumes[2].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize | toJson }})) == 0)) &&
         object.spec.template.spec.containers.size() == 1 &&
         (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
         (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
@@ -530,22 +531,34 @@ spec:
         !has(object.spec.template.spec.containers[0].readinessProbe) &&
         !has(object.spec.template.spec.containers[0].startupProbe) &&
         !has(object.spec.template.spec.containers[0].envFrom) &&
-        object.spec.template.spec.containers[0].env.size() == 1 &&
-        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' &&
-        object.spec.template.spec.containers[0].env[0].valueFrom.fieldRef.fieldPath == "metadata.annotations['opencrane.ai/capability-reference']" &&
-        object.spec.template.spec.containers[0].volumeMounts.size() == 2 &&
+        object.spec.template.spec.containers[0].env.size() == 3 &&
+        object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL' &&
+        object.spec.template.spec.containers[0].env[0].value == {{ $skillBootstrapUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH' &&
+        object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/capability.token' &&
+        object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH' &&
+        object.spec.template.spec.containers[0].env[2].value == '/var/run/opencrane/bootstrap/reference' &&
+        object.spec.template.spec.containers[0].volumeMounts.size() == 3 &&
         object.spec.template.spec.containers[0].volumeMounts[0].name == 'capability-token' &&
         object.spec.template.spec.containers[0].volumeMounts[0].mountPath == '/var/run/opencrane/tokens' &&
         object.spec.template.spec.containers[0].volumeMounts[0].readOnly == true &&
-        object.spec.template.spec.containers[0].volumeMounts[1].name == 'scratch' &&
-        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/tmp' &&
-        object.spec.template.spec.volumes.size() == 2 &&
+        object.spec.template.spec.containers[0].volumeMounts[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].mountPath == '/var/run/opencrane/bootstrap' &&
+        object.spec.template.spec.containers[0].volumeMounts[1].readOnly == true &&
+        object.spec.template.spec.containers[0].volumeMounts[2].name == 'scratch' &&
+        object.spec.template.spec.containers[0].volumeMounts[2].mountPath == '/tmp' &&
+        object.spec.template.spec.volumes.size() == 3 &&
         object.spec.template.spec.volumes[0].name == 'capability-token' &&
         object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
         object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
         object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'capability.token' &&
         object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == 600 &&
-        object.spec.template.spec.volumes[1].name == 'scratch' &&
+        object.spec.template.spec.volumes[1].name == 'bootstrap-reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].path == 'reference' &&
+        object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == "metadata.annotations['opencrane.ai/capability-reference']" &&
+        object.spec.template.spec.volumes[2].name == 'scratch' &&
         object.spec.template.metadata.labels.size() == 2 &&
         object.spec.template.metadata.labels['app.kubernetes.io/component'] == object.metadata.labels['app.kubernetes.io/component'] &&
         object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload'] &&
