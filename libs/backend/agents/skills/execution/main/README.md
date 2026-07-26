@@ -27,8 +27,9 @@ already projected into the Job and creates the one-use bootstrap record. This or
 safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
 cannot attach a different Job or replace its reference.
 
-It does not create Kubernetes resources, exchange worker capabilities, read ArtifactStore bytes, or
-complete tool invocations. Those responsibilities remain downstream of the durable authority.
+It does not create Kubernetes resources, issue worker capabilities, read ArtifactStore bytes, or
+complete tool invocations. A released worker may acknowledge its one-use bootstrap only after its
+projected-token identity matches the canonical Pod UID recorded for the Job.
 
 ## Public surface
 
@@ -36,13 +37,17 @@ complete tool invocations. Those responsibilities remain downstream of the durab
 - `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID and opaque-reference fence.
 - `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
+- `__CreateSkillWorkloadBootstrapRouter` — consumes one opaque bootstrap reference only for the
+  exact TokenReview-confirmed worker Pod.
 
 ## Boundary
 
 The controller is the sole Kubernetes mutator. A worker never receives permission to alter this
 record, so retries, crash recovery, and future replies all start from Postgres rather than a Job.
-The route rejects every identity except the controller's dedicated Kubernetes ServiceAccount, and it
-accepts no caller-selected namespace, image, capability, or Job profile.
+The controller route rejects every identity except the controller's dedicated Kubernetes
+ServiceAccount, and it accepts no caller-selected namespace, image, capability, or Job profile. The
+worker acknowledgement route separately TokenReviews the audience selected by the durable bootstrap,
+then compares namespace, ServiceAccount, and canonical Pod UID before it consumes the one-use hash.
 
 ## Dependency direction
 
@@ -57,7 +62,7 @@ enforces its pending → assigned state fence, monotonic delivery generation, im
 terminal cancellation independently of this TypeScript adapter. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
-the controller-registered consuming Pod UID. The later worker exchange may consume that record, but cannot turn it into a
+the controller-registered canonical worker Pod UID. The later worker exchange may consume that record, but cannot turn it into a
 general artifact or runtime credential.
 
 ## See also
