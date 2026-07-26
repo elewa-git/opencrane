@@ -15,7 +15,11 @@ export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository.
 export { PrismaRunCancellationRepository } from "./prisma-run-cancellation-repository.js";
 export { PrismaRunDispatchRepository } from "./prisma-run-dispatch-repository.js";
 export { __CreateAgentControllerRunDispatchRouter } from "./run-dispatch.router.js";
+export { __CreateSelfRunStatusRouter } from "./self-run-status.router.js";
+export { PrismaSelfRunStatusRepository } from "./prisma-self-run-status-repository.js";
+export { _SelfRunStatusOpenapiPaths } from "./openapi.js";
 export type { AgentControllerRunDispatchRouterDependencies, AgentControllerTokenReviewer, AttemptModelKeyIssuer, AttemptModelKeyMintRequest, ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, MintedAttemptModelKey, RegisterRunWorkloadPodResult, ReviewedAgentControllerIdentity, RunDispatchRepository, RunDispatchRepositoryConfig } from "./run-dispatch.types.js";
+export type { SelfRunStatus, SelfRunStatusCaller, SelfRunStatusRepository, SelfRunStatusRouterDependencies } from "./self-run-status.router.types.js";
 export type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupClaimLease, RunWorkloadCleanupMode, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 export { RunAdmissionConcurrencyGate } from "./run-admission-concurrency.js";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";

@@ -29,6 +29,7 @@ import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
 import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
 import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
+import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
 import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
 
 // ---------------------------------------------------------------------------
@@ -773,6 +774,7 @@ export const spec = {
     ..._MetricsOpenapiPaths,
     ..._AuthorizationOpenapiPaths,
     ..._RuntimeSteeringOpenapiPaths,
+    ..._SelfRunStatusOpenapiPaths,
     ..._SelfConversationReplayOpenapiPaths,
 
     // ------------------------------------------------------------------
