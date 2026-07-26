@@ -117,9 +117,10 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			if (!workload || !bootstrap || !now || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || !workload.workloadUid) return null;
 			const claimedAt = new Date(Math.max(now.getTime(), (workload.releaseClaimedAt?.getTime() ?? -1) + 1));
 			const deliveryCount = workload.releaseDeliveryCount + 1;
-			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount: deliveryCount } });
+			const expiresAt = new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime()));
+			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount: deliveryCount, releaseExpiresAt: expiresAt } });
 			if (updated.count !== 1) throw new Error("skill workload release claim lost its fence");
-			return { workloadId: workload.id, workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime())).toISOString() };
+			return { workloadId: workload.id, workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: expiresAt.toISOString() };
 		});
 	}
 
@@ -138,8 +139,8 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			const nowRows = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 			const now = nowRows[0]?.now;
 			const bootstrap = await transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
-			if (!now || !bootstrap || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid !== command.workloadUid || workload.releaseClaimedAt?.getTime() !== Date.parse(command.releaseClaimedAt) || workload.releaseDeliveryCount !== command.releaseDeliveryCount || now.getTime() >= workload.releaseClaimedAt.getTime() + lease) return "conflict";
-			const updated = await transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releasedAt: now } });
+			if (!now || !bootstrap || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid !== command.workloadUid || workload.releaseClaimedAt?.getTime() !== Date.parse(command.releaseClaimedAt) || workload.releaseDeliveryCount !== command.releaseDeliveryCount || !workload.releaseExpiresAt || now >= workload.releaseExpiresAt) return "conflict";
+			const updated = await transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, releaseExpiresAt: workload.releaseExpiresAt }, data: { releasedAt: now } });
 			return updated.count === 1 ? "released" : "conflict";
 		});
 	}

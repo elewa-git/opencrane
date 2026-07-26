@@ -62,7 +62,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 	it("returns only the database-fenced workload claim to the reviewed controller", async function _ReturnsClaim()
 	{
 		const claim = { workloadId: "workload-1", siloId: "silo-a", kind: "authoring" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
-		const { app } = _App({ repository: { claimNextAtomically: vi.fn().mockResolvedValue(claim), commitAssignmentAtomically: vi.fn() } });
+		const { app } = _App({ repository: { claimNextAtomically: vi.fn().mockResolvedValue(claim), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn() } });
 
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer projected-token").send({});
 
@@ -89,7 +89,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn() };
-		const repository = { claimNextAtomically: vi.fn().mockRejectedValue(failure), commitAssignmentAtomically: vi.fn() };
+		const repository = { claimNextAtomically: vi.fn().mockRejectedValue(failure), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn() };
 		const { app } = _App({ repository, logger });
 
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer secret-projected-token").send({});
