@@ -20,7 +20,7 @@ describe("governed child run admission", function _describeChildRunAdmission()
 {
 	it("inherits lineage, silo, and subject only from parent authority while carving bounded budget", async function _preparesChild()
 	{
-		await expect(__PrepareChildRunAdmission(_PARENT, _COMMAND, _LIMITS, _AUTHORIZED_TARGET)).resolves.toEqual({ outcome: "prepared", value: { runId: "child-1", parentRunId: "parent-1", rootRunId: "root-1", siloId: "silo-1", executionSubjectId: "user-1", agentServiceId: "service-child", agentRevisionId: "revision-child", trigger: "managed_invocation", budget: { maxTokens: 200, maxCostUsdMicros: 1_000_000 } } });
+		await expect(__PrepareChildRunAdmission(_PARENT, _COMMAND, _LIMITS, _AUTHORIZED_TARGET)).resolves.toEqual({ outcome: "prepared", value: { depth: 2, runId: "child-1", parentRunId: "parent-1", rootRunId: "root-1", siloId: "silo-1", executionSubjectId: "user-1", agentServiceId: "service-child", agentRevisionId: "revision-child", trigger: "managed_invocation", budget: { maxTokens: 200, maxCostUsdMicros: 1_000_000 } } });
 	});
 
 	it("denies a recursive fork at the configured depth cap", async function _deniesDepth()

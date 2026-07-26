@@ -1,9 +1,11 @@
 export { __StartNextRunAttempt, __ValidateRunWorkloadAssignment } from "./run-authority.js";
 export { __PrepareChildRunAdmission } from "./child-run-admission.js";
+export { PrismaChildRunReservationRepository } from "./prisma-child-run-reservation-repository.js";
 export { __DigestRunInputSnapshot } from "./run-input-snapshot-digest.js";
 export type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
 export type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
 export type { ChildRunAdmissionLimits, ChildRunBudget, ChildRunParentAuthority, ChildRunTargetAuthorization, ChildRunTargetAuthorizationResult, PrepareChildRunAdmissionCommand, PrepareChildRunAdmissionResult, PreparedChildRunAdmission } from "./child-run-admission.types.js";
+export type { ChildRunReservationBuild, ChildRunReservationBuildResult, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types.js";
 export { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";
 export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository.js";
 export { PrismaRunCancellationRepository } from "./prisma-run-cancellation-repository.js";

@@ -24,7 +24,7 @@ export async function __PrepareChildRunAdmission(parent: ChildRunParentAuthority
 		return { outcome: "denied", reason: "target_authorization_unavailable" };
 	}
 
-	return { outcome: "prepared", value: { runId: command.childRunId, parentRunId: parent.runId, rootRunId: parent.rootRunId, siloId: parent.siloId, executionSubjectId: parent.executionSubjectId, agentServiceId: command.targetAgentServiceId, agentRevisionId: command.targetAgentRevisionId, trigger: "managed_invocation", budget: command.requestedBudget } };
+	return { outcome: "prepared", value: { depth: parent.depth + 1, runId: command.childRunId, parentRunId: parent.runId, rootRunId: parent.rootRunId, siloId: parent.siloId, executionSubjectId: parent.executionSubjectId, agentServiceId: command.targetAgentServiceId, agentRevisionId: command.targetAgentRevisionId, trigger: "managed_invocation", budget: command.requestedBudget } };
 }
 
 /** Returns whether parent facts are complete and safe for a child to inherit. */

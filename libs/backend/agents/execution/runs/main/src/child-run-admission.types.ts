@@ -68,6 +68,8 @@ export type ChildRunTargetAuthorizationResult = { readonly outcome: "authorized"
 /** Parent-derived coordinates that the persistence/snapshot layer must preserve exactly. */
 export interface PreparedChildRunAdmission
 {
+	/** Depth inherited from the parent and fixed for this exact child. */
+	readonly depth: number;
 	/** Child run identifier. */
 	readonly runId: string;
 	/** Parent run identifier; a child never starts as a root. */

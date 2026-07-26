@@ -134,6 +134,8 @@ uncertainty fails closed.
 - `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
 - `__PrepareChildRunAdmission(parent, command, limits, targetAuthorization)` — prepare a bounded
   child-run record after exact parent-to-target delegation has been rechecked.
+- `PrismaChildRunReservationRepository` — lock the parent, recalculate capacity from immutable
+  sibling allocations, and atomically persist the child run, snapshot, reservation, and dispatch.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
@@ -183,6 +185,11 @@ from the admitted parent run, use the target-authorization port backed by that p
 tool policy, and persist the prepared record through a transaction that rechecks and reserves it.
 This package neither trusts a child-supplied subject, silo or lineage nor creates a child run by
 itself.
+
+The reservation repository is the sole durable child-admission boundary. It derives parent facts
+from locked database rows and the parent snapshot, rechecks the target policy, and records the
+derived depth with the child allocation. Replaying the same inherited-silo idempotency key returns
+only the exact sealed child; any coordinate mismatch fails closed.
 
 ## Dependency direction
 
