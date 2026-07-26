@@ -65,6 +65,13 @@ export interface RuntimeExternalActionRunner
 	run(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[]): Promise<RuntimeExternalActionRunnerResult>;
 }
 
+/** Terminal lifecycle persistence supplied by the composition root without reversing library dependencies. */
+export interface RuntimeTerminalReporter
+{
+	/** Persist an already-fenced runtime completion or failure in the current authority transaction. */
+	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: "run.completed" | "run.failed" }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+}
+
 /** Stable result returned after a candidate reaches the authoritative run boundary. */
 export interface RuntimeCandidateDispatchResult
 {

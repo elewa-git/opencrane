@@ -119,6 +119,12 @@ may adopt the API UID for deletion. If no controller claim ever left Postgres, t
 attempt event proves no Job can exist and cancellation can finish immediately. Only confirmed
 deletion or authoritative absence moves `Cancelling` to `Cancelled` and emits `run.cancelled`.
 
+`PrismaRuntimeTerminalReporter` is the matching completion boundary for an authenticated runtime
+Pod. It accepts only a protocol-fenced `run.completed` or `run.failed` report for the currently
+running attempt, serialises terminal writers on the run, and commits the lifecycle state, canonical
+conversation event, and any child-to-parent completion delivery together. Runtime Pods have no
+`run.cancelled` authority: cancellation continues to flow through the server-owned cleanup process.
+
 Poisoned or expired release authority uses the same generic cleanup event after failing the run, so
 physical residue is not confused with user cancellation and a suspended Job is never left for an
 inapplicable terminal TTL to discover.

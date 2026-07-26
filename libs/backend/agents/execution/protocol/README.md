@@ -19,6 +19,9 @@ loads and locks the live workload assignment for a connected runtime Pod, mints 
 pure authority accepts, and durably advances the monotonic command sequence and the accepted
 candidate ids so a transport reconnect can neither reorder nor duplicate work. Its compiler adapter
 hydrates the immutable snapshot through the same locked Prisma transaction before dispatch.
+For the two workload-reportable terminal results, the app injects the canonical run authority into
+that transaction: `run.completed` and `run.failed` become one durable run outcome, stream event, and
+child-to-parent notification. A runtime cannot cancel itself; cancellation remains server-owned.
 
 ```
  OpenCrane run authority + immutable snapshot
@@ -69,6 +72,8 @@ authorities to accept or reject.
   neither runtime tool arguments nor a subject id can choose a dataset.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
+- `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results
+  through the run authority without making this protocol package own run state.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
   authority must supply at the final acceptance fence.
 - `RuntimeAdmissionRunState` — run lifecycle values understood by the admission fence, including the
@@ -91,7 +96,8 @@ attempt — the lease fence, the bound runtime instance, the next command sequen
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
 attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
 baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
-conversation domains but never writes those authorities.
+conversation domains. Terminal state remains written by the injected execution-run authority, never
+by this transport/protocol package directly.
 
 ## Dependency direction
 
