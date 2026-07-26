@@ -1222,6 +1222,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/configuration/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's personal configuration proposals
+         * @description The server derives the owner and silo from session and host. It returns at most fifty durable future-session proposals, never a mutable run snapshot.
+         */
+        get: operations["listMyPersonalConfigurationChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1910,6 +1930,26 @@ export interface components {
             createdAt: string;
             /** Format: date-time */
             updatedAt: string;
+        };
+        PersonalConfigurationChange: {
+            changeId: string;
+            requestedPatch: {
+                /** @constant */
+                kind: "persona_refresh";
+            } | {
+                /** @constant */
+                kind: "model_alias";
+                modelAlias: string;
+            };
+            /** @enum {string} */
+            state: "proposed" | "accepted" | "applied" | "rejected" | "superseded";
+            sourceThreadId: string;
+            sourceRunId: string;
+            /** Format: date-time */
+            proposedAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            rejectionReason: string | null;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -5509,6 +5549,46 @@ export interface operations {
             };
             /** @description The management authority could not read the catalogue. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyPersonalConfigurationChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-bound configuration proposal history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changes: components["schemas"]["PersonalConfigurationChange"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Configuration proposal history could not be read. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

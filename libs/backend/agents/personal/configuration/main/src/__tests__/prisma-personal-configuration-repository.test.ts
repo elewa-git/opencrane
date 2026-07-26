@@ -51,4 +51,12 @@ describe("Prisma personal configuration repository", function _Suite()
 		const repository = new PrismaPersonalConfigurationChangeRepository({ personalConfigurationChange: { updateMany: vi.fn(async function _update() { return { count: 0 }; }), findFirst: vi.fn(async function _find() { return null; }) } } as never);
 		await expect(repository.decideAtomically({ siloId: "silo-1", userId: "user-1", changeId: "change-1", decision: "rejected", rejectionReason: "Keep current settings", decidedAt: "2026-07-23T00:00:00.000Z" })).resolves.toEqual({ status: "not_found_or_not_owner" });
 	});
+
+	it("lists only the selected owner's bounded newest-first proposal history", async function _ListsOwned()
+	{
+		const findMany = vi.fn(async function _find() { return [{ id: "change-1", requestedPatch: { kind: "model_alias", modelAlias: "careful-model" }, state: "Proposed", sourceThreadId: "thread-1", sourceRunId: "run-1", proposedAt: new Date("2026-07-23T00:00:00.000Z"), decidedAt: null, rejectionReason: null }]; });
+		const repository = new PrismaPersonalConfigurationChangeRepository({ personalConfigurationChange: { findMany } } as never);
+		await expect(repository.listOwned("silo-1", "user-1")).resolves.toEqual([{ changeId: "change-1", requestedPatch: { kind: "model_alias", modelAlias: "careful-model" }, state: "proposed", sourceThreadId: "thread-1", sourceRunId: "run-1", proposedAt: "2026-07-23T00:00:00.000Z", decidedAt: null, rejectionReason: null }]);
+		expect(findMany).toHaveBeenCalledWith({ where: { siloId: "silo-1", userId: "user-1" }, orderBy: [{ proposedAt: "desc" }, { id: "desc" }], take: 50, select: { id: true, requestedPatch: true, state: true, sourceThreadId: true, sourceRunId: true, proposedAt: true, decidedAt: true, rejectionReason: true } });
+	});
 });

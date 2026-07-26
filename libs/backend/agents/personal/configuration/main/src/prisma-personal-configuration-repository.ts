@@ -4,11 +4,11 @@ import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observa
 
 import { __ProposePersonalConfigurationChange } from "./personal-configuration.js";
 import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
-import type { DecidePersonalConfigurationChangeCommand, PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
+import type { DecidePersonalConfigurationChangeCommand, PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, PersonalConfigurationChangeView, PersonalConfigurationChangeViewRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
 import type { UpgradeSessionProposalReceipt, UpgradeSessionProposalRepository } from "./upgrade-session.types.js";
 
 /** Prisma adapter that proves a proposal's user, thread, run, profile, and service bindings atomically. */
-export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, UpgradeSessionProposalRepository
+export class PrismaPersonalConfigurationChangeRepository implements PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, PersonalConfigurationChangeViewRepository, UpgradeSessionProposalRepository
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -20,6 +20,13 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 	{
 		this.prisma = prisma;
 		this.logger = logger;
+	}
+
+	/** List the latest fifty personal configuration proposals owned by one user in one silo. */
+	async listOwned(siloId: string, userId: string): Promise<readonly PersonalConfigurationChangeView[]>
+	{
+		const changes = await this.prisma.personalConfigurationChange.findMany({ where: { siloId, userId }, orderBy: [{ proposedAt: "desc" }, { id: "desc" }], take: 50, select: { id: true, requestedPatch: true, state: true, sourceThreadId: true, sourceRunId: true, proposedAt: true, decidedAt: true, rejectionReason: true } });
+		return changes.map(_toChangeView);
 	}
 
 	/** Insert one request only after every mutable provenance coordinate agrees in one transaction. */
@@ -88,6 +95,23 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 		if (result.outcome !== "proposed") throw new Error(`upgrade_session proposal denied: ${result.reason}`);
 		return { changeId: result.changeId };
 	}
+}
+
+/** Map a selected canonical proposal row into the closed owner-visible product shape. */
+function _toChangeView(change: { id: string; requestedPatch: Prisma.JsonValue; state: PersonalConfigurationChangeState; sourceThreadId: string; sourceRunId: string; proposedAt: Date; decidedAt: Date | null; rejectionReason: string | null }): PersonalConfigurationChangeView
+{
+	if (!_IsPersonalConfigurationPatch(change.requestedPatch)) throw new Error("personal configuration change has unsupported patch shape");
+	return { changeId: change.id, requestedPatch: change.requestedPatch, state: _state(change.state), sourceThreadId: change.sourceThreadId, sourceRunId: change.sourceRunId, proposedAt: change.proposedAt.toISOString(), decidedAt: change.decidedAt?.toISOString() ?? null, rejectionReason: change.rejectionReason };
+}
+
+/** Convert the database lifecycle enum to its stable product spelling. */
+function _state(state: PersonalConfigurationChangeState): PersonalConfigurationChangeView["state"]
+{
+	if (state === PersonalConfigurationChangeState.Proposed) return "proposed";
+	if (state === PersonalConfigurationChangeState.Accepted) return "accepted";
+	if (state === PersonalConfigurationChangeState.Applied) return "applied";
+	if (state === PersonalConfigurationChangeState.Rejected) return "rejected";
+	return "superseded";
 }
 
 /** Recognise the database's explicit business-fence rejection without exposing database details. */

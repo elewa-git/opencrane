@@ -33,6 +33,7 @@ import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
 import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
 import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
+import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -730,6 +731,20 @@ export const spec = {
           updatedAt: { type: "string", format: "date-time" },
         },
       },
+      PersonalConfigurationChange: {
+        type: "object",
+        required: ["changeId", "requestedPatch", "state", "sourceThreadId", "sourceRunId", "proposedAt", "decidedAt", "rejectionReason"],
+        properties: {
+          changeId: { type: "string" },
+          requestedPatch: { oneOf: [{ type: "object", required: ["kind"], additionalProperties: false, properties: { kind: { const: "persona_refresh" } } }, { type: "object", required: ["kind", "modelAlias"], additionalProperties: false, properties: { kind: { const: "model_alias" }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: ".*\\S.*" } } }] },
+          state: { type: "string", enum: ["proposed", "accepted", "applied", "rejected", "superseded"] },
+          sourceThreadId: { type: "string" },
+          sourceRunId: { type: "string" },
+          proposedAt: { type: "string", format: "date-time" },
+          decidedAt: { type: "string", format: "date-time", nullable: true },
+          rejectionReason: { type: "string", nullable: true },
+        },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -820,6 +835,7 @@ export const spec = {
     ..._PersonaOnboardingOpenapiPaths,
     ..._SelfConversationReplayOpenapiPaths,
     ..._AgentServicesOpenapiPaths,
+    ..._PersonalConfigurationOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection
