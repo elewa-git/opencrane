@@ -98,6 +98,7 @@ export default [
               onlyDependOnLibsWithTags: [
                 "scope:agent-services",
                 "scope:api-spec",
+                "scope:artifacts",
                 "scope:audit",
                 "scope:authorization",
                 "scope:awareness",

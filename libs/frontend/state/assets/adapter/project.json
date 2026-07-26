@@ -1,1 +1,41 @@
-{"name":"frontend-assets-adapter","$schema":"../../../../../node_modules/nx/schemas/project-schema.json","projectType":"library","sourceRoot":"libs/frontend/state/assets/adapter/src","tags":["scope:web","type:state"],"targets":{"lint":{"executor":"nx:run-commands","options":{"command":"tsc -p tsconfig.lint.json","cwd":"libs/frontend/state/assets/adapter"}},"test":{"executor":"nx:run-commands","options":{"command":"vitest run --passWithNoTests","cwd":"libs/frontend/state/assets/adapter"}}}}
+{
+  "name": "frontend-assets-adapter",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/frontend/state/assets/adapter/src",
+  "tags": [
+    "scope:web",
+    "layer:frontend",
+    "type:lib"
+  ],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": [
+        "{workspaceRoot}/dist/libs/frontend/state/assets/adapter"
+      ],
+      "options": {
+        "commands": [
+          "tsc -p tsconfig.lint.json",
+          "esbuild src/index.ts --bundle --format=esm --platform=browser --packages=external --sourcemap --outfile=../../../../../dist/libs/frontend/state/assets/adapter/index.js"
+        ],
+        "cwd": "libs/frontend/state/assets/adapter",
+        "parallel": false
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.lint.json",
+        "cwd": "libs/frontend/state/assets/adapter"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/frontend/state/assets/adapter"
+      }
+    }
+  }
+}

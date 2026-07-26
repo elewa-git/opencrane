@@ -29,6 +29,12 @@
       "path": "../mcp/adapter/tsconfig.lib.json"
     },
     {
+      "path": "../assets/adapter/tsconfig.lib.json"
+    },
+    {
+      "path": "../skills/adapter/tsconfig.lib.json"
+    },
+    {
       "path": "../core"
     },
     {

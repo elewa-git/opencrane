@@ -53,7 +53,7 @@ port or wire contract of its own.
 
 ## Dependency direction
 
-Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
+Tagged `scope:web`, `layer:frontend`, and `type:lib`: it may depend only on other `scope:web` and `scope:shared`
 packages — here the `state/*/adapter` libs, `state/core`, and Angular — never on apps or server domains.
 
 ## See also

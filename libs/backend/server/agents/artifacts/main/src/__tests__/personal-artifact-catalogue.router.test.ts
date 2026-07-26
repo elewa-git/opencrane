@@ -37,4 +37,15 @@ describe("personal asset catalogue router", function _suite()
 		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).get("/api/v1/me/assets/");
 		expect(response.status).toBe(401);
 	});
+
+	it("returns a bounded service-unavailable response when catalogue storage fails", async function _handlesFailure()
+	{
+		const error = new Error("database unavailable");
+		const logger = { error: vi.fn() } as unknown as Logger;
+		const response = await request(_app(_dependencies({ catalogue: { listOwnedCatalogue: vi.fn().mockRejectedValue(error) }, logger }))).get("/api/v1/me/assets/");
+
+		expect(response.status).toBe(503);
+		expect(response.body).toEqual({ error: "personal_artifact_catalogue_unavailable" });
+		expect(logger.error).toHaveBeenCalledWith(expect.objectContaining({ err: error, operation: "personal_artifacts.list", siloId: "silo-1" }), "Personal asset catalogue list failed");
+	});
 });

@@ -22,7 +22,7 @@ This group contains the browser-state adapter for the governed skill catalogue. 
 
 ## Dependency rule for this group
 
-Packages here carry `scope:web` and `type:state`. They may depend on frontend core and shared contracts, but never on UI features, backend domains, or an application. The server, not the browser, chooses the current silo and filters what a session may see.
+Packages here carry `scope:web`, `layer:frontend`, and `type:lib`. They may depend on frontend core and shared contracts, but never on UI features, backend domains, or an application. The server, not the browser, chooses the current silo and filters what a session may see.
 
 ## See also
 

@@ -38,7 +38,7 @@ Consumed by frontend features through the injection token and composed by [state
 
 ## Dependency direction
 
-Tagged `scope:web` and `type:state`: it may import frontend core and browser-safe shared contracts, but never an application, UI feature, backend domain, or deployment package. The adapter depends downward on the public API; features depend upward on this port.
+Tagged `scope:web`, `layer:frontend`, and `type:lib`: it may import frontend core and browser-safe shared contracts, but never an application, UI feature, backend domain, or deployment package. The adapter depends downward on the public API; features depend upward on this port.
 
 ## See also
 

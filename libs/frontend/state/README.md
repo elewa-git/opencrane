@@ -42,7 +42,7 @@ owns the client-side stores and caches that hold fetched data.
 
 ## Dependency rule for this tier
 
-State packages carry `scope:web` and `type:state`. They may import shared contracts and each other
+State packages carry `scope:web`, `layer:frontend`, and `type:lib`. They may import shared contracts and each other
 within the state layer (adapters depend on the ports and stores in `core`; `gateways` wires them
 together). They must **not** import a [`feature`](../features/README.md) or a backend package —
 data flows up to features, dependencies point down to the API. Never import an app.

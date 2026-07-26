@@ -74,6 +74,10 @@ for f in "${FILES[@]:-}"; do
 				*/__tests__/*) : ;;
 				*) _report "$f" 1 ERROR TEST-LOCATION "test file not under __tests__/ — move it there and fix relative imports" ;;
 			esac
+			;;
+	esac
+done
+
 # MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).
 # A changed package must ship a README, and a changed leaf-package README must
 # carry the mandatory sections. Diff-scoped like the .ts checks; skipped when
