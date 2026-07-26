@@ -37,6 +37,10 @@ export interface SkillWorkloadReleaseClaim
 {
 	/** Stable workload identifier. */
 	readonly workloadId: string;
+	/** ClusterTenant silo that owns the released Job. */
+	readonly siloId: string;
+	/** Fixed workload class selecting the immutable controller profile. */
+	readonly kind: "authoring" | "tool-runner";
 	/** Immutable Job UID that Kubernetes must release. */
 	readonly workloadUid: string;
 	/** Database-issued release-claim instant. */
@@ -58,6 +62,13 @@ export interface SkillWorkloadReleaseCommand
 	readonly workloadUid: string;
 }
 
+/** Exact first-Pod evidence committed only after the released Job owns the Pod. */
+export interface SkillWorkloadPodRegistrationCommand extends SkillWorkloadReleaseCommand
+{
+	/** Immutable Kubernetes UID of the worker Pod selected through the Job UID. */
+	readonly podUid: string;
+}
+
 /** Persistence authority for controller-only workload claim and suspended-Job assignment. */
 export interface SkillWorkloadClaimsRepository
 {
@@ -69,4 +80,6 @@ export interface SkillWorkloadClaimsRepository
 	claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>;
 	/** Records an exact successful unsuspend or its idempotent replay. */
 	commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
+	/** Binds the sole Job-owned worker Pod before its bootstrap can be consumed. */
+	registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
 }

@@ -93,12 +93,15 @@ test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
 
-# Governed skill namespaces are derived from their owning charts. Their controller Roles can only
-# exact-adopt or create suspended Jobs: no patch permission can release or modify a worker.
+# Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
+# exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
 grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
 grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
-if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(patch|delete|update|watch|list)"'; then
-  echo "skill workload Roles exceed get/create Job authority" >&2
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["get", "create", "patch"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["list"]'
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(delete|update|watch)"'; then
+  echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
   exit 1
 fi
 
@@ -146,7 +149,7 @@ grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-co
 # must bind the same identity to the exact suspended, class-specific worker envelopes.
 grep -Eq 'name: .*skill-workloads' "$ADMISSION"
 grep -Fq 'values: ["skill-authoring", "tool-runner"]' "$ADMISSION"
-grep -Fq 'operations: ["CREATE"]' "$ADMISSION"
+grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq "object.spec.suspend == true" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].name == 'tool-runner'" "$ADMISSION"
@@ -160,7 +163,8 @@ if grep -Fq 'request.subResource' "$ADMISSION"; then
   echo "Job-only admission must not dereference the optional subResource request field" >&2
   exit 1
 fi
-grep -Fq "request.operation == 'CREATE' && object.spec.suspend == true" "$ADMISSION"
+grep -Fq "request.operation == 'CREATE' ||" "$ADMISSION"
+grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ADMISSION"
 grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers.size() == 1" "$ADMISSION"
 grep -Fq "!has(object.spec.template.spec.containers[0].livenessProbe)" "$ADMISSION"

@@ -19,20 +19,24 @@ OpenCrane.
 **In this flow:** [execution authority](../execution/main/README.md) ·
 [Job builder](../k8s-launcher/README.md).
 
-The Job stays suspended after this package finishes. That is the safety boundary between a database
-transaction and a Kubernetes create: a crash can leave an inert Job to exact-adopt later, but cannot
-leave unrecorded Python code running.
+The Job stays suspended until a separate, database-fenced release claim authorises one conditional
+unsuspend. The controller then records the exact first Job-owned Pod before the worker bootstrap can
+be used. A crash can therefore leave an inert Job to exact-adopt later, but cannot leave unrecorded
+Python code running.
 
 ## Public surface
 
 - `__ReconcileNextSkillWorkload` — handles at most one fenced claim and suspended Job assignment.
+- `__ReconcileNextSkillWorkloadRelease` — conditionally releases one assigned Job and registers its
+  exact first worker Pod.
 - `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
 - `__ValidateSkillWorkloadControllerProfiles` — validates the two deployment-owned job-class profiles.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-release a Job, read artifact bytes, or run a worker. A later worker protocol must exchange the
+read artifact bytes, or run a worker. It releases only an exact UID-bound Job under a short durable
+release claim, then binds one Kubernetes-issued Pod UID. A later worker protocol must exchange the
 non-secret Job reference through a separately authenticated boundary before any code can run.
 
 ## Dependency direction

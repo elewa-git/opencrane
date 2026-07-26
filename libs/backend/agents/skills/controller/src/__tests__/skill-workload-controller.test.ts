@@ -2,7 +2,7 @@ import type { V1Job } from "@kubernetes/client-node";
 import { type Logger } from "@opencrane/observability";
 import { describe, expect, it } from "vitest";
 
-import { __ReconcileNextSkillWorkload, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";
+import { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";
 import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerKubernetesStore, SkillWorkloadControllerOptions } from "../skill-workload-controller.types.js";
 
 /** Silent structured logger used by focused reconciliation tests. */
@@ -26,13 +26,13 @@ function _Claim()
 /** Compose an authority with fail-fast defaults for operations a test does not use. */
 function _Authority(overrides: Partial<SkillWorkloadControllerAuthority>): SkillWorkloadControllerAuthority
 {
-	return { async __Claim() { return null; }, async __CommitAssignment() { throw new Error("unexpected assignment commit"); }, ...overrides };
+	return { async __Claim() { return null; }, async __CommitAssignment() { throw new Error("unexpected assignment commit"); }, async __ClaimRelease() { return null; }, async __CommitRelease() { throw new Error("unexpected release commit"); }, async __RegisterFirstPod() { throw new Error("unexpected Pod registration"); }, ...overrides };
 }
 
 /** Compose a Kubernetes port with a fail-fast default. */
 function _Kubernetes(overrides: Partial<SkillWorkloadControllerKubernetesStore>): SkillWorkloadControllerKubernetesStore
 {
-	return { async __EnsureSuspendedJob() { throw new Error("unexpected Job"); }, ...overrides };
+	return { async __EnsureSuspendedJob() { throw new Error("unexpected Job"); }, async __EnsureSkillJobReleased() { throw new Error("unexpected Job release"); }, async __FindFirstSkillWorkloadPod() { throw new Error("unexpected Pod lookup"); }, ...overrides };
 }
 
 /** Compose reconciler options from focused fake ports. */
@@ -85,6 +85,15 @@ describe("governed skill workload controller", function _DescribeController()
 	{
 		expect(function _MissingRunner() { __ValidateSkillWorkloadControllerProfiles({ authoring: _Profiles().authoring }); }).toThrow(/exactly authoring and tool-runner/);
 		expect(function _WrongKind() { __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring: { ..._Profiles().authoring, kind: "tool-runner" } }); }).toThrow(/wrong workload class/);
+	});
+
+	it("releases only the durable Job UID then records its uniquely selected first Pod", async function _ReleasesAndRegistersFirstPod()
+	{
+		const claim = { workloadId: "workload_1", siloId: "silo-a", kind: "authoring" as const, workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:01:00.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:30.000Z" };
+		const authority = _Authority({ async __ClaimRelease() { return claim; }, async __CommitRelease() { return "released"; }, async __RegisterFirstPod() { return "registered"; } });
+		const kubernetes = _Kubernetes({ async __EnsureSkillJobReleased(job) { return { ...job, metadata: { ...job.metadata, uid: "job-uid-1" }, spec: { ...job.spec!, suspend: false } }; }, async __FindFirstSkillWorkloadPod(job, workloadUid, serviceAccountName) { const name = job.metadata?.name; const namespace = job.metadata?.namespace; if (!name || !namespace) throw new Error("test Job must have coordinates"); return { metadata: { uid: "pod-uid-1", namespace, labels: { ...job.spec?.template.metadata?.labels, "batch.kubernetes.io/controller-uid": workloadUid, "batch.kubernetes.io/job-name": name, "controller-uid": workloadUid, "job-name": name }, ownerReferences: [{ apiVersion: "batch/v1", kind: "Job", name, uid: workloadUid, controller: true }] }, spec: { serviceAccountName, containers: [] } }; } });
+
+		expect(await __ReconcileNextSkillWorkloadRelease(_Options(authority, kubernetes), new AbortController().signal)).toEqual({ outcome: "registered", workloadId: "workload_1", workloadUid: "job-uid-1", podUid: "pod-uid-1" });
 	});
 
 	it("stops an idle poll promptly when shutdown interrupts its pending wait", async function _StopsIdlePollOnAbort()

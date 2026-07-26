@@ -168,11 +168,14 @@ metadata:
     {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-controller
 rules:
-  # A governed skill Job is created or exact-adopted while suspended. No patch, Pod, Secret, or
-  # delete permission exists in these namespaces, so this controller cannot release or alter work.
+  # A governed skill Job is created suspended, then released by one UID/resourceVersion-fenced patch.
+  # The admission policy below permits only that immutable-template-preserving transition.
   - apiGroups: ["batch"]
     resources: ["jobs"]
-    verbs: ["get", "create"]
+    verbs: ["get", "create", "patch"]
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["list"]
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -443,7 +446,7 @@ spec:
     resourceRules:
       - apiGroups: ["batch"]
         apiVersions: ["v1"]
-        operations: ["CREATE"]
+        operations: ["CREATE", "UPDATE"]
         resources: ["jobs"]
         scope: "Namespaced"
     namespaceSelector:
@@ -456,7 +459,7 @@ spec:
         request.userInfo.username == {{ $controllerUsername | toJson }}
       message: only this release's controller ServiceAccount may create governed skill Jobs
     - expression: >-
-        ((object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
+        request.operation == 'UPDATE' || ((object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
           object.metadata.name.matches('^skill-author-[a-f0-9]{24}$') &&
           object.metadata.labels.size() == 3 &&
           object.metadata.labels['app.kubernetes.io/name'] == 'opencrane-skill-authoring' &&
@@ -476,7 +479,7 @@ spec:
         (!has(object.metadata.generateName) || object.metadata.generateName == '')
       message: governed skill Job identity must exactly match its isolated workload class
     - expression: >-
-        object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
+        request.operation == 'UPDATE' || (object.spec.suspend == true && object.spec.parallelism == 1 && object.spec.completions == 1 &&
         object.spec.backoffLimit == 0 && object.spec.ttlSecondsAfterFinished == 0 &&
         ((object.metadata.namespace == {{ $authoringNamespace | toJson }} &&
           object.spec.activeDeadlineSeconds == {{ .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds }} &&
@@ -554,8 +557,18 @@ spec:
         (!has(object.spec.template.metadata.finalizers) || object.spec.template.metadata.finalizers.size() == 0) &&
         (!has(object.spec.template.metadata.name) || object.spec.template.metadata.name == '') &&
         (!has(object.spec.template.metadata.generateName) || object.spec.template.metadata.generateName == '') &&
-        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == '')
+        (!has(object.spec.template.metadata.namespace) || object.spec.template.metadata.namespace == ''))
       message: governed skill Job must remain the exact suspended, class-bounded worker shape
+    - expression: >-
+        request.operation == 'CREATE' ||
+        (oldObject.spec.suspend == true && object.spec.suspend == false &&
+         object.metadata.name == oldObject.metadata.name && object.metadata.labels == oldObject.metadata.labels &&
+         object.metadata.annotations == oldObject.metadata.annotations && object.spec.parallelism == oldObject.spec.parallelism &&
+         object.spec.completions == oldObject.spec.completions && object.spec.backoffLimit == oldObject.spec.backoffLimit &&
+         object.spec.ttlSecondsAfterFinished == oldObject.spec.ttlSecondsAfterFinished &&
+         object.spec.activeDeadlineSeconds > 0 && object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeconds &&
+         object.spec.template == oldObject.spec.template)
+      message: a governed skill Job update may only release its exact suspended template once
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding

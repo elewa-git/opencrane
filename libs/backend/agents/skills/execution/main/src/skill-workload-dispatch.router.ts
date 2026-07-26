@@ -3,7 +3,7 @@ import { Router, type Request, type Response } from "express";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type AgentControllerSkillWorkloadAssignmentCommand } from "@opencrane/contracts";
 
 import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types.js";
-import type { SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
+import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
 /**
  * Build the controller-authenticated internal API for governed skill workloads.
@@ -137,6 +137,39 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 		}
 	});
 
+	router.put("/skill-workloads/:workloadId/pod-registration", async function _RegisterFirstPod(request: Request, response: Response): Promise<void>
+	{
+		try
+		{
+			// 1. Authenticate before reading Pod evidence so it cannot become an identity oracle.
+			if (!await _IsController(request, dependencies))
+			{
+				_RespondProblem(response, 401, "controller_identity_denied");
+				return;
+			}
+			const command = _ParsePodRegistrationCommand(request.body);
+			const workloadId = request.params["workloadId"];
+			if (command === null || typeof workloadId !== "string" || workloadId.length === 0)
+			{
+				_RespondProblem(response, 400, "invalid_pod_registration");
+				return;
+			}
+			// 2. Persist only the exact release-fenced, Kubernetes-discovered immutable Pod UID.
+			const outcome = await dependencies.repository.registerFirstPodAtomically(workloadId, command);
+			if (outcome === "conflict")
+			{
+				_RespondProblem(response, 409, "stale_or_conflicting_pod_registration");
+				return;
+			}
+			response.status(200).json({ outcome, workloadId, workloadUid: command.workloadUid, podUid: command.podUid });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "agent_controller.skill_workload_pod_registration" }, "Agent-controller skill workload Pod registration failed");
+			_RespondProblem(response, 503, "skill_workload_authority_unavailable");
+		}
+	});
+
 	return router;
 }
 
@@ -191,6 +224,17 @@ function _ParseReleaseCommand(value: unknown): SkillWorkloadReleaseCommand | nul
 	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _hasExpectedKey(key): boolean { return key in body; })) return null;
 	if (typeof body["releaseClaimedAt"] !== "string" || typeof body["releaseDeliveryCount"] !== "number" || typeof body["workloadUid"] !== "string") return null;
 	return { releaseClaimedAt: body["releaseClaimedAt"], releaseDeliveryCount: body["releaseDeliveryCount"], workloadUid: body["workloadUid"] };
+}
+
+/** Parse exact first-Pod evidence without admitting controller-selected extensions. */
+function _ParsePodRegistrationCommand(value: unknown): SkillWorkloadPodRegistrationCommand | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const body = value as Record<string, unknown>;
+	const expectedKeys = ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid", "podUid"];
+	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _HasExpectedKey(key): boolean { return key in body; })) return null;
+	if (typeof body["releaseClaimedAt"] !== "string" || typeof body["releaseDeliveryCount"] !== "number" || typeof body["workloadUid"] !== "string" || typeof body["podUid"] !== "string") return null;
+	return { releaseClaimedAt: body["releaseClaimedAt"], releaseDeliveryCount: body["releaseDeliveryCount"], workloadUid: body["workloadUid"], podUid: body["podUid"] };
 }
 
 /** Write one bounded, non-sensitive internal problem response. */

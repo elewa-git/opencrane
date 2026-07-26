@@ -12,11 +12,12 @@ Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim the
 that exact Job and register the unique first Pod.
 
 The same process also projects governed skill workloads into the authoring and tool-runner
-namespaces. Those Jobs are always created suspended and their UID is committed to the durable skill
-record. This app has only `get/create` Job access there: it cannot patch, release, inspect Pods, or
-write Secrets in either skill namespace. A separate fail-closed admission policy permits that
-create verb only for the pinned, class-specific suspended worker shape, so the controller cannot use
-its Job permission to create arbitrary work.
+namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
+A separate database-fenced release permits one conditional unsuspend with a deadline bounded by that
+release, followed by registration of the exact first Job-owned Pod. The controller cannot write
+Secrets or choose a worker identity in either skill namespace. A separate fail-closed admission
+policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
+permission to create arbitrary work.
 
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
