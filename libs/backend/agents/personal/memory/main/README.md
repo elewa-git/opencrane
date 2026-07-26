@@ -54,12 +54,18 @@ from a first learned preference.
 - `MemoryCatalogRepository` — the persistence port a caller may inject.
 - `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
   metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
+- `__ResolvePersonalMemoryDataset(repository, command)` — selects the one active personal dataset
+  from a signed run's silo, organization, and subject. It takes no caller-supplied dataset id.
+- `PrismaPersonalMemoryDatasetRepository` — the production lookup adapter for that exact personal
+  dataset tuple.
 
 ## Boundary
 
 Consumed by the personal-agent memory-writing path. It never stores durable fact content — that stays
-in Cognee — and it never accepts a fact without an explainable source. Storage is injected through
-`MemoryCatalogRepository`, keeping the use case pure.
+in Cognee — and it never accepts a fact without an explainable source. Its dataset resolver binds
+personal memory to the run's verified `(silo, organization, subject)` tuple; no browser or runtime
+caller can select a different user's dataset by id. Storage is injected through small repository ports,
+keeping both use cases pure.
 
 ## Dependency direction
 
