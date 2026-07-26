@@ -39,7 +39,11 @@ export function __DigestFleetMembershipSignedPayload(revision: FleetMembershipSi
 		})
 		.sort(function _ByCanonicalContent(left, right): number
 		{
-			return __DigestCanonicalJson(left).localeCompare(__DigestCanonicalJson(right));
+			const leftDigest = __DigestCanonicalJson(left);
+			const rightDigest = __DigestCanonicalJson(right);
+			if (leftDigest < rightDigest) return -1;
+			if (leftDigest > rightDigest) return 1;
+			return 0;
 		});
 	return __DigestCanonicalJson({
 		schema: "opencrane.fleet-membership/v1",

@@ -116,7 +116,13 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 	}
 }
 
-/** Selects one deterministic signed assertion while rejecting cross-organization ambiguity. */
+/**
+ * Selects the lowest stable assertion identifier inside one organization.
+ *
+ * Multiple same-organization membership scopes are valid. This choice freezes one exact signed
+ * membership assertion as identity evidence; executable knowledge scope remains the separate
+ * intersection of revision attachments and effective grants.
+ */
 async function _SelectMembershipAssertion(prisma: Prisma.TransactionClient, trustedIssuerId: string, siloId: string, subjectId: string): Promise<{ assertionId: string; scopeKind: FleetMembershipScopeKind; organizationId: string; scopeResourceId: string | null } | null>
 {
 	const revision = await prisma.verifiedFleetMembershipRevision.findFirst({
