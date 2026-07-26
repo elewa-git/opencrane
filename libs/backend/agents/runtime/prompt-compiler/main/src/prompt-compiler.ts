@@ -25,14 +25,15 @@ export const PROMPT_COMPILER_VERSION = "opencrane.prompt-compiler/2026-07-21.1";
  * record is immutable, the same snapshot always compiles to byte-identical output across restarts.
  *
  * @param snapshot - The immutable input snapshot whose `promptCompilerVersion` must equal this compiler's.
+ * @param attempt - Positive AgentRun attempt the input is sealed for; it is not the snapshot schema version.
  * @param repositories - Injected control-plane read ports; the compiler itself holds no database.
  * @returns The literal compiled input, digest-sealed and version-stamped.
  */
-export async function __CompileRunInput(snapshot: RunInputSnapshot, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
+export async function __CompileRunInput(snapshot: RunInputSnapshot, attempt: number, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
 {
 	return ___DoWithTrace("prompt_compiler.compile", { runId: snapshot.runId, snapshotDigest: snapshot.digest }, function _compile(): Promise<CompiledRunInput>
 	{
-		return _compileVerified(snapshot, repositories);
+		return _compileVerified(snapshot, attempt, repositories);
 	});
 }
 
@@ -44,13 +45,22 @@ export function __AppendCompiledTool(input: CompiledRunInput, tool: CompiledTool
 	return { ...unsealed, digest: _digest(unsealed) };
 }
 
+/** Verify that an untrusted persisted value is a complete, digest-sealed compiled runtime input. */
+export function __VerifyCompiledRunInput(value: unknown): CompiledRunInput | null
+{
+	if (!_isCompiledRunInput(value)) return null;
+	const input = value as CompiledRunInput;
+	const { digest, ...unsealed } = input;
+	return _digest(unsealed) === digest ? input : null;
+}
+
 /** Verify the snapshot's compiler version, then assemble and seal the compiled input. */
-async function _compileVerified(snapshot: RunInputSnapshot, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
+async function _compileVerified(snapshot: RunInputSnapshot, attempt: number, repositories: PromptCompilerRepositories): Promise<CompiledRunInput>
 {
 	// 1. Fail closed unless the snapshot was minted for exactly this compiler version.
-	if (snapshot.promptCompilerVersion !== PROMPT_COMPILER_VERSION)
+	if (snapshot.promptCompilerVersion !== PROMPT_COMPILER_VERSION || !Number.isSafeInteger(attempt) || attempt < 1)
 	{
-		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} cannot compile snapshot version ${snapshot.promptCompilerVersion}`);
+		throw new Error(`prompt compiler ${PROMPT_COMPILER_VERSION} requires its own snapshot version and a positive run attempt`);
 	}
 
 	// 2. Dereference every immutable record the literal input needs.
@@ -65,7 +75,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 	// 3. Assemble instructions and budget deterministically, then seal the payload with its digest.
 	const instructions = _assembleInstructions(personaInstructions, memoryStatements, artifactSummaries, skillSummaries);
 	const budget = _resolveBudget(snapshot.budgetPolicy);
-	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt: _attempt(snapshot), instructions, messages, tools, model, budget };
+	const unsealed = { promptCompilerVersion: PROMPT_COMPILER_VERSION, runId: snapshot.runId, attempt, instructions, messages, tools, model, budget };
 	return { ...unsealed, digest: _digest(unsealed) };
 }
 
@@ -79,12 +89,6 @@ function _orderTools(tools: readonly CompiledToolDefinition[]): readonly Compile
 function _orderedFactIds(snapshot: RunInputSnapshot): readonly string[]
 {
 	return snapshot.memoryFacts.map(function _factId(reference): string { return reference.factId; }).sort();
-}
-
-/** Derive the positive attempt the snapshot compiles for, defaulting to the first attempt. */
-function _attempt(snapshot: RunInputSnapshot): number
-{
-	return Number.isSafeInteger(snapshot.snapshotVersion) && snapshot.snapshotVersion > 0 ? snapshot.snapshotVersion : 1;
 }
 
 /** Build the single instructions block from persona text and canonically ordered context sections. */
@@ -127,4 +131,66 @@ function _optionalCount(value: JsonValue | undefined): number | null
 function _digest(unsealed: Omit<CompiledRunInput, "digest">): `sha256:${string}`
 {
 	return `sha256:${createHash("sha256").update(___CanonicalizeJson(unsealed as unknown as JsonValue), "utf8").digest("hex")}`;
+}
+
+/** Return whether a value has every required compiled-input coordinate and nested wire shape. */
+function _isCompiledRunInput(value: unknown): value is CompiledRunInput
+{
+	if (!_isRecord(value) || typeof value["promptCompilerVersion"] !== "string" || typeof value["runId"] !== "string" || !Number.isSafeInteger(value["attempt"]) || (value["attempt"] as number) < 1 || typeof value["instructions"] !== "string" || typeof value["digest"] !== "string") return false;
+	return Array.isArray(value["messages"]) && value["messages"].every(_isCompiledMessage)
+		&& Array.isArray(value["tools"]) && value["tools"].every(_isCompiledTool)
+		&& _isCompiledModelRoute(value["model"])
+		&& _isCompiledBudget(value["budget"]);
+}
+
+/** Return whether a value is the exact literal shape accepted for one compiled conversation turn. */
+function _isCompiledMessage(value: unknown): boolean
+{
+	if (!_isRecord(value)) return false;
+	return (value["role"] === "system" || value["role"] === "user" || value["role"] === "assistant" || value["role"] === "tool") && typeof value["content"] === "string";
+}
+
+/** Return whether a value is one complete resolved tool definition with JSON-safe parameters. */
+function _isCompiledTool(value: unknown): boolean
+{
+	return _isRecord(value) && typeof value["name"] === "string" && typeof value["toolRevisionId"] === "string" && typeof value["description"] === "string" && typeof value["requiresApproval"] === "boolean" && _isJsonValue(value["parametersSchema"]);
+}
+
+/** Return whether a value is the credential-free resolved model route the runtime can consume. */
+function _isCompiledModelRoute(value: unknown): boolean
+{
+	return _isRecord(value) && typeof value["modelAlias"] === "string" && _isOptionalCount(value["maxOutputTokens"]);
+}
+
+/** Return whether a value carries every bounded aggregate budget field. */
+function _isCompiledBudget(value: unknown): boolean
+{
+	return _isRecord(value)
+		&& _isOptionalCount(value["maxModelTurns"])
+		&& _isOptionalCount(value["maxTotalTokens"])
+		&& _isOptionalCount(value["maxCostUsdMicros"])
+		&& _isOptionalCount(value["maxToolInvocations"])
+		&& _isOptionalCount(value["wallClockDeadlineEpochMs"]);
+}
+
+/** Return whether a value is a nullable non-negative safe-integer budget or output limit. */
+function _isOptionalCount(value: unknown): boolean
+{
+	return value === null || (typeof value === "number" && Number.isSafeInteger(value) && value >= 0);
+}
+
+/** Return whether a value is a plain record rather than an array or primitive. */
+function _isRecord(value: unknown): value is Record<string, unknown>
+{
+	return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+/** Return whether a value can be persisted without executable or undefined JavaScript members. */
+function _isJsonValue(value: unknown): value is JsonValue
+{
+	if (value === null || typeof value === "string" || typeof value === "boolean") return true;
+	if (typeof value === "number") return Number.isFinite(value);
+	if (Array.isArray(value)) return value.every(_isJsonValue);
+	if (!_isRecord(value)) return false;
+	return Object.values(value).every(_isJsonValue);
 }

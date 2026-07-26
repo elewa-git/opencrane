@@ -6,11 +6,11 @@ import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, Runtim
  * Injected control-plane compiler that hydrates an immutable snapshot into the literal compiled
  * input carried on `start_attempt`.
  *
- * The dispatch authority calls it inside the same locked transaction that loads the snapshot, so it
+ * The dispatch authority calls it inside the same locked transaction that loads the snapshot and run attempt, so it
  * reads only immutable records and must return byte-identical output for a given snapshot on every
  * mint and idempotent redelivery. The runtime treats the returned payload as opaque.
  */
-export type RunInputCompiler = (snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient) => Promise<CompiledRunInput>;
+export type RunInputCompiler = (snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient) => Promise<CompiledRunInput>;
 
 /** Fixed, server-owned policy for minting and expiring runtime command frames. */
 export interface RuntimeDispatchAuthorityConfig

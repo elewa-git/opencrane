@@ -35,12 +35,12 @@ describe("Prisma run-input compiler model routes", function _DescribePrismaRunIn
 	it("uses the deployment sealed in the snapshot after checking the exact definition has not changed", async function _UsesSealedDeployment()
 	{
 		const compile = __CreatePrismaRunInputCompiler();
-		await expect(compile(_Snapshot({ modelDefinitionId: "model-1", litellmModelId: "deployment-a" }), _Transaction("deployment-a"))).resolves.toMatchObject({ model: { modelAlias: "deployment-a" } });
+		await expect(compile(_Snapshot({ modelDefinitionId: "model-1", litellmModelId: "deployment-a" }), 1, _Transaction("deployment-a"))).resolves.toMatchObject({ model: { modelAlias: "deployment-a" } });
 	});
 
 	it("refuses a route whose registered definition now points to another deployment", async function _RefusesRouteDrift()
 	{
 		const compile = __CreatePrismaRunInputCompiler();
-		await expect(compile(_Snapshot({ modelDefinitionId: "model-1", litellmModelId: "deployment-a" }), _Transaction("deployment-b"))).rejects.toThrow("changed or unavailable model definition");
+		await expect(compile(_Snapshot({ modelDefinitionId: "model-1", litellmModelId: "deployment-a" }), 1, _Transaction("deployment-b"))).rejects.toThrow("changed or unavailable model definition");
 	});
 });

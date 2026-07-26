@@ -218,10 +218,10 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 function _CreatePersonalRunInputCompiler(): RunInputCompiler
 {
 	const compile = __CreatePrismaRunInputCompiler();
-	return async function _compilePersonalInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	return async function _compilePersonalInput(snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient)
 	{
 		// 1. Compile the immutable snapshot normally before composition adds any built-in descriptor.
-		const input = await compile(snapshot, transaction);
+		const input = await compile(snapshot, attempt, transaction);
 		// 2. Exclude non-conversation and non-persona snapshots without inferring a personal service.
 		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
 		// 3. Prove the current service kind in the same compiler transaction; snapshot fields alone are insufficient.

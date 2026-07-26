@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { CompiledModelRoute, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { PROMPT_COMPILER_VERSION, __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
+import { PROMPT_COMPILER_VERSION, __AppendCompiledTool, __CompileRunInput, __VerifyCompiledRunInput } from "../prompt-compiler.js";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types.js";
 
 /** Build a snapshot fixture whose references the fake repositories can resolve. */
@@ -66,36 +66,43 @@ describe("__CompileRunInput", function _describeCompiler()
 {
 	it("stamps the compiler version and preserves message order", async function _stampsVersion()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.promptCompilerVersion).toBe(PROMPT_COMPILER_VERSION);
 		expect(compiled.messages.map(function _content(m): string { return m.content; })).toEqual(["msg:m-1", "msg:m-2"]);
 	});
 
+	it("uses the run attempt rather than the independent snapshot schema version", async function _usesRunAttempt()
+	{
+		const compiled = await __CompileRunInput(_snapshot({ snapshotVersion: 2 }), 1, _repositories());
+
+		expect(compiled.attempt).toBe(1);
+	});
+
 	it("orders tools by name regardless of grant iteration order", async function _ordersTools()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.tools.map(function _name(t): string { return t.name; })).toEqual(["alpha", "zulu"]);
 	});
 
 	it("resolves literal budget numbers from the opaque budget policy", async function _resolvesBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.budget).toEqual({ maxModelTurns: 6, maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 });
 	});
 
 	it("nulls malformed or absent budget limits rather than inventing them", async function _nullsBadBudget()
 	{
-		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), _repositories());
+		const compiled = await __CompileRunInput(_snapshot({ budgetPolicy: { maxTotalTokens: "lots" as unknown as JsonValue } }), 1, _repositories());
 
 		expect(compiled.budget).toEqual({ maxModelTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null });
 	});
 
 	it("assembles persona, memory, artifact, and skill sections in canonical order", async function _assembles()
 	{
-		const compiled = await __CompileRunInput(_snapshot(), _repositories());
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(compiled.instructions).toBe(
 			"You are a careful assistant.\n\n"
@@ -107,8 +114,8 @@ describe("__CompileRunInput", function _describeCompiler()
 
 	it("produces byte-identical output for the same snapshot across repeated compilations", async function _deterministic()
 	{
-		const first = await __CompileRunInput(_snapshot(), _repositories());
-		const second = await __CompileRunInput(_snapshot(), _repositories());
+		const first = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const second = await __CompileRunInput(_snapshot(), 1, _repositories());
 
 		expect(JSON.stringify(second)).toBe(JSON.stringify(first));
 		expect(second.digest).toBe(first.digest);
@@ -117,15 +124,15 @@ describe("__CompileRunInput", function _describeCompiler()
 
 	it("changes the digest when any compiled input changes", async function _digestSensitive()
 	{
-		const base = await __CompileRunInput(_snapshot(), _repositories());
-		const changed = await __CompileRunInput(_snapshot(), _repositories({ loadPersonaInstructions: async function _other(): Promise<string> { return "Different persona."; } }));
+		const base = await __CompileRunInput(_snapshot(), 1, _repositories());
+		const changed = await __CompileRunInput(_snapshot(), 1, _repositories({ loadPersonaInstructions: async function _other(): Promise<string> { return "Different persona."; } }));
 
 		expect(changed.digest).not.toBe(base.digest);
 	});
 
 	it("fails closed when the snapshot targets a different compiler version", async function _versionMismatch()
 	{
-		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), _repositories())).rejects.toThrow(/cannot compile snapshot version/);
+		await expect(__CompileRunInput(_snapshot({ promptCompilerVersion: "opencrane.prompt-compiler/other" }), 1, _repositories())).rejects.toThrow(/requires its own snapshot version/);
 	});
 });
 
@@ -133,7 +140,7 @@ describe("__AppendCompiledTool", function _describeAppend()
 {
 	it("orders the added first-party tool and reseals the changed payload", async function _Reseals()
 	{
-		const input = await __CompileRunInput(_snapshot(), _repositories());
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
 		const updated = __AppendCompiledTool(input, { name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "future change", requiresApproval: false, parametersSchema: { type: "object" } });
 
 		expect(updated.tools.map(function _name(tool): string { return tool.name; })).toEqual(["alpha", "upgrade_session", "zulu"]);
@@ -142,7 +149,31 @@ describe("__AppendCompiledTool", function _describeAppend()
 
 	it("rejects a duplicate tool name so an MCP descriptor cannot shadow a first-party tool", async function _RejectsDuplicateName()
 	{
-		const input = await __CompileRunInput(_snapshot(), _repositories());
+		const input = await __CompileRunInput(_snapshot(), 1, _repositories());
 		expect(function _appendDuplicateName(): void { __AppendCompiledTool(input, { name: "alpha", toolRevisionId: "opencrane:personal:upgrade_session:v1", description: "shadow", requiresApproval: false, parametersSchema: { type: "object" } }); }).toThrow(/already contains tool/);
+	});
+});
+
+describe("__VerifyCompiledRunInput", function _describeVerification()
+{
+	it("accepts a complete literal compiled by this authority", async function _acceptsSealedInput()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(__VerifyCompiledRunInput(compiled)).toEqual(compiled);
+	});
+
+	it("refuses a persisted input whose literal instructions no longer match its digest", async function _refusesChangedInput()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(__VerifyCompiledRunInput({ ...compiled, instructions: "altered" })).toBeNull();
+	});
+
+	it("refuses incomplete nested model and budget payloads", async function _refusesIncompleteNestedPayload()
+	{
+		const compiled = await __CompileRunInput(_snapshot(), 1, _repositories());
+
+		expect(__VerifyCompiledRunInput({ ...compiled, model: {}, budget: {} })).toBeNull();
 	});
 });

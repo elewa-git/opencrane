@@ -5,6 +5,7 @@ import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalR
 import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeChildRunSpawnCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
+import { __VerifyCompiledRunInput } from "@opencrane/backend/agents/runtime/prompt-compiler";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
@@ -70,7 +71,7 @@ interface DispatchedCommandRow
 	readonly kind: RuntimeCommandKind;
 	/** Server-owned lease fence carried by the frame. */
 	readonly fence: number;
-	/** Persisted resume payload for a resume frame, so redelivery survives resume-token consumption. */
+	/** Persisted start input or resume payload, so redelivery avoids mutable-source rehydration. */
 	readonly payload: Prisma.JsonValue | null;
 	/** Canonical issuance instant of the minted frame. */
 	readonly issuedAt: Date;
@@ -125,9 +126,10 @@ export class PrismaRuntimeDispatchAuthority
 		const config = this.config;
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
+		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.command.next", { namespace: identity.namespace }, async function _traceNext(): Promise<RuntimeCommandEnvelope | null>
 		{
-			return _nextCommand(prisma, config, clock, compileRunInput, identity, open, afterSequence);
+			return _nextCommand(prisma, config, clock, compileRunInput, log, identity, open, afterSequence);
 		});
 	}
 
@@ -275,7 +277,7 @@ function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 }
 
 /** Mint or redeliver one command for the connected runtime inside a single locked transaction. */
-async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
+async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, log: Logger, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
 	if (!Number.isSafeInteger(afterSequence) || afterSequence < 0) return null;
 	return prisma.$transaction(async function _dispatch(transaction: Prisma.TransactionClient): Promise<RuntimeCommandEnvelope | null>
@@ -297,10 +299,14 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		const stored = commands.find(function _atTarget(row) { return row.sequence === targetSequence; });
 		if (stored)
 		{
-			// Rebuild the exact body from immutable state (or the stored resume payload) so a redelivered
-			// frame is byte-identical even after the single-use resume token has been consumed.
-			const extras = await _storedCommandExtras(transaction, context, stored, compileRunInput);
-			if (extras === null) return null;
+			// Rebuild the exact body from immutable state and the stored payload so a redelivered frame is
+			// byte-identical without recompiling its frozen start input or reusing a consumed resume token.
+			const extras = _storedCommandExtras(context, stored);
+			if (extras === null)
+			{
+				log.warn({ runId: context.runId, attempt: context.attempt, commandId: stored.commandId, sequence: stored.sequence, failureKind: "stored_command_payload_invalid" }, "runtime dispatch refused invalid persisted command payload");
+				return null;
+			}
 			const envelope = _rebuildEnvelope(context, runtimeInstanceId, stored, extras);
 			const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
 			return admission.outcome === "idempotent" ? envelope : null;
@@ -318,8 +324,8 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		const admission = __AdmitRuntimeCommand({ authority, command: envelope, clock });
 		if (admission.outcome !== "accepted") return null;
 
-		// 5. Persist the accepted command (with any resume payload) and advance the sequence under lock.
-		await transaction.runtimeDispatchedCommand.create({ data: { runId: context.runId, attempt: context.attempt, sequence: envelope.sequence, commandId: envelope.commandId, kind, fence: envelope.fence, payload: extras.resume === null ? Prisma.DbNull : extras.resume as unknown as Prisma.InputJsonValue, issuedAt: new Date(envelope.issuedAt), expiresAt: new Date(envelope.expiresAt) } });
+		// 5. Persist the accepted command body and advance the sequence under lock for exact reconnect replay.
+		await transaction.runtimeDispatchedCommand.create({ data: { runId: context.runId, attempt: context.attempt, sequence: envelope.sequence, commandId: envelope.commandId, kind, fence: envelope.fence, payload: _payloadForPersistence(kind, extras), issuedAt: new Date(envelope.issuedAt), expiresAt: new Date(envelope.expiresAt) } });
 		const advanced = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { nextCommandSequence: admission.nextCommandSequence } });
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
 		// Consume the single-use resume tokens so a duplicate resume can never re-dispatch the results.
@@ -366,7 +372,7 @@ async function _dispatchExternalAction(prisma: PrismaClient, compileRunInput: Ru
 		{
 			const context = await _loadContext(transaction, identity);
 			if (context === null || context.runId !== candidate.runId || context.attempt !== candidate.attempt) return null;
-			const compiled = await compileRunInput(context.snapshot, transaction);
+			const compiled = await compileRunInput(context.snapshot, context.attempt, transaction);
 			return { snapshot: context.snapshot, tools: compiled.tools };
 		});
 	}
@@ -568,7 +574,7 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 {
 	if (kind === RuntimeCommandKind.StartAttempt)
 	{
-		const compiledInput = await compileRunInput(context.snapshot, transaction);
+		const compiledInput = await compileRunInput(context.snapshot, context.attempt, transaction);
 		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
 	}
 	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
@@ -577,18 +583,44 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, cancelReason: "cancelled" };
 }
 
-/** Rebuild the body data for a stored command on redelivery, reading a resume payload from its row. */
-async function _storedCommandExtras(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, row: DispatchedCommandRow, compileRunInput: RunInputCompiler): Promise<CommandExtras | null>
+/** Rebuild the body data for a stored command on redelivery without compiling mutable source records. */
+function _storedCommandExtras(context: RuntimeDispatchContext, row: DispatchedCommandRow): CommandExtras | null
 {
 	if (row.kind === RuntimeCommandKind.StartAttempt)
 	{
-		const compiledInput = await compileRunInput(context.snapshot, transaction);
+		const compiledInput = _compiledInputFromPayload(row.payload, context);
+		if (compiledInput === null) return null;
 		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
 	}
 	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
 	const resume = _resumeFromPayload(row.payload);
 	if (resume === null) return null;
 	return { compiledInput: null, resume, resumeApprovalIds: [], cancelReason: "cancelled" };
+}
+
+/** Store only the command-specific body required for byte-identical redelivery. */
+function _payloadForPersistence(kind: RuntimeCommandKind, extras: CommandExtras): Prisma.InputJsonValue | typeof Prisma.DbNull
+{
+	if (kind === RuntimeCommandKind.StartAttempt)
+	{
+		if (extras.compiledInput === null) throw new Error("runtime dispatch requires compiled input for persisted start command");
+		return { compiledInput: extras.compiledInput } as unknown as Prisma.InputJsonValue;
+	}
+	if (kind === RuntimeCommandKind.ResumeAttempt)
+	{
+		if (extras.resume === null) throw new Error("runtime dispatch requires resume input for persisted resume command");
+		return extras.resume as unknown as Prisma.InputJsonValue;
+	}
+	return Prisma.DbNull;
+}
+
+/** Parse the sealed start payload and refuse database corruption rather than recompiling it differently. */
+function _compiledInputFromPayload(payload: Prisma.JsonValue | null, context: RuntimeDispatchContext): CompiledRunInput | null
+{
+	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
+	const compiledInput = (payload as { readonly [key: string]: JsonValue })["compiledInput"];
+	const verified = __VerifyCompiledRunInput(compiledInput);
+	return verified !== null && verified.runId === context.runId && verified.attempt === context.attempt ? verified : null;
 }
 
 /** Parse a persisted resume payload back into the exact frame it was minted from. */

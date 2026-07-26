@@ -21,9 +21,9 @@ const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", A
  */
 export function __CreatePrismaRunInputCompiler(): RunInputCompiler
 {
-	return function _compile(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
+	return function _compile(snapshot: RunInputSnapshot, attempt: number, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
 	{
-		return __CompileRunInput(snapshot, _repositories(transaction));
+		return __CompileRunInput(snapshot, attempt, _repositories(transaction));
 	};
 }
 

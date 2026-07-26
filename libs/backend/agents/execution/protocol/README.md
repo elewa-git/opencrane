@@ -90,7 +90,10 @@ records needed to compile a dispatch. The dispatch adapter owns two Postgres mod
 `runtime.prisma`: `RuntimeCommandStream` (one per run
 attempt — the lease fence, the bound runtime instance, the next command sequence, and accepted
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
-attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
+attempt's accepted command set). A start command stores its sealed compiled input with that row, so a
+reconnecting runtime receives the identical command without re-reading or recompiling persona, prompt,
+tools, or model routing. Its execution attempt is supplied from the locked `AgentRun`; it is never
+derived from the snapshot schema version. Their clean-database schema lives in the OpenCrane-owned target
 baseline. `RuntimeChildRunSpawnDispatch` is created as pending in the same transaction as candidate
 admission, then stores the terminal completion or refusal; a reconnect sees pending or replays that
 exact outcome instead of reconsidering it. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and

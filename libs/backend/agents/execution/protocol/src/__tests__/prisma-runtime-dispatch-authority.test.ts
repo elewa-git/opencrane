@@ -1,8 +1,11 @@
+import { createHash } from "node:crypto";
+
 import type { PrismaClient } from "@prisma/client";
 import type { Logger } from "@opencrane/observability";
 import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { ___CanonicalizeJson } from "@opencrane/util";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
 import type { RunInputCompiler, RuntimeChildRunSpawnRunner, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
@@ -112,6 +115,8 @@ interface FakeOptions
 	readonly snapshotVersion?: number;
 	/** Makes the persisted identity omit its required organization coordinate. */
 	readonly omitOrganizationId?: boolean;
+	/** Optional compiler used to prove durable start-command redelivery does not rehydrate input. */
+	readonly compileRunInput?: RunInputCompiler;
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
@@ -222,16 +227,17 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
-const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Promise<CompiledRunInput>
+const _compileRunInput: RunInputCompiler = async function _compile(snapshot, attempt): Promise<CompiledRunInput>
 {
-	return { promptCompilerVersion: "v1", runId: snapshot.runId, attempt: 1, instructions: "compiled", messages: [], tools: [], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxModelTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null }, digest: `sha256:${snapshot.digest}` };
+	const unsealed = { promptCompilerVersion: "v1", runId: snapshot.runId, attempt, instructions: "compiled", messages: [], tools: [], model: { modelAlias: "silo-default", maxOutputTokens: null }, budget: { maxModelTurns: null, maxTotalTokens: null, maxCostUsdMicros: null, maxToolInvocations: null, wallClockDeadlineEpochMs: null } };
+	return { ...unsealed, digest: `sha256:${createHash("sha256").update(___CanonicalizeJson(unsealed), "utf8").digest("hex")}` };
 };
 
 /** Build the adapter under test over a fake with the requested durable state. */
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.clock ?? _clock, options.logger, options.childRunSpawnRunner), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, options.compileRunInput ?? _compileRunInput, options.externalActionRunner, options.clock ?? _clock, options.logger, options.childRunSpawnRunner), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -258,7 +264,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(command?.sequence).toBe(1);
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
-		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toBe("sha256:sha256:snap");
+		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toMatch(/^sha256:[a-f0-9]{64}$/);
 	});
 
 	it("refuses legacy or organization-less persisted snapshots before issuing runtime work", async function _refusesLegacySnapshot()
@@ -274,14 +280,35 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 
 	it("idempotently redelivers the same start command to a reconnecting instance", async function _redelivers()
 	{
-		const context = _authority({ runState: "Running" });
+		let compilationCount = 0;
+		const context = _authority({ runState: "Running", compileRunInput: async function _countedCompile(snapshot, attempt, transaction): Promise<CompiledRunInput>
+		{
+			compilationCount += 1;
+			return _compileRunInput(snapshot, attempt, transaction);
+		} });
 
 		const first = await context.authority.__NextCommand(_identity, _open, 0);
 		const redelivered = await context.authority.__NextCommand(_identity, _open, 0);
 
 		expect(redelivered).toEqual(first);
+		expect(compilationCount).toBe(1);
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
+	});
+
+	it("refuses and logs a digest-mismatched stored start payload instead of recompiling it", async function _refusesInvalidStoredPayload()
+	{
+		const logger = { warn: vi.fn() } as unknown as Logger;
+		const context = _authority({ runState: "Running", logger });
+		await context.authority.__NextCommand(_identity, _open, 0);
+		const stored = context.commands[0];
+		if (stored === undefined || stored.payload === undefined || typeof stored.payload !== "object" || Array.isArray(stored.payload)) throw new Error("expected stored start command payload");
+		const compiledInput = (stored.payload as { readonly compiledInput?: Record<string, unknown> }).compiledInput;
+		if (compiledInput === undefined) throw new Error("expected stored compiled input");
+		stored.payload = { ...stored.payload, compiledInput: { ...compiledInput, instructions: "altered" } };
+
+		expect(await context.authority.__NextCommand(_identity, _open, 0)).toBeNull();
+		expect(logger.warn).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, commandId: stored.commandId, sequence: 1, failureKind: "stored_command_payload_invalid" }, "runtime dispatch refused invalid persisted command payload");
 	});
 
 	it("returns null once the sole start command is already at the connection frontier", async function _noneDue()

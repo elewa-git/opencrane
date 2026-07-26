@@ -9,7 +9,8 @@ holds only ID references plus a `promptCompilerVersion` — into the literal `Co
 runtime executes. It dereferences persona, message, tool, memory, artifact, and skill records
 through injected control-plane read ports, resolves the model route and literal budget numbers,
 orders every collection canonically, stamps its own version, and seals the result with a SHA-256
-digest over the canonical payload.
+digest over the canonical payload. The caller supplies the current `AgentRun` attempt separately:
+the snapshot schema version describes the record format and is never used as an execution attempt.
 
 Because every referenced record is immutable, the same snapshot compiles to byte-identical output
 across process restarts. The compiler holds no database of its own: the app injects the read ports
@@ -33,9 +34,12 @@ than being silently compiled by a mismatched version.
 
 ## Public surface
 
-- `__CompileRunInput` — hydrate a snapshot into the literal, digest-sealed `CompiledRunInput`.
+- `__CompileRunInput` — hydrate a snapshot and its current run attempt into the literal, digest-sealed
+  `CompiledRunInput`.
 - `__AppendCompiledTool` — append one composition-owned first-party tool, canonically re-order it,
   and re-seal the literal input without mutating the snapshot.
+- `__VerifyCompiledRunInput` — verify a persisted literal input's complete wire shape and digest before
+  a reconnecting runtime receives it.
 - `PROMPT_COMPILER_VERSION` — the exact version this compiler stamps and requires on every snapshot.
 - `PromptCompilerRepositories` — the injected read ports the runtime authority implements over control-plane
   persona, conversation, tool, memory, artifact, skill, and model-routing records.
