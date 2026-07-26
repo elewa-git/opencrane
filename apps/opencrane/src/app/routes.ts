@@ -38,6 +38,7 @@ import { _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact
 import { _CreatePersonaOnboardingRouter } from "./persona-onboarding-wiring.js";
 import { _CreateDeferredToolApprovalRouter } from "./deferred-tool-approval-wiring.js";
 import { _CreateSteeringIngestRouter } from "./steering-ingest-wiring.js";
+import { _CreateSelfConversationReplayRouter } from "./self-conversation-replay-wiring.js";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _log } from "./log.js";
 
@@ -375,7 +376,8 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma, runAdmission));
   app.use("/api/v1/me/persona", _CreatePersonaOnboardingRouter(prisma));
   app.use("/api/v1/me/approvals", _CreateDeferredToolApprovalRouter(prisma));
-  app.use("/api/v1/me/runs", _CreateSteeringIngestRouter(prisma));
+	app.use("/api/v1/me/runs", _CreateSteeringIngestRouter(prisma));
+	app.use("/api/v1/me/conversations", _CreateSelfConversationReplayRouter(prisma));
   app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
   app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
   app.use("/api/v1/shares", sharesRouter(prisma));

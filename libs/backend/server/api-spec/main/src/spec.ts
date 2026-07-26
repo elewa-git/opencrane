@@ -29,6 +29,7 @@ import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
 import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
 import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
+import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -772,6 +773,7 @@ export const spec = {
     ..._MetricsOpenapiPaths,
     ..._AuthorizationOpenapiPaths,
     ..._RuntimeSteeringOpenapiPaths,
+    ..._SelfConversationReplayOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection
