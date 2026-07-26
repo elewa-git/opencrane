@@ -34,7 +34,9 @@ function, and the durable rows)* · [membership](../../../../server/iam/membersh
 
 Every input is loaded through a port (`RunAuthoritySource`, `ApprovedPersonaSource`, …) inside the
 **same database transaction** that admits the run, so a permission revoked or a membership expired a
-millisecond before commit can never leak into the frozen record. One refusal anywhere denies the
+millisecond before commit can never leak into the frozen record. The assembler resolves signed
+membership identity before either personal-memory port and passes that verified organisation to both;
+neither port accepts an organisation coordinate from the caller. One refusal anywhere denies the
 whole assembly with a single precise reason; a duplicate request (same idempotency key) returns the
 previously admitted snapshot without recompiling anything.
 
@@ -64,16 +66,16 @@ caller input.
   in the same silo and accepts its current revision only while it remains approved. Managed runs carry
   no persona, and neither a service nor a caller can select another person's persona revision.
 - `PrismaPreferenceFactSource` — admits optional personalisation only from the user's active
-  `Personal` memory dataset. A fact also needs active state, explicit or confirmed consent, and
-  provenance naming that exact user; shared-scope, inferred, retired, and unproven facts never enter
-  a run snapshot.
+  `Personal` memory dataset in the organisation named by the signed membership assertion. A fact also
+  needs active state, explicit or confirmed consent, and provenance naming that exact user;
+  shared-scope, cross-organisation, inferred, retired, and unproven facts never enter a run snapshot.
 - `PrismaThreadContextSource` — accepts a conversation only when its active thread is bound to the
   exact service, silo, and authenticated participant. It freezes ordered IDs of completed messages
   only; pending and streaming content cannot race into an immutable run input.
 - `PrismaMemoryScopeSource` — limits personal memory to the delegated user's active `Personal`
-  dataset, active explicit/confirmed facts, and complete provenance-backed content digests. It bounds
-  the frozen set to 100 facts and returns an explicit no-memory policy for managed or unprovisioned
-  users.
+  dataset in the verified organisation, active explicit/confirmed facts, and complete
+  provenance-backed content digests. It bounds the frozen set to 100 facts and returns an explicit
+  no-memory policy for managed or unprovisioned users.
 - `__CreatePrismaSessionAssemblyAuthorities` — composes every local Prisma-backed input source with
   the app-owned `RunAdmissionRepository`. The caller must provide the signed identity-envelope
   source explicitly; this factory never invents membership or capability evidence.

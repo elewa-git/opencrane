@@ -54,7 +54,7 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 		lastAcceptedRevision: highestAcceptedRevision,
 		maximumStalenessMs: command.maximumStalenessMs,
 	});
-	if (decision.outcome !== "trusted" || decision.trustedUntilEpochMs === undefined)
+	if (decision.outcome !== "trusted")
 	{
 		return { outcome: "denied", reason: decision.reason, revision: decision.revision };
 	}
@@ -66,5 +66,5 @@ export async function __VerifyCurrentFleetMembershipEvidence(repository: FleetMe
 		return { outcome: "denied", reason: "acceptance_conflict", revision: revision.revision };
 	}
 
-	return { outcome: "trusted", evidence: { issuerId: revision.issuerId, issuerKeyId: revision.issuerKeyId, revision: revision.revision, assertionId: command.assertionId, subjectId: command.subjectId, payloadDigest: revision.payloadDigest, trustedUntilEpochMs: decision.trustedUntilEpochMs } };
+	return { outcome: "trusted", evidence: { issuerId: revision.issuerId, issuerKeyId: revision.issuerKeyId, revision: revision.revision, assertionId: command.assertionId, subjectId: command.subjectId, organizationId: decision.organizationId, payloadDigest: revision.payloadDigest, trustedUntilEpochMs: decision.trustedUntilEpochMs } };
 }

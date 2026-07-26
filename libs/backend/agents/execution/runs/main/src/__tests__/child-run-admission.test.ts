@@ -17,10 +17,10 @@ function _Parent(overrides: Partial<GovernedChildRunParent> = {}): GovernedChild
 		rootRunId: "root-run",
 		siloId: "silo-a",
 		snapshot: {
-			runId: "parent-run", siloId: "silo-a", agentServiceId: "parent-service", agentRevisionId: "parent-revision", snapshotVersion: 1,
+			runId: "parent-run", siloId: "silo-a", agentServiceId: "parent-service", agentRevisionId: "parent-revision", snapshotVersion: 2,
 			threadId: "thread-1", messageIds: ["message-1", "message-2"], personaRevisionId: "persona-1", preferenceFactIds: [], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"],
 			memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"c".repeat(64)}`, provenance: [] }], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {},
-			identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-26T00:00:00.000Z" },
+			identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-26T00:00:00.000Z" },
 			capabilitySetDigest: _PARENT_CAPABILITY_DIGEST, capabilitySet: _PARENT_CAPABILITY_SET.capabilities, effectiveContractDigest: `sha256:${"e".repeat(64)}`, promptCompilerVersion: "test-v1", digest: `sha256:${"f".repeat(64)}`, compiledAt: "2026-07-25T00:00:00.000Z",
 		},
 		depth: 0,

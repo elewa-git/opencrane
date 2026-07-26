@@ -1,7 +1,7 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
 import { describe, expect, it } from "vitest";
 
-import { __VerifyCurrentFleetMembership } from "../membership-authority.js";
+import { __VerifyCurrentFleetMembership, __VerifyCurrentFleetMembershipEvidence } from "../membership-authority.js";
 import type { FleetMembershipAcceptance, FleetMembershipAcceptanceResult, FleetMembershipAuthorityRepository, FleetMembershipSignatureVerifier, VerifyFleetMembershipCommand } from "../membership-authority.types.js";
 
 /** Creates a signed fleet revision whose assertion matches the command fixture. */
@@ -129,6 +129,25 @@ describe("fleet-membership authority", function _suite()
 		expect(result).toEqual({ outcome: "trusted", revision: 7, trustedUntilEpochMs: 4000 });
 		expect(await repository.getHighestAcceptedRevision("fleet-1", "silo-1")).toBe(7);
 		expect(await repository.getHighestAcceptedRevision("fleet-other", "silo-1")).toBe(0);
+	});
+
+	it("freezes the organization only from the matched signed assertion", async function _signedOrganization()
+	{
+		const result = await __VerifyCurrentFleetMembershipEvidence(new _MembershipRepository(_revision()), new _Verifier(), _command(2_000));
+
+		expect(result).toEqual({
+			outcome: "trusted",
+			evidence: {
+				issuerId: "fleet-1",
+				issuerKeyId: "key-1",
+				revision: 7,
+				assertionId: "assertion-1",
+				subjectId: "user-1",
+				organizationId: "org-1",
+				payloadDigest: "sha256:membership-7",
+				trustedUntilEpochMs: 4_000,
+			},
+		});
 	});
 
 	it("rejects a subject mismatch even under a valid fleet signature", async function _wrongSubject()

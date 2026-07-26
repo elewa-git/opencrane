@@ -93,15 +93,31 @@ export type FleetMembershipTrustReason =
 	| "stale"
 	| "assertion_mismatch";
 
-/** Fail-closed fleet membership trust result. */
-export interface FleetMembershipTrustDecision
+/** Signed membership evidence accepted at the pure trust boundary. */
+export interface TrustedFleetMembershipDecision
 {
-	/** Whether the signed membership revision may be trusted. */
-	outcome: "trusted" | "denied";
-	/** Stable reason explaining the trust result. */
-	reason: FleetMembershipTrustReason;
+	/** Signals that every signed-envelope, time, and assertion check succeeded. */
+	readonly outcome: "trusted";
+	/** Stable successful trust reason. */
+	readonly reason: "trusted";
 	/** Revision evaluated at the trust boundary. */
-	revision: number;
+	readonly revision: number;
+	/** Organization claimed by the exact signed assertion that matched this decision. */
+	readonly organizationId: string;
 	/** Earliest epoch-millisecond boundary after which trust must fail closed. */
-	trustedUntilEpochMs?: number;
+	readonly trustedUntilEpochMs: number;
 }
+
+/** Fail-closed membership denial that deliberately exposes no assertion-derived identity. */
+export interface DeniedFleetMembershipDecision
+{
+	/** Signals that the signed membership revision cannot be trusted. */
+	readonly outcome: "denied";
+	/** Stable rejection reason. */
+	readonly reason: Exclude<FleetMembershipTrustReason, "trusted">;
+	/** Revision evaluated at the trust boundary. */
+	readonly revision: number;
+}
+
+/** Result of evaluating one signed fleet-membership revision. */
+export type FleetMembershipTrustDecision = TrustedFleetMembershipDecision | DeniedFleetMembershipDecision;

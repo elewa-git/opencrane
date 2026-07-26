@@ -81,6 +81,8 @@ export interface TrustedFleetMembershipEvidence
 	readonly assertionId: string;
 	/** Subject whose membership was verified. */
 	readonly subjectId: string;
+	/** Organization from the exact signed assertion that authorized this subject. */
+	readonly organizationId: string;
 	/** Digest of the exact signed membership payload. */
 	readonly payloadDigest: string;
 	/** UTC epoch-millisecond limit on trust for this verified evidence. */

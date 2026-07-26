@@ -421,7 +421,7 @@ async function _loadContext(transaction: Prisma.TransactionClient, identity: Run
 	const run = await transaction.agentRun.findUnique({ where: { id: assignment.runId } });
 	if (run === null || run.attempt !== assignment.attempt || run.agentServiceId !== assignment.agentServiceId || run.agentRevisionId !== assignment.agentRevisionId || run.siloId !== assignment.siloId) return null;
 	const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
-	if (snapshot === null) return null;
+	if (snapshot === null || snapshot.snapshotVersion !== 2) return null;
 	const snapshotIdentity = _snapshotIdentity(snapshot.identitySnapshot);
 	if (snapshotIdentity === null) return null;
 
@@ -711,12 +711,13 @@ function _computeAssignmentDigest(context: { runId: string; attempt: number; age
 }
 
 /** Parse the trusted execution identity fields from the immutable snapshot JSON. */
-function _snapshotIdentity(value: unknown): { subjectUserId: string; fleetMembershipRevision: number } | null
+function _snapshotIdentity(value: unknown): { subjectUserId: string; organizationId: string; fleetMembershipRevision: number } | null
 {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const identity = value as Record<string, unknown>;
 	const subjectUserId = identity["executionSubjectId"];
+	const organizationId = identity["organizationId"];
 	const fleetMembershipRevision = identity["fleetMembershipRevision"];
-	if (typeof subjectUserId !== "string" || subjectUserId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0) return null;
-	return { subjectUserId, fleetMembershipRevision };
+	if (typeof subjectUserId !== "string" || subjectUserId.trim().length === 0 || typeof organizationId !== "string" || organizationId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0) return null;
+	return { subjectUserId, organizationId, fleetMembershipRevision };
 }

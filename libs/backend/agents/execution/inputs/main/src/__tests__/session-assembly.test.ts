@@ -27,7 +27,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		memoryScope: { load: async function _load() { return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, memoryFacts: [{ datasetId: "dataset-b", factId: "fact-2", contentDigest: `sha256:${"1".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-2", capturedAt: "2026-07-19T11:59:00.000Z" }] }, { datasetId: "dataset-a", factId: "fact-1", contentDigest: `sha256:${"2".repeat(64)}`, provenance: [{ sourceKind: "explicit-user-fact", sourceId: "preference-1", sourceUserId: "user-1", capturedAt: "2026-07-19T11:58:00.000Z" }] }] } } as const; } },
 		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", allowedTools: ["tool-2", "tool-1"] }, { integrationId: "integration-1", allowedTools: ["tool-1"] }], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
-		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { executionSubjectId: "user-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}`, capabilitySet: [] } } as const; } },
+		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}`, capabilitySet: [] } } as const; } },
 	};
 }
 
@@ -46,6 +46,43 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		expect(firstSnapshots[0]?.messageIds).toEqual(["message-2", "message-1"]);
 		expect(firstSnapshots[0]?.preferenceFactIds).toEqual(["preference-1", "preference-2"]);
 		expect(firstSnapshots[0]?.memoryFacts.map(function _factId(fact) { return fact.factId; })).toEqual(["fact-1", "fact-2"]);
+	});
+
+	it("resolves signed organization identity before binding it into personal-memory reads", async function _bindsVerifiedIdentityBeforeMemoryReads()
+	{
+		const loadOrder: string[] = [];
+		let preferenceOrganizationId: string | null = null;
+		let memoryOrganizationId: string | null = null;
+		const authorities = _Authorities(function _accept() { return "accepted"; });
+		authorities.identityEnvelope = {
+			load: async function _load()
+			{
+				loadOrder.push("identity");
+				return { outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-signed", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}`, capabilitySet: [] } } as const;
+			},
+		};
+		authorities.preferenceFacts = {
+			load: async function _load(_command, _run, identity)
+			{
+				loadOrder.push("preferences");
+				preferenceOrganizationId = identity.organizationId;
+				return { outcome: "loaded", value: [] } as const;
+			},
+		};
+		authorities.memoryScope = {
+			load: async function _load(_command, _run, identity)
+			{
+				loadOrder.push("memory");
+				memoryOrganizationId = identity.organizationId;
+				return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal" }, memoryFacts: [] } } as const;
+			},
+		};
+
+		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toMatchObject({ outcome: "assembled" });
+
+		expect(loadOrder).toEqual(["identity", "preferences", "memory"]);
+		expect(preferenceOrganizationId).toBe("org-signed");
+		expect(memoryOrganizationId).toBe("org-signed");
 	});
 
 	it("fails closed before persistence when a personal service has no active approved persona", async function _deniesMissingPersona()
@@ -95,7 +132,7 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	it("returns the snapshot selected by an earlier admission without compiling a later request timestamp", async function _returnsIdempotentSnapshot()
 	{
 		let sourceLoads = 0;
-		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, capabilitySet: [], effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
+		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 2, threadId: "thread-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, capabilitySet: [], effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
 		const authorities = _Authorities(function _accept() { return "accepted"; });
 		authorities.admission = { admit: async function _admit() { return { outcome: "idempotent", snapshot: previous } as const; } };
 		authorities.runAuthority = { load: async function _load() { sourceLoads += 1; return { outcome: "denied", reason: "run_not_admittable" } as const; } };

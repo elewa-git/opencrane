@@ -3,7 +3,7 @@ import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryF
 import type { MemoryFactReference } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
-import type { MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
+import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
 
 /** Maximum recalled personal facts frozen into one immutable prompt input. */
 const _MAX_PERSONAL_MEMORY_FACTS = 100;
@@ -15,14 +15,14 @@ const _ISO_UTC_INSTANT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{3})?Z$/;
 export class PrismaMemoryScopeSource implements MemoryScopeSource
 {
 	/** Load a bounded personal memory scope for the delegated user, or no personal memory for managed runs. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
 	{
 		if (run.agentKind === "managed") return { outcome: "loaded", value: _NoMemoryScope() };
 		if (run.delegatedUserId === null || run.delegatedUserId !== command.executionSubjectId) return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 1. Discover only the user-owned Personal dataset; no shared scope is implicitly eligible.
 		const dataset = await transaction.prisma.memoryDataset.findFirst({
-			where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, scopeResourceId: run.delegatedUserId, state: MemoryDatasetState.Active },
+			where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, organizationId: identity.organizationId, scopeResourceId: run.delegatedUserId, state: MemoryDatasetState.Active },
 			select: { id: true },
 		});
 		if (dataset === null) return { outcome: "loaded", value: _NoMemoryScope() };

@@ -33,7 +33,8 @@ itself is genuine, current, and the newest one seen.
 It consumes the freshest locally stored signed revision plus a fresh cryptographic check of the
 signature, and hands off either a trusted window or the complete signed evidence needed to freeze
 identity into a run snapshot. That evidence names the issuer, signing key, revision, assertion,
-subject, payload digest and trust expiry; callers cannot assemble it from request claims.
+subject, **organization from the matching signed assertion**, payload digest and trust expiry;
+callers cannot assemble it from request claims.
 
 It is strict in three ways worth knowing. Absence is never membership — no stored revision means
 denied, not trusted. A cached revision is trusted only until the earlier of its own signed expiry or
@@ -49,7 +50,7 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
 - `__VerifyCurrentFleetMembership` — verifies the newest signed membership revision and, on success,
   atomically records its acceptance; returns a trusted window or a denial with a reason.
 - `__VerifyCurrentFleetMembershipEvidence` — performs the same verification but returns the exact
-  signed issuer, key, assertion, subject, payload digest, revision, and trust window that a run may
+  signed issuer, key, assertion, subject, organization, payload digest, revision, and trust window that a run may
   freeze into its input snapshot.
 - `PrismaFleetMembershipAuthorityRepository` — the database-backed store of signed revisions and the
   highest-accepted high-water mark. It can own a transaction or join the run-admission transaction,

@@ -12,6 +12,8 @@ interface SnapshotExecutionIdentity
 {
 	/** User or delegated subject whose authority the runtime exercises. */
 	readonly subjectId: string;
+	/** Verified organization that scopes every personal-memory input. */
+	readonly organizationId: string;
 	/** Last instant at which the signed fleet-membership evidence remains trusted. */
 	readonly fleetMembershipTrustedUntilEpochMilliseconds: number;
 }
@@ -532,10 +534,11 @@ function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity |
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const identity = value as Record<string, unknown>;
 	const subjectId = identity["executionSubjectId"];
+	const organizationId = identity["organizationId"];
 	const trustedUntil = identity["fleetMembershipTrustedUntil"];
-	if (typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
+	if (typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof organizationId !== "string" || organizationId.trim().length === 0 || organizationId.length > 256 || typeof trustedUntil !== "string") return null;
 	const fleetMembershipTrustedUntilEpochMilliseconds = _CanonicalUtcInstantEpochMilliseconds(trustedUntil);
-	return fleetMembershipTrustedUntilEpochMilliseconds === null ? null : { subjectId, fleetMembershipTrustedUntilEpochMilliseconds };
+	return fleetMembershipTrustedUntilEpochMilliseconds === null ? null : { subjectId, organizationId, fleetMembershipTrustedUntilEpochMilliseconds };
 }
 
 /** Parse the sole canonical UTC ISO-8601 representation used by snapshot and lease contracts. */
@@ -547,9 +550,9 @@ function _CanonicalUtcInstantEpochMilliseconds(value: string): number | null
 }
 
 /** Require the persisted snapshot to repeat every immutable run authority coordinate exactly. */
-function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; digest: string; threadId: string | null }, run: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; inputSnapshotDigest: string; threadId: string | null }): boolean
+function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; effectiveContractDigest: string; digest: string; threadId: string | null }, run: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; inputSnapshotDigest: string; threadId: string | null }): boolean
 {
-	return snapshot.runId === run.id && snapshot.siloId === run.siloId && snapshot.agentServiceId === run.agentServiceId && snapshot.agentRevisionId === run.agentRevisionId && snapshot.effectiveContractDigest === run.effectiveContractDigest && snapshot.digest === run.inputSnapshotDigest && snapshot.threadId === run.threadId;
+	return snapshot.runId === run.id && snapshot.siloId === run.siloId && snapshot.agentServiceId === run.agentServiceId && snapshot.agentRevisionId === run.agentRevisionId && snapshot.snapshotVersion === 2 && snapshot.effectiveContractDigest === run.effectiveContractDigest && snapshot.digest === run.inputSnapshotDigest && snapshot.threadId === run.threadId;
 }
 
 /** Compare an existing immutable assignment with the complete canonical command and run authority. */

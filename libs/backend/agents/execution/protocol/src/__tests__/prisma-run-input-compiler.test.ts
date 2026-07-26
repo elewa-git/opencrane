@@ -9,7 +9,7 @@ function _Snapshot(modelRoute: object): never
 {
 	return {
 		runId: "run-1",
-		snapshotVersion: 1,
+		snapshotVersion: 2,
 		personaRevisionId: null,
 		messageIds: [],
 		integrationAssignments: [],
@@ -18,6 +18,7 @@ function _Snapshot(modelRoute: object): never
 		skillRevisionIds: [],
 		modelRoute,
 		budgetPolicy: {},
+		identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1" },
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,
 		digest: "sha256:snapshot",
 	} as never;

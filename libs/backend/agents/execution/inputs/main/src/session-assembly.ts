@@ -8,7 +8,7 @@ import { _CanonicalMemoryFacts, _IsIdentityFresh } from "./utils/canonical-input
 import type { ApprovedPersonaInput, AssembleRunInputSnapshotResult, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyRefusalReason, ThreadContextInput, ToolPolicyInput } from "./session-assembly.types.js";
 
 /** Stable contract version emitted by the first session assembler. */
-const _SNAPSHOT_VERSION = 1;
+const _SNAPSHOT_VERSION = 2;
 
 /**
  * Admits one logical run by compiling its sole immutable `RunInputSnapshot`.
@@ -42,20 +42,21 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (thread.outcome === "denied") return thread;
 		if (command.threadId === null && thread.value.messageIds.length > 0) return { outcome: "denied", reason: "thread_unavailable" } as const;
 
-		// 6. Freeze preferences, memory, tools, budgets, and signed identity in the same final transaction.
-		const preferences = await authorities.preferenceFacts.load(command, run.value, transaction);
+		// 6. Verify signed identity first so personal-memory readers cannot select an organisation from caller input.
+		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);
+		if (identity.outcome === "denied") return identity;
+		if (identity.value.executionSubjectId !== command.executionSubjectId || !_IsIdentityFresh(identity.value, transaction.admittedAt)) return { outcome: "denied", reason: "membership_stale" } as const;
+
+		// 7. Freeze org-scoped preferences, memory, tools, and budgets in the same final transaction.
+		const preferences = await authorities.preferenceFacts.load(command, run.value, identity.value, transaction);
 		if (preferences.outcome === "denied") return preferences;
-		const memory = await authorities.memoryScope.load(command, run.value, transaction);
+		const memory = await authorities.memoryScope.load(command, run.value, identity.value, transaction);
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
-		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);
-		if (identity.outcome === "denied") return identity;
-		if (!_IsIdentityFresh(identity.value, transaction.admittedAt)) return { outcome: "denied", reason: "membership_stale" } as const;
-
-		// 7. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
+		// 8. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, thread.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
 	});
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
@@ -100,6 +101,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: {
 			executionSubjectId: identity.executionSubjectId,
+			organizationId: identity.organizationId,
 			fleetMembershipRevision: identity.fleetMembershipRevision,
 			fleetMembershipIssuer: identity.fleetMembershipIssuer,
 			fleetMembershipIssuerKeyId: identity.fleetMembershipIssuerKeyId,

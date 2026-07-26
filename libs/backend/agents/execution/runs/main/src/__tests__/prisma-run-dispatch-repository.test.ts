@@ -36,9 +36,9 @@ function _Event(overrides: Record<string, unknown> = {})
 }
 
 /** Creates the immutable input snapshot and its time-bounded signed membership identity. */
-function _Snapshot(trustedUntil = "2026-07-20T02:00:00.000Z")
+function _Snapshot(trustedUntil = "2026-07-20T02:00:00.000Z", overrides: Record<string, unknown> = {})
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", threadId: "thread-1", modelRoute: { modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-silo-1" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipTrustedUntil: trustedUntil } };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 2, effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", threadId: "thread-1", modelRoute: { modelDefinitionId: "model-definition-1", litellmModelId: "litellm-deployment-silo-1" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipTrustedUntil: trustedUntil }, ...overrides };
 }
 
 /** Creates the immutable model definition that resolves one snapshot identity to one LiteLLM deployment. */
@@ -175,6 +175,26 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(result).toMatchObject({ status: "claimed", claim: { attempt: { litellmKey: "sk-attempt-transient" } } });
 		// The transient key rides the claim response only; it appears in no database write argument.
 		expect(JSON.stringify(writes)).not.toContain("sk-attempt-transient");
+	});
+
+	it("terminalises a v1 snapshot without verified organization identity", async function _RejectsLegacySnapshot()
+	{
+		const run = _Run();
+		const event = _Event();
+		const transaction = {
+			$queryRaw: vi.fn().mockResolvedValueOnce([{ eventId: event.id, runId: run.id, agentServiceId: run.agentServiceId }]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([]).mockResolvedValueOnce([{ now: new Date("2026-07-20T00:00:00.000Z") }]),
+			agentService: { findUnique: vi.fn().mockResolvedValue(_Service()) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 2 } }), create: vi.fn().mockResolvedValue({}) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
+			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(_Snapshot("2026-07-20T02:00:00.000Z", { snapshotVersion: 1, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipTrustedUntil: "2026-07-20T02:00:00.000Z" } })) },
+		};
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+
+		await expect(repository.claimNextAttemptAtomically()).resolves.toEqual({ status: "none" });
+		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: { id: "event-1", claimedAt: null, deliveryCount: 0, publishedAt: null, failedAt: null }, data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1, failedAt: new Date("2026-07-20T00:00:00.000Z"), failureCode: "RUN_DISPATCH_SNAPSHOT_INVALID" } });
 	});
 
 	it("terminalises a route whose definition changed before it can mint a replacement deployment key", async function _RejectsModelRouteDrift()

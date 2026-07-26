@@ -108,6 +108,10 @@ interface FakeOptions
 	readonly clock?: RuntimeProtocolClock;
 	/** Approved deferred-tool results available for a resume frame. */
 	readonly approvedDeferredResults?: readonly unknown[];
+	/** Durable snapshot contract version exposed to the runtime dispatcher. */
+	readonly snapshotVersion?: number;
+	/** Makes the persisted identity omit its required organization coordinate. */
+	readonly omitOrganizationId?: boolean;
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
@@ -120,7 +124,8 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshotIdentity = options.omitOrganizationId ? { executionSubjectId: "user-1", fleetMembershipRevision: 3 } : { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: options.snapshotVersion ?? 2, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: snapshotIdentity, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 
 	/** Return whether a stream row satisfies the guard fields present in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
@@ -254,6 +259,17 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
 		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toBe("sha256:sha256:snap");
+	});
+
+	it("refuses legacy or organization-less persisted snapshots before issuing runtime work", async function _refusesLegacySnapshot()
+	{
+		const legacyVersion = _authority({ runState: "Running", snapshotVersion: 1 });
+		const missingOrganization = _authority({ runState: "Running", omitOrganizationId: true });
+
+		await expect(legacyVersion.authority.__NextCommand(_identity, _open, 0)).resolves.toBeNull();
+		await expect(missingOrganization.authority.__NextCommand(_identity, _open, 0)).resolves.toBeNull();
+		expect(legacyVersion.commands).toHaveLength(0);
+		expect(missingOrganization.commands).toHaveLength(0);
 	});
 
 	it("idempotently redelivers the same start command to a reconnecting instance", async function _redelivers()

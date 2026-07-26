@@ -69,6 +69,8 @@ export interface IdentityEnvelopeInput
 {
 	/** Subject authorized to cause this exact execution. */
 	executionSubjectId: string;
+	/** Organization selected by the verified signed membership assertion. */
+	organizationId: string;
 	/** Highest verified fleet-membership revision used to authorize the run. */
 	fleetMembershipRevision: number;
 	/** Issuer that signed the accepted fleet-membership revision. */
@@ -119,14 +121,14 @@ export interface ThreadContextSource
 export interface PreferenceFactSource
 {
 	/** Loads zero or more stable preference fact identifiers. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
 }
 
 /** Reads authorised memory scope and pinned fact references. */
 export interface MemoryScopeSource
 {
 	/** Loads the exact memory scope allowed for this run. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
 }
 
 /** Reads revision assignments intersected with the caller's effective grants. */
