@@ -163,6 +163,8 @@ export interface AgentServiceHistory
 /** Concurrency-capable persistence boundary for the managed-agent definition plane. */
 export interface AgentRevisionLifecycleRepository
 {
+	/** Lists managed service identities in the caller's silo, newest first, for catalogue discovery. */
+	listManagedServices(siloId: SiloId): Promise<readonly AgentService[]>;
 	/** Loads one stable service identity scoped to the caller's silo, or null when absent. */
 	getService(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
 	/** Loads one immutable revision whose parent service is in the caller's silo, or null. */

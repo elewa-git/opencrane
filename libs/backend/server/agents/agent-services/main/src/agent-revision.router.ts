@@ -165,6 +165,17 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		return caller;
 	}
 
+	router.get("/", async function _list(req: Request, res: Response)
+	{
+		try
+		{
+			const caller = _requireCaller(req, res);
+			if (caller === null) return;
+			res.status(200).json({ services: await lifecycle.listManagedServices(caller.siloId) });
+		}
+		catch (error) { _fail(res, error, "list"); }
+	});
+
 	router.post("/", async function _create(req: Request, res: Response)
 	{
 		try

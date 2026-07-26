@@ -17,6 +17,11 @@ class _Repository implements AgentRevisionLifecycleRepository
 	readonly revisions: AgentRevision[] = [];
 	private counter = 0;
 
+	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
+	{
+		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === "managed").sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
+	}
+
 	async getService(id: string, siloId: string): Promise<AgentService | null>
 	{
 		const service = this.services.get(id) ?? null;

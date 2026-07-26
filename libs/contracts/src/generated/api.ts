@@ -1202,6 +1202,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/agent-services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List managed agent services in the signed-in caller's silo
+         * @description The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.
+         */
+        get: operations["listManagedAgentServices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1875,6 +1895,21 @@ export interface components {
             expiresAt: string;
             /** Format: date-time */
             createdAt: string;
+        };
+        AgentService: {
+            id: string;
+            siloId: string;
+            /** @enum {string} */
+            kind: "managed";
+            name: string;
+            /** @enum {string} */
+            state: "draft" | "active" | "paused" | "retired";
+            activeRevisionId: string | null;
+            workloadProfile: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -5434,6 +5469,46 @@ export interface operations {
             };
             /** @description Canonical history could not be read. */
             503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listManagedAgentServices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Managed agent services in the selected silo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        services: components["schemas"]["AgentService"][];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The management authority could not read the catalogue. */
+            500: {
                 headers: {
                     [name: string]: unknown;
                 };

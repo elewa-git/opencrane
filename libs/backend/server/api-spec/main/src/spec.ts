@@ -32,6 +32,7 @@ import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/executio
 import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
 import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
 import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
+import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -714,6 +715,21 @@ export const spec = {
           createdAt: { type: "string", format: "date-time" },
         },
       },
+      AgentService: {
+        type: "object",
+        required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],
+        properties: {
+          id: { type: "string" },
+          siloId: { type: "string" },
+          kind: { type: "string", enum: ["managed"] },
+          name: { type: "string" },
+          state: { type: "string", enum: ["draft", "active", "paused", "retired"] },
+          activeRevisionId: { type: "string", nullable: true },
+          workloadProfile: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -803,6 +819,7 @@ export const spec = {
     ..._SelfRunStatusOpenapiPaths,
     ..._PersonaOnboardingOpenapiPaths,
     ..._SelfConversationReplayOpenapiPaths,
+    ..._AgentServicesOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

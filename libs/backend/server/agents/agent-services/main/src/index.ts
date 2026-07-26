@@ -7,6 +7,7 @@ export type { AgentRevisionContent, AgentRevisionLifecycleDenial, AgentRevisionL
 export { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle.js";
 export { __CreateAgentServicesRouter } from "./agent-revision.router.js";
 export type { AgentServicesRouterDependencies, ManagementCaller, ManagementClock } from "./agent-revision.router.types.js";
+export { _AgentServicesOpenapiPaths } from "./openapi.js";
 export { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __ValidateAttachAuthority } from "./scope-attachment-authority.js";
 export type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 export { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
