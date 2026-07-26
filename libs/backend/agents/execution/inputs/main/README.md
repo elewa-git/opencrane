@@ -51,6 +51,8 @@ caller input.
 - `FleetMembershipIdentityEnvelopeSource` — the identity port implementation: accepts only a
   cryptographically verified fleet-membership assertion (never caller-supplied claims) and a
   same-transaction capability-set digest.
+- `PersonalMemoryScopeSource` — selects a personal memory dataset from that verified identity's
+  silo, organization, and subject. It cannot receive a dataset identifier from the runtime caller.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -74,8 +76,10 @@ non-canonical digest, or any single source refusal denies the run.
 ## Dependency direction
 
 Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:artifacts`,
-`scope:membership`, `scope:execution-runs`, `scope:execution-inputs`, and `scope:shared` — never on
-apps or unrelated domains.
+`scope:membership`, `scope:personal-memory`, `scope:execution-runs`, `scope:execution-inputs`, and
+`scope:shared` — never on apps or unrelated domains. The personal-memory dependency is one-way:
+the assembler consumes its dataset-selection authority; the memory domain never depends on runtime
+assembly.
 
 ## See also
 

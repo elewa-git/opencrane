@@ -169,7 +169,7 @@ export default [
             { sourceTag: "scope:policies", onlyDependOnLibsWithTags: ["scope:grants", "scope:k8s-api", "scope:policies", "scope:projection", "scope:shared"] },
             { sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:personal-personas", "scope:shared"] },
             { sourceTag: "scope:projection", onlyDependOnLibsWithTags: ["scope:cluster-tenants", "scope:k8s-api", "scope:projection", "scope:shared"] },
-            { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agents", "scope:artifacts", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:shared"] },
+            { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agents", "scope:artifacts", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:personal-memory", "scope:shared"] },
             { sourceTag: "scope:providers", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:providers", "scope:shared"] },
             { sourceTag: "scope:retrieval", onlyDependOnLibsWithTags: ["scope:retrieval", "scope:shared"] },
             { sourceTag: "scope:execution-runs", onlyDependOnLibsWithTags: ["scope:agents", "scope:authorization", "scope:execution-runs", "scope:shared"] },
