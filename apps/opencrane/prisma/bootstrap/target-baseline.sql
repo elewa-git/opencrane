@@ -1353,6 +1353,19 @@ CREATE TABLE "run_input_snapshots" (
 );
 
 -- CreateTable
+CREATE TABLE "child_run_reservations" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "root_run_id" TEXT NOT NULL,
+    "depth" INTEGER NOT NULL,
+    "max_tokens" INTEGER NOT NULL,
+    "max_cost_usd_micros" BIGINT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
+);
+
+-- CreateTable
 CREATE TABLE "workload_assignments" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -2196,6 +2209,12 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
 
 -- CreateIndex
+CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
+
+-- CreateIndex
+CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
+
+-- CreateIndex
 CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
 
 -- CreateIndex
@@ -2553,6 +2572,12 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revis
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_thread_id_silo_id__fkey" FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2862,6 +2887,50 @@ $$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
+END;
+$$;
+CREATE FUNCTION "enforce_child_run_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child "agent_runs"%ROWTYPE;
+    parent "agent_runs"%ROWTYPE;
+    root "agent_runs"%ROWTYPE;
+    parent_depth INTEGER;
+BEGIN
+    SELECT * INTO child FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR KEY SHARE;
+    SELECT * INTO parent FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    SELECT * INTO root FROM "agent_runs" WHERE "id" = NEW."root_run_id" FOR KEY SHARE;
+
+    IF child."id" IS NULL OR parent."id" IS NULL OR root."id" IS NULL
+        OR child."state" IS DISTINCT FROM 'accepted'::"AgentRunState"
+        OR child."attempt" <> 1
+        OR child."trigger" IS DISTINCT FROM 'managed_invocation'::"AgentRunTrigger"
+        OR child."parent_run_id" IS DISTINCT FROM NEW."parent_run_id"
+        OR child."root_run_id" IS DISTINCT FROM NEW."root_run_id"
+        OR parent."root_run_id" IS DISTINCT FROM NEW."root_run_id"
+        OR root."id" IS DISTINCT FROM root."root_run_id"
+        OR root."parent_run_id" IS NOT NULL
+        OR child."silo_id" IS DISTINCT FROM parent."silo_id"
+        OR parent."silo_id" IS DISTINCT FROM root."silo_id"
+        OR NEW."child_run_id" = NEW."parent_run_id" THEN
+        RAISE EXCEPTION 'ChildRunReservation must bind one same-silo child to its exact parent and root';
+    END IF;
+
+    IF parent."parent_run_id" IS NULL THEN
+        IF parent."id" IS DISTINCT FROM NEW."root_run_id" OR NEW."depth" <> 1 THEN
+            RAISE EXCEPTION 'a direct child reservation must have the canonical root parent and depth 1';
+        END IF;
+    ELSE
+        SELECT "depth" INTO parent_depth FROM "child_run_reservations" WHERE "child_run_id" = parent."id" FOR KEY SHARE;
+        IF parent_depth IS NULL OR NEW."depth" <> parent_depth + 1 THEN
+            RAISE EXCEPTION 'a nested child reservation must continue its parent reservation depth';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "reject_child_run_reservation_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ChildRunReservation rows are immutable';
 END;
 $$;
 CREATE FUNCTION "enforce_initial_agent_run_state"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -4259,6 +4328,11 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_c
         btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
         "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
+    "depth" > 0
+    AND "max_tokens" > 0
+    AND "max_cost_usd_micros" > 0
+);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
@@ -4558,6 +4632,8 @@ CREATE TRIGGER "agent_revision_scope_attachments_immutable"
 CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
 CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
+CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
+CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
 CREATE TRIGGER "agent_runs_initial_state"
     BEFORE INSERT ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_initial_agent_run_state"();

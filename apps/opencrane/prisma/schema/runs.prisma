@@ -47,35 +47,37 @@ enum RunOutboxEventKind {
 
 /// One logical run authority. Retries atomically increment `attempt`; there is no AgentRunAttempt.
 model AgentRun {
-  id                      String                   @id @default(cuid())
-  siloId                  String                   @map("silo_id")
-  agentServiceId          String                   @map("agent_service_id")
-  agentRevisionId         String                   @map("agent_revision_id")
-  threadId                String?                  @map("thread_id")
-  trigger                 AgentRunTrigger
-  delegatedUserId         String?                  @map("delegated_user_id")
-  requestIdempotencyKey   String                   @map("request_idempotency_key")
-  rootRunId               String                   @map("root_run_id")
-  parentRunId             String?                  @map("parent_run_id")
-  attempt                 Int                      @default(1)
-  state                   AgentRunState            @default(Accepted)
-  effectiveContractDigest String                   @map("effective_contract_digest")
-  inputSnapshotDigest     String                   @map("input_snapshot_digest")
-  acceptedAt              DateTime                 @default(now()) @map("accepted_at")
-  startedAt               DateTime?                @map("started_at")
-  finishedAt              DateTime?                @map("finished_at")
-  terminalReason          AgentRunTerminalReason?  @map("terminal_reason")
-  costAmount              Decimal?                 @map("cost_amount") @db.Decimal(18, 6)
-  costCurrency            String?                  @map("cost_currency")
-  revision                AgentRevision            @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
-  service                 AgentService             @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
-  inputSnapshot           RunInputSnapshot?
-  workloadAssignments     WorkloadAssignment[]
-  proofKeys               RunProofKey[]
-  approvalRequests        ApprovalRequest[]
-  executionReceipts       ActionExecutionReceipt[]
-  toolInvocations         ToolInvocation[]
-  outboxEvents            OutboxEvent[]
+  id                       String                   @id @default(cuid())
+  siloId                   String                   @map("silo_id")
+  agentServiceId           String                   @map("agent_service_id")
+  agentRevisionId          String                   @map("agent_revision_id")
+  threadId                 String?                  @map("thread_id")
+  trigger                  AgentRunTrigger
+  delegatedUserId          String?                  @map("delegated_user_id")
+  requestIdempotencyKey    String                   @map("request_idempotency_key")
+  rootRunId                String                   @map("root_run_id")
+  parentRunId              String?                  @map("parent_run_id")
+  attempt                  Int                      @default(1)
+  state                    AgentRunState            @default(Accepted)
+  effectiveContractDigest  String                   @map("effective_contract_digest")
+  inputSnapshotDigest      String                   @map("input_snapshot_digest")
+  acceptedAt               DateTime                 @default(now()) @map("accepted_at")
+  startedAt                DateTime?                @map("started_at")
+  finishedAt               DateTime?                @map("finished_at")
+  terminalReason           AgentRunTerminalReason?  @map("terminal_reason")
+  costAmount               Decimal?                 @map("cost_amount") @db.Decimal(18, 6)
+  costCurrency             String?                  @map("cost_currency")
+  revision                 AgentRevision            @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  service                  AgentService             @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  inputSnapshot            RunInputSnapshot?
+  workloadAssignments      WorkloadAssignment[]
+  proofKeys                RunProofKey[]
+  approvalRequests         ApprovalRequest[]
+  executionReceipts        ActionExecutionReceipt[]
+  toolInvocations          ToolInvocation[]
+  outboxEvents             OutboxEvent[]
+  spawnedChildReservations ChildRunReservation[]    @relation("ChildRunReservationParent")
+  childReservation         ChildRunReservation?     @relation("ChildRunReservationChild")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -89,30 +91,51 @@ model AgentRun {
   @@map("agent_runs")
 }
 
+/// Immutable token and cost allocation made by a parent for one governed child run.
+///
+/// This row is committed with its accepted child run. It makes the parent/root lineage and the
+/// budget carved from the parent auditable, while allowing a parent-locked transaction to count
+/// durable allocations rather than trust a caller-provided remaining budget.
+model ChildRunReservation {
+  childRunId       String   @id @map("child_run_id")
+  parentRunId      String   @map("parent_run_id")
+  rootRunId        String   @map("root_run_id")
+  depth            Int
+  maxTokens        Int      @map("max_tokens")
+  maxCostUsdMicros BigInt   @map("max_cost_usd_micros")
+  createdAt        DateTime @default(now()) @map("created_at")
+  parentRun        AgentRun @relation("ChildRunReservationParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+  childRun         AgentRun @relation("ChildRunReservationChild", fields: [childRunId], references: [id], onDelete: Restrict)
+
+  @@index([parentRunId])
+  @@index([rootRunId])
+  @@map("child_run_reservations")
+}
+
 model RunInputSnapshot {
-  id                      String   @id @default(cuid())
-  runId                   String   @unique @map("run_id")
-  snapshotVersion         Int      @map("snapshot_version")
-  siloId                  String   @map("silo_id")
-  agentServiceId          String   @map("agent_service_id")
-  agentRevisionId         String   @map("agent_revision_id")
-  effectiveContractDigest String   @map("effective_contract_digest")
-  personaRevisionId       String?  @map("persona_revision_id")
-  threadId                String?  @map("thread_id")
-  messageIds              String[] @default([]) @map("message_ids")
-  preferenceFactIds       String[] @default([]) @map("preference_fact_ids")
-  artifactRevisionIds     String[] @default([]) @map("artifact_revision_ids")
-  memoryFacts             Json     @map("memory_facts")
-  identitySnapshot        Json     @map("identity_snapshot")
-  modelRoute              Json     @map("model_route")
-  toolGrantIds            String[] @default([]) @map("tool_grant_ids")
-  skillRevisionIds        String[] @default([]) @map("skill_revision_ids")
-  memoryQueryPolicy       Json     @map("memory_query_policy")
-  budgetPolicy            Json     @map("budget_policy")
-  capabilitySetDigest     String   @map("capability_set_digest")
-  promptCompilerVersion   String   @map("prompt_compiler_version")
-  digest                  String   @unique @map("input_digest")
-  compiledAt              DateTime @default(now()) @map("created_at")
+  id                      String    @id @default(cuid())
+  runId                   String    @unique @map("run_id")
+  snapshotVersion         Int       @map("snapshot_version")
+  siloId                  String    @map("silo_id")
+  agentServiceId          String    @map("agent_service_id")
+  agentRevisionId         String    @map("agent_revision_id")
+  effectiveContractDigest String    @map("effective_contract_digest")
+  personaRevisionId       String?   @map("persona_revision_id")
+  threadId                String?   @map("thread_id")
+  messageIds              String[]  @default([]) @map("message_ids")
+  preferenceFactIds       String[]  @default([]) @map("preference_fact_ids")
+  artifactRevisionIds     String[]  @default([]) @map("artifact_revision_ids")
+  memoryFacts             Json      @map("memory_facts")
+  identitySnapshot        Json      @map("identity_snapshot")
+  modelRoute              Json      @map("model_route")
+  toolGrantIds            String[]  @default([]) @map("tool_grant_ids")
+  skillRevisionIds        String[]  @default([]) @map("skill_revision_ids")
+  memoryQueryPolicy       Json      @map("memory_query_policy")
+  budgetPolicy            Json      @map("budget_policy")
+  capabilitySetDigest     String    @map("capability_set_digest")
+  promptCompilerVersion   String    @map("prompt_compiler_version")
+  digest                  String    @unique @map("input_digest")
+  compiledAt              DateTime  @default(now()) @map("created_at")
   run                     AgentRun? @relation(fields: [runId, digest, threadId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], references: [id, inputSnapshotDigest, threadId, siloId, agentServiceId, agentRevisionId, effectiveContractDigest], onDelete: Restrict)
 
   @@unique([runId, digest])

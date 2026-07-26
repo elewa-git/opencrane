@@ -67,6 +67,13 @@ any failed check. A later persistence adapter must repeat the target check and r
 the same transaction that creates the child run: this pure package intentionally makes no durable
 reservation on its own.
 
+`ChildRunReservation` is the durable companion record for that later transaction. It fixes a
+child's exact parent/root lineage, depth, token allocation, and micro-USD cost allocation. The
+database accepts it only for an accepted first attempt whose existing `AgentRun` already has that
+same lineage and silo, locks the parent while checking it, and rejects every subsequent change.
+The later transaction will calculate remaining capacity from these append-only records rather than
+from a mutable counter or a value supplied by the requesting agent.
+
 `PrismaRunDispatchRepository` is the database side of the controller handshake. It issues a short,
 server-owned claim lease over `RunAttemptRequested`, exposes only the coordinates needed to create a
 suspended Job, and commits the Job UID as a `PendingPod` assignment. At claim time it also mints the
@@ -156,6 +163,8 @@ uncertainty fails closed.
 - `ChildRunTargetAuthorization` / `PrepareChildRunAdmissionCommand` /
   `PrepareChildRunAdmissionResult` — the target-policy port and the prepared-or-denied child
   admission vocabulary.
+- `ChildRunReservation` — the Prisma-owned durable allocation that binds one admitted child to its
+  parent, root, depth, token ceiling, and cost ceiling.
 
 ## Boundary
 
