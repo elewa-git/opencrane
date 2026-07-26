@@ -1,5 +1,6 @@
 import type { JsonValue } from "@opencrane/util";
 import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
 import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
 
@@ -67,7 +68,7 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 			if (integrationTool !== null)
 			{
 				const resolved = await dependencies.integrations.resolveAssignment({ siloId: dependencies.siloId, agentRevisionId: dependencies.agentRevisionId, integrationId: integrationTool.integrationId });
-				if (resolved.outcome !== "resolved") throw new UnsupportedExternalActionError(toolRevisionId);
+				if (resolved.outcome !== "resolved") throw new IntegrationAssignmentUnavailableError(integrationTool.integrationId, resolved.reason);
 				const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
 				return result.content;
 			}

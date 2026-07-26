@@ -1,7 +1,10 @@
 import type { ObotMcpInvocationPort } from "@opencrane/server/_infra/obot-custody";
 import type { SandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import type { MemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
-import type { IntegrationAuthorityRepository } from "@opencrane/backend/server/gateways/integrations";
+import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
+
+/** Safe bounded reason the integration authority can return without exposing custody material. */
+export type IntegrationAssignmentUnavailableReason = Extract<ResolveIntegrationAssignmentResult, { readonly outcome: "unavailable" }>["reason"];
 
 /** Concrete transport ports the composition root injects into the external-action router. */
 export interface ExternalActionExecutorDependencies

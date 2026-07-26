@@ -2,9 +2,10 @@ import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { __CreateExternalActionExecutor, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
+import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types.js";
 
 /** Build a candidate for the given tool revision prefix. */
 function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
@@ -14,6 +15,15 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
 const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+
+/** Proves one live-custody refusal remains typed and never reaches the Obot invocation port. */
+async function _expectAssignmentUnavailable(reason: IntegrationAssignmentUnavailableReason): Promise<void>
+{
+	const invokeTool = vi.fn();
+	const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, integrations: { resolveAssignment: async function _resolve() { return { outcome: "unavailable" as const, reason }; } }, obotMcpInvocation: { invokeTool } });
+	await expect(executor.execute()).rejects.toMatchObject({ name: "IntegrationAssignmentUnavailableError", integrationId: "calendar", reason });
+	expect(invokeTool).not.toHaveBeenCalled();
+}
 
 describe("composition-root external action executor", function _suite()
 {
@@ -27,6 +37,16 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new __FakeObotMcpInvocationAdapter({ content: { result: "ok" } }) });
 		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
+	});
+
+	it("preserves a revoked live assignment as a typed refusal without calling Obot", async function _revoked()
+	{
+		await _expectAssignmentUnavailable("revoked");
+	});
+
+	it("preserves an expired live assignment as a typed refusal without calling Obot", async function _expired()
+	{
+		await _expectAssignmentUnavailable("expired");
 	});
 
 	it("fails closed for a sandbox tool call when no sandbox transport is available", async function _sandbox()

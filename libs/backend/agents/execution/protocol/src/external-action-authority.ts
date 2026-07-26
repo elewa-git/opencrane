@@ -3,8 +3,10 @@ import { createHash } from "node:crypto";
 import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository } from "@opencrane/backend/server/iam/authorization";
+import type { Logger } from "@opencrane/observability";
 
 import type { ExecuteExternalActionCommand, ExecuteExternalActionResult, ExternalActionExecutor } from "./external-action-authority.types.js";
+import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
 
 /** Returns whether a completed receipt still binds the exact validated invocation intent. */
 function _receiptMatchesIntent<TResult>(receipt: ToolInvocationReceipt<TResult>, intent: ToolInvocationIntent): boolean
@@ -39,9 +41,10 @@ function _requestFingerprint(command: ExecuteExternalActionCommand): string
  * @param repository - Durable reserve-before-I/O tool-invocation authority.
  * @param command - Runtime candidate, immutable snapshot, compiled tools, and approval requirement.
  * @param executor - Deferred external tool invoked only for a fresh, non-deferred reservation.
+ * @param log - Structured evidence sink for bounded post-reservation execution failures.
  * @returns First execution, allowed idempotent replay, a deferred reservation, or fail-closed denial.
  */
-export async function __ExecuteExternalAction<TResult>(repository: ToolInvocationRepository, command: ExecuteExternalActionCommand, executor: ExternalActionExecutor<TResult>): Promise<ExecuteExternalActionResult<TResult>>
+export async function __ExecuteExternalAction<TResult>(repository: ToolInvocationRepository, command: ExecuteExternalActionCommand, executor: ExternalActionExecutor<TResult>, log: Logger): Promise<ExecuteExternalActionResult<TResult>>
 {
 	// 1. Bind the candidate to the immutable snapshot's run attempt before trusting any field.
 	const candidate = command.candidate;
@@ -92,11 +95,16 @@ export async function __ExecuteExternalAction<TResult>(repository: ToolInvocatio
 	{
 		result = await executor.execute();
 	}
-	catch
+	catch (error)
 	{
+		const failureCode = _executionFailureCode(error);
+		if (error instanceof IntegrationAssignmentUnavailableError)
+		{
+			log.warn({ runId: candidate.runId, attempt: candidate.attempt, toolInvocationId: candidate.toolInvocationId, toolRevisionId: candidate.toolRevisionId, integrationId: error.integrationId, reason: error.reason, failureKind: "integration_assignment_unavailable" }, "runtime integration assignment became unavailable before execution");
+		}
 		try
 		{
-			const failure = await repository.markFailed(reservation.reservationId, "executor_failed");
+			const failure = await repository.markFailed(reservation.reservationId, failureCode);
 			if (failure.status === "conflict") return { outcome: "denied", reason: "invocation_execution_ambiguous" };
 		}
 		catch
@@ -117,4 +125,10 @@ export async function __ExecuteExternalAction<TResult>(repository: ToolInvocatio
 	{
 		return { outcome: "denied", reason: "invocation_execution_ambiguous" };
 	}
+}
+
+/** Maps only safe typed execution failures into bounded durable evidence. */
+function _executionFailureCode(error: unknown): string
+{
+	return error instanceof IntegrationAssignmentUnavailableError ? `integration_assignment_${error.reason}` : "executor_failed";
 }

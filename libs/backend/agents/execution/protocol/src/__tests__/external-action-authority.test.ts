@@ -4,9 +4,11 @@ import type { CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCan
 import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult } from "@opencrane/backend/server/iam/authorization";
-import { describe, expect, it } from "vitest";
+import type { Logger } from "@opencrane/observability";
+import { describe, expect, it, vi } from "vitest";
 
 import { __ExecuteExternalAction } from "../external-action-authority.js";
+import { IntegrationAssignmentUnavailableError } from "../external-action-errors.js";
 import type { ExternalActionExecutor } from "../external-action-authority.types.js";
 
 /** One granted tool revision the compiled input offers to the run. */
@@ -45,6 +47,8 @@ class _Repository implements ToolInvocationRepository
 	readonly rows = new Map<string, { state: string; receipt: ToolInvocationReceipt<JsonValue> }>();
 	/** Fingerprints already reserved, mapped to their reservation id. */
 	private readonly byFingerprint = new Map<string, string>();
+	/** Safe durable failure codes written by the authority. */
+	readonly failureCodes: string[] = [];
 	/** Seeded prior state simulating an earlier crash or completion. */
 	constructor(private readonly seed?: ToolInvocationReservationResult<JsonValue>) {}
 	/** Records the executor calls so a deferral or replay proves no dispatch happened. */
@@ -69,13 +73,20 @@ class _Repository implements ToolInvocationRepository
 		return { status: "succeeded", receipt: row.receipt as unknown as ToolInvocationReceipt<TResult> };
 	}
 
-	async markFailed(reservationId: string, _failureCode: string): Promise<{ status: "failed" | "conflict" }>
+	async markFailed(reservationId: string, failureCode: string): Promise<{ status: "failed" | "conflict" }>
 	{
 		const row = this.rows.get(reservationId);
 		if (!row || row.state !== "Reserved") return { status: "conflict" };
 		row.state = "Failed";
+		this.failureCodes.push(failureCode);
 		return { status: "failed" };
 	}
+}
+
+/** Build the minimal structured logger used by the action boundary. */
+function _logger(): Logger
+{
+	return { warn: vi.fn() } as unknown as Logger;
 }
 
 /** Executor that records dispatch and returns a fixed result. */
@@ -90,7 +101,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository();
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({ ok: true }, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({ ok: true }, calls), _logger());
 		expect(result.outcome).toBe("executed");
 		expect(repository.reserveCalls).toBe(1);
 		expect(calls.count).toBe(1);
@@ -101,7 +112,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository();
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { toolRevisionId: "integration:search:other" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { toolRevisionId: "integration:search:other" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls), _logger());
 		expect(result).toEqual({ outcome: "denied", reason: "tool_revision_not_granted" });
 		expect(repository.reserveCalls).toBe(0);
 		expect(calls.count).toBe(0);
@@ -111,7 +122,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository();
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { argumentsDigest: "sha256:tampered" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }, { argumentsDigest: "sha256:tampered" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls), _logger());
 		expect(result).toEqual({ outcome: "denied", reason: "arguments_digest_mismatch" });
 		expect(repository.reserveCalls).toBe(0);
 	});
@@ -120,7 +131,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository();
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: true }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: true }, _executor({}, calls), _logger());
 		expect(result.outcome).toBe("deferred");
 		expect(repository.reserveCalls).toBe(1);
 		expect(calls.count).toBe(0);
@@ -133,7 +144,7 @@ describe("external action authority", function _suite()
 		// Bind the seeded receipt to the exact fingerprint the authority will compute for the candidate.
 		const repository = new _Repository({ status: "existing_succeeded", receipt: { ...receipt, requestFingerprint: _fingerprint(candidate) } });
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate, snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate, snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls), _logger());
 		expect(result.outcome).toBe("replayed");
 		expect(calls.count).toBe(0);
 	});
@@ -142,7 +153,7 @@ describe("external action authority", function _suite()
 	{
 		const repository = new _Repository({ status: "existing_reserved" });
 		const calls = { count: 0 };
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls));
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, _executor({}, calls), _logger());
 		expect(result).toEqual({ outcome: "denied", reason: "invocation_replay" });
 		expect(calls.count).toBe(0);
 	});
@@ -150,9 +161,20 @@ describe("external action authority", function _suite()
 	it("marks the invocation failed and denies when the executor throws", async function _failClosed()
 	{
 		const repository = new _Repository();
-		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, { async execute(): Promise<JsonValue> { throw new Error("obot custody unavailable"); } });
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, { async execute(): Promise<JsonValue> { throw new Error("obot custody unavailable"); } }, _logger());
 		expect(result).toEqual({ outcome: "denied", reason: "invocation_execution_failed" });
 		expect([...repository.rows.values()][0].state).toBe("Failed");
+		expect(repository.failureCodes).toEqual(["executor_failed"]);
+	});
+
+	it("records and logs a safe bounded custody reason when a live assignment is revoked", async function _recordsRevocation()
+	{
+		const repository = new _Repository();
+		const logger = _logger();
+		const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, { async execute(): Promise<JsonValue> { throw new IntegrationAssignmentUnavailableError("search", "revoked"); } }, logger);
+		expect(result).toEqual({ outcome: "denied", reason: "invocation_execution_failed" });
+		expect(repository.failureCodes).toEqual(["integration_assignment_revoked"]);
+		expect(logger.warn).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, toolInvocationId: "invocation-1", toolRevisionId: "integration:search:query", integrationId: "search", reason: "revoked", failureKind: "integration_assignment_unavailable" }, "runtime integration assignment became unavailable before execution");
 	});
 });
 

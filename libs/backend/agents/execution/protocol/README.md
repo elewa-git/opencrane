@@ -49,7 +49,9 @@ receipt. That narrow failure returns an explicit bounded retry result from a ser
 budget and deadline, so a reconnecting runtime cannot reset it. The runtime resubmits the same
 candidate identifier rather than falsely treating the action as accepted or emitting a terminal
 executor error. Once a runner records a durable refusal or result, that outcome is final and remains
-fail closed.
+fail closed. If a frozen integration later becomes inactive, revoked, expired, or absent, the
+invocation receipt retains that bounded authority reason and the action boundary emits a
+credential-free structured event; it never collapses a policy revocation into a transport failure.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
 Its external-action adapter routes an admitted action through injected integration custody, sandbox,

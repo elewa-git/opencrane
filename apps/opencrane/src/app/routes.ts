@@ -236,7 +236,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			{
 				return { outcome: "retryable" as const, error };
 			}
-			const result = await __ExecuteExternalAction(repository, { candidate, snapshot, compiledTools, approvalRequired }, executor);
+			const result = await __ExecuteExternalAction(repository, { candidate, snapshot, compiledTools, approvalRequired }, executor, _log);
 			if (result.outcome === "denied") return { outcome: "denied" as const };
 			// A deferred invocation opens the pending approval that gates the eventual resume.
 			if (result.outcome === "deferred")
