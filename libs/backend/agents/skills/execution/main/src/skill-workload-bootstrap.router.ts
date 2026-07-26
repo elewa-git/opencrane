@@ -4,7 +4,16 @@ import { Router, type Request, type Response } from "express";
 
 import type { SkillWorkloadBootstrapRouterDependencies } from "./skill-workload-bootstrap.types.js";
 
-/** Build the one-use worker bootstrap acknowledgement boundary. */
+/**
+ * Build the one-use worker bootstrap acknowledgement boundary.
+ *
+ * **This router is NOT behind `___AuthMiddleware`.** A worker presents its rotating projected
+ * ServiceAccount token; TokenReview and the durable Pod fence provide authorisation, while Helm
+ * limits the worker namespaces to this internal listener and DNS.
+ *
+ * @see apps/opencrane/helm/templates/_networkpolicy.tpl — server ingress and worker egress floor.
+ * @see apps/agent-controller/helm/templates/_resources.tpl — projected worker-token audiences.
+ */
 export function __CreateSkillWorkloadBootstrapRouter(dependencies: SkillWorkloadBootstrapRouterDependencies): Router
 {
 	const router = Router();
