@@ -1,0 +1,40 @@
+import express from "express";
+import request from "supertest";
+import { describe, expect, it, vi } from "vitest";
+import type { Logger } from "@opencrane/observability";
+
+import { __CreatePersonalArtifactCatalogueRouter } from "../personal-artifact-catalogue.router.js";
+import type { PersonalArtifactCatalogueRouterDependencies } from "../personal-artifact-catalogue.router.types.js";
+
+/** Builds owner-scoped catalogue dependencies for router tests. */
+function _dependencies(overrides: Partial<PersonalArtifactCatalogueRouterDependencies> = {}): PersonalArtifactCatalogueRouterDependencies
+{
+	return { resolveCaller: function _caller() { return { siloId: "silo-1", ownerPrincipalId: "user-1" }; }, catalogue: { listOwnedCatalogue: vi.fn().mockResolvedValue([]) }, logger: { error: vi.fn() } as unknown as Logger, ...overrides };
+}
+
+/** Mounts the router below its public personal-assets prefix. */
+function _app(dependencies: PersonalArtifactCatalogueRouterDependencies)
+{
+	const app = express();
+	app.use("/api/v1/me/assets", __CreatePersonalArtifactCatalogueRouter(dependencies));
+	return app;
+}
+
+describe("personal asset catalogue router", function _suite()
+{
+	it("lists only the session-derived owner in the host-derived silo", async function _lists()
+	{
+		const listOwnedCatalogue = vi.fn().mockResolvedValue([{ id: "asset-1" }]);
+		const response = await request(_app(_dependencies({ catalogue: { listOwnedCatalogue } }))).get("/api/v1/me/assets/");
+
+		expect(response.status).toBe(200);
+		expect(response.body.assets).toEqual([{ id: "asset-1" }]);
+		expect(listOwnedCatalogue).toHaveBeenCalledWith("silo-1", "user-1");
+	});
+
+	it("requires an authenticated owner before asset discovery", async function _requiresCaller()
+	{
+		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).get("/api/v1/me/assets/");
+		expect(response.status).toBe(401);
+	});
+});

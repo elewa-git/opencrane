@@ -1282,6 +1282,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's assets
+         * @description The server derives the owner and silo from the browser session and request host. It returns at most fifty non-deleted asset metadata records, never bytes, content addresses, provenance, leases, receipts, or outbox data.
+         */
+        get: operations["listMyAssets"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -5754,6 +5774,61 @@ export interface operations {
                 };
             };
             /** @description The skill catalogue could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-bound personal asset metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assets: {
+                            id: string;
+                            /** @enum {string} */
+                            kind: "document" | "generated" | "skill" | "upload";
+                            /** @enum {string} */
+                            state: "active" | "deletion_pending";
+                            currentRevisionId: string | null;
+                            mediaType: string | null;
+                            byteLength: string | null;
+                            /** @enum {string|null} */
+                            indexState: "pending" | "indexed" | "failed" | "removal_pending" | "removed" | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Personal asset metadata could not be read. */
             503: {
                 headers: {
                     [name: string]: unknown;

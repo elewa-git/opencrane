@@ -42,6 +42,8 @@ result instead of creating a duplicate. A stale, replayed, or already-consumed r
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
 - `__UploadArtifact` — orchestrate the full verified upload (lease → promote → finalize).
 - `PrismaArtifactAuthorityRepository` — the Postgres-backed persistence adapter.
+- `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
+  non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
   and the upload ports (`ArtifactServicePromotionPort`, `ArtifactUploadCryptoPort`,
   `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`, `ArtifactUploadResult`).
@@ -52,6 +54,11 @@ The application layer wires the byte-store client, the crypto port, and the Pris
 use cases. Proof verification and replay reservation happen upstream — this package trusts that a
 `VerifiedArtifactUploadCommand` is already authorized, and its job is to keep metadata consistent
 with what the byte store actually promoted.
+
+The personal catalogue is discovery only. It returns kind, lifecycle, current-revision media type,
+size, indexing state, and timestamps. It never returns bytes, a content address, provenance,
+leases, promotion receipts, or outbox records, and it cannot upload, download, mutate, or delete an
+asset.
 
 ## Dependency direction
 
