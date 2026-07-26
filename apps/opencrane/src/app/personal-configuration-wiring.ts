@@ -10,7 +10,8 @@ import { _log } from "./log.js";
 /** Compose the owner-only personal configuration proposal state API. */
 export function _CreatePersonalConfigurationRouter(prisma: PrismaClient): Router
 {
-	return __CreatePersonalConfigurationRouter({ resolveCaller: _resolveCaller, changes: new PrismaPersonalConfigurationChangeRepository(prisma), logger: _log });
+	const changes = new PrismaPersonalConfigurationChangeRepository(prisma);
+	return __CreatePersonalConfigurationRouter({ resolveCaller: _resolveCaller, changes, decisions: changes, clock: { now(): Date { return new Date(); } }, logger: _log });
 }
 
 /** Derive the proposal owner from the signed-in browser session and trusted host silo. */

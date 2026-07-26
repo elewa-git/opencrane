@@ -1222,6 +1222,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/configuration/changes/{changeId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or reject one signed-in owner's configuration proposal
+         * @description The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.
+         */
+        post: operations["decideMyPersonalConfigurationChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/configuration/changes": {
         parameters: {
             query?: never;
@@ -5549,6 +5569,79 @@ export interface operations {
             };
             /** @description The management authority could not read the catalogue. */
             500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideMyPersonalConfigurationChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    decision: "accepted";
+                } | {
+                    /** @constant */
+                    decision: "rejected";
+                    rejectionReason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Owner decision recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changeId: string;
+                        /** @enum {string} */
+                        state: "accepted" | "rejected";
+                    };
+                };
+            };
+            /** @description Decision body is not the exact accepted or rejected shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal is absent, terminal, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Decision could not be persisted. */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
