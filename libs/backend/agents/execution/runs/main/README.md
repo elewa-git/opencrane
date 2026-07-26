@@ -58,6 +58,22 @@ polls) so a started attempt can never be lost between deciding and launching.
 Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, uses the fixed
 `opencrane-agent-runtime` projected-token audience, and has not expired.
 
+`__PrepareChildRunAdmission` is the authority-only first step for an agent asking a parent run to
+start another agent. It inherits the silo, subject and run lineage exclusively from the already
+admitted parent; the child request cannot supply replacements. Before returning a prepared record it
+enforces server-owned depth, direct-child and remaining-budget limits, then calls the supplied
+delegation policy for the exact target service and immutable revision. It returns a plain denial for
+any failed check. A later persistence adapter must repeat the target check and reserve the budget in
+the same transaction that creates the child run: this pure package intentionally makes no durable
+reservation on its own.
+
+`ChildRunReservation` is the durable companion record for that later transaction. It fixes a
+child's exact parent/root lineage, depth, token allocation, and micro-USD cost allocation. The
+database accepts it only for an accepted first attempt whose existing `AgentRun` already has that
+same lineage and silo, locks the parent while checking it, and rejects every subsequent change.
+The later transaction will calculate remaining capacity from these append-only records rather than
+from a mutable counter or a value supplied by the requesting agent.
+
 `PrismaRunDispatchRepository` is the database side of the controller handshake. It issues a short,
 server-owned claim lease over `RunAttemptRequested`, exposes only the coordinates needed to create a
 suspended Job, and commits the Job UID as a `PendingPod` assignment. At claim time it also mints the
@@ -98,10 +114,18 @@ and fails any unpublished dispatch or release command. It then records both the 
 and any physical cleanup still required. A committed assignment yields an `assigned` cleanup claim
 with its immutable Kubernetes UID. If the controller may have created a suspended Job just before
 the database fence won, an `unassigned_orphan` claim becomes available only after the dispatch lease
-and request margin; the cleaner must reconstruct and exactly compare that suspended Job before it
-may adopt the API UID for deletion. If no controller claim ever left Postgres, the locked failed
+and request margin; the server-owned cleaner must reconstruct and exactly compare that suspended Job
+before it may adopt the API UID for deletion. Its first Kubernetes absence is persisted and deferred
+for one additional full create-observation horizon; only a second absence may finalize cancellation.
+If no controller claim ever left Postgres, the locked failed
 attempt event proves no Job can exist and cancellation can finish immediately. Only confirmed
 deletion or authoritative absence moves `Cancelling` to `Cancelled` and emits `run.cancelled`.
+
+`PrismaRuntimeTerminalReporter` is the matching completion boundary for an authenticated runtime
+Pod. It accepts only a protocol-fenced `run.completed` or `run.failed` report for the currently
+running attempt, serialises terminal writers on the run, and commits the lifecycle state, canonical
+conversation event, and any child-to-parent completion delivery together. Runtime Pods have no
+`run.cancelled` authority: cancellation continues to flow through the server-owned cleanup process.
 
 Poisoned or expired release authority uses the same generic cleanup event after failing the run, so
 physical residue is not confused with user cancellation and a suspended Job is never left for an
@@ -116,6 +140,15 @@ uncertainty fails closed.
 
 - `__StartNextRunAttempt(repository, command)` — start the next attempt of a run via compare-and-swap.
 - `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
+- `__PrepareChildRunAdmission(parent, command, limits, targetAuthorization)` — prepare a bounded
+  child-run record after exact parent-to-target delegation has been rechecked.
+- `PrismaChildRunReservationRepository` — lock the parent, recalculate capacity from immutable
+  sibling allocations, and atomically persist the child run, snapshot, reservation, and dispatch.
+- `PrismaChildRunCompletionRepository` — append one terminal child outcome to its direct parent's
+  conversation stream, or durably record why no parent stream can receive it.
+- `__DeliverChildRunCompletionInTransaction(transaction, command)` — use the same delivery fence
+  from a terminal-state transaction, so cancellation and dispatch failures cannot leave a child
+  closed without its parent notification.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
@@ -134,12 +167,23 @@ uncertainty fails closed.
   lifecycle, lease, server-derived Job projection, and physical-evidence outcomes.
 - `__CreateAgentControllerRunDispatchRouter` — projected-token-authenticated internal assignment and
   release API for the fixed `agent-controller` ServiceAccount.
+- `__CreateSelfRunStatusRouter` / `PrismaSelfRunStatusRepository` — authenticated product read of
+  one personal run or the owner's latest fifty runs, including lifecycle, attempt, immutable
+  revision, and timestamps. The app derives the subject and silo from session and host; foreign or
+  absent single runs share the same non-disclosing 404.
 - `RunDispatchRepository` / `AgentControllerTokenReviewer` — persistence and TokenReview ports used by that internal API.
 - `ClaimNextRunWorkloadReleaseResult` / `RegisterRunWorkloadPodResult` — release-claim and first-Pod
   registration outcomes used across the internal adapter boundary.
 - `AgentRunAuthorityRepository` / `AgentRunAuthoritySnapshot` — the persistence port and its consistent read shape.
 - `StartNextRunAttemptCommand` / `StartNextRunAttemptResult`, `AtomicStartNextRunAttemptCommand` / `AtomicRunAttemptResult` — retry request/result and their atomic commit forms.
 - `RunWorkloadAssignment` / `RunWorkloadAssignmentExpectation` / `RunWorkloadAssignmentDecision` — the workload-identity check inputs and verdict.
+- `ChildRunParentAuthority` / `ChildRunAdmissionLimits` / `ChildRunBudget` — parent facts and
+  server limits used to control one recursive invocation.
+- `ChildRunTargetAuthorization` / `PrepareChildRunAdmissionCommand` /
+  `PrepareChildRunAdmissionResult` — the target-policy port and the prepared-or-denied child
+  admission vocabulary.
+- `ChildRunReservation` — the Prisma-owned durable allocation that binds one admitted child to its
+  parent, root, depth, token ceiling, and cost ceiling.
 
 ## Boundary
 
@@ -152,6 +196,23 @@ Kubernetes itself. It owns only durable admission, attempts, dispatch leases, as
 integrity, release delivery, first-Pod registration, cancellation fencing, and cleanup
 confirmation. Kubernetes inspection and mutation remain in dedicated runtime processes; this
 package only says which exact work may be removed.
+
+Child admission is not an alternate public run-start route. A caller must derive parent authority
+from the admitted parent run, use the target-authorization port backed by that parent's approved
+tool policy, and persist the prepared record through a transaction that rechecks and reserves it.
+This package neither trusts a child-supplied subject, silo or lineage nor creates a child run by
+itself.
+
+The reservation repository is the sole durable child-admission boundary. It derives parent facts
+from locked database rows and the parent snapshot, rechecks the target policy, and records the
+derived depth with the child allocation. Replaying the same inherited-silo idempotency key returns
+only the exact sealed child; any coordinate mismatch fails closed.
+
+Completion delivery is a separate, child-keyed ledger rather than an in-memory callback. It locks
+the terminal child, its reservation, and the parent event stream before adding a single
+`child.run.*` event. A duplicate report returns the existing ledger result. A parent without a
+conversation stream, or a parent that has already terminalised, is recorded as a deliberate
+suppressed outcome instead of silently losing the result or violating the event-stream fence.
 
 ## Dependency direction
 

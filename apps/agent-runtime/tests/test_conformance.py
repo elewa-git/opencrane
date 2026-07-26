@@ -84,7 +84,7 @@ def _resume_command(deferred: dict) -> dict:
         "commandId": "cmd-resume",
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
-        "payload": {"inputGeneration": 10, "deferredToolResults": deferred},
+        "payload": {"inputGeneration": 10, "deferredToolResults": deferred, "steeringRequests": []},
     }
 
 
@@ -239,10 +239,10 @@ class ConformanceCancellationTests(unittest.TestCase):
 
 
 class ConformanceProviderFaultTests(unittest.TestCase):
-    """A provider/executor fault surfaces exactly one ``run.error`` with zero implicit retries."""
+    """A provider/executor fault surfaces exactly one ``run.failed`` with zero implicit retries."""
 
-    def test_provider_fault_surfaces_single_run_error(self) -> None:
-        """An executor exception yields started then one ``run.error``, never a silent success."""
+    def test_provider_fault_surfaces_single_run_failure(self) -> None:
+        """An executor exception yields started then one authoritative ``run.failed`` report."""
 
         def _boom(_compiled, _cancel, _steering):
             raise RuntimeError("litellm proxy unreachable")
@@ -250,7 +250,7 @@ class ConformanceProviderFaultTests(unittest.TestCase):
 
         emitted: list[dict] = []
         _execute_start_attempt(_start_command(), "instance-conf", emitted.append, event_source=_boom)
-        self.assertEqual(_event_types(emitted), ["run.started", "run.error"])
+        self.assertEqual(_event_types(emitted), ["run.started", "run.failed"])
         self.assertEqual(emitted[1]["payload"], {"reason": "executor_failed", "errorType": "RuntimeError"})
 
     def test_every_retry_path_is_pinned_to_zero(self) -> None:
@@ -265,12 +265,12 @@ class ConformanceCompactionAndBudgetTests(unittest.TestCase):
         """Unknown or negative usage counters default to zero so budget accounting cannot go negative."""
         self.assertEqual(_normalize_event({"type": "usage", "inputTokens": None, "outputTokens": -3}), ("run.usage", {"inputTokens": 0, "outputTokens": 0}))
 
-    def test_budget_exhausted_cancel_reason_is_echoed_verbatim(self) -> None:
-        """A server budget cancel reason is echoed, never re-authored by the runtime."""
+    def test_budget_exhausted_cancel_reason_stays_server_owned(self) -> None:
+        """A server budget cancel signal stops work without creating a second terminal candidate."""
         cancel_command = {"kind": "cancel_attempt", "commandId": "cmd-cancel", "fence": 3, "assignment": {"runId": "run-conf", "attempt": 1}, "payload": {"reason": "budget_exhausted"}}
         emitted: list[dict] = []
         runtime._execute_cancel_attempt(cancel_command, "instance-conf", emitted.append, cancel_event=threading.Event())
-        self.assertEqual(emitted[0]["payload"], {"reason": "budget_exhausted"})
+        self.assertEqual(emitted, [])
 
     def test_unknown_framework_event_is_dropped_not_compacted_into_output(self) -> None:
         """An unrecognized framework event is dropped (never accumulated) and logged for observability."""

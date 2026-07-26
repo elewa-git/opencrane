@@ -22,6 +22,8 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 | _(apps/agent-runtime)_ | [apps/agent-runtime/README.md](../../apps/agent-runtime/README.md) | Controller-assigned one-attempt Job image. Its current Python shell opens only a projected-token-authenticated stream; no listener, model/tool driver, or durable tenant storage. |
 | _(apps/agent-controller)_ | [apps/agent-controller/README.md](../../apps/agent-controller/README.md) | Thin outbound-only process and app-owned least-privilege boundary for suspended-Job assignment, fenced release, and first-Pod registration. |
 | _(apps/managed-agent-runtime)_ | [apps/managed-agent-runtime/README.md](../../apps/managed-agent-runtime/README.md) | Chart/deploy-only managed (central) agent plane: dedicated namespace, connector-scoped `managed-agent-runtime-*` ServiceAccount (`automountServiceAccountToken:false`), default-deny + explicit-egress NetworkPolicies. Reuses the `agent-runtime` image; ships no source. |
+| _(apps/skill-authoring)_ | [README](../../apps/skill-authoring/README.md) | Deployment-only isolated candidate-skill Job plane: restricted namespace, exact zero-RBAC identity, quota, and default-deny policy. |
+| _(apps/tool-runner)_ | [README](../../apps/tool-runner/README.md) | Deployment-only isolated tenant-tool Job plane: restricted namespace, exact zero-RBAC identity, quota, and default-deny policy. |
 
 ## Libs (`libs/`)
 
@@ -33,6 +35,8 @@ linked below** — read it before non-trivial work in that package. The whole-cl
 | `libs/server/_infra/channel-proxy` | — | Trusted origin/auth/rate-limit/WebSocket transport owned by the OpenCrane server runtime. |
 | `libs/server/_infra/agent-runtime-stream` | [README](../../libs/server/_infra/agent-runtime-stream/README.md) | Runtime-initiated projected-token HTTP/SSE transport. It never owns assignments or durable run state. |
 | `libs/backend/agents/runtime/k8s-launcher` | [README](../../libs/backend/agents/runtime/k8s-launcher/README.md) | Pure suspended-Job projection; Helm owns the dedicated runtime namespace and its network policy. |
+| `libs/backend/agents/skills/k8s-launcher` | [README](../../libs/backend/agents/skills/k8s-launcher/README.md) | Pure hardened Job projection for isolated skill authoring and tool execution; the controller remains the only Kubernetes mutator. |
+| `libs/backend/agents/skills/worker` | [README](../../libs/backend/agents/skills/worker/README.md) | Dependency-free Python bootstrap acknowledgement client for the governed authoring and tool-runner worker-image build. |
 | `libs/backend/agents/runtime/controller` | [README](../../libs/backend/agents/runtime/controller/README.md) | Crash-safe controller orchestration: exact assignment, conditional Job release, and strict first-Pod registration. Composed only by `apps/agent-controller`. |
 | `libs/server/_infra/tenant-hosting` | — | GCP and on-prem tenant-storage adapters owned by the OpenCrane server runtime; the app retains only factory composition. |
 | _(libs/onboarding)_ | — | **Empty placeholder** — not registered as an NX project and has no code yet. |

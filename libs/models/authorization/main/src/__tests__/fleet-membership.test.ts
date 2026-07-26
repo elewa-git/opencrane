@@ -51,6 +51,7 @@ describe("signed fleet membership trust boundary", function ()
 			outcome: "trusted",
 			reason: "trusted",
 			revision: 8,
+			organizationId: "org-a",
 			trustedUntilEpochMs: 3_000,
 		});
 	});
@@ -167,7 +168,9 @@ describe("signed fleet membership trust boundary", function ()
 	{
 		const revision: SignedFleetMembershipRevision = { ...REVISION, expiresAtEpochMs: 2_500 };
 
-		expect(__EvaluateFleetMembershipRevision(revision, EVIDENCE, EXPECTATION).trustedUntilEpochMs).toBe(2_500);
+		const result = __EvaluateFleetMembershipRevision(revision, EVIDENCE, EXPECTATION);
+		expect(result.outcome).toBe("trusted");
+		if (result.outcome === "trusted") expect(result.trustedUntilEpochMs).toBe(2_500);
 	});
 
 	it("requires the assertion identifier, silo, subject, and exact independent scope", function ()

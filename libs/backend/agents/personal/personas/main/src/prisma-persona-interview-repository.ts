@@ -1,9 +1,9 @@
 import { PersonaInterviewState, PersonaQuestionSetState, Prisma, type PrismaClient } from "@prisma/client";
 
-import type { CompletePersonaInterviewCommand, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
+import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
 
 /** Prisma authority for the append-only, reviewed-question-set persona interview lifecycle. */
-export class PrismaPersonaInterviewRepository implements PersonaInterviewRepository
+export class PrismaPersonaInterviewRepository implements PersonaInterviewRepository, PersonaInterviewQuestionReader
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -12,6 +12,14 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
+	}
+
+	/** Read only the exact question-set revision frozen into one owner interview. */
+	async getQuestions(interviewId: string, personaProfileId: string, userId: string): Promise<readonly { readonly id: string; readonly category: string; readonly prompt: string; readonly ordinal: number }[] | null>
+	{
+		const interview = await this.prisma.personaInterview.findFirst({ where: { id: interviewId, personaProfileId, userId }, select: { questionSetId: true, questionSetVersion: true } });
+		if (interview === null) return null;
+		return this.prisma.personaQuestion.findMany({ where: { questionSetId: interview.questionSetId, questionSetVersion: interview.questionSetVersion }, select: { id: true, category: true, prompt: true, ordinal: true }, orderBy: { ordinal: "asc" } });
 	}
 
 	/** Start one reviewed interview while serialising all in-progress attempts for the same profile. */

@@ -70,15 +70,24 @@ public and internal listeners, starts the projection and OpenClaw-tenant lifecyc
 - `createInternalApp(prisma, authApi)` — builds the internal-only Express app; each mounted route
   declares projected-workload TokenReview or explicit NetworkPolicy-only trust.
 
+The public API also mounts `/api/v1/me/persona`: a self-only persona onboarding surface. Its routes
+derive the user from the signed-in session and the silo from the request host, then choose the
+reviewed interview catalogue on the server. A browser may submit an answer, but never a profile,
+silo, template, or catalogue revision.
+
 The internal controller routes TokenReview only the fixed `agent-controller` ServiceAccount in the
 server namespace and `opencrane-agent-controller` audience. They let that process claim a
-database-fenced run attempt and commit only the immutable UID of the suspended Job it created. A
-separate durable release route lets the controller conditionally unsuspend that assigned Job and
-register its exact first Pod UID. The runtime stream separately accepts the
+database-fenced run attempt or governed skill workload, and commit only the immutable UID of the
+suspended Job it created. A separate durable runtime release route lets the controller conditionally
+unsuspend that assigned Job and register its exact first Pod UID. The skill route accepts no
+caller-chosen namespace, image, capability, or workload profile; its database record remains the
+authority for those facts. The runtime stream separately accepts the
 `opencrane-agent-runtime` audience and bounded runtime-profile ServiceAccount grammar in the
 explicit, separate runtime namespace. Durable assignment remains the authority for the exact
 ServiceAccount, Job, Pod, run, and revision; the projected bootstrap reference and a ServiceAccount
-name alone are never sufficient.
+name alone are never sufficient. Governed skill workers can reach the internal listener only to
+acknowledge their one-use bootstrap reference: their default-deny namespaces receive an additive
+egress rule for this listener and DNS, and the response contains no workload identity or capability.
 The runtime stream mints the full `start_attempt`, `resume_attempt`, and `cancel_attempt` command
 lifecycle and admits candidates, so a verified Pod runs its bounded model/tool loop, proposes
 external actions through the reserve-before-dispatch tool-invocation authority, pauses for deferred
@@ -136,6 +145,12 @@ Cancellation is a nonterminal cleanup phase: active runs first enter `cancelling
 bootstrap or proof authority there, and become `cancelled` only after exact workload cleanup records
 the matching terminal event. Pending approvals close without resume authority even if their expiry
 sweeper has not yet run.
+
+The OpenCrane server, not the outbound agent controller, owns physical runtime cleanup. Its isolated
+runtime-namespace Role can observe and UID-precondition-delete Jobs only after a database-fenced
+cleanup claim. A deletion request is not completion: the server confirms only a later Kubernetes
+absence. An unassigned orphan requires two persisted absence observations separated by the full
+create horizon, so a delayed controller create cannot escape cleanup.
 Managed-agent definitions are likewise revisioned: a revision records its edit parent or restore
 source and change message, while scoped knowledge attachments remain immutable once published.
 

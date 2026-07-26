@@ -49,8 +49,8 @@ leaves a half-published service. Anything missing or stale is refused with a pla
 
 ## Public surface
 
-- `__CreateAgentServicesRouter` — the authoritative management router (create / revise / compare /
-  publish / restore / enable / pause / run-now / history / retire); the UI and parity client are
+- `__CreateAgentServicesRouter` — the authoritative management router (catalogue / create / revise /
+  compare / publish / restore / enable / pause / run-now / history / retire); the UI and parity client are
   clients of it. Composed with `AgentServicesRouterDependencies`, `ManagementCaller`, `ManagementClock`.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.

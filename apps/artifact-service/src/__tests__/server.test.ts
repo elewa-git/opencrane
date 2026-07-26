@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesystem";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -59,6 +59,34 @@ describe("artifact-service promotion endpoint", function _suite()
 			const lease = __SignArtifactWriteLease({ leaseId: "lease-2", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, expectedContentAddress: `sha256:${"a".repeat(64)}`, expectedByteLength: 1, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
 			const response = await fetch(`http://127.0.0.1:${port}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": lease, "content-length": "2" }, body: "ab" });
 			expect(response.status).toBe(413);
+		}
+		finally
+		{
+			await rm(root, { recursive: true, force: true });
+		}
+	});
+
+	it("streams only the canonical address pinned by a signed immutable read lease", async function _readCanonicalBytes()
+	{
+		const root = await mkdtemp(join(tmpdir(), "artifact-service-"));
+		try
+		{
+			const server = _CreateServer({ port: 0, artifactRoot: root, maxUploadDurationMilliseconds: 300_000, leasePublicKeyPem: _leasePublicKey, receiptPrivateKeyPem: _receiptPrivateKey }, new __FilesystemArtifactStore({ rootPath: root }));
+			_servers.push(server);
+			await new Promise<void>(function _listen(resolve) { server.listen(0, "127.0.0.1", function _ready() { resolve(); }); });
+			const port = (server.address() as { port: number }).port;
+			const bytes = Buffer.from("opencrane");
+			const digest = `sha256:${(await import("node:crypto")).createHash("sha256").update(bytes).digest("hex")}`;
+			const writeLease = __SignArtifactWriteLease({ leaseId: "write-1", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, expectedContentAddress: digest, expectedByteLength: bytes.byteLength, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
+			await fetch(`http://127.0.0.1:${port}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": writeLease }, body: bytes });
+			const readLease = __SignArtifactReadLease({ leaseId: "read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: digest, byteLength: bytes.byteLength, mediaType: "text/plain", action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60 }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
+			const response = await fetch(`http://127.0.0.1:${port}/v1/artifacts/content/${digest.slice("sha256:".length)}`, { headers: { "x-opencrane-artifact-lease": readLease } });
+
+			expect(response.status).toBe(200);
+			expect(response.headers.get("content-length")).toBe(String(bytes.byteLength));
+			expect(response.headers.get("cache-control")).toBe("no-store");
+			expect(await response.text()).toBe("opencrane");
+			expect((await fetch(`http://127.0.0.1:${port}/v1/artifacts/content/${"b".repeat(64)}`, { headers: { "x-opencrane-artifact-lease": readLease } })).status).toBe(403);
 		}
 		finally
 		{

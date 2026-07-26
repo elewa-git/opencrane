@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesystem";
-import { __SignArtifactPromotionReceipt, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
 import { __PromoteArtifactUpload } from "@opencrane/backend/artifacts/store";
 import type { ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "@opencrane/backend/artifacts/store";
 import { ___DoWithTrace } from "@opencrane/observability";
@@ -35,24 +35,81 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 				response.end();
 				return;
 			}
-			if (path !== "/v1/artifacts/promote" || request.method !== "POST")
+			if (path === "/v1/artifacts/promote" && request.method === "POST")
 			{
-				response.writeHead(404, { "content-type": "application/json" });
-				response.end(JSON.stringify({ error: "not_found" }));
+				const byteSource = _byteSource(request);
+				const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), byteSource, { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
+				_writePromotionOutcome(response, outcome);
+				if (outcome.outcome === "rejected" && outcome.reason === "artifact_body_exceeds_lease")
+				{
+					byteSource.abort(new Error("artifact body exceeds its signed lease byte limit"));
+				}
 				return;
 			}
-			const byteSource = _byteSource(request);
-			const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), byteSource, { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
-			_writePromotionOutcome(response, outcome);
-			if (outcome.outcome === "rejected" && outcome.reason === "artifact_body_exceeds_lease")
+			if (path.startsWith("/v1/artifacts/content/") && request.method === "GET")
 			{
-				byteSource.abort(new Error("artifact body exceeds its signed lease byte limit"));
+				await _ReadCanonicalArtifact(request, response, store, config.leasePublicKeyPem, path.slice("/v1/artifacts/content/".length));
+				return;
 			}
+			response.writeHead(404, { "content-type": "application/json" });
+			response.end(JSON.stringify({ error: "not_found" }));
 		}).catch(function _onRequestFailure(err)
 		{
 			log.error({ err, method: request.method, path }, "artifact service request failed");
 			response.destroy(err instanceof Error ? err : new Error("artifact service request failed"));
 		});
+	});
+}
+
+/** Verify one exact immutable read lease, then stream only its pinned canonical bytes. */
+async function _ReadCanonicalArtifact(request: IncomingMessage, response: ServerResponse, store: ArtifactStore, leasePublicKeyPem: string, digest: string): Promise<void>
+{
+	// 1. Verify the private-server lease before trusting the requested content coordinate.
+	const compactLease = request.headers["x-opencrane-artifact-lease"];
+	const lease = typeof compactLease === "string" ? __VerifyArtifactReadLease(compactLease, leasePublicKeyPem, Math.floor(Date.now() / 1_000)) : null;
+	const contentAddress = `sha256:${digest}`;
+	if (lease === null || !/^[a-f0-9]{64}$/u.test(digest) || lease.contentAddress !== contentAddress)
+	{
+		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "artifact_read_denied" }));
+		return;
+	}
+
+	// 2. Read only the lease-pinned address; a missing object must never widen the read scope.
+	const stream = await store.read(lease.contentAddress);
+	if (stream === null)
+	{
+		response.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
+		response.end(JSON.stringify({ error: "artifact_not_found" }));
+		return;
+	}
+
+	// 3. Send signed metadata, never request-controlled headers or inferred catalog details.
+	response.writeHead(200, { "content-type": lease.mediaType, "content-length": String(lease.byteLength), "cache-control": "no-store" });
+	for await (const chunk of stream)
+	{
+		if (!response.write(chunk) && !await _WaitForWritableResponse(response)) return;
+	}
+	response.end();
+}
+
+/** Wait for downstream backpressure to drain, but stop reading when the private client disconnects. */
+async function _WaitForWritableResponse(response: ServerResponse): Promise<boolean>
+{
+	return new Promise<boolean>(function _Wait(resolve)
+	{
+		function _Cleanup(): void
+		{
+			response.off("drain", _Drained);
+			response.off("close", _Closed);
+			response.off("error", _Errored);
+		}
+		function _Drained(): void { _Cleanup(); resolve(true); }
+		function _Closed(): void { _Cleanup(); resolve(false); }
+		function _Errored(): void { _Cleanup(); resolve(false); }
+		response.once("drain", _Drained);
+		response.once("close", _Closed);
+		response.once("error", _Errored);
 	});
 }
 

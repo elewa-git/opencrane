@@ -1,7 +1,7 @@
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-job.js";
+import { __AgentRuntimeAttemptResourceName, __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-job.js";
 import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "../agent-runtime-job.types.js";
 
 /** Create one valid immutable run-attempt assignment. */
@@ -39,6 +39,12 @@ function _Profile(): AgentRuntimeJobProfile
 
 describe("personal-runtime attempt Job", function _Suite()
 {
+	it("derives the same deterministic Job name without exposing a runtime profile", function _DerivesName()
+	{
+		const assignment = _Assignment();
+		expect(__AgentRuntimeAttemptResourceName(assignment.siloId, assignment.runId, assignment.attempt)).toBe(__BuildSuspendedAgentRuntimeJob(assignment, _Profile()).metadata?.name);
+	});
+
 	it("derives one stable resource identity per run attempt", function _DeterministicIdentity()
 	{
 		const first = __BuildSuspendedAgentRuntimeJob(_Assignment(), _Profile());

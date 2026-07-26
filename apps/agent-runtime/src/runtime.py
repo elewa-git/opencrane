@@ -16,7 +16,7 @@ positive signal that kills the active task and acknowledges the server-chosen re
 absorbed only at pre-model-request boundaries, and an encrypted, version-tagged, replaceable local
 checkpoint is written to the per-attempt scratch as a resume optimisation subordinate to canonical
 server state. Because the loop is configured with zero implicit retries, any executor failure
-surfaces as a real ``run.error`` candidate rather than a silent acknowledgement.
+surfaces as a real ``run.failed`` terminal report rather than a silent acknowledgement.
 
 Phase E slice 4 lands the offline conformance harness and fault-injection matrix that exercise this
 shell against independently authored neutral-event fixtures and a LiteLLM-compatible test double; both
@@ -51,6 +51,7 @@ _CHECKPOINT_VERSION = 1
 _CHECKPOINT_FILENAME = "checkpoint.enc"
 _MAX_FRAME_BYTES = 65_536
 _MAX_CANDIDATE_RETRY_DELAY_SECONDS = 30.0
+_TERMINAL_DELIVERY_RETRY_SECONDS = 1.0
 
 # Process-lifetime symmetric cipher for local checkpoints. It is generated in memory at first use and
 # never written, logged, or exported; a restarted process cannot read a prior process's checkpoint,
@@ -727,11 +728,9 @@ def _recover_compiled_input(coordinates: dict[str, object], input_generation: ob
 class _TerminalGate:
     """Guards the exactly-once terminal candidate for one attempt across the reader and worker threads.
 
-    A run posts exactly one of ``run.completed`` / ``run.error`` / ``run.cancelled``. The completion
-    path runs on the attempt worker thread while the positive-cancel path runs on the stream-reader
-    thread, so the decision to post and the post itself are made atomically under one lock: a
-    completion is skipped if cancellation has been signalled or a terminal already posted, and a
-    cancellation is skipped if a terminal already posted. Late output can never reopen a terminal run.
+    A run posts exactly one of ``run.completed`` / ``run.failed`` from its attempt worker. The
+    server-owned cancel path only signals the shared cancellation event, so no runtime cancellation
+    candidate can race or reopen the server's canonical terminal state.
     """
 
     def __init__(self, cancel_event: threading.Event) -> None:
@@ -741,23 +740,21 @@ class _TerminalGate:
         self._posted = False
 
     def post_completion(self, post_candidate: Callable[[dict[str, object]], None], candidate: dict[str, object]) -> bool:
-        """Post a completion or error terminal only if no terminal posted and no cancel is signalled."""
+        """Retain and deliver one stable terminal candidate until it reaches the control plane or cancels."""
         with self._lock:
             if self._posted or self._cancel_event.is_set():
                 return False
             self._posted = True
-        post_candidate(candidate)
-        return True
-
-    def post_cancellation(self, post_candidate: Callable[[dict[str, object]], None], candidate: dict[str, object]) -> bool:
-        """Post the cancellation terminal only if no terminal has already been posted."""
-        with self._lock:
-            if self._posted:
-                return False
-            self._posted = True
-        post_candidate(candidate)
-        return True
-
+        while not self._cancel_event.is_set():
+            try:
+                post_candidate(candidate)
+                return True
+            except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
+                # Keep the exact candidate id and terminal payload. A lost response may already have
+                # committed it; replay is idempotent at the server fence, never a second terminal.
+                _log("terminal_candidate_retry", runId=candidate.get("runId"), attempt=candidate.get("attempt"), candidateId=candidate.get("candidateId"), errorType=type(error).__name__)
+                self._cancel_event.wait(_TERMINAL_DELIVERY_RETRY_SECONDS)
+        return False
 
 def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str, post_candidate: Callable[[dict[str, object]], None], event_source: Callable[..., Iterable[dict[str, object]]] = _pydantic_ai_event_source, cancel_event: threading.Event | None = None, checkpoint_cipher: object | None = None, terminal_gate: "_TerminalGate | None" = None) -> None:
     """Execute one ``start_attempt`` command as a bounded model loop, reporting candidates.
@@ -768,7 +765,7 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
     ``run.completed``. Cancellation is a positive signal — once ``cancel_event`` is set no further
     candidate (not even ``run.completed`` or a late ``run.error``) is emitted, so late runtime output
     after cancel is suppressed. Because the loop performs zero implicit retries, any failure surfaces
-    as a single ``run.error`` candidate, never a silent acknowledgement.
+    as a single ``run.failed`` terminal report, never a silent acknowledgement.
     """
     coordinates = _command_coordinates(command, runtime_instance_id)
     if coordinates is None:
@@ -780,7 +777,7 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
     payload = command.get("payload")
     compiled_input = payload.get("compiledInput") if isinstance(payload, dict) else None
     if not isinstance(compiled_input, dict):
-        post_candidate(_candidate(coordinates, "run.error", {"reason": "missing_compiled_input"}))
+        terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "missing_compiled_input"}))
         return
     post_candidate(_candidate(coordinates, "run.started", {"promptCompilerVersion": compiled_input.get("promptCompilerVersion")}))
     _run_evidence(coordinates, "started")
@@ -795,7 +792,7 @@ def _execute_start_attempt(command: dict[str, object], runtime_instance_id: str,
             if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.completed", {})):
                 _run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
-            if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.error", {"reason": "executor_failed", "errorType": type(error).__name__})):
+            if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "executor_failed", "errorType": type(error).__name__})):
                 _run_evidence(coordinates, "error", reason="executor_failed", errorType=type(error).__name__)
 
 
@@ -817,14 +814,18 @@ def _execute_resume_attempt(command: dict[str, object], runtime_instance_id: str
         terminal_gate = _TerminalGate(cancel_event)
     payload = command.get("payload")
     if not isinstance(payload, dict):
-        post_candidate(_candidate(coordinates, "run.error", {"reason": "missing_resume_payload"}))
+        terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "missing_resume_payload"}))
         return
     input_generation = payload.get("inputGeneration")
     deferred_tool_results = payload.get("deferredToolResults")
+    steering_requests = payload.get("steeringRequests")
+    if not isinstance(steering_requests, list) or any(not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip() for item in steering_requests):
+        terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "invalid_resume_steering"}))
+        return
     compiled_input = _recover_compiled_input(coordinates, input_generation, checkpoint_cipher)
     post_candidate(_candidate(coordinates, "run.resumed", {"inputGeneration": input_generation}))
     _run_evidence(coordinates, "resumed", inputGeneration=input_generation)
-    steering_buffer: list[str] = []
+    steering_buffer = [item["text"].strip() for item in steering_requests]
     with _trace("agent_runtime.resume_attempt", runId=coordinates["runId"], attempt=coordinates["attempt"]):
         try:
             for neutral_event in resume_event_source(coordinates["runId"], coordinates["attempt"], input_generation, deferred_tool_results, cancel_event, steering_buffer):
@@ -834,7 +835,7 @@ def _execute_resume_attempt(command: dict[str, object], runtime_instance_id: str
             if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.completed", {})):
                 _run_evidence(coordinates, "completed")
         except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:
-            if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.error", {"reason": "executor_failed", "errorType": type(error).__name__})):
+            if terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "executor_failed", "errorType": type(error).__name__})):
                 _run_evidence(coordinates, "error", reason="executor_failed", errorType=type(error).__name__)
 
 
@@ -842,10 +843,9 @@ def _execute_cancel_attempt(command: dict[str, object], runtime_instance_id: str
     """Handle a positive-signal cancel: kill the active attempt and acknowledge the server's reason.
 
     Cancellation is a POSITIVE signal: on receipt the runtime sets the shared ``cancel_event`` so the
-    running model/tool task stops promptly and emits no further candidate. The runtime never chooses a
-    terminal state — it echoes the server-chosen reason from the ``CancelAttemptCommand`` payload as a
-    bounded ``run.cancelled`` event candidate, posted through the shared terminal gate so it and the
-    worker thread's completion can never both reach a terminal (exactly one terminal candidate posts).
+    running model/tool task stops promptly and emits no further candidate. The runtime does not
+    acknowledge cancellation with a terminal candidate: the server already owns that lifecycle
+    transition and its cleanup evidence.
     """
     coordinates = _command_coordinates(command, runtime_instance_id)
     if coordinates is None:
@@ -855,13 +855,7 @@ def _execute_cancel_attempt(command: dict[str, object], runtime_instance_id: str
         cancel_event.set()
     payload = command.get("payload")
     reason = payload.get("reason") if isinstance(payload, dict) else None
-    candidate = _candidate(coordinates, "run.cancelled", {"reason": reason})
-    if terminal_gate is not None:
-        if terminal_gate.post_cancellation(post_candidate, candidate):
-            _run_evidence(coordinates, "cancelled", reason=reason)
-    else:
-        post_candidate(candidate)
-        _run_evidence(coordinates, "cancelled", reason=reason)
+    _run_evidence(coordinates, "cancelled", reason=reason)
 
 
 def _iter_commands(response: object, cancelled: threading.Event) -> object:

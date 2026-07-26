@@ -19,6 +19,9 @@ loads and locks the live workload assignment for a connected runtime Pod, mints 
 pure authority accepts, and durably advances the monotonic command sequence and the accepted
 candidate ids so a transport reconnect can neither reorder nor duplicate work. Its compiler adapter
 hydrates the immutable snapshot through the same locked Prisma transaction before dispatch.
+For the two workload-reportable terminal results, the app injects the canonical run authority into
+that transaction: `run.completed` and `run.failed` become one durable run outcome, stream event, and
+child-to-parent notification. A runtime cannot cancel itself; cancellation remains server-owned.
 
 ```
  OpenCrane run authority + immutable snapshot
@@ -64,15 +67,22 @@ authorities to accept or reject.
 - `__CreatePrismaRunInputCompiler` — binds the deterministic prompt compiler to the control-plane
   Prisma reads used by the dispatch transaction.
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected MCP custody,
-  sandbox, or memory port and fails closed for unsupported revisions.
+  sandbox, or memory port and fails closed for unsupported revisions. Memory recall additionally
+  requires a `scope: personal` policy and Cognee dataset identifier frozen in the admitted snapshot;
+  neither runtime tool arguments nor a subject id can choose a dataset.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
+- `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results
+  through the run authority without making this protocol package own run state.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
   authority must supply at the final acceptance fence.
 - `RuntimeAdmissionRunState` — run lifecycle values understood by the admission fence, including the
   non-terminal-but-closed `cancelling` state.
 - `RuntimeCommandAdmission*` / `RuntimeCandidateAdmission*` — typed allow, idempotent, or fail-closed
   decisions and their input ports.
+- `__CreateSteeringIngestRouter`, `PrismaSteeringRequestRepository` — the self-only product surface
+  and durable queue for a user's instruction to a live run. It records the instruction against the
+  current owner-bound attempt but never changes input generation from the HTTP request.
 
 ## Boundary
 
@@ -89,7 +99,15 @@ attempt — the lease fence, the bound runtime instance, the next command sequen
 candidate ids) and `RuntimeDispatchedCommand` (one row per minted command, whose ids are exactly the
 attempt's accepted command set). Their clean-database schema lives in the OpenCrane-owned target
 baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
-conversation domains but never writes those authorities.
+conversation domains. Terminal state remains written by the injected execution-run authority, never
+by this transport/protocol package directly.
+
+`RuntimeSteeringRequest` holds each owner-authored instruction before the runtime observes it. A
+request can be accepted only before the attempt's single fenced resume command is minted; that command
+consumes every pending request and seeds the runtime's pre-model buffer. This prevents a second
+executor loop from running concurrently for the same attempt. Its queue is deliberately separate from
+`RuntimeSteeringBoundary`, which remains the sole authority that can advance input generation. A lost
+browser connection therefore cannot drop an instruction or force a model turn to change mid-flight.
 
 ## Dependency direction
 

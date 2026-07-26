@@ -15,6 +15,15 @@ enum RuntimeSteeringDisposition {
   Deferred @map("deferred")
 }
 
+/// Lifecycle of one owner-submitted steering instruction. A request becomes consumable only after
+/// the server has bound it to the current run attempt; the runtime may mark it consumed only while
+/// claiming its fenced safe boundary.
+enum RuntimeSteeringRequestState {
+  Pending  @map("pending")
+  Consumed @map("consumed")
+  Superseded @map("superseded")
+}
+
 /// Per-attempt durable authority for the runtime command stream. It owns the monotonic command
 /// sequence, the server-owned lease fence, the runtime instance bound to the current stream, and
 /// the accepted candidate ids. It is created lazily the first time a registered runtime Pod polls
@@ -76,6 +85,26 @@ model RuntimeSteeringBoundary {
   @@unique([runId, attempt, toInputGeneration])
   @@index([runId, attempt])
   @@map("runtime_steering_boundaries")
+}
+
+/// Durable owner-authored instruction for a running attempt. The public API stores it here before
+/// the runtime observes it, so a disconnect cannot lose a user instruction and the request body is
+/// never trusted as a direct mutation of the stream input generation.
+model RuntimeSteeringRequest {
+  id          String                      @id @default(cuid())
+  runId       String                      @map("run_id")
+  attempt     Int
+  siloId      String                      @map("silo_id")
+  subjectId   String                      @map("subject_id")
+  content     Json
+  digest      String
+  state       RuntimeSteeringRequestState @default(Pending)
+  submittedAt DateTime                    @default(now()) @map("submitted_at")
+  consumedAt  DateTime?                   @map("consumed_at")
+
+  @@index([runId, attempt, state, submittedAt])
+  @@index([siloId, subjectId, submittedAt])
+  @@map("runtime_steering_requests")
 }
 
 /// One durably minted command dispatched to the runtime. The rows for an attempt are exactly the

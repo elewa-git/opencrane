@@ -1,4 +1,5 @@
 import type { AgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
+import type { SkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
 
 /** Fully validated process configuration for the per-silo agent controller. */
 export interface AgentControllerProcessConfig
@@ -17,4 +18,6 @@ export interface AgentControllerProcessConfig
 	readonly requestTimeoutMilliseconds: number;
 	/** Immutable runtime profiles keyed by authority-owned profile name. */
 	readonly profiles: AgentControllerRuntimeProfiles;
+	/** Immutable profiles for the only governed skill Job classes. */
+	readonly skillWorkloadProfiles: SkillWorkloadControllerProfiles;
 }

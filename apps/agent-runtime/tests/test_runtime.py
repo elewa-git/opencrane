@@ -74,7 +74,7 @@ def _resume_command() -> dict:
         "commandId": "c2",
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": 1},
-        "payload": {"inputGeneration": 7, "deferredToolResults": {"t1": {"ok": True}}},
+        "payload": {"inputGeneration": 7, "deferredToolResults": {"t1": {"ok": True}}, "steeringRequests": []},
     }
 
 
@@ -459,17 +459,17 @@ class RuntimeExecutorTests(unittest.TestCase):
         self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.started", "run.output_text"])
         self.assertEqual(emitted[1]["payload"]["text"], "before")
 
-    def test_missing_compiled_input_is_a_real_error(self) -> None:
-        """A start command without compiled input surfaces a ``run.error``, never a silent ack."""
+    def test_missing_compiled_input_is_a_terminal_failure(self) -> None:
+        """A start command without compiled input surfaces `run.failed`, never a silent ack."""
         emitted: list[dict] = []
         command = _start_command()
         command["payload"] = {}
         _execute_start_attempt(command, "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter([]))
-        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.error"])
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.failed"])
         self.assertEqual(emitted[0]["payload"]["reason"], "missing_compiled_input")
 
-    def test_event_source_failure_surfaces_run_error(self) -> None:
-        """An executor failure with zero retries produces started then a single ``run.error``."""
+    def test_event_source_failure_surfaces_run_failed(self) -> None:
+        """An executor failure with zero retries produces started then a single `run.failed`."""
         emitted: list[dict] = []
 
         def _boom(_compiled: dict, _cancel: threading.Event, _steer: list):
@@ -477,7 +477,7 @@ class RuntimeExecutorTests(unittest.TestCase):
             yield  # pragma: no cover - generator marker
 
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=_boom)
-        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.started", "run.error"])
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.started", "run.failed"])
         self.assertEqual(emitted[1]["payload"], {"reason": "executor_failed", "errorType": "RuntimeError"})
 
     def test_malformed_command_emits_no_candidate(self) -> None:
@@ -519,24 +519,35 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         self.assertEqual(event_types, ["run.resumed", "run.output_text", "run.usage", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
 
-    def test_missing_resume_payload_is_a_real_error(self) -> None:
-        """A resume command without a payload surfaces a ``run.error``, never a silent ack."""
+    def test_resume_seeds_queued_steering_before_the_next_safe_boundary(self) -> None:
+        """Resume passes validated owner steering to the executor's pre-model buffer."""
+        command = _resume_command()
+        command["payload"]["steeringRequests"] = [{"text": "Prioritise the current decision."}]
+        captured: dict = {}
+
+        def _resume_source(_run_id, _attempt, _generation, _deferred, _cancel, steering_buffer):
+            captured["steering"] = steering_buffer[:]
+            return iter([])
+
+        _execute_resume_attempt(command, "instance-1", lambda _candidate: None, resume_event_source=_resume_source)
+        self.assertEqual(captured["steering"], ["Prioritise the current decision."])
+
+    def test_missing_resume_payload_is_a_terminal_failure(self) -> None:
+        """A resume command without a payload surfaces `run.failed`, never a silent ack."""
         emitted: list[dict] = []
         command = _resume_command()
         command["payload"] = None
         _execute_resume_attempt(command, "instance-1", emitted.append, resume_event_source=lambda *args: iter([]))
-        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.error"])
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.failed"])
         self.assertEqual(emitted[0]["payload"]["reason"], "missing_resume_payload")
 
-    def test_cancel_signals_the_active_task_and_acknowledges_the_server_reason(self) -> None:
-        """Cancel sets the shared cancel event and emits a ``run.cancelled`` echoing the server reason."""
+    def test_cancel_signals_the_active_task_without_a_runtime_terminal(self) -> None:
+        """Cancel sets the shared event while the server retains the cancellation terminal outcome."""
         emitted: list[dict] = []
         cancel_event = threading.Event()
         _execute_cancel_attempt(_cancel_command(), "instance-1", emitted.append, cancel_event=cancel_event)
         self.assertTrue(cancel_event.is_set())
-        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.cancelled"])
-        self.assertEqual(emitted[0]["kind"], "event")
-        self.assertEqual(emitted[0]["payload"], {"reason": "budget_exhausted"})
+        self.assertEqual(emitted, [])
 
     def test_cancel_before_the_active_task_emits_no_candidate_without_coordinates(self) -> None:
         """A cancel frame lacking coordinates yields no candidate and no crash when no task is active."""
@@ -557,7 +568,7 @@ class RuntimeResumeCancelTests(unittest.TestCase):
 
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
-        self.assertEqual(terminals, ["run.cancelled"])
+        self.assertEqual(terminals, [])
 
     def test_completion_then_late_cancel_keeps_the_single_terminal(self) -> None:
         """When completion wins the race, a late cancel is a no-op and does not add a second terminal."""
@@ -568,6 +579,26 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         _execute_cancel_attempt(_cancel_command(), "instance-1", emitted.append, cancel_event=cancel_event, terminal_gate=gate)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
+
+    def test_failed_completion_delivery_retries_the_same_terminal_candidate(self) -> None:
+        """A lost terminal response retries the exact same candidate rather than inventing a failure."""
+        cancel_event = threading.Event()
+        gate = runtime._TerminalGate(cancel_event)
+        delivered: list[dict] = []
+        attempts = 0
+
+        def _reject_completion(candidate: dict) -> None:
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise RuntimeError("stream reset")
+            delivered.append(candidate)
+
+        coordinates = _command_coordinates(_start_command(), "instance-1")
+        assert coordinates is not None
+        self.assertTrue(gate.post_completion(_reject_completion, _candidate(coordinates, "run.completed", {})))
+        self.assertEqual(attempts, 2)
+        self.assertEqual([candidate["eventType"] for candidate in delivered], ["run.completed"])
 
 
 class RuntimePydanticAiDriverTests(unittest.TestCase):

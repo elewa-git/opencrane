@@ -1,12 +1,13 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Readable } from "node:stream";
 
 import type { PrismaClient } from "@prisma/client";
 
-import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __UploadArtifact, PrismaArtifactAuthorityRepository } from "@opencrane/backend/server/agents/artifacts";
 import type { ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
+import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 
 /** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
@@ -38,6 +39,44 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 			const body = await response.json() as { receipt?: unknown };
 			if (typeof body.receipt !== "string") throw new Error("artifact service promotion returned no receipt");
 			return { receipt: body.receipt };
+		},
+	};
+}
+
+/** Build the server-only HTTP client that retrieves bytes covered by one immutable read lease. */
+export function _CreateArtifactServiceReadPort(serviceUrl: string): { read(lease: string, contentAddress: string): Promise<Response> }
+{
+	return {
+		async read(lease: string, contentAddress: string): Promise<Response>
+		{
+			if (!/^sha256:[a-f0-9]{64}$/u.test(contentAddress)) throw new Error("artifact read requires a canonical content address");
+			const response = await fetch(`${serviceUrl}/v1/artifacts/content/${contentAddress.slice("sha256:".length)}`, { redirect: "error", headers: { "x-opencrane-artifact-lease": lease } });
+			if (!response.ok || response.body === null) throw new Error(`artifact service read failed with ${response.status}`);
+			return response;
+		},
+	};
+}
+
+/** Mint one read lease from server-owned mounted key material; workers never receive this token. */
+export function _CreateArtifactReadLeaseSigner(environment: NodeJS.ProcessEnv = process.env): (claims: Parameters<typeof __SignArtifactReadLease>[0]) => string
+{
+	const leasePrivateKey = _ReadPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
+	return function _SignReadLease(claims): string { return __SignArtifactReadLease(claims, leasePrivateKey, Math.floor(Date.now() / 1_000)); };
+}
+
+/** Build the only server-side bridge from a fenced authoring input to verified ArtifactStore bytes. */
+export function _CreateSkillAuthoringArtifactReader(environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
+{
+	return {
+		async read(input: SkillAuthoringInputRecord): Promise<ReadableStream<Uint8Array>>
+		{
+			const serviceUrl = _InternalServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
+			const signLease = _CreateArtifactReadLeaseSigner(environment);
+			const readPort = _CreateArtifactServiceReadPort(serviceUrl);
+			const lease = signLease({ leaseId: randomUUID(), siloId: input.siloId, artifactId: input.artifactId, artifactRevisionId: input.artifactRevisionId, contentAddress: input.contentAddress, byteLength: input.byteLength, mediaType: input.mediaType, action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60 });
+			const response = await readPort.read(lease, input.contentAddress);
+			if (response.headers.get("content-length") !== String(input.byteLength) || response.headers.get("content-type") !== input.mediaType) throw new Error("artifact service read metadata did not match the fenced revision");
+			return response.body as ReadableStream<Uint8Array>;
 		},
 	};
 }

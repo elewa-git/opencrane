@@ -1,6 +1,6 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, GrantScope, GrantSubjectType, Prisma, type PrismaClient } from "@prisma/client";
 
-import type { GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType } from "@opencrane/models/agents";
+import type { AgentService, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType } from "@opencrane/models/agents";
 
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { JsonValue } from "@opencrane/util";
@@ -129,6 +129,13 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
+	}
+
+	/** List the newest two hundred managed service identities from one exact silo. */
+	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
+	{
+		const rows = await this.prisma.agentService.findMany({ where: { siloId, kind: AgentServiceKind.Managed }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 200 });
+		return rows.map(_mapService);
 	}
 
 	/** Loads one stable service identity scoped to the caller's silo. */

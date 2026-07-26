@@ -9,6 +9,8 @@ export interface ExternalActionExecutorDependencies
 	readonly siloId: string;
 	/** Subject on whose behalf the action runs. */
 	readonly subjectId: string;
+	/** Gateway dataset frozen in the admitted snapshot, or null when this run cannot recall personal memory. */
+	readonly cogneeDatasetId: string | null;
 	/** Obot credential-custody transport backing MCP tool calls (fail-closed until verified). */
 	readonly obotCustody: ObotCustodyPort;
 	/** Sandbox Job transport backing sandboxed tool calls (fail-closed until verified). */

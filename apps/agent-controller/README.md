@@ -11,6 +11,20 @@ and reports the
 Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim then lets it release
 that exact Job and register the unique first Pod.
 
+The same process also projects governed skill workloads into the authoring and tool-runner
+namespaces. Those Jobs are created suspended and their UID is committed to the durable skill record.
+A separate database-fenced release permits one conditional unsuspend with a deadline bounded by that
+release, followed by registration of the exact first Job-owned Pod. The controller cannot write
+Secrets or choose a worker identity in either skill namespace. A separate fail-closed admission
+policy permits only the pinned, class-specific worker shape, so the controller cannot use its Job
+permission to create arbitrary work.
+
+Each released skill Job receives an audience-bound projected token and opaque bootstrap reference
+through separate read-only files. Helm fixes the acknowledgement URL to the same-silo OpenCrane
+Service; it does not inherit the controller's configurable runtime endpoint. The worker can only
+acknowledge that reference, and the server TokenReviews the exact first worker Pod before consuming
+it once.
+
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
 only projects that decision into the one restricted runtime namespace named by its RoleBinding.
@@ -42,7 +56,8 @@ multiple Pods, and OpenCrane registers the first Pod before bootstrap exchange c
 ## Public surface
 
 `Entrypoint:` `src/index.ts` loads telemetry first, validates configuration, creates the narrow
-OpenCrane and Kubernetes adapters, runs the assignment and release poll loop, and flushes telemetry
+OpenCrane and Kubernetes adapters, runs the runtime assignment/release and suspended-skill-assignment
+poll loops, and flushes telemetry
 on `SIGTERM`/`SIGINT`.
 
 ## Boundary
@@ -76,6 +91,9 @@ outside the app root.
   OpenCrane and Kubernetes request; default 10 seconds. Process shutdown cancels either request type
   immediately, and each retry receives a fresh deadline.
 - `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name.
+- `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
+  profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
+  file paths and same-silo acknowledgement URL.
 
 The image runs as an unprivileged numeric user with a read-only root filesystem. Helm provides two
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to

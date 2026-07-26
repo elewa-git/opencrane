@@ -12,6 +12,8 @@ export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
 	readonly siloId: string;
+	/** Gateway-native personal dataset identifier frozen in the admitted run snapshot. */
+	readonly cogneeDatasetId: string;
 	/** Subject whose personal memory is being queried. */
 	readonly subjectId: string;
 	/** Free-text recall query. */
@@ -25,6 +27,46 @@ export interface MemoryQueryResult
 {
 	/** Facts the gateway matched, in gateway-defined order. */
 	readonly facts: readonly MemoryFact[];
+}
+
+/** Request to durably retain one authenticated subject's personal-memory fact. */
+export interface PersonalMemoryRecordCommand
+{
+	/** Silo that owns the personal-memory dataset. */
+	readonly siloId: string;
+	/** Authenticated subject whose personal memory may receive this fact. */
+	readonly subjectId: string;
+	/** Gateway-native dataset identifier; OpenCrane's catalog id never crosses this boundary. */
+	readonly cogneeDatasetId: string;
+	/** Exact durable fact content, sent only to the remote memory gateway. */
+	readonly content: string;
+	/** Stable delivery key: it may be replayed only with byte-identical content in this subject and dataset. */
+	readonly idempotencyKey: string;
+}
+
+/** Gateway evidence returned only after a personal fact has durably been accepted. */
+export type PersonalMemoryRecordResult = PersonalMemoryRecorded | PersonalMemoryRecordDenied;
+
+/** Gateway evidence returned only after a personal fact has durably been accepted. */
+export interface PersonalMemoryRecorded
+{
+	/** Durable gateway acceptance outcome. */
+	readonly outcome: "recorded";
+	/** True when an identical earlier delivery already retained this exact content. */
+	readonly idempotent: boolean;
+	/** Stable fact identifier minted by the remote memory gateway. */
+	readonly cogneeExternalId: string;
+	/** Canonical lowercase sha256: content address computed over accepted durable content. */
+	readonly contentDigest: string;
+}
+
+/** Gateway denial that leaves no new durable personal-memory fact. */
+export interface PersonalMemoryRecordDenied
+{
+	/** Durable gateway denial outcome. */
+	readonly outcome: "denied";
+	/** Reused delivery key names content different from its already accepted request. */
+	readonly reason: "idempotency_conflict";
 }
 
 /** Request to correct the content of one stored fact. */
@@ -125,6 +167,8 @@ export interface MemoryGatewayClient
 {
 	/** Recalls facts for a subject and returns only gateway-originated results. */
 	query(command: MemoryQueryCommand): Promise<MemoryQueryResult>;
+	/** Retains one fact for the authenticated subject and returns gateway-minted evidence. */
+	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordResult>;
 	/** Corrects one stored fact's content remotely. */
 	correct(command: MemoryCorrectionCommand): Promise<void>;
 	/** Forgets one stored fact remotely. */

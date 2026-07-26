@@ -168,6 +168,14 @@ function _AttemptResourceName(assignment: AgentRuntimeJobAssignment): string
 	return `agent-runtime-a${assignment.attempt}-${digest}`;
 }
 
+/** Derive the deterministic runtime Job name from its durable attempt identity. */
+export function __AgentRuntimeAttemptResourceName(siloId: string, runId: string, attempt: number): string
+{
+	const assignment = { siloId, runId, attempt, agentServiceId: "name-derivation", agentRevisionId: "name-derivation", namespace: "runtime", bootstrapReference: "name-derivation", litellmKeySecretName: "name-derivation" };
+	_AssertAssignment(assignment);
+	return _AttemptResourceName(assignment);
+}
+
 /** Build full authority annotations without forcing arbitrary identifiers into label grammar. */
 function _AuthorityAnnotations(assignment: AgentRuntimeJobAssignment): Record<string, string>
 {

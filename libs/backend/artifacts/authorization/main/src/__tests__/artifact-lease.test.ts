@@ -2,7 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { __SignArtifactPromotionReceipt, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactWriteLease } from "../artifact-lease.js";
+import { __SignArtifactPromotionReceipt, __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "../artifact-lease.js";
 
 const _leaseKeys = generateKeyPairSync("ed25519");
 const _receiptKeys = generateKeyPairSync("ed25519");
@@ -30,6 +30,14 @@ describe("ArtifactStore signed internal protocol", function _suite()
 		expect(__VerifyArtifactWriteLease(atPastBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-past-boundary" });
 		expect(__VerifyArtifactWriteLease(beforePastBoundary, _leasePublicKey, now)).toBeNull();
 		expect(__VerifyArtifactWriteLease(atFutureBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-future-boundary" });
+	});
+
+	it("keeps one immutable read lease distinct from upload authority", function _readLeaseRoundTrip()
+	{
+		const compact = __SignArtifactReadLease({ leaseId: "read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "application/gzip", action: "artifact.read", expiresAtEpochSeconds: 1_750_000_060 }, _leasePrivateKey, 1_750_000_000);
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, 1_750_000_001)).toMatchObject({ leaseId: "read-1", action: "artifact.read" });
+		expect(__VerifyArtifactWriteLease(compact, _leasePublicKey, 1_750_000_001)).toBeNull();
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, 1_750_000_061)).toBeNull();
 	});
 
 	it("keeps service promotion receipts distinct from write-lease authority", function _receiptRoundTrip()

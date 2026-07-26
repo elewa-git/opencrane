@@ -176,10 +176,16 @@ CREATE TYPE "WorkloadKind" AS ENUM ('job', 'deployment');
 CREATE TYPE "RunOutboxEventKind" AS ENUM ('run.accepted', 'run.attempt_requested', 'run.workload_release_requested', 'run.workload_cleanup_requested', 'run.cancellation_requested', 'run.resume_requested');
 
 -- CreateEnum
+CREATE TYPE "ChildRunCompletionDeliveryOutcome" AS ENUM ('delivered', 'no_parent_stream', 'parent_stream_terminal');
+
+-- CreateEnum
 CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'cancel_attempt');
 
 -- CreateEnum
 CREATE TYPE "RuntimeSteeringDisposition" AS ENUM ('absorbed', 'deferred');
+
+-- CreateEnum
+CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed', 'superseded');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -189,6 +195,12 @@ CREATE TYPE "SkillRevisionState" AS ENUM ('draft', 'review', 'published', 'rejec
 
 -- CreateEnum
 CREATE TYPE "SkillTrustClass" AS ENUM ('reviewed_instructions', 'sandboxed_python');
+
+-- CreateEnum
+CREATE TYPE "SkillWorkloadKind" AS ENUM ('authoring', 'tool_runner');
+
+-- CreateEnum
+CREATE TYPE "SkillWorkloadState" AS ENUM ('pending', 'assigned', 'succeeded', 'failed', 'cancelled');
 
 -- CreateTable
 CREATE TABLE "agent_services" (
@@ -1347,6 +1359,30 @@ CREATE TABLE "run_input_snapshots" (
 );
 
 -- CreateTable
+CREATE TABLE "child_run_reservations" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "root_run_id" TEXT NOT NULL,
+    "depth" INTEGER NOT NULL,
+    "max_tokens" INTEGER NOT NULL,
+    "max_cost_usd_micros" BIGINT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
+);
+
+-- CreateTable
+CREATE TABLE "child_run_completion_deliveries" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "parent_event_sequence" INTEGER,
+    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
+    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
+);
+
+-- CreateTable
 CREATE TABLE "workload_assignments" (
     "run_id" TEXT NOT NULL,
     "attempt" INTEGER NOT NULL,
@@ -1476,6 +1512,22 @@ CREATE TABLE "runtime_steering_boundaries" (
 );
 
 -- CreateTable
+CREATE TABLE "runtime_steering_requests" (
+    "id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "subject_id" TEXT NOT NULL,
+    "content" JSONB NOT NULL,
+    "digest" TEXT NOT NULL,
+    "state" "RuntimeSteeringRequestState" NOT NULL DEFAULT 'pending',
+    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3),
+
+    CONSTRAINT "runtime_steering_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "runtime_dispatched_commands" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
@@ -1530,6 +1582,47 @@ CREATE TABLE "skill_revisions" (
     "revoked_at" TIMESTAMP(3),
 
     CONSTRAINT "skill_revisions_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_workloads" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "kind" "SkillWorkloadKind" NOT NULL,
+    "state" "SkillWorkloadState" NOT NULL DEFAULT 'pending',
+    "skill_revision_id" TEXT NOT NULL,
+    "tool_invocation_id" TEXT,
+    "claimed_at" TIMESTAMP(3),
+    "delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "workload_uid" TEXT,
+    "worker_pod_uid" TEXT,
+    "release_claimed_at" TIMESTAMP(3),
+    "release_delivery_count" INTEGER NOT NULL DEFAULT 0,
+    "release_expires_at" TIMESTAMP(3),
+    "released_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "completed_at" TIMESTAMP(3),
+    "failure_code" TEXT,
+    "cancelled_at" TIMESTAMP(3),
+
+    CONSTRAINT "skill_workloads_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "skill_workload_bootstraps" (
+    "id" TEXT NOT NULL,
+    "skill_workload_id" TEXT NOT NULL,
+    "reference_hash" TEXT NOT NULL,
+    "audience" TEXT NOT NULL,
+    "service_account_name" TEXT NOT NULL,
+    "namespace" TEXT NOT NULL,
+    "workload_uid" TEXT NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL,
+    "consumed_at" TIMESTAMP(3),
+    "consumed_by_pod_uid" TEXT,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "skill_workload_bootstraps_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1615,6 +1708,12 @@ CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat
 
 -- CreateIndex
 CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
@@ -2149,6 +2248,15 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
 
 -- CreateIndex
+CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
+
+-- CreateIndex
+CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
+
+-- CreateIndex
+CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
+
+-- CreateIndex
 CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
 
 -- CreateIndex
@@ -2249,6 +2357,33 @@ CREATE UNIQUE INDEX "skill_revisions_skill_id_id_key" ON "skill_revisions"("skil
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_revisions_id_artifact_revision_id_artifact_content_ad_key" ON "skill_revisions"("id", "artifact_revision_id", "artifact_content_address");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_tool_invocation_id_key" ON "skill_workloads"("tool_invocation_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("workload_uid");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_worker_pod_uid_key" ON "skill_workloads"("worker_pod_uid");
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_state_release_claimed_at_idx" ON "skill_workloads"("state", "release_claimed_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workload_bootstraps_skill_workload_id_key" ON "skill_workload_bootstraps"("skill_workload_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "skill_workload_bootstraps_reference_hash_key" ON "skill_workload_bootstraps"("reference_hash");
+
+-- CreateIndex
+CREATE INDEX "skill_workload_bootstraps_expires_at_idx" ON "skill_workload_bootstraps"("expires_at");
 
 -- CreateIndex
 CREATE INDEX "tenant_litellm_keys_tenant_idx" ON "tenant_litellm_keys"("tenant");
@@ -2479,6 +2614,18 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revis
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_thread_id_silo_id__fkey" FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2504,6 +2651,15 @@ ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN
 
 -- AddForeignKey
 ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_skill_id_fkey" FOREIGN KEY ("skill_id") REFERENCES "skills"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_skill_revision_id_fkey" FOREIGN KEY ("skill_revision_id") REFERENCES "skill_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id_fkey" FOREIGN KEY ("tool_invocation_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "tenant_litellm_keys" ADD CONSTRAINT "tenant_litellm_keys_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2779,6 +2935,50 @@ $$;
 CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
+END;
+$$;
+CREATE FUNCTION "enforce_child_run_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child "agent_runs"%ROWTYPE;
+    parent "agent_runs"%ROWTYPE;
+    root "agent_runs"%ROWTYPE;
+    parent_depth INTEGER;
+BEGIN
+    SELECT * INTO child FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR KEY SHARE;
+    SELECT * INTO parent FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    SELECT * INTO root FROM "agent_runs" WHERE "id" = NEW."root_run_id" FOR KEY SHARE;
+
+    IF child."id" IS NULL OR parent."id" IS NULL OR root."id" IS NULL
+        OR child."state" IS DISTINCT FROM 'accepted'::"AgentRunState"
+        OR child."attempt" <> 1
+        OR child."trigger" IS DISTINCT FROM 'managed_invocation'::"AgentRunTrigger"
+        OR child."parent_run_id" IS DISTINCT FROM NEW."parent_run_id"
+        OR child."root_run_id" IS DISTINCT FROM NEW."root_run_id"
+        OR parent."root_run_id" IS DISTINCT FROM NEW."root_run_id"
+        OR root."id" IS DISTINCT FROM root."root_run_id"
+        OR root."parent_run_id" IS NOT NULL
+        OR child."silo_id" IS DISTINCT FROM parent."silo_id"
+        OR parent."silo_id" IS DISTINCT FROM root."silo_id"
+        OR NEW."child_run_id" = NEW."parent_run_id" THEN
+        RAISE EXCEPTION 'ChildRunReservation must bind one same-silo child to its exact parent and root';
+    END IF;
+
+    IF parent."parent_run_id" IS NULL THEN
+        IF parent."id" IS DISTINCT FROM NEW."root_run_id" OR NEW."depth" <> 1 THEN
+            RAISE EXCEPTION 'a direct child reservation must have the canonical root parent and depth 1';
+        END IF;
+    ELSE
+        SELECT "depth" INTO parent_depth FROM "child_run_reservations" WHERE "child_run_id" = parent."id" FOR KEY SHARE;
+        IF parent_depth IS NULL OR NEW."depth" <> parent_depth + 1 THEN
+            RAISE EXCEPTION 'a nested child reservation must continue its parent reservation depth';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "reject_child_run_reservation_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'ChildRunReservation rows are immutable';
 END;
 $$;
 CREATE FUNCTION "enforce_initial_agent_run_state"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -3490,7 +3690,61 @@ BEGIN
     ELSIF NEW."type" NOT IN ('run.completed', 'run.failed', 'run.cancelled') AND run_state IN ('completed', 'failed', 'cancelled') THEN
         RAISE EXCEPTION 'terminal AgentRun accepts only its matching terminal event';
     END IF;
+    IF NEW."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled') AND NOT EXISTS (
+        SELECT 1
+        FROM "child_run_completion_deliveries" delivery
+        JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
+        WHERE delivery."child_run_id" = NEW."payload"->>'childRunId'
+          AND delivery."parent_run_id" = NEW."run_id"
+          AND delivery."parent_event_sequence" = NEW."sequence"
+          AND delivery."outcome" = 'delivered'
+          AND ((NEW."type" = 'child.run.completed' AND child."state" = 'completed') OR (NEW."type" = 'child.run.failed' AND child."state" = 'failed') OR (NEW."type" = 'child.run.cancelled' AND child."state" = 'cancelled'))
+    ) THEN
+        RAISE EXCEPTION 'child RunEvent requires child completion delivery authority';
+    END IF;
     RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child_parent_run_id TEXT;
+    child_root_run_id TEXT;
+    child_silo_id TEXT;
+    child_state "AgentRunState";
+    reservation_parent_run_id TEXT;
+    reservation_root_run_id TEXT;
+    parent_silo_id TEXT;
+    parent_root_run_id TEXT;
+    parent_thread_id TEXT;
+    expected_event_type TEXT;
+BEGIN
+    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
+    SELECT "parent_run_id", "root_run_id", "silo_id", "state" INTO child_parent_run_id, child_root_run_id, child_silo_id, child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
+    IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
+    SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
+    SELECT "silo_id", "root_run_id", "thread_id" INTO parent_silo_id, parent_root_run_id, parent_thread_id FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
+    IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
+    IF NEW."outcome" = 'delivered' THEN
+        expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
+        IF parent_thread_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
+    ELSIF NEW."outcome" = 'no_parent_stream' THEN
+        IF parent_thread_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
+    ELSE
+        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent stream'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_child_run_completion_delivery_event"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    child_state "AgentRunState";
+    expected_event_type TEXT;
+BEGIN
+    IF NEW."outcome" <> 'delivered' THEN RETURN NULL; END IF;
+    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id";
+    expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
+    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type AND "payload"->>'childRunId' = NEW."child_run_id") THEN RAISE EXCEPTION 'delivered child completion requires exact parent event'; END IF;
+    RETURN NULL;
 END;
 $$;
 CREATE FUNCTION "reject_conversation_immutable_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -3867,6 +4121,72 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
+        RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
+    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned workload'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned' OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR clock_timestamp() >= OLD."release_expires_at") THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration requires a current released workload'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > clock_timestamp() OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > clock_timestamp() OR clock_timestamp() >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > clock_timestamp())) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") AND (NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
+    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
+    IF TG_OP = 'INSERT' THEN
+        SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
+        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
+        IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
+        IF NEW."kind" = 'tool_runner' THEN
+            RAISE EXCEPTION 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority';
+        END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN
+        IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" bootstrap WHERE bootstrap."skill_workload_id" = NEW."id" AND bootstrap."consumed_at" IS NOT NULL AND bootstrap."consumed_by_pod_uid" = OLD."worker_pod_uid") THEN RAISE EXCEPTION 'SkillWorkload completion requires its consumed canonical worker bootstrap'; END IF;
+        IF NEW."kind" <> 'authoring' THEN RAISE EXCEPTION 'tool runner completion has its own ToolInvocation authority'; END IF;
+        IF NEW."state" = 'succeeded' AND NOT EXISTS (SELECT 1 FROM "skill_revisions" revision WHERE revision."id" = NEW."skill_revision_id" AND revision."state" = 'draft' AND jsonb_typeof(revision."test_report") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."test_report")) = 3 AND revision."test_report" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."test_report"->'summary') = 'string' AND length(revision."test_report"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."test_report"->'checksRun') = 'number' AND (revision."test_report"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$' AND jsonb_typeof(revision."scan_result") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."scan_result")) = 3 AND revision."scan_result" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."scan_result"->'summary') = 'string' AND length(revision."scan_result"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."scan_result"->'checksRun') = 'number' AND (revision."scan_result"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$') THEN RAISE EXCEPTION 'authoring completion requires bounded passed draft test and scan reports'; END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "enforce_skill_workload_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT; transition_time TIMESTAMP(3) := clock_timestamp();
+BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap rows cannot be deleted'; END IF;
+    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN RAISE EXCEPTION 'a new SkillWorkloadBootstrap must begin unconsumed'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."skill_workload_id" IS DISTINCT FROM OLD."skill_workload_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash" OR NEW."audience" IS DISTINCT FROM OLD."audience" OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NOT NULL AND (NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at" OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid") THEN RAISE EXCEPTION 'consumed SkillWorkloadBootstrap is terminal'; END IF;
+    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap may be consumed exactly once'; END IF;
+    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at" OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL) OR (NEW."consumed_at" IS NOT NULL AND (NEW."consumed_at" < NEW."created_at" OR btrim(NEW."consumed_by_pod_uid") = '')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires hashed reference, positive expiry, and paired consumption evidence'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."consumed_at" > transition_time OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap must be consumed at a current time before expiry'; END IF;
+    SELECT "kind", "state", "workload_uid", "worker_pod_uid" INTO workload_kind, workload_state, assigned_uid, assigned_pod_uid FROM "skill_workloads" WHERE "id" = NEW."skill_workload_id" FOR UPDATE;
+    IF workload_state IS DISTINCT FROM 'assigned' OR assigned_uid IS DISTINCT FROM NEW."workload_uid" THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires its exact assigned workload UID'; END IF;
+    IF TG_OP = 'UPDATE' AND assigned_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN RAISE EXCEPTION 'bootstrap consumer Pod is not the registered workload Pod'; END IF;
+    IF NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63 OR (workload_kind = 'authoring' AND (NEW."audience" <> 'opencrane-skill-authoring' OR NEW."service_account_name" <> 'skill-authoring-default')) OR (workload_kind = 'tool_runner' AND (NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match its workload class'; END IF;
+    RETURN NEW;
+END;
+$$;
+CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
+        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
+          WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
+            AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
+    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" <> 'reserved' THEN
+        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
+          WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
+    END IF;
+    RETURN NULL;
+END;
+$$;
 CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Skill rows cannot be deleted'; END IF;
@@ -3891,9 +4211,11 @@ BEGIN
     RETURN NEW;
 END;
 $$;
-CREATE FUNCTION "protect_assigned_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
+CREATE FUNCTION "protect_current_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "agent_revision_skill_assignments" WHERE "skill_revision_id" = NEW."id") THEN RAISE EXCEPTION 'assigned SkillRevision must remain Published'; END IF;
+    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "skills" WHERE "id" = NEW."skill_id" AND "current_revision_id" = NEW."id") THEN
+        RAISE EXCEPTION 'current SkillRevision must remain Published';
+    END IF;
     RETURN NULL;
 END;
 $$;
@@ -4108,6 +4430,11 @@ ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_c
         btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
         "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
     );
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
+    "depth" > 0
+    AND "max_tokens" > 0
+    AND "max_cost_usd_micros" > 0
+);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
 ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
         btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
@@ -4240,7 +4567,8 @@ ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_ty
         'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
         'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed',
         'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled'
+        'run.completed', 'run.failed', 'run.cancelled',
+        'child.run.completed', 'child.run.failed', 'child.run.cancelled'
     ));
 ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
@@ -4327,6 +4655,7 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
          AND "test_report" @> '{"passed":true}'::jsonb AND "scan_result" @> '{"passed":true}'::jsonb
          AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
     );
+ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("organization_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_scope_check" CHECK (
         ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
@@ -4406,6 +4735,10 @@ CREATE TRIGGER "agent_revision_scope_attachments_immutable"
 CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
 CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
 CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
+CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
+CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
+CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE ON "child_run_completion_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery"();
+CREATE CONSTRAINT TRIGGER "child_run_completion_deliveries_exact_parent_event" AFTER INSERT ON "child_run_completion_deliveries" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery_event"();
 CREATE TRIGGER "agent_runs_initial_state"
     BEFORE INSERT ON "agent_runs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_initial_agent_run_state"();
@@ -4468,9 +4801,13 @@ CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON 
 CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
 CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
+CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
+CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
+CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
+CREATE TRIGGER "cancel_ineligible_skill_workloads_on_invocation" AFTER UPDATE OF "state" ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
 CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
 CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
-CREATE CONSTRAINT TRIGGER "assigned_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_assigned_skill_revision"();
+CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
 CREATE CONSTRAINT TRIGGER "skill_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions"
     DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_skill_artifact_revision"();
 CREATE TRIGGER "agent_revision_skill_assignments_same_silo" BEFORE INSERT OR UPDATE ON "agent_revision_skill_assignments"
@@ -4543,3 +4880,21 @@ CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
 AFTER INSERT OR UPDATE OF "run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
 ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
 EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
+
+-- Clean-build persona onboarding sources. They are created as Draft, populated, and reviewed in
+-- this immutable baseline so no runtime path can edit questions or SOUL.md template rules.
+INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES ('personal-agent-onboarding', 1);
+INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "question_id", "category", "prompt", "ordinal") VALUES
+    ('personal-agent-onboarding', 1, 'relationship-role', 'relationship_role', 'What role should your agent take? Choose: A thoughtful partner.', 1),
+    ('personal-agent-onboarding', 1, 'tone-language', 'tone_language', 'Which tone and language should it normally use?', 2),
+    ('personal-agent-onboarding', 1, 'answer-structure', 'answer_structure', 'How should it structure answers: concise first, detailed first, or another approach?', 3),
+    ('personal-agent-onboarding', 1, 'challenge-support', 'challenge_support', 'How should it challenge you? Choose: Challenge me directly, or Start supportively, then challenge me.', 4),
+    ('personal-agent-onboarding', 1, 'initiative', 'initiative', 'When may it take initiative instead of waiting for a request?', 5),
+    ('personal-agent-onboarding', 1, 'approval-risk', 'approval_risk', 'Which external actions always require your approval?', 6),
+    ('personal-agent-onboarding', 1, 'working-habits', 'working_habits', 'Which working habits should it reinforce?', 7),
+    ('personal-agent-onboarding', 1, 'memory-boundaries', 'memory_boundaries', 'What should it remember, and what must it not retain?', 8);
+UPDATE "persona_question_sets" SET "state" = 'reviewed', "reviewed_by" = 'opencrane-clean-build', "reviewed_at" = clock_timestamp()
+WHERE "question_set_id" = 'personal-agent-onboarding' AND "version" = 1;
+INSERT INTO "persona_soul_templates" ("template_id", "version", "digest", "content", "selection_rules", "reviewed_by", "reviewed_at") VALUES
+    ('direct-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"direct-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Challenge me directly"}}]', 'opencrane-clean-build', clock_timestamp()),
+    ('supportive-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"supportive-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Start supportively, then challenge me"}}]', 'opencrane-clean-build', clock_timestamp());

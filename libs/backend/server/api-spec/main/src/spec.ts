@@ -27,6 +27,14 @@ import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/mo
 import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
+import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
+import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
+import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
+import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
+import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
+import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
+import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
+import { _SkillCatalogueOpenapiPaths } from "@opencrane/backend/server/agents/skills";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -684,6 +692,60 @@ export const spec = {
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
+      SelfRunStatus: {
+        type: "object",
+        required: ["runId", "attempt", "state", "threadId", "agentRevisionId", "acceptedAt", "finishedAt"],
+        properties: {
+          runId: { type: "string" },
+          attempt: { type: "integer", minimum: 1 },
+          state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_approval", "cancelling", "completed", "failed", "cancelled"] },
+          threadId: { type: "string", nullable: true },
+          agentRevisionId: { type: "string" },
+          acceptedAt: { type: "string", format: "date-time" },
+          finishedAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
+      SelfDeferredToolApproval: {
+        type: "object",
+        required: ["approvalRequestId", "runId", "attempt", "toolRevisionId", "expiresAt", "createdAt"],
+        properties: {
+          approvalRequestId: { type: "string" },
+          runId: { type: "string" },
+          attempt: { type: "integer", minimum: 1 },
+          toolRevisionId: { type: "string" },
+          expiresAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
+      AgentService: {
+        type: "object",
+        required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],
+        properties: {
+          id: { type: "string" },
+          siloId: { type: "string" },
+          kind: { type: "string", enum: ["managed"] },
+          name: { type: "string" },
+          state: { type: "string", enum: ["draft", "active", "paused", "retired"] },
+          activeRevisionId: { type: "string", nullable: true },
+          workloadProfile: { type: "string" },
+          createdAt: { type: "string", format: "date-time" },
+          updatedAt: { type: "string", format: "date-time" },
+        },
+      },
+      PersonalConfigurationChange: {
+        type: "object",
+        required: ["changeId", "requestedPatch", "state", "sourceThreadId", "sourceRunId", "proposedAt", "decidedAt", "rejectionReason"],
+        properties: {
+          changeId: { type: "string" },
+          requestedPatch: { oneOf: [{ type: "object", required: ["kind"], additionalProperties: false, properties: { kind: { const: "persona_refresh" } } }, { type: "object", required: ["kind", "modelAlias"], additionalProperties: false, properties: { kind: { const: "model_alias" }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: ".*\\S.*" } } }] },
+          state: { type: "string", enum: ["proposed", "accepted", "applied", "rejected", "superseded"] },
+          sourceThreadId: { type: "string" },
+          sourceRunId: { type: "string" },
+          proposedAt: { type: "string", format: "date-time" },
+          decidedAt: { type: "string", format: "date-time", nullable: true },
+          rejectionReason: { type: "string", nullable: true },
+        },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],
@@ -768,6 +830,14 @@ export const spec = {
     ..._SpendOpenapiPaths,
     ..._AuditOpenapiPaths,
     ..._MetricsOpenapiPaths,
+    ..._AuthorizationOpenapiPaths,
+    ..._RuntimeSteeringOpenapiPaths,
+    ..._SelfRunStatusOpenapiPaths,
+    ..._PersonaOnboardingOpenapiPaths,
+    ..._SelfConversationReplayOpenapiPaths,
+    ..._AgentServicesOpenapiPaths,
+    ..._PersonalConfigurationOpenapiPaths,
+    ..._SkillCatalogueOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

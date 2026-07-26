@@ -1,9 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, PersonaDraftRepository } from "./persona-draft-authority.types.js";
+import type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, PersonaDraftFromInterviewRepository, PersonaDraftRepository } from "./persona-draft-authority.types.js";
 
 /** Prisma authority that derives a draft persona only from one locked completed interview. */
-export class PrismaPersonaDraftRepository implements PersonaDraftRepository
+export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRepository, PersonaDraftRepository
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -45,6 +45,22 @@ export class PrismaPersonaDraftRepository implements PersonaDraftRepository
 		catch (error)
 		{
 			if (error instanceof Prisma.PrismaClientKnownRequestError) return { status: "conflict" };
+			return { status: "persistence_unavailable" };
+		}
+	}
+
+	/** Derive three bounded owner-visible insights from the completed interview before using the existing atomic draft path. */
+	async createFromInterviewAtomically(command: Omit<CreatePersonaDraftCommand, "insights">): Promise<CreatePersonaDraftPersistenceResult>
+	{
+		try
+		{
+			const interview = await this.prisma.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: "Completed" }, select: { answers: { select: { id: true, value: true }, orderBy: { id: "asc" }, take: 5 } } });
+			if (interview === null) return { status: "interview_incomplete" };
+			if (interview.answers.length < 3) return { status: "invalid_insights" };
+			return this.createAtomically({ ...command, insights: interview.answers.map(function _insight(answer) { return { answerId: answer.id, statement: `Owner response: ${answer.value.trim()}` }; }) });
+		}
+		catch
+		{
 			return { status: "persistence_unavailable" };
 		}
 	}

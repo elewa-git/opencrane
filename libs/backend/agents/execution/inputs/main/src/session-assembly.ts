@@ -32,30 +32,33 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const run = await authorities.runAuthority.load(command, transaction);
 		if (run.outcome === "denied") return run;
 
-		// 4. A personal run requires an approved persona; a managed run must not carry one.
-		const persona = await authorities.approvedPersona.load(command, run.value, transaction);
-		if (persona.outcome === "denied") return persona;
-		if ((run.value.agentKind === "personal") !== (persona.value.personaRevisionId !== null)) return { outcome: "denied", reason: "persona_unavailable" } as const;
-
-		// 5. Freeze the transcript, rejecting messages that leaked into a non-conversational run.
-		const thread = await authorities.threadContext.load(command, run.value, transaction);
-		if (thread.outcome === "denied") return thread;
-		if (command.threadId === null && thread.value.messageIds.length > 0) return { outcome: "denied", reason: "thread_unavailable" } as const;
-
-		// 6. Freeze preferences, memory, tools, budgets, and signed identity in the same final transaction.
-		const preferences = await authorities.preferenceFacts.load(command, run.value, transaction);
-		if (preferences.outcome === "denied") return preferences;
-		const memory = await authorities.memoryScope.load(command, run.value, transaction);
-		if (memory.outcome === "denied") return memory;
-		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
-		if (tools.outcome === "denied") return tools;
-		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
-		if (budget.outcome === "denied") return budget;
+		// 4. Verify signed identity before any identity-scoped input can select data from another organization.
 		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);
 		if (identity.outcome === "denied") return identity;
 		if (!_IsIdentityFresh(identity.value, transaction.admittedAt)) return { outcome: "denied", reason: "membership_stale" } as const;
 
-		// 7. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
+		// 5. A personal run requires an approved persona; a managed run must not carry one.
+		const persona = await authorities.approvedPersona.load(command, run.value, transaction);
+		if (persona.outcome === "denied") return persona;
+		if ((run.value.agentKind === "personal") !== (persona.value.personaRevisionId !== null)) return { outcome: "denied", reason: "persona_unavailable" } as const;
+
+		// 6. Freeze the transcript, rejecting messages that leaked into a non-conversational run.
+		const thread = await authorities.threadContext.load(command, run.value, transaction);
+		if (thread.outcome === "denied") return thread;
+		if (command.threadId === null && thread.value.messageIds.length > 0) return { outcome: "denied", reason: "thread_unavailable" } as const;
+
+		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
+		const preferences = await authorities.preferenceFacts.load(command, run.value, transaction);
+		if (preferences.outcome === "denied") return preferences;
+		const memory = await authorities.memoryScope.load(command, run.value, identity.value, transaction);
+		if (memory.outcome === "denied") return memory;
+		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
+		if (tools.outcome === "denied") return tools;
+		const skills = await authorities.skillEligibility.load(command, run.value, tools.value, transaction);
+		if (skills.outcome === "denied") return skills;
+		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
+		if (budget.outcome === "denied") return budget;
+		// 8. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, thread.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
 	});
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
@@ -100,6 +103,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: {
 			executionSubjectId: identity.executionSubjectId,
+			organizationId: identity.organizationId,
 			fleetMembershipRevision: identity.fleetMembershipRevision,
 			fleetMembershipIssuer: identity.fleetMembershipIssuer,
 			fleetMembershipIssuerKeyId: identity.fleetMembershipIssuerKeyId,

@@ -34,6 +34,7 @@ SELECT pg_temp.expect_failure('run must bind its exact conversation thread', $st
 INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload") VALUES ('conversation-run', 1, 'run.accepted', '{}');
 
 SELECT pg_temp.expect_failure('event sequence cannot skip', $statement$INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload") VALUES ('conversation-run', 3, 'run.started', '{}')$statement$, 'must be contiguous');
+SELECT pg_temp.expect_failure('child completion event requires delivery authority', $statement$INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload") VALUES ('conversation-run', 2, 'child.run.completed', '{"childRunId":"forged-child"}')$statement$, 'requires child completion delivery authority');
 SELECT pg_temp.expect_failure('terminal event requires matching run authority', $statement$INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload") VALUES ('conversation-run', 2, 'run.completed', '{}')$statement$, 'requires Completed AgentRun authority');
 UPDATE "agent_runs" SET "state"='failed', "finished_at"=clock_timestamp(), "terminal_reason"='runtime_failure' WHERE "id"='conversation-run';
 INSERT INTO "conversation_run_events" ("run_id", "sequence", "type", "payload") VALUES ('conversation-run', 2, 'run.failed', '{}');

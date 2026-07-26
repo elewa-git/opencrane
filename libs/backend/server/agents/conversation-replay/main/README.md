@@ -5,10 +5,11 @@
 ## What it owns
 
 This package is the read side of a personal agent conversation. A browser does not read the
-canonical event tables directly: the channel proxy first obtains a short-lived, one-use permission
-for a specific conversation, then this package consumes that permission and turns the resulting
-snapshot into Agent User Interface (AG-UI) server-sent events (SSE). An SSE stream is a normal HTTP
-response made of separately resumable event records.
+canonical event tables directly. It can read through a channel proxy's short-lived, one-use
+permission, or through the signed-in owner's self-only API. Both paths bind the read to the same
+participant, silo, keyset cursor, redaction, and Agent User Interface (AG-UI) server-sent event
+(SSE) projection. An SSE stream is a normal HTTP response made of separately resumable event
+records.
 
 ```
  browser ──► channel-proxy ── one-use context ──►
@@ -46,13 +47,17 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
   rows.
 - `PrismaConversationReplayRepository` reads canonical rows after participant and cursor checks.
 - `__CreateConversationReplayRouter` consumes the one-use context and writes the AG-UI SSE snapshot.
+- `__CreateSelfConversationReplayRouter` exposes the same redacted snapshot to the authenticated
+  participant at `GET /api/v1/me/conversations/:threadId/events`; it derives the subject and silo
+  from session and host, never from request input.
 
 ## Boundary
 
-The caller supplies a consumed channel-context authority and the exact route identifier selected by
-the controller. This package does not authenticate a browser, resolve a channel target, create a
-run, register an endpoint, or persist new conversation events. It fails closed before a canonical
-read whenever the context, cursor, thread, silo, or participant binding is wrong.
+The channel route caller supplies a consumed channel-context authority and exact controller-selected
+route identifier. The self route caller supplies only a server-derived session/host identity. This
+package does not authenticate a browser, resolve a channel target, create a run, register an
+endpoint, or persist new conversation events. It fails closed before a canonical read whenever the
+context, cursor, thread, silo, or participant binding is wrong.
 
 ## Dependency direction
 

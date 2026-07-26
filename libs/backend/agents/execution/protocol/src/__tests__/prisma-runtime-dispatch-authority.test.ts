@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 
 import { PrismaRuntimeDispatchAuthority } from "../prisma-runtime-dispatch-authority.js";
-import type { RunInputCompiler, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "../prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "../prisma-runtime-dispatch-authority.types.js";
 import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.js";
 
 /** Fixed reviewed identity for the registered runtime Pod under test. */
@@ -87,22 +87,28 @@ interface FakeOptions
 	readonly externalActionRunner?: RuntimeExternalActionRunner;
 	/** Optional structured logger injected to assert handled dispatch failures remain observable. */
 	readonly logger?: Logger;
+	/** Optional terminal lifecycle bridge supplied by the composition root. */
+	readonly terminalReporter?: RuntimeTerminalReporter;
 	/** Optional trusted clock for retry-window expiry assertions. */
 	readonly clock?: RuntimeProtocolClock;
 	/** Approved deferred-tool results available for a resume frame. */
 	readonly approvedDeferredResults?: readonly unknown[];
+	/** Owner steering requests waiting for the next fenced resume command. */
+	readonly pendingSteeringRequests?: readonly unknown[];
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const retries: FakeExternalActionRetryRow[] = [];
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
+	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const queryRaw = vi.fn().mockResolvedValue([]);
 
 	/** Return whether a stream row satisfies the guard fields present in a where clause. */
 	function _streamMatches(row: FakeStreamRow, where: Record<string, unknown>): boolean
@@ -115,7 +121,7 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 
 	const client = {
 		async $transaction(run_: (tx: unknown) => Promise<unknown>) { return run_(client); },
-		async $queryRaw() { return []; },
+		$queryRaw: queryRaw,
 		workloadAssignment: {
 			async findUnique(args: { where: { namespace_podUid?: { namespace: string; podUid: string } } })
 			{
@@ -175,8 +181,17 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; streams: Fak
 				return { count };
 			},
 		},
+		runtimeSteeringRequest: {
+			async findMany() { return steeringRequests.filter(row => row.state === "Pending"); },
+			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })
+			{
+				let count = 0;
+				for (const row of steeringRequests.filter(candidate => args.where.id.in.includes(candidate.id) && candidate.state === args.where.state)) { row.state = args.data.state; count += 1; }
+				return { count };
+			},
+		},
 	};
-	return { prisma: client as unknown as PrismaClient, streams, commands, retries, approvals };
+	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -189,7 +204,7 @@ const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Pr
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.clock ?? _clock, options.logger), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -211,6 +226,16 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
 		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toBe("sha256:sha256:snap");
+	});
+
+	it("takes the per-run advisory lock before its row lock, matching cancellation", async function _ordersRunLocks()
+	{
+		const context = _authority({ runState: "Running" });
+
+		await context.authority.__NextCommand(_identity, _open, 0);
+		const queries = context.queryRaw.mock.calls.map(function _sql(call) { return ((call[0] as { strings?: readonly string[] }).strings ?? []).join(" "); });
+		expect(queries[0]).toContain("pg_advisory_xact_lock");
+		expect(queries[1]).toContain('FROM "agent_runs"');
 	});
 
 	it("idempotently redelivers the same start command to a reconnecting instance", async function _redelivers()
@@ -269,6 +294,19 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(resume?.kind === "resume_attempt" ? resume.payload.deferredToolResults : null).toEqual([{ ok: true }]);
 	});
 
+	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()
+	{
+		const context = _authority({ runState: "Running", pendingSteeringRequests: [{ text: "Focus on risks." }] });
+		const authority = context.authority;
+		await authority.__NextCommand(_identity, _open, 0);
+		const resume = await authority.__NextCommand(_identity, _open, 1);
+		expect(resume?.kind).toBe("resume_attempt");
+		if (resume?.kind !== "resume_attempt") throw new Error("expected resume command");
+		expect(resume.payload.steeringRequests).toEqual([{ text: "Focus on risks." }]);
+		expect(context.steeringRequests[0]?.state).toBe("Consumed");
+		expect(await authority.__NextCommand(_identity, _open, 2)).toBeNull();
+	});
+
 	it("consumes the single-use resume token so no duplicate resume is minted", async function _singleUseResume()
 	{
 		const context = _authority({ runState: "Running", approvedDeferredResults: [{ ok: true }] });
@@ -305,6 +343,26 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 
 		expect(result.accepted).toBe(true);
 		expect(ran).toBe(1);
+	});
+
+	it("persists only a fenced runtime completion through the injected run authority", async function _reportsTerminalCompletion()
+	{
+		const reporter = { reportInTransaction: vi.fn().mockResolvedValue({ outcome: "reported" }) };
+		const context = _authority({ runState: "Running", terminalReporter: reporter });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-complete", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.completed", payload: { ignored: "runtime payload never becomes durable terminal evidence" } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(reporter.reportInTransaction).toHaveBeenCalledWith(expect.anything(), { runId: "run-1", attempt: 1, eventType: "run.completed" });
+	});
+
+	it("keeps cancellation server-owned even for an authenticated runtime", async function _deniesRuntimeCancellation()
+	{
+		const context = _authority({ runState: "Running", terminalReporter: { reportInTransaction: vi.fn() } });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.cancelled", payload: {} };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "runtime_cancellation_not_authoritative" });
 	});
 
 	it("retries only an explicit pre-reservation runner failure within its durable server budget", async function _surfacesExternalActionFailure()

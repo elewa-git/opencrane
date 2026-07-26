@@ -2,13 +2,13 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Fixed retry delay returned before an admitted action has a durable invocation receipt. */
 const _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS = 1_000;
@@ -98,9 +98,11 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly externalActionRunner: RuntimeExternalActionRunner | null;
 	/** Structured logger for dispatch failures that must be retried by the runtime. */
 	private readonly log: Logger;
+	/** Optional composition-root bridge to the canonical terminal run authority. */
+	private readonly terminalReporter: RuntimeTerminalReporter | null;
 
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires a bounded namespace and command lifetime");
 		this.prisma = prisma;
@@ -109,6 +111,7 @@ export class PrismaRuntimeDispatchAuthority
 		this.externalActionRunner = externalActionRunner ?? null;
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.log = log;
+		this.terminalReporter = terminalReporter ?? null;
 	}
 
 	/** Returns the next server-issued command after the supplied sequence, or null while idle. */
@@ -134,10 +137,11 @@ export class PrismaRuntimeDispatchAuthority
 		const clock = this.clock;
 		const compileRunInput = this.compileRunInput;
 		const externalActionRunner = this.externalActionRunner;
+		const terminalReporter = this.terminalReporter;
 		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
-			const admission = await _admitCandidate(prisma, clock, identity, candidate);
+			const admission = await _admitCandidate(prisma, clock, identity, candidate, terminalReporter);
 			// After the fence-checked admission commits, dispatch accepted external actions outside the
 			// admission transaction. Only an explicit runner result that proves no ToolInvocation exists can
 			// use the server-owned retry budget; every post-reservation outcome stays terminal and fail closed.
@@ -234,13 +238,17 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
 		// Consume the single-use resume tokens so a duplicate resume can never re-dispatch the results.
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeApprovalIds.length > 0) await transaction.approvalRequest.updateMany({ where: { id: { in: [...extras.resumeApprovalIds] } }, data: { resumeTokenHash: null } });
+		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: "Pending" }, data: { state: "Consumed", consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
 }
 
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
+	const terminal = _terminalRuntimeEvent(candidate);
+	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
+	if (terminal !== null && terminalReporter === null) return { accepted: false, reason: "terminal_reporter_unavailable" };
 	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
@@ -255,12 +263,26 @@ async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock
 		const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
 		if (admission.outcome === "idempotent") return { accepted: true };
 		if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
+		if (terminal !== null && terminalReporter !== null)
+		{
+			const report = await terminalReporter.reportInTransaction(transaction, { runId: context.runId, attempt: context.attempt, eventType: terminal });
+			if (report.outcome === "denied") return { accepted: false, reason: report.reason ?? "terminal_report_denied" };
+		}
 
 		// 3. Append the accepted candidate id monotonically under the held stream lock.
 		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 		if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 		return { accepted: true };
 	});
+}
+
+/** Return a terminal event type only for workload outcomes the server lets a runtime report. */
+function _terminalRuntimeEvent(candidate: RuntimeCandidate): "run.completed" | "run.failed" | null
+{
+	if (candidate.kind !== "event") return null;
+	const event = candidate as RuntimeEventCandidate;
+	if (event.eventType === "run.completed" || event.eventType === "run.failed") return event.eventType;
+	return null;
 }
 
 /** Reserve and dispatch one admitted external-action candidate through the composition-root runner. */
@@ -321,7 +343,14 @@ async function _releaseStream(prisma: PrismaClient, identity: RuntimeStreamWorkl
 /** Load and lock the assignment, run, and snapshot for the reviewed namespace and Pod UID. */
 async function _loadContext(transaction: Prisma.TransactionClient, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
 {
-	// 1. Establish the assignment lock by its unique namespace/Pod key before reading dependents.
+	// 1. Discover the run without holding the assignment. All terminal/cancellation authorities lock
+	// the run before its assignment, so this prevents a runtime report from deadlocking with a cancel.
+	const discovered = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
+	if (discovered === null) return null;
+	// The cancellation and terminal-report authorities use this advisory-before-row order too. It
+	// serialises every writer for one run without creating an advisory/row lock inversion.
+	await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${discovered.runId}, 0))`);
+	await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discovered.runId} FOR UPDATE`);
 	await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "namespace" = ${identity.namespace} AND "pod_uid" = ${identity.podUid} FOR UPDATE`);
 	const assignment = await transaction.workloadAssignment.findUnique({ where: { namespace_podUid: { namespace: identity.namespace, podUid: identity.podUid } } });
 	if (assignment === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered || assignment.serviceAccountName !== identity.serviceAccountName) return null;
@@ -428,6 +457,8 @@ interface CommandExtras
 	readonly resume: ResumeAttemptCommand | null;
 	/** Approval rows whose single-use resume tokens this resume frame consumes when minted. */
 	readonly resumeApprovalIds: readonly string[];
+	/** Steering rows consumed only after their enclosing resume command is persisted. */
+	readonly resumeSteeringRequestIds: readonly string[];
 	/** Server-defined stop reason carried by a `cancel_attempt` frame. */
 	readonly cancelReason: CancelAttemptCommand["reason"];
 }
@@ -478,12 +509,12 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 	if (kind === RuntimeCommandKind.StartAttempt)
 	{
 		const compiledInput = await compileRunInput(context.snapshot, transaction);
-		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
+		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
-	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
+	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
 	const loaded = await _loadResume(transaction, context, inputGeneration);
 	if (loaded === null) return null;
-	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, cancelReason: "cancelled" };
+	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }
 
 /** Rebuild the body data for a stored command on redelivery, reading a resume payload from its row. */
@@ -492,12 +523,12 @@ async function _storedCommandExtras(transaction: Prisma.TransactionClient, conte
 	if (row.kind === RuntimeCommandKind.StartAttempt)
 	{
 		const compiledInput = await compileRunInput(context.snapshot, transaction);
-		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
+		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
-	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
+	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
 	const resume = _resumeFromPayload(row.payload);
 	if (resume === null) return null;
-	return { compiledInput: null, resume, resumeApprovalIds: [], cancelReason: "cancelled" };
+	return { compiledInput: null, resume, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 }
 
 /** Parse a persisted resume payload back into the exact frame it was minted from. */
@@ -505,8 +536,8 @@ function _resumeFromPayload(payload: Prisma.JsonValue | null): ResumeAttemptComm
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };
-	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record)) return null;
-	return { inputGeneration: record["inputGeneration"], deferredToolResults: record["deferredToolResults"] };
+	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record) || !("steeringRequests" in record)) return null;
+	return { inputGeneration: record["inputGeneration"], deferredToolResults: record["deferredToolResults"], steeringRequests: record["steeringRequests"] };
 }
 
 /** Map a durable run terminal reason to the server-defined cancellation reason the runtime receives. */
@@ -526,12 +557,14 @@ function _cancelReason(terminalReason: AgentRunTerminalReason | null): CancelAtt
  * mint. Once consumed, a duplicate resume finds nothing and is a no-op rather than a re-execution.
  * Returns null when no unconsumed approved result exists.
  */
-async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[] } | null>
+async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[]; steeringRequestIds: string[] } | null>
 {
 	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" } });
-	if (approvals.length === 0) return null;
+	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
+	if (approvals.length === 0 && steering.length === 0) return null;
 	const deferredToolResults = approvals.map(function _result(row): JsonValue { return row.deferredToolResult as JsonValue; });
-	return { resume: { inputGeneration, deferredToolResults }, approvalIds: approvals.map(function _id(row) { return row.id; }) };
+	const steeringRequests = steering.map(function _content(row): JsonValue { return row.content as JsonValue; });
+	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _id(row) { return row.id; }), steeringRequestIds: steering.map(function _id(row) { return row.id; }) };
 }
 
 /** Map the durable snapshot row into the immutable wire snapshot the runtime receives. */
@@ -578,7 +611,8 @@ function _commandId(context: RuntimeDispatchContext, sequence: number): string
  * additive to — never a replacement for — the fence bump and stream loss that already bound a
  * cancelled attempt, so cancellation still holds if the runtime never receives the frame.
  * `resume_attempt` is minted while the run is running once at least one approved deferred-tool result
- * is ready and no resume has yet been dispatched, feeding the authorized results back into the loop.
+ * or queued steering request is ready and no resume has yet been dispatched. The sole-resume fence
+ * prevents a second executor loop from running concurrently for the same attempt.
  */
 async function _decideKind(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, commands: readonly DispatchedCommandRow[]): Promise<RuntimeCommandKind | null>
 {
@@ -586,8 +620,9 @@ async function _decideKind(transaction: Prisma.TransactionClient, context: Runti
 	const hasStart = commands.some(function _isStart(row) { return row.kind === RuntimeCommandKind.StartAttempt; });
 	if (runState === "cancelling") return commands.some(function _isCancel(row) { return row.kind === RuntimeCommandKind.CancelAttempt; }) ? null : RuntimeCommandKind.CancelAttempt;
 	if ((runState === "assigned" || runState === "running") && !hasStart) return RuntimeCommandKind.StartAttempt;
-	if (runState === "running" && hasStart && !commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; }))
+	if (runState === "running" && hasStart)
 	{
+		if (commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; })) return null;
 		const loaded = await _loadResume(transaction, context, 0);
 		if (loaded !== null) return RuntimeCommandKind.ResumeAttempt;
 	}

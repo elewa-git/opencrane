@@ -8,6 +8,8 @@ export interface RunInputSnapshotIdentity
 {
   /** Subject that caused this exact run to execute. */
   executionSubjectId: string;
+	/** Organization selected by the verified fleet-membership assertion. */
+	organizationId: string;
   /** Highest verified fleet-membership revision accepted for this run. */
   fleetMembershipRevision: number;
   /** Issuer that signed the accepted fleet-membership revision. */

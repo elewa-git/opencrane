@@ -1065,6 +1065,223 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's pending tool approvals
+         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.
+         */
+        get: operations["listMyPendingToolApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/approvals/{approvalRequestId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny one pending tool action owned by the signed-in user
+         * @description The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.
+         */
+        post: operations["decideDeferredToolApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}/steering": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue one signed-in owner's instruction for a running agent
+         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.
+         */
+        post: operations["submitRuntimeSteering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a signed-in owner's fifty most recent personal runs
+         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
+         */
+        get: operations["listMyRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Return one signed-in owner's personal run status
+         * @description The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.
+         */
+        get: operations["getMyRunStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the signed-in owner's resumable persona onboarding state */
+        get: operations["getMyPersonaOnboarding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{threadId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Replay the signed-in participant's canonical conversation events
+         * @description The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected thread.
+         */
+        get: operations["replayMyConversationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List managed agent services in the signed-in caller's silo
+         * @description The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.
+         */
+        get: operations["listManagedAgentServices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/configuration/changes/{changeId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or reject one signed-in owner's configuration proposal
+         * @description The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.
+         */
+        post: operations["decideMyPersonalConfigurationChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/configuration/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's personal configuration proposals
+         * @description The server derives the owner and silo from session and host. It returns at most fifty durable future-session proposals, never a mutable run snapshot.
+         */
+        get: operations["listMyPersonalConfigurationChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List governed skills in the signed-in caller's silo
+         * @description The server derives the silo from the browser session and request host. It returns at most two hundred catalogue summaries, never skill bundles, artifact addresses, manifests, review evidence, signatures, or workload coordinates.
+         */
+        get: operations["listSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -1716,6 +1933,63 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
+        };
+        SelfRunStatus: {
+            runId: string;
+            attempt: number;
+            /** @enum {string} */
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+            threadId: string | null;
+            agentRevisionId: string;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+        };
+        SelfDeferredToolApproval: {
+            approvalRequestId: string;
+            runId: string;
+            attempt: number;
+            toolRevisionId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AgentService: {
+            id: string;
+            siloId: string;
+            /** @enum {string} */
+            kind: "managed";
+            name: string;
+            /** @enum {string} */
+            state: "draft" | "active" | "paused" | "retired";
+            activeRevisionId: string | null;
+            workloadProfile: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalConfigurationChange: {
+            changeId: string;
+            requestedPatch: {
+                /** @constant */
+                kind: "persona_refresh";
+            } | {
+                /** @constant */
+                kind: "model_alias";
+                modelAlias: string;
+            };
+            /** @enum {string} */
+            state: "proposed" | "accepted" | "applied" | "rejected" | "superseded";
+            sourceThreadId: string;
+            sourceRunId: string;
+            /** Format: date-time */
+            proposedAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            rejectionReason: string | null;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -4882,6 +5156,610 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+        };
+    };
+    listMyPendingToolApprovals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending owner-bound tool approvals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approvals: components["schemas"]["SelfDeferredToolApproval"][];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not read pending approvals. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideDeferredToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque identifier for the pending approval. */
+                approvalRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approved" | "denied";
+                };
+            };
+        };
+        responses: {
+            /** @description Decision recorded or identical terminal decision replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approvalRequestId: string;
+                        /** @enum {string} */
+                        state: "approved" | "denied";
+                    };
+                };
+            };
+            /** @description The request body is not the exact decision shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval is absent, terminal in another way, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval expired before the decision. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the decision. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitRuntimeSteering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Steering request queued for the current run attempt. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        steeringRequestId: string;
+                        attempt: number;
+                        /** @enum {string} */
+                        state: "pending";
+                    };
+                };
+            };
+            /** @description The body is not one bounded text instruction. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owned run has no steerable live attempt. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the instruction. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent canonical lifecycle views for the owned runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: components["schemas"]["SelfRunStatus"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyRunStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current canonical lifecycle view for the owned run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunStatus"];
+                };
+            };
+            /** @description The run identifier is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyPersonaOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable onboarding progress without compiled persona instructions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        state: "interview" | "review" | "ready";
+                        interviewId: string | null;
+                        answeredQuestionCount: number;
+                        questionCount: number;
+                        personaRevisionId: string | null;
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Onboarding status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replayMyConversationEvents: {
+        parameters: {
+            query?: {
+                /** @description Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism. */
+                cursor?: string;
+            };
+            header?: {
+                /** @description Opaque canonical event cursor. It must match cursor when both are supplied. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                /** @description Opaque conversation-thread identifier. */
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A bounded text/event-stream replay. An empty stream does not disclose whether the thread exists or belongs to another participant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description The thread identifier or replay cursor is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Canonical history could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listManagedAgentServices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Managed agent services in the selected silo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        services: components["schemas"]["AgentService"][];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The management authority could not read the catalogue. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideMyPersonalConfigurationChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    decision: "accepted";
+                } | {
+                    /** @constant */
+                    decision: "rejected";
+                    rejectionReason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Owner decision recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changeId: string;
+                        /** @enum {string} */
+                        state: "accepted" | "rejected";
+                    };
+                };
+            };
+            /** @description Decision body is not the exact accepted or rejected shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal is absent, terminal, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Decision could not be persisted. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyPersonalConfigurationChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-bound configuration proposal history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changes: components["schemas"]["PersonalConfigurationChange"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Configuration proposal history could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-safe governed skill catalogue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        skills: {
+                            id: string;
+                            name: string;
+                            description: string;
+                            /** @enum {string} */
+                            state: "active" | "retired";
+                            currentRevisionId: string | null;
+                            /** @enum {string|null} */
+                            currentRevisionState: "draft" | "review" | "published" | "rejected" | "revoked" | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The skill catalogue could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

@@ -14,6 +14,17 @@ export class UnsupportedExternalActionError extends Error
 	}
 }
 
+/** Typed failure emitted when an admitted snapshot did not authorize a personal memory dataset. */
+export class MemoryScopeUnavailableError extends Error
+{
+	/** Creates a failure that cannot fall back to subject-selected memory. */
+	constructor()
+	{
+		super("personal memory scope is unavailable for this run snapshot");
+		this.name = "MemoryScopeUnavailableError";
+	}
+}
+
 /** Read a string field from a candidate's canonical argument object, or null when absent. */
 function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string): string | null
 {
@@ -57,8 +68,9 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 			}
 			if (toolRevisionId.startsWith("memory:"))
 			{
+				if (dependencies.cogneeDatasetId === null) throw new MemoryScopeUnavailableError();
 				const query = _stringArgument(candidate, "query") ?? "";
-				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, subjectId: dependencies.subjectId, query, maxResults: 20 });
+				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.cogneeDatasetId, subjectId: dependencies.subjectId, query, maxResults: 20 });
 				return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
 			}
 			throw new UnsupportedExternalActionError(toolRevisionId);

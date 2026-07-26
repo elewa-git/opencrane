@@ -23,6 +23,8 @@ import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
 import { _CreateManagedRunAdmissionPort, _ReadRunAdmissionConcurrencyPolicy } from "./app/run-admission-wiring.js";
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
+import { PrismaRunCancellationRepository, type RunCancellationRepository, type RunWorkloadCleanupClaim } from "@opencrane/backend/agents/execution/runs";
+import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { OpenClawTenantLifecycle } from "@opencrane/backend/feat-openclaw-tenant";
 
 // In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
@@ -144,6 +146,79 @@ const coreApi = kc.makeApiClient(k8s.CoreV1Api);
 /** Kubernetes Authentication API client — used for tenant contract TokenReview validation. */
 const authApi = kc.makeApiClient(k8s.AuthenticationV1Api);
 
+/** Kubernetes Batch API client reserved for server-fenced runtime cleanup. */
+const batchApi = kc.makeApiClient(k8s.BatchV1Api);
+
+/** Return a Kubernetes HTTP status from the generated client's supported error shapes. */
+function _KubernetesStatus(err: unknown): number | undefined
+{
+	if (typeof err !== "object" || err === null) return undefined;
+	const record = err as Record<string, unknown>;
+	if (typeof record.statusCode === "number") return record.statusCode;
+	if (typeof record.code === "number") return record.code;
+	const body = typeof record.body === "object" && record.body !== null ? record.body as Record<string, unknown> : null;
+	return typeof body?.code === "number" ? body.code : undefined;
+}
+
+/** Verify that one Job is the sole deterministic Kubernetes projection of the fenced cleanup claim. */
+function _IsExactCleanupJob(job: k8s.V1Job, claim: RunWorkloadCleanupClaim): boolean
+{
+	const workload = claim.workload;
+	const name = __AgentRuntimeAttemptResourceName(workload.siloId, workload.runId, workload.attempt);
+	const annotations = job.metadata?.annotations;
+	const templateAnnotations = job.spec?.template.metadata?.annotations;
+	return job.metadata?.name === name && job.metadata.namespace === workload.namespace &&
+		annotations?.["opencrane.ai/run-id"] === workload.runId &&
+		annotations["opencrane.ai/run-attempt"] === String(workload.attempt) &&
+		annotations["opencrane.ai/agent-service-id"] === workload.agentServiceId &&
+		annotations["opencrane.ai/agent-revision-id"] === workload.agentRevisionId &&
+		annotations["opencrane.ai/silo-id"] === workload.siloId &&
+		templateAnnotations?.["opencrane.ai/bootstrap-reference"] === workload.bootstrapReference;
+}
+
+/** Claim and physically remove at most one server-fenced runtime Job without trusting controller input. */
+async function _ReconcileNextRuntimeWorkloadCleanup(repository: RunCancellationRepository, batch: k8s.BatchV1Api): Promise<void>
+{
+	// 1. Claim through Postgres first: only the server-held lease authorizes a Kubernetes mutation.
+	const claimed = await repository.claimNextWorkloadCleanupAtomically();
+	if (claimed.status === "none") return;
+	const claim = claimed.claim;
+	const name = __AgentRuntimeAttemptResourceName(claim.workload.siloId, claim.workload.runId, claim.workload.attempt);
+
+	// 2. Read the deterministic projection; only Kubernetes absence can finalize the durable cleanup.
+	let job: k8s.V1Job;
+	try
+	{
+		job = await batch.readNamespacedJob({ namespace: claim.workload.namespace, name });
+	}
+	catch (err)
+	{
+		if (_KubernetesStatus(err) !== 404) throw err;
+		if (claim.workload.mode === "unassigned_orphan" && claim.workload.orphanAbsenceObservedAt == null)
+		{
+			const deferred = await repository.deferUnassignedOrphanAbsenceAtomically(claim.lease.eventId, claim);
+			if (deferred !== "deferred") throw new Error("runtime orphan absence deferral conflicted");
+			log.info({ eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt }, "runtime orphan absence deferred for second observation");
+			return;
+		}
+		const confirmed = await repository.confirmWorkloadCleanupAtomically(claim.lease.eventId, { claimedAt: claim.lease.claimedAt, deliveryCount: claim.lease.deliveryCount, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid: claim.workload.workloadUid, outcome: "absent" });
+		if (confirmed.status === "conflict") throw new Error(`runtime cleanup absence confirmation conflicted: ${confirmed.reason}`);
+		log.info({ eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, outcome: confirmed.status }, "runtime workload cleanup confirmed absent");
+		return;
+	}
+
+	// 3. Bind the exact projection before delete and use Kubernetes' UID precondition against name reuse.
+	if (!_IsExactCleanupJob(job, claim)) throw new Error("refusing to clean a runtime Job outside the fenced cleanup projection");
+	if (claim.workload.workloadUid !== null && job.metadata?.uid !== claim.workload.workloadUid)
+	{
+		throw new Error("refusing to clean a runtime Job whose durable UID differs from the fenced assignment");
+	}
+	const workloadUid = job.metadata?.uid;
+	if (!workloadUid) throw new Error("runtime cleanup Job is missing its Kubernetes UID");
+	await batch.deleteNamespacedJob({ namespace: claim.workload.namespace, name, body: { preconditions: { uid: workloadUid } } });
+	log.info({ eventId: claim.lease.eventId, runId: claim.workload.runId, attempt: claim.workload.attempt, workloadUid }, "runtime workload cleanup requested");
+}
+
 /** One process-wide capacity boundary shared by run-now and scheduled managed admissions. */
 const managedRunAdmission = _CreateManagedRunAdmissionPort(prisma, _ReadRunAdmissionConcurrencyPolicy());
 
@@ -183,6 +258,16 @@ const schedulerHandle = process.env.OPENCRANE_SCHEDULER_ENABLED === "true"
   : null;
 schedulerHandle?.unref();
 
+/** Server-owned repair loop that terminalises runtime attempts after their signed workload lease expires. */
+const runtimeRepairNamespace = process.env.AGENT_RUNTIME_NAMESPACE?.trim();
+if (!runtimeRepairNamespace) throw new Error("AGENT_RUNTIME_NAMESPACE must be configured for runtime repair");
+const runtimeRepairRepository = new PrismaRunCancellationRepository(prisma, { namespace: runtimeRepairNamespace, claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+const runtimeRepairHandle = setInterval(function _repair() { void runtimeRepairRepository.repairNextExpiredRunAtomically().catch(function _onError(err: unknown) { log.error({ err }, "runtime terminal repair failed"); }); }, 30_000);
+runtimeRepairHandle.unref();
+/** Server-owned cleanup loop consumes only database-fenced run workload cleanup claims. */
+const runtimeCleanupHandle = setInterval(function _cleanup() { void _ReconcileNextRuntimeWorkloadCleanup(runtimeRepairRepository, batchApi).catch(function _onError(err: unknown) { log.error({ err }, "runtime workload cleanup failed"); }); }, 5_000);
+runtimeCleanupHandle.unref();
+
 /** Frozen-blue OpenClaw tenant runtime composed behind its library lifecycle contract. */
 const openClawTenantLifecycle = new OpenClawTenantLifecycle({
   kubeConfig: kc,
@@ -211,7 +296,9 @@ async function _shutdown(signal: string): Promise<void>
   hardExit.unref();
 
   // Stop the schedule ticker and the in-silo controller before disconnecting their DB dependencies.
-  if (schedulerHandle !== null) clearInterval(schedulerHandle);
+	if (schedulerHandle !== null) clearInterval(schedulerHandle);
+	clearInterval(runtimeRepairHandle);
+	clearInterval(runtimeCleanupHandle);
   await openClawTenantLifecycle.stop();
 
   try

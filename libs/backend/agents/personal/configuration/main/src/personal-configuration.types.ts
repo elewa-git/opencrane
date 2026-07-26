@@ -68,3 +68,31 @@ export interface PersonalConfigurationChangeDecisionRepository
 	/** Atomically accepts or rejects one still-proposed change owned by this user. */
 	decideAtomically(command: DecidePersonalConfigurationChangeCommand): Promise<{ readonly status: "accepted" | "rejected" } | { readonly status: "not_found_or_not_owner" | "already_decided" | "persistence_unavailable" }>;
 }
+
+/** Product-safe owner view of one durable future-session configuration proposal. */
+export interface PersonalConfigurationChangeView
+{
+	/** Opaque durable proposal identifier. */
+	readonly changeId: string;
+	/** Closed patch requested for a later immutable run snapshot. */
+	readonly requestedPatch: PersonalConfigurationPatch;
+	/** Current durable proposal lifecycle state. */
+	readonly state: "proposed" | "accepted" | "applied" | "rejected" | "superseded";
+	/** Conversation source that prompted the proposal. */
+	readonly sourceThreadId: string;
+	/** Run source that recorded the proposal. */
+	readonly sourceRunId: string;
+	/** Server time the proposal was created. */
+	readonly proposedAt: string;
+	/** Server time it was decided, when applicable. */
+	readonly decidedAt: string | null;
+	/** Owner-provided reason for a rejection, when applicable. */
+	readonly rejectionReason: string | null;
+}
+
+/** Read-only persistence boundary for the signed-in owner's configuration-proposal state. */
+export interface PersonalConfigurationChangeViewRepository
+{
+	/** Lists at most fifty proposals belonging to the exact owner and selected silo. */
+	listOwned(siloId: string, userId: string): Promise<readonly PersonalConfigurationChangeView[]>;
+}

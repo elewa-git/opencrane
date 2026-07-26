@@ -114,4 +114,18 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
 		expect(confirmTransaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Cancelling }, data: expect.objectContaining({ state: AgentRunState.Cancelled }) });
 	});
+
+	it("persists a first orphan absence and rejects a stale deferral lease", async function _DefersOrphanAbsence()
+	{
+		const workload = { runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-runtime", workloadProfile: "personal-small", bootstrapReference: "bootstrap-v1_exact", workloadUid: null, mode: "unassigned_orphan" as const, reason: "cancellation" as const, orphanAbsenceObservedAt: null };
+		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
+		const transaction = { $queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:05.000Z") }] : []; }), outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
+		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transaction as never); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunCancellationRepository(prisma, { namespace: "silo-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const claim = { lease: { eventId: "cleanup-1", claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:30.000Z" }, workload };
+
+		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", claim)).resolves.toBe("deferred");
+		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "cleanup-1", deliveryCount: 1 }), data: expect.objectContaining({ availableAt: new Date("2026-07-20T00:01:15.000Z"), claimedAt: null, payload: expect.objectContaining({ orphanAbsenceObservedAt: "2026-07-20T00:01:05.000Z" }) }) });
+		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", { ...claim, lease: { ...claim.lease, deliveryCount: 2 } })).resolves.toBe("conflict");
+	});
 });

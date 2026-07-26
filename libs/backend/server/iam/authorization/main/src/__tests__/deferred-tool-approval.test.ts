@@ -14,7 +14,7 @@ function _transaction(row: unknown, updatedCount: number): { transaction: Prisma
 /** A pending deferred-tool approval bound to a tool invocation row. */
 function _pending(): unknown
 {
-	return { id: "approval-1", runId: "run-1", attempt: 2, toolInvocationRowId: "tool-1", state: ApprovalRequestState.Pending };
+	return { id: "approval-1", runId: "run-1", attempt: 2, siloId: "silo-1", subjectId: "user-1", toolInvocationRowId: "tool-1", state: ApprovalRequestState.Pending, expiresAt: new Date("2026-07-22T09:00:00.000Z") };
 }
 
 const NOW = new Date("2026-07-21T09:00:00.000Z");
@@ -24,22 +24,22 @@ describe("deferred tool approval authority", function _suite()
 	it("approves and records the authorized deferred result and resume-token hash", async function _approve()
 	{
 		const { transaction, updateMany } = _transaction(_pending(), 1);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", runId: "run-1", attempt: 2, decision: "approved", decidedBy: "reviewer-1", now: NOW, resumeTokenHash: "hash-1", deferredToolResult: { ok: true } });
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW, resumeTokenHash: "hash-1", deferredToolResult: { ok: true } });
 		expect(result).toEqual({ outcome: "approved", deferredToolResult: { ok: true } });
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: "approval-1", state: ApprovalRequestState.Pending }, data: expect.objectContaining({ state: ApprovalRequestState.Approved, resumeTokenHash: "hash-1" }) }));
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, resumeTokenHash: "hash-1" }) }));
 	});
 
 	it("denies by closing the pending request without a result", async function _deny()
 	{
 		const { transaction } = _transaction(_pending(), 1);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", runId: "run-1", attempt: 2, decision: "denied", decidedBy: "reviewer-1", now: NOW });
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "denied", decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "denied" });
 	});
 
 	it("replays an identical decision idempotently", async function _idempotent()
 	{
 		const { transaction, updateMany } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved }, 0);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", runId: "run-1", attempt: 2, decision: "approved", decidedBy: "reviewer-1", now: NOW });
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "already_decided", decision: "approved" });
 		expect(updateMany).not.toHaveBeenCalled();
 	});
@@ -47,15 +47,34 @@ describe("deferred tool approval authority", function _suite()
 	it("conflicts when re-decided the other way", async function _conflict()
 	{
 		const { transaction } = _transaction({ ..._pending() as object, state: ApprovalRequestState.Approved }, 0);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", runId: "run-1", attempt: 2, decision: "denied", decidedBy: "reviewer-1", now: NOW });
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "denied", decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "conflict" });
 	});
 
 	it("conflicts on a row that is not a deferred-tool approval", async function _notTool()
 	{
 		const { transaction } = _transaction({ ..._pending() as object, toolInvocationRowId: null }, 0);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", runId: "run-1", attempt: 2, decision: "approved", decidedBy: "reviewer-1", now: NOW });
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW });
 		expect(result).toEqual({ outcome: "conflict" });
+	});
+
+	it("expires a pending approval before it can be decided", async function _expires()
+	{
+		const { transaction, updateMany } = _transaction({ ..._pending() as object, expiresAt: new Date("2026-07-20T09:00:00.000Z") }, 1);
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW });
+		expect(result).toEqual({ outcome: "expired" });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({
+			where: expect.objectContaining({ state: ApprovalRequestState.Pending, expiresAt: { lte: NOW } }),
+			data: expect.objectContaining({ state: ApprovalRequestState.Expired, resumeTokenHash: null }),
+		}));
+	});
+
+	it("does not let a different subject decide an otherwise valid approval", async function _wrongOwner()
+	{
+		const { transaction, updateMany } = _transaction(_pending(), 1);
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-2", decision: "approved", decidedBy: "user-2", now: NOW });
+		expect(result).toEqual({ outcome: "conflict" });
+		expect(updateMany).not.toHaveBeenCalled();
 	});
 });
 
