@@ -1085,6 +1085,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/runs/{runId}/steering": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue one signed-in owner's instruction for a running agent
+         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.
+         */
+        post: operations["submitRuntimeSteering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -4975,6 +4995,85 @@ export interface operations {
                 };
             };
             /** @description The product authority could not persist the decision. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitRuntimeSteering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Steering request queued for the current run attempt. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        steeringRequestId: string;
+                        attempt: number;
+                        /** @enum {string} */
+                        state: "pending";
+                    };
+                };
+            };
+            /** @description The body is not one bounded text instruction. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owned run has no steerable live attempt. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the instruction. */
             503: {
                 headers: {
                     [name: string]: unknown;

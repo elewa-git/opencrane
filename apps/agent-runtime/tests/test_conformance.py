@@ -84,7 +84,7 @@ def _resume_command(deferred: dict) -> dict:
         "commandId": "cmd-resume",
         "fence": 3,
         "assignment": {"runId": "run-conf", "attempt": 1},
-        "payload": {"inputGeneration": 10, "deferredToolResults": deferred},
+        "payload": {"inputGeneration": 10, "deferredToolResults": deferred, "steeringRequests": []},
     }
 
 

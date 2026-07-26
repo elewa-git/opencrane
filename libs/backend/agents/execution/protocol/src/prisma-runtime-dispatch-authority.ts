@@ -238,6 +238,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 		if (advanced.count !== 1) throw new Error("runtime dispatch lost its command sequence fence");
 		// Consume the single-use resume tokens so a duplicate resume can never re-dispatch the results.
 		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeApprovalIds.length > 0) await transaction.approvalRequest.updateMany({ where: { id: { in: [...extras.resumeApprovalIds] } }, data: { resumeTokenHash: null } });
+		if (kind === RuntimeCommandKind.ResumeAttempt && extras.resumeSteeringRequestIds.length > 0) await transaction.runtimeSteeringRequest.updateMany({ where: { id: { in: [...extras.resumeSteeringRequestIds] }, state: "Pending" }, data: { state: "Consumed", consumedAt: new Date(nowEpochMs) } });
 		return envelope;
 	});
 }
@@ -456,6 +457,8 @@ interface CommandExtras
 	readonly resume: ResumeAttemptCommand | null;
 	/** Approval rows whose single-use resume tokens this resume frame consumes when minted. */
 	readonly resumeApprovalIds: readonly string[];
+	/** Steering rows consumed only after their enclosing resume command is persisted. */
+	readonly resumeSteeringRequestIds: readonly string[];
 	/** Server-defined stop reason carried by a `cancel_attempt` frame. */
 	readonly cancelReason: CancelAttemptCommand["reason"];
 }
@@ -506,12 +509,12 @@ async function _mintCommandExtras(transaction: Prisma.TransactionClient, context
 	if (kind === RuntimeCommandKind.StartAttempt)
 	{
 		const compiledInput = await compileRunInput(context.snapshot, transaction);
-		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
+		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
-	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
+	if (kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
 	const loaded = await _loadResume(transaction, context, inputGeneration);
 	if (loaded === null) return null;
-	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, cancelReason: "cancelled" };
+	return { compiledInput: null, resume: loaded.resume, resumeApprovalIds: loaded.approvalIds, resumeSteeringRequestIds: loaded.steeringRequestIds, cancelReason: "cancelled" };
 }
 
 /** Rebuild the body data for a stored command on redelivery, reading a resume payload from its row. */
@@ -520,12 +523,12 @@ async function _storedCommandExtras(transaction: Prisma.TransactionClient, conte
 	if (row.kind === RuntimeCommandKind.StartAttempt)
 	{
 		const compiledInput = await compileRunInput(context.snapshot, transaction);
-		return { compiledInput, resume: null, resumeApprovalIds: [], cancelReason: "cancelled" };
+		return { compiledInput, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 	}
-	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], cancelReason: _cancelReason(context.terminalReason) };
+	if (row.kind === RuntimeCommandKind.CancelAttempt) return { compiledInput: null, resume: null, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: _cancelReason(context.terminalReason) };
 	const resume = _resumeFromPayload(row.payload);
 	if (resume === null) return null;
-	return { compiledInput: null, resume, resumeApprovalIds: [], cancelReason: "cancelled" };
+	return { compiledInput: null, resume, resumeApprovalIds: [], resumeSteeringRequestIds: [], cancelReason: "cancelled" };
 }
 
 /** Parse a persisted resume payload back into the exact frame it was minted from. */
@@ -533,8 +536,8 @@ function _resumeFromPayload(payload: Prisma.JsonValue | null): ResumeAttemptComm
 {
 	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
 	const record = payload as { readonly [key: string]: JsonValue };
-	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record)) return null;
-	return { inputGeneration: record["inputGeneration"], deferredToolResults: record["deferredToolResults"] };
+	if (typeof record["inputGeneration"] !== "number" || !("deferredToolResults" in record) || !("steeringRequests" in record)) return null;
+	return { inputGeneration: record["inputGeneration"], deferredToolResults: record["deferredToolResults"], steeringRequests: record["steeringRequests"] };
 }
 
 /** Map a durable run terminal reason to the server-defined cancellation reason the runtime receives. */
@@ -554,12 +557,14 @@ function _cancelReason(terminalReason: AgentRunTerminalReason | null): CancelAtt
  * mint. Once consumed, a duplicate resume finds nothing and is a no-op rather than a re-execution.
  * Returns null when no unconsumed approved result exists.
  */
-async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[] } | null>
+async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[]; steeringRequestIds: string[] } | null>
 {
 	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" } });
-	if (approvals.length === 0) return null;
+	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
+	if (approvals.length === 0 && steering.length === 0) return null;
 	const deferredToolResults = approvals.map(function _result(row): JsonValue { return row.deferredToolResult as JsonValue; });
-	return { resume: { inputGeneration, deferredToolResults }, approvalIds: approvals.map(function _id(row) { return row.id; }) };
+	const steeringRequests = steering.map(function _content(row): JsonValue { return row.content as JsonValue; });
+	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _id(row) { return row.id; }), steeringRequestIds: steering.map(function _id(row) { return row.id; }) };
 }
 
 /** Map the durable snapshot row into the immutable wire snapshot the runtime receives. */
@@ -606,7 +611,8 @@ function _commandId(context: RuntimeDispatchContext, sequence: number): string
  * additive to — never a replacement for — the fence bump and stream loss that already bound a
  * cancelled attempt, so cancellation still holds if the runtime never receives the frame.
  * `resume_attempt` is minted while the run is running once at least one approved deferred-tool result
- * is ready and no resume has yet been dispatched, feeding the authorized results back into the loop.
+ * or queued steering request is ready and no resume has yet been dispatched. The sole-resume fence
+ * prevents a second executor loop from running concurrently for the same attempt.
  */
 async function _decideKind(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, commands: readonly DispatchedCommandRow[]): Promise<RuntimeCommandKind | null>
 {
@@ -614,8 +620,9 @@ async function _decideKind(transaction: Prisma.TransactionClient, context: Runti
 	const hasStart = commands.some(function _isStart(row) { return row.kind === RuntimeCommandKind.StartAttempt; });
 	if (runState === "cancelling") return commands.some(function _isCancel(row) { return row.kind === RuntimeCommandKind.CancelAttempt; }) ? null : RuntimeCommandKind.CancelAttempt;
 	if ((runState === "assigned" || runState === "running") && !hasStart) return RuntimeCommandKind.StartAttempt;
-	if (runState === "running" && hasStart && !commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; }))
+	if (runState === "running" && hasStart)
 	{
+		if (commands.some(function _isResume(row) { return row.kind === RuntimeCommandKind.ResumeAttempt; })) return null;
 		const loaded = await _loadResume(transaction, context, 0);
 		if (loaded !== null) return RuntimeCommandKind.ResumeAttempt;
 	}

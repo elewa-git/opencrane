@@ -74,7 +74,7 @@ def _resume_command() -> dict:
         "commandId": "c2",
         "fence": 2,
         "assignment": {"runId": "r1", "attempt": 1},
-        "payload": {"inputGeneration": 7, "deferredToolResults": {"t1": {"ok": True}}},
+        "payload": {"inputGeneration": 7, "deferredToolResults": {"t1": {"ok": True}}, "steeringRequests": []},
     }
 
 
@@ -518,6 +518,19 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         event_types = [candidate["eventType"] for candidate in emitted]
         self.assertEqual(event_types, ["run.resumed", "run.output_text", "run.usage", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
+
+    def test_resume_seeds_queued_steering_before_the_next_safe_boundary(self) -> None:
+        """Resume passes validated owner steering to the executor's pre-model buffer."""
+        command = _resume_command()
+        command["payload"]["steeringRequests"] = [{"text": "Prioritise the current decision."}]
+        captured: dict = {}
+
+        def _resume_source(_run_id, _attempt, _generation, _deferred, _cancel, steering_buffer):
+            captured["steering"] = steering_buffer[:]
+            return iter([])
+
+        _execute_resume_attempt(command, "instance-1", lambda _candidate: None, resume_event_source=_resume_source)
+        self.assertEqual(captured["steering"], ["Prioritise the current decision."])
 
     def test_missing_resume_payload_is_a_terminal_failure(self) -> None:
         """A resume command without a payload surfaces `run.failed`, never a silent ack."""

@@ -118,14 +118,13 @@ positive `cancel_attempt` stop signal (with exactly-once terminal reporting unde
 surfaces model tool calls as external-action candidates validated against the immutable snapshot and
 reserved before dispatch through an injected tool-invocation authority. A tool grant flagged
 `requiresApproval` defers: the reserved invocation opens a pending `ApprovalRequest`, so the
-pause is reachable end to end. The deferred-tool DECIDE authority and single-use resume feed
-(`resumeTokenHash`-consumed) are built and unit-covered, and steering is absorbed only at safe
-pre-model boundaries with an exactly-once ordered claim that advances a fenced input generation. The
+pause is reachable end to end. The owner-bound approval-DECISION and steering-INGEST APIs are built:
+an owner may decide only their own pending tool approval or queue bounded text only to their own live
+run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
+the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP, memory, and sandbox execution transports are ports
-with fail-closed stubs wired only in the composition root. NOT yet built: the human
-approval-DECISION HTTP endpoint and the steering-INGEST HTTP surface are the operator/product plane in
-Phase F (#224), so approval and steering are not end-to-end live. The offline conformance harness and
+with fail-closed stubs wired only in the composition root. The offline conformance harness and
 fault-injection matrix ARE built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence); still gated on
 [#337](https://github.com/italanta/opencrane/issues/337) are the live-LiteLLM conformance leg,

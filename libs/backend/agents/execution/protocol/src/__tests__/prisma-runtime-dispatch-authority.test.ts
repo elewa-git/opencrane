@@ -93,15 +93,18 @@ interface FakeOptions
 	readonly clock?: RuntimeProtocolClock;
 	/** Approved deferred-tool results available for a resume frame. */
 	readonly approvedDeferredResults?: readonly unknown[];
+	/** Owner steering requests waiting for the next fenced resume command. */
+	readonly pendingSteeringRequests?: readonly unknown[];
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const retries: FakeExternalActionRetryRow[] = [];
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
+	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
 	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, toolGrantIds: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
@@ -178,8 +181,17 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 				return { count };
 			},
 		},
+		runtimeSteeringRequest: {
+			async findMany() { return steeringRequests.filter(row => row.state === "Pending"); },
+			async updateMany(args: { where: { id: { in: string[] }; state: string }; data: { state: string; consumedAt: Date } })
+			{
+				let count = 0;
+				for (const row of steeringRequests.filter(candidate => args.where.id.in.includes(candidate.id) && candidate.state === args.where.state)) { row.state = args.data.state; count += 1; }
+				return { count };
+			},
+		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals };
+	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -280,6 +292,19 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(start?.kind).toBe("start_attempt");
 		expect(resume?.kind).toBe("resume_attempt");
 		expect(resume?.kind === "resume_attempt" ? resume.payload.deferredToolResults : null).toEqual([{ ok: true }]);
+	});
+
+	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()
+	{
+		const context = _authority({ runState: "Running", pendingSteeringRequests: [{ text: "Focus on risks." }] });
+		const authority = context.authority;
+		await authority.__NextCommand(_identity, _open, 0);
+		const resume = await authority.__NextCommand(_identity, _open, 1);
+		expect(resume?.kind).toBe("resume_attempt");
+		if (resume?.kind !== "resume_attempt") throw new Error("expected resume command");
+		expect(resume.payload.steeringRequests).toEqual([{ text: "Focus on risks." }]);
+		expect(context.steeringRequests[0]?.state).toBe("Consumed");
+		expect(await authority.__NextCommand(_identity, _open, 2)).toBeNull();
 	});
 
 	it("consumes the single-use resume token so no duplicate resume is minted", async function _singleUseResume()

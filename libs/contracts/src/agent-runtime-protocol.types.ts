@@ -98,13 +98,15 @@ export interface StartAttemptCommand
 	readonly compiledInput: CompiledRunInput;
 }
 
-/** Resumes a paused attempt only with control-plane-authorized deferred results. */
+/** Resumes an attempt only with control-plane-authorized deferred results and steering. */
 export interface ResumeAttemptCommand
 {
 	/** Monotonic input generation that must still be current at resume. */
 	readonly inputGeneration: number;
 	/** Opaque canonical result payloads for previously deferred actions. */
 	readonly deferredToolResults: JsonValue;
+	/** Owner-authored steering consumed at this server-fenced command boundary. */
+	readonly steeringRequests: JsonValue;
 }
 
 /** Stops one attempt without allowing the runtime to choose a terminal state. */

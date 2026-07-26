@@ -185,6 +185,9 @@ CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'ca
 CREATE TYPE "RuntimeSteeringDisposition" AS ENUM ('absorbed', 'deferred');
 
 -- CreateEnum
+CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed', 'superseded');
+
+-- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
@@ -1509,6 +1512,22 @@ CREATE TABLE "runtime_steering_boundaries" (
 );
 
 -- CreateTable
+CREATE TABLE "runtime_steering_requests" (
+    "id" TEXT NOT NULL,
+    "run_id" TEXT NOT NULL,
+    "attempt" INTEGER NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "subject_id" TEXT NOT NULL,
+    "content" JSONB NOT NULL,
+    "digest" TEXT NOT NULL,
+    "state" "RuntimeSteeringRequestState" NOT NULL DEFAULT 'pending',
+    "submitted_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "consumed_at" TIMESTAMP(3),
+
+    CONSTRAINT "runtime_steering_requests_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "runtime_dispatched_commands" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
@@ -1689,6 +1708,12 @@ CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat
 
 -- CreateIndex
 CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");

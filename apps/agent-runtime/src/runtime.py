@@ -818,10 +818,14 @@ def _execute_resume_attempt(command: dict[str, object], runtime_instance_id: str
         return
     input_generation = payload.get("inputGeneration")
     deferred_tool_results = payload.get("deferredToolResults")
+    steering_requests = payload.get("steeringRequests")
+    if not isinstance(steering_requests, list) or any(not isinstance(item, dict) or not isinstance(item.get("text"), str) or not item["text"].strip() for item in steering_requests):
+        terminal_gate.post_completion(post_candidate, _candidate(coordinates, "run.failed", {"reason": "invalid_resume_steering"}))
+        return
     compiled_input = _recover_compiled_input(coordinates, input_generation, checkpoint_cipher)
     post_candidate(_candidate(coordinates, "run.resumed", {"inputGeneration": input_generation}))
     _run_evidence(coordinates, "resumed", inputGeneration=input_generation)
-    steering_buffer: list[str] = []
+    steering_buffer = [item["text"].strip() for item in steering_requests]
     with _trace("agent_runtime.resume_attempt", runId=coordinates["runId"], attempt=coordinates["attempt"]):
         try:
             for neutral_event in resume_event_source(coordinates["runId"], coordinates["attempt"], input_generation, deferred_tool_results, cancel_event, steering_buffer):

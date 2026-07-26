@@ -80,6 +80,9 @@ authorities to accept or reject.
   non-terminal-but-closed `cancelling` state.
 - `RuntimeCommandAdmission*` / `RuntimeCandidateAdmission*` — typed allow, idempotent, or fail-closed
   decisions and their input ports.
+- `__CreateSteeringIngestRouter`, `PrismaSteeringRequestRepository` — the self-only product surface
+  and durable queue for a user's instruction to a live run. It records the instruction against the
+  current owner-bound attempt but never changes input generation from the HTTP request.
 
 ## Boundary
 
@@ -98,6 +101,13 @@ attempt's accepted command set). Their clean-database schema lives in the OpenCr
 baseline. It reads the assignment, run, and immutable snapshot rows owned by the execution-run and
 conversation domains. Terminal state remains written by the injected execution-run authority, never
 by this transport/protocol package directly.
+
+`RuntimeSteeringRequest` holds each owner-authored instruction before the runtime observes it. A
+request can be accepted only before the attempt's single fenced resume command is minted; that command
+consumes every pending request and seeds the runtime's pre-model buffer. This prevents a second
+executor loop from running concurrently for the same attempt. Its queue is deliberately separate from
+`RuntimeSteeringBoundary`, which remains the sole authority that can advance input generation. A lost
+browser connection therefore cannot drop an instruction or force a model turn to change mid-flight.
 
 ## Dependency direction
 
