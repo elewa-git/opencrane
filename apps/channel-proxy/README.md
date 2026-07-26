@@ -99,7 +99,7 @@ library composed by the silo umbrella chart
 ([`apps/_infra/deploy-k8s`](../_infra/deploy-k8s/README.md)).
 The final image pins the upstream Node user's numeric UID and GID (`1000:1000`) so Kubernetes can
 enforce the chart's `runAsNonRoot` policy before the container starts.
-elewa-git
+
 ## See also
 
 - Parent index: [apps](../README.md)

@@ -186,7 +186,7 @@ Each tenant's LiteLLM virtual key carries a `models[]` allowlist, populated from
 registry at key-mint time and kept in sync by the operator's reconcile loop. A call to
 a model outside the allowlist is rejected at the gateway.
 
-**How measurement estimates savings.** A run replays every eval case elewa-gitboth the
+**How measurement estimates savings.** A run replays every eval case through both the
 baseline and the candidate model, grades each output with an independent judge model,
 reads the real per-call USD cost from LiteLLM, and estimates the saving with a
 bootstrap 95% confidence interval. A proposal is emitted only when that interval

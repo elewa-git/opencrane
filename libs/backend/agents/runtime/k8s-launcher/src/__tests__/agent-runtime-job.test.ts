@@ -105,7 +105,7 @@ describe("personal-runtime attempt Job", function _Suite()
 		expect(function _InvalidAttempt() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), attempt: 0 }, _Profile()); }).toThrow(/positive safe integer/);
 		expect(function _MutableImageTag() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), image: "ghcr.io/elewa-git/opencrane-agent-runtime:latest" }); }).toThrow(/immutable image/);
 		expect(function _InvalidPullPolicy() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), imagePullPolicy: "Sometimes" as "Always" }); }).toThrow(/image pull policy/);
-		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-sielewa-git _Profile()); }).toThrow(/different namespaces/);
+		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-silo-1" }, _Profile()); }).toThrow(/different namespaces/);
 		expect(function _UnboundedScratch() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), scratchSize: "2Gi" }); }).toThrow(/bounded scratch/);
 		expect(function _MissingResourceLimits() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), resources: {} }); }).toThrow(/CPU and memory requests/);
 		expect(function _MissingBootstrapReference() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), bootstrapReference: "" }, _Profile()); }).toThrow(/invalid authority coordinate/);

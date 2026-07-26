@@ -174,7 +174,7 @@ gateways, the GKE metadata endpoint when selected, and the cross-namespace Artif
 Shared and BYO dependencies must use HTTPS; installations that need hostname-level external
 restrictions should add Cilium FQDN policy.
 
-## See alselewa-git
+## See also
 
 - Parent index: [apps](../README.md)
 - Composed logic: [libs/backend/server](../../libs/backend/server/README.md)

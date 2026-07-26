@@ -16,7 +16,7 @@ WRONG_USER="system:serviceaccount:${SERVER_NAMESPACE}:default"
 JOB_NAME="agent-runtime-a1-aaaaaaaaaaaaaaaaaaaaaaaa"
 RUNTIME_IMAGE="ghcr.io/elewa-git/opencrane-agent-runtime@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
 TMP_DIR="$(mktemp -d)"
-BASE_JOB="$TMP_DIR/runtelewa-gityaml"
+BASE_JOB="$TMP_DIR/runtime-job.yaml"
 VARIANT_JOB="$TMP_DIR/runtime-job-variant.yaml"
 
 function _cleanup()
@@ -174,7 +174,7 @@ _expect_create_denied "controller ServiceAccount" "$CONTROLLER_USER"
 
 _variant '[{"op":"replace","path":"/spec/template/spec/containers/0/image","value":"ghcr.io/elewa-git/opencrane-agent-runtime:latest"}]'
 _expect_create_denied "mutable image" "$CONTROLLER_USER"
-elewa-git
+
 _variant '[{"op":"replace","path":"/spec/template/spec/volumes/2","value":{"name":"litellm-key","configMap":{"name":"foreign"}}}]'
 _expect_create_denied "non-attempt-key volume" "$CONTROLLER_USER"
 
