@@ -12,6 +12,8 @@ export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
 	readonly siloId: string;
+	/** Organization selected by the caller's verified membership assertion. */
+	readonly organizationId: string;
 	/** Subject whose personal memory is being queried. */
 	readonly subjectId: string;
 	/** Free-text recall query. */
@@ -32,6 +34,8 @@ export interface PersonalMemoryRecordCommand
 {
 	/** Silo that owns the personal-memory dataset. */
 	readonly siloId: string;
+	/** Organization selected by the caller's verified membership assertion. */
+	readonly organizationId: string;
 	/** Authenticated subject whose personal memory may receive this fact. */
 	readonly subjectId: string;
 	/** Gateway-native dataset identifier; OpenCrane's catalog id never crosses this boundary. */
@@ -40,6 +44,30 @@ export interface PersonalMemoryRecordCommand
 	readonly content: string;
 	/** Stable delivery key: it may be replayed only with byte-identical content in this subject and dataset. */
 	readonly idempotencyKey: string;
+}
+
+/** Request to create or resolve the one durable personal dataset for verified coordinates. */
+export interface PersonalMemoryDatasetProvisionCommand
+{
+	/** Silo that owns the personal dataset. */
+	readonly siloId: string;
+	/** Organization selected by the caller's verified membership assertion. */
+	readonly organizationId: string;
+	/** Authenticated subject who exclusively owns the personal dataset. */
+	readonly subjectId: string;
+	/** Stable delivery key that makes repeated provisioning resolve the same dataset. */
+	readonly idempotencyKey: string;
+}
+
+/** Gateway evidence that the personal dataset exists for exactly one verified scope. */
+export interface PersonalMemoryDatasetProvisioned
+{
+	/** Durable provision outcome. */
+	readonly outcome: "provisioned";
+	/** True only when a prior identical delivery already created the dataset. */
+	readonly idempotent: boolean;
+	/** Gateway-native dataset identifier; never synthesized by OpenCrane. */
+	readonly cogneeDatasetId: string;
 }
 
 /** Gateway evidence returned only after a personal fact has durably been accepted. */
@@ -165,6 +193,8 @@ export interface MemoryGatewayClient
 {
 	/** Recalls facts for a subject and returns only gateway-originated results. */
 	query(command: MemoryQueryCommand): Promise<MemoryQueryResult>;
+	/** Creates or resolves the one gateway-native dataset for a verified personal scope. */
+	provisionPersonalDataset(command: PersonalMemoryDatasetProvisionCommand): Promise<PersonalMemoryDatasetProvisioned>;
 	/** Retains one fact for the authenticated subject and returns gateway-minted evidence. */
 	recordPersonalFact(command: PersonalMemoryRecordCommand): Promise<PersonalMemoryRecordResult>;
 	/** Corrects one stored fact's content remotely. */

@@ -9,6 +9,8 @@ export interface ExternalActionExecutorDependencies
 	readonly siloId: string;
 	/** Subject on whose behalf the action runs. */
 	readonly subjectId: string;
+	/** Organization from the immutable verified run snapshot. */
+	readonly organizationId: string;
 	/** Obot credential-custody transport backing MCP tool calls (fail-closed until verified). */
 	readonly obotCustody: ObotCustodyPort;
 	/** Sandbox Job transport backing sandboxed tool calls (fail-closed until verified). */

@@ -18,7 +18,7 @@ of the fact (CAS-style: content-addressed storage, where a value is named by the
 never the fact text itself.
 
 ```
- Cognee accepts durable fact content
+Cognee accepts durable fact content
           │  external id · content digest · source · consent · sensitivity
           ▼
  ┌──────────────────────────────┐
@@ -26,7 +26,7 @@ never the fact text itself.
  └──────────────────────────────┘
           │  recorded (catalog row + outbox intent) / denied (+ reason)
           ▼
- OpenCrane catalog  ── later explained, corrected, or superseded
+OpenCrane catalog  ── later explained, corrected, or superseded
 ```
 
 **In this flow:** Cognee memory service *(durable content store, external)* ·
@@ -45,13 +45,23 @@ cannot turn one user's statement into a preference for another user's run. A suc
 `memory.fact_corrected` rather than `memory.fact_recorded`, so consumers can distinguish a correction
 from a first learned preference.
 
+Before any fact can be retained, `__ProvisionPersonalMemoryDataset` registers the one Cognee dataset
+that the gateway has already confirmed for a verified `(silo, organization, user)` scope. The catalog
+will create that binding once, accept only an identical retry, and reject another gateway dataset for
+the same user scope. It never creates a Cognee dataset itself: the remote gateway owns that side
+effect and its identifier is evidence, not a value OpenCrane invents.
+
 ## Public surface
 
 - `__RecordMemoryFact(repository, command)` — the single use case: validate provenance, then record catalog metadata atomically.
+- `__ProvisionPersonalMemoryDataset(repository, command)` — register a gateway-confirmed dataset
+  under one verified personal scope, with exact-retry idempotency and no replacement path.
 - `RecordMemoryFactCommand` / `RecordMemoryFactResult` — the request and the stable allow/deny outcome.
 - `MemoryFactSource` — the one-of-three provenance reference (artifact revision · message · explicit statement).
 - `AtomicRecordMemoryFactResult` — the raw persistence outcome the repository returns.
 - `MemoryCatalogRepository` — the persistence port a caller may inject.
+- `PersonalMemoryDatasetRepository` — the separate persistence port that creates the immutable
+  scope-to-gateway dataset binding.
 - `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
   metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
 

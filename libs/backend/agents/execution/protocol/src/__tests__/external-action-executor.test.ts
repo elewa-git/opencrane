@@ -13,7 +13,7 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 }
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+const DEPENDENCIES = { siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", obotCustody: new __UnavailableObotCustodyAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
 
 describe("composition-root external action executor", function _suite()
 {
@@ -33,6 +33,15 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), DEPENDENCIES);
 		await expect(executor.execute()).rejects.toThrow(/Memory gateway is unavailable/);
+	});
+
+	it("forwards the immutable organization coordinate to the memory gateway", async function _forwardsOrganization()
+	{
+		const queries: unknown[] = [];
+		const memoryGateway = { query: async function _query(command: unknown) { queries.push(command); return { facts: [] }; } } as never;
+		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, memoryGateway });
+		await expect(executor.execute()).resolves.toEqual([]);
+		expect(queries).toEqual([{ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", query: "a", maxResults: 20 }]);
 	});
 
 	it("refuses a tool revision that names no wired transport kind", async function _unsupported()

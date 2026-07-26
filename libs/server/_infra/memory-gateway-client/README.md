@@ -14,11 +14,11 @@ interface) that says *what* memory operations exist, with the real transport wir
 It sits between the personal-agent backend and the remote memory gateway:
 
 ```
- personal-agent backend  (recall / record / correct / forget on a subject's memory)
-          │  MemoryQueryCommand · PersonalMemoryRecordCommand · MemoryCorrectionCommand · MemoryForgetCommand
+ personal-agent backend  (recall / provision / record / correct / forget on verified personal memory)
+		  │  MemoryQueryCommand · PersonalMemoryDatasetProvisionCommand · PersonalMemoryRecordCommand
           ▼
  ┌────────────────────────────────────┐
- │  memory-gateway-client  ◄── HERE    │  MemoryGatewayClient: query · record · correct · forget
+ │  memory-gateway-client  ◄── HERE    │  MemoryGatewayClient: query · provision · record · correct · forget
  └────────────────────────────────────┘
           │  MemoryQueryResult (gateway-minted facts)
           │  PersonalMemoryRecordResult (gateway id + sha256: digest / idempotency conflict)
@@ -29,7 +29,8 @@ It sits between the personal-agent backend and the remote memory gateway:
 **In this flow:** the personal-agent backend *(consumer)* · the remote memory gateway *(holds the
 facts, mints fact references)*
 
-It owns: the `MemoryGatewayClient` interface (`query` / `recordPersonalFact` / `correct` / `forget`
+It owns: the `MemoryGatewayClient` interface (`query` / `provisionPersonalDataset` /
+`recordPersonalFact` / `correct` / `forget`
 for a subject's personal memory, plus `recallScoped` / `injectScoped` for a shared knowledge SCOPE); the request/result
 types, where recall returns only gateway-originated facts and a fact reference is only ever real if
 the gateway minted it; and a **fail-closed** default implementation,
@@ -47,13 +48,15 @@ complete provenance.
 
 ## Public surface
 
-- `MemoryGatewayClient` — the runtime-neutral query/record/correct/forget + recallScoped/injectScoped contract.
+- `MemoryGatewayClient` — the runtime-neutral query/provision/record/correct/forget + recallScoped/injectScoped contract.
 - `MemoryQueryCommand`, `MemoryQueryResult`, `MemoryFact`, `MemoryCorrectionCommand`, `MemoryForgetCommand` — the personal-memory I/O types.
 - `PersonalMemoryRecordCommand` / `PersonalMemoryRecordResult` — authenticated personal-memory retention:
   the gateway receives the fact text and returns its own external id and SHA-256 digest only after
   durable acceptance. The digest is always a lowercase `sha256:` content address; a reused key with
   different content returns the explicit `idempotency_conflict` denial instead of silently reusing a
   fact for the wrong statement.
+- `PersonalMemoryDatasetProvisionCommand` / `PersonalMemoryDatasetProvisioned` — idempotently
+  create or resolve one gateway-native dataset for the verified silo, organization, and user.
 - `__AssertPersonalMemoryRecordResult` / `MemoryGatewayProtocolError` — response guard that every
   concrete transport uses before exposing record evidence to the catalog boundary.
 - `MemoryProvenance`, `ScopedMemoryRecallCommand`, `ScopedMemoryRecallResult`, `ScopedMemoryFact`, `ScopedMemoryInjectionCommand` — the scoped read/write I/O types.
@@ -65,7 +68,8 @@ complete provenance.
 Consumed by the personal-agent backend. It defines the memory contract and a safe default; it does
 not talk to the gateway or Cognee itself yet — a concrete, authenticated client is wired when the
 gateway API contract is confirmed. It stores nothing and holds no fact beyond the single in-flight
-call. In particular, the record command uses the gateway-native dataset id, while the OpenCrane
+call. Every personal query, provision, and record carries the organization selected by verified
+membership. In particular, the record command uses the gateway-native dataset id, while the OpenCrane
 memory catalog's internal id stays at the catalog boundary. That prevents a caller from treating an
 OpenCrane row as proof that the gateway accepted the fact content.
 

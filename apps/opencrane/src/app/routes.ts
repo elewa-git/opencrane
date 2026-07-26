@@ -195,7 +195,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			{
 				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
 					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
-					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, organizationId: snapshot.identitySnapshot.organizationId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{

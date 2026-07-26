@@ -58,7 +58,7 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 			if (toolRevisionId.startsWith("memory:"))
 			{
 				const query = _stringArgument(candidate, "query") ?? "";
-				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, subjectId: dependencies.subjectId, query, maxResults: 20 });
+				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, organizationId: dependencies.organizationId, subjectId: dependencies.subjectId, query, maxResults: 20 });
 				return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
 			}
 			throw new UnsupportedExternalActionError(toolRevisionId);

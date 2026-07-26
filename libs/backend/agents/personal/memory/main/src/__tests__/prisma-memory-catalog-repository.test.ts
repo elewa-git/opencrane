@@ -15,7 +15,7 @@ function _transaction()
 	return {
 		$queryRaw: vi.fn(),
 		memoryOutboxEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
-		memoryDataset: { findUnique: vi.fn().mockResolvedValue({ state: MemoryDatasetState.Active }) },
+		memoryDataset: { findUnique: vi.fn().mockResolvedValue({ state: MemoryDatasetState.Active }), findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
 		memoryFactCatalog: { create: vi.fn().mockResolvedValue({ id: "fact-1" }) },
 	};
 }
@@ -105,5 +105,23 @@ describe("Prisma memory catalog repository", function _suite()
 		const command = { ..._command(), supersedesFactId: "fact-previous" };
 		await expect(_repository(transaction).recordFactAtomically(command)).resolves.toEqual({ status: "recorded" });
 		expect(transaction.memoryOutboxEvent.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ kind: MemoryOutboxEventKind.FactCorrected, payload: expect.objectContaining({ supersedesFactId: "fact-previous" }) }) }));
+	});
+
+	it("creates one immutable Personal dataset binding and rejects a changed gateway dataset", async function _provisionsPersonalDataset()
+	{
+		const transaction = _transaction();
+		const repository = _repository(transaction);
+		const command = { siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", cogneeDatasetId: "cognee-dataset-1", createdBy: "user-1" };
+		await expect(repository.provisionPersonalDatasetAtomically(command)).resolves.toEqual({ status: "provisioned" });
+		expect(transaction.memoryDataset.create).toHaveBeenCalledWith({ data: { siloId: "silo-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "user-1", cogneeDatasetId: "cognee-dataset-1", createdBy: "user-1" } });
+		transaction.memoryDataset.findFirst.mockResolvedValue({ cogneeDatasetId: "other-dataset", state: MemoryDatasetState.Active });
+		await expect(repository.provisionPersonalDatasetAtomically(command)).resolves.toEqual({ status: "conflict" });
+	});
+
+	it("resolves an identical concurrent provision after a serialization conflict", async function _concurrentProvision()
+	{
+		const command = { siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", cogneeDatasetId: "cognee-dataset-1", createdBy: "user-1" };
+		const prisma = { $transaction: vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError("serialization race", { code: "P2034", clientVersion: "test" })), memoryDataset: { findFirst: vi.fn().mockResolvedValue({ cogneeDatasetId: command.cogneeDatasetId, state: MemoryDatasetState.Active }) } } as never;
+		await expect(new PrismaMemoryCatalogRepository(prisma).provisionPersonalDatasetAtomically(command)).resolves.toEqual({ status: "idempotent" });
 	});
 });

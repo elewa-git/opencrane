@@ -46,6 +46,34 @@ export interface MemoryCatalogRepository
 	recordFactAtomically(command: RecordMemoryFactCommand): Promise<AtomicRecordMemoryFactResult>;
 }
 
+/** Gateway-confirmed coordinates for the one personal dataset of a verified user scope. */
+export interface ProvisionPersonalMemoryDatasetCommand
+{
+	/** Silo containing the signed membership and product catalog. */
+	readonly siloId: string;
+	/** Organization from the exact verified membership assertion. */
+	readonly organizationId: string;
+	/** User who exclusively owns the Personal dataset. */
+	readonly subjectId: string;
+	/** Gateway-minted durable dataset identifier. */
+	readonly cogneeDatasetId: string;
+	/** Principal that initiated the authenticated provisioning flow. */
+	readonly createdBy: string;
+}
+
+/** Atomic catalog registration outcome for one gateway-confirmed personal dataset. */
+export type AtomicProvisionPersonalMemoryDatasetResult = { readonly status: "provisioned" } | { readonly status: "idempotent" } | { readonly status: "invalid_command" } | { readonly status: "conflict" };
+
+/** Persistence boundary that registers a gateway dataset under one immutable verified scope. */
+export interface PersonalMemoryDatasetRepository
+{
+	/** Creates the catalog row or accepts only the exact prior scope-to-gateway binding. */
+	provisionPersonalDatasetAtomically(command: ProvisionPersonalMemoryDatasetCommand): Promise<AtomicProvisionPersonalMemoryDatasetResult>;
+}
+
+/** Public outcome of registering a gateway-confirmed personal dataset in the catalog. */
+export type ProvisionPersonalMemoryDatasetResult = { readonly outcome: "provisioned"; readonly idempotent: boolean } | { readonly outcome: "denied"; readonly reason: "invalid_command" | "conflict" };
+
 /** Stable outcome of recording memory catalog metadata. */
 export type RecordMemoryFactResult =
 	| { readonly outcome: "recorded"; readonly idempotent: boolean }

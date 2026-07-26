@@ -1,11 +1,12 @@
-import { MemoryDatasetState, MemoryOutboxEventKind, Prisma, type PrismaClient } from "@prisma/client";
+import { AuthorizationScopeKind, MemoryDatasetState, MemoryOutboxEventKind, Prisma, type PrismaClient } from "@prisma/client";
 
 import { __IsValidMemoryFactCommand } from "./memory-catalog.js";
+import { __IsValidPersonalMemoryDatasetProvisionCommand } from "./personal-memory-dataset.js";
 
-import type { AtomicRecordMemoryFactResult, MemoryCatalogRepository, RecordMemoryFactCommand } from "./memory-catalog.types.js";
+import type { AtomicProvisionPersonalMemoryDatasetResult, AtomicRecordMemoryFactResult, MemoryCatalogRepository, PersonalMemoryDatasetRepository, ProvisionPersonalMemoryDatasetCommand, RecordMemoryFactCommand } from "./memory-catalog.types.js";
 
 /** Prisma persistence authority for immutable memory-fact catalog records and their outbox intents. */
-export class PrismaMemoryCatalogRepository implements MemoryCatalogRepository
+export class PrismaMemoryCatalogRepository implements MemoryCatalogRepository, PersonalMemoryDatasetRepository
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
@@ -49,12 +50,45 @@ export class PrismaMemoryCatalogRepository implements MemoryCatalogRepository
 		}
 	}
 
+	/** Atomically register the one gateway-confirmed Personal dataset for verified user coordinates. */
+	async provisionPersonalDatasetAtomically(command: ProvisionPersonalMemoryDatasetCommand): Promise<AtomicProvisionPersonalMemoryDatasetResult>
+	{
+		// 1. Reuse the pure guard so malformed caller coordinates never begin a transaction.
+		if (!__IsValidPersonalMemoryDatasetProvisionCommand(command)) return { status: "invalid_command" };
+
+		try
+		{
+			// 2. Serialize the exact scope lookup so a concurrent attempt cannot bind a second dataset.
+			return await this.prisma.$transaction(async function _provision(transaction)
+			{
+				const existing = await transaction.memoryDataset.findFirst({ where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, organizationId: command.organizationId, scopeResourceId: command.subjectId }, select: { cogneeDatasetId: true, state: true } });
+				if (existing !== null) return _MatchesPersonalDataset(existing, command) ? { status: "idempotent" } as const : { status: "conflict" } as const;
+
+				// 3. Persist the immutable scope-to-gateway binding only after the gateway has confirmed its dataset.
+				await transaction.memoryDataset.create({ data: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, organizationId: command.organizationId, scopeResourceId: command.subjectId, cogneeDatasetId: command.cogneeDatasetId, createdBy: command.createdBy } });
+				return { status: "provisioned" } as const;
+			});
+		}
+		catch (error)
+		{
+			if (!(error instanceof Prisma.PrismaClientKnownRequestError) || (error.code !== "P2002" && error.code !== "P2034")) throw error;
+			const existing = await this.prisma.memoryDataset.findFirst({ where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, organizationId: command.organizationId, scopeResourceId: command.subjectId }, select: { cogneeDatasetId: true, state: true } });
+			return existing !== null && _MatchesPersonalDataset(existing, command) ? { status: "idempotent" } : { status: "conflict" };
+		}
+	}
+
 	/** Re-read a unique-key race after transaction rollback and accept only the exact committed delivery. */
 	private async _ResolveConcurrentIdempotency(command: RecordMemoryFactCommand): Promise<AtomicRecordMemoryFactResult>
 	{
 		const existing = await this.prisma.memoryOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey }, include: { fact: true } });
 		return existing !== null && _MatchesExistingDelivery(existing, command) ? { status: "idempotent" } : { status: "conflict" };
 	}
+}
+
+/** Return whether a prior active row names exactly the gateway dataset confirmed for this user scope. */
+function _MatchesPersonalDataset(existing: { readonly cogneeDatasetId: string; readonly state: MemoryDatasetState }, command: ProvisionPersonalMemoryDatasetCommand): boolean
+{
+	return existing.state === MemoryDatasetState.Active && existing.cogneeDatasetId === command.cogneeDatasetId;
 }
 
 /** Return whether Postgres rejected a correction because its predecessor is no longer eligible. */

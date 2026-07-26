@@ -16,13 +16,19 @@ describe("unavailable memory gateway client", function _suite()
 	it("fails closed instead of returning an empty recall", async function _query()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.query({ siloId: "silo-1", subjectId: "subject-1", query: "what do I know", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.query({ siloId: "silo-1", organizationId: "org-1", subjectId: "subject-1", query: "what do I know", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("fails closed rather than minting a personal-memory fact identifier", async function _recordPersonalFact()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.recordPersonalFact({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-user-1", content: "Use UK spelling", idempotencyKey: "interview-1:answer-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.recordPersonalFact({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-user-1", content: "Use UK spelling", idempotencyKey: "interview-1:answer-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+	});
+
+	it("fails closed rather than inventing a personal dataset identifier", async function _provisionPersonalDataset()
+	{
+		const client = new __UnavailableMemoryGatewayClient();
+		await expect(client.provisionPersonalDataset({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1", idempotencyKey: "personal-dataset:org-1:user-1" })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("fails closed rather than pretending a correction landed", async function _correct()
