@@ -34,6 +34,7 @@ import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/person
 import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
 import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
 import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
+import { _SkillCatalogueOpenapiPaths } from "@opencrane/backend/server/agents/skills";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -836,6 +837,7 @@ export const spec = {
     ..._SelfConversationReplayOpenapiPaths,
     ..._AgentServicesOpenapiPaths,
     ..._PersonalConfigurationOpenapiPaths,
+    ..._SkillCatalogueOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

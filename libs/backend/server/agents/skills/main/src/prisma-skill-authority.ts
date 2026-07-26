@@ -2,10 +2,10 @@ import { Prisma, SkillRevisionState, SkillState, type PrismaClient } from "@pris
 
 import { ___DoWithTrace } from "@opencrane/observability";
 
-import type { AtomicPublishSkillRevisionResult, AtomicRevokeSkillRevisionResult, PublishSkillRevisionCommand, RevokeSkillRevisionCommand, SkillAuthorityRepository, SkillPublicationSnapshot, SkillRevocationRepository } from "./skill-publication.types.js";
+import type { AtomicPublishSkillRevisionResult, AtomicRevokeSkillRevisionResult, PublishSkillRevisionCommand, RevokeSkillRevisionCommand, SkillAuthorityRepository, SkillCatalogueEntry, SkillCatalogueRepository, SkillPublicationSnapshot, SkillRevocationRepository } from "./skill-publication.types.js";
 
 /** Postgres authority that publishes one reviewed SkillRevision and advances its logical pointer. */
-export class PrismaSkillAuthorityRepository implements SkillAuthorityRepository, SkillRevocationRepository
+export class PrismaSkillAuthorityRepository implements SkillAuthorityRepository, SkillCatalogueRepository, SkillRevocationRepository
 {
 	/** Canonical OpenCrane catalog database client. */
 	private readonly prisma: PrismaClient;
@@ -27,6 +27,16 @@ export class PrismaSkillAuthorityRepository implements SkillAuthorityRepository,
 			const artifact = await self.prisma.artifactRevision.findFirst({ where: { id: command.artifactRevisionId, contentAddress: command.artifactContentAddress, artifact: { siloId: command.siloId } }, select: { state: true } });
 			if (artifact === null) return null;
 			return { skillState: revision.skill.state === SkillState.Active ? "active" : "retired", currentRevisionId: revision.skill.currentRevisionId, state: _ToPublicationState(revision.state), artifactPublished: artifact.state === "Published", artifactContentAddress: revision.artifactContentAddress, evidence: _Evidence(revision) };
+		});
+	}
+
+	/** List only browser-safe catalogue metadata from the exact host-derived silo. */
+	async listCatalogue(siloId: string): Promise<readonly SkillCatalogueEntry[]>
+	{
+		const skills = await this.prisma.skill.findMany({ where: { siloId }, select: { id: true, name: true, description: true, state: true, currentRevisionId: true, currentRevision: { select: { state: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 200 });
+		return skills.map(function _toCatalogueEntry(skill): SkillCatalogueEntry
+		{
+			return { id: skill.id, name: skill.name, description: skill.description, state: skill.state === SkillState.Active ? "active" : "retired", currentRevisionId: skill.currentRevisionId, currentRevisionState: skill.currentRevision === null ? null : _ToPublicationState(skill.currentRevision.state), createdAt: skill.createdAt.toISOString(), updatedAt: skill.updatedAt.toISOString() };
 		});
 	}
 
@@ -100,39 +110,6 @@ export class PrismaSkillAuthorityRepository implements SkillAuthorityRepository,
 		}
 	}
 
-	/** Lock and revoke one scoped published revision without changing already admitted run snapshots. */
-	async revokeAtomically(command: RevokeSkillRevisionCommand): Promise<AtomicRevokeSkillRevisionResult>
-	{
-		const self = this;
-		try
-		{
-			return await ___DoWithTrace("skills.revision.revoke", { siloId: command.siloId, skillId: command.skillId, skillRevisionId: command.skillRevisionId }, async function _traceRevocation(): Promise<AtomicRevokeSkillRevisionResult>
-			{
-				return await self.prisma.$transaction(async function _revoke(transaction: Prisma.TransactionClient): Promise<AtomicRevokeSkillRevisionResult>
-				{
-					// 1. Lock the logical skill before its revision so publication and revocation share one lock order.
-					await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skills" WHERE "id" = ${command.skillId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
-					await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_revisions" WHERE "id" = ${command.skillRevisionId} AND "skill_id" = ${command.skillId} FOR UPDATE`);
-
-					// 2. Recheck the trusted silo and lifecycle state while those locks prevent a stale transition.
-					const revision = await transaction.skillRevision.findFirst({ where: { id: command.skillRevisionId, skillId: command.skillId, skill: { siloId: command.siloId } }, select: { id: true, state: true } });
-					if (revision === null) return { status: "not_found" };
-					if (revision.state !== SkillRevisionState.Published) return { status: "not_published" };
-
-					// 3. Transition exactly once and remove the pointer only if it still targets this withdrawn revision.
-					const revoked = await transaction.skillRevision.updateMany({ where: { id: command.skillRevisionId, skillId: command.skillId, state: SkillRevisionState.Published }, data: { state: SkillRevisionState.Revoked, revokedAt: new Date(command.revokedAt) } });
-					if (revoked.count !== 1) return { status: "conflict" };
-					const skill = await transaction.skill.updateMany({ where: { id: command.skillId, siloId: command.siloId, currentRevisionId: command.skillRevisionId }, data: { currentRevisionId: null } });
-					return skill.count <= 1 ? { status: "revoked" } : { status: "conflict" };
-				});
-			});
-		}
-		catch (error)
-		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return { status: "conflict" };
-			throw error;
-		}
-	}
 }
 
 /** Forces rollback when the final pointer compare-and-swap loses after the revision lifecycle write. */

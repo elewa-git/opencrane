@@ -82,6 +82,34 @@ export interface SkillRevocationRepository
 	revokeAtomically(command: RevokeSkillRevisionCommand): Promise<AtomicRevokeSkillRevisionResult>;
 }
 
+/** A browser-safe summary of one governed skill in the caller's silo. */
+export interface SkillCatalogueEntry
+{
+	/** Stable skill identifier. */
+	readonly id: string;
+	/** Human-readable skill name. */
+	readonly name: string;
+	/** Human-readable summary supplied while authoring the skill. */
+	readonly description: string;
+	/** Current lifecycle state of the logical skill. */
+	readonly state: "active" | "retired";
+	/** Identifier of the revision selected for new admissions, when any. */
+	readonly currentRevisionId: string | null;
+	/** Lifecycle state of the selected revision, when any. */
+	readonly currentRevisionState: "draft" | "review" | "published" | "rejected" | "revoked" | null;
+	/** Creation instant in ISO-8601 form. */
+	readonly createdAt: string;
+	/** Most recent metadata or current-pointer update instant in ISO-8601 form. */
+	readonly updatedAt: string;
+}
+
+/** Reads the browser-safe skill catalogue within an already trusted silo boundary. */
+export interface SkillCatalogueRepository
+{
+	/** Returns a bounded, deterministic list of skill summaries from one silo. */
+	listCatalogue(siloId: string): Promise<readonly SkillCatalogueEntry[]>;
+}
+
 /** Stable result of attempting to revoke one skill revision. */
 export type RevokeSkillRevisionResult = { readonly outcome: "revoked" } | { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "not_published" | "conflict" };
 

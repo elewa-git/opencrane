@@ -12,10 +12,9 @@ authority that publishes a reviewed skill revision.
 
 It is the final step of the authoring flow. A bundle is authored, uploaded as an artifact, then
 tested, scanned, and signed by an isolated job; this package publishes the revision only when that
-server-owned review evidence and the artifact reference still line up. The later product API is
-deliberately not composed yet: it needs the authoritative fleet-to-silo membership projection to
-prove the administrator belongs to the host-derived ClusterTenant, rather than trusting a global
-session flag.
+server-owned review evidence and the artifact reference still line up. Its read-only catalogue API
+is composed by the OpenCrane app: an authenticated browser session and request host select the
+silo, and callers see only safe skill metadata.
 
 ```
  authored skill bundle  ──►  ArtifactRevision (exact content address)
@@ -50,6 +49,10 @@ or invalidates inputs already accepted for a run.
 - `__RevokeSkillRevision` — the future-only withdrawal use case for an exact published revision.
 - `PrismaSkillAuthorityRepository.revokeAtomically` — shares the publication lock order, changes
   `published → revoked`, and conditionally clears the live current-revision pointer.
+- `__CreateSkillCatalogueRouter` — serves `GET /api/v1/skills`, a bounded catalogue of skill name,
+  description, lifecycle, and current-revision state in the trusted host silo.
+- `SkillCatalogueRepository` and `SkillCatalogueEntry` — the narrow read boundary and safe summary
+  shape used by the browser catalogue.
 - Types: `SkillAuthorityRepository` (the persistence boundary), `PublishSkillRevisionCommand`,
   `PublishSkillRevisionResult`, `SkillPublicationEvidence`, `SkillPublicationSnapshot`, and the
   atomic result `AtomicPublishSkillRevisionResult`.
@@ -62,6 +65,11 @@ records that a reviewed revision is now published, consistently with the artifac
 It is not an OCI/package registry, has no internal bundle-download route, and does not configure or
 communicate with the retired `feat-skill-registry` workload. It does not re-evaluate or cancel
 already accepted runs; their immutable snapshots remain the audit record.
+
+The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
+requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
+authoring or tool-runner workload coordinates. It is a discovery surface, not a skill authoring,
+publication, download, or execution API.
 
 ## Dependency direction
 
