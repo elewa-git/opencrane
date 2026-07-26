@@ -22,13 +22,15 @@ the only process allowed to submit its result to Kubernetes.
 ```
 
 **In this flow:** [skill catalog authority](../../../server/agents/skills/main/README.md) ·
-[agent runtime launcher](../../runtime/k8s-launcher/README.md).
+[agent controller](../../../../../apps/agent-controller/README.md) *(future sole Job mutator once
+durable claims grant it narrow RBAC)* · [agent runtime launcher](../../runtime/k8s-launcher/README.md).
 
 It guarantees a suspended, zero-retry, terminally cleaned, non-privileged Job with a read-only root
 filesystem, bounded temporary scratch space, no auto-mounted service-account token, and no source
-code, artifact bytes, arguments, or credentials embedded in the manifest. The controller can release
-it only after it has durably committed the exact Kubernetes identity. The only input it projects is an
-opaque capability reference for later exchange by a worker protocol.
+code, artifact bytes, arguments, or credentials embedded in the manifest. A later controller slice
+may release it only after it has durably committed the exact Kubernetes identity and received a
+narrow workload-class RBAC/profile grant. The only input it projects is an opaque capability
+reference for later exchange by a worker protocol.
 
 ## Public surface
 

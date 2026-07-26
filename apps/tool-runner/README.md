@@ -9,14 +9,33 @@ Jobs that run an already-authorized tenant tool. It does not accept user traffic
 choose network destinations. The later durable worker protocol will create exact Jobs through the
 agent controller and capability-bound policy.
 
+```
+ OpenCrane control plane ── durable claim (later slice) ──► agent controller
+                                                            │ creates a suspended Job
+                                                            ▼
+                                                    tool-runner namespace
+                                                    zero-RBAC worker identity
+                                                            │ exchanges one capability
+                                                            ▼
+                                                    bounded tool-result reply
+```
+
+**In this flow:** [agent controller](../agent-controller/README.md) *(future sole Kubernetes
+mutator)* · [skill launcher](../../libs/backend/agents/skills/k8s-launcher/README.md) *(pure Job
+shape)* · OpenCrane *(future capability exchange and result authority)*
+
 ## Public surface
 
 - Helm chart — restricted namespace, `tool-runner-default` ServiceAccount, quota, and default-deny policy.
+- `values.yaml` — only the namespace name and standard chart labels; controller-owned image,
+  capability, resource, and lifecycle values stay unavailable until durable claims exist.
 
 ## Boundary
 
-The agent controller remains the only Kubernetes mutator. No worker gets automatic Kubernetes API
-credentials, and default-deny means a future execution path must declare every permitted destination.
+No worker gets Kubernetes API credentials, and default-deny means a future execution path must
+declare every permitted destination. No controller currently has RBAC or a profile to create this
+Job; the later durable-claim slice must give the agent controller that narrow authority before it
+becomes the sole Kubernetes mutator. Until then, this is an inert deployment boundary.
 
 ## Dependency direction
 
