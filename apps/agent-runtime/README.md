@@ -17,8 +17,8 @@ command as a bounded Pydantic AI model/tool loop over the per-silo LiteLLM proxy
 candidates as the attempt runs. A model tool call is surfaced as a bounded `external_action`
 candidate for the control plane to authorize — the runtime never executes the tool itself. It also
 handles `resume_attempt` (feeding control-plane-authorized deferred tool results back into the paused
-loop) and `cancel_attempt` (a positive signal that kills the active task and acknowledges the
-server-chosen reason), absorbs steering only at pre-model-request boundaries, and writes an encrypted,
+loop) and `cancel_attempt` (a positive signal that kills the active task while the server retains the
+canonical cancellation outcome), absorbs steering only at pre-model-request boundaries, and writes an encrypted,
 version-tagged, replaceable local checkpoint subordinate to canonical server state.
 
 ```text
@@ -59,7 +59,7 @@ and whose `argumentsDigest` is a deterministic `sha256:<hex>` the control plane 
 AI types, ids, and checkpoints never cross that seam. Resume injects only control-plane-authorized
 deferred tool results; cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real
-`run.error` candidate rather than a silent acknowledgement, and a dropped stream bounds further
+`run.failed` terminal report rather than a silent acknowledgement, and a dropped stream bounds further
 candidate emission. The one exception is the control plane's explicit bounded retry response before
 an external action has a durable invocation receipt: the runtime resubmits that exact candidate id
 until the server accepts it, exhausts its durable retry budget, or the active attempt/stream is

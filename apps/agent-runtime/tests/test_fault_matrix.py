@@ -118,8 +118,8 @@ class FaultTerminalGateTests(unittest.TestCase):
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
 
-    def test_cancel_in_the_check_then_act_window_posts_exactly_one_terminal(self) -> None:
-        """A cancel firing between loop end and completion post yields exactly one cancelled terminal."""
+    def test_cancel_in_the_check_then_act_window_posts_no_runtime_terminal(self) -> None:
+        """A cancel firing between loop end and completion post leaves terminal state server-owned."""
         emitted: list[dict] = []
         cancel_event = threading.Event()
         gate = _TerminalGate(cancel_event)
@@ -130,7 +130,7 @@ class FaultTerminalGateTests(unittest.TestCase):
 
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
-        self.assertEqual(terminals, ["run.cancelled"])
+        self.assertEqual(terminals, [])
 
 
 class FaultStreamLossTests(unittest.TestCase):
