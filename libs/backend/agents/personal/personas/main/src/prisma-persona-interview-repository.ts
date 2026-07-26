@@ -1,4 +1,4 @@
-import { PersonaInterviewState, PersonaQuestionSetState, Prisma, type PrismaClient } from "@prisma/client";
+import { PersonalConfigurationChangeState, PersonaInterviewState, PersonaQuestionSetState, Prisma, type PrismaClient } from "@prisma/client";
 
 import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
 
@@ -23,7 +23,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	}
 
 	/** Start one reviewed interview while serialising all in-progress attempts for the same profile. */
-	async startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: "started" | "already_in_progress"; readonly interviewId: string } | { readonly status: "not_found_or_wrong_owner" | "question_set_unavailable" | "persistence_unavailable" }>
+	async startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: "started" | "already_in_progress"; readonly interviewId: string } | { readonly status: "not_found_or_wrong_owner" | "question_set_unavailable" | "refresh_change_unavailable" | "refresh_interview_conflict" | "persistence_unavailable" }>
 	{
 		try
 		{
@@ -33,14 +33,21 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				const profiles = await transaction.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				if (profiles.length !== 1) return { status: "not_found_or_wrong_owner" } as const;
 
-				// 2. Reuse a still-active interview; starting again must not discard unreviewed user answers.
-				const existing = await transaction.personaInterview.findFirst({ where: { personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, select: { id: true } });
-				if (existing !== null) return { status: "already_in_progress", interviewId: existing.id } as const;
+				// 2. Claim only an accepted owner-bound persona-refresh proposal before any interview exists.
+				if (command.refreshConfigurationChangeId !== null)
+				{
+					const refresh = await transaction.personalConfigurationChange.findFirst({ where: { id: command.refreshConfigurationChangeId, siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: "persona_refresh" } } }, select: { id: true } });
+					if (refresh === null) return { status: "refresh_change_unavailable" } as const;
+				}
 
-				// 3. Accept only an exact reviewed question-set revision before recording the interview attempt.
+				// 3. Reuse a still-active interview; a different refresh may not hijack unreviewed answers.
+				const existing = await transaction.personaInterview.findFirst({ where: { personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.InProgress }, select: { id: true } });
+				if (existing !== null) return command.refreshConfigurationChangeId === null ? { status: "already_in_progress", interviewId: existing.id } as const : { status: "refresh_interview_conflict" } as const;
+
+				// 4. Accept only an exact reviewed question-set revision before recording the interview attempt.
 				const questionSet = await transaction.personaQuestionSet.findUnique({ where: { id_version: { id: command.questionSetId, version: command.questionSetVersion } }, select: { state: true } });
 				if (questionSet?.state !== PersonaQuestionSetState.Reviewed) return { status: "question_set_unavailable" } as const;
-				const interview = await transaction.personaInterview.create({ data: { personaProfileId: command.personaProfileId, userId: command.userId, questionSetId: command.questionSetId, questionSetVersion: command.questionSetVersion, startedAt: new Date(command.startedAt) }, select: { id: true } });
+				const interview = await transaction.personaInterview.create({ data: { personaProfileId: command.personaProfileId, userId: command.userId, refreshConfigurationChangeId: command.refreshConfigurationChangeId, questionSetId: command.questionSetId, questionSetVersion: command.questionSetVersion, startedAt: new Date(command.startedAt) }, select: { id: true } });
 				return { status: "started", interviewId: interview.id } as const;
 			});
 		}

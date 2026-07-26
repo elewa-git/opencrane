@@ -1153,6 +1153,7 @@ CREATE TABLE "persona_interviews" (
     "id" TEXT NOT NULL,
     "persona_profile_id" TEXT NOT NULL,
     "user_id" TEXT NOT NULL,
+    "refresh_configuration_change_id" TEXT,
     "question_set_id" TEXT NOT NULL,
     "question_set_version" INTEGER NOT NULL,
     "state" "PersonaInterviewState" NOT NULL DEFAULT 'in_progress',
@@ -2185,6 +2186,9 @@ CREATE UNIQUE INDEX "persona_interviews_id_persona_profile_id_user_id_question_s
 CREATE INDEX "persona_interview_answers_question_set_id_question_set_vers_idx" ON "persona_interview_answers"("question_set_id", "question_set_version", "question_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "persona_interviews_refresh_configuration_change_id_key" ON "persona_interviews"("refresh_configuration_change_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "persona_interview_answers_interview_id_question_id_key" ON "persona_interview_answers"("interview_id", "question_id");
 
 -- CreateIndex
@@ -2627,6 +2631,9 @@ ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_persona_prof
 
 -- AddForeignKey
 ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_question_set_id_question_set_version_fkey" FOREIGN KEY ("question_set_id", "question_set_version") REFERENCES "persona_question_sets"("question_set_id", "version") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_refresh_configuration_change_id_fkey" FOREIGN KEY ("refresh_configuration_change_id") REFERENCES "personal_configuration_changes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_interview_id_fkey" FOREIGN KEY ("interview_id") REFERENCES "persona_interviews"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3867,14 +3874,27 @@ END;
 $$;
 CREATE FUNCTION "enforce_persona_interview_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE expected_answers INTEGER; actual_answers INTEGER; question_set_state "PersonaQuestionSetState";
+        refresh_state "PersonalConfigurationChangeState"; refresh_user TEXT; refresh_profile TEXT; refresh_patch JSONB;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaInterview rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT "state" INTO question_set_state FROM "persona_question_sets"
           WHERE "question_set_id" = NEW."question_set_id" AND "version" = NEW."question_set_version" FOR UPDATE;
         IF question_set_state IS DISTINCT FROM 'reviewed' THEN RAISE EXCEPTION 'PersonaInterview requires a Reviewed question set'; END IF;
+        IF NEW."refresh_configuration_change_id" IS NOT NULL THEN
+            SELECT "state", "user_id", "persona_profile_id", "requested_patch"
+              INTO refresh_state, refresh_user, refresh_profile, refresh_patch
+              FROM "personal_configuration_changes" WHERE "id" = NEW."refresh_configuration_change_id" FOR UPDATE;
+            IF refresh_state IS DISTINCT FROM 'accepted' OR refresh_user IS DISTINCT FROM NEW."user_id"
+               OR refresh_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_patch IS DISTINCT FROM '{"kind":"persona_refresh"}'::jsonb THEN
+                RAISE EXCEPTION 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal';
+            END IF;
+        END IF;
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" IN ('completed', 'retaken') THEN RAISE EXCEPTION 'completed PersonaInterview evidence is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."refresh_configuration_change_id" IS DISTINCT FROM OLD."refresh_configuration_change_id" THEN
+        RAISE EXCEPTION 'PersonaInterview refresh provenance is immutable';
+    END IF;
     IF NEW."state" = 'completed' THEN
         SELECT count(*) INTO expected_answers FROM "persona_questions" WHERE "question_set_id" = NEW."question_set_id" AND "question_set_version" = NEW."question_set_version";
         SELECT count(*) INTO actual_answers FROM "persona_interview_answers" WHERE "interview_id" = NEW."id";
@@ -4027,6 +4047,7 @@ $$;
 CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
         run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
+        refresh_change TEXT; applied_revision_profile TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -4066,10 +4087,22 @@ BEGIN
     IF OLD."state" <> 'proposed' AND (NEW."decided_at" IS DISTINCT FROM OLD."decided_at" OR NEW."decided_by" IS DISTINCT FROM OLD."decided_by" OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason") THEN
         RAISE EXCEPTION 'PersonalConfigurationChange decision evidence is immutable';
     END IF;
-    IF NOT (OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected')) THEN
-        RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
+    IF OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected') THEN RETURN NEW; END IF;
+    IF OLD."state" = 'accepted' AND NEW."state" = 'applied' THEN
+        IF NEW."requested_patch" IS DISTINCT FROM '{"kind":"persona_refresh"}'::jsonb
+           OR NEW."applied_persona_revision_id" IS NULL OR NEW."applied_agent_revision_id" IS NOT NULL THEN
+            RAISE EXCEPTION 'only accepted persona_refresh changes may apply an approved persona revision';
+        END IF;
+        SELECT revision."persona_profile_id", interview."refresh_configuration_change_id"
+          INTO applied_revision_profile, refresh_change
+          FROM "persona_revisions" revision JOIN "persona_interviews" interview ON interview."id" = revision."interview_id"
+          WHERE revision."id" = NEW."applied_persona_revision_id" AND revision."state" = 'approved' FOR UPDATE OF revision, interview;
+        IF applied_revision_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_change IS DISTINCT FROM NEW."id" THEN
+            RAISE EXCEPTION 'applied persona refresh must use its exact approved interview-derived revision';
+        END IF;
+        RETURN NEW;
     END IF;
-    RETURN NEW;
+    RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
 END;
 $$;
 CREATE FUNCTION "enforce_artifact_revision_silo_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
@@ -4893,7 +4926,7 @@ CREATE TRIGGER "persona_question_sets_closed_lifecycle" BEFORE INSERT OR UPDATE 
     FOR EACH ROW EXECUTE FUNCTION "enforce_persona_question_set_lifecycle"();
 CREATE TRIGGER "persona_questions_draft_only" BEFORE INSERT OR UPDATE OR DELETE ON "persona_questions"
     FOR EACH ROW EXECUTE FUNCTION "enforce_persona_question_mutation"();
-CREATE TRIGGER "persona_interviews_closed_lifecycle" BEFORE UPDATE OR DELETE ON "persona_interviews" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_interview_lifecycle"();
+CREATE TRIGGER "persona_interviews_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_interviews" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_interview_lifecycle"();
 CREATE TRIGGER "persona_interview_answers_exact_question_set" BEFORE INSERT ON "persona_interview_answers" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_answer_provenance"();
 CREATE TRIGGER "persona_insights_exact_provenance" BEFORE INSERT ON "persona_insights" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_insight_provenance"();
 CREATE TRIGGER "persona_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_revision_lifecycle"();

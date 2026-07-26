@@ -8,7 +8,9 @@ This package records a person's request to change how their agent behaves. It bi
 the user, conversation, run, current persona revision, and current agent revision. A run input
 snapshot is immutable, so the package never changes work already in progress. An owner may first
 mark a request `Accepted`; a later materialisation authority may mark it `Applied` only while assembling a new
-snapshot and only while the recorded active revisions still match.
+snapshot and only while the recorded active revisions still match. A `persona_refresh` proposal is
+materialised by a new, proposal-bound onboarding interview; approving that interview's derived
+persona revision applies that exact proposal atomically.
 
 ```
  conversation request ─► configuration proposal ◄── HERE ─► later approved revision
@@ -45,9 +47,10 @@ means the request is already user-approved or applied.
 
 ## Boundary
 
-The package does not mutate `RunInputSnapshot`, perform persona synthesis, apply a user decision,
-or invoke an MCP tool. The app composes its Prisma adapter and `ToolInvocation` ledger; runtime
-transport and UI remain separate owners.
+The package does not mutate `RunInputSnapshot`, perform persona synthesis, or invoke an MCP tool.
+Its narrow self-only API records an owner's accept/reject decision; the persona authority alone can
+apply the linked `persona_refresh` proposal while approving the resulting revision. The app composes
+its Prisma adapter and `ToolInvocation` ledger, while runtime transport and UI remain separate owners.
 
 ## Dependency direction
 

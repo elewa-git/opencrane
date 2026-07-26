@@ -27,7 +27,7 @@ export async function __CompletePersonaInterview(repository: PersonaInterviewRep
 /** Return whether every start coordinate and instant is safely present. */
 function _validStart(command: StartPersonaInterviewCommand): boolean
 {
-	return _validIdentifier(command.siloId) && _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.questionSetId) && Number.isSafeInteger(command.questionSetVersion) && command.questionSetVersion > 0 && _validInstant(command.startedAt);
+	return _validIdentifier(command.siloId) && _validIdentifier(command.userId) && _validIdentifier(command.personaProfileId) && _validIdentifier(command.questionSetId) && (command.refreshConfigurationChangeId === null || _validIdentifier(command.refreshConfigurationChangeId)) && Number.isSafeInteger(command.questionSetVersion) && command.questionSetVersion > 0 && _validInstant(command.startedAt);
 }
 
 /** Return whether one answer remains bounded enough for durable interview evidence. */

@@ -58,6 +58,14 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(dependencies.interviews.startAtomically).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1 }));
 	});
 
+	it("starts a refresh interview only from the route-bound accepted proposal identity", async function _startsRefresh()
+	{
+		const dependencies = _dependencies();
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/refreshes/change-1/interview").send({});
+		expect(response.status).toBe(200);
+		expect(dependencies.interviews.startAtomically).toHaveBeenCalledWith(expect.objectContaining({ personaProfileId: "profile-1", refreshConfigurationChangeId: "change-1" }));
+	});
+
 	it("rejects a role value that cannot select one reviewed SOUL template", async function _rejectsUnsupportedRole()
 	{
 		const dependencies = _dependencies();

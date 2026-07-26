@@ -1,4 +1,4 @@
-import { PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
+import { PersonalConfigurationChangeState, PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
 
 import type { ApprovePersonaCommand, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 
@@ -58,7 +58,7 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 				if (profiles.length !== 1) return { status: "not_found" } as const;
 
 				// 2. Lock the draft revision before inspecting its evidence, matching the lock used by the insight-provenance trigger.
-				const revisions = await transaction.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_revisions" WHERE "id" = ${command.personaRevisionId} AND "persona_profile_id" = ${command.personaProfileId} AND "state" = 'draft' FOR UPDATE`);
+				const revisions = await transaction.$queryRaw<readonly { readonly id: string; readonly interviewId: string }[]>(Prisma.sql`SELECT "id", "interview_id" AS "interviewId" FROM "persona_revisions" WHERE "id" = ${command.personaRevisionId} AND "persona_profile_id" = ${command.personaProfileId} AND "state" = 'draft' FOR UPDATE`);
 				if (revisions.length !== 1) return { status: "conflict" } as const;
 
 				// 3. Rebind the exact evidence count accepted at preflight; a valid extra insight still changes the reviewed draft.
@@ -77,7 +77,18 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 					where: { id: command.personaProfileId, userId: command.userId },
 					data: { activeRevisionId: command.personaRevisionId },
 				});
-				return profile.count === 1 ? { status: "approved" } as const : { status: "conflict" } as const;
+				if (profile.count !== 1) return { status: "conflict" } as const;
+
+				// 6. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
+				const interviewId = revisions[0]?.interviewId;
+				if (typeof interviewId !== "string") return { status: "approved" } as const;
+				const interview = await transaction.personaInterview.findUnique({ where: { id: interviewId }, select: { refreshConfigurationChangeId: true } });
+				if (interview?.refreshConfigurationChangeId === null || interview === null) return { status: "approved" } as const;
+				const change = await transaction.personalConfigurationChange.updateMany({
+					where: { id: interview.refreshConfigurationChangeId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: "persona_refresh" } } },
+					data: { state: PersonalConfigurationChangeState.Applied, appliedPersonaRevisionId: command.personaRevisionId },
+				});
+				return change.count === 1 ? { status: "approved" } as const : { status: "conflict" } as const;
 			});
 		}
 		catch (error)

@@ -6,7 +6,9 @@
 
 This package is part of the **personal-agent product**. A **persona** is the saved personality and
 instructions an agent runs with — who it is and how it should behave. A user builds one through an
-onboarding interview, producing a **draft**. This package owns the full durable lifecycle: it starts
+onboarding interview, producing a **draft**. An accepted persona-refresh proposal starts the same
+interview with its proposal identity permanently recorded; approving the resulting revision applies
+that exact proposal. This package owns the full durable lifecycle: it starts
 an interview from a reviewed question set, captures each answer once, freezes the completed evidence,
 derives a draft from selected-template evidence, and then approves a fully evidenced draft into the
 single live persona.
@@ -80,8 +82,9 @@ whole provisioning transaction.
 - `PERSONA_ONBOARDING_QUESTION_SET_ID`, `PERSONA_ONBOARDING_QUESTION_SET_VERSION`,
   `PERSONA_ONBOARDING_QUESTIONS`, and `PERSONA_ONBOARDING_SOUL_TEMPLATES` — the reviewed catalogue
   source: eight key questions and three role-selected SOUL.md starting templates.
-- `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts an interview,
-  records one answer, and completes it using only session-and-host-derived ownership.
+- `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts ordinary or
+  proposal-bound refresh interviews, records one answer, and completes them using only
+  session-and-host-derived ownership.
 
 ## Boundary
 

@@ -32,4 +32,16 @@ SELECT pg_temp.expect_failure('accepted proposal cannot return to proposed', $st
 SELECT pg_temp.expect_failure('unknown patch fields are rejected', $statement$INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_thread_id", "source_run_id", "requested_patch", "requested_patch_digest") VALUES ('change-extra', 'silo-1', 'user-1', 'profile-1', 'service-1', 'thread-1', 'run-1', '{"kind":"model_alias","modelAlias":"careful","budget":1}', 'sha256:' || repeat('e',64))$statement$, 'personal_configuration_changes_valid_check');
 SELECT pg_temp.expect_failure('whitespace model alias is rejected', $statement$INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_thread_id", "source_run_id", "requested_patch", "requested_patch_digest") VALUES ('change-whitespace', 'silo-1', 'user-1', 'profile-1', 'service-1', 'thread-1', 'run-1', '{"kind":"model_alias","modelAlias":"\t"}', 'sha256:' || repeat('f',64))$statement$, 'personal_configuration_changes_valid_check');
 
+INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES ('refresh-onboarding', 1);
+INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "question_id", "category", "prompt", "ordinal") VALUES
+('refresh-onboarding',1,'q1','relationship_role','Role?',1), ('refresh-onboarding',1,'q2','tone_language','Tone?',2),
+('refresh-onboarding',1,'q3','answer_structure','Structure?',3), ('refresh-onboarding',1,'q4','challenge_support','Challenge?',4),
+('refresh-onboarding',1,'q5','initiative','Initiative?',5), ('refresh-onboarding',1,'q6','approval_risk','Risk?',6),
+('refresh-onboarding',1,'q7','working_habits','Habits?',7), ('refresh-onboarding',1,'q8','memory_boundaries','Memory?',8);
+UPDATE "persona_question_sets" SET "state"='reviewed', "reviewed_by"='reviewer-1', "reviewed_at"=clock_timestamp() WHERE "question_set_id"='refresh-onboarding' AND "version"=1;
+SELECT pg_temp.expect_failure('refresh interview rejects a non-refresh proposal', $statement$INSERT INTO "persona_interviews" ("id", "persona_profile_id", "user_id", "refresh_configuration_change_id", "question_set_id", "question_set_version") VALUES ('invalid-refresh-interview','profile-1','user-1','change-1','refresh-onboarding',1)$statement$, 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal');
+INSERT INTO "personal_configuration_changes" ("id", "silo_id", "user_id", "persona_profile_id", "agent_service_id", "source_thread_id", "source_run_id", "requested_patch", "requested_patch_digest") VALUES ('refresh-change-1', 'silo-1', 'user-1', 'profile-1', 'service-1', 'thread-1', 'run-1', '{"kind":"persona_refresh"}', 'sha256:' || repeat('a',64));
+UPDATE "personal_configuration_changes" SET "state"='accepted', "decided_at"=clock_timestamp(), "decided_by"='user-1' WHERE "id"='refresh-change-1';
+INSERT INTO "persona_interviews" ("id", "persona_profile_id", "user_id", "refresh_configuration_change_id", "question_set_id", "question_set_version") VALUES ('refresh-interview','profile-1','user-1','refresh-change-1','refresh-onboarding',1);
+
 ROLLBACK;
