@@ -11,6 +11,8 @@ export interface StartPersonaInterviewCommand
 	readonly questionSetId: string;
 	/** Exact reviewed question-set version. */
 	readonly questionSetVersion: number;
+	/** Accepted personal refresh proposal this interview materialises, or null for ordinary onboarding. */
+	readonly refreshConfigurationChangeId: string | null;
 	/** Trusted start instant. */
 	readonly startedAt: string;
 }
@@ -48,7 +50,7 @@ export interface CompletePersonaInterviewCommand
 /** Stable outcome from starting a reviewed persona interview. */
 export type StartPersonaInterviewResult =
 	| { readonly outcome: "started" | "already_in_progress"; readonly interviewId: string }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "question_set_unavailable" | "persistence_unavailable" };
+	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "question_set_unavailable" | "refresh_change_unavailable" | "refresh_interview_conflict" | "persistence_unavailable" };
 
 /** Stable outcome from recording one interview answer. */
 export type RecordPersonaInterviewAnswerResult =
@@ -64,7 +66,7 @@ export type CompletePersonaInterviewResult =
 export interface PersonaInterviewRepository
 {
 	/** Starts one reviewed interview or returns the owner's existing in-progress interview. */
-	startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: "started" | "already_in_progress"; readonly interviewId: string } | { readonly status: "not_found_or_wrong_owner" | "question_set_unavailable" | "persistence_unavailable" }>;
+	startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: "started" | "already_in_progress"; readonly interviewId: string } | { readonly status: "not_found_or_wrong_owner" | "question_set_unavailable" | "refresh_change_unavailable" | "refresh_interview_conflict" | "persistence_unavailable" }>;
 	/** Appends one answer only while the owner interview remains in progress. */
 	recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: "recorded"; readonly answerId: string } | { readonly status: "not_found_or_wrong_owner" | "not_in_progress" | "question_unavailable" | "already_answered" | "persistence_unavailable" }>;
 	/** Completes a fully answered owner interview once and freezes its evidence. */

@@ -19,7 +19,7 @@ function _repository(overrides: Partial<PersonaInterviewRepository> = {}): Perso
 /** Creates the valid exact reviewed-question-set request used by lifecycle tests. */
 function _startCommand()
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", questionSetId: "onboarding", questionSetVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
+	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
 }
 
 /** Wraps one fake transactional client in the narrow Prisma interface this authority needs. */

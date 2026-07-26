@@ -53,6 +53,21 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		expect(updateRevision).not.toHaveBeenCalled();
 	});
 
+	it("applies only the accepted refresh proposal bound to the approved revision interview", async function _appliesBoundRefresh()
+	{
+		const updateChange = vi.fn().mockResolvedValue({ count: 1 });
+		const queryRaw = vi.fn().mockResolvedValueOnce([{ id: "profile-1" }]).mockResolvedValueOnce([{ id: "revision-1", interviewId: "interview-1" }]);
+		const prisma = _Prisma({
+			personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: "change-1" }) },
+			personalConfigurationChange: { updateMany: updateChange },
+			$queryRaw: queryRaw,
+		});
+		const repository = new PrismaPersonaAuthorityRepository(prisma);
+
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: "draft", expectedInterviewState: "completed", expectedInsightCount: 3 })).resolves.toEqual({ status: "approved" });
+		expect(updateChange).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "change-1", userId: "user-1", personaProfileId: "profile-1" }), data: expect.objectContaining({ appliedPersonaRevisionId: "revision-1" }) });
+	});
+
 	it("does not approve when the draft evidence changed after its preflight snapshot", async function _rejectsChangedEvidence()
 	{
 		const updateRevision = vi.fn();

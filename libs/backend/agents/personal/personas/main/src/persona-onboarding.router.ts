@@ -20,7 +20,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		{
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, startedAt: dependencies.clock.now().toISOString() });
+			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: null, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, startedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
@@ -29,6 +29,29 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		catch (err)
 		{
 			dependencies.logger.error({ err, operation: "persona_onboarding.start", siloId: caller.siloId }, "Persona onboarding interview start failed");
+			_respond(response, 503, "persona_onboarding_unavailable");
+		}
+	});
+
+	router.post("/refreshes/:configurationChangeId/interview", async function _startRefresh(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		const configurationChangeId = request.params["configurationChangeId"];
+		if (caller === null) return;
+		if (typeof configurationChangeId !== "string" || !_isEmptyObject(request.body)) { _respond(response, 400, "invalid_persona_refresh"); return; }
+		try
+		{
+			const ready = await _ensure(caller, dependencies);
+			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
+			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: configurationChangeId, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, startedAt: dependencies.clock.now().toISOString() });
+			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
+			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
+			response.status(200).json({ interviewId: result.interviewId, state: "in_progress", questions });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "persona_onboarding.start_refresh", siloId: caller.siloId }, "Persona refresh interview start failed");
 			_respond(response, 503, "persona_onboarding_unavailable");
 		}
 	});
@@ -131,7 +154,7 @@ function _answerValue(body: unknown, questionId: unknown, questions: readonly { 
 /** Map interview lifecycle denials to a bounded HTTP status without leaking another owner's state. */
 function _interviewDenialStatus(reason: string): number
 {
-	return reason === "persistence_unavailable" ? 503 : reason === "question_set_unavailable" ? 422 : reason === "not_found_or_wrong_owner" ? 404 : reason === "already_answered" || reason === "not_in_progress" || reason === "incomplete_answers" ? 409 : 400;
+	return reason === "persistence_unavailable" ? 503 : reason === "question_set_unavailable" ? 422 : reason === "not_found_or_wrong_owner" || reason === "refresh_change_unavailable" ? 404 : reason === "already_answered" || reason === "not_in_progress" || reason === "incomplete_answers" || reason === "refresh_interview_conflict" ? 409 : 400;
 }
 
 /** Require an empty object for a state transition with no caller-owned coordinates. */
