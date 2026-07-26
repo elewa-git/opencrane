@@ -20,6 +20,7 @@ is not itself published.
 | [0007](0007-direct-target-refactor.md) | Direct target refactor without an estate migration | Accepted |
 | [0008](0008-target-agent-contracts-and-workload-identity.md) | Target agent contracts and workload identity | Accepted |
 | [0010](0010-language-neutral-agent-runtime.md) | Language-neutral agent runtime (Pydantic AI first qualification) | Accepted |
+| [0011](0011-single-run-input-and-artifact-read-authorities.md) | Single run-input and artifact-read authorities | Accepted |
 
 ## Writing a new ADR
 

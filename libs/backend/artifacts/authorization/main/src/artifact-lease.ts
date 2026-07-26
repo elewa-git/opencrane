@@ -2,6 +2,7 @@ import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
 import { ___CanonicalizeJson } from "@opencrane/util";
 
+import { __IsSafeArtifactMediaType } from "./artifact-media-type.js";
 import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
 
 const _LEASE_AUDIENCE = "artifact-service";
@@ -39,9 +40,9 @@ export function __VerifyArtifactReadLease(compact: string, publicKeyPem: string,
 {
 	const payload = _verify(compact, publicKeyPem);
 	const issuedAt = payload?.iat;
-	if (payload === null || payload.typ !== _READ_LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds + 300) return null;
+	if (payload === null || payload.typ !== _READ_LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds) return null;
 	const claims = _readLeaseFromPayload(payload);
-	return claims !== null && _isReadLease(claims, nowEpochSeconds) ? claims : null;
+	return claims !== null && _isReadLease(claims, issuedAt) && claims.expiresAtEpochSeconds > nowEpochSeconds ? claims : null;
 }
 
 /** Sign promotion facts with the service's distinct Ed25519 receipt key. */
@@ -102,16 +103,16 @@ function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionR
 
 function _isLease(value: ArtifactWriteLeaseClaims, now: number): boolean
 {
-	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && value.mediaType.includes("/");
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && __IsSafeArtifactMediaType(value.mediaType);
 }
 
 /** Validate every immutable coordinate before an artifact read lease can be signed or accepted. */
 function _isReadLease(value: ArtifactReadLeaseClaims, now: number): boolean
 {
-	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && value.mediaType.includes("/") && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now;
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && __IsSafeArtifactMediaType(value.mediaType) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.expiresAtEpochSeconds <= now + 300;
 }
 
 function _isReceipt(value: ArtifactPromotionReceiptClaims): boolean
 {
-	return value.leaseId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && value.mediaType.includes("/") && Number.isSafeInteger(value.issuedAtEpochSeconds) && value.issuedAtEpochSeconds >= 0;
+	return value.leaseId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && __IsSafeArtifactMediaType(value.mediaType) && Number.isSafeInteger(value.issuedAtEpochSeconds) && value.issuedAtEpochSeconds >= 0;
 }

@@ -33,7 +33,7 @@ describe("skill authoring input router", function _DescribeAuthoringInput()
 		expect(response.status).toBe(200);
 		expect(response.headers["content-type"]).toBe("application/gzip");
 		expect(response.headers["content-length"]).toBe("13");
-		expect(response.headers["x-opencrane-content-address"]).toBe(_INPUT.contentAddress);
+		expect(response.headers["x-opencrane-content-address"]).toBeUndefined();
 		expect(response.body.toString()).toBe("skill archive");
 		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-skill-authoring");
 		expect(dependencies.repository.loadForWorker).toHaveBeenCalledWith("workload-1", { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });

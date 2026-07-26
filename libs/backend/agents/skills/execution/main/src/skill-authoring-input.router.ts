@@ -49,7 +49,7 @@ export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringIn
 			const bytes = await dependencies.artifactReader.read(input);
 			const reader = bytes.getReader();
 			const first = await reader.read();
-			response.status(200).set({ "content-type": input.mediaType, "content-length": String(input.byteLength), "x-opencrane-content-address": input.contentAddress, "cache-control": "no-store" });
+			response.status(200).set({ "content-type": input.mediaType, "content-length": String(input.byteLength), "cache-control": "no-store" });
 			const stream = Readable.from(_ReadBytes(reader, first));
 			/** Terminate a half-written protected response without serialising its broker failure. */
 			function _AbortStream(err: Error): void

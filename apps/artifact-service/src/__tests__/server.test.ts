@@ -80,18 +80,42 @@ describe("artifact-service promotion endpoint", function _suite()
 			const writeLease = __SignArtifactWriteLease({ leaseId: "write-1", siloId: "silo-1", artifactId: "artifact-1", action: "artifact.write", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60, expectedContentAddress: digest, expectedByteLength: bytes.byteLength, mediaType: "text/plain" }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
 			await fetch(`http://127.0.0.1:${port}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": writeLease }, body: bytes });
 			const readLease = __SignArtifactReadLease({ leaseId: "read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: digest, byteLength: bytes.byteLength, mediaType: "text/plain", action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60 }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
-			const response = await fetch(`http://127.0.0.1:${port}/v1/artifacts/content/${digest.slice("sha256:".length)}`, { headers: { "x-opencrane-artifact-lease": readLease } });
+			const response = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-read-lease": readLease } });
 
 			expect(response.status).toBe(200);
 			expect(response.headers.get("content-length")).toBe(String(bytes.byteLength));
 			expect(response.headers.get("cache-control")).toBe("no-store");
+			expect(response.headers.get("x-content-type-options")).toBe("nosniff");
 			expect(await response.text()).toBe("opencrane");
-			expect((await fetch(`http://127.0.0.1:${port}/v1/artifacts/content/${"b".repeat(64)}`, { headers: { "x-opencrane-artifact-lease": readLease } })).status).toBe(403);
+			expect((await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-lease": readLease } })).status).toBe(403);
+			expect((await fetch(`http://127.0.0.1:${port}/v1/artifacts/content/${digest.slice("sha256:".length)}`, { headers: { "x-opencrane-artifact-read-lease": readLease } })).status).toBe(404);
 		}
 		finally
 		{
 			await rm(root, { recursive: true, force: true });
 		}
+	});
+
+	it("denies missing and byte-mismatched objects before reading or sending a success response", async function _readPreflight()
+	{
+		const read = vi.fn(async function _read() { return null; });
+		let storedByteLength: number | null = 8;
+		const store = { stage: vi.fn(), promote: vi.fn(), byteLength: vi.fn(async function _byteLength() { return storedByteLength; }), read, purge: vi.fn() } as never;
+		const server = _CreateServer({ port: 0, artifactRoot: "/tmp/artifact-service", maxUploadDurationMilliseconds: 300_000, leasePublicKeyPem: _leasePublicKey, receiptPrivateKeyPem: _receiptPrivateKey }, store);
+		_servers.push(server);
+		await new Promise<void>(function _listen(resolve) { server.listen(0, "127.0.0.1", function _ready() { resolve(); }); });
+		const port = (server.address() as { port: number }).port;
+		const readLease = __SignArtifactReadLease({ leaseId: "read-2", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 9, mediaType: "text/plain", action: "artifact.read", expiresAtEpochSeconds: Math.floor(Date.now() / 1_000) + 60 }, _leasePrivateKey, Math.floor(Date.now() / 1_000));
+		const mismatch = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-read-lease": readLease } });
+		storedByteLength = null;
+		const missing = await fetch(`http://127.0.0.1:${port}/v1/artifacts/read`, { headers: { "x-opencrane-artifact-read-lease": readLease } });
+
+		expect(mismatch.status).toBe(403);
+		expect(missing.status).toBe(403);
+		expect(mismatch.headers.get("cache-control")).toBe("no-store");
+		expect(missing.headers.get("cache-control")).toBe("no-store");
+		expect(await mismatch.text()).toBe(await missing.text());
+		expect(read).not.toHaveBeenCalled();
 	});
 
 	it("cuts off a client that drips bytes beyond the independent lease-bound deadline", async function _absoluteDeadline()

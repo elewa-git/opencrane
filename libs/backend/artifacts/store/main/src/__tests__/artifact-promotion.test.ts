@@ -65,6 +65,7 @@ function _store(): TestStore
 				promoteCount += 1;
 				return { ...staged, created: true };
 			},
+			async byteLength() { return null; },
 			async read() { return null; },
 			async purge() { return { purged: false }; },
 		},

@@ -30,23 +30,43 @@ genuine and has not already been used.
  skills / agent revisions reference the exact ArtifactRevision by content address
 ```
 
+For internal reads, an upstream authority first decides *which* revision a workload may use. This
+package then reloads that exact revision through the active artifact and published-revision
+relations before minting a short-lived lease from catalogue-owned facts:
+
+```
+ workload-specific admission  ──►  silo + artifact + revision coordinates
+                                          │
+                                          ▼
+                        reload active published catalogue facts
+                                          │ exact digest · bytes · media type
+                                          ▼
+                         five-minute-maximum signed read lease
+```
+
 **In this flow:** [skills](../../skills/main/README.md) · [agent-services](../../agent-services/main/README.md) *(both pin artifacts)*
 
 Invariant: this domain never touches artifact bytes — no upload, no download, no hashing of content
 here. It commits revision metadata, the current-revision pointer, the lease consumption, and the
 outbox event in one transaction, keyed by an idempotency key so a retried finalize returns the same
 result instead of creating a duplicate. A stale, replayed, or already-consumed receipt fails closed.
+Read leases contain only facts reloaded from the catalogue; caller-provided digests, byte counts,
+media types, storage paths, and URLs never become read authority.
 
 ## Public surface
 
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
+- `__IssueArtifactReadLease` — reload an active artifact's exact published revision and issue one
+  internal read lease that expires after at most five minutes.
 - `__UploadArtifact` — orchestrate the full verified upload (lease → promote → finalize).
 - `PrismaArtifactAuthorityRepository` — the Postgres-backed persistence adapter.
 - `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
   non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
-  and the upload ports (`ArtifactServicePromotionPort`, `ArtifactUploadCryptoPort`,
-  `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`, `ArtifactUploadResult`).
+  the read-lease ports (`ArtifactReadLeaseRepository`, `ArtifactReadLeaseSigner`,
+  `IssueArtifactReadLeaseCommand`), and the upload ports (`ArtifactServicePromotionPort`,
+  `ArtifactUploadCryptoPort`, `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`,
+  `ArtifactUploadResult`).
 
 ## Boundary
 
@@ -54,6 +74,12 @@ The application layer wires the byte-store client, the crypto port, and the Pris
 use cases. Proof verification and replay reservation happen upstream — this package trusts that a
 `VerifiedArtifactUploadCommand` is already authorized, and its job is to keep metadata consistent
 with what the byte store actually promoted.
+
+Read-lease issuance is internal and has no router. It does not decide which workload may name an
+artifact; the caller must already have passed its workload-specific admission authority. The issuer
+then independently reloads the exact active/published catalogue facts and delegates signing to an
+app-owned port backed by mounted key material. The lease and ArtifactStore endpoint never reach the
+workload.
 
 The personal catalogue is discovery only. It returns kind, lifecycle, current-revision media type,
 size, indexing state, and timestamps. It never returns bytes, a content address, provenance,

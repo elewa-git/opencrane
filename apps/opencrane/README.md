@@ -88,6 +88,12 @@ ServiceAccount, Job, Pod, run, and revision; the projected bootstrap reference a
 name alone are never sufficient. Governed skill workers can reach the internal listener only to
 acknowledge their one-use bootstrap reference: their default-deny namespaces receive an additive
 egress rule for this listener and DNS, and the response contains no workload identity or capability.
+For a skill-authoring input, the worker-facing route first proves the exact workload, Pod, bootstrap,
+draft skill revision, and published source artifact. App composition then asks the server artifact
+authority to reload only those catalogue coordinates and mint a five-minute-maximum read lease from
+mounted key material. The server consumes that lease against the private artifact-service and relays
+the bytes; the worker receives neither the lease, the content address, the ArtifactStore endpoint,
+nor disk access.
 The runtime stream mints the full `start_attempt`, `resume_attempt`, and `cancel_attempt` command
 lifecycle and admits candidates, so a verified Pod runs its bounded model/tool loop, proposes
 external actions through the reserve-before-dispatch tool-invocation authority, pauses for deferred

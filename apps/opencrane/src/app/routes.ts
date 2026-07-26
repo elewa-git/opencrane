@@ -325,7 +325,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
 	app.use("/api/internal/agent-controller", __CreateSkillWorkloadDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: skillWorkloadClaimsRepository, logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }));
-	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringInputRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(), logger: _log }));
+	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringInputRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringCompletionRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.

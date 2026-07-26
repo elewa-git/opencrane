@@ -42,7 +42,7 @@ boundary, and a receipt is impossible unless the exact authorised object became 
 
 - `__PromoteArtifactUpload(store, leaseVerifier, byteSource, config)` — the end-to-end promotion protocol (verify → stage → promote → receipt).
 - `__ValidateVerifiedArtifactWriteLease`, `__ValidateStageArtifactCommand`, `__ValidateStagedArtifact`, `__ValidateArtifactStorePromotion` — the fail-closed input guards.
-- `ArtifactStore` — the storage port an adapter implements (`stage` · `promote` · `read` · `purge`).
+- `ArtifactStore` — the storage port an adapter implements (`stage` · `promote` · `byteLength` · `read` · `purge`); `byteLength` lets readers prove the signed size before opening bytes.
 - `ArtifactPromotionLeaseVerifier` / `ArtifactPromotionReceiptSigner` — the injected signing/verification seams.
 - `StageArtifactCommand`, `StagedArtifact`, `ArtifactStorePromotion`, `PromoteArtifactUploadResult`, `BoundedArtifactUploadByteSource`, and the related claim/config types.
 

@@ -21,7 +21,7 @@ export async function _PrepareArtifactStore(config: ArtifactServiceProcessConfig
 	});
 }
 
-/** Create the private server, which accepts only OpenCrane-signed, bounded write leases. */
+/** Create the private server for bounded promotion writes and lease-pinned immutable reads. */
 export function _CreateServer(config: ArtifactServiceProcessConfig, store: ArtifactStore): Server
 {
 	return createServer(function _handle(request, response)
@@ -46,9 +46,9 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 				}
 				return;
 			}
-			if (path.startsWith("/v1/artifacts/content/") && request.method === "GET")
+			if (path === "/v1/artifacts/read" && request.method === "GET")
 			{
-				await _ReadCanonicalArtifact(request, response, store, config.leasePublicKeyPem, path.slice("/v1/artifacts/content/".length));
+				await _ReadCanonicalArtifact(request, response, store, config.leasePublicKeyPem);
 				return;
 			}
 			response.writeHead(404, { "content-type": "application/json" });
@@ -61,36 +61,50 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 	});
 }
 
-/** Verify one exact immutable read lease, then stream only its pinned canonical bytes. */
-async function _ReadCanonicalArtifact(request: IncomingMessage, response: ServerResponse, store: ArtifactStore, leasePublicKeyPem: string, digest: string): Promise<void>
+/** Verifies one exact immutable read lease, preflights its bytes, then streams only its pinned address. */
+async function _ReadCanonicalArtifact(request: IncomingMessage, response: ServerResponse, store: ArtifactStore, leasePublicKeyPem: string): Promise<void>
 {
-	// 1. Verify the private-server lease before trusting the requested content coordinate.
-	const compactLease = request.headers["x-opencrane-artifact-lease"];
+	// 1. Read the dedicated header because write authority must never open the read endpoint.
+	const compactLease = request.headers["x-opencrane-artifact-read-lease"];
 	const lease = typeof compactLease === "string" ? __VerifyArtifactReadLease(compactLease, leasePublicKeyPem, Math.floor(Date.now() / 1_000)) : null;
-	const contentAddress = `sha256:${digest}`;
-	if (lease === null || !/^[a-f0-9]{64}$/u.test(digest) || lease.contentAddress !== contentAddress)
+	if (lease === null)
 	{
-		response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
-		response.end(JSON.stringify({ error: "artifact_read_denied" }));
+		_WriteArtifactReadDenied(response);
 		return;
 	}
 
-	// 2. Read only the lease-pinned address; a missing object must never widen the read scope.
+	// 2. Preflight the stored length before opening a stream so missing and mismatched bytes fail identically.
+	const storedByteLength = await store.byteLength(lease.contentAddress);
+	if (storedByteLength === null || storedByteLength !== lease.byteLength)
+	{
+		_WriteArtifactReadDenied(response);
+		return;
+	}
+
+	// 3. Read only the lease-pinned address after its size matches; there is no caller-selected coordinate.
 	const stream = await store.read(lease.contentAddress);
 	if (stream === null)
 	{
-		response.writeHead(404, { "content-type": "application/json", "cache-control": "no-store" });
-		response.end(JSON.stringify({ error: "artifact_not_found" }));
+		_WriteArtifactReadDenied(response);
 		return;
 	}
 
-	// 3. Send signed metadata, never request-controlled headers or inferred catalog details.
-	response.writeHead(200, { "content-type": lease.mediaType, "content-length": String(lease.byteLength), "cache-control": "no-store" });
+	// 4. Send only lease-signed metadata after all preflight gates passed, preventing a partial successful response.
+	// X-Content-Type-Options: proprietary response header that asks clients not to MIME-sniff signed bytes.
+	// @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options
+	response.writeHead(200, { "content-type": lease.mediaType, "content-length": String(lease.byteLength), "cache-control": "no-store", "x-content-type-options": "nosniff" });
 	for await (const chunk of stream)
 	{
 		if (!response.write(chunk) && !await _WaitForWritableResponse(response)) return;
 	}
 	response.end();
+}
+
+/** Returns the same non-cacheable denial for an invalid lease, missing object, or size mismatch. */
+function _WriteArtifactReadDenied(response: ServerResponse): void
+{
+	response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+	response.end(JSON.stringify({ error: "artifact_read_denied" }));
 }
 
 /** Wait for downstream backpressure to drain, but stop reading when the private client disconnects. */

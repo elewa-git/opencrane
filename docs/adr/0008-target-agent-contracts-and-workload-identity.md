@@ -1,6 +1,7 @@
 # ADR 0008: Target agent contracts and workload identity
 
-**Status:** Accepted
+**Status:** Accepted; artifact-read and prompt-compiler placement clarified by
+[ADR 0011](0011-single-run-input-and-artifact-read-authorities.md)
 **Origin:** [#245](https://github.com/elewa-git/opencrane/issues/245)
 
 ## Context
@@ -98,7 +99,7 @@ omitted from the network column for brevity.
 | `apps/_infra/litellm` | Model gateway | `litellm` | none | approved model providers and its mounted store |
 | `apps/_infra/obot` | Integration gateway | `obot` | none | approved external integrations and its mounted store |
 | `apps/postgres` | OpenCrane CNPG database Pods | CNPG-generated `<cluster-name>` instance identity | CNPG-generated instance-manager Role only | in-silo database replication and approved backup destination |
-| `apps/skill-authoring` | Skill authoring Job | `skill-authoring` | none | artifact-service, LiteLLM |
+| `apps/skill-authoring` | Skill authoring Job | `skill-authoring` | none | OpenCrane internal byte broker, LiteLLM |
 | `apps/tool-runner` | Sandboxed non-Obot tool Job | per-job projected `tool-runner` identity | none | only capability-declared destinations |
 | `apps/silo-provisioner` | Fresh target-store initialization Job | `silo-provisioner` | none | target Postgres and app-owned mounted stores |
 

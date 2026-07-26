@@ -9,6 +9,25 @@ function _command()
 
 describe("Prisma artifact authority", function _suite()
 {
+	it("loads only an exact published revision owned by an active artifact in the requested silo", async function _LoadsReadTarget()
+	{
+		const artifactRevision = { findFirst: vi.fn().mockResolvedValue({ id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12n, mediaType: "text/plain", artifact: { siloId: "silo-1" } }) };
+		const repository = new PrismaArtifactAuthorityRepository({ artifactRevision } as never);
+
+		await expect(repository.loadPublishedReadTarget({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" })).resolves.toEqual({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "text/plain" });
+		expect(artifactRevision.findFirst).toHaveBeenCalledWith(expect.objectContaining({
+			where: { id: "revision-1", artifactId: "artifact-1", state: "Published", artifact: { siloId: "silo-1", state: "Active" } },
+			select: expect.objectContaining({ contentAddress: true, byteLength: true, mediaType: true }),
+		}));
+	});
+
+	it.each([null, { id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: -1n, mediaType: "text/plain", artifact: { siloId: "silo-1" } }, { id: "revision-1", artifactId: "artifact-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: BigInt(Number.MAX_SAFE_INTEGER) + 1n, mediaType: "text/plain", artifact: { siloId: "silo-1" } }])("fails closed for an absent or unsafe published revision projection", async function _RejectsUnsafeReadTarget(row)
+	{
+		const repository = new PrismaArtifactAuthorityRepository({ artifactRevision: { findFirst: vi.fn().mockResolvedValue(row) } } as never);
+
+		await expect(repository.loadPublishedReadTarget({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" })).resolves.toBeNull();
+	});
+
 	it("commits promotion receipt, immutable revision, current pointer, outbox, and final lease state together", async function _finalize()
 	{
 		const transaction = {

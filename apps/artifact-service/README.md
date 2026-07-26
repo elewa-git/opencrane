@@ -51,14 +51,16 @@ can only refuse a legitimate upload; it can never store bytes that were not cove
 `Entrypoint: src/index.ts` (`_Main`) — reads config, prepares the mounted CAS root (mode `0700`), opens
 the listener, and binds bounded `SIGTERM`/`SIGINT` shutdown that drains requests and flushes telemetry.
 
-HTTP endpoints: `POST /v1/artifacts/promote` writes bounded bytes; `GET /v1/artifacts/content/:sha256`
-streams only the exact canonical bytes named by a separately signed immutable-read lease; and `/livez`
+HTTP endpoints: `POST /v1/artifacts/promote` writes bounded bytes; `GET /v1/artifacts/read` streams only
+the exact canonical bytes named by the `X-Opencrane-Artifact-Read-Lease` immutable-read lease, after its
+stored length matches the signed length; and `/livez`
 · `/readyz` probes. Any other path or method is `404`.
 
 ## Boundary
 
 Stateless apart from the mounted CAS volume. It does **not** issue leases (the server does), list
-artifacts, or accept a caller-selected content address: a read path must equal the signed lease. It
+artifacts, or accept a caller-selected content address: reads have no address in the request and use
+only the address inside the signed lease. It
 does not accept raw secrets as environment variables — signing keys are
 mounted PEM files, not env values. Verification and signing are delegated to the artifacts libraries;
 this process is only the HTTP adapter and byte pump around them.
@@ -77,7 +79,7 @@ key file is not PEM.
 |---|---|---|
 | `PORT` | Listener port | `8080` |
 | `ARTIFACT_ROOT` | Absolute mounted CAS directory | `/var/lib/opencrane/artifacts` |
-| `ARTIFACT_LEASE_PUBLIC_KEY_PATH` | Mounted PEM public key used to verify write leases | *(required)* |
+| `ARTIFACT_LEASE_PUBLIC_KEY_PATH` | Mounted PEM public key used to verify distinct write and immutable-read leases | *(required)* |
 | `ARTIFACT_RECEIPT_PRIVATE_KEY_PATH` | Mounted PEM private key used to sign receipts | *(required)* |
 | `ARTIFACT_MAX_UPLOAD_DURATION_MILLISECONDS` | Hard cap on a single upload's duration | `300000` |
 
