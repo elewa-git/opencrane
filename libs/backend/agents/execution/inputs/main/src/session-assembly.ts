@@ -102,6 +102,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
 		identitySnapshot: {
 			executionSubjectId: identity.executionSubjectId,
+			organizationId: identity.organizationId,
 			fleetMembershipRevision: identity.fleetMembershipRevision,
 			fleetMembershipIssuer: identity.fleetMembershipIssuer,
 			fleetMembershipIssuerKeyId: identity.fleetMembershipIssuerKeyId,

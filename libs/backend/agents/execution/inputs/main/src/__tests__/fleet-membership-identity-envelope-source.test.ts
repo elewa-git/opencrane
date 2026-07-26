@@ -66,7 +66,7 @@ describe("FleetMembershipIdentityEnvelopeSource", function _describeIdentityEnve
 		const source = new FleetMembershipIdentityEnvelopeSource({ trustedIssuerId: "fleet-1", assertionId: "assertion-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" }, maximumStalenessMs: 3000 }, new _Verifier(), new _CapabilitySet());
 		const transaction = _transaction();
 
-		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { executionSubjectId: "user-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: `sha256:${"c".repeat(64)}` } });
+		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: `sha256:${"c".repeat(64)}` } });
 		expect(transaction.prisma.$queryRaw).toHaveBeenCalledOnce();
 		expect(transaction.prisma.highestAcceptedFleetMembership.upsert).toHaveBeenCalledOnce();
 	});

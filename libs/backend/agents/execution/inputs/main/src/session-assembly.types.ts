@@ -68,6 +68,8 @@ export interface IdentityEnvelopeInput
 {
 	/** Subject authorized to cause this exact execution. */
 	executionSubjectId: string;
+	/** Organization selected by the verified signed membership assertion. */
+	organizationId: string;
 	/** Highest verified fleet-membership revision used to authorize the run. */
 	fleetMembershipRevision: number;
 	/** Issuer that signed the accepted fleet-membership revision. */

@@ -52,6 +52,7 @@ export class FleetMembershipIdentityEnvelopeSource implements IdentityEnvelopeSo
 			outcome: "loaded",
 			value: {
 				executionSubjectId: membership.evidence.subjectId,
+				organizationId: membership.evidence.organizationId,
 				fleetMembershipRevision: membership.evidence.revision,
 				fleetMembershipIssuer: membership.evidence.issuerId,
 				fleetMembershipIssuerKeyId: membership.evidence.issuerKeyId,
