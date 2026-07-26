@@ -169,18 +169,26 @@ function _IsPersonalAttachment(value: RevisionScopeAttachment): boolean
 	return value.scope === "personal";
 }
 
+/** Compares canonical ASCII coordinates without locale- or ICU-dependent collation. */
+function _CompareCanonicalCoordinate(left: string, right: string): number
+{
+	if (left < right) return -1;
+	if (left > right) return 1;
+	return 0;
+}
+
 /** Canonicalizes effective attachments before persistence and digesting. */
 function _CanonicalAttachments(values: readonly RevisionScopeAttachment[]): readonly ManagedRunInputScopeAttachment[]
 {
 	return [...values]
 		.map(function _Copy(value): ManagedRunInputScopeAttachment { return { scope: value.scope, subjectType: value.subjectType, subjectId: value.subjectId }; })
-		.sort(function _ByTriple(left, right): number { return `${left.scope}\u0000${left.subjectType}\u0000${left.subjectId}`.localeCompare(`${right.scope}\u0000${right.subjectType}\u0000${right.subjectId}`); });
+		.sort(function _ByTriple(left, right): number { return _CompareCanonicalCoordinate(`${left.scope}\u0000${left.subjectType}\u0000${left.subjectId}`, `${right.scope}\u0000${right.subjectType}\u0000${right.subjectId}`); });
 }
 
 /** Canonicalizes revision skill coordinates for capability digesting. */
 function _CanonicalSkillAssignments(values: readonly { skillId: string; skillRevisionId: string }[]): JsonValue
 {
-	return [...values].sort(function _BySkill(left, right): number { return `${left.skillId}\u0000${left.skillRevisionId}`.localeCompare(`${right.skillId}\u0000${right.skillRevisionId}`); }) as JsonValue;
+	return [...values].sort(function _BySkill(left, right): number { return _CompareCanonicalCoordinate(`${left.skillId}\u0000${left.skillRevisionId}`, `${right.skillId}\u0000${right.skillRevisionId}`); }) as JsonValue;
 }
 
 /** Canonicalizes integration custody and exact tool allowances for capability digesting. */
@@ -188,5 +196,5 @@ function _CanonicalIntegrationAssignments(values: readonly { integrationId: stri
 {
 	return [...values]
 		.map(function _Copy(value) { return { integrationId: value.integrationId, custodyReferenceId: value.custodyReferenceId, allowedTools: [...value.allowedTools].sort() }; })
-		.sort(function _ByIntegration(left, right): number { return `${left.integrationId}\u0000${left.custodyReferenceId}`.localeCompare(`${right.integrationId}\u0000${right.custodyReferenceId}`); }) as JsonValue;
+		.sort(function _ByIntegration(left, right): number { return _CompareCanonicalCoordinate(`${left.integrationId}\u0000${left.custodyReferenceId}`, `${right.integrationId}\u0000${right.custodyReferenceId}`); }) as JsonValue;
 }
