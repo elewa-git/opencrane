@@ -113,6 +113,11 @@
       "workloadIds": ["agent-runtime"]
     },
     {
+      "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
+      "workloadIds": ["skill-authoring", "tool-runner"]
+    },
+    {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
       "anchor": "local postgres_args=(upgrade --install \"$POSTGRES_RELEASE\" \"$POSTGRES_CHART_DIR\"",
       "workloadIds": ["postgres-database"]
@@ -274,7 +279,7 @@
     {
       "id": "skill-authoring",
       "podClass": "Job/skill-authoring-attempt",
-      "image": "ghcr.io/italanta/opencrane-skill-authoring@sha256:<release-digest>",
+      "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
       "localOwner": true,
       "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" },
@@ -284,7 +289,7 @@
     {
       "id": "tool-runner",
       "podClass": "Job/tool-runner-invocation",
-      "image": "ghcr.io/italanta/opencrane-tool-runner@sha256:<release-digest>",
+      "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
       "owner": "apps/tool-runner",
       "localOwner": true,
       "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" },

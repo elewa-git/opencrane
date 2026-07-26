@@ -73,7 +73,7 @@ An app entrypoint owns only this workload's deployment contract; it imports no l
 ## Runtime & config
 
 The existing `Validate and publish affected deployables` workflow builds this image whenever this
-package changes on an integration branch. It publishes `ghcr.io/italanta/opencrane-skill-authoring`
+package changes on an integration branch. It publishes `ghcr.io/elewa-git/opencrane-skill-authoring`
 under a commit-derived tag. The workflow does not promote it: the release operator retrieves the
 manifest `sha256:` value from that published GitHub Container Registry package version and records
 it in a separate values review. A tag, local image ID, or Dockerfile base digest is never a valid

@@ -398,7 +398,7 @@ agentController:
   skillWorkloadProfiles:
     authoring:
       image:
-        repository: ghcr.io/italanta/opencrane-skill-authoring
+        repository: ghcr.io/elewa-git/opencrane-skill-authoring
         digest: ""
         pullPolicy: IfNotPresent
       scratchSize: 128Mi
@@ -408,7 +408,7 @@ agentController:
         limits: { cpu: "2", memory: 4Gi }
     toolRunner:
       image:
-        repository: ghcr.io/italanta/opencrane-tool-runner
+        repository: ghcr.io/elewa-git/opencrane-tool-runner
         digest: ""
         pullPolicy: IfNotPresent
       scratchSize: 64Mi
