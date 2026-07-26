@@ -104,7 +104,19 @@ function _denialStatus(reason: AgentRevisionLifecycleDenial): number
 		case "service_retired": return 409;
 		case "transition_not_allowed": return 409;
 		case "service_not_runnable": return 409;
-		case "run_admission_unavailable": return 503;
+		case "membership_stale": return 503;
+		case "persistence_unavailable": return 503;
+		case "admission_concurrency_limited": return 503;
+		case "authority_conflict": return 409;
+		case "run_not_admittable":
+		case "revision_unavailable":
+		case "persona_unavailable":
+		case "thread_unavailable":
+		case "memory_scope_unavailable":
+		case "tool_policy_unavailable":
+		case "skill_unavailable":
+		case "budget_unavailable":
+		case "identity_unavailable": return 409;
 		default: return 400;
 	}
 }
@@ -404,8 +416,9 @@ function _runDenialStatus(reason: AgentRevisionLifecycleDenial): number
 {
 	if (reason === "service_not_found") return 404;
 	if (reason === "service_not_runnable") return 409;
-	if (reason === "run_admission_unavailable") return 503;
+	if (reason === "membership_stale" || reason === "persistence_unavailable") return 503;
 	if (reason === "admission_concurrency_limited") return 503;
+	if (reason === "authority_conflict" || reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable" || reason === "thread_unavailable" || reason === "memory_scope_unavailable" || reason === "tool_policy_unavailable" || reason === "skill_unavailable" || reason === "budget_unavailable" || reason === "identity_unavailable") return 409;
 	return 400;
 }
 

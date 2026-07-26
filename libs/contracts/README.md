@@ -41,7 +41,10 @@ record of one run's frozen persona, transcript, memory references, tools, budget
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects. Its integration assignments record only an
 integration identifier and the revision-approved tool names; a custody reference stays behind the
-server boundary and is rechecked when a tool is invoked.
+server boundary and is rechecked when a tool is invoked. Identity is explicitly tagged: a user run
+pins a human's signed fleet membership, while a managed run pins the derived service principal, its
+signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
+user record by accident.
 
 `PROMPT_COMPILER_VERSION` is the single version pin shared by revision authoring, admission, and
 the deterministic compiler. A revision that names another version is not admissible, preventing a
@@ -63,12 +66,12 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   provenance rather than a mutable revision counter.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
-- `AGENT_RUNTIME_PROTOCOL_V1`, `AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE`,
-  `___IsAgentRuntimeServiceAccountName`, `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and
-  `RuntimeCandidate` — the private workload protocol for a personal-agent process that opens its own
-  authenticated stream. The opening frame binds the runtime instance to the Pod UID independently
-  verified from its Kubernetes credential. The audience constant and shared validator keep Job
-  issuance and TokenReview admission on one bounded identity grammar.
+- `AGENT_RUNTIME_PROTOCOL_V1`, the personal and managed runtime audience constants and validators,
+  `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
+  protocol for an agent process that opens its own authenticated stream. The opening frame binds the
+  runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
+  and managed runtimes use distinct projected-token audiences and ServiceAccount grammars, so one
+  workload class cannot borrow the other's transport identity.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database

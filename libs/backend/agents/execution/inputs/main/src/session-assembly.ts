@@ -36,6 +36,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const identity = await authorities.identityEnvelope.load(command, run.value, transaction);
 		if (identity.outcome === "denied") return identity;
 		if (!_IsIdentityFresh(identity.value, transaction.admittedAt)) return { outcome: "denied", reason: "membership_stale" } as const;
+		if ((run.value.agentKind === "personal" && identity.value.kind !== "user") || (run.value.agentKind === "managed" && identity.value.kind !== "service")) return { outcome: "denied", reason: "identity_unavailable" } as const;
 
 		// 5. A personal run requires an approved persona; a managed run must not carry one.
 		const persona = await authorities.approvedPersona.load(command, run.value, transaction);
@@ -48,7 +49,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if (command.threadId === null && thread.value.messageIds.length > 0) return { outcome: "denied", reason: "thread_unavailable" } as const;
 
 		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
-		const preferences = await authorities.preferenceFacts.load(command, run.value, transaction);
+		const preferences = await authorities.preferenceFacts.load(command, run.value, identity.value, transaction);
 		if (preferences.outcome === "denied") return preferences;
 		const memory = await authorities.memoryScope.load(command, run.value, identity.value, transaction);
 		if (memory.outcome === "denied") return memory;
@@ -63,7 +64,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, thread.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
 	});
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
-	return { outcome: "assembled", snapshot: admitted.snapshot };
+	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot };
 }
 
 /** Returns whether a command contains valid run coordinates and one deterministic compilation instant. */
@@ -72,8 +73,10 @@ function _isCommandValid(command: SessionAssemblyCommand): boolean
 	return command.runId.trim().length > 0
 		&& command.siloId.trim().length > 0
 		&& (command.threadId === null || command.threadId.trim().length > 0)
-		&& command.executionSubjectId.trim().length > 0
-		&& command.requestIdempotencyKey.trim().length > 0;
+		&& command.requestIdempotencyKey.trim().length > 0
+		&& (command.identityKind === "user"
+			? command.trigger === "interactive" && command.executionSubjectId.trim().length > 0
+			: (command.trigger === "schedule" || command.trigger === "managed_invocation"));
 }
 
 /** Maps the repository-internal `authority_conflict` refusal onto the public assembly vocabulary. */
@@ -102,16 +105,7 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		integrationAssignments: _canonicalIntegrationAssignments(tools.integrationAssignments),
 		modelRoute: ___CloneCanonicalJson(tools.modelRoute),
 		budgetPolicy: ___CloneCanonicalJson(budgetPolicy),
-		identitySnapshot: {
-			executionSubjectId: identity.executionSubjectId,
-			organizationId: identity.organizationId,
-			fleetMembershipRevision: identity.fleetMembershipRevision,
-			fleetMembershipIssuer: identity.fleetMembershipIssuer,
-			fleetMembershipIssuerKeyId: identity.fleetMembershipIssuerKeyId,
-			fleetMembershipAssertionId: identity.fleetMembershipAssertionId,
-			fleetMembershipPayloadDigest: identity.fleetMembershipPayloadDigest,
-			fleetMembershipTrustedUntil: identity.fleetMembershipTrustedUntil,
-		},
+		identitySnapshot: _SnapshotIdentity(identity),
 		capabilitySetDigest: identity.capabilitySetDigest,
 		effectiveContractDigest: run.effectiveContractDigest,
 		promptCompilerVersion: run.promptCompilerVersion,
@@ -119,6 +113,13 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 	};
 	const digest = __DigestRunInputSnapshot(withoutDigest);
 	return { ...withoutDigest, digest };
+}
+
+/** Removes the assembly-only capability digest while retaining every tagged identity field in the persisted snapshot. */
+function _SnapshotIdentity(identity: IdentityEnvelopeInput): RunInputSnapshot["identitySnapshot"]
+{
+	const { capabilitySetDigest: _capabilitySetDigest, ...snapshotIdentity } = identity;
+	return snapshotIdentity;
 }
 
 /** Canonicalises revision-selected integration tools before sealing them into a snapshot. */

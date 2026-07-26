@@ -2,11 +2,12 @@ import { randomUUID } from "node:crypto";
 
 import type { PrismaClient } from "@prisma/client";
 
+import { __AssembleRunInputSnapshot, __CreatePrismaManagedSessionAssemblyAuthorities, ManagedExecutionIdentityEnvelopeSource, PrismaSkillRevisionEligibilitySource } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRunAdmissionRepository, RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
 import type { RunAdmissionCommand, RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
-import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
+import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import type { RunAdmissionCapacityGate } from "./run-admission-wiring.types.js";
+import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./run-admission-wiring.types.js";
 
 /** Conservative server-process limits aligned to the five-connection Prisma budget. */
 const _DEFAULT_POLICY: RunAdmissionConcurrencyPolicy = { maxConcurrentAdmissions: 2, maxQueuedAdmissions: 10 };
@@ -36,13 +37,28 @@ export function _ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessEn
  *
  * @param prisma - Canonical product-authority client.
  * @param policy - Validated server capacity policy.
+ * @param evidenceAuthority - Service-owned signed identity and scope-capability authority.
  * @returns A fail-closed, capacity-bounded managed run admission port.
  */
-export function _CreateManagedRunAdmissionPort(prisma: PrismaClient, policy: RunAdmissionConcurrencyPolicy): ManagedRunAdmissionPort
+export function _CreateManagedRunAdmissionPort(prisma: PrismaClient, policy: RunAdmissionConcurrencyPolicy, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
 {
 	const admission = new PrismaRunAdmissionRepository(prisma);
 	const gate = __CreateRunAdmissionCapacityGate(policy);
-	return _CreateManagedRunAdmissionPortWithGate(admission, gate);
+	const identityEnvelope = new ManagedExecutionIdentityEnvelopeSource(evidenceAuthority);
+	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope, new PrismaSkillRevisionEligibilitySource());
+	const assemble: ManagedSnapshotAssembler = async function _Assemble(command)
+	{
+		return __AssembleRunInputSnapshot({
+			runId: randomUUID(),
+			siloId: command.siloId,
+			agentServiceId: command.agentServiceId,
+			threadId: null,
+			identityKind: "service",
+			trigger: command.trigger,
+			requestIdempotencyKey: command.requestIdempotencyKey,
+		}, authorities);
+	};
+	return _CreateManagedRunAdmissionPortWithGate(assemble, gate);
 }
 
 /** Build the shared global, silo, and service capacity gate for this server process. */
@@ -56,11 +72,11 @@ export function __CreateRunAdmissionCapacityGate(policy: RunAdmissionConcurrency
  *
  * Kept separate from Prisma composition so the overload boundary can be proved without a database.
  *
- * @param admission - Canonical run/snapshot/outbox persistence authority.
+ * @param assemble - Complete immutable managed run assembler and persistence boundary.
  * @param gate - Shared process-local capacity boundary.
  * @returns The managed-agent run admission port.
  */
-export function _CreateManagedRunAdmissionPortWithGate(admission: Pick<PrismaRunAdmissionRepository, "admit">, gate: RunAdmissionCapacityGate): ManagedRunAdmissionPort
+export function _CreateManagedRunAdmissionPortWithGate(assemble: ManagedSnapshotAssembler, gate: RunAdmissionCapacityGate): ManagedRunAdmissionPort
 {
 	return {
 		async admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
@@ -69,15 +85,9 @@ export function _CreateManagedRunAdmissionPortWithGate(admission: Pick<PrismaRun
 				{ siloId: command.siloId, agentServiceId: command.agentServiceId },
 				async function _admitAfterCapacityGrant()
 				{
-					const runId = randomUUID();
-					const result = await admission.admit(
-						{ runId, siloId: command.siloId, agentServiceId: command.agentServiceId, threadId: null, executionSubjectId: `agent-service:${command.agentServiceId}`, requestIdempotencyKey: command.requestIdempotencyKey },
-						// The managed executor (fleet-membership + capability-set snapshot assembly) is a
-						// live-Obot gate. Until then the shared persistence authority fails closed.
-						async function _assembleManagedSnapshot() { return { outcome: "denied", reason: "run_admission_unavailable" } as const; },
-					);
+					const result = await assemble(command);
 					if (result.outcome === "denied") return { outcome: "denied", reason: result.reason } as const;
-					return { outcome: result.outcome, runId } as const;
+					return { outcome: result.admissionOutcome, runId: result.snapshot.runId } as const;
 				},
 			);
 			return bounded.outcome === "rejected" ? { outcome: "denied", reason: bounded.reason } : bounded.value;

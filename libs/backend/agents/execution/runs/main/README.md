@@ -33,8 +33,9 @@ run's ordered user-visible events)* · dispatcher *(polls the outbox and launche
 
 Initial admission serialises the silo and request idempotency key before compiling any mutable
 input. A duplicate returns the first durable snapshot only when the AgentService, conversation
-thread and signed execution subject are the same; an interactive run also proves that its delegated
-user is that exact subject. A same-silo key from any other authority scope fails closed without
+thread, trigger, and tagged execution identity are the same. An interactive run proves its delegated
+user is that exact subject; a scheduled or explicitly invoked managed run proves the derived service
+principal is the active service. A same-silo key from any other authority scope fails closed without
 exposing a run. A new request locks the AgentService, lets the session assembler
 revalidate every input inside that transaction, and commits the `AgentRun`, its only `RunInputSnapshot`, and the ordered
 `RunAccepted` and `RunAttemptRequested` outbox events together. The canonical digest covers every
@@ -57,8 +58,7 @@ transaction it appends a `RunAttemptRequested` event to the **outbox** (a durabl
 polls) so a started attempt can never be lost between deciding and launching.
 
 `__ValidateRunWorkloadAssignment` is the mirror check at launch time: it accepts only a one-attempt
-Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, uses the fixed
-`opencrane-agent-runtime` projected-token audience, and has not expired.
+Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, and selects the dedicated personal or managed namespace together with its matching projected-token audience and ServiceAccount grammar.
 
 `__PrepareChildRunAdmission` is the authority-only first step for an agent asking a parent run to
 start another agent. It inherits the silo, subject and run lineage exclusively from the already

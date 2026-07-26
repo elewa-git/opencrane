@@ -25,8 +25,8 @@ export interface InitialRunAuthority
 	readonly parentRunId: string | null;
 }
 
-/** Immutable public coordinates that identify one initial logical-run admission. */
-export interface RunAdmissionCommand
+/** Immutable coordinates shared by every initial logical-run admission. */
+export interface RunAdmissionCommandCoordinates
 {
 	/** Caller-provided logical run identifier created before admission begins. */
 	readonly runId: AgentRunId;
@@ -36,11 +36,32 @@ export interface RunAdmissionCommand
 	readonly agentServiceId: AgentServiceId;
 	/** Conversation thread permanently bound to the admitted input snapshot, or null for non-conversational work. */
 	readonly threadId: ThreadId | null;
-	/** Subject that must be verified by the signed membership assertion before the run can commit. */
-	readonly executionSubjectId: string;
 	/** User-visible key making duplicate transport delivery return the first admission. */
 	readonly requestIdempotencyKey: string;
 }
+
+/** Initial admission requested by a human whose signed membership authorises an interactive run. */
+export interface UserRunAdmissionCommand extends RunAdmissionCommandCoordinates
+{
+	/** Discriminant that makes a human subject mandatory for a personal run. */
+	readonly identityKind: "user";
+	/** Interactive runs are the only root admission that exercises a human subject directly. */
+	readonly trigger: "interactive";
+	/** Subject that must be verified by signed fleet membership before the run can commit. */
+	readonly executionSubjectId: string;
+}
+
+/** Initial admission requested for an autonomous managed AgentService. */
+export interface ServiceRunAdmissionCommand extends RunAdmissionCommandCoordinates
+{
+	/** Discriminant that prevents a caller from supplying a user-shaped service identity. */
+	readonly identityKind: "service";
+	/** Managed roots are admitted by an explicit invocation or the scheduler, never interactively. */
+	readonly trigger: "managed_invocation" | "schedule";
+}
+
+/** Tagged initial admission command with no untagged execution-subject fallback. */
+export type RunAdmissionCommand = UserRunAdmissionCommand | ServiceRunAdmissionCommand;
 
 /** Transaction capability supplied to every loader at the final admission fence. */
 export interface RunAdmissionTransaction

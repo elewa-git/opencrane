@@ -51,11 +51,28 @@
 {{- if or (gt (len $runtimeServiceAccount) 63) (not (regexMatch "^agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $runtimeServiceAccount)) -}}
 {{- fail "agentController.runtimeProfile.serviceAccountName must be a bounded agent-runtime-* identity" -}}
 {{- end -}}
+{{- $managedRuntimeValues := .Values.managedAgentRuntimePlane.managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedRuntimeValues.namespace -}}
+{{- if or (gt (len $managedRuntimeNamespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeNamespace)) (eq $managedRuntimeNamespace .Release.Namespace) (eq $managedRuntimeNamespace $runtimeNamespace) -}}
+{{- fail "managedAgentRuntimePlane.managedAgentRuntime.namespace must be a valid namespace distinct from the server and personal runtime namespaces" -}}
+{{- end -}}
+{{- $managedRuntimeServiceAccount := default "managed-agent-runtime-default" $managedRuntimeValues.serviceAccountName -}}
+{{- if or (gt (len $managedRuntimeServiceAccount) 63) (not (regexMatch "^managed-agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $managedRuntimeServiceAccount)) -}}
+{{- fail "managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName must be a bounded managed-agent-runtime-* identity" -}}
+{{- end -}}
 {{- $openCraneInternalUrl := default (printf "http://%s-opencrane-server.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort) .Values.agentController.openCraneInternalUrl -}}
 {{- $runtimeStreamUrl := default (printf "%s/api/internal/agent-runtime" $openCraneInternalUrl) .Values.agentController.runtimeProfile.runtimeStreamUrl -}}
 {{- $skillBootstrapUrl := printf "http://%s-opencrane-server.%s.svc.cluster.local:%v/api/internal/agent-runtime" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort -}}
 {{- $runtimeLiteLlmUrl := printf "http://%s-litellm.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.litellm.service.port -}}
 {{- $runtimeImage := printf "%s@%s" .Values.agentController.runtimeProfile.image.repository .Values.agentController.runtimeProfile.image.digest -}}
+{{- $personalRuntimeProfileName := .Values.agentController.runtimeProfile.name -}}
+{{- $managedRuntimeProfileName := "managed-default" -}}
+{{- if or (gt (len $personalRuntimeProfileName) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $personalRuntimeProfileName)) (eq $personalRuntimeProfileName $managedRuntimeProfileName) -}}
+{{- fail "agentController.runtimeProfile.name must be a valid personal profile name distinct from reserved managed-default" -}}
+{{- end -}}
+{{- $runtimeProfiles := list
+  (dict "name" $personalRuntimeProfileName "namespace" $runtimeNamespace "serviceAccountName" $runtimeServiceAccount "identityProfile" "personal" "tokenAudience" "opencrane-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources)
+  (dict "name" $managedRuntimeProfileName "namespace" $managedRuntimeNamespace "serviceAccountName" $managedRuntimeServiceAccount "identityProfile" "managed" "tokenAudience" "opencrane-managed-agent-runtime" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) -}}
 {{- $authoringImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.authoring.image.repository .Values.agentController.skillWorkloadProfiles.authoring.image.digest -}}
 {{- $toolRunnerImage := printf "%s@%s" .Values.agentController.skillWorkloadProfiles.toolRunner.image.repository .Values.agentController.skillWorkloadProfiles.toolRunner.image.digest -}}
 {{- $authoringNamespace := (index .Values "opencrane-skill-authoring").skillAuthoring.namespace -}}
@@ -85,7 +102,7 @@ metadata:
   name: {{ $controllerName }}
   namespace: {{ .Release.Namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-controller
 automountServiceAccountToken: false
 ---
@@ -97,7 +114,7 @@ metadata:
   name: {{ $runtimeServiceAccount }}
   namespace: {{ $runtimeNamespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-runtime
 automountServiceAccountToken: false
 ---
@@ -115,18 +132,20 @@ spec:
   hard:
     pods: {{ .Values.agentController.runtimeQuota.pods | quote }}
     count/jobs.batch: {{ .Values.agentController.runtimeQuota.jobs | quote }}
+    count/secrets: {{ .Values.agentController.runtimeQuota.secrets | quote }}
     requests.cpu: {{ .Values.agentController.runtimeQuota.requests.cpu | quote }}
     requests.memory: {{ .Values.agentController.runtimeQuota.requests.memory | quote }}
     limits.cpu: {{ .Values.agentController.runtimeQuota.limits.cpu | quote }}
     limits.memory: {{ .Values.agentController.runtimeQuota.limits.memory | quote }}
 ---
+{{- range $profile := $runtimeProfiles }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: {{ $controllerName }}
-  namespace: {{ $runtimeNamespace }}
+  namespace: {{ $profile.namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-controller
 rules:
   - apiGroups: ["batch"]
@@ -146,28 +165,30 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: {{ $controllerName }}
-  namespace: {{ $runtimeNamespace }}
+  namespace: {{ $profile.namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-controller
 subjects:
   - kind: ServiceAccount
     name: {{ $controllerName }}
-    namespace: {{ .Release.Namespace }}
+    namespace: {{ $.Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
   name: {{ $controllerName }}
 ---
+{{- end }}
 # Cleanup is server-owned: the controller cannot delete or terminate active runtime Jobs.
 # The server performs UID-preconditioned deletion only after claiming the durable cleanup outbox row.
+{{- range $profile := $runtimeProfiles }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
-  namespace: {{ $runtimeNamespace }}
+  name: {{ include "opencrane.fullname" $ }}-runtime-cleanup
+  namespace: {{ $profile.namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: opencrane-server
 rules:
   - apiGroups: ["batch"]
@@ -177,20 +198,21 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
-  namespace: {{ $runtimeNamespace }}
+  name: {{ include "opencrane.fullname" $ }}-runtime-cleanup
+  namespace: {{ $profile.namespace }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: opencrane-server
 subjects:
   - kind: ServiceAccount
-    name: {{ include "opencrane.fullname" . }}-opencrane-server
-    namespace: {{ .Release.Namespace }}
+    name: {{ include "opencrane.fullname" $ }}-opencrane-server
+    namespace: {{ $.Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
+  name: {{ include "opencrane.fullname" $ }}-runtime-cleanup
 ---
+{{- end }}
 {{- range $namespace := (list $authoringNamespace $toolRunnerNamespace) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
@@ -274,14 +296,12 @@ spec:
               value: {{ $openCraneInternalUrl | quote }}
             - name: OPENCRANE_CONTROLLER_TOKEN_PATH
               value: /var/run/opencrane/tokens/opencrane.token
-            - name: AGENT_RUNTIME_NAMESPACE
-              value: {{ $runtimeNamespace | quote }}
             - name: AGENT_CONTROLLER_POLL_INTERVAL_MS
               value: {{ .Values.agentController.pollIntervalMs | quote }}
             - name: AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS
               value: {{ .Values.agentController.outboxPruneIntervalMs | quote }}
             - name: AGENT_CONTROLLER_PROFILES_JSON
-              value: {{ dict .Values.agentController.runtimeProfile.name (dict "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) | toJson | quote }}
+              value: {{ dict .Values.agentController.runtimeProfile.name (dict "namespace" $runtimeNamespace "identityProfile" "personal" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $runtimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) $managedRuntimeProfileName (dict "namespace" $managedRuntimeNamespace "identityProfile" "managed" "image" $runtimeImage "imagePullPolicy" .Values.agentController.runtimeProfile.image.pullPolicy "runtimeStreamUrl" $runtimeStreamUrl "litellmBaseUrl" $runtimeLiteLlmUrl "serverNamespace" .Release.Namespace "serviceAccountName" $managedRuntimeServiceAccount "projectedTokenTtlSeconds" .Values.agentController.runtimeProfile.projectedTokenTtlSeconds "scratchSize" .Values.agentController.runtimeProfile.scratchSize "activeDeadlineSeconds" .Values.agentController.runtimeProfile.activeDeadlineSeconds "ttlSecondsAfterFinished" .Values.agentController.runtimeProfile.ttlSecondsAfterFinished "resources" .Values.agentController.runtimeProfile.resources) | toJson | quote }}
             - name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON
               value: {{ dict "authoring" (dict "kind" "authoring" "image" $authoringImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.authoring.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $authoringNamespace "serviceAccountName" "skill-authoring-default" "capabilityTokenAudience" "opencrane-skill-authoring" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.authoring.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.authoring.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.authoring.resources) "tool-runner" (dict "kind" "tool-runner" "image" $toolRunnerImage "imagePullPolicy" .Values.agentController.skillWorkloadProfiles.toolRunner.image.pullPolicy "serverNamespace" .Release.Namespace "namespace" $toolRunnerNamespace "serviceAccountName" "tool-runner-default" "capabilityTokenAudience" "opencrane-tool-runner" "bootstrapUrl" $skillBootstrapUrl "capabilityTokenPath" "/var/run/opencrane/tokens/capability.token" "bootstrapReferencePath" "/var/run/opencrane/bootstrap/reference" "scratchSize" .Values.agentController.skillWorkloadProfiles.toolRunner.scratchSize "activeDeadlineSeconds" .Values.agentController.skillWorkloadProfiles.toolRunner.activeDeadlineSeconds "ttlSecondsAfterFinished" 0 "resources" .Values.agentController.skillWorkloadProfiles.toolRunner.resources) | toJson | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "agent-controller") | nindent 12 }}
@@ -633,13 +653,15 @@ spec:
           values: ["skill-authoring", "tool-runner"]
 ---
 # The policy is cluster-scoped only because Kubernetes admission policies are cluster-scoped. Its
-# namespace selector binds it to this one Helm-owned namespace label; no controller RBAC covers it.
+# namespace selector binds it to one exact profile namespace; no controller RBAC covers a namespace
+# outside the two configured runtime profiles.
+{{- range $profile := $runtimeProfiles }}
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicy
 metadata:
-  name: {{ include "opencrane.agentController.admissionName" . }}
+  name: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-runtime
 spec:
   failurePolicy: Fail
@@ -653,14 +675,14 @@ spec:
         scope: "Namespaced"
     namespaceSelector:
       matchLabels:
-        opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+        kubernetes.io/metadata.name: {{ $profile.namespace | quote }}
   validations:
     - expression: >-
         request.userInfo.username == {{ $controllerUsername | toJson }}
       message: only this release's controller ServiceAccount may create or release runtime Jobs
     - expression: >-
         object.metadata.name.matches('^agent-runtime-a[1-9][0-9]*-[a-f0-9]{24}$') &&
-        object.metadata.namespace == {{ $runtimeNamespace | toJson }} &&
+        object.metadata.namespace == {{ $profile.namespace | toJson }} &&
         object.metadata.labels.size() >= 3 && object.metadata.labels.size() <= 7 &&
         object.metadata.labels.all(k, k in [
           'app.kubernetes.io/name', 'app.kubernetes.io/component', 'opencrane.ai/runtime-attempt',
@@ -686,8 +708,8 @@ spec:
     - expression: >-
         object.spec.parallelism == 1 && object.spec.completions == 1 && object.spec.backoffLimit == 0 &&
         object.spec.activeDeadlineSeconds > 0 &&
-        object.spec.activeDeadlineSeconds <= {{ .Values.agentController.runtimeProfile.activeDeadlineSeconds }} &&
-        object.spec.ttlSecondsAfterFinished == {{ .Values.agentController.runtimeProfile.ttlSecondsAfterFinished }} &&
+        object.spec.activeDeadlineSeconds <= {{ $profile.activeDeadlineSeconds }} &&
+        object.spec.ttlSecondsAfterFinished == {{ $profile.ttlSecondsAfterFinished }} &&
         (!has(object.spec.manualSelector) || object.spec.manualSelector == false) &&
         (!has(object.spec.completionMode) || object.spec.completionMode == 'NonIndexed') &&
         !has(object.spec.podFailurePolicy) && !has(object.spec.successPolicy) &&
@@ -731,8 +753,8 @@ spec:
           (!has(object.metadata.uid) || !('controller-uid' in object.spec.selector.matchLabels) || object.spec.selector.matchLabels['controller-uid'] == string(object.metadata.uid)))
       message: only Kubernetes-owned Job selector labels may be defaulted by the API server
     - expression: >-
-        object.spec.template.spec.serviceAccountName == {{ $runtimeServiceAccount | toJson }} &&
-        (!has(object.spec.template.spec.serviceAccount) || object.spec.template.spec.serviceAccount == {{ $runtimeServiceAccount | toJson }}) &&
+        object.spec.template.spec.serviceAccountName == {{ $profile.serviceAccountName | toJson }} &&
+        (!has(object.spec.template.spec.serviceAccount) || object.spec.template.spec.serviceAccount == {{ $profile.serviceAccountName | toJson }}) &&
         object.spec.template.spec.automountServiceAccountToken == false &&
         object.spec.template.spec.enableServiceLinks == false &&
         object.spec.template.spec.restartPolicy == 'Never' &&
@@ -763,8 +785,8 @@ spec:
         (!has(object.spec.template.spec.initContainers) || object.spec.template.spec.initContainers.size() == 0) &&
         (!has(object.spec.template.spec.ephemeralContainers) || object.spec.template.spec.ephemeralContainers.size() == 0) &&
         object.spec.template.spec.containers[0].name == 'agent-runtime' &&
-        object.spec.template.spec.containers[0].image == {{ $runtimeImage | toJson }} &&
-        object.spec.template.spec.containers[0].imagePullPolicy == {{ .Values.agentController.runtimeProfile.image.pullPolicy | toJson }} &&
+        object.spec.template.spec.containers[0].image == {{ $profile.image | toJson }} &&
+        object.spec.template.spec.containers[0].imagePullPolicy == {{ $profile.imagePullPolicy | toJson }} &&
         object.spec.template.spec.containers[0].securityContext.allowPrivilegeEscalation == false &&
         object.spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem == true &&
         object.spec.template.spec.containers[0].securityContext.capabilities.drop == ['ALL'] &&
@@ -778,19 +800,19 @@ spec:
         (!has(object.spec.template.spec.containers[0].ports) || object.spec.template.spec.containers[0].ports.size() == 0) &&
         object.spec.template.spec.containers[0].resources.requests.size() == 2 &&
         object.spec.template.spec.containers[0].resources.limits.size() == 2 &&
-        quantity(object.spec.template.spec.containers[0].resources.requests.cpu).compareTo(quantity({{ .Values.agentController.runtimeProfile.resources.requests.cpu | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity({{ .Values.agentController.runtimeProfile.resources.requests.memory | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity({{ .Values.agentController.runtimeProfile.resources.limits.cpu | toJson }})) == 0 &&
-        quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ .Values.agentController.runtimeProfile.resources.limits.memory | toJson }})) == 0
+        quantity(object.spec.template.spec.containers[0].resources.requests.cpu).compareTo(quantity({{ $profile.resources.requests.cpu | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity({{ $profile.resources.requests.memory | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity({{ $profile.resources.limits.cpu | toJson }})) == 0 &&
+        quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity({{ $profile.resources.limits.memory | toJson }})) == 0
       message: runtime image, container shape, security and resources are immutable
     - expression: >-
         object.spec.template.spec.containers[0].env.size() == 5 &&
         object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_RUNTIME_STREAM_URL' &&
-        object.spec.template.spec.containers[0].env[0].value == {{ $runtimeStreamUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[0].value == {{ $profile.runtimeStreamUrl | toJson }} &&
         object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_RUNTIME_TOKEN_PATH' &&
         object.spec.template.spec.containers[0].env[1].value == '/var/run/opencrane/tokens/runtime.token' &&
         object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNTIME_LITELLM_BASE_URL' &&
-        object.spec.template.spec.containers[0].env[2].value == {{ $runtimeLiteLlmUrl | toJson }} &&
+        object.spec.template.spec.containers[0].env[2].value == {{ $profile.litellmBaseUrl | toJson }} &&
         object.spec.template.spec.containers[0].env[3].name == 'OPENCRANE_RUNTIME_LITELLM_KEY_PATH' &&
         object.spec.template.spec.containers[0].env[3].value == '/var/run/opencrane/litellm/key' &&
         object.spec.template.spec.containers[0].env[4].name == 'POD_UID' &&
@@ -815,8 +837,8 @@ spec:
         object.spec.template.spec.volumes[0].projected.defaultMode == 288 &&
         object.spec.template.spec.volumes[0].projected.sources.size() == 1 &&
         object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.path == 'runtime.token' &&
-        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == 'opencrane-agent-runtime' &&
-        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == {{ .Values.agentController.runtimeProfile.projectedTokenTtlSeconds }} &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.audience == {{ $profile.tokenAudience | toJson }} &&
+        object.spec.template.spec.volumes[0].projected.sources[0].serviceAccountToken.expirationSeconds == {{ $profile.projectedTokenTtlSeconds }} &&
         object.spec.template.spec.volumes[1].name == 'runtime-bootstrap' &&
         object.spec.template.spec.volumes[1].downwardAPI.defaultMode == 288 &&
         object.spec.template.spec.volumes[1].downwardAPI.items.size() == 1 &&
@@ -831,7 +853,7 @@ spec:
         object.spec.template.spec.volumes[2].projected.sources[0].secret.items[0].path == 'key' &&
         object.spec.template.spec.volumes[3].name == 'scratch' &&
         (!has(object.spec.template.spec.volumes[3].emptyDir.medium) || object.spec.template.spec.volumes[3].emptyDir.medium == '') &&
-        quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity({{ .Values.agentController.runtimeProfile.scratchSize | toJson }})) == 0
+        quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity({{ $profile.scratchSize | toJson }})) == 0
       message: runtime volumes must be exactly one audience token, one reference, one virtual key, and bounded scratch
     - expression: >-
         (request.operation == 'CREATE' && object.spec.suspend == true) ||
@@ -851,16 +873,18 @@ spec:
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingAdmissionPolicyBinding
 metadata:
-  name: {{ include "opencrane.agentController.admissionName" . }}
+  name: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
   labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
+    {{- include "opencrane.labels" $ | nindent 4 }}
     app.kubernetes.io/component: agent-runtime
 spec:
-  policyName: {{ include "opencrane.agentController.admissionName" . }}
+  policyName: {{ printf "%s-%s" (include "opencrane.agentController.admissionName" $) $profile.name | trunc 63 | trimSuffix "-" }}
   validationActions: [Deny]
   matchResources:
     namespaceSelector:
       matchLabels:
-        opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
+        kubernetes.io/metadata.name: {{ $profile.namespace | quote }}
+---
+{{- end }}
 {{- end }}
 {{- end }}

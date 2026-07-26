@@ -8,8 +8,6 @@ export interface AgentControllerProcessConfig
 	readonly openCraneInternalUrl: string;
 	/** Absolute path of the rotating OpenCrane-audience projected token. */
 	readonly controllerTokenPath: string;
-	/** Dedicated runtime namespace this controller may mutate. */
-	readonly runtimeNamespace: string;
 	/** Delay after an idle poll or handled error. */
 	readonly pollIntervalMilliseconds: number;
 	/** Delay between controller-only runs of durable outbox retention. */

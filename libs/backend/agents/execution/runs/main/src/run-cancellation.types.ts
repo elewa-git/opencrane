@@ -1,8 +1,10 @@
 /** Fixed lease and orphan-observation policy for cancellation cleanup authority. */
 export interface RunCancellationRepositoryConfig
 {
-	/** Dedicated namespace in which this silo's runtime Jobs may exist. */
-	readonly namespace: string;
+	/** Dedicated namespace in which personal runtime Jobs may exist. */
+	readonly personalRuntimeNamespace: string;
+	/** Dedicated namespace in which managed runtime Jobs may exist. */
+	readonly managedRuntimeNamespace: string;
 	/** Time after which an abandoned cleanup claim may be reclaimed. */
 	readonly claimLeaseMilliseconds: number;
 	/** Additional time after a dispatch lease in which an in-flight Kubernetes create may finish. */

@@ -35,10 +35,14 @@ the target, refined by the
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
 
-Toolkit selection remains evidence-driven: the offline Phase E conformance harness and fault-injection
-matrix are built and CI-runnable, but choosing and adopting the exact-pinned driver waits on the
-live-LiteLLM conformance leg, gated on [#337](https://github.com/elewa-git/opencrane/issues/337)
-(→ [#246](https://github.com/elewa-git/opencrane/issues/246)).
+Toolkit selection remains evidence-driven: the offline Phase E conformance harness, immutable
+managed run admission and tagged personal/managed input contract, fault-injection matrix,
+controller, and runtime boundaries are built and CI-runnable. The
+[Phase E heavy-qualification runbook](docs/operators/phase-e-heavy-qualification.md) now starts with
+the live PostgreSQL, Obot, Cognee, and LiteLLM legs gated on
+[#337](https://github.com/elewa-git/opencrane/issues/337)
+(→ [#246](https://github.com/elewa-git/opencrane/issues/246)); only passing evidence adopts the
+exact-pinned driver and permits deletion of the replaced live path.
 
 ## Current state
 
@@ -100,9 +104,9 @@ custody/credential/discovery slices from `main` per
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
 
-### Phase E — personal runtime and AgentService plane (parallel work lanes)
+### Phase E — personal runtime and AgentService plane (implementation complete; live qualification next)
 
-**In progress:** the active PR stack now defines immutable run input, the fenced runtime protocol,
+**Implementation complete offline:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
 the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
 crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
 Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,

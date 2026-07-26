@@ -20,16 +20,16 @@ describe("managed run admission composition", function _describeManagedRunAdmiss
 		const admit = vi.fn(async function _admit()
 		{
 			await held;
-			return { outcome: "denied", reason: "run_admission_unavailable" } as const;
+			return { outcome: "denied", reason: "membership_stale" } as const;
 		});
-		const port = _CreateManagedRunAdmissionPortWithGate({ admit } as never, new RunAdmissionConcurrencyGate({ maxConcurrentAdmissions: 1, maxQueuedAdmissions: 0 }));
+		const port = _CreateManagedRunAdmissionPortWithGate(admit, new RunAdmissionConcurrencyGate({ maxConcurrentAdmissions: 1, maxQueuedAdmissions: 0 }));
 
 		const first = port.admitManagedRun(_Command("service-a"));
 		await vi.waitFor(function _waitForFirstAdmission() { expect(admit).toHaveBeenCalledTimes(1); });
 		await expect(port.admitManagedRun(_Command("service-a"))).resolves.toEqual({ outcome: "denied", reason: "admission_concurrency_limited" });
 		expect(admit).toHaveBeenCalledTimes(1);
 		release?.();
-		await expect(first).resolves.toEqual({ outcome: "denied", reason: "run_admission_unavailable" });
+		await expect(first).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
 	});
 
 	it("bounds different services below the process database budget", async function _boundsProcessCapacity()
@@ -39,9 +39,9 @@ describe("managed run admission composition", function _describeManagedRunAdmiss
 		const admit = vi.fn(async function _admit()
 		{
 			await held;
-			return { outcome: "denied", reason: "run_admission_unavailable" } as const;
+			return { outcome: "denied", reason: "membership_stale" } as const;
 		});
-		const port = _CreateManagedRunAdmissionPortWithGate({ admit } as never, __CreateRunAdmissionCapacityGate({ maxConcurrentAdmissions: 1, maxQueuedAdmissions: 0 }));
+		const port = _CreateManagedRunAdmissionPortWithGate(admit, __CreateRunAdmissionCapacityGate({ maxConcurrentAdmissions: 1, maxQueuedAdmissions: 0 }));
 
 		const first = port.admitManagedRun(_Command("service-a", "silo-a"));
 		const second = port.admitManagedRun(_Command("service-a", "silo-b"));
@@ -49,8 +49,8 @@ describe("managed run admission composition", function _describeManagedRunAdmiss
 		await expect(port.admitManagedRun(_Command("service-b", "silo-c"))).resolves.toEqual({ outcome: "denied", reason: "admission_concurrency_limited" });
 		release?.();
 		await expect(Promise.all([first, second])).resolves.toEqual([
-			{ outcome: "denied", reason: "run_admission_unavailable" },
-			{ outcome: "denied", reason: "run_admission_unavailable" },
+			{ outcome: "denied", reason: "membership_stale" },
+			{ outcome: "denied", reason: "membership_stale" },
 		]);
 	});
 

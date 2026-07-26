@@ -1,5 +1,7 @@
 import { WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
 
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type AgentRuntimeProjectedTokenAudience, type ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
+
 import { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
 import type { RuntimeBootstrapClaim, RuntimeBootstrapConsumptionResult } from "./runtime-proof.types.js";
 import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository } from "./runtime-bootstrap.types.js";
@@ -8,6 +10,13 @@ import type { RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository
 function _toWorkloadKind(kind: WorkloadKind): "job" | "deployment"
 {
 	return kind === WorkloadKind.Job ? "job" : "deployment";
+}
+
+/** Parse only the two runtime audience classes supported by the clean runtime planes. */
+function _toRuntimeAudience(value: string): AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience | null
+{
+	if (value === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || value === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) return value;
+	return null;
 }
 
 /**
@@ -41,12 +50,16 @@ export class PrismaRuntimeBootstrapExchange implements RuntimeBootstrapExchangeR
 		// 2. Load its independent assignment; a bootstrap cannot bind before the first Pod registers.
 		const assignment = await this.prisma.workloadAssignment.findUnique({ where: { runId_attempt: { runId: bootstrap.runId, attempt: bootstrap.attempt } } });
 		if (assignment === null || assignment.podUid === null || assignment.state !== WorkloadAssignmentState.Registered) return null;
+		const bootstrapAudience = _toRuntimeAudience(bootstrap.audience);
+		const assignmentAudience = _toRuntimeAudience(assignment.audience);
+		if (bootstrapAudience === null || assignmentAudience === null) return null;
 
 		// 3. Return both authority sources so the router can compare them field by field.
 		return {
 			bootstrapId: bootstrap.id,
 			bootstrapSiloId: bootstrap.siloId,
 			bootstrapSubjectId: bootstrap.subjectId,
+			bootstrapAudience,
 			bootstrapServiceAccountName: bootstrap.serviceAccountName,
 			bootstrapNamespace: bootstrap.namespace,
 			bootstrapWorkloadKind: _toWorkloadKind(bootstrap.workloadKind),
@@ -58,6 +71,7 @@ export class PrismaRuntimeBootstrapExchange implements RuntimeBootstrapExchangeR
 			bootstrapExpiresAtEpochMs: bootstrap.expiresAt.getTime(),
 			assignmentSiloId: assignment.siloId,
 			assignmentSubjectId: assignment.subjectId,
+			assignmentAudience,
 			assignmentWorkloadKind: _toWorkloadKind(assignment.workloadKind),
 			assignmentWorkloadUid: assignment.workloadUid,
 			assignmentPodUid: assignment.podUid,

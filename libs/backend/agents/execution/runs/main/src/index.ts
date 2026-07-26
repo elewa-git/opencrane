@@ -5,7 +5,7 @@ export { PrismaChildRunReservationRepository } from "./prisma-child-run-reservat
 export { PrismaRuntimeTerminalReporter } from "./prisma-runtime-terminal-reporter.js";
 export { __DigestRunInputSnapshot } from "./run-input-snapshot-digest.js";
 export type { AgentRunAuthorityRepository, AgentRunAuthoritySnapshot, AtomicRunAttemptResult, AtomicStartNextRunAttemptCommand, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
-export type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction } from "./run-admission.types.js";
+export type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, RunAdmissionClock, RunAdmissionCommand, RunAdmissionCommandCoordinates, RunAdmissionRepository, RunAdmissionResult, RunAdmissionTransaction, ServiceRunAdmissionCommand, UserRunAdmissionCommand } from "./run-admission.types.js";
 export type { ChildRunAdmissionLimits, ChildRunBudget, ChildRunParentAuthority, ChildRunTargetAuthorization, ChildRunTargetAuthorizationResult, PrepareChildRunAdmissionCommand, PrepareChildRunAdmissionResult, PreparedChildRunAdmission } from "./child-run-admission.types.js";
 export type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types.js";
 export type { ChildRunReservationBuild, ChildRunReservationBuildResult, ChildRunReservationCommand, ChildRunReservationRepository, ChildRunReservationResult } from "./child-run-reservation.types.js";

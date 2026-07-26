@@ -22,6 +22,7 @@ import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.
 import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
 import { _CreateManagedRunAdmissionPort, _ReadRunAdmissionConcurrencyPolicy } from "./app/run-admission-wiring.js";
+import { _CreateManagedExecutionEvidenceAuthority } from "./app/fleet-membership-wiring.js";
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
 import { PrismaRunCancellationRepository, type RunCancellationRepository, type RunWorkloadCleanupClaim } from "@opencrane/backend/agents/execution/runs";
 import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
@@ -231,7 +232,7 @@ async function _ReconcileNextRuntimeWorkloadCleanup(repository: RunCancellationR
 }
 
 /** One process-wide capacity boundary shared by run-now and scheduled managed admissions. */
-const managedRunAdmission = _CreateManagedRunAdmissionPort(prisma, _ReadRunAdmissionConcurrencyPolicy());
+const managedRunAdmission = _CreateManagedRunAdmissionPort(prisma, _ReadRunAdmissionConcurrencyPolicy(), _CreateManagedExecutionEvidenceAuthority());
 
 // Build and start the PUBLIC app (ingress-facing: /api/v1/*, /auth — session-authed).
 const app = createApp(prisma, customApi, coreApi, authApi, managedRunAdmission);
@@ -270,9 +271,10 @@ const schedulerHandle = process.env.OPENCRANE_SCHEDULER_ENABLED === "true"
 schedulerHandle?.unref();
 
 /** Server-owned repair loop that terminalises runtime attempts after their signed workload lease expires. */
-const runtimeRepairNamespace = process.env.AGENT_RUNTIME_NAMESPACE?.trim();
-if (!runtimeRepairNamespace) throw new Error("AGENT_RUNTIME_NAMESPACE must be configured for runtime repair");
-const runtimeRepairRepository = new PrismaRunCancellationRepository(prisma, { namespace: runtimeRepairNamespace, claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+const personalRuntimeNamespace = process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim();
+const managedRuntimeNamespace = process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim();
+if (!personalRuntimeNamespace || !managedRuntimeNamespace || personalRuntimeNamespace === managedRuntimeNamespace) throw new Error("distinct personal and managed runtime namespaces must be configured for runtime repair");
+const runtimeRepairRepository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace, managedRuntimeNamespace, claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
 const runtimeRepairHandle = setInterval(function _repair() { void runtimeRepairRepository.repairNextExpiredRunAtomically().catch(function _onError(err: unknown) { log.error({ err }, "runtime terminal repair failed"); }); }, 30_000);
 runtimeRepairHandle.unref();
 /** Server-owned cleanup loop consumes only database-fenced run workload cleanup claims. */

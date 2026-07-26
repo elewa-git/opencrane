@@ -15,6 +15,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Operators can now admit managed agents through the immutable, fail-closed run authority.**
+  Run-now and scheduled work derive a dedicated service principal, verify its current
+  Ed25519-signed fleet membership, intersect the active revision's exact non-personal knowledge
+  attachments with effective grants, and atomically persist the run, snapshot, and dispatch
+  request. Managed Jobs use their distinct projected identity and can never inherit the requesting
+  administrator, scheduler, personal memory, or personal configuration tools.
+
 - **Platform developers can now build the personal-agent data model, APIs, and policies from one
   canonical target contract.** Pure packages define personal and managed AgentServices, immutable
   revisions and runs, ordered transcripts and events, content-addressed artifacts and skills, and

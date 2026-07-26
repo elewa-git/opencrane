@@ -31,6 +31,7 @@ export class FleetMembershipIdentityEnvelopeSource implements IdentityEnvelopeSo
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<IdentityEnvelopeInput>>
 	{
 		// 1. Resolve the capability digest within the final transaction so a concurrent revocation cannot leave stale grants in the snapshot.
+		if (command.identityKind !== "user" || run.agentKind !== "personal") return { outcome: "denied", reason: "identity_unavailable" };
 		const capabilitySet = await this.capabilitySet.load(command, run, transaction);
 		if (capabilitySet.outcome === "denied") return capabilitySet;
 		if (!___IsSha256Digest(capabilitySet.value)) return { outcome: "denied", reason: "identity_unavailable" };
@@ -51,6 +52,7 @@ export class FleetMembershipIdentityEnvelopeSource implements IdentityEnvelopeSo
 		return {
 			outcome: "loaded",
 			value: {
+				kind: "user",
 				executionSubjectId: membership.evidence.subjectId,
 				organizationId: membership.evidence.organizationId,
 				fleetMembershipRevision: membership.evidence.revision,

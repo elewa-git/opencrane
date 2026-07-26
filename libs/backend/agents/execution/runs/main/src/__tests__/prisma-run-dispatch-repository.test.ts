@@ -38,7 +38,7 @@ function _Event(overrides: Record<string, unknown> = {})
 /** Creates the immutable input snapshot and its time-bounded signed membership identity. */
 function _Snapshot(trustedUntil = "2026-07-20T02:00:00.000Z")
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", threadId: "thread-1", modelRoute: { alias: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { executionSubjectId: "user-1", fleetMembershipTrustedUntil: trustedUntil } };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", threadId: "thread-1", modelRoute: { alias: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", fleetMembershipTrustedUntil: trustedUntil } };
 }
 
 /** Creates the exact suspended-Job assignment command returned after a claim. */
@@ -115,7 +115,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(_Snapshot()) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		const result = await repository.claimNextAttemptAtomically();
 		expect(result).toEqual({
@@ -132,6 +132,34 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "event-1", deliveryCount: 0 }), data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1 } });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ state: AgentRunState.Accepted }), data: { state: AgentRunState.Queued } });
 		expect(JSON.stringify(result)).not.toContain("executionSubjectId");
+	});
+
+	it("claims a managed service from its tagged service evidence without a user fallback", async function _ClaimsManagedService()
+	{
+		const run = _Run();
+		const event = _Event();
+		const service = { ..._Service(), kind: AgentServiceKind.Managed, workloadProfile: "managed-default" };
+		const snapshot = { ..._Snapshot(), identitySnapshot: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T02:00:00.000Z" } };
+		const queryRaw = vi.fn()
+			.mockResolvedValueOnce([{ eventId: event.id, runId: run.id, agentServiceId: run.agentServiceId }])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([])
+			.mockResolvedValueOnce([{ now: new Date("2026-07-20T00:00:00.000Z") }]);
+		const transaction = {
+			$queryRaw: queryRaw,
+			agentService: { findUnique: vi.fn().mockResolvedValue(service) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
+			runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(snapshot) },
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
+		};
+		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+
+		await expect(repository.claimNextAttemptAtomically()).resolves.toMatchObject({ status: "claimed", claim: { attempt: { runId: "run-1", namespace: "silo-managed", workloadProfile: "managed-default" } } });
+		expect(_SqlText(queryRaw.mock.calls[0]?.[0])).not.toContain('service."kind" = \'personal\'');
 	});
 
 	it("mints the attempt key onto the claim response without persisting it to Postgres", async function _MintsTransientKey()
@@ -156,7 +184,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const requests: AttemptModelKeyMintRequest[] = [];
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer(function _record(request: AttemptModelKeyMintRequest) { requests.push(request); }));
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer(function _record(request: AttemptModelKeyMintRequest) { requests.push(request); }));
 
 		const result = await repository.claimNextAttemptAtomically();
 
@@ -196,7 +224,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		};
 		const transactions = [firstTransaction, secondTransaction];
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof firstTransaction) => Promise<unknown>) { return callback(transactions.shift()!); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.claimNextAttemptAtomically()).resolves.toEqual({ status: "none" });
 		expect(firstTransaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: { id: "event-1", claimedAt: null, deliveryCount: 0, publishedAt: null, failedAt: null }, data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1, failedAt: new Date("2026-07-20T00:00:00.000Z"), failureCode: "RUN_DISPATCH_MEMBERSHIP_EXPIRED" } });
@@ -219,7 +247,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", _Command())).resolves.toEqual({ status: "conflict", reason: "stale_claim" });
 		expect(transaction.workloadAssignment.create).not.toHaveBeenCalled();
@@ -241,7 +269,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadBootstrap: { findUnique: vi.fn(), create: vi.fn().mockResolvedValue(_Bootstrap()) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", _Command())).resolves.toEqual({ status: "committed", result: { outcome: "assigned", runId: "run-1", attempt: 1, workloadUid: "job-uid-1" } });
 		expect(transaction.workloadAssignment.create).toHaveBeenCalledWith({ data: expect.objectContaining({ workloadKind: WorkloadKind.Job, workloadUid: "job-uid-1", workloadProfile: "personal-small", state: WorkloadAssignmentState.PendingPod, expiresAt: new Date("2026-07-20T01:00:10.000Z"), createdAt: new Date("2026-07-20T00:00:10.000Z") }) });
@@ -268,7 +296,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", { ..._Command(), bootstrapReference: `bootstrap-v1_${"b".repeat(64)}` })).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
 		expect(transaction.workloadAssignment.create).not.toHaveBeenCalled();
@@ -292,7 +320,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadBootstrap: { create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", _Command())).resolves.toMatchObject({ status: "committed" });
 		expect(createAssignment).toHaveBeenCalledWith({ data: expect.objectContaining({ expiresAt: new Date("2026-07-20T00:30:00.000Z") }) });
@@ -313,7 +341,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", _Command())).resolves.toEqual({ status: "conflict", reason: "authority_conflict" });
 		expect(transaction.workloadAssignment.create).not.toHaveBeenCalled();
@@ -343,7 +371,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		};
 		let traceFields: Record<string, unknown> | undefined;
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { traceFields = ___GetContext()?.extra; return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.claimNextWorkloadReleaseAtomically()).resolves.toEqual({
 			status: "claimed",
@@ -361,7 +389,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(_SqlText(queryRaw.mock.calls[4]?.[0])).toContain("workload_assignments");
 		expect(_SqlText(queryRaw.mock.calls[5]?.[0])).toContain("workload_bootstraps");
 		expect(_SqlText(queryRaw.mock.calls[6]?.[0])).toContain("run_outbox_events");
-		expect(traceFields).toMatchObject({ operation: "run_dispatch.workload_release.claim", namespace: "silo-a" });
+		expect(traceFields).toMatchObject({ operation: "run_dispatch.workload_release.claim", runtimePlanes: 2 });
 		expect(JSON.stringify(traceFields)).not.toContain("bootstrap");
 	});
 
@@ -402,7 +430,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		};
 		let transactionCall = 0;
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof expiredTransaction) => Promise<unknown>) { transactionCall += 1; return callback(transactionCall === 1 ? expiredTransaction : laterTransaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.claimNextWorkloadReleaseAtomically()).resolves.toEqual({ status: "terminalized", eventId: "release-expired", runId: "run-1", attempt: 1, failureCode: "RUN_WORKLOAD_RELEASE_AUTHORITY_EXPIRED" });
 		expect(expiredTransaction.workloadAssignment.updateMany).toHaveBeenCalledOnce();
@@ -436,7 +464,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 4 } }), create: vi.fn().mockResolvedValue({}) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.claimNextWorkloadReleaseAtomically()).resolves.toEqual({ status: "terminalized", eventId: "release-1", runId: "run-1", attempt: 1, failureCode: "RUN_WORKLOAD_RELEASE_INTEGRITY_INVALID" });
 		expect(transaction.outboxEvent.updateMany).toHaveBeenCalledWith({
@@ -474,7 +502,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue(_Bootstrap()), create: vi.fn() },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.commitSuspendedJobAssignmentAtomically("event-1", _Command())).resolves.toEqual({ status: "committed", result: { outcome: "idempotent", runId: "run-1", attempt: 1, workloadUid: "job-uid-1" } });
 		expect(transaction.workloadAssignment.create).not.toHaveBeenCalled();
@@ -497,7 +525,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		};
 		let traceFields: Record<string, unknown> | undefined;
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { traceFields = ___GetContext()?.extra; return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.registerFirstPodAndPublishReleaseAtomically("release-1", _Registration())).resolves.toEqual({ status: "registered", result: { outcome: "registered", runId: "run-1", attempt: 1, workloadUid: "job-uid-1", podUid: "pod-uid-1" } });
 		expect(transaction.workloadAssignment.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ workloadProfile: "personal-small", state: WorkloadAssignmentState.PendingPod, podUid: null }), data: { state: WorkloadAssignmentState.Registered, podUid: "pod-uid-1", registeredAt: new Date("2026-07-20T00:20:10.000Z") } });
@@ -520,7 +548,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 			workloadBootstrap: { findUnique: vi.fn().mockResolvedValue(_Bootstrap()) },
 		};
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunDispatchRepository(prisma, { namespace: "silo-a", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
+		const repository = new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: "silo-a", managedRuntimeNamespace: "silo-managed", claimLeaseMilliseconds: 30_000, assignmentTtlMilliseconds: 3_600_000 }, _Issuer());
 
 		await expect(repository.registerFirstPodAndPublishReleaseAtomically("release-1", _Registration())).resolves.toEqual({ status: "registered", result: { outcome: "idempotent", runId: "run-1", attempt: 1, workloadUid: "job-uid-1", podUid: "pod-uid-1" } });
 		await expect(repository.registerFirstPodAndPublishReleaseAtomically("release-1", { ..._Registration(), podUid: "pod-uid-2" })).resolves.toEqual({ status: "conflict", reason: "pod_conflict" });

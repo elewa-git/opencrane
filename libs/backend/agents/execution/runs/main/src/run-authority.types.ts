@@ -1,5 +1,8 @@
 import type { AgentRevisionId, AgentRun, AgentRunId, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
-import type { AgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
+import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
+
+/** Dedicated projected-token audience for either isolated runtime identity class. */
+export type RunWorkloadProjectedTokenAudience = AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
 
 /** Workload assignment bound to exactly one logical run attempt. */
 export interface RunWorkloadAssignment
@@ -15,7 +18,7 @@ export interface RunWorkloadAssignment
 	/** Silo containing the run and workload. */
 	readonly siloId: SiloId;
 	/** Fixed control-plane audience for the projected workload token. */
-	readonly audience: AgentRuntimeProjectedTokenAudience;
+	readonly audience: RunWorkloadProjectedTokenAudience;
 	/** Human or service subject authorized to cause the action. */
 	readonly subjectId: string;
 	/** Expected projected Kubernetes service account. */
@@ -46,7 +49,7 @@ export interface RunWorkloadAssignmentExpectation
 	/** Expected silo. */
 	readonly siloId: SiloId;
 	/** Fixed control-plane audience expected from the projected workload token. */
-	readonly audience: AgentRuntimeProjectedTokenAudience;
+	readonly audience: RunWorkloadProjectedTokenAudience;
 	/** Expected authorization subject. */
 	readonly subjectId: string;
 	/** Expected projected Kubernetes service account. */

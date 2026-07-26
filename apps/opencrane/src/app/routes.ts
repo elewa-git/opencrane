@@ -86,15 +86,16 @@ function _IsNamespace(value: string): boolean
  * The runtime namespace is explicit because it identifies untrusted workload subjects and durable
  * assignments; it must never silently collapse back into the OpenCrane server namespace.
  */
-function _ReadRuntimeNamespaceBoundary(): { readonly serverNamespace: string; readonly runtimeNamespace: string }
+function _ReadRuntimeNamespaceBoundary(): { readonly serverNamespace: string; readonly personalRuntimeNamespace: string; readonly managedRuntimeNamespace: string }
 {
 	const serverNamespace = process.env.POD_NAMESPACE?.trim() || "default";
-	const runtimeNamespace = process.env.AGENT_RUNTIME_NAMESPACE?.trim();
-	if (!_IsNamespace(serverNamespace) || !runtimeNamespace || !_IsNamespace(runtimeNamespace) || runtimeNamespace === serverNamespace)
+	const personalRuntimeNamespace = process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim();
+	const managedRuntimeNamespace = process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim();
+	if (!_IsNamespace(serverNamespace) || !personalRuntimeNamespace || !_IsNamespace(personalRuntimeNamespace) || !managedRuntimeNamespace || !_IsNamespace(managedRuntimeNamespace) || personalRuntimeNamespace === serverNamespace || managedRuntimeNamespace === serverNamespace || personalRuntimeNamespace === managedRuntimeNamespace)
 	{
-		throw new Error("AGENT_RUNTIME_NAMESPACE must be a valid namespace different from POD_NAMESPACE");
+		throw new Error("personal and managed runtime namespaces must be valid, distinct, and different from POD_NAMESPACE");
 	}
-	return { serverNamespace, runtimeNamespace };
+	return { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace };
 }
 
 /** Read the dedicated restricted preprocessing namespace as an explicit trust boundary. */
@@ -228,6 +229,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			let executor;
 			try
 			{
+				if (candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION && snapshot.identitySnapshot.kind !== "user") return { outcome: "denied" as const };
 				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
 					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
 					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, cogneeDatasetId: _PersonalMemoryDatasetId(snapshot), agentRevisionId: snapshot.agentRevisionId, integrations, obotMcpInvocation, sandboxExecutor, memoryGateway });
@@ -252,6 +254,7 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 /** Returns the personal Cognee dataset frozen in a snapshot, or null for every other scope. */
 function _PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
 {
+	if (snapshot.identitySnapshot.kind !== "user") return null;
 	const policy = snapshot.memoryQueryPolicy;
 	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
 	const record = policy as Readonly<Record<string, unknown>>;
@@ -261,10 +264,10 @@ function _PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
 }
 
 /** Compile normal grants, then add the sealed first-party upgrade intent only to personal sessions. */
-function _CreatePersonalRunInputCompiler(): RunInputCompiler
+function _CreateRunInputCompiler(): RunInputCompiler
 {
 	const compile = __CreatePrismaRunInputCompiler();
-	return async function _compilePersonalInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
 	{
 		// 1. Compile the immutable snapshot normally before composition adds any built-in descriptor.
 		const input = await compile(snapshot, transaction);
@@ -333,16 +336,17 @@ const _DEFERRED_APPROVAL_TTL_MILLISECONDS = 24 * 60 * 60 * 1000;
  */
 export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api): void
 {
-	const { serverNamespace, runtimeNamespace } = _ReadRuntimeNamespaceBoundary();
+	const { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace } = _ReadRuntimeNamespaceBoundary();
 	const claimLeaseMilliseconds = _ReadBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300);
 	const assignmentTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400);
 	const publishedOutboxRetentionMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000);
 	const outboxPruneBatchSize = _ReadBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000);
 	const commandTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300);
-	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
+	const runtimePlanes = { personalRuntimeNamespace, managedRuntimeNamespace };
+	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { ...runtimePlanes, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const skillWorkloadClaimsRepository = new PrismaSkillWorkloadClaimsRepository(prisma, claimLeaseMilliseconds);
-	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
-	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma), new PrismaRuntimeTerminalReporter());
+	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimePlanes);
+	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { ...runtimePlanes, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreateRunInputCompiler(), _CreateExternalActionRunner(prisma), new PrismaRuntimeTerminalReporter());
 	const replayRouteId = _ReadChannelReplayRouteId();
 	if (replayRouteId !== null)
 	{
@@ -378,7 +382,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
   // runtime's public proof key exactly once. Both are mounted under the same base path.
   app.use("/api/internal/agent-runtime", __CreateRuntimeBootstrapRouter({
     tokenReviewer: runtimeTokenReviewer,
-    namespace: runtimeNamespace,
+    runtimeNamespaces: [personalRuntimeNamespace, managedRuntimeNamespace],
     repository: new PrismaRuntimeBootstrapExchange(prisma),
     clock: { nowEpochMs(): number { return Date.now(); } },
     logger: _log,

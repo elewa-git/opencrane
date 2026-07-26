@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
 import { _CreateRuntimeTokenReviewer } from "../runtime-token-reviewer.js";
 
@@ -26,10 +26,12 @@ function _ValidStatus(overrides: object = {})
 
 describe("runtime projected-token reviewer", function _describeRuntimeTokenReviewer()
 {
+	const config = { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns" };
+
 	it("binds the Kubernetes review to the fixed runtime audience and returns the exact Pod identity", async function _bindsRuntimeIdentity()
 	{
 		const api = _ReviewApi(_ValidStatus());
-		const reviewer = _CreateRuntimeTokenReviewer(api as never, "runtime-ns");
+		const reviewer = _CreateRuntimeTokenReviewer(api as never, config);
 
 		await expect(reviewer.__Review("projected-token")).resolves.toEqual({
 			subject: "system:serviceaccount:runtime-ns:agent-runtime-default",
@@ -37,7 +39,23 @@ describe("runtime projected-token reviewer", function _describeRuntimeTokenRevie
 			serviceAccountName: "agent-runtime-default",
 			podUid: "pod-uid-1",
 		});
-		expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ token: "projected-token", audiences: [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE] }) }) }));
+		expect(api.createTokenReview).toHaveBeenCalledWith(expect.objectContaining({ body: expect.objectContaining({ spec: expect.objectContaining({ token: "projected-token", audiences: [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE] }) }) }));
+	});
+
+	it("binds a managed audience only to the managed namespace and ServiceAccount grammar", async function _bindsManagedIdentity()
+	{
+		const api = _ReviewApi(_ValidStatus({
+			audiences: [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE],
+			user: { username: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default", extra: { "authentication.kubernetes.io/pod-uid": ["pod-uid-2"] } },
+		}));
+		const reviewer = _CreateRuntimeTokenReviewer(api as never, config);
+
+		await expect(reviewer.__Review("managed-token")).resolves.toEqual({
+			subject: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default",
+			namespace: "managed-runtime-ns",
+			serviceAccountName: "managed-agent-runtime-default",
+			podUid: "pod-uid-2",
+		});
 	});
 
 	it.each([
@@ -48,7 +66,13 @@ describe("runtime projected-token reviewer", function _describeRuntimeTokenRevie
 		["a missing bound Pod UID", _ValidStatus({ user: { username: "system:serviceaccount:runtime-ns:agent-runtime-default", extra: {} } })],
 	])("rejects %s", async function _rejectsMalformedReview(_description, status)
 	{
-		const reviewer = _CreateRuntimeTokenReviewer(_ReviewApi(status) as never, "runtime-ns");
+		const reviewer = _CreateRuntimeTokenReviewer(_ReviewApi(status) as never, config);
+		await expect(reviewer.__Review("projected-token")).resolves.toBeNull();
+	});
+
+	it("rejects an ambiguous response carrying both runtime audience classes", async function _rejectsAmbiguousAudience()
+	{
+		const reviewer = _CreateRuntimeTokenReviewer(_ReviewApi(_ValidStatus({ audiences: [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE] })) as never, config);
 		await expect(reviewer.__Review("projected-token")).resolves.toBeNull();
 	});
 });

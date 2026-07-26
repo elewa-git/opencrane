@@ -1,7 +1,7 @@
 {{- $v := .Values.managedAgentRuntime -}}
-{{- $ns := $v.namespace -}}
-{{- $serverNs := $v.serverNamespace -}}
-{{- $artifactNs := $v.egress.artifactNamespace -}}
+{{- $ns := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $v.namespace -}}
+{{- $serverNs := default .Release.Namespace $v.serverNamespace -}}
+{{- $artifactNs := default (printf "%s-artifacts" $serverNs | trunc 63 | trimSuffix "-") $v.egress.artifactNamespace -}}
 {{- $sa := $v.serviceAccountName -}}
 {{- if or (gt (len $ns) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $ns)) -}}
 {{- fail "managedAgentRuntime.namespace must be a valid DNS-label namespace of at most 63 characters" -}}
@@ -40,6 +40,26 @@ metadata:
     app.kubernetes.io/part-of: opencrane
     app.kubernetes.io/component: managed-agent-runtime
 automountServiceAccountToken: false
+---
+# Aggregate namespace ceiling: the controller may request only admission-fixed Jobs, and this quota
+# bounds how many otherwise conforming managed workloads can consume cluster resources at once.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: managed-agent-runtime
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+spec:
+  hard:
+    pods: {{ $v.quota.pods | quote }}
+    count/jobs.batch: {{ $v.quota.jobs | quote }}
+    count/secrets: {{ $v.quota.secrets | quote }}
+    requests.cpu: {{ $v.quota.requests.cpu | quote }}
+    requests.memory: {{ $v.quota.requests.memory | quote }}
+    limits.cpu: {{ $v.quota.limits.cpu | quote }}
+    limits.memory: {{ $v.quota.limits.memory | quote }}
 ---
 # Namespace-wide default deny. Only the explicit egress policy below admits any traffic.
 apiVersion: networking.k8s.io/v1
@@ -101,6 +121,9 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/component: {{ $v.egress.channelProxyComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.channelProxyPort }}
     - to:
         - namespaceSelector:
             matchLabels:
@@ -108,6 +131,9 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/component: {{ $v.egress.artifactServiceComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.artifactServicePort }}
     - to:
         - namespaceSelector:
             matchLabels:

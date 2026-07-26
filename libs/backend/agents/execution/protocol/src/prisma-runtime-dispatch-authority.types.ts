@@ -15,8 +15,10 @@ export type RunInputCompiler = (snapshot: RunInputSnapshot, transaction: Prisma.
 /** Fixed, server-owned policy for minting and expiring runtime command frames. */
 export interface RuntimeDispatchAuthorityConfig
 {
-	/** Dedicated namespace containing this silo's untrusted runtime Pods and no server workload. */
-	readonly namespace: string;
+	/** Dedicated namespace containing personal runtime Pods and no server workload. */
+	readonly personalRuntimeNamespace: string;
+	/** Dedicated namespace containing managed runtime Pods and no personal workload identity. */
+	readonly managedRuntimeNamespace: string;
 	/** Hard lifetime stamped on each minted command frame, bounded by the durable assignment lease. */
 	readonly commandTtlMilliseconds: number;
 	/** Maximum server-recorded pre-reservation retries for one external-action candidate. */

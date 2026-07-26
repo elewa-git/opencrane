@@ -11,7 +11,8 @@ how that agent behaves (its prompt policy, registered model definition, budget, 
 integrations it may use). A service always points at exactly one *active* revision.
 
 This package owns the whole definition plane and the authoritative management API. It creates a
-managed service with its first draft revision; appends immutable draft revisions as edits (each
+managed service with its first draft revision, accepting only the deployed `managed-default`
+workload profile so an admitted service always has an executable controller target; appends immutable draft revisions as edits (each
 recording its parent revision and a change message); restores an older revision by cloning it into
 a new revision that records both its parent and its source; publishes a draft (flipping the active
 pointer under compare-and-swap); moves the service through enable/pause/retire under optimistic
@@ -68,6 +69,10 @@ with a plain reason.
   schedule into due runs lives in the sibling `scheduling` package.
 - Scope attach-authority + effective access: `__ValidateAttachAuthority`,
   `__ResolveEffectiveScopeAttachments`, `__IntersectScopeAttachments`, `PrismaScopeGrantResolver`.
+- Managed execution evidence: `PrismaManagedExecutionEvidenceAuthority` derives the canonical
+  `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
+  active revision's non-personal scope attachments with effective grants, and digests the complete
+  capability-bearing revision inside the run-admission transaction.
 - Types: the lifecycle commands/results (`AgentRevisionContent`, `CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
@@ -84,13 +89,17 @@ a silent partial publish.
 ## Dependency direction
 
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
-agent models), `scope:audit`, `scope:authorization`, `scope:grants`, and `scope:shared` — never on
+agent models), `scope:audit`, `scope:authorization`, `scope:grants`, `scope:membership`, and `scope:shared` — never on
 apps, gateways, or knowledge domains. run-now and session reading are injected by the app so this
-package never imports `scope:auth` or `scope:execution-runs`. The `scope:grants` edge is real and
+package never imports `scope:identity` or `scope:execution-runs`. The `scope:grants` edge is real and
 load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled
-grants) both ride the compiler. Scope attachments remain silo-bounded and org-admin-gated.
+grants) both ride the compiler. The resolver treats a Grant's principal as the receiver and its
+Awareness `payloadId` as the attached knowledge target, preventing a receiver identifier from being
+mistaken for a project, team, department, organization, or personal dataset. The membership edge is equally narrow: managed execution freezes
+fresh signed service-principal evidence into its immutable snapshot. Scope attachments remain
+silo-bounded and org-admin-gated.
 
 ## Data & persistence
 

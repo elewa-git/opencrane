@@ -20,6 +20,9 @@ dependencies:
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
   version: 0.1.0
+- name: opencrane-managed-agent-runtime
+  repository: file://../../managed-agent-runtime/helm
+  version: 0.1.0
 - name: opencrane-skill-authoring
   repository: file://../../skill-authoring/helm
   version: 0.1.0
@@ -38,5 +41,5 @@ dependencies:
 - name: langfuse
   repository: https://langfuse.github.io/langfuse-k8s
   version: 1.5.37
-digest: sha256:2a206b11d7770ba68b1b146c6fbd05dd78ae6aafe84b909f1d1fef496e1bca5e
-generated: "2026-07-26T14:56:40.936218+03:00"
+digest: sha256:818ac28a0bfde83304e3d0f7168c098b675374d034f901565795b12331592757
+generated: "2026-07-26T18:08:19.730055+03:00"

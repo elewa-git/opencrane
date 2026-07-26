@@ -9,8 +9,9 @@
 This app owns the **deployment surface for managed (central) agents** — the agents an organisation
 runs on a schedule, distinct from a person's personal agent. It is **chart/deploy-only**: a
 dedicated Kubernetes namespace, one bounded connector-scoped ServiceAccount, and the
-default-deny + explicit-egress NetworkPolicies that fence that namespace. It ships no application
-source and builds no image of its own.
+default-deny + port-bounded explicit-egress NetworkPolicies that fence that namespace. A
+namespace-wide Pod, Job, attempt-key Secret, CPU, and memory quota limits aggregate consumption even when many
+admission-valid Jobs are requested. It ships no application source and builds no image of its own.
 
 Managed runtime Pods run the **same image as the personal runtime** (built by
 [`agent-runtime`](../agent-runtime/README.md) — one shared build artifact, never duplicated Python).
@@ -25,7 +26,7 @@ LiteLLM / Obot services a central agent needs — everything else is denied.
         │  scheduler admits a due run; launcher builds a managed-profile Job
         ▼
  ┌────────────────────────────────────┐
- │  managed-agent-runtime  ◄── HERE    │  namespace · connector-scoped SA · default-deny + egress NP
+ │  managed-agent-runtime  ◄── HERE    │  namespace · scoped SA · quota · default-deny + bounded egress
  └────────────────────────────────────┘
         │  runs the shared agent-runtime image under the managed identity
         ▼
@@ -37,11 +38,18 @@ chart rejects a personal ServiceAccount name at render time, and the namespace m
 server namespace. `automountServiceAccountToken` is `false`; the launcher projects a managed-audience
 token explicitly per attempt.
 
+## Public surface
+
+This app has no HTTP or TypeScript API. Its public deployment contract is
+`helm/values.yaml`: namespace and ServiceAccount identity, aggregate workload quota, and the exact
+components and TCP ports reachable from managed runtime Pods. The chart renders one Namespace,
+ServiceAccount, ResourceQuota, default-deny NetworkPolicy, and explicit egress NetworkPolicy.
+
 ## Layout
 
 - `helm/` — the standalone chart (`Chart.yaml`, `values.yaml`, `templates/managed-agent-runtime.yaml`).
-- `tests/helm-contract.sh` — renders the chart and asserts the distinct SA, default-deny + egress
-  policies, restricted namespace, and the identity-class fences.
+- `tests/helm-contract.sh` — renders the chart and asserts the distinct SA, aggregate quota,
+  default-deny + port-bounded egress policies, restricted namespace, and identity-class fences.
 - `deploy/README.md` — image provenance: this plane reuses the `agent-runtime` image.
 
 ## Boundary

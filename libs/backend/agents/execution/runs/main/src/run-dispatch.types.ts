@@ -40,8 +40,10 @@ export type AttemptModelKeyIssuer = (request: AttemptModelKeyMintRequest) => Pro
 /** Fixed database-owned lease and assignment policy for run dispatch. */
 export interface RunDispatchRepositoryConfig
 {
-	/** Dedicated namespace containing this silo's untrusted runtime Jobs and no server workload. */
-	readonly namespace: string;
+	/** Dedicated namespace containing personal runtime Jobs and no server workload. */
+	readonly personalRuntimeNamespace: string;
+	/** Dedicated namespace containing managed runtime Jobs and no personal workload identity. */
+	readonly managedRuntimeNamespace: string;
 	/** Time after which an uncommitted outbox claim may be reclaimed. */
 	readonly claimLeaseMilliseconds: number;
 	/** Hard lifetime persisted on a newly assigned runtime workload. */

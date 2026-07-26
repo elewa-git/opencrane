@@ -139,6 +139,14 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(withPersona).toEqual({ outcome: "denied", reason: "invalid_command" });
 	});
 
+	it("rejects a workload profile the deployed controller cannot resolve", async function _unknownProfile()
+	{
+		const repository = new _Repository();
+		const created = await __CreateManagedAgentService(repository, { siloId: _SILO, name: "Reporter", workloadProfile: "reports-v2", authoredBy: "admin-1", changeMessage: "initial", content: _content() }, _NOW);
+		expect(created).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(repository.services.size).toBe(0);
+	});
+
 	it("rejects duplicate scope attachments with a validation denial, not a persistence error", async function _duplicateAttachment()
 	{
 		const repository = new _Repository();

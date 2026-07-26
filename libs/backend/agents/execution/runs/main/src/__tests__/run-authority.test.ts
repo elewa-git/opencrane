@@ -130,7 +130,7 @@ function _assignment(): RunWorkloadAssignment
 		siloId: "silo-1",
 		audience: "opencrane-agent-runtime",
 		subjectId: "user-1",
-		serviceAccountName: "agent-runtime",
+		serviceAccountName: "agent-runtime-default",
 		namespace: "silo-1",
 		workloadKind: "job",
 		workloadUid: "job-uid-1",
@@ -209,6 +209,8 @@ describe("single AgentRun authority", function _suite()
 	it("binds workload identity to the exact run and attempt", function _assignmentBinding()
 	{
 		expect(__ValidateRunWorkloadAssignment(_assignment(), _expectation())).toEqual({ outcome: "trusted" });
+		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "managed-agent-runtime-default" }, { ..._expectation(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "managed-agent-runtime-default" })).toEqual({ outcome: "trusted" });
+		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "agent-runtime-default" }, { ..._expectation(), audience: "opencrane-managed-agent-runtime", serviceAccountName: "agent-runtime-default" })).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });
 		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), runId: "run-other" }, _expectation())).toEqual({ outcome: "denied", reason: "run_mismatch" });
 		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), agentServiceId: "service-other" }, _expectation())).toEqual({ outcome: "denied", reason: "agent_service_mismatch" });
 		expect(__ValidateRunWorkloadAssignment({ ..._assignment(), audience: "artifact-service" as RunWorkloadAssignment["audience"] }, _expectation())).toEqual({ outcome: "denied", reason: "projected_token_audience_mismatch" });

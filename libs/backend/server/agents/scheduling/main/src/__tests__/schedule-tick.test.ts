@@ -146,7 +146,7 @@ describe("schedule tick", function _TickSuite()
 
 	it("schedules a backed-off retry and stops advancing on a transient denial", async function _TransientRetry()
 	{
-		const admission = new _DenyingAdmission("run_admission_unavailable");
+		const admission = new _DenyingAdmission("membership_stale");
 		const result = await __RunScheduleTick(_schedule(), "rev-1", _deps(admission, "2026-07-01T02:30:00.000Z"));
 		if (result.status !== "ticked") throw new Error("expected ticked");
 		const first = result.outcomes[0];

@@ -37,6 +37,15 @@ grep -Fq '        runAsUser: 1000' <<<"$server_manifest"
 grep -Fq '        runAsGroup: 1000' <<<"$server_manifest"
 grep -Fq '        fsGroup: 1000' <<<"$server_manifest"
 grep -Fq '            defaultMode: 0440' <<<"$server_manifest"
+grep -Fq '            - name: OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE' <<<"$server_manifest"
+grep -Fq '              value: /var/run/opencrane/fleet-membership/public-key.pem' <<<"$server_manifest"
+grep -Fq '            - name: fleet-membership-key' <<<"$server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/fleet-membership' <<<"$server_manifest"
+grep -Fq '            secretName: "opencrane-fleet-membership-verification"' <<<"$server_manifest"
+grep -Fq '            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE' <<<"$server_manifest"
+grep -Fq '              value: "opencrane-silo-runtime"' <<<"$server_manifest"
+grep -Fq '            - name: AGENT_RUNTIME_MANAGED_NAMESPACE' <<<"$server_manifest"
+grep -Fq '              value: "opencrane-silo-managed-runtime"' <<<"$server_manifest"
 
 if grep -Fq '            defaultMode: 0400' <<<"$server_manifest"; then
   echo "opencrane-server artifact keys are root-only" >&2

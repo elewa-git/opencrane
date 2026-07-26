@@ -352,8 +352,41 @@ artifactPreprocessor:
       cpu: 1000m
       memory: 512Mi
 
-# -- Personal-runtime workload controller. Disabled until an immutable runtime image digest and
-# exact Kubernetes API Service CIDR are supplied; enabling it never starts a runtime Job directly.
+# -- Managed runtime-plane chart. It creates no long-lived workload: only the dedicated namespace,
+# connector-scoped identity, and default-deny policy used by controller-created managed Jobs.
+managedAgentRuntimePlane:
+  managedAgentRuntime:
+    # Empty derives `<release>-managed-runtime`; it must differ from the personal and server planes.
+    namespace: ""
+    # Empty binds destinations to the umbrella release namespace.
+    serverNamespace: ""
+    serviceAccountName: managed-agent-runtime-default
+    quota:
+      pods: "20"
+      jobs: "20"
+      secrets: "20"
+      requests:
+        cpu: "2"
+        memory: 4Gi
+      limits:
+        cpu: "20"
+        memory: 20Gi
+    egress:
+      runtimePodComponent: agent-runtime
+      channelProxyComponent: channel-proxy
+      artifactNamespace: ""
+      artifactServiceComponent: artifact-service
+      memoryGatewayComponent: opencrane-server
+      litellmComponent: litellm
+      obotComponent: obot
+      serverInternalPort: 8081
+      channelProxyPort: 8080
+      artifactServicePort: 8080
+      litellmPort: 4000
+      obotPort: 8080
+
+# -- Personal and managed runtime workload controller. Disabled until immutable runtime image
+# digests and exact Kubernetes API Service CIDRs are supplied; enabling it never starts a Job directly.
 agentController:
   enabled: false
   # -- Dedicated namespace containing only personal-runtime Jobs, Pods, their zero-RBAC KSA, and
@@ -393,6 +426,7 @@ agentController:
   runtimeQuota:
     pods: 20
     jobs: 20
+    secrets: 20
     requests:
       cpu: "2"
       memory: 4Gi
@@ -400,6 +434,7 @@ agentController:
       cpu: "20"
       memory: 20Gi
   runtimeProfile:
+    # -- Exact personal-agent profile name. `managed-default` is reserved for the managed plane.
     name: personal-default
     image:
       repository: ghcr.io/elewa-git/opencrane-agent-runtime
@@ -508,6 +543,14 @@ clustertenantManager:
   runAdmission:
     maxConcurrent: 2
     maxQueued: 10
+  # -- Signed fleet-membership trust used for managed-service run admission.
+  # The existing Secret contains only the fleet's Ed25519 public verification key.
+  fleetMembership:
+    trustedIssuerId: opencrane-fleet
+    issuerKeyId: fleet-key-1
+    existingSecret: opencrane-fleet-membership-verification
+    publicKeyKey: public-key.pem
+    maximumStalenessMs: 300000
   service:
     # -- Public API port (ingress-facing): /api/v1/*, /auth. Session-authed.
     port: 8080

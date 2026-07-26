@@ -21,6 +21,14 @@ export const AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-runtime";
 export const MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE = "opencrane-managed-agent-runtime";
 
 /**
+ * Sole managed-agent workload profile deployed by the initial controller composition.
+ *
+ * Keeping the value in the shared contract prevents the definition API from admitting a profile
+ * that the controller can never resolve into an executable workload.
+ */
+export const MANAGED_AGENT_RUNTIME_PROFILE_NAME = "managed-default";
+
+/**
  * Return whether a ServiceAccount belongs to the bounded first-party personal-runtime identity class.
  * @param value - Kubernetes ServiceAccount name to validate.
  * @returns True only for a valid personal-runtime-prefixed DNS label.
@@ -52,6 +60,9 @@ export type AgentRuntimeProjectedTokenAudience = typeof AGENT_RUNTIME_PROJECTED_
 
 /** Exact audience literal for a managed (central) agent runtime's projected ServiceAccount token. */
 export type ManagedAgentRuntimeProjectedTokenAudience = typeof MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
+
+/** Exact workload-profile literal accepted for managed agents by the initial composition. */
+export type ManagedAgentRuntimeProfileName = typeof MANAGED_AGENT_RUNTIME_PROFILE_NAME;
 
 /** Initial message sent by a runtime after it opens its control-plane stream. */
 export interface RuntimeStreamOpen

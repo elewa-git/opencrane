@@ -14,3 +14,5 @@ export { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
 export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.js";
 export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 export { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
+export { __ManagedAgentServicePrincipal, PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.js";
+export type { ManagedExecutionEvidence, ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types.js";

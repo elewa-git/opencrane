@@ -10,7 +10,10 @@ but it does not get to decide what is current or authoritative. This package own
 through the language-neutral `AgentRuntimeProtocol v1`.
 
 Before a command reaches an executor, it checks that the command belongs to the currently assigned
-run attempt, carries the exact frozen input snapshot, arrives in order, and is still inside its lease.
+run attempt, carries the exact frozen input snapshot and tagged user-or-service identity, arrives in
+order, and is still inside its lease. A service principal cannot be interpreted as a user merely
+because both carry signed fleet-membership evidence.
+
 When the executor proposes an event or outside action, it performs the mirror check before another
 domain may persist or execute that proposal.
 
@@ -127,3 +130,6 @@ an app, a concrete transport adapter, a model driver, or a legacy runtime packag
 - Parent group: [execution](../README.md)
 - Wire contract: [`@opencrane/contracts`](../../../../../contracts/README.md)
 - Run authority: [execution/runs](../runs/main/README.md)
+Personal and managed runtime Pods share the same protocol but not an identity plane: every tagged
+snapshot is re-bound to its deployment-owned namespace, projected-token audience, and ServiceAccount
+grammar before a command or candidate is accepted.

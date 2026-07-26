@@ -26,7 +26,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		integrationAssignments: [{ integrationId: "integration-b", allowedTools: ["write"] }, { integrationId: "integration-a", allowedTools: ["read"] }],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: { maxTotalTokens: 4096, maxCostUsdMicros: 500000, maxToolInvocations: 8, wallClockDeadlineEpochMs: 1_800_000_000_000 },
-		identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
+		identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: "sha256:c", fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" },
 		capabilitySetDigest: "sha256:cap",
 		effectiveContractDigest: "sha256:contract",
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,

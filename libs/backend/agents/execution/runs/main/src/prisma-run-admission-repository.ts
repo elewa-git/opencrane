@@ -9,7 +9,7 @@ import type { InitialRunAuthority, RunAdmissionBuild, RunAdmissionBuildResult, R
 
 /**
  * Prisma-backed authority for the first durable instant of a logical run.
- * It serialises the user-visible idempotency key before compilation and commits the run, its sole
+ * It serialises the caller-visible idempotency key before compilation and commits the run, its sole
  * immutable snapshot, and both initial outbox events together; failure leaves none of them visible.
  */
 export class PrismaRunAdmissionRepository implements RunAdmissionRepository
@@ -27,7 +27,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 	 * @param clock - Server-owned admission clock, replaceable only for deterministic tests.
 	 * @param log - Structured redacting logger for otherwise fail-closed persistence failures.
 	 */
-	constructor(prisma: PrismaClient, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("personal-run-admission"))
+	constructor(prisma: PrismaClient, clock: RunAdmissionClock = { now: function _now(): Date { return new Date(); } }, log: Logger = ___CreateLogger("run-admission"))
 	{
 		this.prisma = prisma;
 		this.clock = clock;
@@ -65,7 +65,7 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				const admittedAt = admittedAtDate.toISOString();
 				const compiled = await build({ prisma: transaction, admittedAt, admittedAtEpochMs: admittedAtDate.getTime() });
 				if (compiled.outcome === "denied") return compiled;
-				if (!_matchesCommand(compiled.value, command) || !_matchesInteractiveDelegation(compiled.value.authority, command)) return { outcome: "denied", reason: "authority_conflict" };
+				if (!_matchesCommand(compiled.value, command) || !_matchesExecutionIdentity(compiled.value.authority, compiled.value.snapshot, command)) return { outcome: "denied", reason: "authority_conflict" };
 
 				// 3. Insert both sides of the deferred snapshot relation plus ordered acceptance and dispatch events in one commit.
 				await _persistInitialAdmission(transaction, command, compiled.value, admittedAtDate);
@@ -92,11 +92,11 @@ export class PrismaRunAdmissionRepository implements RunAdmissionRepository
 				}
 				catch (recoveryError)
 				{
-					this.log.error({ err: recoveryError, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "duplicate_recovery_failed" }, "personal run admission persistence failed");
+					this.log.error({ err: recoveryError, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "duplicate_recovery_failed" }, "run admission persistence failed");
 					return { outcome: "denied", reason: "persistence_unavailable" };
 				}
 			}
-			this.log.error({ err: error, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "transaction_failed" }, "personal run admission persistence failed");
+			this.log.error({ err: error, runId: command.runId, siloId: command.siloId, agentServiceId: command.agentServiceId, failureKind: "transaction_failed" }, "run admission persistence failed");
 			return { outcome: "denied", reason: "persistence_unavailable" };
 		}
 	}
@@ -108,7 +108,9 @@ function _matchesIdempotencyScope(existing: { siloId: string; agentServiceId: st
 	return existing.siloId === command.siloId
 		&& existing.agentServiceId === command.agentServiceId
 		&& existing.threadId === command.threadId
-		&& (existing.trigger !== "Interactive" || existing.delegatedUserId === command.executionSubjectId);
+		&& existing.trigger === _trigger(command.trigger)
+		&& (command.identityKind !== "user" || existing.delegatedUserId === command.executionSubjectId)
+		&& (command.identityKind !== "service" || existing.delegatedUserId === null);
 }
 
 /** Returns whether a recovered immutable snapshot belongs to the exact execution subject requesting it. */
@@ -116,13 +118,20 @@ function _matchesSnapshotScope(snapshot: { siloId: string; agentServiceId: strin
 {
 	if (snapshot.siloId !== command.siloId || snapshot.agentServiceId !== command.agentServiceId || snapshot.threadId !== command.threadId) return false;
 	if (!snapshot.identitySnapshot || typeof snapshot.identitySnapshot !== "object" || Array.isArray(snapshot.identitySnapshot)) return false;
-	return snapshot.identitySnapshot["executionSubjectId"] === command.executionSubjectId;
+	const identity = snapshot.identitySnapshot as Record<string, unknown>;
+	if (identity["kind"] !== command.identityKind) return false;
+	if (command.identityKind === "user") return identity["executionSubjectId"] === command.executionSubjectId;
+	return identity["agentServiceId"] === command.agentServiceId && identity["executionSubjectId"] === `agent-service:${command.agentServiceId}`;
 }
 
-/** Returns whether interactive run custody and its signed snapshot are bound to the same subject. */
-function _matchesInteractiveDelegation(authority: InitialRunAuthority, command: RunAdmissionCommand): boolean
+/** Require authority and snapshot evidence to express only the tagged command identity. */
+function _matchesExecutionIdentity(authority: InitialRunAuthority, snapshot: RunInputSnapshot, command: RunAdmissionCommand): boolean
 {
-	return authority.trigger !== "interactive" || authority.delegatedUserId === command.executionSubjectId;
+	if (command.identityKind === "user")
+	{
+		return authority.agentKind === "personal" && authority.trigger === "interactive" && authority.delegatedUserId === command.executionSubjectId && snapshot.identitySnapshot.kind === "user" && snapshot.identitySnapshot.executionSubjectId === command.executionSubjectId;
+	}
+	return authority.agentKind === "managed" && authority.trigger === command.trigger && authority.delegatedUserId === null && snapshot.identitySnapshot.kind === "service" && snapshot.identitySnapshot.agentServiceId === command.agentServiceId && snapshot.identitySnapshot.executionSubjectId === `agent-service:${command.agentServiceId}`;
 }
 
 /** Returns whether the transaction-fenced authority exactly matches immutable caller coordinates. */
@@ -133,7 +142,7 @@ function _matchesCommand(value: RunAdmissionBuild, command: RunAdmissionCommand)
 		&& value.snapshot.siloId === command.siloId
 		&& value.snapshot.agentServiceId === command.agentServiceId
 		&& value.snapshot.threadId === command.threadId
-		&& value.snapshot.identitySnapshot.executionSubjectId === command.executionSubjectId;
+		&& value.authority.trigger === command.trigger;
 }
 
 /** Inserts the run, its only snapshot, and the ordered initial run-domain events. */

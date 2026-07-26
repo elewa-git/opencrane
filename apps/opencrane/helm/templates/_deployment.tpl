@@ -1,4 +1,6 @@
 {{- define "opencrane.server.deployment" -}}
+{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -61,9 +63,19 @@ spec:
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
-            # The server accepts runtime assignments only for this Helm-owned restricted namespace.
-            - name: AGENT_RUNTIME_NAMESPACE
+            - name: OPENCRANE_FLEET_MEMBERSHIP_ISSUER_ID
+              value: {{ required "clustertenantManager.fleetMembership.trustedIssuerId is required" .Values.clustertenantManager.fleetMembership.trustedIssuerId | quote }}
+            - name: OPENCRANE_FLEET_MEMBERSHIP_KEY_ID
+              value: {{ required "clustertenantManager.fleetMembership.issuerKeyId is required" .Values.clustertenantManager.fleetMembership.issuerKeyId | quote }}
+            - name: OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE
+              value: /var/run/opencrane/fleet-membership/public-key.pem
+            - name: OPENCRANE_FLEET_MEMBERSHIP_MAX_STALENESS_MS
+              value: {{ .Values.clustertenantManager.fleetMembership.maximumStalenessMs | quote }}
+            # The server binds each runtime identity class to its own Helm-owned restricted namespace.
+            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
+            - name: AGENT_RUNTIME_MANAGED_NAMESPACE
+              value: {{ $managedRuntimeNamespace | quote }}
             # The preprocessing router TokenReviews only this Helm-owned worker namespace.
             - name: ARTIFACT_PREPROCESSOR_ENABLED
               value: {{ .Values.artifactPreprocessor.enabled | quote }}
@@ -362,6 +374,9 @@ spec:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
+            - name: fleet-membership-key
+              mountPath: /var/run/opencrane/fleet-membership
+              readOnly: true
           livenessProbe:
             httpGet:
               path: /healthz
@@ -386,4 +401,11 @@ spec:
                 path: lease-private.pem
               - key: receipt-public.pem
                 path: receipt-public.pem
+        - name: fleet-membership-key
+          secret:
+            secretName: {{ required "clustertenantManager.fleetMembership.existingSecret is required" .Values.clustertenantManager.fleetMembership.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ required "clustertenantManager.fleetMembership.publicKeyKey is required" .Values.clustertenantManager.fleetMembership.publicKeyKey | quote }}
+                path: public-key.pem
 {{- end }}

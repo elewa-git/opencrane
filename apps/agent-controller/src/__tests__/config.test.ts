@@ -7,12 +7,28 @@ function _ProfilesJson(serverNamespace = "silo-a"): string
 {
 	return JSON.stringify({
 		"personal-default": {
+			namespace: "silo-a-runtime",
 			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			imagePullPolicy: "IfNotPresent",
 			runtimeStreamUrl: `http://opencrane-server.${serverNamespace}.svc.cluster.local:3001/api/internal/agent-runtime`,
 				litellmBaseUrl: `http://litellm.${serverNamespace}.svc.cluster.local:4000`,
 				serverNamespace,
 			serviceAccountName: "agent-runtime-default",
+			projectedTokenTtlSeconds: 600,
+			scratchSize: "64Mi",
+			activeDeadlineSeconds: 900,
+			ttlSecondsAfterFinished: 0,
+			resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } },
+		},
+		"managed-default": {
+			namespace: "silo-a-managed-runtime",
+			identityProfile: "managed",
+			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			imagePullPolicy: "IfNotPresent",
+			runtimeStreamUrl: `http://opencrane-server.${serverNamespace}.svc.cluster.local:3001/api/internal/agent-runtime`,
+			litellmBaseUrl: `http://litellm.${serverNamespace}.svc.cluster.local:4000`,
+			serverNamespace,
+			serviceAccountName: "managed-agent-runtime-default",
 			projectedTokenTtlSeconds: 600,
 			scratchSize: "64Mi",
 			activeDeadlineSeconds: 900,
@@ -34,15 +50,17 @@ function _SkillProfilesJson(): string
 /** Return the minimal complete process environment. */
 function _Environment(): NodeJS.ProcessEnv
 {
-	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_RUNTIME_NAMESPACE: "silo-a-runtime", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson() };
+	return { OPENCRANE_INTERNAL_URL: "http://opencrane-server.silo-a.svc.cluster.local:3001", OPENCRANE_CONTROLLER_TOKEN_PATH: "/var/run/opencrane/tokens/opencrane.token", AGENT_CONTROLLER_POLL_INTERVAL_MS: "1000", AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson() };
 }
 
 describe("agent-controller process config", function _Suite()
 {
-	it("loads the explicit token paths, namespace, and validated immutable profiles", function _Loads()
+	it("loads the explicit token path and namespace-bound immutable profiles", function _Loads()
 	{
 		const config = _ReadConfig(_Environment());
-		expect(config.runtimeNamespace).toBe("silo-a-runtime");
+		expect(config.profiles["personal-default"]?.namespace).toBe("silo-a-runtime");
+		expect(config.profiles["managed-default"]?.namespace).toBe("silo-a-managed-runtime");
+		expect(config.profiles["managed-default"]?.serviceAccountName).toBe("managed-agent-runtime-default");
 		expect(config.profiles["personal-default"]?.serverNamespace).toBe("silo-a");
 		expect(config.controllerTokenPath).toBe("/var/run/opencrane/tokens/opencrane.token");
 		expect(config.requestTimeoutMilliseconds).toBe(10_000);
@@ -53,7 +71,7 @@ describe("agent-controller process config", function _Suite()
 
 	it("rejects a collapsed namespace or moving image tag", function _RejectsUnsafeConfig()
 	{
-		expect(function _SameNamespace() { _ReadConfig({ ..._Environment(), AGENT_RUNTIME_NAMESPACE: "silo-a" }); }).toThrow(/namespaces separate/);
+		expect(function _SameNamespace() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson("silo-a").replace("\"silo-a-runtime\"", "\"silo-a\"") }); }).toThrow(/unique runtime namespace separate/);
 		expect(function _MovingImage() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: _ProfilesJson().replace(/@sha256:[a-f0-9]{64}/, ":latest") }); }).toThrow(/immutable image/);
 		expect(function _SkillProfileWrongClass() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: _SkillProfilesJson().replace("\"kind\":\"authoring\"", "\"kind\":\"tool-runner\"") }); }).toThrow(/wrong workload class/);
 	});

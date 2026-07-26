@@ -1,4 +1,6 @@
 {{- define "opencrane.server.networkPolicy" -}}
+{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #
@@ -83,13 +85,23 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # The personal-agent runtime owns no listener and can only initiate this connection.
-    # TokenReview fixes its exact projected-token audience and ServiceAccount subject in-process.
+    # Runtime Jobs own no listener and can only initiate this connection. TokenReview fixes each
+    # personal or managed audience to its distinct namespace and ServiceAccount subject in-process.
     {{- if .Values.agentController.enabled }}
     - from:
         - namespaceSelector:
             matchLabels:
               opencrane.ai/runtime-release: {{ include "opencrane.agentController.runtimeNamespaceLabelValue" . | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-runtime
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
           podSelector:
             matchLabels:
               app.kubernetes.io/component: agent-runtime

@@ -1,9 +1,9 @@
 import type { V1Job, V1Secret } from "@kubernetes/client-node";
 
-import { __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds, type AgentRuntimeJobProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
+import { __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "@opencrane/backend/agents/runtime/k8s-launcher";
 import { ___DoWithTrace } from "@opencrane/observability";
 
-import type { AgentControllerOptions, AgentControllerReconcileResult, AgentControllerRuntimeProfiles, AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types.js";
+import type { AgentControllerOptions, AgentControllerReconcileResult, AgentControllerRuntimeProfile, AgentControllerRuntimeProfiles, AgentControllerRuntimeReleaseReconcileResult } from "./agent-controller.types.js";
 
 /** Validate a DNS-label namespace before it becomes a Kubernetes authority boundary. */
 function _IsNamespace(value: string): boolean
@@ -12,7 +12,7 @@ function _IsNamespace(value: string): boolean
 }
 
 /** Resolve one exact configured profile without accepting prototype properties. */
-function _ResolveProfile(profiles: AgentControllerRuntimeProfiles, name: string): AgentRuntimeJobProfile | undefined
+function _ResolveProfile(profiles: AgentControllerRuntimeProfiles, name: string): AgentControllerRuntimeProfile | undefined
 {
 	if (!Object.prototype.hasOwnProperty.call(profiles, name))
 	{
@@ -24,33 +24,34 @@ function _ResolveProfile(profiles: AgentControllerRuntimeProfiles, name: string)
 /**
  * Validate every deployment-supplied runtime profile through the canonical manifest builder.
  * @param value - Parsed JSON map whose values are candidate immutable runtime profiles.
- * @param runtimeNamespace - Dedicated runtime namespace, distinct from every profile's server namespace.
  * @returns A detached, validated runtime-profile map.
  */
-export function __ValidateAgentControllerRuntimeProfiles(value: unknown, runtimeNamespace: string): AgentControllerRuntimeProfiles
+export function __ValidateAgentControllerRuntimeProfiles(value: unknown): AgentControllerRuntimeProfiles
 {
-	if (typeof value !== "object" || value === null || Array.isArray(value) || !_IsNamespace(runtimeNamespace))
+	if (typeof value !== "object" || value === null || Array.isArray(value))
 	{
-		throw new Error("agent controller profiles must be one object bound to a valid namespace");
+		throw new Error("agent controller profiles must be one bounded object");
 	}
 	const entries = Object.entries(value);
 	if (entries.length === 0 || entries.length > 32)
 	{
 		throw new Error("agent controller requires between 1 and 32 bounded runtime profiles");
 	}
-	const profiles: Record<string, AgentRuntimeJobProfile> = Object.create(null) as Record<string, AgentRuntimeJobProfile>;
+	const profiles: Record<string, AgentControllerRuntimeProfile> = Object.create(null) as Record<string, AgentControllerRuntimeProfile>;
+	const namespaces = new Set<string>();
 	for (const [name, candidate] of entries)
 	{
 		if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(name) || name.length > 63 || typeof candidate !== "object" || candidate === null || Array.isArray(candidate))
 		{
 			throw new Error("agent controller profile names and bodies must be bounded objects");
 		}
-		const profile = structuredClone(candidate) as AgentRuntimeJobProfile;
-		if (profile.serverNamespace === runtimeNamespace)
+		const profile = structuredClone(candidate) as AgentControllerRuntimeProfile;
+		if (!_IsNamespace(profile.namespace) || profile.serverNamespace === profile.namespace || namespaces.has(profile.namespace))
 		{
-			throw new Error(`agent controller profile '${name}' must keep runtime and server namespaces separate`);
+			throw new Error(`agent controller profile '${name}' must own one unique runtime namespace separate from its server namespace`);
 		}
-		__BuildSuspendedAgentRuntimeJob({ runId: "profile-validation", attempt: 1, agentServiceId: "profile-validation", agentRevisionId: "profile-validation", siloId: "profile-validation", namespace: runtimeNamespace, bootstrapReference: "profile-validation", litellmKeySecretName: "litellm-key-profilevalidation" }, profile);
+		__BuildSuspendedAgentRuntimeJob({ runId: "profile-validation", attempt: 1, agentServiceId: "profile-validation", agentRevisionId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, bootstrapReference: "profile-validation", litellmKeySecretName: "litellm-key-profilevalidation" }, profile);
+		namespaces.add(profile.namespace);
 		profiles[name] = profile;
 	}
 	return profiles;
@@ -153,15 +154,11 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	const claim = await options.authority.__Claim(signal);
 	if (!claim) return { outcome: "idle" };
 
-	// 2. Bind the claim to this one silo and one immutable, preconfigured runtime profile.
-	if (claim.attempt.namespace !== options.runtimeNamespace)
-	{
-		throw new Error("claimed runtime attempt targets a namespace outside this controller silo");
-	}
+	// 2. Bind the claim to one immutable profile and its sole deployment-owned namespace.
 	const profile = _ResolveProfile(options.profiles, claim.attempt.workloadProfile);
-	if (!profile || profile.serverNamespace === options.runtimeNamespace)
+	if (!profile || claim.attempt.namespace !== profile.namespace || profile.serverNamespace === profile.namespace)
 	{
-		throw new Error("claimed runtime profile is not bound to this controller silo");
+		throw new Error("claimed runtime attempt does not match this controller's bounded workload profile namespace");
 	}
 	const assignment = {
 		runId: claim.attempt.runId,
@@ -223,19 +220,15 @@ function _RequirePodUid(uid: string | undefined): string
  */
 export async function __ReconcileNextRuntimeRelease(options: AgentControllerOptions, signal: AbortSignal): Promise<AgentControllerRuntimeReleaseReconcileResult>
 {
-	return ___DoWithTrace("agent_controller.workload_release.reconcile", { namespace: options.runtimeNamespace }, async function _reconcileWorkloadRelease(): Promise<AgentControllerRuntimeReleaseReconcileResult>
+	return ___DoWithTrace("agent_controller.workload_release.reconcile", {}, async function _reconcileWorkloadRelease(): Promise<AgentControllerRuntimeReleaseReconcileResult>
 	{
 		// 1. Claim a durable release generation so stale controller replicas cannot register a Pod.
 		const claim = await options.authority.__ClaimWorkloadRelease(signal);
 		if (!claim) return { outcome: "idle" };
 
 		// 2. Rebuild the exact assigned Job from authority coordinates and the fixed release profile.
-		if (claim.workload.namespace !== options.runtimeNamespace)
-		{
-			throw new Error("claimed runtime release targets a namespace outside this controller silo");
-		}
 		const profile = _ResolveProfile(options.profiles, claim.workload.workloadProfile);
-		if (!profile || profile.serverNamespace === options.runtimeNamespace || profile.serviceAccountName !== claim.workload.serviceAccountName)
+		if (!profile || claim.workload.namespace !== profile.namespace || profile.serverNamespace === profile.namespace || profile.serviceAccountName !== claim.workload.serviceAccountName)
 		{
 			throw new Error("claimed runtime release does not match this silo's bounded workload profile");
 		}
@@ -296,9 +289,9 @@ export async function __ReconcileNextRuntimeRelease(options: AgentControllerOpti
 export async function __RunAgentController(options: AgentControllerOptions, signal: AbortSignal): Promise<void>
 {
 	const outboxPruneIntervalMilliseconds = options.outboxPruneIntervalMilliseconds ?? 3_600_000;
-	if (!_IsNamespace(options.runtimeNamespace) || !Number.isSafeInteger(options.pollIntervalMilliseconds) || options.pollIntervalMilliseconds < 100 || options.pollIntervalMilliseconds > 60_000 || !Number.isSafeInteger(outboxPruneIntervalMilliseconds) || outboxPruneIntervalMilliseconds < 60_000 || outboxPruneIntervalMilliseconds > 86_400_000)
+	if (!_ProfilesAreBoundToDistinctNamespaces(options.profiles) || !Number.isSafeInteger(options.pollIntervalMilliseconds) || options.pollIntervalMilliseconds < 100 || options.pollIntervalMilliseconds > 60_000 || !Number.isSafeInteger(outboxPruneIntervalMilliseconds) || outboxPruneIntervalMilliseconds < 60_000 || outboxPruneIntervalMilliseconds > 86_400_000)
 	{
-		throw new Error("agent controller requires a valid namespace, 100-60000ms poll interval, and 60s-24h outbox prune interval");
+		throw new Error("agent controller requires distinct profile runtime namespaces, 100-60000ms poll interval, and 60s-24h outbox prune interval");
 	}
 	let nextOutboxPruneAt = Date.now();
 	while (!signal.aborted)
@@ -343,4 +336,12 @@ export async function __RunAgentController(options: AgentControllerOptions, sign
 		if (didWork) continue;
 		await _Wait(options.pollIntervalMilliseconds, signal);
 	}
+}
+
+/** Return whether each configured profile owns one distinct namespace outside its server namespace. */
+function _ProfilesAreBoundToDistinctNamespaces(profiles: AgentControllerRuntimeProfiles): boolean
+{
+	const values = Object.values(profiles);
+	const namespaces = new Set(values.map(function _namespace(profile): string { return profile.namespace; }));
+	return values.length > 0 && values.every(function _valid(profile): boolean { return _IsNamespace(profile.namespace) && profile.namespace !== profile.serverNamespace; }) && namespaces.size === values.length;
 }

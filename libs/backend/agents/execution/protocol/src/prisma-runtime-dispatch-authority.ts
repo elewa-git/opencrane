@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROTOCOL_V1, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
@@ -38,10 +38,8 @@ interface RuntimeDispatchContext
 	readonly snapshot: RunInputSnapshot;
 	/** Approved persona revision compiled for the run, when present. */
 	readonly personaRevisionId: string | null;
-	/** Subject user whose membership and grants authorised the run. */
-	readonly subjectUserId: string;
-	/** Highest verified fleet-membership revision used for authorisation. */
-	readonly fleetMembershipRevision: number;
+	/** Tagged user or managed-service identity whose membership evidence authorised the run. */
+	readonly identity: RuntimeAssignmentIdentity;
 	/** Digest of the effective proof-bound capability set for the attempt. */
 	readonly capabilitySetDigest: string;
 	/** Expected Kubernetes ServiceAccount name for the runtime workload. */
@@ -88,7 +86,7 @@ export class PrismaRuntimeDispatchAuthority
 {
 	/** Canonical OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
-	/** Fixed namespace and command-lifetime policy. */
+	/** Fixed runtime-plane namespaces and command-lifetime policy. */
 	private readonly config: RuntimeDispatchAuthorityConfig;
 	/** Trusted server clock, never a runtime-supplied time. */
 	private readonly clock: RuntimeProtocolClock;
@@ -104,7 +102,7 @@ export class PrismaRuntimeDispatchAuthority
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
 	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
 	{
-		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires a bounded namespace and command lifetime");
+		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
 		this.prisma = prisma;
 		this.config = config;
 		this.compileRunInput = compileRunInput;
@@ -117,7 +115,7 @@ export class PrismaRuntimeDispatchAuthority
 	/** Returns the next server-issued command after the supplied sequence, or null while idle. */
 	async __NextCommand(identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 	{
-		if (identity.namespace !== this.config.namespace || open.podUid !== identity.podUid) return null;
+		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config) || open.podUid !== identity.podUid) return null;
 		const prisma = this.prisma;
 		const config = this.config;
 		const clock = this.clock;
@@ -131,7 +129,7 @@ export class PrismaRuntimeDispatchAuthority
 	/** Admits a runtime candidate through the pure authority and durably records acceptance. */
 	async __AdmitCandidate(identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate): Promise<RuntimeCandidateDispatchResult>
 	{
-		if (identity.namespace !== this.config.namespace) return { accepted: false, reason: "namespace_mismatch" };
+		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config)) return { accepted: false, reason: "namespace_mismatch" };
 		const prisma = this.prisma;
 		const config = this.config;
 		const clock = this.clock;
@@ -141,13 +139,13 @@ export class PrismaRuntimeDispatchAuthority
 		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
-			const admission = await _admitCandidate(prisma, clock, identity, candidate, terminalReporter);
+			const admission = await _admitCandidate(prisma, config, clock, identity, candidate, terminalReporter);
 			// After the fence-checked admission commits, dispatch accepted external actions outside the
 			// admission transaction. Only an explicit runner result that proves no ToolInvocation exists can
 			// use the server-owned retry budget; every post-reservation outcome stays terminal and fail closed.
 			if (admission.accepted && candidate.kind === "external_action" && externalActionRunner !== null)
 			{
-				const outcome = await _dispatchExternalAction(prisma, compileRunInput, externalActionRunner, identity, candidate);
+				const outcome = await _dispatchExternalAction(prisma, config, compileRunInput, externalActionRunner, identity, candidate);
 				if (outcome.outcome === "denied") return { accepted: false, reason: "external_action_dispatch_denied" };
 				if (outcome.outcome === "retryable")
 				{
@@ -163,11 +161,12 @@ export class PrismaRuntimeDispatchAuthority
 	/** Releases the runtime-instance binding when its stream is lost so a clean reconnect can rebind. */
 	async __ReleaseStream(identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
 	{
-		if (identity.namespace !== this.config.namespace || open.podUid !== identity.podUid) return;
+		if (!_IsConfiguredRuntimeNamespace(identity.namespace, this.config) || open.podUid !== identity.podUid) return;
 		const prisma = this.prisma;
+		const config = this.config;
 		await ___DoWithTrace("runtime_dispatch.stream.release", { namespace: identity.namespace }, async function _traceRelease(): Promise<void>
 		{
-			await _releaseStream(prisma, identity, open);
+			await _releaseStream(prisma, config, identity, open);
 		});
 	}
 }
@@ -175,8 +174,9 @@ export class PrismaRuntimeDispatchAuthority
 /** Validate fixed dispatch policy before any database transaction begins. */
 function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 {
-	return /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(config.namespace)
-		&& config.namespace.length <= 63
+	return _IsNamespace(config.personalRuntimeNamespace)
+		&& _IsNamespace(config.managedRuntimeNamespace)
+		&& config.personalRuntimeNamespace !== config.managedRuntimeNamespace
 		&& Number.isSafeInteger(config.commandTtlMilliseconds)
 		&& config.commandTtlMilliseconds >= 1_000
 		&& config.commandTtlMilliseconds <= 300_000
@@ -188,6 +188,18 @@ function _configIsValid(config: RuntimeDispatchAuthorityConfig): boolean
 		&& config.externalActionRetryWindowMilliseconds <= 300_000;
 }
 
+/** Return whether one namespace belongs to either explicit runtime identity plane. */
+function _IsConfiguredRuntimeNamespace(namespace: string, config: RuntimeDispatchAuthorityConfig): boolean
+{
+	return namespace === config.personalRuntimeNamespace || namespace === config.managedRuntimeNamespace;
+}
+
+/** Return whether one value is a bounded Kubernetes namespace. */
+function _IsNamespace(value: string): boolean
+{
+	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
+}
+
 /** Mint or redeliver one command for the connected runtime inside a single locked transaction. */
 async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, compileRunInput: RunInputCompiler, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen, afterSequence: number): Promise<RuntimeCommandEnvelope | null>
 {
@@ -195,7 +207,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 	return prisma.$transaction(async function _dispatch(transaction: Prisma.TransactionClient): Promise<RuntimeCommandEnvelope | null>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot before any authority decision.
-		const context = await _loadContext(transaction, identity);
+		const context = await _loadContext(transaction, config, identity);
 		if (context === null) return null;
 
 		// 2. Bind the stream to the connecting runtime instance so a stale instance cannot be served.
@@ -244,7 +256,7 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 }
 
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
 	const terminal = _terminalRuntimeEvent(candidate);
 	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
@@ -252,7 +264,7 @@ async function _admitCandidate(prisma: PrismaClient, clock: RuntimeProtocolClock
 	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
-		const context = await _loadContext(transaction, identity);
+		const context = await _loadContext(transaction, config, identity);
 		if (context === null) return { accepted: false, reason: "unknown_workload" };
 		const stream = await transaction.runtimeCommandStream.findUnique({ where: { runId_attempt: { runId: context.runId, attempt: context.attempt } } });
 		if (stream === null || stream.runtimeInstanceId === null) return { accepted: false, reason: "no_active_stream" };
@@ -286,7 +298,7 @@ function _terminalRuntimeEvent(candidate: RuntimeCandidate): "run.completed" | "
 }
 
 /** Reserve and dispatch one admitted external-action candidate through the composition-root runner. */
-async function _dispatchExternalAction(prisma: PrismaClient, compileRunInput: RunInputCompiler, runner: RuntimeExternalActionRunner, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeExternalActionCandidate): ReturnType<RuntimeExternalActionRunner["run"]>
+async function _dispatchExternalAction(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, runner: RuntimeExternalActionRunner, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeExternalActionCandidate): ReturnType<RuntimeExternalActionRunner["run"]>
 {
 	// Reload the immutable snapshot and recompile its granted tools so the runner validates the
 	// candidate's revision against the exact authority the attempt was admitted under.
@@ -295,7 +307,7 @@ async function _dispatchExternalAction(prisma: PrismaClient, compileRunInput: Ru
 	{
 		loaded = await prisma.$transaction(async function _load(transaction: Prisma.TransactionClient): Promise<{ snapshot: RunInputSnapshot; tools: CompiledRunInput["tools"] } | null>
 		{
-			const context = await _loadContext(transaction, identity);
+			const context = await _loadContext(transaction, config, identity);
 			if (context === null || context.runId !== candidate.runId || context.attempt !== candidate.attempt) return null;
 			const compiled = await compileRunInput(context.snapshot, transaction);
 			return { snapshot: context.snapshot, tools: compiled.tools };
@@ -307,6 +319,20 @@ async function _dispatchExternalAction(prisma: PrismaClient, compileRunInput: Ru
 	}
 	if (loaded === null) return { outcome: "denied" };
 	return runner.run(candidate, loaded.snapshot, loaded.tools);
+}
+
+/** Bind the tagged snapshot identity to its exact namespace, audience, and ServiceAccount class. */
+function _RuntimePlaneMatches(identity: RuntimeAssignmentIdentity, assignment: { namespace: string; audience: string; serviceAccountName: string }, config: RuntimeDispatchAuthorityConfig): boolean
+{
+	if (identity.kind === "service")
+	{
+		return assignment.namespace === config.managedRuntimeNamespace
+			&& assignment.audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
+			&& ___IsManagedAgentRuntimeServiceAccountName(assignment.serviceAccountName);
+	}
+	return assignment.namespace === config.personalRuntimeNamespace
+		&& assignment.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE
+		&& ___IsAgentRuntimeServiceAccountName(assignment.serviceAccountName);
 }
 
 /** Consume one durable retry slot after the runner proves no invocation reservation exists. */
@@ -330,18 +356,18 @@ async function _recordExternalActionRetry(prisma: PrismaClient, clock: RuntimePr
 }
 
 /** Unbind the runtime instance from its stream if the closing connection still owns it. */
-async function _releaseStream(prisma: PrismaClient, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
+async function _releaseStream(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity, open: RuntimeStreamOpen): Promise<void>
 {
 	await prisma.$transaction(async function _release(transaction: Prisma.TransactionClient): Promise<void>
 	{
-		const context = await _loadContext(transaction, identity);
+		const context = await _loadContext(transaction, config, identity);
 		if (context === null) return;
 		await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, runtimeInstanceId: open.runtimeInstanceId }, data: { runtimeInstanceId: null } });
 	});
 }
 
 /** Load and lock the assignment, run, and snapshot for the reviewed namespace and Pod UID. */
-async function _loadContext(transaction: Prisma.TransactionClient, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
+async function _loadContext(transaction: Prisma.TransactionClient, config: RuntimeDispatchAuthorityConfig, identity: RuntimeStreamWorkloadIdentity): Promise<RuntimeDispatchContext | null>
 {
 	// 1. Discover the run without holding the assignment. All terminal/cancellation authorities lock
 	// the run before its assignment, so this prevents a runtime report from deadlocking with a cancel.
@@ -361,10 +387,10 @@ async function _loadContext(transaction: Prisma.TransactionClient, identity: Run
 	const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
 	if (snapshot === null) return null;
 	const snapshotIdentity = _snapshotIdentity(snapshot.identitySnapshot);
-	if (snapshotIdentity === null) return null;
+	if (snapshotIdentity === null || assignment.subjectId !== snapshotIdentity.executionSubjectId || !_RuntimePlaneMatches(snapshotIdentity, assignment, config)) return null;
 
 	// 3. Compute the canonical assignment digest and return the immutable dispatch context.
-	const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, serviceAccountName: assignment.serviceAccountName, podUid: assignment.podUid, expiresAt: assignment.expiresAt, createdAt: assignment.createdAt });
+	const assignmentDigest = _computeAssignmentDigest({ runId: assignment.runId, attempt: assignment.attempt, agentServiceId: assignment.agentServiceId, agentRevisionId: assignment.agentRevisionId, siloId: assignment.siloId, subjectId: assignment.subjectId, identity: snapshotIdentity, serviceAccountName: assignment.serviceAccountName, podUid: assignment.podUid, expiresAt: assignment.expiresAt, createdAt: assignment.createdAt });
 	return {
 		runId: assignment.runId,
 		attempt: assignment.attempt,
@@ -377,8 +403,7 @@ async function _loadContext(transaction: Prisma.TransactionClient, identity: Run
 		inputSnapshotDigest: run.inputSnapshotDigest,
 		snapshot: _buildSnapshotFrame(snapshot),
 		personaRevisionId: snapshot.personaRevisionId,
-		subjectUserId: snapshotIdentity.subjectUserId,
-		fleetMembershipRevision: snapshotIdentity.fleetMembershipRevision,
+		identity: snapshotIdentity,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
 		serviceAccountName: assignment.serviceAccountName,
 		podUid: assignment.podUid,
@@ -437,8 +462,7 @@ function _buildAssignmentFrame(context: RuntimeDispatchContext): RuntimeAssignme
 		agentRevisionId: context.agentRevisionId,
 		personaRevisionId: context.personaRevisionId ?? undefined,
 		siloId: context.siloId,
-		subjectUserId: context.subjectUserId,
-		fleetMembershipRevision: context.fleetMembershipRevision,
+		identity: context.identity,
 		capabilitySetDigest: context.capabilitySetDigest,
 		serviceAccountName: context.serviceAccountName,
 		podUid: context.podUid,
@@ -647,19 +671,31 @@ function _toAdmissionRunState(state: PrismaAgentRunState): RuntimeAdmissionRunSt
 }
 
 /** Digest the immutable assignment identity so a command frame cannot silently rebind a run. */
-function _computeAssignmentDigest(context: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
+function _computeAssignmentDigest(context: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; identity: RuntimeAssignmentIdentity; serviceAccountName: string; podUid: string; expiresAt: Date; createdAt: Date }): string
 {
-	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v1", context.runId, context.attempt, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
+	const canonical = JSON.stringify(["opencrane-runtime-assignment-digest-v2", context.runId, context.attempt, context.agentServiceId, context.agentRevisionId, context.siloId, context.subjectId, _CanonicalAssignmentIdentity(context.identity), context.serviceAccountName, context.podUid, context.expiresAt.toISOString(), context.createdAt.toISOString()]);
 	return `sha256:${createHash("sha256").update(canonical, "utf8").digest("hex")}`;
 }
 
-/** Parse the trusted execution identity fields from the immutable snapshot JSON. */
-function _snapshotIdentity(value: unknown): { subjectUserId: string; fleetMembershipRevision: number } | null
+/** Canonicalise tagged assignment identity before it becomes immutable frame evidence. */
+function _CanonicalAssignmentIdentity(identity: RuntimeAssignmentIdentity): readonly string[]
+{
+	if (identity.kind === "user") return [identity.kind, identity.executionSubjectId, String(identity.fleetMembershipRevision)];
+	return [identity.kind, identity.executionSubjectId, identity.agentServiceId, String(identity.fleetMembershipRevision), identity.effectiveScopeAttachmentDigest];
+}
+
+/** Parse tagged trusted execution identity fields from the immutable snapshot JSON. */
+function _snapshotIdentity(value: unknown): RuntimeAssignmentIdentity | null
 {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const identity = value as Record<string, unknown>;
-	const subjectUserId = identity["executionSubjectId"];
+	const kind = identity["kind"];
+	const executionSubjectId = identity["executionSubjectId"];
 	const fleetMembershipRevision = identity["fleetMembershipRevision"];
-	if (typeof subjectUserId !== "string" || subjectUserId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0) return null;
-	return { subjectUserId, fleetMembershipRevision };
+	if ((kind !== "user" && kind !== "service") || typeof executionSubjectId !== "string" || executionSubjectId.trim().length === 0 || typeof fleetMembershipRevision !== "number" || !Number.isSafeInteger(fleetMembershipRevision) || fleetMembershipRevision < 0) return null;
+	if (kind === "user") return { kind, executionSubjectId, fleetMembershipRevision };
+	const agentServiceId = identity["agentServiceId"];
+	const effectiveScopeAttachmentDigest = identity["effectiveScopeAttachmentDigest"];
+	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || executionSubjectId !== `agent-service:${agentServiceId}` || typeof effectiveScopeAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveScopeAttachmentDigest)) return null;
+	return { kind, executionSubjectId, agentServiceId, fleetMembershipRevision, effectiveScopeAttachmentDigest };
 }

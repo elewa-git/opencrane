@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { AgentRunState, AgentRunTerminalReason, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment } from "@prisma/client";
+import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment } from "@prisma/client";
 
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
@@ -29,7 +29,7 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 	/** Creates cancellation authority over canonical Postgres. */
 	constructor(prisma: PrismaClient, config: RunCancellationRepositoryConfig)
 	{
-		if (!_ConfigIsValid(config)) throw new Error("run cancellation repository requires bounded namespace and lease policy");
+		if (!_ConfigIsValid(config)) throw new Error("run cancellation repository requires distinct bounded runtime namespaces and lease policy");
 		this.prisma = prisma;
 		this.config = config;
 	}
@@ -82,7 +82,8 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 			const maximum = await transaction.outboxEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 			let sequence = (maximum._max.sequence ?? 0) + 1;
 			await transaction.outboxEvent.create({ data: { runId: run.id, attempt: run.attempt, sequence, kind: RunOutboxEventKind.RunCancellationRequested, idempotencyKey: `${run.id}:cancellation:${run.attempt}`, payload: { runId: run.id, attempt: run.attempt, requestedBy: command.requestedBy }, availableAt: now } });
-			const cleanup = _CleanupProjection(run, assignment, bootstrap?.id ?? _BootstrapReference(attemptEvent.id, run, config.namespace), service.workloadProfile, config.namespace, "cancellation");
+			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
+			const cleanup = _CleanupProjection(run, assignment, bootstrap?.id ?? _BootstrapReference(attemptEvent.id, run, runtimeNamespace), service.workloadProfile, runtimeNamespace, "cancellation");
 			const inFlightCreateMayExist = assignment !== null || attemptEvent.claimedAt !== null;
 			if (inFlightCreateMayExist)
 			{
@@ -215,9 +216,23 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 /** Validate repository configuration before it reaches SQL or Kubernetes coordinates. */
 function _ConfigIsValid(config: RunCancellationRepositoryConfig): boolean
 {
-	return config.namespace.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(config.namespace)
+	return _IsNamespace(config.personalRuntimeNamespace)
+		&& _IsNamespace(config.managedRuntimeNamespace)
+		&& config.personalRuntimeNamespace !== config.managedRuntimeNamespace
 		&& Number.isSafeInteger(config.claimLeaseMilliseconds) && config.claimLeaseMilliseconds >= 1_000 && config.claimLeaseMilliseconds <= 300_000
 		&& Number.isSafeInteger(config.orphanObservationMarginMilliseconds) && config.orphanObservationMarginMilliseconds >= 1_000 && config.orphanObservationMarginMilliseconds <= 60_000;
+}
+
+/** Resolve the only runtime namespace authorized for one immutable service kind. */
+function _RuntimeNamespace(kind: AgentServiceKind, config: RunCancellationRepositoryConfig): string
+{
+	return kind === AgentServiceKind.Managed ? config.managedRuntimeNamespace : config.personalRuntimeNamespace;
+}
+
+/** Return whether one value is a bounded Kubernetes namespace. */
+function _IsNamespace(value: string): boolean
+{
+	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
 }
 
 /** Reject malformed cancellation coordinates before opening a transaction. */

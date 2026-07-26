@@ -9,14 +9,14 @@ import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository
 function _snapshot(): RunInputSnapshot
 {
 	return {
-		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
+		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
 	};
 }
 
 /** Creates a target initial-admission command matching the canonical test snapshot. */
 function _command()
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as const;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" } as const;
 }
 
 /** Creates the immutable authority facts that are revalidated within the admission transaction. */
@@ -27,6 +27,19 @@ function _authority()
 
 describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 {
+	it("admits a scheduled managed run without accepting a user-shaped execution subject", async function _admitsManagedService()
+	{
+		const snapshot = { ..._snapshot(), threadId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"f".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
+		const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "schedule", requestIdempotencyKey: "schedule:service-1:slot-1" } as const;
+		const authority = { ..._authority(), agentKind: "managed", trigger: "schedule", delegatedUserId: null } as const;
+		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
+		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
+		const repository = new PrismaRunAdmissionRepository(prisma, { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } });
+
+		await expect(repository.admit(command, async function _build() { return { outcome: "ready", value: { authority, snapshot } } as const; })).resolves.toMatchObject({ outcome: "accepted" });
+		expect(transaction.agentRun.create).toHaveBeenCalledWith({ data: expect.objectContaining({ trigger: "Schedule", delegatedUserId: null }) });
+	});
+
 	it("creates the logical run, immutable snapshot, and ordered acceptance/dispatch events in one transaction", async function _persistsAdmission()
 	{
 		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
@@ -123,7 +136,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		const repository = new PrismaRunAdmissionRepository(prisma, { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } }, log);
 
 		await expect(repository.admit(_command(), async function _UnexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
-		expect(error).toHaveBeenCalledWith({ err: persistenceError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "transaction_failed" }, "personal run admission persistence failed");
+		expect(error).toHaveBeenCalledWith({ err: persistenceError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "transaction_failed" }, "run admission persistence failed");
 		expect(error.mock.calls[0]?.[0]).not.toHaveProperty("requestIdempotencyKey");
 	});
 
@@ -137,7 +150,7 @@ describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 		const repository = new PrismaRunAdmissionRepository(prisma, { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } }, log);
 
 		await expect(repository.admit(_command(), async function _UnexpectedBuild() { throw new Error("unexpected build"); })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
-		expect(error).toHaveBeenCalledWith({ err: recoveryError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "duplicate_recovery_failed" }, "personal run admission persistence failed");
+		expect(error).toHaveBeenCalledWith({ err: recoveryError, runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", failureKind: "duplicate_recovery_failed" }, "run admission persistence failed");
 		expect(error.mock.calls[0]?.[0]).not.toHaveProperty("requestIdempotencyKey");
 	});
 });

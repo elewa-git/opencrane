@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
@@ -11,8 +11,14 @@ import type { AttemptModelKeyIssuer, ClaimNextRunAttemptResult, ClaimNextRunWork
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity
 {
+	/** Kind of immutable subject evidence admitted into the snapshot. */
+	readonly kind: "user" | "service";
 	/** User or delegated subject whose authority the runtime exercises. */
 	readonly subjectId: string;
+	/** Managed service that owns service-principal evidence, or null for a human user. */
+	readonly agentServiceId: string | null;
+	/** Digest binding effective scope attachments into a service identity, or null for a user. */
+	readonly effectiveScopeAttachmentDigest: string | null;
 	/** Last instant at which the signed fleet-membership evidence remains trusted. */
 	readonly fleetMembershipTrustedUntilEpochMilliseconds: number;
 }
@@ -38,7 +44,7 @@ interface ClaimedAttemptWithMintInputs
 type ClaimTransactionResult = { readonly status: "none" } | ({ readonly status: "claimed" } & ClaimedAttemptWithMintInputs);
 
 /**
- * Prisma-backed authority for handing one accepted personal run to the Kubernetes controller.
+ * Prisma-backed authority for handing one accepted run to the Kubernetes controller.
  *
  * Claims use database time plus a monotonically increasing delivery generation, so a controller
  * whose lease expired cannot publish an assignment after a newer replica reclaimed the event. Every
@@ -48,7 +54,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 {
 	/** Canonical OpenCrane product-authority database client. */
 	private readonly prisma: PrismaClient;
-	/** Fixed namespace and database-owned lifetime policy. */
+	/** Fixed runtime-plane namespaces and database-owned lifetime policy. */
 	private readonly config: RunDispatchRepositoryConfig;
 	/** App-injected issuer that mints the attempt-scoped model key; the master key stays server-side. */
 	private readonly issueAttemptModelKey: AttemptModelKeyIssuer;
@@ -56,7 +62,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	/** Creates a dispatch adapter over canonical Postgres with an injected attempt-key issuer. */
 	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer)
 	{
-		if (!_ConfigIsValid(config)) throw new Error("run dispatch repository requires bounded namespace and lifetimes");
+		if (!_ConfigIsValid(config)) throw new Error("run dispatch repository requires distinct bounded runtime namespaces and lifetimes");
 		this.prisma = prisma;
 		this.config = config;
 		this.issueAttemptModelKey = issueAttemptModelKey;
@@ -80,7 +86,6 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				  AND event."available_at" <= clock_timestamp()
 				  AND (event."claimed_at" IS NULL OR event."claimed_at" <= clock_timestamp() - (${config.claimLeaseMilliseconds} * interval '1 millisecond'))
 				  AND run."state" IN ('accepted'::"AgentRunState", 'queued'::"AgentRunState")
-				  AND service."kind" = 'personal'::"AgentServiceKind"
 				  AND service."state" = 'active'::"AgentServiceState" AND service."active_revision_id" = run."agent_revision_id"
 				  AND NOT EXISTS (SELECT 1 FROM "workload_assignments" assignment WHERE assignment."run_id" = run."id" AND assignment."attempt" = run."attempt")
 				ORDER BY event."available_at", event."created_at", event."id"
@@ -117,6 +122,11 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_SNAPSHOT_INVALID", AgentRunTerminalReason.InvalidInput);
 				return { status: "none" };
 			}
+			if (!_SnapshotIdentityMatchesService(identity, service))
+			{
+				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_IDENTITY_SERVICE_MISMATCH", AgentRunTerminalReason.PolicyDenied);
+				return { status: "none" };
+			}
 			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime())
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MEMBERSHIP_EXPIRED", AgentRunTerminalReason.PolicyDenied);
@@ -144,10 +154,11 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			}
 
 			// 5. Return the claim plus the inputs to mint the transient key once the lock is released.
+			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			return {
 				status: "claimed",
 				lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
-				attempt: { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest, namespace: config.namespace, workloadProfile: service.workloadProfile, bootstrapReference: _BootstrapReference(event.id, run.attempt, run, config.namespace) },
+				attempt: { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest, namespace: runtimeNamespace, workloadProfile: service.workloadProfile, bootstrapReference: _BootstrapReference(event.id, run.attempt, run, runtimeNamespace) },
 				keyAlias: _AttemptKeyAlias(run.id, run.attempt, run.siloId, deliveryCount),
 				modelAlias,
 				maxBudgetUsd,
@@ -200,7 +211,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	async commitSuspendedJobAssignmentAtomically(eventId: string, command: AgentControllerRunAttemptAssignmentCommand): Promise<CommitRunAttemptAssignmentResult>
 	{
 		const config = this.config;
-		if (!_AssignmentCommandIsValid(eventId, command, config.namespace)) return { status: "conflict", reason: "invalid_assignment" };
+		if (!_AssignmentCommandIsValid(eventId, command)) return { status: "conflict", reason: "invalid_assignment" };
 		return this.prisma.$transaction(async function _commit(transaction: Prisma.TransactionClient): Promise<CommitRunAttemptAssignmentResult>
 		{
 			// 1. Pre-read only to discover lock keys. Every value is reloaded after canonical locking.
@@ -224,7 +235,8 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			const now = databaseTime[0]?.now;
 			const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
 			const identity = _SnapshotExecutionIdentity(snapshot?.identitySnapshot);
-			if (!now || snapshot === null || identity === null || !_SnapshotMatchesRun(snapshot, run) || command.bootstrapReference !== _BootstrapReference(event.id, event.attempt, run, config.namespace))
+			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
+			if (!now || snapshot === null || identity === null || !_SnapshotMatchesRun(snapshot, run) || command.namespace !== runtimeNamespace || command.bootstrapReference !== _BootstrapReference(event.id, event.attempt, run, runtimeNamespace))
 			{
 				return { status: "conflict", reason: "authority_conflict" };
 			}
@@ -236,7 +248,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			{
 				const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: command.bootstrapReference } });
 				const release = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: _ReleaseIdempotencyKey(run.id, command.attempt) } });
-				if (leaseMatches && event.publishedAt !== null && _AssignmentIdentityMatches(existing, command, run, identity.subjectId) && _BootstrapMatches(bootstrap, command.bootstrapReference, existing) && _ReleaseEventMatches(release, existing, command.bootstrapReference))
+				if (leaseMatches && event.publishedAt !== null && _AssignmentIdentityMatches(existing, command, run, identity.subjectId, _RuntimeWorkloadIdentity(service.kind).audience) && _BootstrapMatches(bootstrap, command.bootstrapReference, existing) && _ReleaseEventMatches(release, existing, command.bootstrapReference))
 				{
 					return { status: "committed", result: { outcome: "idempotent", runId: run.id, attempt: command.attempt, workloadUid: existing.workloadUid } };
 				}
@@ -244,7 +256,8 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			}
 
 			// 4. Require the exact unexpired database claim generation before authoritative writes begin.
-			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime() || service.id !== run.agentServiceId || service.kind !== AgentServiceKind.Personal || service.state !== AgentServiceState.Active || service.siloId !== run.siloId || service.activeRevisionId !== run.agentRevisionId || service.workloadProfile !== command.expectedWorkloadProfile)
+			const runtimeIdentity = _RuntimeWorkloadIdentity(service.kind);
+			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime() || !_SnapshotIdentityMatchesService(identity, service) || service.id !== run.agentServiceId || service.state !== AgentServiceState.Active || service.siloId !== run.siloId || service.activeRevisionId !== run.agentRevisionId || service.workloadProfile !== command.expectedWorkloadProfile || !runtimeIdentity.isServiceAccountName(command.serviceAccountName))
 			{
 				return { status: "conflict", reason: "authority_conflict" };
 			}
@@ -262,7 +275,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				agentRevisionId: run.agentRevisionId,
 				siloId: run.siloId,
 				subjectId: identity.subjectId,
-				audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE,
+				audience: runtimeIdentity.audience,
 				serviceAccountName: command.serviceAccountName,
 				namespace: command.namespace,
 				workloadKind: WorkloadKind.Job,
@@ -286,7 +299,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				agentRevisionId: run.agentRevisionId,
 				siloId: run.siloId,
 				subjectId: identity.subjectId,
-				audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE,
+				audience: runtimeIdentity.audience,
 				serviceAccountName: command.serviceAccountName,
 				namespace: command.namespace,
 				workloadKind: WorkloadKind.Job,
@@ -320,7 +333,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	{
 		const config = this.config;
 		const prisma = this.prisma;
-		return ___DoWithTrace("run_dispatch.workload_release.claim", { namespace: config.namespace }, async function _traceReleaseClaim(): Promise<ClaimNextRunWorkloadReleaseResult>
+		return ___DoWithTrace("run_dispatch.workload_release.claim", { runtimePlanes: 2 }, async function _traceReleaseClaim(): Promise<ClaimNextRunWorkloadReleaseResult>
 		{
 			return prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<ClaimNextRunWorkloadReleaseResult>
 			{
@@ -397,7 +410,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	async registerFirstPodAndPublishReleaseAtomically(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand): Promise<RegisterRunWorkloadPodResult>
 	{
 		const config = this.config;
-		if (!_RegistrationCommandIsValid(eventId, command, config.namespace)) return { status: "conflict", reason: "invalid_registration" };
+		if (!_RegistrationCommandIsValid(eventId, command, config)) return { status: "conflict", reason: "invalid_registration" };
 		const prisma = this.prisma;
 		return ___DoWithTrace("run_dispatch.workload_release.register", { eventId, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid, podUid: command.podUid }, async function _tracePodRegistration(): Promise<RegisterRunWorkloadPodResult>
 		{
@@ -490,8 +503,9 @@ function _TerminalReasonPayload(value: AgentRunTerminalReason): string
 /** Validate fixed repository policy before any database transaction begins. */
 function _ConfigIsValid(config: RunDispatchRepositoryConfig): boolean
 {
-	return /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(config.namespace)
-		&& config.namespace.length <= 63
+	return _IsNamespace(config.personalRuntimeNamespace)
+		&& _IsNamespace(config.managedRuntimeNamespace)
+		&& config.personalRuntimeNamespace !== config.managedRuntimeNamespace
 		&& Number.isSafeInteger(config.claimLeaseMilliseconds) && config.claimLeaseMilliseconds >= 1_000 && config.claimLeaseMilliseconds <= 300_000
 		&& Number.isSafeInteger(config.assignmentTtlMilliseconds) && config.assignmentTtlMilliseconds >= 60_000 && config.assignmentTtlMilliseconds <= 86_400_000
 		&& (config.publishedOutboxRetentionMilliseconds === undefined || (Number.isSafeInteger(config.publishedOutboxRetentionMilliseconds) && config.publishedOutboxRetentionMilliseconds >= 3_600_000 && config.publishedOutboxRetentionMilliseconds <= 7_776_000_000))
@@ -507,11 +521,11 @@ function _ClaimAuthorityIsCurrent(service: { id: string; kind: AgentServiceKind;
 		&& event.publishedAt === null && event.failedAt === null && event.availableAt.getTime() <= now.getTime()
 		&& (event.claimedAt === null || event.claimedAt.getTime() <= now.getTime() - claimLeaseMilliseconds)
 		&& (run.state === AgentRunState.Accepted || run.state === AgentRunState.Queued)
-		&& service.kind === AgentServiceKind.Personal && service.state === AgentServiceState.Active && service.activeRevisionId === run.agentRevisionId;
+		&& service.state === AgentServiceState.Active && service.activeRevisionId === run.agentRevisionId;
 }
 
 /** Validate untrusted assignment evidence before it reaches Prisma or SQL. */
-function _AssignmentCommandIsValid(eventId: string, command: AgentControllerRunAttemptAssignmentCommand, namespace: string): boolean
+function _AssignmentCommandIsValid(eventId: string, command: AgentControllerRunAttemptAssignmentCommand): boolean
 {
 	return eventId.trim().length > 0 && eventId.length <= 256
 		&& command.runId.trim().length > 0 && command.runId.length <= 256
@@ -520,21 +534,59 @@ function _AssignmentCommandIsValid(eventId: string, command: AgentControllerRunA
 		&& _CanonicalUtcInstantEpochMilliseconds(command.claimedAt) !== null
 		&& command.expectedWorkloadProfile.trim().length > 0 && command.expectedWorkloadProfile.length <= 128
 		&& /^bootstrap-v1_[0-9a-f]{64}$/.test(command.bootstrapReference)
-		&& command.namespace === namespace
-		&& ___IsAgentRuntimeServiceAccountName(command.serviceAccountName)
+		&& _IsNamespace(command.namespace)
+		&& _IsAnyRuntimeServiceAccountName(command.serviceAccountName)
 		&& /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(command.workloadUid);
 }
 
-/** Parse the trusted subject and signed-membership lifetime from immutable snapshot JSON. */
+/** Parse only tagged trusted subject and signed-membership lifetime from immutable snapshot JSON. */
 function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity | null
 {
 	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const identity = value as Record<string, unknown>;
+	const kind = identity["kind"];
 	const subjectId = identity["executionSubjectId"];
 	const trustedUntil = identity["fleetMembershipTrustedUntil"];
-	if (typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
+	if ((kind !== "user" && kind !== "service") || typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
 	const fleetMembershipTrustedUntilEpochMilliseconds = _CanonicalUtcInstantEpochMilliseconds(trustedUntil);
-	return fleetMembershipTrustedUntilEpochMilliseconds === null ? null : { subjectId, fleetMembershipTrustedUntilEpochMilliseconds };
+	if (fleetMembershipTrustedUntilEpochMilliseconds === null) return null;
+	if (kind === "user") return { kind, subjectId, agentServiceId: null, effectiveScopeAttachmentDigest: null, fleetMembershipTrustedUntilEpochMilliseconds };
+	const agentServiceId = identity["agentServiceId"];
+	const effectiveScopeAttachmentDigest = identity["effectiveScopeAttachmentDigest"];
+	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || agentServiceId.length > 256 || typeof effectiveScopeAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveScopeAttachmentDigest)) return null;
+	return { kind, subjectId, agentServiceId, effectiveScopeAttachmentDigest, fleetMembershipTrustedUntilEpochMilliseconds };
+}
+
+/** Require a snapshot identity to be the only identity class valid for the active service. */
+function _SnapshotIdentityMatchesService(identity: SnapshotExecutionIdentity, service: { id: string; kind: AgentServiceKind }): boolean
+{
+	if (identity.kind === "user") return service.kind === AgentServiceKind.Personal;
+	return service.kind === AgentServiceKind.Managed && identity.agentServiceId === service.id && identity.subjectId === `agent-service:${service.id}`;
+}
+
+/** Return the dedicated projected-token class required by an active service kind. */
+function _RuntimeWorkloadIdentity(kind: AgentServiceKind): { readonly audience: string; readonly isServiceAccountName: (value: string) => boolean }
+{
+	if (kind === AgentServiceKind.Managed) return { audience: MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, isServiceAccountName: ___IsManagedAgentRuntimeServiceAccountName };
+	return { audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, isServiceAccountName: ___IsAgentRuntimeServiceAccountName };
+}
+
+/** Resolve the only runtime namespace authorized for one immutable service kind. */
+function _RuntimeNamespace(kind: AgentServiceKind, config: RunDispatchRepositoryConfig): string
+{
+	return kind === AgentServiceKind.Managed ? config.managedRuntimeNamespace : config.personalRuntimeNamespace;
+}
+
+/** Return whether one value is a bounded Kubernetes namespace. */
+function _IsNamespace(value: string): boolean
+{
+	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
+}
+
+/** Return whether a controller-supplied ServiceAccount belongs to either isolated runtime class. */
+function _IsAnyRuntimeServiceAccountName(value: string): boolean
+{
+	return ___IsAgentRuntimeServiceAccountName(value) || ___IsManagedAgentRuntimeServiceAccountName(value);
 }
 
 /** Parse the sole canonical UTC ISO-8601 representation used by snapshot and lease contracts. */
@@ -552,9 +604,9 @@ function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentSer
 }
 
 /** Compare an existing immutable assignment with the complete canonical command and run authority. */
-function _AssignmentIdentityMatches(existing: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; audience: string; serviceAccountName: string; namespace: string; workloadKind: WorkloadKind; workloadUid: string; workloadProfile: string }, command: AgentControllerRunAttemptAssignmentCommand, run: { id: string; agentServiceId: string; agentRevisionId: string; siloId: string }, subjectId: string): boolean
+function _AssignmentIdentityMatches(existing: { runId: string; attempt: number; agentServiceId: string; agentRevisionId: string; siloId: string; subjectId: string; audience: string; serviceAccountName: string; namespace: string; workloadKind: WorkloadKind; workloadUid: string; workloadProfile: string }, command: AgentControllerRunAttemptAssignmentCommand, run: { id: string; agentServiceId: string; agentRevisionId: string; siloId: string }, subjectId: string, audience: string): boolean
 {
-	return existing.runId === run.id && existing.attempt === command.attempt && existing.agentServiceId === run.agentServiceId && existing.agentRevisionId === run.agentRevisionId && existing.siloId === run.siloId && existing.subjectId === subjectId && existing.audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && existing.serviceAccountName === command.serviceAccountName && existing.namespace === command.namespace && existing.workloadKind === WorkloadKind.Job && existing.workloadUid === command.workloadUid && existing.workloadProfile === command.expectedWorkloadProfile;
+	return existing.runId === run.id && existing.attempt === command.attempt && existing.agentServiceId === run.agentServiceId && existing.agentRevisionId === run.agentRevisionId && existing.siloId === run.siloId && existing.subjectId === subjectId && existing.audience === audience && existing.serviceAccountName === command.serviceAccountName && existing.namespace === command.namespace && existing.workloadKind === WorkloadKind.Job && existing.workloadUid === command.workloadUid && existing.workloadProfile === command.expectedWorkloadProfile;
 }
 
 /** Derive a stable non-secret reference from immutable attempt authority. */
@@ -762,7 +814,7 @@ function _AttemptKeyExpirySeconds(assignmentTtlMilliseconds: number): number
 }
 
 /** Validate untrusted first-Pod evidence before it reaches Prisma or SQL. */
-function _RegistrationCommandIsValid(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand, namespace: string): boolean
+function _RegistrationCommandIsValid(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand, config: RunDispatchRepositoryConfig): boolean
 {
 	return eventId.trim().length > 0 && eventId.length <= 256
 		&& command.runId.trim().length > 0 && command.runId.length <= 256
@@ -772,8 +824,8 @@ function _RegistrationCommandIsValid(eventId: string, command: AgentControllerRu
 		&& command.siloId.trim().length > 0 && command.siloId.length <= 256
 		&& command.agentServiceId.trim().length > 0 && command.agentServiceId.length <= 256
 		&& command.agentRevisionId.trim().length > 0 && command.agentRevisionId.length <= 256
-		&& command.namespace === namespace
-		&& ___IsAgentRuntimeServiceAccountName(command.serviceAccountName)
+		&& (command.namespace === config.personalRuntimeNamespace || command.namespace === config.managedRuntimeNamespace)
+		&& _IsAnyRuntimeServiceAccountName(command.serviceAccountName)
 		&& /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(command.workloadUid)
 		&& command.workloadProfile.trim().length > 0 && command.workloadProfile.length <= 128
 		&& /^bootstrap-v1_[0-9a-f]{64}$/.test(command.bootstrapReference)

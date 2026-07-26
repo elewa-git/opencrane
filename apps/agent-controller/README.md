@@ -4,9 +4,9 @@
 
 ## What it owns
 
-The agent controller is the sole OpenCrane process allowed to create personal-agent workloads in a
-customer **silo**. Each silo has a server namespace plus a separate runtime namespace for untrusted
-personal-agent Jobs. The controller has no inbound listener: it polls OpenCrane for authorised desired state, creates a suspended Job in that dedicated runtime namespace,
+The agent controller is the sole OpenCrane process allowed to create personal- and managed-agent
+workloads in a customer **silo**. Each silo has a server namespace plus separate runtime namespaces
+for untrusted personal-agent and connector-scoped managed-agent Jobs. The controller has no inbound listener: it polls OpenCrane for authorised desired state, creates a suspended Job only in the namespace bound to that workload profile,
 and reports the
 Job's Kubernetes-issued identity back to OpenCrane. A separate durable claim then lets it release
 that exact Job and register the unique first Pod.
@@ -27,7 +27,7 @@ it once.
 
 Keeping this work in a separate, narrowly privileged process prevents the API server and the runtime
 itself from becoming general Kubernetes workload launchers. OpenCrane decides *what* may run; this app
-only projects that decision into the one restricted runtime namespace named by its RoleBinding.
+only projects that decision into the restricted runtime namespace named by the selected profile's RoleBinding.
 
 ```
  OpenCrane internal API ........ durable run attempt + named profile
@@ -38,7 +38,7 @@ only projects that decision into the one restricted runtime namespace named by i
  └──────────────┬───────────────────┘
                 │ exact create, conditional release, exact Pod list
                 ▼
- Helm-owned network floor → suspended agent-runtime Job
+ Helm-owned personal or managed runtime floor → suspended agent-runtime Job
                 │ Job UID        │ first Pod UID
                 └────────────────┴───────► OpenCrane run authority
 ```
@@ -63,7 +63,7 @@ on `SIGTERM`/`SIGINT`.
 ## Boundary
 
 The process holds no database credentials and exposes no Service, Ingress, public route or health
-listener. Its Kubernetes role exists only in the dedicated runtime namespace and grants
+listener. Its Kubernetes roles exist only in the dedicated personal and managed runtime namespaces and grant
 `get/create/patch` for Jobs, `list` for Pods, and `create` (only) for Secrets — the per-attempt
 LiteLLM key Secret, owned by its Job so it is garbage-collected with it. It cannot create policy,
 read/update/delete Secrets, mutate Pods, or get, replace, delete, or watch any Pod. The minted
@@ -82,15 +82,17 @@ outside the app root.
 
 - `OPENCRANE_INTERNAL_URL` — same-silo internal OpenCrane origin; Helm derives it from the release.
 - `OPENCRANE_CONTROLLER_TOKEN_PATH` — rotating `opencrane-agent-controller` audience token file.
-- `AGENT_RUNTIME_NAMESPACE` — literal dedicated runtime namespace the Role and controller may
-  mutate; it is never inferred from the controller Pod's own namespace.
 - `AGENT_CONTROLLER_POLL_INTERVAL_MS` — 100–60,000 ms delay after idle or failure; default 1,000 ms.
 - `AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS` — 60 seconds–24 hours between bounded removal of
   successfully delivered runtime handshakes; default one hour. Failed commands remain durable evidence.
 - `AGENT_CONTROLLER_REQUEST_TIMEOUT_MS` — 1–60 second hard cap independently applied to every
   OpenCrane and Kubernetes request; default 10 seconds. Process shutdown cancels either request type
   immediately, and each retry receives a fresh deadline.
-- `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name.
+- `AGENT_CONTROLLER_PROFILES_JSON` — bounded immutable runtime profiles keyed by authority-owned name;
+  every profile carries its sole runtime namespace, identity class, and ServiceAccount. A claim whose
+  namespace does not exactly equal its selected profile is refused before Kubernetes I/O. The
+  personal profile name must be a DNS label and cannot use the reserved managed profile name
+  `managed-default`.
 - `AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON` — exactly one immutable authoring and tool-runner
   profile, each using a class-bound ServiceAccount, projected-token audience, and fixed bootstrap
   file paths and same-silo acknowledgement URL.
@@ -99,7 +101,11 @@ The image runs as an unprivileged numeric user with a read-only root filesystem.
 separate projected tokens: one for OpenCrane and one for the Kubernetes API. Structured logs go to
 standard output, and OpenTelemetry spans cover every HTTP and Kubernetes input/output call. Enabling
 the chart requires immutable SHA-256 digests for both the controller and runtime images. Helm derives
-one `<release>-runtime` namespace by default, applies the Pod Security Standards restricted profile,
+one personal `<release>-runtime` namespace by default. Its managed profile reads the namespace and
+ServiceAccount from the composer-owned `managedAgentRuntimePlane.managedAgentRuntime` values; that
+runtime plane owns the namespace and its network policy, while this chart grants the controller KSA only exact Job, Pod-list, and attempt-key
+Secret-create permissions there. Each profile namespace receives a separate fail-closed admission
+policy with its own ServiceAccount grammar and projected-token audience. The personal plane applies the Pod Security Standards restricted profile,
 an aggregate Job/Pod/CPU/memory quota, default-deny networking, fixed OpenCrane, same-silo LiteLLM,
 and DNS egress, and a ValidatingAdmissionPolicy that rejects sidecars, probes, unpinned images,
 privileged or host access, durable mounts, arbitrary Secret projections, and any update other than

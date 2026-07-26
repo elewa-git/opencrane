@@ -56,7 +56,7 @@ function _CancellationTransaction(run: ReturnType<typeof _Run>, event: ReturnTyp
 function _Repository(transaction: ReturnType<typeof _CancellationTransaction>): PrismaRunCancellationRepository
 {
 	const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
-	return new PrismaRunCancellationRepository(prisma, { namespace: "silo-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+	return new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
 }
 
 describe("PrismaRunCancellationRepository", function _DescribeCancellationRepository()
@@ -108,7 +108,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		const confirmTransaction = { $queryRaw: confirmQuery, outboxEvent: { findUnique: vi.fn().mockResolvedValue(claimedEvent), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, agentRun: { findUnique: vi.fn().mockResolvedValue(run), updateMany: vi.fn().mockResolvedValue({ count: 1 }) }, conversationRunEvent: { aggregate: vi.fn().mockResolvedValue({ _max: { sequence: 5 } }), create: vi.fn().mockResolvedValue({}) } };
 		const transactions = [claimTransaction, confirmTransaction];
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transactions.shift() as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { namespace: "silo-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
 
 		await expect(repository.claimNextWorkloadCleanupAtomically()).resolves.toMatchObject({ status: "claimed", claim: { lease: { eventId: "cleanup-1", deliveryCount: 1 }, workload } });
 		await expect(repository.confirmWorkloadCleanupAtomically("cleanup-1", { claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, runId: "run-1", attempt: 1, workloadUid: "job-uid-1", outcome: "deleted" })).resolves.toEqual({ status: "confirmed", runId: "run-1", attempt: 1, runFinalized: true });
@@ -121,7 +121,7 @@ describe("PrismaRunCancellationRepository", function _DescribeCancellationReposi
 		const event = { id: "cleanup-1", runId: "run-1", attempt: 1, kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: workload, availableAt: new Date("2026-07-20T00:00:00.000Z"), claimedAt: new Date("2026-07-20T00:01:00.000Z"), publishedAt: null, failedAt: null, deliveryCount: 1 };
 		const transaction = { $queryRaw: vi.fn(async function _Query(value: unknown) { return _SqlText(value).includes("clock_timestamp()::timestamp(3)") ? [{ now: new Date("2026-07-20T00:01:05.000Z") }] : []; }), outboxEvent: { findUnique: vi.fn().mockResolvedValue(event), updateMany: vi.fn().mockResolvedValue({ count: 1 }) } };
 		const prisma = { $transaction: vi.fn(async function _Transaction(callback: (client: never) => Promise<unknown>) { return callback(transaction as never); }) } as unknown as PrismaClient;
-		const repository = new PrismaRunCancellationRepository(prisma, { namespace: "silo-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
+		const repository = new PrismaRunCancellationRepository(prisma, { personalRuntimeNamespace: "silo-runtime", managedRuntimeNamespace: "silo-managed-runtime", claimLeaseMilliseconds: 30_000, orphanObservationMarginMilliseconds: 10_000 });
 		const claim = { lease: { eventId: "cleanup-1", claimedAt: "2026-07-20T00:01:00.000Z", deliveryCount: 1, expiresAt: "2026-07-20T00:01:30.000Z" }, workload };
 
 		await expect(repository.deferUnassignedOrphanAbsenceAtomically("cleanup-1", claim)).resolves.toBe("deferred");

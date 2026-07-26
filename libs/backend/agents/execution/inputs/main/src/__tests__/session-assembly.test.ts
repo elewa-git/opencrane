@@ -1,11 +1,12 @@
 import type { RunInputSnapshot } from "@opencrane/contracts";
+import type { RunAdmissionCommand } from "@opencrane/backend/agents/execution/runs";
 import type { SessionAssemblyAuthorities } from "../session-assembly.types.js";
 import { describe, expect, it } from "vitest";
 
 import { __AssembleRunInputSnapshot } from "../session-assembly.js";
 
 /** Fixed admission coordinates used to prove deterministic snapshot assembly. */
-const _COMMAND = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
+const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
 
 /** Builds independently fakeable authority ports with deliberately unsorted source outputs. */
 function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | "idempotent" | "persistence_unavailable", personaRevisionId: string | null = "persona-1"): SessionAssemblyAuthorities
@@ -28,7 +29,7 @@ function _Authorities(onAdmission: (snapshot: RunInputSnapshot) => "accepted" | 
 		toolPolicy: { load: async function _load() { return { outcome: "loaded", value: { modelRoute: { alias: "target-model" }, integrationAssignments: [{ integrationId: "integration-2", allowedTools: ["write", "read"] }, { integrationId: "integration-1", allowedTools: ["search"] }], skillRevisionIds: ["skill-2", "skill-1"], artifactRevisionIds: ["artifact-2", "artifact-1"] } } as const; } },
 		skillEligibility: { load: async function _load() { return { outcome: "loaded", value: null } as const; } },
 		budgetPolicy: { load: async function _load() { return { outcome: "loaded", value: { budgetPolicy: { maxTokens: 1000, maxTurns: 4 } } } as const; } },
-		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
+		identityEnvelope: { load: async function _load() { return { outcome: "loaded", value: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } },
 	};
 }
 
@@ -64,8 +65,9 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 		let admitted = false;
 		const authorities = _Authorities(function _accept() { admitted = true; return "accepted"; });
 		authorities.runAuthority = { load: async function _load() { return { outcome: "loaded", value: { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "managed", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "prompt-v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } } as const; } };
+		authorities.identityEnvelope = { load: async function _load() { return { outcome: "loaded", value: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", organizationId: "org-1", fleetMembershipRevision: 8, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"e".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T13:00:00.000Z", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, capabilitySetDigest: `sha256:${"f".repeat(64)}` } } as const; } };
 
-		const result = await __AssembleRunInputSnapshot(_COMMAND, authorities);
+		const result = await __AssembleRunInputSnapshot({ runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" }, authorities);
 
 		expect(result).toEqual({ outcome: "denied", reason: "persona_unavailable" });
 		expect(admitted).toBe(false);
@@ -119,12 +121,12 @@ describe("__AssembleRunInputSnapshot", function _describeSessionAssembly()
 	it("returns the snapshot selected by an earlier admission without compiling a later request timestamp", async function _returnsIdempotentSnapshot()
 	{
 		let sourceLoads = 0;
-		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
+		const previous = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-21T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"d".repeat(64)}`, compiledAt: "2026-07-19T12:00:00.000Z" } as const;
 		const authorities = _Authorities(function _accept() { return "accepted"; });
 		authorities.admission = { admit: async function _admit() { return { outcome: "idempotent", snapshot: previous } as const; } };
 		authorities.runAuthority = { load: async function _load() { sourceLoads += 1; return { outcome: "denied", reason: "run_not_admittable" } as const; } };
 
-		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "assembled", snapshot: previous });
+		await expect(__AssembleRunInputSnapshot(_COMMAND, authorities)).resolves.toEqual({ outcome: "assembled", admissionOutcome: "idempotent", snapshot: previous });
 		expect(sourceLoads).toBe(0);
 	});
 

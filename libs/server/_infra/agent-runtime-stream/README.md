@@ -4,9 +4,9 @@
 
 ## What it owns
 
-This package is the OpenCrane server's narrow transport for agent runtimes. Its current
-`_CreateRuntimeTokenReviewer` factory is deliberately bounded to personal runtime Pods; a managed
-runtime needs its own audience and ServiceAccount-specific reviewer before it can use this transport.
+This package is the OpenCrane server's narrow transport for agent runtimes. Its
+`_CreateRuntimeTokenReviewer` factory binds the personal and managed projected-token audiences to
+distinct namespaces and ServiceAccount grammars before either runtime can use the shared transport.
 The transport turns an outbound request from a runtime Pod into an authenticated stream with bounded
 inbound requests, without becoming an authority over runs, commands, or agent output.
 
@@ -43,8 +43,8 @@ The package does not repair identity, choose a run, mint a command, or persist a
 
 - `_RegisterInternalAgentRuntimeStream(options)` — builds the internal Express router for the
   authenticated stream and candidate endpoints.
-- `_CreateRuntimeTokenReviewer` — fail-closed Kubernetes TokenReview adapter for the fixed runtime
-  audience, namespace, ServiceAccount grammar, and bound Pod UID.
+- `_CreateRuntimeTokenReviewer` — fail-closed Kubernetes TokenReview adapter for the distinct
+  personal/managed audiences, namespaces, ServiceAccount grammars, and bound Pod UID.
 - `RuntimeTokenReviewer` — identity-review port used by the stream transport.
 - `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
@@ -74,8 +74,8 @@ import apps, Prisma, or backend persistence implementations.
 
 ## Runtime & config
 
-The composing app supplies maximum request bytes, heartbeat interval, recovery interval, runtime
-namespace, and command/candidate authority. The recovery interval is deliberately much slower than
+The composing app supplies maximum request bytes, heartbeat interval, recovery interval, both
+runtime-plane namespaces, and command/candidate authority. The recovery interval is deliberately much slower than
 the old one-second poll: accepted candidates wake streams promptly, while the durable recovery read
 keeps a lost local signal from losing a command. This library reads no environment variables and
 opens no listener by itself.

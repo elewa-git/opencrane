@@ -5,7 +5,7 @@ import type { Express } from "express";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/server/_infra/auth";
 import { _CheckDbHealth, _RateLimit } from "@opencrane/server/_infra/http";
 
@@ -108,7 +108,8 @@ describe("Control Plane", () =>
   beforeEach(function _RuntimeNamespaceBoundary()
   {
     vi.stubEnv("POD_NAMESPACE", "opencrane-silo");
-    vi.stubEnv("AGENT_RUNTIME_NAMESPACE", "opencrane-silo-runtime");
+    vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
+    vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
   });
 
   afterEach(function _RestoreEnvironment()
@@ -198,14 +199,27 @@ describe("Control Plane", () =>
       expect(rejected.status).toBe(401);
     });
 
+    it("accepts the managed audience only in the dedicated managed runtime plane", async function _ManagedRuntimeServiceAccountIdentity()
+    {
+      const acceptedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-managed-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+      const crossedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+
+      const accepted = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const crossed = await request(crossedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+
+      expect(accepted.status).toBe(409);
+      expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
+      expect(crossed.status).toBe(401);
+    });
+
     it("requires one explicit runtime namespace separate from the server", async function _RuntimeNamespaceSeparation()
     {
       const { _RegisterInternalRoutes } = await import("../app/routes.js");
       const app = express();
-      vi.stubEnv("AGENT_RUNTIME_NAMESPACE", "");
+      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
       expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api); }).toThrow(/different from POD_NAMESPACE/);
 
-      vi.stubEnv("AGENT_RUNTIME_NAMESPACE", "opencrane-silo");
+      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
       expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api); }).toThrow(/different from POD_NAMESPACE/);
     });
 

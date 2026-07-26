@@ -59,6 +59,19 @@ caller input.
   same-transaction capability-set digest.
 - `PersonalMemoryScopeSource` — selects a personal memory dataset from that verified identity's
   silo, organization, and subject. It cannot receive a dataset identifier from the runtime caller.
+- `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
+  fleet-membership and effective non-personal scope evidence into a tagged `service` identity. Its
+  canonical `agent-service:<id>` principal must match the admitted service; a requester never
+  becomes that service's execution identity.
+- `ManagedNoPersonalMemoryScopeSource` — seals managed work with `{ scope: "none" }` and no fact
+  references. It is an explicit boundary, not a fallback to user, organization, or workspace
+  memory; future managed knowledge recall needs a separately authorized source.
+- `PrismaRunAuthoritySource`, `PrismaApprovedPersonaSource`, `PrismaThreadContextSource`,
+  `PrismaPreferenceFactSource`, `PrismaRevisionToolPolicySource`, and
+  `PrismaRevisionBudgetPolicySource` — production transaction readers for the live service,
+  persona, transcript, organization-bound consented preferences, tools, and resource ceilings.
+  `__CreatePrismaManagedSessionAssemblyAuthorities` composes them with caller-owned identity and
+  final skill-eligibility authorities.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -86,11 +99,11 @@ non-canonical digest, or any single source refusal denies the run.
 
 ## Dependency direction
 
-Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:artifacts`,
-`scope:membership`, `scope:personal-memory`, `scope:execution-runs`, `scope:execution-inputs`, and
-`scope:shared` — never on apps or unrelated domains. The personal-memory dependency is one-way:
-the assembler consumes its dataset-selection authority; the memory domain never depends on runtime
-assembly.
+Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:agent-services`,
+`scope:artifacts`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
+`scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. The
+agent-services dependency is one-way: this package consumes managed-service evidence but never
+decides service publication, membership, or scope attachment policy.
 
 ## See also
 

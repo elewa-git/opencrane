@@ -88,6 +88,10 @@ package imports it.
   broker/DNS/optional-telemetry egress.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
+- `clustertenantManager.fleetMembership` — the trusted fleet issuer/key identifiers, mounted
+  Ed25519 public-key Secret, and bounded revision-staleness policy used by managed-service run
+  admission. The default trust window is five minutes and may never exceed 24 hours. The server
+  re-reads the projected key for each admission, so Secret rotation applies without a Pod restart.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
   and aggregate Job quota; it contains no standing worker.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate

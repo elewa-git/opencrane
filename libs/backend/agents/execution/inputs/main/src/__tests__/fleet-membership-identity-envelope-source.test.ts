@@ -8,7 +8,7 @@ import { FleetMembershipIdentityEnvelopeSource } from "../fleet-membership-ident
 /** Creates one final-admission command bound to the exact signed assertion fixture. */
 function _command(): SessionAssemblyCommand
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
 }
 
 /** Creates the immutable run authority needed only to request a capability-set digest. */
@@ -66,7 +66,7 @@ describe("FleetMembershipIdentityEnvelopeSource", function _describeIdentityEnve
 		const source = new FleetMembershipIdentityEnvelopeSource({ trustedIssuerId: "fleet-1", assertionId: "assertion-1", scope: { kind: "project", organizationId: "org-1", projectId: "project-1" }, maximumStalenessMs: 3000 }, new _Verifier(), new _CapabilitySet());
 		const transaction = _transaction();
 
-		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: `sha256:${"c".repeat(64)}` } });
+		await expect(source.load(_command(), _run(), transaction)).resolves.toEqual({ outcome: "loaded", value: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 7, fleetMembershipIssuer: "fleet-1", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"b".repeat(64)}`, fleetMembershipTrustedUntil: new Date(12000).toISOString(), capabilitySetDigest: `sha256:${"c".repeat(64)}` } });
 		expect(transaction.prisma.$queryRaw).toHaveBeenCalledOnce();
 		expect(transaction.prisma.highestAcceptedFleetMembership.upsert).toHaveBeenCalledOnce();
 	});

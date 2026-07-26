@@ -22,6 +22,15 @@ export interface RuntimeTokenReviewer
 	__Review(token: string): Promise<RuntimeWorkloadIdentity | null>;
 }
 
+/** Deployment-owned namespaces for the mutually exclusive personal and managed runtime identities. */
+export interface RuntimeTokenReviewerConfig
+{
+	/** Namespace containing only personal `agent-runtime-*` workload identities. */
+	readonly personalRuntimeNamespace: string;
+	/** Namespace containing only managed `managed-agent-runtime-*` workload identities. */
+	readonly managedRuntimeNamespace: string;
+}
+
 /** Durable command authority injected by the server app, never owned by this transport. */
 export interface RuntimeCommandStreamAuthority
 {

@@ -21,6 +21,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 	{
 		// 1. Personal datasets cannot enter a managed-service snapshot, even if a delegated user has signed membership.
 		if (run.agentKind !== "personal") return { outcome: "denied", reason: "memory_scope_unavailable" };
+		if (identity.kind !== "user") return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 2. Resolve the sole personal dataset from identity already verified at the admission fence.
 		const resolved = await __ResolvePersonalMemoryDataset(this.datasets, { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });

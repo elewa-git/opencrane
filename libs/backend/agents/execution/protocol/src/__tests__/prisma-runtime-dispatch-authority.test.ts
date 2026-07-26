@@ -11,6 +11,9 @@ import type { RuntimeProtocolClock } from "../runtime-protocol-authority.types.j
 /** Fixed reviewed identity for the registered runtime Pod under test. */
 const _identity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:runtime-ns:agent-runtime-personal", namespace: "runtime-ns", serviceAccountName: "agent-runtime-personal", podUid: "pod-1" };
 
+/** Fixed reviewed identity for a registered managed-runtime Pod. */
+const _managedIdentity: RuntimeStreamWorkloadIdentity = { subject: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default", namespace: "managed-runtime-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-1" };
+
 /** Fixed stream-open message from the connecting runtime instance. */
 const _open = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", podUid: "pod-1" } as const;
 
@@ -95,6 +98,8 @@ interface FakeOptions
 	readonly approvedDeferredResults?: readonly unknown[];
 	/** Owner steering requests waiting for the next fenced resume command. */
 	readonly pendingSteeringRequests?: readonly unknown[];
+	/** Use tagged managed service evidence and its distinct projected workload identity. */
+	readonly managed?: boolean;
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
@@ -105,9 +110,10 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 	const retries: FakeExternalActionRetryRow[] = [];
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
 	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
-	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: "user-1", audience: "opencrane-agent-runtime", serviceAccountName: _identity.serviceAccountName, namespace: _identity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
+	const workloadIdentity = options.managed ? _managedIdentity : _identity;
+	const assignment = { runId: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", subjectId: options.managed ? "agent-service:svc-1" : "user-1", audience: options.managed ? "opencrane-managed-agent-runtime" : "opencrane-agent-runtime", serviceAccountName: workloadIdentity.serviceAccountName, namespace: workloadIdentity.namespace, workloadKind: "Job", workloadUid: "wl-1", workloadProfile: "profile", podUid: options.podUid === undefined ? "pod-1" : options.podUid, state: options.assignmentState ?? "Registered", expiresAt: new Date("2026-07-20T00:05:00.000Z"), createdAt: new Date("2026-07-20T00:00:00.000Z") };
 	const run = { id: "run-1", attempt: 1, agentServiceId: "svc-1", agentRevisionId: "rev-1", siloId: "silo-1", state: options.runState, inputSnapshotDigest: "sha256:snap" };
-	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
+	const snapshot = { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: options.managed ? { kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 3 } : { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3 }, capabilitySetDigest: "sha256:cap", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snap", compiledAt: new Date("2026-07-20T00:00:00.000Z") };
 	const queryRaw = vi.fn().mockResolvedValue([]);
 
 	/** Return whether a stream row satisfies the guard fields present in a where clause. */
@@ -204,7 +210,7 @@ const _compileRunInput: RunInputCompiler = async function _compile(snapshot): Pr
 function _authority(options: FakeOptions)
 {
 	const fake = _fakePrisma(options);
-	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { namespace: "runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger), ...fake };
+	return { authority: new PrismaRuntimeDispatchAuthority(fake.prisma, { personalRuntimeNamespace: "runtime-ns", managedRuntimeNamespace: "managed-runtime-ns", commandTtlMilliseconds: 60_000, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _compileRunInput, options.externalActionRunner, options.terminalReporter, options.clock ?? _clock, options.logger), ...fake };
 }
 
 /** Build a runtime event candidate bound to a dispatched command. */
@@ -226,6 +232,15 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		expect(context.commands).toHaveLength(1);
 		expect(context.streams[0]?.nextCommandSequence).toBe(2);
 		expect(command?.kind === "start_attempt" ? command.payload.compiledInput.digest : null).toBe("sha256:sha256:snap");
+	});
+
+	it("mints a managed-runtime frame only from tagged service identity evidence", async function _mintsManagedStart()
+	{
+		const context = _authority({ runState: "Running", managed: true });
+
+		const command = await context.authority.__NextCommand(_managedIdentity, _open, 0);
+
+		expect(command?.assignment.identity).toEqual({ kind: "service", executionSubjectId: "agent-service:svc-1", agentServiceId: "svc-1", fleetMembershipRevision: 3, effectiveScopeAttachmentDigest: `sha256:${"a".repeat(64)}` });
 	});
 
 	it("takes the per-run advisory lock before its row lock, matching cancellation", async function _ordersRunLocks()

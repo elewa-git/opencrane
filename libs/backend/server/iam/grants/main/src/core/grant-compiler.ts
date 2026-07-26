@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/observability";
 
@@ -104,6 +104,8 @@ type _GrantRow = {
   subjectId: string;
   createdAt: Date;
 };
+/** Read surface shared by a full Prisma client and an existing transaction fence. */
+type _GrantCompilerPrisma = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Compile effective grant decisions for a single principal and payload family.
@@ -119,7 +121,7 @@ type _GrantRow = {
 export async function compile(
   principalId: string,
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   return compileForPrincipals([principalId], payloadType, prisma);
@@ -144,7 +146,7 @@ export async function compile(
 export async function compileForPrincipals(
   principalIds: string[],
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   // 0. Normalise to a minimal, distinct principal set (drop empties + duplicates), then run the
@@ -174,7 +176,7 @@ export async function compileForPrincipals(
 async function _compileForResolvedPrincipals(
   principals: string[],
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   // An empty set has nothing to compile, so short-circuit before touching the DB.

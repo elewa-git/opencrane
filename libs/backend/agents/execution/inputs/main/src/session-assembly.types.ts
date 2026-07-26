@@ -1,4 +1,4 @@
-import type { MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { MemoryFactReference, RunInputSnapshot, RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
@@ -63,28 +63,11 @@ export interface BudgetPolicyInput
 	budgetPolicy: JsonValue;
 }
 
-/** Proof-bound identity evidence that must be fresh at admission. */
-export interface IdentityEnvelopeInput
-{
-	/** Subject authorized to cause this exact execution. */
-	executionSubjectId: string;
-	/** Organization selected by the verified signed membership assertion. */
-	organizationId: string;
-	/** Highest verified fleet-membership revision used to authorize the run. */
-	fleetMembershipRevision: number;
-	/** Issuer that signed the accepted fleet-membership revision. */
-	fleetMembershipIssuer: string;
-	/** Signing key that cryptographically verified the accepted fleet-membership revision. */
-	fleetMembershipIssuerKeyId: string;
-	/** Stable signed assertion identifier bound to the execution subject. */
-	fleetMembershipAssertionId: string;
-	/** Digest of the verified signed membership payload. */
-	fleetMembershipPayloadDigest: string;
-	/** UTC expiry after which the evidence cannot admit the run. */
-	fleetMembershipTrustedUntil: string;
-	/** Digest of the effective capability set bound to the run. */
-	capabilitySetDigest: string;
-}
+/** Tagged frozen identity plus its separately sealed effective capability-set digest. */
+export type IdentityEnvelopeInput = RunInputSnapshotIdentity & {
+	/** SHA-256 digest of every capability fact accepted at the admission fence. */
+	readonly capabilitySetDigest: string;
+};
 
 /** Capability-set digest loaded from the same transaction that verifies membership. */
 export interface CapabilitySetDigestSource
@@ -117,8 +100,8 @@ export interface ThreadContextSource
 /** Reads explicit and accepted durable preference facts for the execution subject. */
 export interface PreferenceFactSource
 {
-	/** Loads zero or more stable preference fact identifiers. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
+	/** Loads zero or more stable preference fact identifiers scoped by verified tagged identity. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<readonly PreferenceFactInput[]>>;
 }
 
 /** Reads authorised memory scope and pinned fact references. */
@@ -182,4 +165,4 @@ export interface SessionAssemblyAuthorities
 }
 
 /** Public result from attempting to assemble and persist one immutable runtime input. */
-export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };
+export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };

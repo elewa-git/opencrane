@@ -1,5 +1,5 @@
 import type { AgentRun } from "@opencrane/models/agents";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 
 import type { AgentRunAuthorityRepository, RunWorkloadAssignment, RunWorkloadAssignmentDecision, RunWorkloadAssignmentExpectation, StartNextRunAttemptCommand, StartNextRunAttemptResult } from "./run-authority.types.js";
 
@@ -9,10 +9,17 @@ function _isRetryable(run: AgentRun): boolean
 	return run.state === "failed" || run.state === "cancelled";
 }
 
-/** Return whether the personal-run workload is the sole accepted one-attempt Job kind. */
+/** Return whether the one-attempt runtime workload has the sole accepted Job kind. */
 function _isWorkloadKind(value: string): value is "job"
 {
 	return value === "job";
+}
+
+/** Return whether the exact audience and ServiceAccount belong to one isolated runtime class. */
+function _isRuntimeWorkloadIdentity(audience: string, serviceAccountName: string): boolean
+{
+	return (audience === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && ___IsAgentRuntimeServiceAccountName(serviceAccountName))
+		|| (audience === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE && ___IsManagedAgentRuntimeServiceAccountName(serviceAccountName));
 }
 
 /**
@@ -40,7 +47,7 @@ export function __ValidateRunWorkloadAssignment(assignment: RunWorkloadAssignmen
 	if (assignment.attempt !== expectation.attempt) return { outcome: "denied", reason: "attempt_mismatch" };
 	if (assignment.agentRevisionId !== expectation.agentRevisionId) return { outcome: "denied", reason: "revision_mismatch" };
 	if (assignment.siloId !== expectation.siloId) return { outcome: "denied", reason: "silo_mismatch" };
-	if (assignment.audience !== AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || expectation.audience !== AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) return { outcome: "denied", reason: "projected_token_audience_mismatch" };
+	if (!_isRuntimeWorkloadIdentity(assignment.audience, assignment.serviceAccountName) || !_isRuntimeWorkloadIdentity(expectation.audience, expectation.serviceAccountName) || assignment.audience !== expectation.audience) return { outcome: "denied", reason: "projected_token_audience_mismatch" };
 	if (assignment.subjectId !== expectation.subjectId) return { outcome: "denied", reason: "subject_mismatch" };
 	if (assignment.serviceAccountName !== expectation.serviceAccountName) return { outcome: "denied", reason: "service_account_mismatch" };
 	if (assignment.namespace !== expectation.namespace) return { outcome: "denied", reason: "namespace_mismatch" };

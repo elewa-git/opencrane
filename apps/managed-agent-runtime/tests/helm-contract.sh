@@ -7,13 +7,15 @@ MANIFEST="$(mktemp)"
 SA="$(mktemp)"
 DENY="$(mktemp)"
 EGRESS="$(mktemp)"
-trap 'rm -f "$MANIFEST" "$SA" "$DENY" "$EGRESS"' EXIT
+QUOTA="$(mktemp)"
+trap 'rm -f "$MANIFEST" "$SA" "$DENY" "$EGRESS" "$QUOTA"' EXIT
 
 helm template mar "$CHART" > "$MANIFEST"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ServiceAccount\n/ { print $0 }' "$MANIFEST" > "$SA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /managed-agent-runtime-default-deny/ { print $0 }' "$MANIFEST" > "$DENY"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /managed-agent-runtime-egress/ { print $0 }' "$MANIFEST" > "$EGRESS"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /managed-agent-runtime/ { print $0 }' "$MANIFEST" > "$QUOTA"
 
 # A distinct connector-scoped ServiceAccount in the managed-runtime identity class, token off.
 test -s "$SA"
@@ -26,8 +28,18 @@ fi
 
 # A dedicated restricted namespace, distinct from the server namespace.
 grep -Fq 'kind: Namespace' "$MANIFEST"
-grep -Fq 'name: opencrane-managed-runtime' "$MANIFEST"
+grep -Fq 'name: mar-managed-runtime' "$MANIFEST"
 grep -Fq 'pod-security.kubernetes.io/enforce: restricted' "$MANIFEST"
+
+# Aggregate workload consumption remains bounded even if the controller identity is compromised.
+test -s "$QUOTA"
+grep -Fq 'pods: "20"' "$QUOTA"
+grep -Fq 'count/jobs.batch: "20"' "$QUOTA"
+grep -Fq 'count/secrets: "20"' "$QUOTA"
+grep -Fq 'requests.cpu: "2"' "$QUOTA"
+grep -Fq 'requests.memory: "4Gi"' "$QUOTA"
+grep -Fq 'limits.cpu: "20"' "$QUOTA"
+grep -Fq 'limits.memory: "20Gi"' "$QUOTA"
 
 # Default-deny governs all traffic; only the egress policy admits anything.
 test -s "$DENY"
@@ -40,9 +52,10 @@ grep -Fq 'app.kubernetes.io/component: agent-runtime' "$EGRESS"
 grep -Fq 'k8s-app: kube-dns' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: channel-proxy' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: artifact-service' "$EGRESS"
-grep -Fq 'kubernetes.io/metadata.name: opencrane-artifacts' "$EGRESS"
+grep -Fq 'kubernetes.io/metadata.name: default-artifacts' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: litellm' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: obot' "$EGRESS"
+test "$(grep -Fc 'port: 8080' "$EGRESS")" -eq 3
 grep -Fq 'const _COMPONENT_LABEL = "agent-runtime";' "$ROOT/libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts"
 
 # A personal agent-runtime-* SA name must be rejected at render time (identity-class fence).
@@ -51,7 +64,7 @@ if helm template mar "$CHART" --set-string managedAgentRuntime.serviceAccountNam
   exit 1
 fi
 # The namespace must differ from the server namespace.
-if helm template mar "$CHART" --set-string managedAgentRuntime.namespace=opencrane >/dev/null 2>&1; then
+if helm template mar "$CHART" --set-string managedAgentRuntime.namespace=default >/dev/null 2>&1; then
   echo "server namespace was accepted as the managed-runtime namespace" >&2
   exit 1
 fi

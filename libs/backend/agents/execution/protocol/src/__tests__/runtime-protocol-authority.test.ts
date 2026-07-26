@@ -28,7 +28,7 @@ type RuntimeStartAttemptCommand = Extract<RuntimeCommandEnvelope, { readonly kin
 /** Returns the canonical input snapshot for a start command. */
 function _snapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-07-20T00:05:00.000Z" }, capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-07-20T00:05:00.000Z" }, capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
 }
 
 /** Returns the compiled literal input carried alongside the snapshot on a start command. */
@@ -48,7 +48,7 @@ function _command(): RuntimeStartAttemptCommand
 		fence: 7,
 		issuedAt: "2026-07-20T00:00:00.000Z",
 		expiresAt: "2026-07-20T00:05:00.000Z",
-		assignment: { runId: "run-1", attempt: 2, agentServiceId: "agent-1", agentRevisionId: "revision-1", siloId: "silo-1", subjectUserId: "user-1", fleetMembershipRevision: 1, capabilitySetDigest: "sha256:capabilities", serviceAccountName: "runtime", podUid: "pod-1", assignmentDigest: "sha256:assignment", issuedAt: "2026-07-20T00:00:00.000Z", expiresAt: "2026-07-20T00:05:00.000Z" },
+		assignment: { runId: "run-1", attempt: 2, agentServiceId: "agent-1", agentRevisionId: "revision-1", siloId: "silo-1", identity: { kind: "user", executionSubjectId: "user-1", fleetMembershipRevision: 1 }, capabilitySetDigest: "sha256:capabilities", serviceAccountName: "runtime", podUid: "pod-1", assignmentDigest: "sha256:assignment", issuedAt: "2026-07-20T00:00:00.000Z", expiresAt: "2026-07-20T00:05:00.000Z" },
 		kind: "start_attempt",
 		payload: { snapshot: _snapshot(), compiledInput: _compiledInput() },
 	};

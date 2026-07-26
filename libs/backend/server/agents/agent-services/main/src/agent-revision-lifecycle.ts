@@ -1,3 +1,4 @@
+import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
 import { __DiffAgentRevisions, __IsAgentServiceTransitionAllowed } from "@opencrane/models/agents";
 import type { AgentRevisionId, AgentServiceId, AgentServiceState } from "@opencrane/models/agents";
 
@@ -60,7 +61,7 @@ function _actionState(action: AgentServiceLifecycleAction): AgentServiceState
  */
 export async function __CreateManagedAgentService(repository: AgentRevisionLifecycleRepository, command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.name) || !_isPresent(command.workloadProfile) || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
+	if (!_isPresent(command.siloId) || !_isPresent(command.name) || command.workloadProfile !== MANAGED_AGENT_RUNTIME_PROFILE_NAME || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}

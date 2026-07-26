@@ -58,6 +58,13 @@ snapshot assembly can consume a PostgreSQL connection; overload is rejected rath
 form a database-lock convoy. Helm exposes the conservative `runAdmission.maxConcurrent` and
 `runAdmission.maxQueued` settings: one silo is limited to that policy and the whole process to
 twice that policy, which remains below the server's five-connection database pool budget.
+Before either entrypoint can persist a run, the server derives the managed
+`agent-service:<id>` principal, verifies its latest Ed25519-signed fleet membership, intersects the
+active revision's declared non-personal knowledge scopes with current effective grants, and freezes
+that evidence into a tagged service snapshot. The administrator or scheduler requesting the run is
+audit context, never the runtime identity. The fleet public key is read only from a mounted Secret.
+The server re-reads that projected key for every admission, so an in-place Secret rotation takes
+effect on the next decision without extending revoked trust until a Pod restart.
 
 ## Public surface
 
@@ -127,9 +134,9 @@ Organisation administrators can also use `/api/v1/agent-services` to create a ma
 its next immutable revision, inspect what changed, and publish a reviewed revision. A managed agent
 is a shared, organisation-owned agent rather than one person's personal agent; its allowed knowledge
 scopes are attached to the specific revision, not to the service as a whole. The `run now` request is
-present but deliberately refuses until the later runtime assembler can bind the managed revision to
-verified fleet membership and capability evidence. It never creates a partial run while that evidence
-is unavailable.
+and scheduler share the same immutable assembler and persistence fence. A missing or stale
+membership revision, inactive service or revision, personal knowledge attachment, or revoked grant
+refuses the complete admission; it never creates a partial run.
 
 ## Boundary
 
@@ -178,11 +185,16 @@ Read from the environment at startup.
 | `DATABASE_URL` | Postgres connection string (Prisma) | *(required)* |
 | `NAMESPACE` | Silo namespace the reconcilers act on | `default` |
 | `AGENT_CONTROLLER_CLAIM_LEASE_SECONDS` | Database-owned lease for one controller delivery attempt | `30` |
-| `AGENT_RUNTIME_NAMESPACE` | Dedicated namespace for untrusted runtime Jobs; must differ from `POD_NAMESPACE` | *(required)* |
+| `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Dedicated namespace for personal runtime Jobs; distinct from the server and managed plane | *(required)* |
+| `AGENT_RUNTIME_MANAGED_NAMESPACE` | Dedicated namespace for managed runtime Jobs; distinct from the server and personal plane | *(required)* |
 | `AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS` | Hard lifetime of a pending runtime workload assignment | `3600` |
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
 | `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
+| `OPENCRANE_FLEET_MEMBERSHIP_ISSUER_ID` | Exact fleet issuer trusted for managed-service run admission | *(required)* |
+| `OPENCRANE_FLEET_MEMBERSHIP_KEY_ID` | Exact signed key identifier bound to the mounted Ed25519 key | *(required)* |
+| `OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE` | Absolute projected Secret path re-read on each managed admission | *(required)* |
+| `OPENCRANE_FLEET_MEMBERSHIP_MAX_STALENESS_MS` | Maximum age of the last signed membership revision; at most 24 hours | `300000` |
 | `ARTIFACT_PREPROCESSOR_ENABLED` | Mount the broker-only preprocessing authority | `false` |
 | `ARTIFACT_PREPROCESSOR_NAMESPACE` | Dedicated worker namespace accepted by TokenReview; must differ from `POD_NAMESPACE` when enabled | *(required when enabled)* |
 | `ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES` | Shared raw-body and promotion ceiling for extracted text | `16777216` |

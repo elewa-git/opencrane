@@ -17,7 +17,7 @@ const TOOL: CompiledToolDefinition = { name: "integration:search:query", toolRev
 /** Immutable snapshot facts the authority binds a candidate to. */
 function _snapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", identitySnapshot: { executionSubjectId: "user-1" } } as unknown as RunInputSnapshot;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "svc-1", agentRevisionId: "rev-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" } } as unknown as RunInputSnapshot;
 }
 
 /** Build a candidate whose argument digest is computed the same way the authority revalidates it. */
