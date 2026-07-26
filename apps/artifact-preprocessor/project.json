@@ -1,0 +1,18 @@
+{
+  "name": "artifact-preprocessor",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/artifact-preprocessor/src",
+  "tags": ["type:app", "layer:entrypoint", "scope:artifacts"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/artifact-preprocessor"],
+      "options": { "command": "rm -rf dist/apps/artifact-preprocessor && esbuild apps/artifact-preprocessor/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/artifact-preprocessor/index.js" }
+    },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/artifact-preprocessor" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run && bash tests/helm-contract.sh", "cwd": "apps/artifact-preprocessor" } },
+    "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/artifact-preprocessor/helm" } },
+    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/artifact-preprocessor/deploy/Dockerfile ." } }
+  }
+}

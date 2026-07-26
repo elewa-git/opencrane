@@ -7,6 +7,7 @@ const _deployables = [
   { project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
   { project: "channel-proxy", image: "opencrane-channel-proxy", dockerfile: "apps/channel-proxy/deploy/Dockerfile" },
   { project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
+  { project: "artifact-preprocessor", image: "opencrane-artifact-preprocessor", dockerfile: "apps/artifact-preprocessor/deploy/Dockerfile" },
   { project: "agent-runtime", image: "opencrane-agent-runtime", dockerfile: "apps/agent-runtime/deploy/Dockerfile" },
   { project: "agent-controller", image: "opencrane-agent-controller", dockerfile: "apps/agent-controller/deploy/Dockerfile" },
   { project: "skill-authoring", image: "opencrane-skill-authoring", dockerfile: "apps/skill-authoring/deploy/Dockerfile" },

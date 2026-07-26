@@ -26,7 +26,8 @@ wires the pieces and the per-silo networking together.
  │  opencrane-silo umbrella chart  ◄── HERE                     │
  │    composes app-owned template libraries into one release:   │
  │    server · opencrane-ui · channel-proxy · artifact-service  │
- │    · agent-controller · skill-authoring · tool-runner         │
+ │    · artifact-preprocessor · agent-controller                 │
+ │    · skill-authoring · tool-runner                            │
  │    · cognee · litellm · obot · langfuse                       │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
@@ -36,6 +37,7 @@ wires the pieces and the per-silo networking together.
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+· [artifact-preprocessor](../../artifact-preprocessor/README.md)
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
@@ -45,7 +47,9 @@ A silo installs **only** its own namespaced app releases. Cluster-wide controlle
 external-dns, CloudNativePG, cert-manager) are external prerequisites a silo never installs. Dependencies
 resolve from `Chart.lock` via `helm dep build` (pinned, reproducible) — never from open version ranges.
 
-The personal `agent-runtime` image is deliberately absent from the long-lived Deployment rollup. It is not a
+The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
+identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image is
+deliberately absent from the long-lived Deployment rollup. It is not a
 long-lived silo service: the agent controller creates its bounded, suspended Job for each authorised
 run attempt and commits the Kubernetes-issued Job identity to OpenCrane. Workload lifetime and
 Kubernetes identity therefore remain tied to that attempt. The release still owns the runtime
@@ -79,6 +83,9 @@ package imports it.
   `values.schema.json`, pins in `Chart.lock`.
 - `agentController.runtimeNamespace` — optional DNS-label override for the sibling runtime namespace;
   empty derives `<release>-runtime`, and the chart rejects the trusted server namespace.
+- `artifactPreprocessor` — disabled until its immutable image digest is supplied; when enabled, the
+  worker runs in a dedicated restricted namespace and receives only ephemeral scratch plus
+  broker/DNS/optional-telemetry egress.
 - `agentController.runtimeQuota` — aggregate Job, Pod, CPU, and memory ceilings for the dedicated
   untrusted runtime namespace.
 - `opencrane-skill-authoring.skillAuthoring` — the separate, default-deny candidate-skill namespace
@@ -102,6 +109,7 @@ package imports it.
 - Parent index: [_infra](../README.md)
 - Composed apps: [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
 · [channel-proxy](../../channel-proxy/README.md) · [artifact-service](../../artifact-service/README.md)
+  · [artifact-preprocessor](../../artifact-preprocessor/README.md)
   · [agent-controller](../../agent-controller/README.md)
   · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
   · [postgres](../../postgres/README.md)

@@ -324,6 +324,34 @@ artifactService:
       cpu: 500m
       memory: 512Mi
 
+# -- Outbound-only PDF preprocessing worker. It exchanges source and output bytes through the
+# OpenCrane internal broker; it has no listener, durable volume, ArtifactStore address, or API RBAC.
+# Enable only after supplying the immutable published image digest.
+artifactPreprocessor:
+  enabled: false
+  # -- Isolated restricted namespace for the worker and its zero-RBAC identity. Empty derives
+  # `<release-fullname>-artifact-preprocessing`; it must never equal the trusted server namespace.
+  namespace: ""
+  image:
+    repository: ghcr.io/elewa-git/opencrane-artifact-preprocessor
+    digest: ""
+    pullPolicy: IfNotPresent
+  replicas: 1
+  projectedTokenTtlSeconds: 600
+  scratchSize: 128Mi
+  pollIntervalMs: 1000
+  requestTimeoutMs: 10000
+  maximumSourceBytes: 33554432
+  maximumOutputBytes: 16777216
+  conversionTimeoutMs: 30000
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
 # -- Personal-runtime workload controller. Disabled until an immutable runtime image digest and
 # exact Kubernetes API Service CIDR are supplied; enabling it never starts a runtime Job directly.
 agentController:

@@ -18,7 +18,7 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/ret
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/knowledge/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, PrismaRuntimeTerminalReporter, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
@@ -31,10 +31,11 @@ import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbo
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
+import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter, type ArtifactPreprocessorTokenReviewer, type ReviewedArtifactPreprocessorIdentity } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
-import { _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
+import { _CreateArtifactPreprocessOutputBroker, _CreateArtifactPreprocessSourceBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
 import { _CreatePersonaOnboardingRouter } from "./persona-onboarding-wiring.js";
 import { _CreateDeferredToolApprovalRouter } from "./deferred-tool-approval-wiring.js";
 import { _CreateSteeringIngestRouter } from "./steering-ingest-wiring.js";
@@ -95,6 +96,14 @@ function _ReadRuntimeNamespaceBoundary(): { readonly serverNamespace: string; re
 	return { serverNamespace, runtimeNamespace };
 }
 
+/** Read the dedicated restricted preprocessing namespace as an explicit trust boundary. */
+function _ReadArtifactPreprocessorNamespace(serverNamespace: string): string
+{
+	const namespace = process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim();
+	if (!namespace || !_IsNamespace(namespace) || namespace === serverNamespace) throw new Error("ARTIFACT_PREPROCESSOR_NAMESPACE must be a valid namespace different from POD_NAMESPACE");
+	return namespace;
+}
+
 /**
  * Submit one audience-bound projected token and expose only an authenticated accepted review.
  *
@@ -138,6 +147,22 @@ function _CreateAgentControllerTokenReviewer(authApi: k8s.AuthenticationV1Api, s
 		{
 			const status = await _ReviewProjectedToken(authApi, token, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE);
 			return status ? _ParseAgentControllerSubject(status.user?.username ?? "", serverNamespace, status.audiences ?? []) : null;
+		},
+	};
+}
+
+/** Build the fixed TokenReview adapter for the dedicated artifact-preprocessor identity. */
+function _CreateArtifactPreprocessorTokenReviewer(authApi: k8s.AuthenticationV1Api, namespace: string): ArtifactPreprocessorTokenReviewer
+{
+	return {
+		async __Review(token: string): Promise<ReviewedArtifactPreprocessorIdentity | null>
+		{
+			const status = await _ReviewProjectedToken(authApi, token, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE);
+			const username = status?.user?.username ?? "";
+			const expectedUsername = `system:serviceaccount:${namespace}:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`;
+			return status !== null && username === expectedUsername
+				? { username, namespace, serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: status.audiences ?? [] }
+				: null;
 		},
 	};
 }
@@ -327,6 +352,18 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	app.use("/api/internal/agent-runtime", __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringInputRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }));
 	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringCompletionRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }));
+	if (process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true")
+	{
+		const artifactPreprocessorNamespace = _ReadArtifactPreprocessorNamespace(serverNamespace);
+		app.use("/api/internal/artifact-preprocessor", __CreateArtifactPreprocessorRouter({
+			tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
+			namespace: artifactPreprocessorNamespace,
+			repository: new PrismaArtifactPreprocessRepository(prisma),
+			sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
+			outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, _ReadBoundedInteger("ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES", 16 * 1024 * 1024, 1_024, 64 * 1024 * 1024)),
+			logger: _log,
+		}));
+	}
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
   app.use("/api/internal/tenant-models", _RegisterInternalTenantModels(prisma));

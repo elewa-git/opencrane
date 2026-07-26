@@ -25,6 +25,8 @@
 ---
 {{ include "opencrane.artifactService.resources" . }}
 ---
+{{ include "opencrane.artifactPreprocessor.resources" . }}
+---
 {{ include "opencrane.agentController.resources" . }}
 ---
 {{ include "opencrane.cognee.resources" . }}

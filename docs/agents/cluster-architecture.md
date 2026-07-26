@@ -26,7 +26,8 @@ strength is a per-customer choice (`isolationTier`).
 │  │   • opencrane-api :8080  API /api/v1 + internal /api/internal       │ │
 │  │   • litellm     :4000    LLM cost/budget proxy (egress for pods)    │ │
 │  │   • mcp-gateway :8080    Obot — MCP runtime, polls opencrane-api    │ │
-│  │   • artifact-service :8080 canonical ArtifactStore CAS on PVC          │ │
+│  │   • artifact-service :8080 canonical ArtifactStore CAS on PVC       │ │
+│  │   • artifact-preprocessor  outbound-only brokered PDF extraction    │ │
 │  │                                                                     │ │
 │  │  USERTENANT WORKLOADS (operator-created, one set per Tenant CR)     │ │
 │  │   Deployment(OpenClaw, 1 replica) · Service · Ingress · ConfigMap   │ │
@@ -111,6 +112,7 @@ library units with the parent release context; shared labels and topology helper
 | `apps/_infra/obot/helm` | Obot gateway Deployment, Service, KSA/RBAC, and NetworkPolicy |
 | `apps/_infra/langfuse` | Pinned upstream chart ownership for web, worker, ClickHouse, ZooKeeper, Valkey, and MinIO workload classes |
 | `apps/artifact-service/helm` | Canonical ArtifactStore byte service: RWO expandable PVC, private service, and no catalog authority |
+| `apps/artifact-preprocessor/helm` | Outbound-only PDF-to-text worker: broker-only OpenCrane access, projected identity, bounded scratch, zero RBAC, and no listener or durable volume |
 | `apps/agent-controller/helm` | Outbound-only controller in the server namespace; dedicated restricted runtime namespace, zero-RBAC runtime identity, exact Job create/release and first-Pod list RBAC, fixed network floor, and fail-closed Job admission |
 | `apps/_infra/deploy-k8s/templates/{cluster-issuer,external-secrets-store,networkpolicy-*}.yaml` | Issuer/external-secret composition and cross-plane/default-deny policy |
 
@@ -128,6 +130,10 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
   tenant pods reach MCP servers through it (projected token `aud=obot-gateway`). OpenCrane remains
   the catalog/grant authority; the removed registry-poll route is not a synchronization mechanism.
 - **artifact-service** (`:8080`) → owns only content-addressed artifact bytes on its mounted PVC. It runs in the release's dedicated `<release>-artifacts` namespace with the receipt-signing key; OpenCrane remains the catalog and authorization authority in the control namespace, holds only the lease signer, and tenant/runtime pods never mount the volume.
+- **artifact-preprocessor** → owns no listener or durable state. It claims fenced PDF work from
+  OpenCrane, exchanges bounded source/output bytes through that broker, and uses only a bounded
+  `emptyDir` while converting. It has no ArtifactStore address, key, volume, ingress, or Kubernetes
+  API RBAC.
 - **agent-controller** → owns no listener. It claims desired attempts from OpenCrane, exactly creates
   or adopts their suspended Job in a Helm-owned dedicated runtime namespace, reports the Kubernetes
   Job UID, then separately
@@ -140,10 +146,12 @@ All planes are **ClusterIP-only** (no external LB) — external traffic arrives 
 
 ## Namespace Model
 
-**Single-install (default):** one release namespace holds the server-side planes. Personal-runtime
-Jobs and Pods occupy a deterministic sibling `<release>-runtime` namespace containing only their
-zero-RBAC ServiceAccount and Helm-owned security policies. CRDs and other RBAC remain scoped by
-their owning plane.
+**Single-install (default):** one release namespace holds the server-side planes. The artifact
+preprocessor occupies a deterministic sibling `<release>-artifact-preprocessing` restricted
+namespace containing only its Deployment, zero-RBAC ServiceAccount, bounded scratch, and policy.
+Personal-runtime Jobs and Pods occupy a separate deterministic sibling `<release>-runtime`
+namespace containing only their zero-RBAC ServiceAccount and Helm-owned security policies. CRDs and
+other RBAC remain scoped by their owning plane.
 
 **Multi-instance (`multiInstance.enabled: true`):** each customer install gets its own namespace (`oc-acme`, `oc-globex`, …) with its own planes, namespaced RBAC, namespaced cert Issuer/SecretStore, and a default-deny cross-instance NetworkPolicy. CRDs are installed **once** cluster-wide (`--skip-crds` on releases). See [Multi-Instance](#multi-instance-cluster-shape).
 
@@ -152,7 +160,12 @@ their owning plane.
 ## Network Topology
 
 - **Ingress:** GCE Ingress (GCP) or ingress-nginx (on-prem). The **control plane** is reached on the **fixed super-operator host** (`ingress.controlPlaneHost`, default `platform.<base>`); org hosts `<org>.<base>` are resolved by the platform wildcard `*.<base>` and routed via a single wildcard Ingress to the operator's identity-routing proxy (gateway WebSocket) and the control plane (API). There are no per-user Ingress objects. See [Tenancy Model](#tenancy-model--clustertenant-vs-usertenant).
-- **App-owned NetworkPolicies** restrict ArtifactStore ingress to the OpenCrane server only across the control-to-artifact namespace boundary; its PVC is mounted only in the artifact-service pod. Server RBAC is namespaced to its explicit control/tenant namespaces and cannot read the artifact namespace receipt signer. The server's `/api/internal/*` listener remains separately protected by its own policy and is never internet-routable.
+- **App-owned NetworkPolicies** restrict ArtifactStore ingress to the OpenCrane server only across
+  the control-to-artifact namespace boundary; its PVC is mounted only in the artifact-service pod.
+  The artifact preprocessor reaches only the server's internal listener, DNS, and optional telemetry;
+  it cannot reach ArtifactStore directly. Server RBAC is namespaced to its explicit control/tenant
+  namespaces and cannot read the artifact namespace receipt signer. The server's `/api/internal/*`
+  listener remains separately protected by its own policy and is never internet-routable.
 - **Personal-runtime NetworkPolicies** default-deny the whole dedicated runtime namespace and admit
   only runtime Pod egress to the exact OpenCrane internal port in the server namespace plus cluster
   DNS. The controller remains in the server namespace and has its own explicit OpenCrane/API/DNS

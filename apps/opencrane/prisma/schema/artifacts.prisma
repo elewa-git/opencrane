@@ -39,6 +39,14 @@ enum ArtifactUploadLeaseState {
   Cancelled @map("cancelled")
 }
 
+enum ArtifactPreprocessJobState {
+  Pending         @map("pending")
+  Claimed         @map("claimed")
+  Completed       @map("completed")
+  RetryableFailed @map("retryable_failed")
+  TerminalFailed  @map("terminal_failed")
+}
+
 model Artifact {
   id                String         @id @default(cuid())
   siloId            String         @map("silo_id")
@@ -52,6 +60,7 @@ model Artifact {
   deletedAt         DateTime?      @map("deleted_at")
   revisions         ArtifactRevision[] @relation("ArtifactRevisions")
   uploadLeases      ArtifactUploadLease[]
+  preprocessOutputs ArtifactPreprocessJob[] @relation("ArtifactPreprocessOutput")
   currentRevision   ArtifactRevision?  @relation("CurrentArtifactRevision", fields: [id, currentRevisionId], references: [artifactId, id], onDelete: Restrict)
 
   @@unique([id, currentRevisionId])
@@ -77,6 +86,7 @@ model ArtifactUploadLease {
   finalizedAt             DateTime?                @map("finalized_at")
   createdAt               DateTime                 @default(now()) @map("created_at")
   artifact                Artifact                 @relation(fields: [artifactId], references: [id], onDelete: Restrict)
+  preprocessJobOutput     ArtifactPreprocessJob?   @relation("ArtifactPreprocessOutputLease")
 
   @@index([artifactId, state, expiresAt])
   @@index([siloId, state, expiresAt])
@@ -105,6 +115,8 @@ model ArtifactRevision {
   parents           ArtifactRevisionParent[] @relation("ArtifactRevisionChildren")
   children          ArtifactRevisionParent[] @relation("ArtifactRevisionParents")
   outboxEvents      ArtifactOutboxEvent[]
+  preprocessJobsAsSource ArtifactPreprocessJob[] @relation("ArtifactPreprocessSource")
+  preprocessJobsAsOutput ArtifactPreprocessJob[] @relation("ArtifactPreprocessOutputRevision")
 
   @@unique([artifactId, revision])
   @@unique([artifactId, id])
@@ -113,6 +125,35 @@ model ArtifactRevision {
   @@index([sourceRunId])
   @@index([indexState, createdAt])
   @@map("artifact_revisions")
+}
+
+/// Durable, fenced work record for one deterministic source-revision preprocessing pipeline.
+model ArtifactPreprocessJob {
+  id                String                     @id @default(cuid())
+  sourceRevisionId  String                     @map("source_revision_id")
+  pipelineVersion   String                     @map("pipeline_version")
+  state             ArtifactPreprocessJobState @default(Pending)
+  attempt           Int                        @default(0)
+  claimFence        String?                    @map("claim_fence")
+  claimExpiresAt    DateTime?                  @map("claim_expires_at")
+  nextAttemptAt     DateTime?                  @map("next_attempt_at")
+  failureCode       String?                    @map("failure_code")
+  derivedArtifactId String?                    @map("derived_artifact_id")
+  derivedRevisionId String?                    @map("derived_revision_id")
+  outputLeaseId     String?                    @unique @map("output_lease_id")
+  completedAt       DateTime?                  @map("completed_at")
+  createdAt         DateTime                   @default(now()) @map("created_at")
+  updatedAt         DateTime                   @updatedAt @map("updated_at")
+  sourceRevision    ArtifactRevision           @relation("ArtifactPreprocessSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
+  derivedArtifact   Artifact?                  @relation("ArtifactPreprocessOutput", fields: [derivedArtifactId], references: [id], onDelete: Restrict)
+  derivedRevision   ArtifactRevision?          @relation("ArtifactPreprocessOutputRevision", fields: [derivedRevisionId], references: [id], onDelete: Restrict)
+  outputLease       ArtifactUploadLease?       @relation("ArtifactPreprocessOutputLease", fields: [outputLeaseId], references: [id], onDelete: Restrict)
+
+  @@unique([sourceRevisionId, pipelineVersion])
+  @@unique([derivedArtifactId])
+  @@unique([derivedRevisionId])
+  @@index([state, nextAttemptAt, claimExpiresAt])
+  @@map("artifact_preprocess_jobs")
 }
 
 model ArtifactRevisionParent {

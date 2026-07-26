@@ -64,6 +64,13 @@ spec:
             # The server accepts runtime assignments only for this Helm-owned restricted namespace.
             - name: AGENT_RUNTIME_NAMESPACE
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
+            # The preprocessing router TokenReviews only this Helm-owned worker namespace.
+            - name: ARTIFACT_PREPROCESSOR_ENABLED
+              value: {{ .Values.artifactPreprocessor.enabled | quote }}
+            - name: ARTIFACT_PREPROCESSOR_NAMESPACE
+              value: {{ include "opencrane.artifactPreprocessor.namespace" . | quote }}
+            - name: ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES
+              value: {{ .Values.artifactPreprocessor.maximumOutputBytes | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "opencrane-server") | nindent 12 }}
             - name: INGRESS_DOMAIN
               value: {{ .Values.ingress.domain | quote }}

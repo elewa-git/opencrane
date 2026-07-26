@@ -6,6 +6,9 @@ import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, Publis
 import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
 
+/** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
+const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
+
 /** Postgres authority for receipt consumption, immutable revision publication, and outbox creation. */
 export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactReadLeaseRepository, ArtifactUploadLeaseRepository, PersonalArtifactCatalogueRepository
 {
@@ -32,7 +35,7 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 	/** List only safe metadata from non-deleted assets owned in the exact trusted silo. */
 	async listOwnedCatalogue(siloId: string, ownerPrincipalId: string): Promise<readonly PersonalArtifactEntry[]>
 	{
-		const artifacts = await this.prisma.artifact.findMany({ where: { siloId, ownerPrincipalId, state: { not: ArtifactState.Deleted } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
+		const artifacts = await this.prisma.artifact.findMany({ where: { siloId, ownerPrincipalId, state: { not: ArtifactState.Deleted }, currentRevisionId: { not: null } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
 		return artifacts.map(function _toPersonalEntry(artifact): PersonalArtifactEntry
 		{
 			return { id: artifact.id, kind: _ToKind(artifact.kind), state: artifact.state === ArtifactState.Active ? "active" : "deletion_pending", currentRevisionId: artifact.currentRevisionId, mediaType: artifact.currentRevision?.mediaType ?? null, byteLength: artifact.currentRevision === null ? null : artifact.currentRevision.byteLength.toString(), indexState: artifact.currentRevision === null ? null : _ToIndexState(artifact.currentRevision.indexState), createdAt: artifact.createdAt.toISOString(), updatedAt: artifact.updatedAt.toISOString() };
@@ -101,6 +104,14 @@ export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepos
 					data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy },
 				});
 				await transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
+
+				// 3. Schedule the one deterministic PDF derivative in the same source-publication transaction.
+				if (command.promotion.mediaType === "application/pdf")
+				{
+					await transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
+				}
+
+				// 4. Publish the normal revision event only after its optional derived-work record exists.
 				await transaction.artifactOutboxEvent.create({
 					data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } },
 				});

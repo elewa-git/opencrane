@@ -55,6 +55,21 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.artifactPreprocessor.enabled }}
+    # The dedicated artifact preprocessor can reach only the brokered internal API.
+    # TokenReview binds its projected token to the exact worker ServiceAccount and namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "opencrane.artifactPreprocessor.namespace" . }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-preprocessor
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- end }}
     # The controller authenticates its fixed KSA and projected audience before it may claim or
     # commit an assignment; this rule exposes only the internal listener at the L3/4 floor.
     - from:

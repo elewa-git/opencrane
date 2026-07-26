@@ -114,12 +114,23 @@ export function createInternalApp(prisma: PrismaClient, authApi: k8s.Authenticat
   // The runtime route has a smaller fixed body boundary than other internal routes. Mount
   // it before the generic parser because Express will not re-parse an already consumed body.
   app.use("/api/internal/agent-runtime", express.json({ limit: 64 * 1024, strict: true }));
+  // Preprocessed text is brokered as one bounded raw body; JSON claim/failure requests fall through.
+  app.use("/api/internal/artifact-preprocessor/jobs/:jobId/output", express.raw({ type: "text/plain", limit: _ReadArtifactPreprocessorBodyLimit() }));
   app.use(express.json());
   app.use(___RequestContext());
   app.use(pinoHttp({ logger: log, genReqId: function _genReqId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
   _RegisterInternalRoutes(app, prisma, authApi);
   app.use(_ErrorHandler(log));
   return app;
+}
+
+/** Read the same bounded output ceiling used by the server-side promotion broker. */
+function _ReadArtifactPreprocessorBodyLimit(): number
+{
+  const raw = process.env.ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES?.trim() ?? "16777216";
+  const value = Number(raw);
+  if (!Number.isSafeInteger(value) || value < 1_024 || value > 64 * 1024 * 1024) throw new Error("ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES must be an integer from 1024 through 67108864");
+  return value;
 }
 
 /** HTTP port the server listens on. */

@@ -69,6 +69,11 @@ provider credentials or mutable source objects.
   locator projected through the Job's downward API, never a bearer credential. These types expose
   only immutable workload coordinates; they never expose the run-input body or let the controller
   choose a user, revision, namespace, runtime profile, or replacement Pod.
+- `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
+  `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
+  claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs
+  carry only an expiring attempt fence and bounded source metadata; storage addresses, content
+  addresses, leases, receipts, and catalogue coordinates remain server-private.
 - Re-exported model types: the agent, artifact, authorization, and platform-policy DTOs.
 
 ## Boundary

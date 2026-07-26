@@ -94,6 +94,11 @@ authority to reload only those catalogue coordinates and mint a five-minute-maxi
 mounted key material. The server consumes that lease against the private artifact-service and relays
 the bytes; the worker receives neither the lease, the content address, the ArtifactStore endpoint,
 nor disk access.
+PDF preprocessing follows the same broker rule in a separate restricted namespace. Finalizing a PDF
+creates one database-fenced job. The worker receives only its attempt, expiry, source media type,
+and byte length; OpenCrane proxies the PDF and extracted text while privately issuing and consuming
+the storage leases. The derived revision becomes catalogue-visible only when its verified promotion,
+source lineage, current pointer, and job completion commit together.
 The runtime stream mints the full `start_attempt`, `resume_attempt`, and `cancel_attempt` command
 lifecycle and admits candidates, so a verified Pod runs its bounded model/tool loop, proposes
 external actions through the reserve-before-dispatch tool-invocation authority, pauses for deferred
@@ -176,6 +181,9 @@ Read from the environment at startup.
 | `AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS` | Time to retain successfully delivered runtime handshakes before bounded cleanup | `604800` |
 | `AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE` | Maximum successful handshakes removed by one controller maintenance pass | `100` |
 | `AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS` | Bounded durable recovery check for an otherwise idle runtime stream | `5` |
+| `ARTIFACT_PREPROCESSOR_ENABLED` | Mount the broker-only preprocessing authority | `false` |
+| `ARTIFACT_PREPROCESSOR_NAMESPACE` | Dedicated worker namespace accepted by TokenReview; must differ from `POD_NAMESPACE` when enabled | *(required when enabled)* |
+| `ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES` | Shared raw-body and promotion ceiling for extracted text | `16777216` |
 | `CHANNEL_REPLAY_ROUTE_ID` | Controller-registered `events.read` route accepted by the internal replay endpoint; unset disables replay | *(unset)* |
 | `WATCH_NAMESPACE` | Namespace member workspaces are seeded into | falls back to `NAMESPACE` |
 | `FLEET_INTERNAL_URL` | Fleet membership write-through URL; empty = standalone silo | *(empty)* |

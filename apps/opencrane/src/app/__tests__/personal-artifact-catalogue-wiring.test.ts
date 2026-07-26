@@ -30,7 +30,7 @@ describe("personal artifact catalogue wiring", function _suite()
 			.set("x-forwarded-host", "silo-1.dev.opencrane.ai");
 
 		expect(response.status).toBe(200);
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { siloId: "silo-1", ownerPrincipalId: "subject-1", state: expect.any(Object) } }));
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", ownerPrincipalId: "subject-1", state: expect.any(Object) }) }));
 	});
 
 	it("normalises the signed-in email fallback and denies a missing session", async function _handlesFallback()
