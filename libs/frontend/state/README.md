@@ -18,10 +18,12 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/cache`](./conversation/cache/README.md) | IndexedDB conversation cache. |
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
+| [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |
 | [`onboarding`](./onboarding/README.md) | Shared onboarding persistence. |
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
 | [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |
+| [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
 | [`tenant/adapter`](./tenant/adapter/README.md) | Live tenant gateway and store. |
 | [`utils/storage`](./utils/storage/README.md) | Safe browser-storage seam. |
 
@@ -31,8 +33,9 @@ owns the client-side stores and caches that hold fetched data.
       ▼
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
-      ├─ conversation/{adapter,cache,render}   mcp/adapter   provider-key/adapter
-      ├─ settings/adapter   tenant/adapter   onboarding   utils/storage
+      ├─ conversation/{adapter,cache,render}   assets/adapter   skills/adapter
+      ├─ mcp/adapter   provider-key/adapter   settings/adapter   tenant/adapter
+      └─ onboarding   utils/storage
       ▼ HTTP
    backend API
 ```

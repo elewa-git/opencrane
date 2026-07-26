@@ -13,6 +13,8 @@ directory hierarchy in the SPA.
 | --- | --- | --- |
 | Managed personal agents | `features/conversation`, `state/conversation/*`, `state/onboarding` | personal agents and `server/agents` |
 | Gateway governance | `features/tools`, `state/mcp/adapter`, `state/provider-key/adapter` | `server/gateways` |
+| Governed skill catalogue | `state/skills/adapter` | `server/agents/skills` |
+| Personal asset catalogue | `state/assets/adapter` | server-side artifact authority |
 | Tenancy and administration | `features/customer-admin`, `state/tenant/adapter`, `state/settings/adapter` | `server/tenancy`, `server/iam` |
 | Reporting | `features/metrics` | `server/reporting` |
 | Shared browser composition | `core`, `platform`, `elements/*`, `state/core`, `state/gateways` | cross-cutting |
