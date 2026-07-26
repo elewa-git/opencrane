@@ -56,6 +56,8 @@ export interface RunWorkloadCleanupProjection
 	readonly mode: RunWorkloadCleanupMode;
 	/** Why cleanup exists; cancellation finalises the run while failure only removes residue. */
 	readonly reason: "cancellation" | "dispatch_failure" | "runtime_lease_expired";
+	/** First authoritative orphan absence, retained until a second post-horizon observation confirms it. */
+	readonly orphanAbsenceObservedAt?: string | null;
 }
 
 /** Database claim generation fencing one cleanup worker delivery. */
@@ -120,6 +122,8 @@ export interface RunCancellationRepository
 	claimNextWorkloadCleanupAtomically(): Promise<ClaimNextRunWorkloadCleanupResult>;
 	/** Confirms exact deletion or authoritative absence and finalises Cancelling when applicable. */
 	confirmWorkloadCleanupAtomically(eventId: string, command: ConfirmRunWorkloadCleanupCommand): Promise<ConfirmRunWorkloadCleanupResult>;
+	/** Persist a first orphan absence and defer its required second observation horizon. */
+	deferUnassignedOrphanAbsenceAtomically(eventId: string, claim: RunWorkloadCleanupClaim): Promise<"deferred" | "conflict">;
 	/** Fence and terminalise one expired registered runtime attempt without trusting runtime output. */
 	repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>;
 }

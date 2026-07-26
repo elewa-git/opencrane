@@ -38,6 +38,8 @@ after the deadline.
 
 - `__BuildSuspendedAgentRuntimeJob(assignment, profile)` — builds the suspended Job for one run
   attempt.
+- `__AgentRuntimeAttemptResourceName(siloId, runId, attempt)` — derives the same deterministic Job
+  name when a server-owned cleanup authority must locate a fenced attempt without receiving a profile.
 - `__DeriveAgentRuntimeReleaseDeadlineSeconds(assignmentExpiresAt, now, profileMaximum)` — converts
   absolute assignment authority into a conservative positive Kubernetes deadline.
 - `AgentRuntimeJobAssignment` — the durable run, attempt, revision, silo, namespace, and opaque

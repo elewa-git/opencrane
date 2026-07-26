@@ -159,6 +159,38 @@ roleRef:
   kind: Role
   name: {{ $controllerName }}
 ---
+# Cleanup is server-owned: the controller cannot delete or terminate active runtime Jobs.
+# The server performs UID-preconditioned deletion only after claiming the durable cleanup outbox row.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
+  namespace: {{ $runtimeNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opencrane-server
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
+  namespace: {{ $runtimeNamespace }}
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: opencrane-server
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opencrane.fullname" . }}-opencrane-server
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opencrane.fullname" . }}-runtime-cleanup
+---
 {{- range $namespace := (list $authoringNamespace $toolRunnerNamespace) }}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role

@@ -10,6 +10,8 @@ MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
 ROLE="$(mktemp)"
 BINDING="$(mktemp)"
+CLEANUP_ROLE="$(mktemp)"
+CLEANUP_BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
 RUNTIME_QUOTA="$(mktemp)"
 ADMISSION="$(mktemp)"
@@ -18,7 +20,7 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
 
 # The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
 # this contract always renders the source template under test without refreshing remote dependencies.
@@ -46,6 +48,8 @@ render_enabled --set-string agentController.openCraneInternalUrl=http://override
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_ROLE"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_NAMESPACE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-agent-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_QUOTA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ { print $0 }' "$MANIFEST" > "$ADMISSION"
@@ -94,6 +98,19 @@ fi
 test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
+
+# Only the OpenCrane server receives runtime Job deletion, through a separately named Role.
+test -s "$CLEANUP_ROLE"
+grep -Fq 'namespace: oc-opencrane-runtime' "$CLEANUP_ROLE"
+grep -Fq 'resources: ["jobs"]' "$CLEANUP_ROLE"
+grep -Fq 'verbs: ["get", "delete"]' "$CLEANUP_ROLE"
+if grep -Eq '"(create|list|patch|update|watch)"|resources: \["(pods|secrets)"\]' "$CLEANUP_ROLE"; then
+  echo "runtime cleanup Role exceeds server-owned Job observation/deletion authority" >&2
+  exit 1
+fi
+test -s "$CLEANUP_BINDING"
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'name: oc-opencrane-opencrane-server'
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'namespace: server-ns'
 
 # Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
 # exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.

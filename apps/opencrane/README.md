@@ -145,6 +145,12 @@ Cancellation is a nonterminal cleanup phase: active runs first enter `cancelling
 bootstrap or proof authority there, and become `cancelled` only after exact workload cleanup records
 the matching terminal event. Pending approvals close without resume authority even if their expiry
 sweeper has not yet run.
+
+The OpenCrane server, not the outbound agent controller, owns physical runtime cleanup. Its isolated
+runtime-namespace Role can observe and UID-precondition-delete Jobs only after a database-fenced
+cleanup claim. A deletion request is not completion: the server confirms only a later Kubernetes
+absence. An unassigned orphan requires two persisted absence observations separated by the full
+create horizon, so a delayed controller create cannot escape cleanup.
 Managed-agent definitions are likewise revisioned: a revision records its edit parent or restore
 source and change message, while scoped knowledge attachments remain immutable once published.
 

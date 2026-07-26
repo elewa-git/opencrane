@@ -114,8 +114,10 @@ and fails any unpublished dispatch or release command. It then records both the 
 and any physical cleanup still required. A committed assignment yields an `assigned` cleanup claim
 with its immutable Kubernetes UID. If the controller may have created a suspended Job just before
 the database fence won, an `unassigned_orphan` claim becomes available only after the dispatch lease
-and request margin; the cleaner must reconstruct and exactly compare that suspended Job before it
-may adopt the API UID for deletion. If no controller claim ever left Postgres, the locked failed
+and request margin; the server-owned cleaner must reconstruct and exactly compare that suspended Job
+before it may adopt the API UID for deletion. Its first Kubernetes absence is persisted and deferred
+for one additional full create-observation horizon; only a second absence may finalize cancellation.
+If no controller claim ever left Postgres, the locked failed
 attempt event proves no Job can exist and cancellation can finish immediately. Only confirmed
 deletion or authoritative absence moves `Cancelling` to `Cancelled` and emits `run.cancelled`.
 

@@ -5,7 +5,7 @@ import { AgentRunState, AgentRunTerminalReason, Prisma, RunOutboxEventKind, Work
 import { __CancelPendingRunApprovalAuthority } from "@opencrane/backend/server/iam/authorization";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
+import type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
 
 /** Non-locking cleanup coordinates used only to establish canonical lock order. */
 interface CleanupCandidateRow
@@ -162,6 +162,26 @@ export class PrismaRunCancellationRepository implements RunCancellationRepositor
 		});
 	}
 
+	/** Persist the first orphan absence and force a second observation after the full create horizon. */
+	async deferUnassignedOrphanAbsenceAtomically(eventId: string, claim: RunWorkloadCleanupClaim): Promise<"deferred" | "conflict">
+	{
+		const config = this.config;
+		return this.prisma.$transaction(async function _defer(transaction: Prisma.TransactionClient): Promise<"deferred" | "conflict">
+		{
+			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
+			if (!event || event.runId !== claim.workload.runId || event.attempt !== claim.workload.attempt) return "conflict";
+			await transaction.$queryRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtextextended(${event.runId}, 0))`);
+			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
+			const locked = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
+			const now = (await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`))[0]?.now;
+			const workload = _ParseCleanupProjection(locked?.payload);
+			if (!locked || !now || !workload || workload.mode !== "unassigned_orphan" || workload.orphanAbsenceObservedAt !== null || locked.claimedAt?.getTime() !== Date.parse(claim.lease.claimedAt) || locked.deliveryCount !== claim.lease.deliveryCount || locked.publishedAt !== null || locked.failedAt !== null) return "conflict";
+			const payload = { ...workload, orphanAbsenceObservedAt: now.toISOString() };
+			const deferred = await transaction.outboxEvent.updateMany({ where: { id: eventId, claimedAt: locked.claimedAt, deliveryCount: locked.deliveryCount, publishedAt: null, failedAt: null }, data: { payload: payload as unknown as Prisma.InputJsonObject, availableAt: new Date(now.getTime() + config.orphanObservationMarginMilliseconds), claimedAt: null } });
+			return deferred.count === 1 ? "deferred" : "conflict";
+		});
+	}
+
 	/** Fail one registered attempt whose server-issued workload lease expired without a terminal report. */
 	async repairNextExpiredRunAtomically(): Promise<RepairExpiredRunResult>
 	{
@@ -216,7 +236,7 @@ function _BootstrapReference(eventId: string, run: Pick<AgentRun, "id" | "attemp
 /** Build the durable cleanup payload from run authority rather than caller input. */
 function _CleanupProjection(run: AgentRun, assignment: WorkloadAssignment | null, bootstrapReference: string, workloadProfile: string, namespace: string, reason: RunWorkloadCleanupProjection["reason"]): RunWorkloadCleanupProjection
 {
-	return { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, namespace: assignment?.namespace ?? namespace, workloadProfile: assignment?.workloadProfile ?? workloadProfile, bootstrapReference, workloadUid: assignment?.workloadUid ?? null, mode: assignment === null ? "unassigned_orphan" : "assigned", reason };
+	return { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, namespace: assignment?.namespace ?? namespace, workloadProfile: assignment?.workloadProfile ?? workloadProfile, bootstrapReference, workloadUid: assignment?.workloadUid ?? null, mode: assignment === null ? "unassigned_orphan" : "assigned", reason, orphanAbsenceObservedAt: null };
 }
 
 /** Parse one internally persisted cleanup payload without trusting arbitrary JSON. */
@@ -228,7 +248,8 @@ function _ParseCleanupProjection(value: Prisma.JsonValue | undefined): RunWorklo
 	if (item["workloadUid"] !== null && typeof item["workloadUid"] !== "string") return null;
 	if (item["mode"] !== "assigned" && item["mode"] !== "unassigned_orphan") return null;
 	if (item["reason"] !== "cancellation" && item["reason"] !== "dispatch_failure" && item["reason"] !== "runtime_lease_expired") return null;
-	return { runId: item["runId"], attempt: item["attempt"], siloId: item["siloId"], agentServiceId: item["agentServiceId"], agentRevisionId: item["agentRevisionId"], namespace: item["namespace"], workloadProfile: item["workloadProfile"], bootstrapReference: item["bootstrapReference"], workloadUid: item["workloadUid"], mode: item["mode"], reason: item["reason"] };
+	if (item["orphanAbsenceObservedAt"] !== undefined && item["orphanAbsenceObservedAt"] !== null && typeof item["orphanAbsenceObservedAt"] !== "string") return null;
+	return { runId: item["runId"], attempt: item["attempt"], siloId: item["siloId"], agentServiceId: item["agentServiceId"], agentRevisionId: item["agentRevisionId"], namespace: item["namespace"], workloadProfile: item["workloadProfile"], bootstrapReference: item["bootstrapReference"], workloadUid: item["workloadUid"], mode: item["mode"], reason: item["reason"], orphanAbsenceObservedAt: item["orphanAbsenceObservedAt"] ?? null };
 }
 
 /** Revalidate a cleanup event after canonical locks are held. */
