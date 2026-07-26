@@ -19,10 +19,10 @@ snapshot and only while the recorded active revisions still match.
 **In this flow:** [conversations](../../conversations/main/README.md) · [personas](../../personas/main/README.md) · [execution inputs](../../../execution/inputs/main/README.md)
 
 The invariant is that a proposal is durable provenance, not mutable session state. Missing or
-cross-owner source coordinates fail closed. This first foundation does not itself approve, apply,
-or expose a browser/API control. Its first-party `upgrade_session` descriptor is always callable in
-a personal conversation, but its call records only a proposed change in this same journal; it never
-means the request is already user-approved or applied.
+cross-owner source coordinates fail closed. The self-only decision API may accept or reject that
+proposal, but never applies it or changes an in-flight run. Its first-party `upgrade_session`
+descriptor is always callable in a personal conversation, but its call records only a proposed
+change in this same journal; it never means the request is already user-approved or applied.
 
 ## Public surface
 
@@ -32,6 +32,8 @@ means the request is already user-approved or applied.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
 - `__DecidePersonalConfigurationChange` records the owner's `Accepted` or `Rejected` decision but
   never applies a patch itself.
+- `__CreatePersonalConfigurationRouter` exposes that decision only to the authenticated proposal
+  owner; browser input cannot choose a user, silo, timestamp, or lifecycle state beyond accept/reject.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
@@ -40,9 +42,10 @@ means the request is already user-approved or applied.
 
 ## Boundary
 
-The package does not mutate `RunInputSnapshot`, perform persona synthesis, apply a user decision,
-or invoke an MCP tool. The app composes its Prisma adapter and `ToolInvocation` ledger; runtime
-transport and UI remain separate owners.
+The package does not mutate `RunInputSnapshot`, perform persona synthesis, apply an accepted patch,
+or invoke an MCP tool. Its narrow self-only API records an owner's accept/reject decision; the app
+composes its Prisma adapter and `ToolInvocation` ledger, while runtime transport and UI remain
+separate owners.
 
 ## Dependency direction
 
