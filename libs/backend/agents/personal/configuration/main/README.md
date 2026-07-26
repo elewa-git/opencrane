@@ -12,6 +12,11 @@ snapshot and only while the recorded active revisions still match. A `persona_re
 materialised by a new, proposal-bound onboarding interview; approving that interview's derived
 persona revision applies that exact proposal atomically.
 
+An accepted `model_alias` follows a separate owner-triggered materialization step. It copies the
+current personal AgentService revision, changes only its registered model definition, publishes the
+copy, and makes that copy active in the same database transaction. The next run therefore seals the
+new model into its own input snapshot; a run already in progress keeps its old snapshot.
+
 ```
  conversation request ─► configuration proposal ◄── HERE ─► later approved revision
                                       │                         │
@@ -35,10 +40,15 @@ means the request is already user-approved or applied.
 - `ProposePersonalConfigurationChangeCommand` and `Result` describe the stable proposal boundary.
 - `__DecidePersonalConfigurationChange` records the owner's `Accepted` or `Rejected` decision but
   never applies a patch itself.
+- `__MaterializePersonalConfigurationChange` applies an accepted `model_alias` proposal by creating
+  and activating the next immutable personal AgentRevision; persona refreshes remain on the
+  interview-and-approval route.
 - `__CreatePersonalConfigurationRouter` and `PrismaPersonalConfigurationChangeRepository` provide
-  the owner-only configuration API: `GET /api/v1/me/configuration/changes` lists at most fifty
-  proposals in the signed-in owner's selected silo, and `POST /api/v1/me/configuration/changes/:changeId/decision`
-  records their accept-or-reject consent. Neither endpoint alters any current run snapshot.
+  the owner-only configuration API. `GET /api/v1/me/configuration/changes` lists at most fifty
+  proposals, `POST /api/v1/me/configuration/changes/:changeId/decision` records consent, and
+  `POST /api/v1/me/configuration/changes/:changeId/materialize` retry-safely applies an accepted
+  model selection. Browser input cannot choose a user, silo, timestamp, revision,
+  model-definition ID, or lifecycle state, and no endpoint mutates the current run snapshot.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
@@ -48,9 +58,11 @@ means the request is already user-approved or applied.
 ## Boundary
 
 The package does not mutate `RunInputSnapshot`, perform persona synthesis, or invoke an MCP tool.
-Its narrow self-only API records an owner's accept/reject decision; the persona authority alone can
-apply the linked `persona_refresh` proposal while approving the resulting revision. The app composes
-its Prisma adapter and `ToolInvocation` ledger, while runtime transport and UI remain separate owners.
+Its narrow self-only API records an owner's accept/reject decision. The persona authority alone can
+apply a linked `persona_refresh` proposal while approving the resulting revision; this package
+materialises only an accepted `model_alias` by copying the current personal revision. The app
+composes its Prisma adapter and `ToolInvocation` ledger, while runtime transport and UI remain
+separate owners.
 
 ## Dependency direction
 

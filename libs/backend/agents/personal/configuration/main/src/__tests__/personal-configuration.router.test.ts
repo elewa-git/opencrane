@@ -4,16 +4,17 @@ import { describe, expect, it, vi } from "vitest";
 import type { Logger } from "@opencrane/observability";
 
 import { __CreatePersonalConfigurationRouter } from "../personal-configuration.router.js";
+import type { PersonalConfigurationChangeMaterializationRepository } from "../personal-configuration-materialization.types.js";
 import type { PersonalConfigurationChangeView } from "../personal-configuration.types.js";
 
 /** Builds the owner-only proposal route with a caller and observable read port. */
-function _app(caller: unknown, listOwned = vi.fn(async function _list(): Promise<readonly PersonalConfigurationChangeView[]> { return []; }))
+function _app(caller: unknown, listOwned = vi.fn(async function _list(): Promise<readonly PersonalConfigurationChangeView[]> { return []; }), materializeAtomically: PersonalConfigurationChangeMaterializationRepository["materializeAtomically"] = vi.fn(async function _materialize() { return { status: "not_applicable" } as const; }))
 {
 	const app = express();
 	const decideAtomically = vi.fn(async function _decide() { return { status: "accepted" } as const; });
 	app.use(express.json());
-	app.use(__CreatePersonalConfigurationRouter({ resolveCaller: function _caller() { return caller as never; }, changes: { listOwned }, decisions: { decideAtomically }, clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } }, logger: { error: vi.fn() } as unknown as Logger }));
-	return { app, decideAtomically, listOwned };
+	app.use(__CreatePersonalConfigurationRouter({ resolveCaller: function _caller() { return caller as never; }, changes: { listOwned }, decisions: { decideAtomically }, materializer: { materializeAtomically }, clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } }, logger: { error: vi.fn() } as unknown as Logger }));
+	return { app, decideAtomically, listOwned, materializeAtomically };
 }
 
 describe("personal configuration router", function _suite()
@@ -40,5 +41,15 @@ describe("personal configuration router", function _suite()
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ changeId: "change-1", state: "accepted" });
 		expect(decideAtomically).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", changeId: "change-1", decision: "accepted", rejectionReason: null, decidedAt: "2026-07-26T12:00:00.000Z" });
+	});
+
+	it("materializes an accepted owner model proposal without accepting browser coordinates", async function _materializes()
+	{
+		const materializeAtomically = vi.fn(async function _materialize() { return { status: "applied", agentRevisionId: "revision-2" } as const; });
+		const { app } = _app({ siloId: "silo-1", userId: "user-1" }, undefined, materializeAtomically);
+		const response = await request(app).post("/changes/change-1/materialize").send({});
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ changeId: "change-1", state: "applied", agentRevisionId: "revision-2" });
+		expect(materializeAtomically).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", changeId: "change-1", materializedAt: "2026-07-26T12:00:00.000Z" });
 	});
 });

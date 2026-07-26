@@ -2,6 +2,7 @@ import type { Request } from "express";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeViewRepository } from "./personal-configuration.types.js";
+import type { PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
 
 /** Trusted browser identity for the owner-only configuration-proposal read surface. */
 export interface PersonalConfigurationCaller
@@ -21,6 +22,8 @@ export interface PersonalConfigurationRouterDependencies
 	readonly changes: PersonalConfigurationChangeViewRepository;
 	/** Atomically records an owner decision without applying the proposed patch. */
 	readonly decisions: PersonalConfigurationChangeDecisionRepository;
+	/** Applies one accepted model-alias proposal to a future immutable personal revision. */
+	readonly materializer: PersonalConfigurationChangeMaterializationRepository;
 	/** Supplies trusted decision timestamps. */
 	readonly clock: { now(): Date };
 	/** Records unexpected persistence failures without logging patch contents. */

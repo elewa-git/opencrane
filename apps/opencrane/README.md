@@ -109,7 +109,9 @@ approval-DECISION endpoint and the steering-INGEST surface are the operator/prod
 For personal conversation snapshots, this composition also adds the reserved `upgrade_session` tool
 after normal MCP grants are compiled and reseals the delivered input. The call itself is not deferred;
 it uses the same durable `ToolInvocation` ledger to record a future-only configuration proposal. A
-later explicit user decision and a later run snapshot own any actual change.
+later explicit user decision may start a proposal-bound persona interview, or may materialize an
+accepted model alias as the next immutable personal AgentRevision. In both cases, a later run
+snapshot owns the actual change; no active run is rewritten.
 Idle runtime streams do not create a database transaction every second. An accepted runtime
 candidate wakes local streams to check the durable command state immediately; a bounded recovery
 check still runs afterwards in case that in-process hint was lost. PostgreSQL remains the source of
