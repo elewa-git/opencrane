@@ -5,6 +5,7 @@ import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from 
 import type { PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
 import type { PersonaAuthorityRepository } from "./persona-authority.types.js";
 import type { PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types.js";
+import type { PersonaOnboardingStatusRepository } from "./persona-onboarding-status.types.js";
 
 /** Authenticated browser identity resolved by the composing server, never from request input. */
 export interface PersonaOnboardingCaller
@@ -41,4 +42,6 @@ export interface PersonaOnboardingRouterDependencies
 	clock: PersonaOnboardingClock;
 	/** Records unexpected authority failures without including owner answers. */
 	logger: Logger;
+	/** Reads the resumable onboarding state without exposing compiled persona instructions. */
+	status: PersonaOnboardingStatusRepository;
 }

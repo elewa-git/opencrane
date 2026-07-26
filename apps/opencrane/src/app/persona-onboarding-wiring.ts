@@ -1,7 +1,7 @@
 import type { Request, Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { __CreatePersonaOnboardingRouter, PrismaPersonaAuthorityRepository, PrismaPersonaDraftRepository, PrismaPersonaInterviewRepository, PrismaPersonaOnboardingRepository, type PersonaOnboardingCaller } from "@opencrane/backend/agents/personal/personas";
+import { __CreatePersonaOnboardingRouter, PrismaPersonaAuthorityRepository, PrismaPersonaDraftRepository, PrismaPersonaInterviewRepository, PrismaPersonaOnboardingRepository, PrismaPersonaOnboardingStatusRepository, type PersonaOnboardingCaller } from "@opencrane/backend/agents/personal/personas";
 import { _ClusterTenantFromHost, _RequestHost } from "@opencrane/server/_infra/auth";
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/server/_infra/auth";
@@ -21,6 +21,7 @@ export function _CreatePersonaOnboardingRouter(prisma: PrismaClient): Router
 		approval: new PrismaPersonaAuthorityRepository(prisma),
 		clock: { now(): Date { return new Date(); } },
 		logger: _log,
+		status: new PrismaPersonaOnboardingStatusRepository(prisma),
 	});
 }
 

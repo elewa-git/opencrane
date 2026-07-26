@@ -18,6 +18,7 @@ function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> =
 		approval: { getApprovalSnapshot: vi.fn(), approveAndActivateAtomically: vi.fn() },
 		clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } },
 		logger: { error: vi.fn() } as unknown as Logger,
+		status: { readStatus: vi.fn().mockResolvedValue({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null }) },
 		...overrides,
 	};
 }
@@ -33,6 +34,14 @@ function _app(dependencies: PersonaOnboardingRouterDependencies)
 
 describe("__CreatePersonaOnboardingRouter", function _describe()
 {
+	it("returns only durable resumable onboarding metadata for the authenticated owner", async function _status()
+	{
+		const dependencies = _dependencies();
+		const response = await request(_app(dependencies)).get("/api/v1/me/persona/");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null });
+		expect(dependencies.status.readStatus).toHaveBeenCalledWith("silo-1", "user-1");
+	});
 	it("requires session-derived caller identity before it reveals an onboarding flow", async function _requiresCaller()
 	{
 		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).post("/api/v1/me/persona/interview").send({});

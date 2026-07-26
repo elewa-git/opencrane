@@ -11,6 +11,20 @@ import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } fro
 export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingRouterDependencies): Router
 {
 	const router = Router();
+	router.get("/", async function _status(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		if (caller === null) return;
+		try
+		{
+			response.status(200).json(await dependencies.status.readStatus(caller.siloId, caller.userId));
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "persona_onboarding.status", siloId: caller.siloId }, "Persona onboarding status read failed");
+			_respond(response, 503, "persona_onboarding_unavailable");
+		}
+	});
 
 	router.post("/interview", async function _start(request: Request, response: Response)
 	{

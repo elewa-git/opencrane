@@ -1125,6 +1125,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/persona": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the signed-in owner's resumable persona onboarding state */
+        get: operations["getMyPersonaOnboarding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{threadId}/events": {
         parameters: {
             query?: never;
@@ -5184,6 +5201,51 @@ export interface operations {
                 };
             };
             /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyPersonaOnboarding: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Durable onboarding progress without compiled persona instructions. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        state: "interview" | "review" | "ready";
+                        interviewId: string | null;
+                        answeredQuestionCount: number;
+                        questionCount: number;
+                        personaRevisionId: string | null;
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Onboarding status could not be read. */
             503: {
                 headers: {
                     [name: string]: unknown;
