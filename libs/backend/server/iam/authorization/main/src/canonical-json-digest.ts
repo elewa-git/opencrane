@@ -11,6 +11,5 @@ import type { JsonValue } from "@opencrane/util";
  */
 export function __DigestCanonicalJson(value: JsonValue): CanonicalJsonSha256Digest
 {
-	const canonicalJson = ___CanonicalizeJson(value);
-	return `sha256:${createHash("sha256").update(canonicalJson, "utf8").digest("hex")}`;
+	return `sha256:${createHash("sha256").update(___CanonicalizeJson(value), "utf8").digest("hex")}`;
 }

@@ -399,7 +399,7 @@ spec:
         opencrane.ai/runtime-release: {{ $runtimeNamespaceLabel | quote }}
   validations:
     - expression: >-
-        request.userInfo.username == {{ $controllerUsername | toJson }} && request.subResource == ""
+        request.userInfo.username == {{ $controllerUsername | toJson }}
       message: only this release's controller ServiceAccount may create or release runtime Jobs
     - expression: >-
         object.metadata.name.matches('^agent-runtime-a[1-9][0-9]*-[a-f0-9]{24}$') &&

@@ -110,7 +110,7 @@ export function __DiffAgentRevisions(base: AgentRevision, target: AgentRevision)
 	// 2. Diff scalar configuration fields semantically.
 	const scalarChanges = [
 		_scalarChange("personaRevisionId", base.personaRevisionId, target.personaRevisionId),
-		_scalarChange("modelPolicyId", base.modelPolicyId, target.modelPolicyId),
+		_scalarChange("modelDefinitionId", base.modelDefinitionId, target.modelDefinitionId),
 		_scalarChange("budget.maxTurns", String(base.budget.maxTurns), String(target.budget.maxTurns)),
 		_scalarChange("budget.maxTokens", String(base.budget.maxTokens), String(target.budget.maxTokens)),
 		_scalarChange("budget.maxDurationMs", String(base.budget.maxDurationMs), String(target.budget.maxDurationMs)),

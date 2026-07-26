@@ -340,6 +340,8 @@ helm_args=(
   "$VALUES_FILE"
   --set
   "fleetManager.database.existingSecret=${FLEET_POSTGRES_APP_SECRET}"
+  --set-string
+  "networkPolicy.postgresPoolerName=${POSTGRES_RELEASE_NAME}-pooler"
   --set
   "fleetManager.database.secretKey=uri"
   --set
@@ -379,6 +381,8 @@ silo_args=(
   "$VALUES_FILE"
   --set
   "clustertenantManager.database.existingSecret=${OPENCRANE_POSTGRES_APP_SECRET}"
+  --set-string
+  "networkPolicy.postgresPoolerName=${POSTGRES_RELEASE_NAME}-pooler"
   --set
   "clustertenantManager.database.secretKey=uri"
   --set

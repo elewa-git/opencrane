@@ -4,7 +4,7 @@ import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from ".
 import type { AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickDependencies, ScheduleTickResult, ScheduledSlotOutcome } from "./schedule-tick.types.js";
 
 /** Admission denial reasons that are transient and warrant a backed-off retry rather than a drop. */
-const _RETRYABLE_DENIALS = new Set(["run_admission_unavailable", "persistence_unavailable", "authority_conflict"]);
+const _RETRYABLE_DENIALS = new Set(["run_admission_unavailable", "admission_concurrency_limited", "persistence_unavailable", "authority_conflict"]);
 
 /**
  * Derive the deterministic idempotency key for one scheduled slot.

@@ -781,21 +781,6 @@
           }
         }
       },
-      "ProviderKey": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "type": "string"
-          },
-          "configured": {
-            "type": "boolean"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "ByokProviderKeyStatus": {
         "type": "object",
         "required": [
@@ -4581,111 +4566,6 @@
               "application/json": {
                 "schema": {
                   "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/keys": {
-      "get": {
-        "operationId": "listProviderKeys",
-        "summary": "List configured provider API keys (configured status only, never the key value)",
-        "tags": [
-          "Provider Keys"
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider key status list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderKey"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/keys/{provider}": {
-      "put": {
-        "operationId": "upsertProviderKey",
-        "summary": "Create or update a provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "apiKey"
-                ],
-                "properties": {
-                  "apiKey": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Key updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderKey"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProviderKey",
-        "summary": "Delete a configured provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Key deleted."
-          },
-          "404": {
-            "description": "Provider key not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

@@ -53,6 +53,9 @@ authorities or leaking them into command arguments or logs. Clean setup publishe
 `scripts/publish-initdb-baseline-config-map.sh`; physical recovery does not execute that SQL because
 the backup already contains the schema and its protected, superuser-owned baseline marker. The
 privileges hook verifies that in-database marker before application deployment can continue.
+It retries transient CNPG rollout disconnects within a fixed shell budget, applies each privilege
+batch in one transaction, and leaves a short Job-deadline grace period for the final PostgreSQL
+diagnostic. A persistent failure still blocks the Helm hook.
 
 The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
 budget permits at most ten server connections per logical database (fifty across the deployed

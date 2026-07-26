@@ -3,6 +3,8 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
+CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
+IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
 ROLE="$(mktemp)"
@@ -122,7 +124,10 @@ grep -A2 -F '  matchConstraints:' "$ADMISSION" | grep -Fq '    matchPolicy: Exac
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq 'resources: ["jobs"]' "$ADMISSION"
 grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-controller"' "$ADMISSION"
-grep -Fq "request.subResource == \"\"" "$ADMISSION"
+if grep -Fq 'request.subResource' "$ADMISSION"; then
+  echo "Job-only admission must not dereference the optional subResource request field" >&2
+  exit 1
+fi
 grep -Fq "request.operation == 'CREATE' && object.spec.suspend == true" "$ADMISSION"
 grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers.size() == 1" "$ADMISSION"
@@ -133,14 +138,29 @@ grep -Fq "object.spec.activeDeadlineSeconds <= oldObject.spec.activeDeadlineSeco
 grep -Fq "object.spec.template.spec.nodeName == ''" "$ADMISSION"
 grep -Fq "object.spec.template.spec.terminationGracePeriodSeconds == 0" "$ADMISSION"
 grep -Fq "object.spec.template.metadata.ownerReferences.size() == 0" "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-agent-runtime@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/italanta/opencrane-agent-runtime@sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\"" "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.requests.cpu).compareTo(quantity("100m")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity("128Mi")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity("1000m")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity("1Gi")) == 0' "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].env.size() == 5" "$elewa-gitN"
+grep -Fq "object.spec.template.spec.containers[0].env.size() == 5" "$ADMISSION"
+grep -Fq "!has(object.spec.template.spec.containers[0].envFrom)" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNTIME_LITELLM_BASE_URL'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].volumeMounts.size() == 4" "$ADMISSION"
+grep -Fq 'SERVER_INTERNAL_PORT="$4"' "$CONFORMANCE"
+grep -Fq 'LITELLM_PORT="$5"' "$CONFORMANCE"
+if grep -Fq 'cluster.local:3001' "$CONFORMANCE"; then
+  echo "Admission conformance must use the deployed internal server port" >&2
+  exit 1
+fi
+grep -Fq '        runAsUser: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        runAsGroup: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        fsGroup: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        fsGroupChangePolicy: OnRootMismatch' "$IDENTITY_CONFORMANCE"
+grep -Fq '          type: RuntimeDefault' "$IDENTITY_CONFORMANCE"
+grep -Fq 'for (let attempt = 1; attempt <= 10; attempt += 1)' "$IDENTITY_CONFORMANCE"
+grep -Fq 'signal: AbortSignal.timeout(2000)' "$IDENTITY_CONFORMANCE"
+grep -Fq 'if (response.status !== 200 && response.status !== 204)' "$IDENTITY_CONFORMANCE"
 grep -Fq "object.spec.template.spec.volumes.size() == 4" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'litellm-key'" "$ADMISSION"
 grep -Fq "secret.name.matches('^litellm-key-[a-f0-9]{32}$')" "$ADMISSION"

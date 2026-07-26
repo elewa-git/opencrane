@@ -88,6 +88,8 @@ describe("personal-runtime attempt Job", function _Suite()
 		expect(runtime?.env).toContainEqual({ name: "OPENCRANE_RUNTIME_LITELLM_KEY_PATH", value: "/var/run/opencrane/litellm/key" });
 		expect(runtime?.env).toContainEqual({ name: "OPENCRANE_RUNTIME_LITELLM_BASE_URL", value: "http://litellm.opencrane-silo-1.svc.cluster.local:4000" });
 		expect(runtime?.env).not.toContainEqual(expect.objectContaining({ name: expect.stringMatching(/KEY$/), value: expect.stringMatching(/^sk-/) }));
+		expect(serialized).not.toContain("envFrom");
+		expect(serialized).not.toMatch(/(?:OPENAI|ANTHROPIC|GEMINI|MISTRAL|DEEPSEEK)_API_KEY/);
 		expect(serialized).not.toContain("persistentVolumeClaim");
 		expect(serialized).not.toContain("secretKeyRef");
 		expect(serialized).not.toContain("secretName");

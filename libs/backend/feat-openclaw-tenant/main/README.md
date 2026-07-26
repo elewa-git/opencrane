@@ -74,8 +74,8 @@ the channel-proxy infra lib through the app root.
 
 Driven by the app-owned operator environment (`OpenClawTenantOperatorConfig`): watch namespace,
 deployment mode (standalone vs fleet-managed), standalone seed identity, Cognee endpoint, and the
-optional in-process gateway proxy (`GATEWAY_PROXY_ENABLED`). A boot-time `OPENCRANE_BOOTSTRAP_OPENAI_KEY`
-provisions an optional BYOK (bring-your-own-key) provider key.
+optional in-process gateway proxy (`GATEWAY_PROXY_ENABLED`). It never accepts or provisions an
+upstream provider key at boot.
 
 ## See also
 

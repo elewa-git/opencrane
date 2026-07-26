@@ -39,6 +39,20 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Resolve the exact CNPG-managed Pooler identity used by application egress rules.
+The database release normally follows `<application release>-postgres`, while
+recovery validation deliberately points an application release at a separately
+named restored database. Deploy paths must override this value in that case.
+*/}}
+{{- define "opencrane.postgresPoolerName" -}}
+{{- if .Values.networkPolicy.postgresPoolerName -}}
+{{- .Values.networkPolicy.postgresPoolerName -}}
+{{- else -}}
+{{- printf "%s-postgres-pooler" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Resolve deployment environment for validation rules.
 */}}
 {{- define "opencrane.environment" -}}

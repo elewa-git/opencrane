@@ -129,7 +129,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              cnpg.io/poolerName: {{ printf "%s-postgres-pooler" .Release.Name | trunc 63 | trimSuffix "-" }}
+              cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
       ports:
         - protocol: TCP
           port: 5432

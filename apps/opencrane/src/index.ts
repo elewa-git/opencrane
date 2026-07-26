@@ -16,10 +16,12 @@ import { ___AuthMiddleware } from "@opencrane/server/_infra/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/server/_infra/http";
 
 import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/iam/identity";
+import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { _log as log } from "./app/log.js";
 import { _RegisterInternalRoutes, _RegisterRoutes } from "./app/routes.js";
+import { _CreateManagedRunAdmissionPort, _ReadRunAdmissionConcurrencyPolicy } from "./app/run-admission-wiring.js";
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
 import { OpenClawTenantLifecycle } from "@opencrane/backend/feat-openclaw-tenant";
 
@@ -40,9 +42,10 @@ const _unbindConsole = ___BindConsole(log);
  * @param customApi - Kubernetes Custom Objects API client
  * @param coreApi   - Kubernetes Core V1 API client
  * @param authApi   - Kubernetes Authentication API for tenant contract TokenReview
+ * @param runAdmission - Process-shared, capacity-bounded managed run admission port.
  * @returns Configured Express application
  */
-export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
+export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api, runAdmission: ManagedRunAdmissionPort): Express
 {
   const app = express();
   // First-login member workspaces are seeded into the TenantOperator's watch namespace
@@ -83,7 +86,7 @@ export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi,
   app.use(___AuthMiddleware());
 
   // Register API routes
-  _RegisterRoutes(app, prisma, customApi, coreApi, authApi);
+  _RegisterRoutes(app, prisma, customApi, coreApi, authApi, runAdmission);
 
   // Global error handler — must be registered after all routes.
   app.use(_ErrorHandler(log));
@@ -141,8 +144,11 @@ const coreApi = kc.makeApiClient(k8s.CoreV1Api);
 /** Kubernetes Authentication API client — used for tenant contract TokenReview validation. */
 const authApi = kc.makeApiClient(k8s.AuthenticationV1Api);
 
+/** One process-wide capacity boundary shared by run-now and scheduled managed admissions. */
+const managedRunAdmission = _CreateManagedRunAdmissionPort(prisma, _ReadRunAdmissionConcurrencyPolicy());
+
 // Build and start the PUBLIC app (ingress-facing: /api/v1/*, /auth — session-authed).
-const app = createApp(prisma, customApi, coreApi, authApi);
+const app = createApp(prisma, customApi, coreApi, authApi, managedRunAdmission);
 app.locals.artifactUploadGateway = artifactUploadGateway;
 
 log.info({ port }, "starting opencrane control plane");
@@ -169,7 +175,7 @@ const internalServer = internalApp.listen(internalPort, function _onInternalList
 // harvesting-central-agent live-Obot proof gated under #337. The interval is unref'd so it never
 // holds the process open, and it is cleared on shutdown.
 /** Managed-agent schedule ticker bound to canonical Postgres and the shared admission port. */
-const scheduleTicker = _CreateScheduleTicker(prisma);
+const scheduleTicker = _CreateScheduleTicker(prisma, managedRunAdmission);
 /** Milliseconds between schedule passes when the scheduler is enabled. */
 const schedulerIntervalMs = Math.max(1_000, Number(process.env.OPENCRANE_SCHEDULER_INTERVAL_MS ?? "60000"));
 const schedulerHandle = process.env.OPENCRANE_SCHEDULER_ENABLED === "true"

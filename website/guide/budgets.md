@@ -40,8 +40,8 @@ Add the model providers your company uses, and switch freely between them. Use
 Claude, GPT, or open-source models without changing anything about your assistants
 or skills. Budget and provider changes are recorded in the [audit log](/guide/audit).
 
-Manage these through the authenticated `/api/v1/providers/keys` endpoints. The API
-returns key status, never the raw secret; see the [interactive API reference](/reference/api).
+Manage these through the authenticated BYOK endpoints below; the API returns status, never the raw
+secret. See the [interactive API reference](/reference/api).
 
 ### Bring your own provider key (BYOK)
 

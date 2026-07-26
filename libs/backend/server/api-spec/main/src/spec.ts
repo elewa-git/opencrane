@@ -392,15 +392,6 @@ const AuditEntrySchema = {
   },
 };
 
-const ProviderKeySchema = {
-  type: "object" as const,
-  properties: {
-    provider: { type: "string" },
-    configured: { type: "boolean" },
-    updatedAt: { type: "string", format: "date-time" },
-  },
-};
-
 const ByokProviderKeyStatusSchema = {
   type: "object" as const,
   required: ["provider", "configured", "litellmRegistered"],
@@ -667,7 +658,6 @@ export const spec = {
         required: ["groupId", "resourceType", "resourceId", "members"],
       },
       AuditEntry: AuditEntrySchema,
-      ProviderKey: ProviderKeySchema,
       ByokProviderKeyStatus: ByokProviderKeyStatusSchema,
       ProviderKeySetRequest: ProviderKeySetRequestSchema,
       ProviderCredential: ProviderCredentialSchema,

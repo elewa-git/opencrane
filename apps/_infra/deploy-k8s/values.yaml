@@ -429,6 +429,12 @@ clustertenantManager:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
+  # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
+  # These apply per silo and AgentService; keep the active limit below the server's five-connection
+  # Prisma budget so a hot service cannot starve unrelated control-plane work.
+  runAdmission:
+    maxConcurrent: 2
+    maxQueued: 10
   service:
     # -- Public API port (ingress-facing): /api/v1/*, /auth. Session-authed.
     port: 8080
@@ -602,21 +608,6 @@ clustertenantManager:
   # `fleetManager.zitadel` (Stage 4) — the silo's OIDC above is for per-org LOGIN only and
   # never holds the IAM_OWNER SA key. The silo uses standards-only OIDC discovery at
   # `clustertenantManager.oidc.issuerUrl`; it makes no Zitadel management API calls.
-
-# -- LiteLLM integration settings
-# -- Short-lived TEST bootstrap of a silo's provider key. When providerKey.existingSecret names a
-#    Secret, the operator provisions its OpenAI key as this silo's BYOK key on boot (encrypted
-#    Secret + LiteLLM credential + seeded default model), so a freshly-deployed silo is usable
-#    without a manual key-set. OFF by default. NOT for production: it injects ONE shared key for all
-#    tenants in the silo (no per-tenant spend isolation). Create the Secret out-of-band, e.g.
-#    `kubectl -n <silo-ns> create secret generic opencrane-bootstrap-provider-key --from-literal=openaiApiKey=sk-...`
-#    then set providerKey.existingSecret to its name; delete the Secret to stop re-applying.
-bootstrap:
-  providerKey:
-    # -- Name of an existing Secret holding the OpenAI key; empty disables the bootstrap.
-    existingSecret: ""
-    # -- Key within that Secret carrying the raw OpenAI API key.
-    secretKey: openaiApiKey
 
 litellm:
   # -- Cost routing is enabled by default as part of platform setup.
@@ -1136,6 +1127,10 @@ projectedIdentity:
 # for internal platform services)
 networkPolicy:
   enabled: true
+  # -- Exact CNPG-managed Pooler identity admitted by application egress policies.
+  # Defaults to `<release>-postgres-pooler`; deploy tooling sets it explicitly so a
+  # recovery smoke can point the application at a separately named restored cluster.
+  postgresPoolerName: ""
   # -- Allow DNS resolution (still consumed by the multi-instance cross-namespace policy)
   allowDNS: true
   # -- Reserved for a future FQDN egress policy (requires Cilium). The per-silo egress

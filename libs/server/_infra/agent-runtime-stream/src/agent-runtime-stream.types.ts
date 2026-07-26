@@ -1,5 +1,7 @@
 import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeStreamOpen } from "@opencrane/contracts";
 
+import type { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
+
 /** Verified workload identity associated with one runtime-initiated connection. */
 export interface RuntimeWorkloadIdentity
 {
@@ -55,6 +57,8 @@ export interface RuntimeStreamTransportOptions
 	readonly maxBodyBytes: number;
 	/** Heartbeat interval for an idle, runtime-initiated SSE connection. */
 	readonly heartbeatMilliseconds: number;
-	/** Bounded wait before polling the authority again when no command is ready. */
-	readonly commandPollMilliseconds: number;
+	/** Bounded durable recovery interval after a local wake-up is missed or unavailable. */
+	readonly commandRecoveryMilliseconds: number;
+	/** Optional process-local wake-up fan-out; it never stores or authorizes commands. */
+	readonly commandWakeup?: RuntimeCommandWakeup;
 }

@@ -7,8 +7,8 @@
 This package is part of the **managed-agent plane** — the side of OpenCrane that turns a saved
 agent definition into something the runtime can execute. An *agent service* is the stable identity
 of one agent (its name and lifecycle); an *agent revision* is one immutable, versioned snapshot of
-how that agent behaves (its prompt policy, model policy, budget, and the skills and integrations it
-may use). A service always points at exactly one *active* revision.
+how that agent behaves (its prompt policy, registered model definition, budget, and the skills and
+integrations it may use). A service always points at exactly one *active* revision.
 
 This package owns the whole definition plane and the authoritative management API. It creates a
 managed service with its first draft revision; appends immutable draft revisions as edits (each
@@ -24,7 +24,7 @@ read/recall and inject/write for that exact scope only, and never implies skills
 models, credentials, or a neighbouring scope.
 
 ```
- author a draft AgentRevision   (prompt policy · model policy · budget · assigned skills + integrations)
+ author a draft AgentRevision   (prompt policy · registered model · budget · assigned skills + integrations)
         │
         ▼
  ┌────────────────────────────────────┐
@@ -39,8 +39,11 @@ models, credentials, or a neighbouring scope.
 **In this flow:** [skills](../../skills/main/README.md) · [integrations](../../../gateways/integrations/main/README.md) *(a revision assigns these)*
 
 Invariant: a revision is only published when it belongs to the named service, is still a draft, and
-carries every executable field (a positive version, a digest, prompt and model policy, and positive
-turn/token/duration budgets). The publish and the pointer flip happen as a single compare-and-swap,
+carries every executable field (a positive version, a digest, prompt and registered model definition,
+and positive turn/token/duration budgets). The model is a foreign-key reference to the gateway-owned
+catalogue, so an author cannot turn an arbitrary provider alias into executable behaviour. A model
+is available only when it is platform-global or belongs to the service's tenant scope; the database
+checks the same rule as the application. The publish and the pointer flip happen as a single compare-and-swap,
 so two people publishing at once cannot both win — the second sees a conflict, and a crash never
 leaves a half-published service. Anything missing or stale is refused with a plain reason.
 
@@ -80,7 +83,7 @@ a silent partial publish.
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
 agent models), `scope:audit`, `scope:authorization`, `scope:grants`, and `scope:shared` — never on
 apps, gateways, or knowledge domains. run-now and session reading are injected by the app so this
-package never imports `scope:auth` or `scope:personal-runs`. The `scope:grants` edge is real and
+package never imports `scope:auth` or `scope:execution-runs`. The `scope:grants` edge is real and
 load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled
@@ -89,7 +92,7 @@ grants) both ride the compiler. Scope attachments remain silo-bounded and org-ad
 ## Data & persistence
 
 Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisionId`/`changeMessage`
-lineage), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
+lineage and a required `ModelDefinition` reference), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
 the `GrantScope`/`GrantSubjectType` enums), `AgentRevisionSkillAssignment`,
 `AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
 enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`. The retired
@@ -98,4 +101,4 @@ single-owner shape (`ownerScope`/`ownerSubjectId`/`AgentServiceOwnerScope`) is d
 ## See also
 
 - Parent index: [agents](../../README.md)
-- Siblings: [skills](../../skills/main/README.md) · [artifacts](../../artifacts/main/README.md) · [channel-targets](../../channel-targets/main/README.md)
+- Siblings: [skills](../../skills/main/README.md) · [artifacts](../../artifacts/main/README.md) · [channel-targets](../../channel-targets/main/README.md) · [model routing](../../../gateways/model-routing/main/README.md)

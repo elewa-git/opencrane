@@ -68,9 +68,15 @@ test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 3
 test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 4
 grep -q '^kind: Job$' "$OUTPUT"
 grep -q 'helm.sh/hook: post-install,post-upgrade' "$OUTPUT"
+grep -q 'activeDeadlineSeconds: 330' "$OUTPUT"
 test "$(grep -c 'app.kubernetes.io/component: postgres-database-privileges' "$OUTPUT")" -ge 2
 grep -q 'REVOKE CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q 'GRANT CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
+grep -q -- '--single-transaction' "$OUTPUT"
+test "$(grep -c 'until psql' "$OUTPUT")" -eq 4
+grep -q 'until recorded_baseline=' "$OUTPUT"
+grep -q "Timed out reading the target baseline from logical database" "$OUTPUT"
+grep -q "Timed out applying privileges for logical database" "$OUTPUT"
 grep -q 'name: "postgres-admin-bootstrap"' "$OUTPUT"
 grep -q 'name: "opencrane_database_admin"' "$OUTPUT"
 grep -q 'pg_read_all_data' "$OUTPUT"
@@ -113,6 +119,13 @@ fi
 
 if helm template invalid "$CHART" >/dev/null 2>&1; then
   echo "postgres chart accepted missing database credentials" >&2
+  exit 1
+fi
+
+if helm template invalid-privileges-grace "$CHART" "${BASE_VALUES[@]}" \
+  --set networkPolicy.enabled=false \
+  --set privileges.jobDeadlineGraceSeconds=9 >/dev/null 2>&1; then
+  echo "postgres chart accepted insufficient privileges Job deadline grace" >&2
   exit 1
 fi
 

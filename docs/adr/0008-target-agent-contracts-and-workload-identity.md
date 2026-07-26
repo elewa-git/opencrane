@@ -21,6 +21,11 @@ fleet-membership projection. Canonical bytes live behind `ArtifactStore`; durabl
 memory lives in Cognee. Runtime Pods consume immutable assignments and emit the canonical RunEvent
 protocol. They do not own product state or mutate their approved persona.
 
+Any future AG-UI browser projection is a versioned, display-only view of server-authorized canonical
+events. The channel proxy may encode only explicitly selected safe fields; it never reads Postgres,
+stores a parallel event log, exposes raw event payloads, or decides and resumes approvals. Replay,
+snapshots, and approval decisions remain OpenCrane server authorities until their dedicated APIs exist.
+
 Project is an authorization dimension independent of department and team. A project can include
 people from several departments and teams without copying those memberships. Grant evaluation uses
 numeric priority; deny wins when allow and deny have equal priority. The authorization facade fails

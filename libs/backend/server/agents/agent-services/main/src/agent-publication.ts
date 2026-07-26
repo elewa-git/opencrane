@@ -17,7 +17,7 @@ function _isPublishableRevision(revision: AgentRevision): boolean
 		&& _isPresent(revision.agentServiceId)
 		&& _isPresent(revision.digest)
 		&& _isPresent(revision.promptPolicyVersion)
-		&& _isPresent(revision.modelPolicyId)
+		&& _isPresent(revision.modelDefinitionId)
 		&& Number.isSafeInteger(revision.budget.maxTurns)
 		&& revision.budget.maxTurns > 0
 		&& Number.isSafeInteger(revision.budget.maxTokens)

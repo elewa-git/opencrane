@@ -33,51 +33,6 @@ function created(description: string, schema: object)
 
 /** OpenAPI path fragments owned by the providers domain (composed into the opencrane-ui spec). */
 export const _ProvidersOpenapiPaths = {
-  "/providers/keys": {
-    get: {
-      operationId: "listProviderKeys",
-      summary: "List configured provider API keys (configured status only, never the key value)",
-      tags: ["Provider Keys"],
-      responses: {
-        200: ok("Provider key status list.", { type: "array", items: { $ref: "#/components/schemas/ProviderKey" } }),
-      },
-    },
-  },
-
-  "/providers/keys/{provider}": {
-    put: {
-      operationId: "upsertProviderKey",
-      summary: "Create or update a provider API key",
-      tags: ["Provider Keys"],
-      parameters: [{ name: "provider", in: "path", required: true, schema: { type: "string" } }],
-      requestBody: {
-        required: true,
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              required: ["apiKey"],
-              properties: { apiKey: { type: "string" } },
-            },
-          },
-        },
-      },
-      responses: {
-        200: ok("Key updated.", { $ref: "#/components/schemas/ProviderKey" }),
-      },
-    },
-    delete: {
-      operationId: "deleteProviderKey",
-      summary: "Delete a configured provider API key",
-      tags: ["Provider Keys"],
-      parameters: [{ name: "provider", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        204: { description: "Key deleted." },
-        404: notFound("Provider key not found."),
-      },
-    },
-  },
-
   "/providers/byok": {
     get: {
       operationId: "listByokProviderKeys",

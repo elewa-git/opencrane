@@ -10,7 +10,7 @@ describe("harvesting central-agent definition", function _DefinitionSuite()
 {
 	it("is expressible as a valid packaged managed agent", function _Expressible()
 	{
-		const definition = _HarvestingCentralAgentDefinition("obot-ref-slack-opaque");
+		const definition = _HarvestingCentralAgentDefinition("obot-ref-slack-opaque", "global-model-definition");
 		expect(definition.content.personaRevisionId).toBeNull();
 		expect(definition.content.budget.maxTurns).toBeGreaterThan(0);
 		expect(definition.content.budget.maxTokens).toBeGreaterThan(0);
@@ -27,7 +27,7 @@ describe("harvesting Obot MCP invocation (stubbed transport)", function _McpSuit
 {
 	it("invokes only allow-listed tools through the opaque custody reference", async function _AllowList()
 	{
-		const definition = _HarvestingCentralAgentDefinition("obot-ref-slack-opaque");
+		const definition = _HarvestingCentralAgentDefinition("obot-ref-slack-opaque", "global-model-definition");
 		const assignment = definition.content.integrationAssignments[0];
 		const transport = new __FakeObotMcpInvocationAdapter({ content: { channels: ["general"] } });
 		const result = await transport.invokeTool({ siloId: "silo-1", integrationId: assignment.integrationId, obotCustodyReference: assignment.custodyReferenceId, toolName: "slack.listChannels", arguments: {}, allowedTools: assignment.allowedTools });

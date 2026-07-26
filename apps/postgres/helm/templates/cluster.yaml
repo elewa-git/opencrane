@@ -8,6 +8,12 @@
 {{- if or (not .Values.databaseAdmin.name) (not .Values.databaseAdmin.credentialsSecret) -}}
 {{- fail "databaseAdmin.name and databaseAdmin.credentialsSecret are required; OpenCrane never generates database credentials" -}}
 {{- end -}}
+{{- if lt (int .Values.privileges.timeoutSeconds) 1 -}}
+{{- fail "privileges.timeoutSeconds must be at least 1" -}}
+{{- end -}}
+{{- if lt (int .Values.privileges.jobDeadlineGraceSeconds) 10 -}}
+{{- fail "privileges.jobDeadlineGraceSeconds must be at least 10 so the Job can emit terminal diagnostics" -}}
+{{- end -}}
 {{- range $database := .Values.databases }}
 {{- if or (not .name) (not .owner) (not .credentialsSecret) -}}
 {{- fail "every databases entry requires name, owner, and credentialsSecret; OpenCrane never generates database credentials" -}}

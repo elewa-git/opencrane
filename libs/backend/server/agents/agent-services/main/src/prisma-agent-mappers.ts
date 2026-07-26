@@ -138,7 +138,7 @@ export function _mapRevision(row: AgentRevisionRow): AgentRevision
 		digest: row.digest,
 		promptPolicyVersion: row.promptPolicyVersion,
 		personaRevisionId: row.personaRevisionId,
-		modelPolicyId: row.modelPolicyId,
+		modelDefinitionId: row.modelDefinitionId,
 		skills: row.skillAssignments.map(assignment => ({ skillId: assignment.skillId, revisionId: assignment.skillRevisionId })),
 		integrationAssignments: row.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: assignment.allowedTools })),
 		scopeAttachments: row.scopeAttachments.map(attachment => ({ scope: _grantScope(attachment.scope), subjectType: _grantSubjectType(attachment.subjectType), subjectId: attachment.subjectId })),

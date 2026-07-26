@@ -9,7 +9,8 @@ MULTI_OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT" "$MULTI_OUTPUT"' EXIT
 
 helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
-  --set networkPolicy.mainNetworkDefaultDeny.enabled=true >"$OUTPUT"
+  --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
+  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler >"$OUTPUT"
 
 PLATFORM_POLICY="$(awk '
   BEGIN { RS="---" }
@@ -20,7 +21,7 @@ test -n "$PLATFORM_POLICY"
 grep -Fq '        values: [artifact-service, agent-controller, agent-runtime]' <<<"$PLATFORM_POLICY"
 grep -Fq '      - key: cnpg.io/poolerName' <<<"$PLATFORM_POLICY"
 grep -Fq '        operator: DoesNotExist' <<<"$PLATFORM_POLICY"
-grep -Fq '              cnpg.io/poolerName: opencrane-silo-postgres-pooler' <<<"$PLATFORM_POLICY"
+grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$PLATFORM_POLICY"
 grep -Fq '          port: 5432' <<<"$PLATFORM_POLICY"
 
 if grep -Fq 'cnpg.io/cluster' <<<"$PLATFORM_POLICY"; then

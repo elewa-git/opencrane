@@ -11,7 +11,7 @@ model/tool loop and states that adoption is recorded **only after** the pinned a
 protocol, security, reliability, and **live-LiteLLM** conformance gate. The offline conformance
 harness and fault-injection matrix (Phase E slice 4 — `apps/agent-runtime/tests/test_conformance.py`,
 `apps/agent-runtime/tests/test_fault_matrix.py`, and the attempt-scoped credential rejection proofs in
-`libs/backend/agents/personal/runs`) are built and CI-runnable, but they are a **precondition**, not
+`libs/backend/agents/execution/runs`) are built and CI-runnable, but they are a **precondition**, not
 adoption. The live-LiteLLM leg, this evidence record, and the OpenClaw loop deletion all remain gated
 on #337.
 

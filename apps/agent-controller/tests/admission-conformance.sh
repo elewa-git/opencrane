@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ "$#" -ne 3 ]]; then
-  echo "usage: admission-conformance.sh <server-namespace> <runtime-namespace> <release-fullname>" >&2
+if [[ "$#" -ne 5 ]]; then
+  echo "usage: admission-conformance.sh <server-namespace> <runtime-namespace> <release-fullname> <server-internal-port> <litellm-port>" >&2
   exit 2
 fi
 
 SERVER_NAMESPACE="$1"
 RUNTIME_NAMESPACE="$2"
 RELEASE_FULLNAME="$3"
+SERVER_INTERNAL_PORT="$4"
+LITELLM_PORT="$5"
 CONTROLLER_USER="system:serviceaccount:${SERVER_NAMESPACE}:agent-controller"
 WRONG_USER="system:serviceaccount:${SERVER_NAMESPACE}:default"
 JOB_NAME="agent-runtime-a1-aaaaaaaaaaaaaaaaaaaaaaaa"
@@ -101,11 +103,11 @@ spec:
               drop: ["ALL"]
           env:
             - name: OPENCRANE_RUNTIME_STREAM_URL
-              value: http://${RELEASE_FULLNAME}-opencrane-server.${SERVER_NAMESPACE}.svc.cluster.local:3001/api/internal/agent-runtime
+              value: http://${RELEASE_FULLNAME}-opencrane-server.${SERVER_NAMESPACE}.svc.cluster.local:${SERVER_INTERNAL_PORT}/api/internal/agent-runtime
             - name: OPENCRANE_RUNTIME_TOKEN_PATH
               value: /var/run/opencrane/tokens/runtime.token
             - name: OPENCRANE_RUNTIME_LITELLM_BASE_URL
-              value: http://${RELEASE_FULLNAME}-litellm.${SERVER_NAMESPACE}.svc.cluster.local:4000
+              value: http://${RELEASE_FULLNAME}-litellm.${SERVER_NAMESPACE}.svc.cluster.local:${LITELLM_PORT}
             - name: OPENCRANE_RUNTIME_LITELLM_KEY_PATH
               value: /var/run/opencrane/litellm/key
             - name: POD_UID

@@ -731,41 +731,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/providers/keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List configured provider API keys (configured status only, never the key value) */
-        get: operations["listProviderKeys"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/providers/keys/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Create or update a provider API key */
-        put: operations["upsertProviderKey"];
-        post?: never;
-        /** Delete a configured provider API key */
-        delete: operations["deleteProviderKey"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/providers/byok": {
         parameters: {
             query?: never;
@@ -1495,12 +1460,6 @@ export interface components {
             action?: string;
             resource?: string;
             message?: string;
-        };
-        ProviderKey: {
-            provider?: string;
-            configured?: boolean;
-            /** Format: date-time */
-            updatedAt?: string;
         };
         ByokProviderKeyStatus: {
             /**
@@ -3943,83 +3902,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    listProviderKeys: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Provider key status list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKey"][];
-                };
-            };
-        };
-    };
-    upsertProviderKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    apiKey: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Key updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKey"];
-                };
-            };
-        };
-    };
-    deleteProviderKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Key deleted. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Provider key not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

@@ -4,7 +4,6 @@ import { __RunScheduleTick } from "@opencrane/backend/server/agents/scheduling";
 import type { ActiveScheduledRunLookup, AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickResult } from "@opencrane/backend/server/agents/scheduling";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 
-import { _createManagedRunAdmissionPort } from "./agent-services-wiring.js";
 import { _log } from "./log.js";
 import type { ScheduleTicker } from "./scheduler-wiring.types.js";
 
@@ -35,11 +34,11 @@ function _createActiveScheduledRunLookup(prisma: PrismaClient): ActiveScheduledR
 /**
  * Compose the schedule ticker over canonical Postgres and the shared admission port.
  * @param prisma - Canonical product-authority client.
+ * @param admission - The shared, capacity-bounded admission port used by run-now too.
  * @returns A ticker whose `runOnce` performs one full scheduling pass.
  */
-export function _CreateScheduleTicker(prisma: PrismaClient): ScheduleTicker
+export function _CreateScheduleTicker(prisma: PrismaClient, admission: ManagedRunAdmissionPort): ScheduleTicker
 {
-	const admission: ManagedRunAdmissionPort = _createManagedRunAdmissionPort(prisma);
 	const activeRuns = _createActiveScheduledRunLookup(prisma);
 	return {
 		async runOnce(now: Date): Promise<readonly { readonly scheduleId: string; readonly result: ScheduleTickResult }[]>

@@ -3,6 +3,7 @@ import { json, Router, type Response } from "express";
 import { AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
+import { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
 import type { RuntimeCandidateAdmission, RuntimeStreamTransportOptions, RuntimeWorkloadIdentity } from "./agent-runtime-stream.types.js";
 
 /** Validate a bounded runtime instance identifier without accepting executable syntax. */
@@ -97,12 +98,6 @@ function _WriteEvent(response: Response, event: string, data: unknown): void
 	response.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
 }
 
-/** Wait the deployment-owned bounded interval before polling the injected authority again. */
-function _Wait(milliseconds: number): Promise<void>
-{
-	return new Promise(function _schedule(resolve) { setTimeout(resolve, milliseconds); });
-}
-
 /**
  * Build the runtime-initiated internal transport.
  *
@@ -116,6 +111,7 @@ function _Wait(milliseconds: number): Promise<void>
 export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransportOptions): Router
 {
 	const router = Router();
+	const wakeup = options.commandWakeup ?? new RuntimeCommandWakeup();
 	router.use(json({ limit: options.maxBodyBytes, strict: true }));
 
 	router.post("/stream", async function _openStream(request, response, next)
@@ -136,6 +132,7 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 				response.flushHeaders();
 				let closed = false;
 				let sequence = 0;
+				const waitAbort = new AbortController();
 				// Stream loss must bound in-flight command dispatch and let the injected authority release
 				// the runtime-instance binding. The signal is a port call, never an import of the backend
 				// authority package, so a lost connection cannot leave the attempt bound to a dead Pod.
@@ -144,6 +141,7 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 					if (closed) return;
 					closed = true;
 					clearInterval(heartbeat);
+					waitAbort.abort();
 					void options.authority.__ReleaseStream?.(identity, open).catch(function _ignoreReleaseError() {});
 				};
 				const heartbeat = setInterval(function _heartbeat()
@@ -158,11 +156,12 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 				response.once("close", cleanup);
 				response.once("error", cleanup);
 
-				// 1. Poll the injected authority after identity and wire syntax are fixed.
+				// 1. Read Postgres before waiting: durable authority owns every command and replay decision.
 				// 2. Forward only strictly newer immutable commands; never mint or reorder one here.
-				// 3. Keep the runtime-initiated response alive with heartbeats between bounded polls.
+				// 3. Sleep until a local lifecycle hint or bounded recovery check, so idle streams do not poll each second.
 				while (!closed)
 				{
+					const observedWakeRevision = wakeup.currentRevision();
 					const command = await options.authority.__NextCommand(identity, open, sequence);
 					if (closed)
 					{
@@ -180,7 +179,7 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 						_WriteEvent(response, "command", command);
 						continue;
 					}
-					await _Wait(options.commandPollMilliseconds);
+					await wakeup.waitForChange(observedWakeRevision, options.commandRecoveryMilliseconds, waitAbort.signal);
 				}
 			});
 		}
@@ -208,6 +207,10 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 				response.status(401).json({ code: "UNAUTHORIZED" });
 				return;
 			}
+			// Only external actions can currently make a resume command due. Waking on every accepted
+			// event would turn high-frequency message deltas into a fleet-wide read burst; all other
+			// lifecycle changes remain protected by the bounded durable recovery check.
+			if (result.accepted && _IsRuntimeCandidate(request.body) && request.body.kind === "external_action") wakeup.wake();
 			response.status(result.accepted ? 202 : result.retryable ? 503 : 409).json(result);
 		}
 		catch (error)

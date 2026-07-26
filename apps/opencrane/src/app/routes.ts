@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import * as k8s from "@kubernetes/client-node";
-import { ActionExecutionState, type PrismaClient } from "@prisma/client";
+import { ActionExecutionState, AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
 
 import { aiBudgetRouter, tokenUsageRouter, spendRouter } from "@opencrane/backend/server/reporting/spend";
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
@@ -11,24 +11,29 @@ import { _RegisterInternalParticipation, awarenessRolloutRouter, awarenessPartic
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
 import { metricsRouter, prometheusMetricsRouter } from "@opencrane/backend/server/reporting/metrics";
 import { policiesRouter } from "@opencrane/backend/server/iam/policies";
-import { providerKeysRouter, providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
+import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { tenantsRouter } from "@opencrane/backend/server/tenancy/tenants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/knowledge/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
-import { _RegisterInternalAgentRuntimeStream, type RuntimeTokenReviewer, type RuntimeWorkloadIdentity } from "@opencrane/server/_infra/agent-runtime-stream";
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
-import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/personal/runs";
-import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/runtime";
+import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
+import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
+import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
+import { __AppendCompiledTool } from "@opencrane/backend/agents/runtime/prompt-compiler";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
 import { __UnavailableObotCustodyAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
+import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
+import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _log } from "./log.js";
 
 /** Read a bounded, server-owned seconds setting and return milliseconds. */
@@ -49,6 +54,13 @@ function _ReadBoundedInteger(name: string, fallback: number, minimum: number, ma
 	const value = Number(raw);
 	if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`${name} must be an integer from ${minimum} through ${maximum}`);
 	return value;
+}
+
+/** Read the controller-registered route identity, leaving replay unreachable until it is configured. */
+function _ReadChannelReplayRouteId(): string | null
+{
+	const routeId = process.env.CHANNEL_REPLAY_ROUTE_ID?.trim();
+	return routeId || null;
 }
 
 /** Return whether one value is a bounded Kubernetes namespace DNS label. */
@@ -74,37 +86,6 @@ function _ReadRuntimeNamespaceBoundary(): { readonly serverNamespace: string; re
 }
 
 /**
- * Convert one reviewed Kubernetes subject into the identity accepted by the runtime transport.
- *
- * The expected namespace comes from server-owned deployment configuration. The reviewed
- * ServiceAccount must satisfy the same bounded runtime-profile grammar used when building Jobs, and
- * the Pod UID must come from TokenReview. Returning `null` on every mismatch keeps subject parsing
- * from silently broadening which runtime workloads the server trusts.
- */
-function _ParseRuntimeSubject(subject: string, expectedNamespace: string, podUid: string | null): RuntimeWorkloadIdentity | null
-{
-  const parts = subject.split(":");
-	const serviceAccountName = parts[3];
-	if (parts.length !== 4 || parts[0] !== "system" || parts[1] !== "serviceaccount" || parts[2] !== expectedNamespace || !serviceAccountName || !___IsAgentRuntimeServiceAccountName(serviceAccountName) || !podUid)
-  {
-    return null;
-  }
-	return { subject, namespace: expectedNamespace, serviceAccountName, podUid };
-}
-
-/**
- * Read the Pod UID claim Kubernetes attaches to a bound projected ServiceAccount token.
- *
- * The UID is required because a ServiceAccount name identifies a workload class, not the exact Pod
- * assigned to one run attempt. Missing or malformed TokenReview extras therefore fail closed.
- */
-function _ReadReviewedPodUid(extra: Record<string, string[]> | undefined): string | null
-{
-	const podUid = extra?.["authentication.kubernetes.io/pod-uid"]?.[0];
-	return typeof podUid === "string" && podUid.length > 0 ? podUid : null;
-}
-
-/**
  * Submit one audience-bound projected token and expose only an authenticated accepted review.
  *
  * The raw credential remains local to this traced Kubernetes call. A valid signature without the
@@ -122,26 +103,6 @@ async function _ReviewProjectedToken(authApi: k8s.AuthenticationV1Api, token: st
 		const status = review.status;
 		return status?.authenticated && status.audiences?.includes(audience) ? status : null;
 	});
-}
-
-/**
- * Build the app-owned Kubernetes TokenReview adapter for runtime projected credentials.
- *
- * Kubernetes remains the issuer and verifier. This adapter fixes the audience and namespace, then
- * validates the reviewed ServiceAccount against the shared runtime-profile grammar and exposes only
- * the workload identity needed by the transport. It never forwards the raw token or TokenReview
- * response; a valid signature without all bindings is still unauthorised.
- */
-function _CreateRuntimeTokenReviewer(authApi: k8s.AuthenticationV1Api, runtimeNamespace: string): RuntimeTokenReviewer
-{
-  return {
-    async __Review(token: string): Promise<RuntimeWorkloadIdentity | null>
-    {
-		const status = await _ReviewProjectedToken(authApi, token, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE);
-		if (!status) return null;
-		return _ParseRuntimeSubject(status.user?.username ?? "", runtimeNamespace, _ReadReviewedPodUid(status.user?.extra));
-    },
-  };
 }
 
 /**
@@ -175,7 +136,7 @@ function _CreateAgentControllerTokenReviewer(authApi: k8s.AuthenticationV1Api, s
  * Mint one attempt-scoped LiteLLM virtual key for a claimed run attempt.
  *
  * This binds the run-dispatch repository's injected issuer to the model-routing gateway, which holds
- * the LiteLLM master key. Keeping the call here (not in the `scope:personal-runs` library) is why the
+ * the LiteLLM master key. Keeping the call here (not in the `scope:execution-runs` library) is why the
  * master key never reaches the outbound-only controller: only the minted virtual key rides the claim
  * response. The per-silo server already targets its own silo LiteLLM, so `siloId` needs no routing.
  * @param request - Alias, single model alias, silo, budget, and expiry the key is bound to.
@@ -202,6 +163,7 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
 function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActionRunner
 {
 	const repository = new PrismaToolInvocationRepository(prisma);
+	const personalConfiguration = new PrismaPersonalConfigurationChangeRepository(prisma);
 	const obotCustody = new __UnavailableObotCustodyAdapter();
 	const sandboxExecutor = new __UnavailableSandboxJobExecutor();
 	const memoryGateway = new __UnavailableMemoryGatewayClient();
@@ -214,7 +176,9 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			let executor;
 			try
 			{
-				executor = __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
+				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
+					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
+					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, obotCustody, sandboxExecutor, memoryGateway });
 			}
 			catch (error)
 			{
@@ -230,6 +194,23 @@ function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActio
 			}
 			return { outcome: "completed" as const };
 		},
+	};
+}
+
+/** Compile normal grants, then add the sealed first-party upgrade intent only to personal sessions. */
+function _CreatePersonalRunInputCompiler(): RunInputCompiler
+{
+	const compile = __CreatePrismaRunInputCompiler();
+	return async function _compilePersonalInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	{
+		// 1. Compile the immutable snapshot normally before composition adds any built-in descriptor.
+		const input = await compile(snapshot, transaction);
+		// 2. Exclude non-conversation and non-persona snapshots without inferring a personal service.
+		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
+		// 3. Prove the current service kind in the same compiler transaction; snapshot fields alone are insufficient.
+		const service = await transaction.agentService.findFirst({ where: { id: snapshot.agentServiceId, siloId: snapshot.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
+		// 4. Append and re-seal only the proven first-party tool, preserving the immutable snapshot itself.
+		return service === null ? input : __AppendCompiledTool(input, UPGRADE_SESSION_TOOL);
 	};
 }
 
@@ -297,7 +278,13 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 	const commandTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { namespace: runtimeNamespace, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimeNamespace);
-	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, __CreatePrismaRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { namespace: runtimeNamespace, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreatePersonalRunInputCompiler(), _CreateExternalActionRunner(prisma));
+	const replayRouteId = _ReadChannelReplayRouteId();
+	if (replayRouteId !== null)
+	{
+		// The registered route ID pins this PEP to one controller-selected internal endpoint.
+		app.use("/api/internal/conversation-replay", __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }));
+	}
 	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
   // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
   // allowed model set + effective default at reconcile. Best-effort — never 404/500.
@@ -321,7 +308,7 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
     authority: runtimeDispatchAuthority,
     maxBodyBytes: 64 * 1024,
     heartbeatMilliseconds: 15_000,
-    commandPollMilliseconds: 1_000,
+	commandRecoveryMilliseconds: _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
   }));
 }
 
@@ -333,9 +320,10 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
  * @param customApi - Kubernetes custom objects client.
  * @param coreApi - Kubernetes core API client.
  * @param authApi - Kubernetes authentication API client.
+ * @param runAdmission - Shared, capacity-bounded admission path for managed run-now requests.
  * @returns The configured Express application.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api, runAdmission: ManagedRunAdmissionPort): Express
 {
   // NOTE: the internal (`/api/internal/*`) routers are mounted separately by
   // `_RegisterInternalRoutes`, which index.ts calls BEFORE `___AuthMiddleware` so the
@@ -348,7 +336,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/ai-budget", aiBudgetRouter(coreApi, prisma));
   app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
   app.use("/api/v1/groups", groupsRouter(prisma));
-  app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma));
+  app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma, runAdmission));
   app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
   app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
   app.use("/api/v1/shares", sharesRouter(prisma));
@@ -364,7 +352,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/awareness/rollout", awarenessRolloutRouter(prisma));
   app.use("/api/v1/awareness/participation", awarenessParticipationRouter(prisma));
   app.use("/api/v1/spend", spendRouter(prisma));
-  app.use("/api/v1/providers/keys", providerKeysRouter(prisma));
   app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
   // BYOK raw-key path — writes the silo's provider key Secret in the operator's own namespace
   // (POD_NAMESPACE, downward-API populated; "default" fallback mirrors config._readOwnNamespace).

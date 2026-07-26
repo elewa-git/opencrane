@@ -29,7 +29,7 @@ function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
 function _isContentValid(content: AgentRevisionContent): boolean
 {
 	return _isPresent(content.promptPolicyVersion)
-		&& _isPresent(content.modelPolicyId)
+		&& _isPresent(content.modelDefinitionId)
 		&& (content.personaRevisionId === null || _isPresent(content.personaRevisionId))
 		&& _isPositiveInteger(content.budget.maxTurns)
 		&& _isPositiveInteger(content.budget.maxTokens)

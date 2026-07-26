@@ -219,7 +219,7 @@ Logical modules that should **not** become separate applications initially:
 - agent, revision, run, trigger, persona, skill-catalog, and sharing domains;
 - transactional outbox and audit ledger;
 - approval and run-coordination state;
-- model-policy compilation.
+- model-definition selection and compilation.
 
 An independently deployed authorization service is justified only if the API cannot meet decision
 latency/availability or several independently deployed PEPs require online checks that signed
@@ -364,7 +364,7 @@ both personal and company-managed agents.
 | Record | Purpose |
 |---|---|
 | `AgentService` | Stable identity, kind (`personal` or `managed`), owner, lifecycle, active revision, deployment policy, workload-profile binding |
-| `AgentRevision` | Immutable prompt/persona references, model policy, skills, MCP assignments, budgets, guardrails, input/output schema, triggers |
+| `AgentRevision` | Immutable prompt/persona references, a registered model definition, skills, MCP assignments, budgets, guardrails, input/output schema, triggers |
 | `AgentRun` | Actor/trigger, revision, effective-contract hash, attempt, state, timestamps, costs, terminal reason |
 | `RunEvent` | Ordered normalized model/tool/approval/artifact/status events for reconnect, console, and audit |
 | `Thread` / `Message` | Canonical user-visible transcript independent of runtime implementation |

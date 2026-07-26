@@ -1,13 +1,11 @@
-import { randomUUID } from "node:crypto";
 import type { Request, Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import type { AgentRevision, AgentService } from "@opencrane/models/agents";
 import { __CreateAgentServicesRouter, PrismaAgentRevisionLifecycleRepository, PrismaAgentScheduleRepository, PrismaAgentServicePublicationRepository, PrismaScopeGrantResolver } from "@opencrane/backend/server/agents/agent-services";
-import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagementCaller } from "@opencrane/backend/server/agents/agent-services";
+import type { AgentPublicationAuditEvidencePort, AgentServicePublicationRepository, AtomicAgentRevisionPublication, ManagedRunAdmissionPort, ManagementCaller } from "@opencrane/backend/server/agents/agent-services";
 import type { AuditDecisionRecord } from "@opencrane/backend/server/iam/audit";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
-import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/personal/runs";
 import { _ClusterTenantFromHost, _RequestHost } from "@opencrane/server/_infra/auth";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
 import "@opencrane/server/_infra/auth";
@@ -67,49 +65,17 @@ function _publicationFor(prisma: PrismaClient, caller: ManagementCaller): AgentS
 }
 
 /**
- * Build the managed run-now admission port.
- *
- * run-now AND the scheduler both record an admission through the EXISTING run-admission repository
- * (`trigger: managed_invocation` or `schedule`); it never dispatches a Job or executes anything.
- * Assembling a managed run's immutable snapshot needs signed fleet-membership identity and
- * effective-capability compilation — the managed executor, which lands with the #337 live-Obot
- * adoption gate. Until then this fails closed inside the admission transaction rather than
- * fabricating signed identity evidence — mirroring the app's other `__Unavailable*` composition-root
- * defaults. Nothing is persisted while it is unavailable.
- *
- * @param prisma - Canonical product-authority client.
- * @returns A fail-closed managed run admission port bound to the real admission repository.
- */
-export function _createManagedRunAdmissionPort(prisma: PrismaClient): ManagedRunAdmissionPort
-{
-	const admission = new PrismaRunAdmissionRepository(prisma);
-	return {
-		async admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
-		{
-			const runId = randomUUID();
-			const result = await admission.admit(
-				{ runId, siloId: command.siloId, agentServiceId: command.agentServiceId, threadId: null, executionSubjectId: `agent-service:${command.agentServiceId}`, requestIdempotencyKey: command.requestIdempotencyKey },
-				// The managed executor (fleet-membership + capability-set snapshot assembly) lands with the
-				// #337 live-Obot adoption gate; until then managed execution stays fail-closed here.
-				async function _assembleManagedSnapshot() { return { outcome: "denied", reason: "run_admission_unavailable" } as const; },
-			);
-			if (result.outcome === "denied") return { outcome: "denied", reason: result.reason };
-			return { outcome: result.outcome, runId };
-		},
-	};
-}
-
-/**
  * Compose the authoritative managed-agent management router for the app.
  * @param prisma - Canonical product-authority client.
+	* @param runAdmission - Shared, capacity-bounded managed run admission boundary.
  * @returns The configured `/api/v1/agent-services` router.
  */
-export function _CreateAgentServicesRouter(prisma: PrismaClient): Router
+export function _CreateAgentServicesRouter(prisma: PrismaClient, runAdmission: ManagedRunAdmissionPort): Router
 {
 	return __CreateAgentServicesRouter({
 		lifecycle: new PrismaAgentRevisionLifecycleRepository(prisma),
 		publicationFor(caller: ManagementCaller): AgentServicePublicationRepository { return _publicationFor(prisma, caller); },
-		runAdmission: _createManagedRunAdmissionPort(prisma),
+		runAdmission,
 		schedules: new PrismaAgentScheduleRepository(prisma),
 		scopeGrantResolver: new PrismaScopeGrantResolver(prisma),
 		resolveCaller: _resolveCaller,

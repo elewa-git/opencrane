@@ -104,6 +104,9 @@ privileges:
   # A bounded in-cluster psql Job runs after each Cluster/Database reconciliation to
   # remove PostgreSQL's default PUBLIC CONNECT/TEMPORARY grants from every logical DB.
   timeoutSeconds: 300
+  # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
+  # after its retry budget expires instead of terminating the Job first.
+  jobDeadlineGraceSeconds: 30
 
 backup:
   enabled: false
