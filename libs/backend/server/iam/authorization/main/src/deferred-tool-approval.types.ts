@@ -8,10 +8,10 @@ export interface DecideDeferredToolRequestCommand
 {
 	/** Approval row that gates the deferred tool invocation. */
 	readonly approvalRequestId: string;
-	/** Logical run the deferred request belongs to. */
-	readonly runId: string;
-	/** Current positive attempt the deferred request belongs to. */
-	readonly attempt: number;
+	/** Silo the authenticated reviewer is operating within. */
+	readonly siloId: string;
+	/** Authenticated subject that owns the approval-bound runtime action. */
+	readonly subjectId: string;
 	/** Reviewer's terminal decision. */
 	readonly decision: DeferredToolDecision;
 	/** Subject who recorded the decision. */
@@ -59,5 +59,13 @@ export type DeferToolRequestResult =
 export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "approved"; readonly deferredToolResult: JsonValue }
 	| { readonly outcome: "denied" }
+	| { readonly outcome: "expired" }
 	| { readonly outcome: "already_decided"; readonly decision: DeferredToolDecision }
 	| { readonly outcome: "conflict" };
+
+/** Atomic persistence boundary for a session-authorized deferred-tool decision. */
+export interface DeferredToolApprovalDecisionRepository
+{
+	/** Decide one request only when its durable run coordinates still match the authenticated owner. */
+	decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>;
+}

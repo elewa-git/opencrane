@@ -1065,6 +1065,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/approvals/{approvalRequestId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny one pending tool action owned by the signed-in user
+         * @description The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.
+         */
+        post: operations["decideDeferredToolApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/me": {
         parameters: {
             query?: never;
@@ -4882,6 +4902,85 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+        };
+    };
+    decideDeferredToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque identifier for the pending approval. */
+                approvalRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approved" | "denied";
+                };
+            };
+        };
+        responses: {
+            /** @description Decision recorded or identical terminal decision replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approvalRequestId: string;
+                        /** @enum {string} */
+                        state: "approved" | "denied";
+                    };
+                };
+            };
+            /** @description The request body is not the exact decision shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval is absent, terminal in another way, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval expired before the decision. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the decision. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

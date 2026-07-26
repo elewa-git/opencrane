@@ -27,6 +27,7 @@ import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/mo
 import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
 import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
+import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -768,6 +769,7 @@ export const spec = {
     ..._SpendOpenapiPaths,
     ..._AuditOpenapiPaths,
     ..._MetricsOpenapiPaths,
+    ..._AuthorizationOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection
