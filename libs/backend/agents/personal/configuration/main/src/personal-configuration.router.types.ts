@@ -2,6 +2,7 @@ import type { Request } from "express";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonalConfigurationChangeDecisionRepository } from "./personal-configuration.types.js";
+import type { PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
 
 /** Authenticated owner identity resolved by the server rather than the browser request body. */
 export interface PersonalConfigurationCaller
@@ -26,6 +27,8 @@ export interface PersonalConfigurationRouterDependencies
 	resolveCaller(request: Request): PersonalConfigurationCaller | null;
 	/** Owns the compare-and-set proposal decision lifecycle. */
 	changes: PersonalConfigurationChangeDecisionRepository;
+	/** Applies one accepted model-alias proposal to a future immutable personal revision. */
+	materializer: PersonalConfigurationChangeMaterializationRepository;
 	/** Supplies trusted decision timestamps. */
 	clock: PersonalConfigurationClock;
 	/** Records unexpected persistence failures without request content. */

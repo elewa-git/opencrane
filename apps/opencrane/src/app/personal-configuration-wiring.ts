@@ -9,9 +9,11 @@ import { _ResolvePersonalSelfCaller } from "./personal-self-caller.js";
 /** Build the app-composed self-only personal-configuration decision API. */
 export function _CreatePersonalConfigurationRouter(prisma: PrismaClient): Router
 {
+	const changes = new PrismaPersonalConfigurationChangeRepository(prisma, _log);
 	return __CreatePersonalConfigurationRouter({
 		resolveCaller: _ResolvePersonalSelfCaller,
-		changes: new PrismaPersonalConfigurationChangeRepository(prisma, _log),
+		changes,
+		materializer: changes,
 		clock: { now(): Date { return new Date(); } },
 		logger: _log,
 	});

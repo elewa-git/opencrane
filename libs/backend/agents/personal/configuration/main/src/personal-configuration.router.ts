@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { __DecidePersonalConfigurationChange } from "./personal-configuration-decision.js";
+import { __MaterializePersonalConfigurationChange } from "./personal-configuration-materialization.js";
 import type { PersonalConfigurationCaller, PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
 
 /** Create the session-authenticated self-only decision API for future personal configuration changes. */
@@ -40,6 +41,38 @@ export function __CreatePersonalConfigurationRouter(dependencies: PersonalConfig
 		}
 	});
 
+	router.post("/changes/:changeId/materialize", async function _materialize(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		const changeId = request.params["changeId"];
+		if (caller === null) return;
+		if (typeof changeId !== "string" || !_isEmptyObject(request.body))
+		{
+			_respond(response, 400, "invalid_personal_configuration_materialization");
+			return;
+		}
+
+		try
+		{
+			// 1. Rebind the owner and trusted instant, so a browser can only retry its own accepted proposal.
+			const result = await __MaterializePersonalConfigurationChange(dependencies.materializer, { siloId: caller.siloId, userId: caller.userId, changeId, materializedAt: dependencies.clock.now().toISOString() });
+			if (result.outcome === "denied")
+			{
+				_respond(response, _materializationDenialStatus(result.reason), result.reason);
+				return;
+			}
+
+			// 2. Persona refreshes deliberately remain in their proposal-bound interview workflow.
+			response.status(200).json(result.outcome === "applied" ? { changeId, state: "applied", agentRevisionId: result.agentRevisionId } : { changeId, state: "accepted", materialized: false });
+		}
+		catch (err)
+		{
+			// 3. Retain safe diagnostic context without leaking the proposal patch or model details.
+			dependencies.logger.error({ err, operation: "personal_configuration.materialize", siloId: caller.siloId, changeId }, "Personal configuration materialization failed");
+			_respond(response, 503, "personal_configuration_unavailable");
+		}
+	});
+
 	return router;
 }
 
@@ -67,6 +100,21 @@ function _denialStatus(reason: string): number
 	if (reason === "not_found_or_not_owner") return 404;
 	if (reason === "already_decided") return 409;
 	return 400;
+}
+
+/** Map an accepted-proposal materialization refusal to a bounded self-only HTTP response. */
+function _materializationDenialStatus(reason: string): number
+{
+	if (reason === "persistence_unavailable") return 503;
+	if (reason === "not_found_or_not_owner") return 404;
+	if (reason === "not_accepted" || reason === "stale_proposal") return 409;
+	return 422;
+}
+
+/** Accept only an empty object when the server derives every materialization coordinate. */
+function _isEmptyObject(value: unknown): boolean
+{
+	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
 }
 
 /** Write one compact machine-readable problem response. */

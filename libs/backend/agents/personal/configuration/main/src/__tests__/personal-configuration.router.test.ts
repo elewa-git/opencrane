@@ -13,6 +13,7 @@ function _dependencies(overrides: Partial<PersonalConfigurationRouterDependencie
 	return {
 		resolveCaller: function _caller() { return { siloId: "silo-1", userId: "user-1" }; },
 		changes: { decideAtomically: vi.fn().mockResolvedValue({ status: "accepted" }) },
+		materializer: { materializeAtomically: vi.fn().mockResolvedValue({ status: "not_applicable" }) },
 		clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } },
 		logger: { error: vi.fn() } as unknown as Logger,
 		...overrides,
@@ -65,6 +66,16 @@ describe("__CreatePersonalConfigurationRouter", function _describeRouter()
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ changeId: "change-1", state: "rejected" });
 		expect(dependencies.changes.decideAtomically).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", changeId: "change-1", decision: "rejected", rejectionReason: "Keep the current setup.", decidedAt: "2026-07-26T12:00:00.000Z" });
+	});
+
+	it("materializes an accepted owner model proposal without accepting browser coordinates", async function _materializes()
+	{
+		const dependencies = _dependencies({ materializer: { materializeAtomically: vi.fn().mockResolvedValue({ status: "applied", agentRevisionId: "revision-2" }) } });
+		const response = await request(_app(dependencies)).post("/api/v1/me/personal-configuration/changes/change-1/materialize").send({});
+
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ changeId: "change-1", state: "applied", agentRevisionId: "revision-2" });
+		expect(dependencies.materializer.materializeAtomically).toHaveBeenCalledWith({ siloId: "silo-1", userId: "user-1", changeId: "change-1", materializedAt: "2026-07-26T12:00:00.000Z" });
 	});
 
 	it("does not disclose another owner's proposal when the authority refuses it", async function _hidesOtherOwner()

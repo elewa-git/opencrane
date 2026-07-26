@@ -3877,7 +3877,7 @@ $$;
 CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
         run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
-        refresh_change TEXT; applied_revision_profile TEXT;
+        refresh_change TEXT; applied_revision_profile TEXT; applied_revision_service TEXT; applied_revision_parent TEXT; applied_model_alias TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -3919,16 +3919,61 @@ BEGIN
     END IF;
     IF OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected') THEN RETURN NEW; END IF;
     IF OLD."state" = 'accepted' AND NEW."state" = 'applied' THEN
-        IF NEW."requested_patch" IS DISTINCT FROM '{"kind":"persona_refresh"}'::jsonb
-           OR NEW."applied_persona_revision_id" IS NULL OR NEW."applied_agent_revision_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'only accepted persona_refresh changes may apply an approved persona revision';
-        END IF;
-        SELECT revision."persona_profile_id", interview."refresh_configuration_change_id"
-          INTO applied_revision_profile, refresh_change
-          FROM "persona_revisions" revision JOIN "persona_interviews" interview ON interview."id" = revision."interview_id"
-          WHERE revision."id" = NEW."applied_persona_revision_id" AND revision."state" = 'approved' FOR UPDATE OF revision, interview;
-        IF applied_revision_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_change IS DISTINCT FROM NEW."id" THEN
-            RAISE EXCEPTION 'applied persona refresh must use its exact approved interview-derived revision';
+        IF NEW."requested_patch" = '{"kind":"persona_refresh"}'::jsonb THEN
+            IF NEW."applied_persona_revision_id" IS NULL OR NEW."applied_agent_revision_id" IS NOT NULL THEN
+                RAISE EXCEPTION 'persona_refresh requires an approved persona revision only';
+            END IF;
+            SELECT revision."persona_profile_id", interview."refresh_configuration_change_id"
+              INTO applied_revision_profile, refresh_change
+              FROM "persona_revisions" revision JOIN "persona_interviews" interview ON interview."id" = revision."interview_id"
+              WHERE revision."id" = NEW."applied_persona_revision_id" AND revision."state" = 'approved' FOR UPDATE OF revision, interview;
+            IF applied_revision_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_change IS DISTINCT FROM NEW."id" THEN
+                RAISE EXCEPTION 'applied persona refresh must use its exact approved interview-derived revision';
+            END IF;
+        ELSIF NEW."requested_patch"->>'kind' = 'model_alias' THEN
+            IF NEW."applied_persona_revision_id" IS NOT NULL OR NEW."applied_agent_revision_id" IS NULL THEN
+                RAISE EXCEPTION 'model_alias requires a published personal AgentRevision only';
+            END IF;
+            SELECT revision."agent_service_id", revision."parent_revision_id", definition."public_model_name"
+              INTO applied_revision_service, applied_revision_parent, applied_model_alias
+              FROM "agent_revisions" revision JOIN "model_definitions" definition ON definition."id" = revision."model_definition_id"
+              WHERE revision."id" = NEW."applied_agent_revision_id" AND revision."state" = 'published' FOR UPDATE OF revision, definition;
+            IF applied_revision_service IS DISTINCT FROM NEW."agent_service_id" OR applied_revision_parent IS DISTINCT FROM NEW."expected_agent_revision_id"
+               OR applied_model_alias IS DISTINCT FROM NEW."requested_patch"->>'modelAlias'
+               OR NOT EXISTS (SELECT 1 FROM "agent_services" service WHERE service."id" = NEW."agent_service_id" AND service."kind" = 'personal' AND service."state" = 'active' AND service."active_revision_id" = NEW."applied_agent_revision_id") THEN
+                RAISE EXCEPTION 'applied model_alias must activate its exact published personal AgentRevision';
+            END IF;
+            IF EXISTS (
+                SELECT 1 FROM "agent_revisions" child JOIN "agent_revisions" parent ON parent."id" = NEW."expected_agent_revision_id"
+                WHERE child."id" = NEW."applied_agent_revision_id" AND (
+                    child."prompt_policy_version" IS DISTINCT FROM parent."prompt_policy_version"
+                    OR child."persona_revision_id" IS DISTINCT FROM parent."persona_revision_id"
+                    OR child."capability_ceiling" IS DISTINCT FROM parent."capability_ceiling"
+                    OR child."budget" IS DISTINCT FROM parent."budget"
+                )
+            ) OR EXISTS (
+                (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                UNION ALL
+                (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+            ) OR EXISTS (
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                UNION ALL
+                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+            ) OR EXISTS (
+                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
+                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
+                UNION ALL
+                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
+                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
+            ) THEN
+                RAISE EXCEPTION 'applied model_alias may change only its model definition';
+            END IF;
+        ELSE
+            RAISE EXCEPTION 'PersonalConfigurationChange has an unsupported applied patch';
         END IF;
         RETURN NEW;
     END IF;
