@@ -7,6 +7,7 @@ import { OpenCraneUserTenantGateway, USER_TENANT_GATEWAY } from "@opencrane/stat
 import { MCP_GATEWAY, OpenCraneMcpGateway } from "@opencrane/state/mcp/adapter";
 import { OpenCraneProviderKeyGateway, PROVIDER_KEY_GATEWAY } from "@opencrane/state/provider-key/adapter";
 import { OpenCranePersonalAssetsGateway, PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
+import { OpenCraneSkillCatalogueGateway, SKILL_CATALOGUE_GATEWAY } from "@opencrane/state/skills/adapter";
 
 import { GATEWAY_MODE } from "./gateway-mode.types";
 
@@ -29,6 +30,7 @@ export function provideControlPlaneGateways(): Provider[]
 		{ provide: USER_TENANT_GATEWAY, useClass: OpenCraneUserTenantGateway },
 		{ provide: MCP_GATEWAY, useClass: OpenCraneMcpGateway },
 		{ provide: PROVIDER_KEY_GATEWAY, useClass: OpenCraneProviderKeyGateway },
-		{ provide: PERSONAL_ASSETS_GATEWAY, useClass: OpenCranePersonalAssetsGateway }
+		{ provide: PERSONAL_ASSETS_GATEWAY, useClass: OpenCranePersonalAssetsGateway },
+		{ provide: SKILL_CATALOGUE_GATEWAY, useClass: OpenCraneSkillCatalogueGateway }
 	];
 }

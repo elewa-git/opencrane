@@ -7,6 +7,7 @@ import { OpenCraneSettingsGateway, SETTINGS_GATEWAY } from "@opencrane/state/set
 import { OpenCraneUserTenantGateway, USER_TENANT_GATEWAY } from "@opencrane/state/tenant/adapter";
 import { MCP_GATEWAY, OpenCraneMcpGateway } from "@opencrane/state/mcp/adapter";
 import { OpenCranePersonalAssetsGateway, PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
+import { OpenCraneSkillCatalogueGateway, SKILL_CATALOGUE_GATEWAY } from "@opencrane/state/skills/adapter";
 
 import { GATEWAY_MODE } from "../gateway-mode.types";
 import { provideControlPlaneGateways } from "../control-plane-gateways.provider";
@@ -16,6 +17,7 @@ import {
 	MockSettingsGateway,
 	MockUserTenantGateway,
 	MockPersonalAssetsGateway,
+	MockSkillCatalogueGateway,
 	provideTestGateways
 } from "../__test__/test-gateways.provider";
 
@@ -64,6 +66,7 @@ describe("provideControlPlaneGateways", () =>
 		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(OpenCraneUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(OpenCraneMcpGateway);
 		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(OpenCranePersonalAssetsGateway);
+		expect(classFor(providers, SKILL_CATALOGUE_GATEWAY)).toBe(OpenCraneSkillCatalogueGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("live");
 	});
 });
@@ -79,6 +82,7 @@ describe("provideTestGateways", () =>
 		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(MockUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(MockMcpGateway);
 		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(MockPersonalAssetsGateway);
+		expect(classFor(providers, SKILL_CATALOGUE_GATEWAY)).toBe(MockSkillCatalogueGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("mock");
 	});
 });

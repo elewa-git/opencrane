@@ -22,12 +22,14 @@ into its config, binding every swappable data gateway to its live adapter in one
  USER_TENANT_GATEWAY  → OpenCraneUserTenantGateway
  MCP_GATEWAY          → OpenCraneMcpGateway
  PROVIDER_KEY_GATEWAY → OpenCraneProviderKeyGateway
+ PERSONAL_ASSETS_GATEWAY → OpenCranePersonalAssetsGateway
+ SKILL_CATALOGUE_GATEWAY → OpenCraneSkillCatalogueGateway
         │  features inject the port, never the class
         ▼
  features/* (UI screens)
 ```
 
-**In this flow:** [conversation/adapter](../conversation/adapter/README.md) · [settings/adapter](../settings/adapter/README.md) · [tenant/adapter](../tenant/adapter/README.md) · [mcp/adapter](../mcp/adapter/README.md) · [provider-key/adapter](../provider-key/adapter/README.md) · [core](../core/README.md)
+**In this flow:** [conversation/adapter](../conversation/adapter/README.md) · [settings/adapter](../settings/adapter/README.md) · [tenant/adapter](../tenant/adapter/README.md) · [mcp/adapter](../mcp/adapter/README.md) · [provider-key/adapter](../provider-key/adapter/README.md) · [assets/adapter](../assets/adapter/README.md) · [skills/adapter](../skills/adapter/README.md) · [core](../core/README.md)
 
 It also owns `ActiveTenantStore`, which resolves *which pod a data fetch should target* by reconciling
 `SessionStore.currentTenant` with the active `GATEWAY_MODE`, and the `GATEWAY_MODE` token itself
@@ -57,4 +59,4 @@ packages — here the `state/*/adapter` libs, `state/core`, and Angular — neve
 ## See also
 
 - Parent index: [state](../README.md)
-- Siblings: [core](../core/README.md) · [tenant/adapter](../tenant/adapter/README.md) · [settings/adapter](../settings/adapter/README.md)
+- Siblings: [core](../core/README.md) · [assets/adapter](../assets/adapter/README.md) · [skills/adapter](../skills/adapter/README.md) · [tenant/adapter](../tenant/adapter/README.md) · [settings/adapter](../settings/adapter/README.md)
