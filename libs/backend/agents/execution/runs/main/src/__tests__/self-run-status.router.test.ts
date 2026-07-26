@@ -8,13 +8,15 @@ import type { SelfRunStatus } from "../self-run-status.router.types.js";
 
 /** Read signature exposed by the owner-bound run-status repository. */
 type ReadOwned = (runId: string, siloId: string, subjectId: string) => Promise<SelfRunStatus | null>;
+/** List signature exposed by the owner-bound run-status repository. */
+type ListOwned = (siloId: string, subjectId: string) => Promise<readonly SelfRunStatus[]>;
 
 /** Build the self-only run route with session identity and persistence seams. */
-function _app(caller: unknown, readOwned: Mock<ReadOwned> = vi.fn<ReadOwned>(async function _read() { return null; }))
+function _app(caller: unknown, readOwned: Mock<ReadOwned> = vi.fn<ReadOwned>(async function _read() { return null; }), listOwned: Mock<ListOwned> = vi.fn<ListOwned>(async function _list() { return []; }))
 {
 	const app = express();
-	app.use(__CreateSelfRunStatusRouter({ resolveCaller: function _caller() { return caller as never; }, repository: { readOwned }, logger: { error: vi.fn() } as unknown as Logger }));
-	return { app, readOwned };
+	app.use(__CreateSelfRunStatusRouter({ resolveCaller: function _caller() { return caller as never; }, repository: { listOwned, readOwned }, logger: { error: vi.fn() } as unknown as Logger }));
+	return { app, listOwned, readOwned };
 }
 
 describe("self run status router", function _suite()
@@ -29,6 +31,16 @@ describe("self run status router", function _suite()
 		expect(readOwned).toHaveBeenCalledWith("run-1", "silo-1", "user-1");
 	});
 
+	it("lists only the caller's recent runs through the owner-bound repository", async function _listsOwnedRuns()
+	{
+		const status = { runId: "run-1", attempt: 2, state: "running", threadId: "thread-1", agentRevisionId: "revision-1", acceptedAt: "2026-07-26T12:00:00.000Z", finishedAt: null };
+		const { app, listOwned } = _app({ siloId: "silo-1", subjectId: "user-1" }, undefined, vi.fn(async function _list() { return [status]; }));
+		const response = await request(app).get("/");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ runs: [status] });
+		expect(listOwned).toHaveBeenCalledWith("silo-1", "user-1");
+	});
+
 	it("does not disclose absent or another owner's run", async function _hidesForeignRun()
 	{
 		const { app } = _app({ siloId: "silo-1", subjectId: "user-1" });
@@ -40,6 +52,12 @@ describe("self run status router", function _suite()
 	it("requires a session-derived caller", async function _requiresCaller()
 	{
 		const response = await request(_app(null).app).get("/run-1");
+		expect(response.status).toBe(401);
+	});
+
+	it("requires a session-derived caller before listing runs", async function _requiresCallerToList()
+	{
+		const response = await request(_app(null).app).get("/");
 		expect(response.status).toBe(401);
 	});
 });

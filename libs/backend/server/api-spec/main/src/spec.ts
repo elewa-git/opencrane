@@ -689,6 +689,19 @@ export const spec = {
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
+      SelfRunStatus: {
+        type: "object",
+        required: ["runId", "attempt", "state", "threadId", "agentRevisionId", "acceptedAt", "finishedAt"],
+        properties: {
+          runId: { type: "string" },
+          attempt: { type: "integer", minimum: 1 },
+          state: { type: "string", enum: ["accepted", "queued", "assigned", "running", "waiting_for_approval", "cancelling", "completed", "failed", "cancelled"] },
+          threadId: { type: "string", nullable: true },
+          agentRevisionId: { type: "string" },
+          acceptedAt: { type: "string", format: "date-time" },
+          finishedAt: { type: "string", format: "date-time", nullable: true },
+        },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],

@@ -1105,6 +1105,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a signed-in owner's fifty most recent personal runs
+         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
+         */
+        get: operations["listMyRuns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/runs/{runId}": {
         parameters: {
             query?: never;
@@ -1813,6 +1833,18 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
+        };
+        SelfRunStatus: {
+            runId: string;
+            attempt: number;
+            /** @enum {string} */
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+            threadId: string | null;
+            agentRevisionId: string;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -5141,6 +5173,46 @@ export interface operations {
             };
         };
     };
+    listMyRuns: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Recent canonical lifecycle views for the owned runs. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runs: components["schemas"]["SelfRunStatus"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     getMyRunStatus: {
         parameters: {
             query?: never;
@@ -5159,18 +5231,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        runId: string;
-                        attempt: number;
-                        /** @enum {string} */
-                        state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
-                        threadId: string | null;
-                        agentRevisionId: string;
-                        /** Format: date-time */
-                        acceptedAt: string;
-                        /** Format: date-time */
-                        finishedAt: string | null;
-                    };
+                    "application/json": components["schemas"]["SelfRunStatus"];
                 };
             };
             /** @description The run identifier is malformed. */

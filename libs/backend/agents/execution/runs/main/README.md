@@ -168,8 +168,9 @@ uncertainty fails closed.
 - `__CreateAgentControllerRunDispatchRouter` — projected-token-authenticated internal assignment and
   release API for the fixed `agent-controller` ServiceAccount.
 - `__CreateSelfRunStatusRouter` / `PrismaSelfRunStatusRepository` — authenticated product read of
-  one personal run's lifecycle, attempt, immutable revision, and timestamps. The app derives the
-  subject and silo from session and host; foreign or absent runs share the same non-disclosing 404.
+  one personal run or the owner's latest fifty runs, including lifecycle, attempt, immutable
+  revision, and timestamps. The app derives the subject and silo from session and host; foreign or
+  absent single runs share the same non-disclosing 404.
 - `RunDispatchRepository` / `AgentControllerTokenReviewer` — persistence and TokenReview ports used by that internal API.
 - `ClaimNextRunWorkloadReleaseResult` / `RegisterRunWorkloadPodResult` — release-claim and first-Pod
   registration outcomes used across the internal adapter boundary.

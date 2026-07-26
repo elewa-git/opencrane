@@ -32,6 +32,8 @@ export interface SelfRunStatus
 /** Read-only owner-bound persistence port for one run status. */
 export interface SelfRunStatusRepository
 {
+	/** Lists the caller's most recent personal runs in one exact selected silo. */
+	listOwned(siloId: string, subjectId: string): Promise<readonly SelfRunStatus[]>;
 	/** Returns the run only when it belongs to the exact authenticated subject in the silo. */
 	readOwned(runId: string, siloId: string, subjectId: string): Promise<SelfRunStatus | null>;
 }
