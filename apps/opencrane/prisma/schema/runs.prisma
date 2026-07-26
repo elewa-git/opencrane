@@ -45,6 +45,13 @@ enum RunOutboxEventKind {
   RunResumeRequested          @map("run.resume_requested")
 }
 
+/// Immutable outcome of attempting to append one terminal child's result to its parent stream.
+enum ChildRunCompletionDeliveryOutcome {
+  Delivered            @map("delivered")
+  NoParentStream       @map("no_parent_stream")
+  ParentStreamTerminal @map("parent_stream_terminal")
+}
+
 /// One logical run authority. Retries atomically increment `attempt`; there is no AgentRunAttempt.
 model AgentRun {
   id                       String                   @id @default(cuid())
@@ -78,6 +85,8 @@ model AgentRun {
   outboxEvents             OutboxEvent[]
   spawnedChildReservations ChildRunReservation[]    @relation("ChildRunReservationParent")
   childReservation         ChildRunReservation?     @relation("ChildRunReservationChild")
+  childCompletionDelivery  ChildRunCompletionDelivery? @relation("ChildRunCompletionDeliveryChild")
+  receivedChildCompletions ChildRunCompletionDelivery[] @relation("ChildRunCompletionDeliveryParent")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -89,6 +98,20 @@ model AgentRun {
   @@index([threadId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
+model ChildRunCompletionDelivery {
+  childRunId          String                            @id @map("child_run_id")
+  parentRunId         String                            @map("parent_run_id")
+  parentEventSequence Int?                              @map("parent_event_sequence")
+  outcome             ChildRunCompletionDeliveryOutcome
+  deliveredAt         DateTime                          @default(now()) @map("delivered_at")
+  childRun            AgentRun                          @relation("ChildRunCompletionDeliveryChild", fields: [childRunId], references: [id], onDelete: Restrict)
+  parentRun           AgentRun                          @relation("ChildRunCompletionDeliveryParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+
+  @@index([parentRunId])
+  @@map("child_run_completion_deliveries")
 }
 
 /// Immutable token and cost allocation made by a parent for one governed child run.

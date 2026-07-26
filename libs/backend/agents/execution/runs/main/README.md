@@ -136,6 +136,8 @@ uncertainty fails closed.
   child-run record after exact parent-to-target delegation has been rechecked.
 - `PrismaChildRunReservationRepository` — lock the parent, recalculate capacity from immutable
   sibling allocations, and atomically persist the child run, snapshot, reservation, and dispatch.
+- `PrismaChildRunCompletionRepository` — append one terminal child outcome to its direct parent's
+  conversation stream, or durably record why no parent stream can receive it.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
@@ -190,6 +192,12 @@ The reservation repository is the sole durable child-admission boundary. It deri
 from locked database rows and the parent snapshot, rechecks the target policy, and records the
 derived depth with the child allocation. Replaying the same inherited-silo idempotency key returns
 only the exact sealed child; any coordinate mismatch fails closed.
+
+Completion delivery is a separate, child-keyed ledger rather than an in-memory callback. It locks
+the terminal child, its reservation, and the parent event stream before adding a single
+`child.run.*` event. A duplicate report returns the existing ledger result. A parent without a
+conversation stream, or a parent that has already terminalised, is recorded as a deliberate
+suppressed outcome instead of silently losing the result or violating the event-stream fence.
 
 ## Dependency direction
 
