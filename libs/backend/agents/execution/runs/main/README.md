@@ -58,6 +58,15 @@ polls) so a started attempt can never be lost between deciding and launching.
 Job, confirms the workload's full identity (who / where / which attempt) matches the expected authority exactly, uses the fixed
 `opencrane-agent-runtime` projected-token audience, and has not expired.
 
+`__PrepareChildRunAdmission` is the authority-only first step for an agent asking a parent run to
+start another agent. It inherits the silo, subject and run lineage exclusively from the already
+admitted parent; the child request cannot supply replacements. Before returning a prepared record it
+enforces server-owned depth, direct-child and remaining-budget limits, then calls the supplied
+delegation policy for the exact target service and immutable revision. It returns a plain denial for
+any failed check. A later persistence adapter must repeat the target check and reserve the budget in
+the same transaction that creates the child run: this pure package intentionally makes no durable
+reservation on its own.
+
 `PrismaRunDispatchRepository` is the database side of the controller handshake. It issues a short,
 server-owned claim lease over `RunAttemptRequested`, exposes only the coordinates needed to create a
 suspended Job, and commits the Job UID as a `PendingPod` assignment. At claim time it also mints the
@@ -116,6 +125,8 @@ uncertainty fails closed.
 
 - `__StartNextRunAttempt(repository, command)` — start the next attempt of a run via compare-and-swap.
 - `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
+- `__PrepareChildRunAdmission(parent, command, limits, targetAuthorization)` — prepare a bounded
+  child-run record after exact parent-to-target delegation has been rechecked.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
@@ -140,6 +151,11 @@ uncertainty fails closed.
 - `AgentRunAuthorityRepository` / `AgentRunAuthoritySnapshot` — the persistence port and its consistent read shape.
 - `StartNextRunAttemptCommand` / `StartNextRunAttemptResult`, `AtomicStartNextRunAttemptCommand` / `AtomicRunAttemptResult` — retry request/result and their atomic commit forms.
 - `RunWorkloadAssignment` / `RunWorkloadAssignmentExpectation` / `RunWorkloadAssignmentDecision` — the workload-identity check inputs and verdict.
+- `ChildRunParentAuthority` / `ChildRunAdmissionLimits` / `ChildRunBudget` — parent facts and
+  server limits used to control one recursive invocation.
+- `ChildRunTargetAuthorization` / `PrepareChildRunAdmissionCommand` /
+  `PrepareChildRunAdmissionResult` — the target-policy port and the prepared-or-denied child
+  admission vocabulary.
 
 ## Boundary
 
@@ -152,6 +168,12 @@ Kubernetes itself. It owns only durable admission, attempts, dispatch leases, as
 integrity, release delivery, first-Pod registration, cancellation fencing, and cleanup
 confirmation. Kubernetes inspection and mutation remain in dedicated runtime processes; this
 package only says which exact work may be removed.
+
+Child admission is not an alternate public run-start route. A caller must derive parent authority
+from the admitted parent run, use the target-authorization port backed by that parent's approved
+tool policy, and persist the prepared record through a transaction that rechecks and reserves it.
+This package neither trusts a child-supplied subject, silo or lineage nor creates a child run by
+itself.
 
 ## Dependency direction
 
