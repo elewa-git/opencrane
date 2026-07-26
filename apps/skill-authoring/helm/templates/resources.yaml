@@ -1,5 +1,5 @@
 {{- $v := .Values.skillAuthoring -}}
-{{- if or (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $v.namespace)) (eq $v.namespace .Release.Namespace) -}}
+{{- if or (gt (len $v.namespace) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $v.namespace)) (eq $v.namespace .Release.Namespace) -}}
 {{- fail "skillAuthoring.namespace must be a valid namespace distinct from the server" -}}
 {{- end -}}
 {{- if ne $v.serviceAccountName "skill-authoring-default" -}}

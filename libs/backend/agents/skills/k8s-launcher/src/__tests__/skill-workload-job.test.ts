@@ -32,5 +32,14 @@ describe("governed skill workload Job", function _describeJob()
 		expect(function _foreignNamespace() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "other-silo-tools" }, _Profile()); }).toThrow(/deployment-owned namespace/);
 		expect(function _wrongAudience() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), capabilityTokenAudience: "opencrane-server" }); }).toThrow(/fixed audience/);
 		expect(function _oversizedResources() { __BuildGovernedSkillWorkloadJob(_Assignment(), { ..._Profile(), activeDeadlineSeconds: 901, resources: { requests: { cpu: "3", memory: "3Gi" }, limits: { cpu: "3", memory: "3Gi" } } }); }).toThrow(/bounded resources/);
+		expect(function _oversizedNamespace() { __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "a".repeat(64) }, { ..._Profile(), namespace: "a".repeat(64) }); }).toThrow(/bounded resources/);
+	});
+
+	it("builds the separately owned authoring Job class", function _buildsAuthoring()
+	{
+		const profile = { ..._Profile(), kind: "authoring" as const, image: `ghcr.io/opencrane/skill-authoring@sha256:${"b".repeat(64)}`, namespace: "opencrane-authoring", serviceAccountName: "skill-authoring-default", capabilityTokenAudience: "opencrane-skill-authoring" };
+		const job = __BuildGovernedSkillWorkloadJob({ ..._Assignment(), namespace: "opencrane-authoring" }, profile);
+		expect(job.metadata?.name).toMatch(/^skill-author-/);
+		expect(job.spec?.template.metadata?.labels).toMatchObject({ "app.kubernetes.io/component": "skill-authoring" });
 	});
 });
