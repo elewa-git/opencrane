@@ -314,7 +314,8 @@ export function _BuildConfigMap(config: OpenClawTenantOperatorConfig, tenant: Te
   //    slot and disable the built-in `memory-core`. OpenClaw registers the memory capability ONLY for
   //    the slot owner, so the built-in's embedding index — which self-disables with "index metadata is
   //    missing" on a provider/model mismatch and would otherwise shadow this — never surfaces. The
-  //    plugin auto-recalls scope-labeled context per turn and exposes the `cognee_memories` tool.
+  //    plugin auto-recalls scope-labeled context per turn and captures workspace notes; it exposes
+  //    no agent-callable memory tool.
   //    Multi-scope is operator-configured: company (org-wide) / user (per IdP subject) / agent (per tenant).
   if (config.cogneeEndpoint)
   {
