@@ -6,6 +6,7 @@ import { OpenClawConversationGateway } from "@opencrane/state/conversation/adapt
 import { OpenCraneSettingsGateway, SETTINGS_GATEWAY } from "@opencrane/state/settings/adapter";
 import { OpenCraneUserTenantGateway, USER_TENANT_GATEWAY } from "@opencrane/state/tenant/adapter";
 import { MCP_GATEWAY, OpenCraneMcpGateway } from "@opencrane/state/mcp/adapter";
+import { OpenCranePersonalAssetsGateway, PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
 
 import { GATEWAY_MODE } from "../gateway-mode.types";
 import { provideControlPlaneGateways } from "../control-plane-gateways.provider";
@@ -14,6 +15,7 @@ import {
 	MockMcpGateway,
 	MockSettingsGateway,
 	MockUserTenantGateway,
+	MockPersonalAssetsGateway,
 	provideTestGateways
 } from "../__test__/test-gateways.provider";
 
@@ -61,6 +63,7 @@ describe("provideControlPlaneGateways", () =>
 		expect(classFor(providers, SETTINGS_GATEWAY)).toBe(OpenCraneSettingsGateway);
 		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(OpenCraneUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(OpenCraneMcpGateway);
+		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(OpenCranePersonalAssetsGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("live");
 	});
 });
@@ -75,6 +78,7 @@ describe("provideTestGateways", () =>
 		expect(classFor(providers, SETTINGS_GATEWAY)).toBe(MockSettingsGateway);
 		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(MockUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(MockMcpGateway);
+		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(MockPersonalAssetsGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("mock");
 	});
 });
