@@ -1,5 +1,18 @@
 /** OpenAPI path fragment for owner-only deferred tool approvals. */
 export const _AuthorizationOpenapiPaths = {
+	"/me/approvals": {
+		get: {
+			operationId: "listMyPendingToolApprovals",
+			summary: "List the signed-in owner's pending tool approvals",
+			description: "The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.",
+			tags: ["Approvals"],
+			responses: {
+				200: { description: "Pending owner-bound tool approvals.", content: { "application/json": { schema: { type: "object", required: ["approvals"], properties: { approvals: { type: "array", items: { $ref: "#/components/schemas/SelfDeferredToolApproval" } } } } } } },
+				401: { description: "No authenticated browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+				503: { description: "The product authority could not read pending approvals.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+			},
+		},
+	},
 	"/me/approvals/{approvalRequestId}/decision": {
 		post: {
 			operationId: "decideDeferredToolApproval",

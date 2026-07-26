@@ -58,10 +58,10 @@ legitimate request — never hand out access it should not.
   effect exactly once (or returns the earlier result on an allowed idempotent retry).
 - `__CancelPendingRunApprovalAuthority` — closes only pending approvals for an exact run attempt on
   a caller-owned database transaction, clearing every late-resume token atomically with cancellation.
-- `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository` — the
-  owner-only HTTP decision surface and its atomic persistence adapter. The router takes only an
-  approval id and an approve-or-deny choice; it derives the person and silo from the signed-in
-  browser session and mints the opaque resume marker inside the server.
+- `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository`,
+  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only pending approval inbox, decision
+  surface, and their persistence adapters. The router derives the person and silo from the signed-in
+  browser session; the list omits arguments, proof data, policy digests, and resume credentials.
 - `__DigestCanonicalJson` — a stable hash of a request used across the checks above.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.

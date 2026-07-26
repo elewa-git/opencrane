@@ -1065,6 +1065,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/approvals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's pending tool approvals
+         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.
+         */
+        get: operations["listMyPendingToolApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/approvals/{approvalRequestId}/decision": {
         parameters: {
             query?: never;
@@ -1845,6 +1865,16 @@ export interface components {
             acceptedAt: string;
             /** Format: date-time */
             finishedAt: string | null;
+        };
+        SelfDeferredToolApproval: {
+            approvalRequestId: string;
+            runId: string;
+            attempt: number;
+            toolRevisionId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -5011,6 +5041,46 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TokenUsage"][];
+                };
+            };
+        };
+    };
+    listMyPendingToolApprovals: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Pending owner-bound tool approvals. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approvals: components["schemas"]["SelfDeferredToolApproval"][];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not read pending approvals. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };

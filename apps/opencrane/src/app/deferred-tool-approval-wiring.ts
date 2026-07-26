@@ -1,7 +1,7 @@
 import type { Request, Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { __CreateDeferredToolApprovalRouter, PrismaDeferredToolApprovalDecisionRepository, type DeferredToolApprovalCaller } from "@opencrane/backend/server/iam/authorization";
+import { __CreateDeferredToolApprovalRouter, PrismaDeferredToolApprovalDecisionRepository, PrismaSelfDeferredToolApprovalListRepository, type DeferredToolApprovalCaller } from "@opencrane/backend/server/iam/authorization";
 import { _ClusterTenantFromHost, _RequestHost } from "@opencrane/server/_infra/auth";
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/server/_infra/auth";
@@ -14,6 +14,7 @@ export function _CreateDeferredToolApprovalRouter(prisma: PrismaClient): Router
 	return __CreateDeferredToolApprovalRouter({
 		resolveCaller: _resolveCaller,
 		decisions: new PrismaDeferredToolApprovalDecisionRepository(prisma),
+		pendingApprovals: new PrismaSelfDeferredToolApprovalListRepository(prisma),
 		clock: { now(): Date { return new Date(); } },
 		logger: _log,
 	});

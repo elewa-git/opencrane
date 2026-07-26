@@ -12,6 +12,7 @@ function _dependencies(overrides: Partial<DeferredToolApprovalRouterDependencies
 	return {
 		resolveCaller: function _caller() { return { siloId: "silo-1", subjectId: "user-1" }; },
 		decisions: { decideAtomically: vi.fn().mockResolvedValue({ outcome: "approved", deferredToolResult: { approvalRequestId: "approval-1", decision: "approved" } }) },
+		pendingApprovals: { listPendingOwned: vi.fn().mockResolvedValue([]) },
 		clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } },
 		logger: { error: vi.fn() } as unknown as Logger,
 		...overrides,
@@ -34,6 +35,22 @@ describe("__CreateDeferredToolApprovalRouter", function _suite()
 		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).post("/api/v1/me/approvals/approval-1/decision").send({ decision: "approved" });
 		expect(response.status).toBe(401);
 		expect(response.body).toEqual({ error: "approval_authentication_required" });
+	});
+
+	it("requires session-derived ownership before listing approvals", async function _requiresCallerToList()
+	{
+		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).get("/api/v1/me/approvals/");
+		expect(response.status).toBe(401);
+		expect(response.body).toEqual({ error: "approval_authentication_required" });
+	});
+
+	it("lists only the pending approvals returned for the session-derived owner", async function _listsPending()
+	{
+		const dependencies = _dependencies({ pendingApprovals: { listPendingOwned: vi.fn().mockResolvedValue([{ approvalRequestId: "approval-1", runId: "run-1", attempt: 2, toolRevisionId: "tool-revision-1", expiresAt: "2026-07-26T13:00:00.000Z", createdAt: "2026-07-26T12:00:00.000Z" }]) } });
+		const response = await request(_app(dependencies)).get("/api/v1/me/approvals/");
+		expect(response.status).toBe(200);
+		expect(response.body).toEqual({ approvals: [{ approvalRequestId: "approval-1", runId: "run-1", attempt: 2, toolRevisionId: "tool-revision-1", expiresAt: "2026-07-26T13:00:00.000Z", createdAt: "2026-07-26T12:00:00.000Z" }] });
+		expect(dependencies.pendingApprovals.listPendingOwned).toHaveBeenCalledWith("silo-1", "user-1", new Date("2026-07-26T12:00:00.000Z"));
 	});
 
 	it("passes only the server-derived owner and a server-minted resume marker to persistence", async function _approves()

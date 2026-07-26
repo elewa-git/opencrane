@@ -11,6 +11,22 @@ export function __CreateDeferredToolApprovalRouter(dependencies: DeferredToolApp
 {
 	const router = Router();
 
+	router.get("/", async function _list(request: Request, response: Response)
+	{
+		const caller = _requireCaller(request, response, dependencies);
+		if (caller === null) return;
+		try
+		{
+			const approvals = await dependencies.pendingApprovals.listPendingOwned(caller.siloId, caller.subjectId, dependencies.clock.now());
+			response.status(200).json({ approvals });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "deferred_tool_approval.list", siloId: caller.siloId }, "Deferred tool approval list failed");
+			_respond(response, 503, "approval_list_unavailable");
+		}
+	});
+
 	router.post("/:approvalRequestId/decision", async function _decide(request: Request, response: Response)
 	{
 		const caller = _requireCaller(request, response, dependencies);

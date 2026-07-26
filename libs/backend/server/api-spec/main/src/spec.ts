@@ -702,6 +702,18 @@ export const spec = {
           finishedAt: { type: "string", format: "date-time", nullable: true },
         },
       },
+      SelfDeferredToolApproval: {
+        type: "object",
+        required: ["approvalRequestId", "runId", "attempt", "toolRevisionId", "expiresAt", "createdAt"],
+        properties: {
+          approvalRequestId: { type: "string" },
+          runId: { type: "string" },
+          attempt: { type: "integer", minimum: 1 },
+          toolRevisionId: { type: "string" },
+          expiresAt: { type: "string", format: "date-time" },
+          createdAt: { type: "string", format: "date-time" },
+        },
+      },
       ZitadelCandidateKeyValidation: {
         type: "object",
         required: ["tokenExchangeOk", "instanceScopeOk", "keyId", "detail"],

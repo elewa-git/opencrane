@@ -69,3 +69,27 @@ export interface DeferredToolApprovalDecisionRepository
 	/** Decide one request only when its durable run coordinates still match the authenticated owner. */
 	decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>;
 }
+
+/** Product-safe metadata for one still-actionable deferred tool approval. */
+export interface SelfDeferredToolApproval
+{
+	/** Opaque approval identifier used to submit a later decision. */
+	readonly approvalRequestId: string;
+	/** Logical personal run paused behind this decision. */
+	readonly runId: string;
+	/** Current attempt waiting for the decision. */
+	readonly attempt: number;
+	/** Immutable tool revision that the owner is being asked to allow. */
+	readonly toolRevisionId: string;
+	/** Server deadline after which the approval stops being actionable. */
+	readonly expiresAt: string;
+	/** Server time when the approval was opened. */
+	readonly createdAt: string;
+}
+
+/** Read-only persistence boundary for the signed-in owner's pending approvals inbox. */
+export interface SelfDeferredToolApprovalListRepository
+{
+	/** Lists at most fifty actionable tool approvals owned by one exact caller in one silo. */
+	listPendingOwned(siloId: string, subjectId: string, now: Date): Promise<readonly SelfDeferredToolApproval[]>;
+}
