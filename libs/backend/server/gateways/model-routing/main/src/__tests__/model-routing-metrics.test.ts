@@ -1,7 +1,6 @@
 import express from "express";
 import type { Express } from "express";
 import type { PrismaClient } from "@prisma/client";
-import session from "express-session";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -38,12 +37,11 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isP
 {
   const app = express();
   app.use(express.json());
-  app.use(session({ secret: "test-session-secret", resave: false, saveUninitialized: false }));
   if (user)
   {
     app.use(function _seedSession(req, _res, next)
     {
-      req.session.authUser = user;
+      Object.defineProperty(req, "session", { configurable: true, value: { authUser: user } });
       next();
     });
   }

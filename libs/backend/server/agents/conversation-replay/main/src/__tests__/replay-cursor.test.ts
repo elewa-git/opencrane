@@ -12,6 +12,8 @@ describe("conversation replay cursor", function _Suite()
 
 	it("rejects malformed, incomplete, and invalid sequence input", function _Rejects()
 	{
+		expect(__DecodeConversationReplayCursor(["e.", "tampered"])).toBeNull();
+		expect(__DecodeConversationReplayCursor({ cursor: "e.tampered" })).toBeNull();
 		expect(__DecodeConversationReplayCursor("wrong")).toBeNull();
 		expect(__DecodeConversationReplayCursor("e.eyJydW5JZCI6InJ1bi0xIn0")).toBeNull();
 		expect(__DecodeConversationReplayCursor(__EncodeConversationReplayCursor({ acceptedAt: "2026-07-23T10:00:00.000Z", runId: "run-1", sequence: 0 }))).toBeNull();

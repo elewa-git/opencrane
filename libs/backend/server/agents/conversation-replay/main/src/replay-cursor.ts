@@ -7,9 +7,9 @@ export function __EncodeConversationReplayCursor(cursor: ConversationReplayCurso
 }
 
 /** Decode one bounded cursor or reject it before it can reach a database query. */
-export function __DecodeConversationReplayCursor(value: string | undefined): ConversationReplayCursor | null
+export function __DecodeConversationReplayCursor(value: unknown): ConversationReplayCursor | null
 {
-	if (value === undefined) return null;
+	if (typeof value !== "string") return null;
 	if (!value.startsWith("e.") || value.length > 512) return null;
 	try
 	{
