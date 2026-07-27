@@ -51,10 +51,15 @@ jobs:
           ref: ${{ matrix.branch }}
           fetch-depth: 0
 
-      - name: Skip when the branch saw no commits in the last 24 hours
+      - name: Select whether this run needs validation
         id: fresh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ -n "$(git log -1 --since='24 hours ago' --format=%H)" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch requested — running the full validation battery."
+          elif [ -n "$(git log -1 --since='24 hours ago' --format=%H)" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
             echo "changed=false" >> "$GITHUB_OUTPUT"
