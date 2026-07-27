@@ -26,6 +26,6 @@ UPDATE "memory_fact_catalog" SET "state"='forget_pending', "forget_requested_at"
 SELECT pg_temp.expect_failure('forget request evidence cannot move after it is recorded', $statement$UPDATE "memory_fact_catalog" SET "forget_requested_at"=clock_timestamp() + interval '1 second' WHERE "id"='fact-1'$statement$, 'forget request evidence is immutable');
 UPDATE "memory_fact_catalog" SET "state"='forgotten', "forgotten_at"=clock_timestamp() WHERE "id"='fact-1';
 SELECT pg_temp.expect_failure('forget completion evidence cannot move after it is recorded', $statement$UPDATE "memory_fact_catalog" SET "forgotten_at"=clock_timestamp() + interval '1 second' WHERE "id"='fact-1'$statement$, 'forget completion evidence is immutable');
-SELECT pg_temp.expect_failure('forgotten fact cannot reactivate', $statement$UPDATE "memory_fact_catalog" SET "state"='active', "forget_requested_at"=NULL, "forgotten_at"=NULL WHERE "id"='fact-1'$statement$, 'invalid MemoryFact forget lifecycle');
+SELECT pg_temp.expect_failure('forgotten fact cannot reactivate', $statement$UPDATE "memory_fact_catalog" SET "state"='active' WHERE "id"='fact-1'$statement$, 'invalid MemoryFact forget lifecycle');
 
 ROLLBACK;
