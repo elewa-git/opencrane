@@ -83,6 +83,7 @@ model AgentRun {
   executionReceipts        ActionExecutionReceipt[]
   toolInvocations          ToolInvocation[]
   outboxEvents             OutboxEvent[]
+  steeringRequests         RuntimeSteeringRequest[]
   spawnedChildReservations ChildRunReservation[]    @relation("ChildRunReservationParent")
   childReservation         ChildRunReservation?     @relation("ChildRunReservationChild")
   childCompletionDelivery  ChildRunCompletionDelivery? @relation("ChildRunCompletionDeliveryChild")

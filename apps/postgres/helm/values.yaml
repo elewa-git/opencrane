@@ -57,9 +57,9 @@ resources:
     memory: 2Gi
 
 # Every application connection goes through this CNPG-managed PgBouncer Pooler.
-# `maxDbConnections` is per logical database; with the five deployed databases
-# (including the optional fleet database), 5 × 10 = 50 server connections stay
-# below `postgresql.maxConnections` (80). `maxClientConnections` bounds queued
+# `maxDbConnections` is per logical database; with the four deployed databases,
+# 4 × 10 = 40 server connections stay below `postgresql.maxConnections` (80).
+# `maxClientConnections` bounds queued
 # client connections at the pooler instead of consuming PostgreSQL connections.
 pooler:
   image: ghcr.io/cloudnative-pg/pgbouncer:1.25.1
@@ -78,8 +78,6 @@ pooler:
         app.kubernetes.io/component: litellm
     - matchLabels:
         app.kubernetes.io/name: langfuse
-    - matchLabels:
-        app.kubernetes.io/component: fleet-manager
 
 networkPolicy:
   enabled: true

@@ -16,12 +16,11 @@ enum RuntimeSteeringDisposition {
 }
 
 /// Lifecycle of one owner-submitted steering instruction. A request becomes consumable only after
-/// the server has bound it to the current run attempt; the runtime may mark it consumed only while
-/// claiming its fenced safe boundary.
+/// the server has bound it to the current run attempt. The server marks it consumed atomically with
+/// the persisted resume command that carries the instruction to the runtime's fenced safe boundary.
 enum RuntimeSteeringRequestState {
   Pending  @map("pending")
   Consumed @map("consumed")
-  Superseded @map("superseded")
 }
 
 /// Per-attempt durable authority for the runtime command stream. It owns the monotonic command
@@ -101,6 +100,7 @@ model RuntimeSteeringRequest {
   state       RuntimeSteeringRequestState @default(Pending)
   submittedAt DateTime                    @default(now()) @map("submitted_at")
   consumedAt  DateTime?                   @map("consumed_at")
+  run         AgentRun                    @relation(fields: [runId], references: [id], onDelete: Restrict)
 
   @@index([runId, attempt, state, submittedAt])
   @@index([siloId, subjectId, submittedAt])

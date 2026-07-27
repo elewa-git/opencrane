@@ -179,7 +179,7 @@ CREATE TYPE "RuntimeCommandKind" AS ENUM ('start_attempt', 'resume_attempt', 'ca
 CREATE TYPE "RuntimeSteeringDisposition" AS ENUM ('absorbed', 'deferred');
 
 -- CreateEnum
-CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed', 'superseded');
+CREATE TYPE "RuntimeSteeringRequestState" AS ENUM ('pending', 'consumed');
 
 -- CreateEnum
 CREATE TYPE "SkillState" AS ENUM ('active', 'retired');
@@ -440,10 +440,10 @@ CREATE TABLE "authorization_grants" (
     "scope_kind" "AuthorizationScopeKind" NOT NULL,
     "organization_id" TEXT NOT NULL,
     "scope_resource_id" TEXT,
-    "catalog_id" TEXT,
-    "catalog_revision" INTEGER,
-    "catalog_digest" TEXT,
-    "capability_id" TEXT,
+    "catalog_id" TEXT NOT NULL,
+    "catalog_revision" INTEGER NOT NULL,
+    "catalog_digest" TEXT NOT NULL,
+    "capability_id" TEXT NOT NULL,
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "effect" "AuthorizationEffect" NOT NULL,
@@ -487,10 +487,10 @@ CREATE TABLE "approval_requests" (
     "workload_kind" "WorkloadKind" NOT NULL,
     "workload_uid" TEXT NOT NULL,
     "pod_uid" TEXT NOT NULL,
-    "catalog_id" TEXT NOT NULL,
-    "catalog_revision" INTEGER NOT NULL,
-    "catalog_digest" TEXT NOT NULL,
-    "capability_id" TEXT NOT NULL,
+    "catalog_id" TEXT,
+    "catalog_revision" INTEGER,
+    "catalog_digest" TEXT,
+    "capability_id" TEXT,
     "resource_kind" TEXT NOT NULL,
     "resource_id" TEXT NOT NULL,
     "action" TEXT NOT NULL,
@@ -2252,6 +2252,9 @@ ALTER TABLE "runtime_external_action_retries" ADD CONSTRAINT "runtime_external_a
 ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -3428,6 +3431,88 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+-- Protect owner-authored steering from direct-SQL identity changes, late injection after a resume,
+-- and consumption that is not backed by the exact persisted resume payload.
+CREATE FUNCTION "enforce_runtime_steering_request_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    run_attempt INTEGER;
+    run_silo_id TEXT;
+    run_subject_id TEXT;
+    run_state "AgentRunState";
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest rows cannot be deleted';
+    END IF;
+
+    -- 1. Admit only a pending request for the locked current attempt, silo, and delegated owner.
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."consumed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
+        END IF;
+
+        SELECT "attempt", "silo_id", "delegated_user_id", "state"
+        INTO run_attempt, run_silo_id, run_subject_id, run_state
+        FROM "agent_runs"
+        WHERE "id" = NEW."run_id"
+        FOR UPDATE;
+
+        IF run_attempt IS DISTINCT FROM NEW."attempt"
+            OR run_silo_id IS DISTINCT FROM NEW."silo_id"
+            OR run_subject_id IS DISTINCT FROM NEW."subject_id"
+            OR run_state NOT IN ('assigned', 'running', 'waiting_for_approval') THEN
+            RAISE EXCEPTION 'RuntimeSteeringRequest requires the current owner-bound steerable AgentRun attempt';
+        END IF;
+
+        IF EXISTS (
+            SELECT 1
+            FROM "runtime_dispatched_commands"
+            WHERE "run_id" = NEW."run_id"
+              AND "attempt" = NEW."attempt"
+              AND "kind" = 'resume_attempt'::"RuntimeCommandKind"
+        ) THEN
+            RAISE EXCEPTION 'RuntimeSteeringRequest must be submitted before its sole resume command';
+        END IF;
+        RETURN NEW;
+    END IF;
+
+    -- 2. Preserve the evidence that was accepted by the public steering boundary.
+    IF NEW."id" IS DISTINCT FROM OLD."id"
+        OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
+        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
+        OR NEW."content" IS DISTINCT FROM OLD."content"
+        OR NEW."digest" IS DISTINCT FROM OLD."digest"
+        OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at" THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest identity and content are immutable';
+    END IF;
+
+    IF OLD."state" <> 'pending' THEN
+        RAISE EXCEPTION 'consumed RuntimeSteeringRequest is terminal';
+    END IF;
+
+    IF NEW."state" = 'pending' AND NEW."consumed_at" IS NULL THEN
+        RETURN NEW;
+    END IF;
+
+    IF NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL OR NEW."consumed_at" < OLD."submitted_at" THEN
+        RAISE EXCEPTION 'RuntimeSteeringRequest may only transition once from Pending to Consumed';
+    END IF;
+
+    -- 3. Close the lifecycle only after the server has durably embedded this content in a resume.
+    IF NOT EXISTS (
+        SELECT 1
+        FROM "runtime_dispatched_commands" command
+        WHERE command."run_id" = OLD."run_id"
+          AND command."attempt" = OLD."attempt"
+          AND command."kind" = 'resume_attempt'::"RuntimeCommandKind"
+          AND command."payload"->'steeringRequests' @> jsonb_build_array(OLD."content")
+    ) THEN
+        RAISE EXCEPTION 'consumed RuntimeSteeringRequest requires its persisted resume command payload';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 CREATE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     previous_sequence INTEGER;
@@ -4405,12 +4490,21 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" C
         "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
         btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
         btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
-        btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        btrim("capability_id") <> '' AND btrim("resource_kind") NOT IN ('', '*') AND
+        (("catalog_id" IS NULL AND "catalog_revision" IS NULL AND "catalog_digest" IS NULL AND "capability_id" IS NULL) OR
+         ("catalog_id" IS NOT NULL AND "catalog_revision" IS NOT NULL AND "catalog_digest" IS NOT NULL AND "capability_id" IS NOT NULL AND
+          btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '')) AND
+        btrim("resource_kind") NOT IN ('', '*') AND
         btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
         "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         "expires_at" > "created_at"
+    );
+ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
+        btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
+        btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
+        jsonb_typeof("content") = 'object' AND "digest" ~ '^sha256:[0-9a-f]{64}$' AND
+        (("state" = 'pending' AND "consumed_at" IS NULL) OR
+         ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
         ("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL) OR
@@ -4677,6 +4771,9 @@ CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_
 CREATE TRIGGER "run_outbox_events_monotonic"
     BEFORE UPDATE OR DELETE ON "run_outbox_events"
     FOR EACH ROW EXECUTE FUNCTION "enforce_run_outbox_event_update"();
+CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
+    BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
+    FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();
 CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE ON "capability_catalog_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_capability_catalog_revision_mutation"();
 CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
 CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();

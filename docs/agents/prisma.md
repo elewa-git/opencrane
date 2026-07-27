@@ -25,7 +25,9 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    A's model, that is an API conversation with A's contract, not a schema edit from B.
 3. **Schema changes update the target baseline in the same slice.** Regenerate and review
    `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
-   Do not add incremental scripts or a runtime schema runner.
+   Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
+   and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
+   those blocks explicitly. Do not add incremental scripts or a runtime schema runner.
 4. **CNPG `initdb` is the only application-schema setup boundary.** The deployment publisher
    prepends `SET ROLE` for the configured application owner and exposes the canonical SQL through
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline

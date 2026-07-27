@@ -12,7 +12,6 @@ grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&
 grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" langfuse' "$DEPLOY_SCRIPT"
-grep -Fq '"$POSTGRES_POOLER_HOST" fleet' "$DEPLOY_SCRIPT"
 grep -Fq 'langfuse.postgresql.host=${POSTGRES_POOLER_HOST}.${NAMESPACE}.svc.cluster.local' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.kubernetesApiServerCidrs[0]' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]' "$DEPLOY_SCRIPT"

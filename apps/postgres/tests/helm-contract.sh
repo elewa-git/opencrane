@@ -45,7 +45,7 @@ if grep -q 'namespaceSelector' <<<"$POOLER_POLICY"; then
   echo "postgres pooler boundary must not admit cross-namespace clients or destinations" >&2
   exit 1
 fi
-if grep -Eq 'app.kubernetes.io/(component: (opencrane-server|mcp-gateway|litellm|fleet-manager)|name: langfuse)' <<<"$INSTANCE_POLICY"; then
+if grep -Eq 'app.kubernetes.io/(component: (opencrane-server|mcp-gateway|litellm)|name: langfuse)' <<<"$INSTANCE_POLICY"; then
   echo "postgres instance policy allows an application to bypass the pooler" >&2
   exit 1
 fi
@@ -106,7 +106,6 @@ grep -q 'app.kubernetes.io/component: opencrane-server' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: mcp-gateway' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: litellm' "$OUTPUT"
 grep -q 'app.kubernetes.io/name: langfuse' "$OUTPUT"
-grep -q 'app.kubernetes.io/component: fleet-manager' "$OUTPUT"
 grep -q 'name: EXPECTED_BASELINE_SHA256' "$OUTPUT"
 grep -q 'value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "$OUTPUT"
 grep -q 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline"' "$OUTPUT"

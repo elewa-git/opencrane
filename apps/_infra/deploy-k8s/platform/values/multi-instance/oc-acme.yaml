@@ -4,9 +4,7 @@
 #   helm install oc-acme apps/_infra/deploy-k8s -n oc-acme --create-namespace \
 #     -f apps/_infra/deploy-k8s/platform/values/multi-instance/oc-acme.yaml
 #
-# Pairs with oc-globex.yaml to demonstrate two strictly-isolated instances in one
-# cluster (brief §5 acceptance). Validate statically with
-# platform/tests/multi-instance-conformance.sh.
+# Pairs with oc-globex.yaml to document two isolated release namespaces in one cluster.
 
 multiInstance:
   enabled: true

@@ -18,8 +18,8 @@ Angular rendering surface that consumes these view-models is re-implemented sepa
 the future product conversation feature; this package is just the data-shaping half.
 
 Invariant: pure functions only, and the markdown sanitiser's security posture (allowlist,
-scheme/host-local blocking, HTML escaping) stays intact. Third-party code remains under its MIT
-licence; see `THIRD_PARTY_NOTICES.md`.
+scheme/host-local blocking, HTML escaping) stays intact. Reused third-party code retains its MIT
+attribution inline in the source file that carries it.
 
 ## Public surface
 
