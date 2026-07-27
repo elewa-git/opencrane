@@ -82,6 +82,24 @@ own silo.
 
 See [`CHANGELOG.md`](CHANGELOG.md) for the capabilities shipped so far and [`plan-done.md`](plan-done.md) for the history behind them.
 
+## Concepts at a glance
+
+A handful of nouns carry most of the platform. Knowing them makes the rest of the repo — API paths,
+CRDs, Helm values, and library names — readable.
+
+| Term | What it means |
+|------|----------------|
+| **Fleet** | The central control plane that provisions and manages organisations. One fleet, many silos. It now lives in the [WeOwnAI](https://github.com/elewa-git/WeOwnAI) repo; this repo hosts the silo it installs. |
+| **ClusterTenant** | One customer organisation. The first-class entity a fleet provisions: a namespace, a database, an identity org, and the whole silo stack that belongs to it. |
+| **Silo** | The isolated per-organisation stack: control-plane server, LLM router, MCP gateway, knowledge base, skill registry, and database. Nothing is shared between silos. |
+| **Tenant** | One employee inside an organisation — a `Tenant` custom resource. Reconciling it provisions that person's private storage, identity, encryption key, and routed access. |
+| **Thread** | A durable conversation. An ordered, persisted message history that survives restarts, rescheduling, and replay. |
+| **Run** | One unit of agent work, started by a message or a schedule. A run is admitted with its inputs frozen — persona, permitted context, tools, budget — so later policy changes never rewrite work already underway. |
+| **Agent revision** | An immutable version of an agent's configuration. Runs bind to a revision, and a revision carries its own capability ceiling, so what an agent may do can never widen mid-run. |
+| **Skill** | A packaged, versioned capability an agent can use. Skills are published as revisions, scanned and entitled before use, and delivered per-read rather than mounted wholesale. |
+| **Artifact** | A versioned file — an upload or a generated output. Conversations reference a specific version, and reads are authorised through a lease naming exactly the bytes the reader may fetch. |
+| **Super-admin** | The only identity permitted to reach across silos. Everything else is scoped to one organisation, and inside it to one person. |
+
 ## Architecture
 
 OpenCrane is **Kubernetes-native** and **API-first**. A central **fleet** manages
@@ -142,17 +160,64 @@ Legend:   [live] live today      [partial] partial / gated      [desired] desire
 
 📐 See the illustrated **[architecture overview](https://opencrane.ai/advanced/architecture)** — diagrams of the fleet/silo model, the sign-in flow, and the deny-by-default access model.
 
-## Components
+## Repository layout
+
+This is an [Nx](https://nx.dev) monorepo with a strict split: **`apps/` holds deployables, `libs/`
+holds logic.** An app is thin — it composes libraries, wires clients, and manages process
+lifecycle. Anything worth testing on its own belongs in a library. Apps never import each other.
+
+```
+apps/        deployables — one directory per thing that ships and runs
+libs/        all product logic, organised by function (not by app)
+docs/        ADRs, decisions, design notes, specs, and agent guidance
+website/     the VitePress documentation site published to opencrane.ai
+scripts/     repo guards (style, boundaries, topology, namespace fences)
+```
+
+The database schema lives with the server that owns it, split per domain:
+`apps/opencrane/prisma/schema/*.prisma` plus reviewed bootstrap SQL alongside it.
+
+### Deployables (`apps/`)
+
+| Deployable | What it owns |
+|------------|--------------|
+| [`opencrane`](apps/opencrane/) | The per-silo server and control plane: headless Express REST API (`/api/v1`), in-silo reconcilers, and the gateway proxy. Emits `openapi.json` at build time. |
+| [`opencrane-ui`](apps/opencrane-ui/) | The org-admin single-page app (Angular + PrimeNG). Just another API client — the API comes first. |
+| [`channel-proxy`](apps/channel-proxy/) | The inbound-channel edge trust boundary. |
+| [`artifact-service`](apps/artifact-service/) | Artifact promote-and-receipt service; issues and honours per-read artifact leases. |
+| [`agent-runtime`](apps/agent-runtime/) | The isolated personal-agent process, prepared as one suspended Job per run attempt. Outbound-only. |
+| [`managed-agent-runtime`](apps/managed-agent-runtime/) | Chart/deploy-only plane for managed (central) agents: dedicated namespace, connector-scoped identity, network fences. Reuses the `agent-runtime` image. |
+| [`agent-controller`](apps/agent-controller/) | The sole Kubernetes mutator for personal-runtime attempt resources. |
+| [`postgres`](apps/postgres/) | The durable PostgreSQL deployable (CNPG). |
+| [`feat-central-agents`](apps/feat-central-agents/) | The Slack → org-memory ingestion worker. |
+| [`feat-openclaw-tenant`](apps/feat-openclaw-tenant/) | The OpenClaw tenant runtime image. Frozen — a deletion target, not a place for new work. |
+
+Vendored third-party infrastructure (Cognee, LiteLLM, Obot, Langfuse) and the Kubernetes release
+composer live one level down under [`apps/_infra/`](apps/_infra/).
+
+### Deployment and infrastructure
 
 | Component | Path | Description |
 |-----------|------|-------------|
-| Silo operator | `apps/opencrane/` | Per-silo control plane: headless Express REST API (`/api/v1`) + in-silo controllers; emits `openapi.json` at build time |
-| Silo chart | `apps/_infra/deploy-k8s/` | Helm chart `opencrane-silo` — per-org silo: silo operator + planes (Cognee, LiteLLM, Obot, skill registry) + Langfuse + gateway. Deploy with `apps/_infra/deploy-k8s/deploy.sh`. |
-| Deployment platform | `apps/_infra/deploy-k8s/platform/` | Internal Helm helper chart, deploy engine (`k8s-deploy.sh`, `configure-oidc.sh`), cluster provisioning (`provision.sh`, behind `--provision`), Terraform, value profiles, tests, and `deploy-single-tenant.sh` |
-| Contracts | `libs/contracts/` | Generated TypeScript client + DTOs from `openapi.json`; used by the OpenCrane UI and external surfaces |
-| Docker | `apps/*/deploy/Dockerfile` | Per-app Dockerfiles (silo operator, tenant runtime, skill registry), built and published by `.github/workflows/docker.yml` |
-| Skills | `skills/shared/` | Org/team shared skill library |
-| Docs site | `website/` | VitePress documentation site published to GitHub Pages |
+| Silo chart | `apps/_infra/deploy-k8s/` | Helm chart `opencrane-silo` — the whole per-org silo: server + planes (Cognee, LiteLLM, Obot, skill registry) + Langfuse + gateway. Deploy with `apps/_infra/deploy-k8s/deploy.sh`. |
+| Deploy engine | `apps/_infra/deploy-k8s/platform/` | Internal Helm helper chart, `k8s-deploy.sh`, `configure-oidc.sh`, cluster provisioning (`provision.sh`, behind `--provision`), Terraform environments, value profiles, tests, and `deploy-single-tenant.sh`. |
+| Container images | `apps/*/deploy/Dockerfile` | One Dockerfile per deployable, built and published by `.github/workflows/docker.yml`. |
+
+> **All cluster changes go through the deploy scripts.** Bare `kubectl` or `helm` mutations outside
+> `deploy.sh` / `k8s-deploy.sh` are not a supported path — the scripts own ordering, secret
+> provisioning, and OIDC wiring that a raw command silently skips.
+
+### Libraries (`libs/`)
+
+| Library tier | Path | Holds |
+|--------------|------|-------|
+| Contracts | `libs/contracts/` | Generated TypeScript client + DTOs from `openapi.json`; consumed by the UI and any external surface. |
+| Backend | `libs/backend/` | Server-side product logic by capability: `agents/`, `artifacts/`, `channel-proxy/`, `server/`. |
+| Models | `libs/models/` | Domain models: `agents/`, `artifacts/`, `authorization/`, `platform-policy/`. |
+| Server infra | `libs/server/_infra/` | Cross-cutting server plumbing — auth, OIDC, silo request resolution. |
+| Frontend | `libs/frontend/` | Angular building blocks: `core/`, `platform/`, `state/`, `elements/`, `features/`. Some are shared with the WeOwnAI repo. |
+| Observability | `libs/observability/` | `@opencrane/observability` — pino JSON logging to stdout and OTEL tracing. |
+| Util | `libs/util/` | Framework-free helpers. |
 
 > The fleet operator (`apps/fleet-operator/`) and fleet chart (`apps/fleet-platform/`) moved to
 > the [WeOwnAI](https://github.com/elewa-git/WeOwnAI) repo (elewa-git/opencrane#150); this repo now
@@ -166,15 +231,22 @@ reference. The site is built with [VitePress](https://vitepress.dev) from
 [`website/`](website/). Contributor/agent coding guidance stays in
 [`AGENTS.md`](AGENTS.md) and [`docs/agents/`](docs/agents/).
 
-| Doc | Covers |
-|-----|--------|
-| [Identity & connection auth](https://opencrane.ai/security/identity) | How people sign in and how a browser connects to its assistant |
-| [Connection security model](https://opencrane.ai/security/connection-security) | How OpenCrane keeps the browser↔assistant connection secure |
-| [Hosting architecture](https://opencrane.ai/operators/hosting) | On-prem-default hosting adapters, the cloud seam, and cert-manager TLS issuance |
-| [MCP gateway (Obot)](https://opencrane.ai/integrators/mcp-gateway) | Connecting assistants to external tools over MCP |
-| [Skill registry & delivery](https://opencrane.ai/integrators/skill-registry) | Skill catalog, scan/entitle pipeline, and per-read delivery |
-| [Retrieval & memory](https://opencrane.ai/integrators/retrieval-memory) | Cognee retrieval plane: datasets, AccessPolicy mapping, freshness |
-| [API overview](https://opencrane.ai/reference/api-overview) · [Interactive API reference](https://opencrane.ai/reference/api) · [Runbook](https://opencrane.ai/operators/runbook) | Authentication and API conventions · live endpoint reference · operational runbook |
+**Start here** — [Introduction](https://opencrane.ai/guide/introduction) ·
+[Getting started](https://opencrane.ai/guide/getting-started) ·
+[How it works](https://opencrane.ai/guide/how-it-works)
+
+| Audience | Where to go |
+|----------|-------------|
+| **Using the platform** | [Connect to your assistant](https://opencrane.ai/guide/connect) · [Organise people and teams](https://opencrane.ai/guide/organize) · [Permissions](https://opencrane.ai/guide/permissions) · [Skills](https://opencrane.ai/guide/skills) · [Tools](https://opencrane.ai/guide/tools) · [Company knowledge](https://opencrane.ai/guide/knowledge) · [Budgets](https://opencrane.ai/guide/budgets) · [Model routing](https://opencrane.ai/guide/model-routing) · [Child runs](https://opencrane.ai/guide/child-runs) · [Audit](https://opencrane.ai/guide/audit) |
+| **Running it (operators)** | [Deploy locally](https://opencrane.ai/guide/deploy-local) · [Deploy a cluster](https://opencrane.ai/guide/deploy-cluster) · [Silo deployment](https://opencrane.ai/operators/silo-deployment) · [Your first tenant](https://opencrane.ai/guide/first-tenant) · [Runbook](https://opencrane.ai/operators/runbook) · [Hosting architecture](https://opencrane.ai/operators/hosting) · [Networking](https://opencrane.ai/operators/networking) · [DNS](https://opencrane.ai/guide/dns) · [Server config](https://opencrane.ai/operators/clustertenantmanager-config) · [Telemetry & logging](https://opencrane.ai/operators/telemetry-logging) · [Awareness SLOs](https://opencrane.ai/operators/awareness-slos) |
+| **Integrating (developers)** | [API overview](https://opencrane.ai/reference/api-overview) · [Interactive API reference](https://opencrane.ai/reference/api) · [Contracts SDK](https://opencrane.ai/integrators/contracts-sdk) · [MCP gateway (Obot)](https://opencrane.ai/integrators/mcp-gateway) · [Retrieval & memory](https://opencrane.ai/integrators/retrieval-memory) · [Agent workspace](https://opencrane.ai/integrators/agent-workspace) · [Silo IAM](https://opencrane.ai/integrators/silo-iam) |
+| **Security & identity** | [Identity & connection auth](https://opencrane.ai/security/identity) · [Connection security model](https://opencrane.ai/security/connection-security) · [Cilium/SPIFFE workload identity](https://opencrane.ai/operators/cilium-spiffe-identity) · [Zitadel key rotation](https://opencrane.ai/security/zitadel-key-rotation) |
+| **Architecture deep dives** | [Architecture overview](https://opencrane.ai/advanced/architecture) · [Fleet/silo model](https://opencrane.ai/operators/fleet-silo-model) · [Multi-instance](https://opencrane.ai/advanced/multi-instance) · [ClusterTenant members](https://opencrane.ai/operators/cluster-tenant-members) |
+
+In-repo references that are *not* on the site: [`docs/adr/`](docs/adr/) and
+[`docs/decisions/`](docs/decisions/) for architecture decisions,
+[`docs/specs/`](docs/specs/) and [`docs/design/`](docs/design/) for design notes, and
+[`CHANGELOG.md`](CHANGELOG.md) for shipped capability.
 
 ## Quick Start
 
@@ -192,6 +264,38 @@ reference. The site is built with [VitePress](https://vitepress.dev) from
 npm ci
 npm run build
 npm run test
+```
+
+Nx drives every target, so you can scope work to one package instead of the whole graph:
+
+```bash
+nx build opencrane          # one project
+nx test opencrane-ui        # one project's tests
+nx run-many -t lint         # same as npm run lint
+npm run dev                 # all dev servers in parallel
+```
+
+Never pass `--legacy-peer-deps`. A clean `npm ci` is the bar — if it fails, the dependency set is
+genuinely inconsistent (partial OpenTelemetry bumps are the usual cause) and needs fixing, not
+overriding.
+
+**Repo guards.** Beyond lint and tests, the repo enforces its architecture with scripts. Run these
+before opening a PR that moves code or touches cluster boundaries:
+
+```bash
+npm run lint:boundaries                  # Nx tag / dependency-direction rules
+scripts/agent-style-check.sh             # mechanical TypeScript style
+npm run check:phase-b-topology           # cluster topology ownership
+npm run check:phase-d-agent-namespaces   # agent namespace fences
+scripts/config-docs-coverage.sh          # finds undocumented Helm values keys
+```
+
+**Documentation site.**
+
+```bash
+npm run docs:dev            # live-reload the VitePress site
+npm run docs:sync-openapi   # refresh the API reference from openapi.json
+npm run docs:build          # build as CI does — validates every internal link
 ```
 
 ### Local Deployment
@@ -260,6 +364,29 @@ OpenClaw and its Cognee memory plugin ship together in a pinned, immutable tenan
 image. Operators upgrade that image through the silo Helm release, so every rollout
 and rollback restores a tested runtime/plugin pair rather than changing executable
 code inside an employee's persistent storage.
+
+## Contributing
+
+**Branches.** `develop` is the integration branch — open pull requests against it, not `main`.
+Feature branches are named `feat/<descriptive-name>`.
+
+**Conventions.** Read [`AGENTS.md`](AGENTS.md) first: it is the canonical guidance file and an index
+into [`docs/agents/`](docs/agents/), which holds the focused rules — TypeScript style, Angular
+layering, IAM-first architecture, Kubernetes boundaries, Prisma schema layout, monorepo boundaries,
+and the review gate. Load the topic file that matches the change in front of you rather than reading
+everything.
+
+Three rules are worth stating here because they shape most reviews:
+
+- **API-first.** Every capability is an API first; the UI is just another client. There is no CLI.
+- **One owner per deployable.** New behaviour goes in a library under `libs/`, and gets a thin
+  `apps/<name>` owner only if it actually ships as its own process.
+- **No compatibility shims.** Replacements delete what they replace — routes, models, tests, config,
+  and docs — in the same change. There are no deprecation periods.
+
+**Packages document themselves.** Every `apps/*` and `libs/*` package carries a `README.md`, and it
+is updated in the same commit as the code. This root README is the front door; mechanism belongs in
+the package README or on the docs site.
 
 ## License
 
