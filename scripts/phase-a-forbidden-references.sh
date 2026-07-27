@@ -4,6 +4,11 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PATTERN='feat-openclaw-tenant|feat-central-agents|libs/server/_infra/(tenant-hosting|channel-proxy)|tenant\.opencrane\.io|openclawVersion|OPENCLAW_VERSION|/auth/pod-token|gatewayProxy|fleetManager|linkerd\.io/inject|LINKERD_'
 
+if ! command -v rg >/dev/null 2>&1; then
+  printf 'phase-a-forbidden-references: ripgrep is required; refusing to pass without scanning.\n' >&2
+  exit 2
+fi
+
 matches="$(
   rg --no-config -n -I -e "$PATTERN" \
     "$ROOT/apps" "$ROOT/libs" "$ROOT/scripts" "$ROOT/.github" \

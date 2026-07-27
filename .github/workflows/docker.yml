@@ -116,6 +116,11 @@ jobs:
           # renders must not drift with the runner image or a new Helm release.
           version: v4.1.4
 
+      - name: Install validation clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client ripgrep
+
       - name: Enforce Phase A retired-reference and legacy-residue guards
         run: ./scripts/phase-a-forbidden-references.sh
 
@@ -140,11 +145,6 @@ jobs:
       # generator can introduce transient files beneath an app root.
       - name: Generate the database client
         run: npm run db:generate -w @opencrane/server
-
-      - name: Install the PostgreSQL client
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes postgresql-client
 
       - name: Apply the fresh target database baseline
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql

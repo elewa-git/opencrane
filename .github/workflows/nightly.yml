@@ -75,11 +75,11 @@ jobs:
         if: steps.fresh.outputs.changed == 'true'
         run: npm run db:generate -w @opencrane/server
 
-      - name: Install the PostgreSQL client
+      - name: Install validation clients
         if: steps.fresh.outputs.changed == 'true'
         run: |
           sudo apt-get update
-          sudo apt-get install --yes postgresql-client
+          sudo apt-get install --yes postgresql-client ripgrep
 
       - name: Apply the fresh target database baseline
         if: steps.fresh.outputs.changed == 'true'
