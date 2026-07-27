@@ -55,7 +55,11 @@ from a first learned preference.
 - `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
   metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
 - `__ResolvePersonalMemoryDataset(repository, command)` — selects the one active personal dataset
-  from a signed run's silo, organization, and subject. It takes no caller-supplied dataset id.
+from a signed run's silo, organization, and subject. It takes no caller-supplied dataset id.
+
+Forgetting is an explicit one-way lifecycle. Postgres records the request instant and completion
+instant as immutable evidence, and refuses a completion that predates its request. That lets later
+audit distinguish a pending erasure from a completed one without a mutable timestamp hiding history.
 - `PrismaPersonalMemoryDatasetRepository` — the production lookup adapter for that exact personal
   dataset tuple.
 

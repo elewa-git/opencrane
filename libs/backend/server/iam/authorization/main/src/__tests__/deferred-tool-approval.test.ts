@@ -76,6 +76,14 @@ describe("deferred tool approval authority", function _suite()
 		expect(result).toEqual({ outcome: "conflict" });
 		expect(updateMany).not.toHaveBeenCalled();
 	});
+
+	it("propagates a stale approval trigger so the transaction owner can roll back", async function _staleAuthority()
+	{
+		const { transaction, updateMany } = _transaction(_pending(), 1);
+		updateMany.mockRejectedValueOnce(new Error("ApprovalRequest decision authority is no longer current"));
+
+		await expect(__DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW })).rejects.toThrow("ApprovalRequest decision authority is no longer current");
+	});
 });
 
 /** Live assignment + proof key the defer authority binds the approval to. */

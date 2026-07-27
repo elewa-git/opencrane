@@ -80,7 +80,9 @@ writes authorization tables directly.
 For a deferred tool action, the API is deliberately narrower than the database record: the browser
 cannot name a run, choose an executor result, or provide a resume token. It may only approve or deny
 the pending action attached to its own subject in its own silo. An expired request is terminalised
-before any decision is recorded, and a successful approval wakes the existing runtime command path.
+before any decision is recorded; a decision whose run, workload, or proof is stale becomes a typed
+conflict rather than a silently cancelled approval; and a successful approval wakes the existing
+runtime command path exactly once.
 
 ## Dependency direction
 

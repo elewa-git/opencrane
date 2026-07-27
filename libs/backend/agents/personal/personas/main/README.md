@@ -40,6 +40,10 @@ completion, ensuring a late answer cannot race a completed record. Answers name 
 revision and question they answered; completion is refused until every question in that reviewed
 revision has exactly one answer.
 
+A retake is a new interview rather than a rewrite of an old one. The owner profile, user, reviewed
+question-set version, and start instant are fixed at creation, so a later refresh preserves the
+earlier interview as evidence instead of changing who answered which questions.
+
 The approval half takes one consistent database snapshot and confirms the caller owns the profile;
 the revision is still a `draft`; the interview is `completed`; there are between **three and five**
 provenance-linked insights; the reviewed template's fingerprint (digest) and selection rule still

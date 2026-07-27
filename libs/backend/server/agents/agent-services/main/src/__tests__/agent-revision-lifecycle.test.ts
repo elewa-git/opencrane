@@ -72,7 +72,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		if (service.state !== command.expectedState) return { outcome: "conflict", currentState: service.state };
 		if (command.action === "enable" && service.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
 		const state = command.action === "enable" ? "active" : command.action === "pause" ? "paused" : "retired";
-		const updated: AgentService = { ...service, state, updatedAt: changedAt };
+		const updated: AgentService = { ...service, state, activeRevisionId: command.action === "retire" ? null : service.activeRevisionId, updatedAt: changedAt };
 		this.services.set(service.id, updated);
 		return { outcome: "changed", service: updated };
 	}
@@ -188,6 +188,17 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(badTransition).toEqual({ outcome: "denied", reason: "transition_not_allowed" });
 		const staleState = await __ChangeAgentServiceState(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedState: "paused", action: "enable" }, _NOW);
 		expect(staleState.outcome).toBe("conflict");
+	});
+
+	it("clears the active revision when a service retires", async function _retire()
+	{
+		const repository = new _Repository();
+		const seed = await _seedService(repository);
+		repository.services.set(seed.serviceId, { ...repository.services.get(seed.serviceId)!, state: "active", activeRevisionId: seed.revisionId });
+
+		const retired = await __ChangeAgentServiceState(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedState: "active", action: "retire" }, _NOW);
+
+		expect(retired).toEqual(expect.objectContaining({ outcome: "changed", service: expect.objectContaining({ state: "retired", activeRevisionId: null }) }));
 	});
 
 	it("compares two revisions of the same service", async function _compare()

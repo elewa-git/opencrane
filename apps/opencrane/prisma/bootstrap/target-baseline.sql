@@ -131,7 +131,7 @@ CREATE TYPE "PersonaInterviewCategory" AS ENUM ('relationship_role', 'tone_langu
 CREATE TYPE "PersonaQuestionSetState" AS ENUM ('draft', 'reviewed');
 
 -- CreateEnum
-CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed', 'retaken');
+CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed');
 
 -- CreateEnum
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
@@ -1643,9 +1643,6 @@ CREATE UNIQUE INDEX "artifact_outbox_events_idempotency_key_key" ON "artifact_ou
 CREATE INDEX "artifact_outbox_events_published_at_available_at_idx" ON "artifact_outbox_events"("published_at", "available_at");
 
 -- CreateIndex
-CREATE INDEX "audit_log_tenant_idx" ON "audit_log"("tenant");
-
--- CreateIndex
 CREATE INDEX "audit_log_timestamp_idx" ON "audit_log"("timestamp");
 
 -- CreateIndex
@@ -2565,13 +2562,13 @@ BEGIN
     INTO service_silo_id
     FROM "agent_services"
     WHERE "id" = NEW."agent_service_id"
-    FOR KEY SHARE;
+    FOR UPDATE;
 
     SELECT "scope", "cluster_tenant"
     INTO definition_scope, definition_cluster_tenant
     FROM "model_definitions"
     WHERE "id" = NEW."model_definition_id"
-    FOR KEY SHARE;
+    FOR UPDATE;
 
     IF definition_scope IS DISTINCT FROM 'global'::"ModelRoutingScope"
         AND (definition_scope IS DISTINCT FROM 'clusterTenant'::"ModelRoutingScope"
@@ -3177,6 +3174,18 @@ BEGIN
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
     END IF;
+    -- A dispatched resume consumes its opaque token without changing the already-authorised decision.
+    -- No other terminal-row mutation is allowed, so retry redelivery still relies on the durable command.
+    IF OLD."state" = 'approved' THEN
+        IF NEW."state" = 'approved'
+            AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
+            AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
+            AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
+            AND NEW."deferred_tool_result" IS NOT DISTINCT FROM OLD."deferred_tool_result" THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
+    END IF;
     IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
         RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
     END IF;
@@ -3206,10 +3215,7 @@ BEGIN
             OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
             OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
             OR proof_expires_at <= decision_time THEN
-            NEW."state" := 'cancelled';
-            NEW."decided_by" := NULL;
-            NEW."resume_token_hash" := NULL;
-            RETURN NEW;
+            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
         END IF;
     END IF;
     IF NEW."state" = 'cancelled' THEN
@@ -3312,6 +3318,9 @@ BEGIN
         IF assertion_issuer_id IS NULL THEN
             RAISE EXCEPTION 'VerifiedFleetMembershipAssertion requires a verified revision';
         END IF;
+        -- Serialize assertion insertion with the issuer/silo high-watermark update. Without this
+        -- shared fence, two transactions can both observe the same prior accepted revision.
+        PERFORM pg_advisory_xact_lock(hashtextextended(assertion_issuer_id || ':' || NEW."silo_id", 0));
         IF EXISTS (
             SELECT 1
             FROM "highest_accepted_fleet_memberships"
@@ -3333,6 +3342,8 @@ BEGIN
     IF TG_OP = 'DELETE' THEN
         RAISE EXCEPTION 'HighestAcceptedFleetMembership rows cannot be deleted';
     END IF;
+    -- Share the issuer/silo fence used by assertion insertion before reading or replacing this row.
+    PERFORM pg_advisory_xact_lock(hashtextextended(NEW."issuer_id" || ':' || NEW."silo_id", 0));
     IF TG_OP = 'UPDATE' THEN
         IF NEW."issuer_id" IS DISTINCT FROM OLD."issuer_id"
             OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" THEN
@@ -3576,6 +3587,9 @@ DECLARE expected_answers INTEGER; actual_answers INTEGER; question_set_state "Pe
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaInterview rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'in_progress' OR NEW."completed_at" IS NOT NULL THEN
+            RAISE EXCEPTION 'PersonaInterview must begin InProgress without completion evidence';
+        END IF;
         SELECT "state" INTO question_set_state FROM "persona_question_sets"
           WHERE "question_set_id" = NEW."question_set_id" AND "version" = NEW."question_set_version" FOR UPDATE;
         IF question_set_state IS DISTINCT FROM 'reviewed' THEN RAISE EXCEPTION 'PersonaInterview requires a Reviewed question set'; END IF;
@@ -3589,7 +3603,14 @@ BEGIN
             END IF;
         END IF;
     END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" IN ('completed', 'retaken') THEN RAISE EXCEPTION 'completed PersonaInterview evidence is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'completed' THEN RAISE EXCEPTION 'completed PersonaInterview evidence is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND (
+        NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id"
+        OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
+        OR NEW."question_set_id" IS DISTINCT FROM OLD."question_set_id"
+        OR NEW."question_set_version" IS DISTINCT FROM OLD."question_set_version"
+        OR NEW."started_at" IS DISTINCT FROM OLD."started_at"
+    ) THEN RAISE EXCEPTION 'PersonaInterview owner, question set, and start evidence are immutable'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."refresh_configuration_change_id" IS DISTINCT FROM OLD."refresh_configuration_change_id" THEN
         RAISE EXCEPTION 'PersonaInterview refresh provenance is immutable';
     END IF;
@@ -3887,7 +3908,7 @@ BEGIN
         IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
             RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
         END IF;
-        IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") THEN RAISE EXCEPTION 'ArtifactRevision required by preprocessing cannot leave Published'; END IF;
+        IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE ("source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") AND "state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'ArtifactRevision required by in-flight preprocessing cannot leave Published'; END IF;
     END IF;
     RETURN NEW;
 END;
@@ -3898,7 +3919,7 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Artifact rows use authorized deletion lifecycle'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."retention_policy" IS DISTINCT FROM OLD."retention_policy" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'Artifact identity and retention are immutable'; END IF;
     IF TG_OP = 'UPDATE' AND NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'deleted')) OR (OLD."state" = 'deleted' AND NEW."state" = 'deleted')) THEN RAISE EXCEPTION 'invalid Artifact lifecycle transition'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" <> 'active' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" job LEFT JOIN "artifact_revisions" source ON source."id" = job."source_revision_id" WHERE job."derived_artifact_id" = NEW."id" OR source."artifact_id" = NEW."id") THEN RAISE EXCEPTION 'Artifact required by preprocessing cannot be deleted'; END IF;
+    IF TG_OP = 'UPDATE' AND NEW."state" <> 'active' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" job LEFT JOIN "artifact_revisions" source ON source."id" = job."source_revision_id" WHERE (job."derived_artifact_id" = NEW."id" OR source."artifact_id" = NEW."id") AND job."state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'Artifact required by in-flight preprocessing cannot be deleted'; END IF;
     IF NEW."current_revision_id" IS NOT NULL THEN
         SELECT "state" INTO revision_state FROM "artifact_revisions" WHERE "id" = NEW."current_revision_id" AND "artifact_id" = NEW."id" FOR UPDATE;
         IF revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'current Artifact revision must be Published'; END IF;
@@ -4177,6 +4198,9 @@ BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryFact catalog rows use explicit forget lifecycle'; END IF;
     IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id" OR NEW."cognee_external_id" IS DISTINCT FROM OLD."cognee_external_id" OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest" OR NEW."consent_state" IS DISTINCT FROM OLD."consent_state" OR NEW."sensitivity" IS DISTINCT FROM OLD."sensitivity" OR NEW."provenance" IS DISTINCT FROM OLD."provenance" OR NEW."source_artifact_revision_id" IS DISTINCT FROM OLD."source_artifact_revision_id" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."supersedes_fact_id" IS DISTINCT FROM OLD."supersedes_fact_id" OR NEW."recorded_by" IS DISTINCT FROM OLD."recorded_by" OR NEW."recorded_at" IS DISTINCT FROM OLD."recorded_at" THEN RAISE EXCEPTION 'MemoryFact content and provenance are immutable'; END IF;
     IF OLD."corrected_at" IS NOT NULL AND NEW."corrected_at" IS DISTINCT FROM OLD."corrected_at" THEN RAISE EXCEPTION 'MemoryFact correction evidence is immutable'; END IF;
+    IF OLD."forget_requested_at" IS NOT NULL AND NEW."forget_requested_at" IS DISTINCT FROM OLD."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget request evidence is immutable'; END IF;
+    IF OLD."forgotten_at" IS NOT NULL AND NEW."forgotten_at" IS DISTINCT FROM OLD."forgotten_at" THEN RAISE EXCEPTION 'MemoryFact forget completion evidence is immutable'; END IF;
+    IF NEW."forgotten_at" IS NOT NULL AND NEW."forgotten_at" < NEW."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget completion cannot predate its request'; END IF;
     IF NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'corrected', 'forget_pending'))
         OR (OLD."state" = 'corrected' AND NEW."state" IN ('corrected', 'forget_pending'))
         OR (OLD."state" = 'forget_pending' AND NEW."state" IN ('forget_pending', 'forgotten'))
@@ -4195,6 +4219,7 @@ $$;
 CREATE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE artifact_silo_id TEXT;
 BEGIN
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactUploadLease rows cannot be deleted'; END IF;
     SELECT "silo_id" INTO artifact_silo_id FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
     IF artifact_silo_id IS DISTINCT FROM NEW."silo_id" THEN RAISE EXCEPTION 'ArtifactUploadLease must stay inside its Artifact silo'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."id" IS DISTINCT FROM OLD."id" OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."capability_jti" IS DISTINCT FROM OLD."capability_jti" OR NEW."expected_content_address" IS DISTINCT FROM OLD."expected_content_address" OR NEW."expected_byte_length" IS DISTINCT FROM OLD."expected_byte_length" OR NEW."media_type" IS DISTINCT FROM OLD."media_type" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'ArtifactUploadLease authority coordinates are immutable'; END IF;
@@ -4480,7 +4505,7 @@ ALTER TABLE "persona_soul_templates" ADD CONSTRAINT "persona_soul_templates_vali
     );
 ALTER TABLE "persona_profiles" ADD CONSTRAINT "persona_profiles_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("user_id") <> '');
 ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_completion_check" CHECK (
-        ("state" = 'in_progress' AND "completed_at" IS NULL) OR ("state" IN ('completed', 'retaken') AND "completed_at" IS NOT NULL)
+        ("state" = 'in_progress' AND "completed_at" IS NULL) OR ("state" = 'completed' AND "completed_at" IS NOT NULL)
     );
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_value_check" CHECK (btrim("value") <> '');
 ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_valid_check" CHECK (
@@ -4715,7 +4740,7 @@ CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "me
 CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_fact_catalog" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_fact_lifecycle"();
 CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
     DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
-CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
+CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
 CREATE TRIGGER "artifact_preprocess_jobs_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_preprocess_jobs"
     FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_job_lifecycle"();
 CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"

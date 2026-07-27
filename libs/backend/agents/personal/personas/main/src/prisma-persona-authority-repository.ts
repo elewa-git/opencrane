@@ -132,9 +132,8 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 }
 
 /** Convert Prisma's closed interview enum into the domain approval vocabulary. */
-function _asInterviewState(state: PersonaInterviewState): "in_progress" | "completed" | "retaken"
+function _asInterviewState(state: PersonaInterviewState): "in_progress" | "completed"
 {
 	if (state === PersonaInterviewState.Completed) return "completed";
-	if (state === PersonaInterviewState.Retaken) return "retaken";
 	return "in_progress";
 }

@@ -208,7 +208,14 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			if (row === null) return { outcome: "denied", reason: "service_not_found" };
 			if (_serviceState(row.state) !== command.expectedState) return { outcome: "conflict", currentState: _serviceState(row.state) };
 			if (command.action === "enable" && row.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
-			const updated = await transaction.agentService.update({ where: { id: command.agentServiceId }, data: { state: _targetServiceState(command.action), updatedAt: changedAtDate } });
+			const updated = await transaction.agentService.update({
+				where: { id: command.agentServiceId },
+				data: {
+					state: _targetServiceState(command.action),
+					activeRevisionId: command.action === "retire" ? null : undefined,
+					updatedAt: changedAtDate,
+				},
+			});
 			return { outcome: "changed", service: _mapService(updated) };
 		});
 	}

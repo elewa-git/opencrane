@@ -140,7 +140,6 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	});
 	return approved.count === 1 ? { outcome: "approved", deferredToolResult } : _conflictOrExpire(transaction, command);
 }
-
 /** Terminalise a just-expired owner-bound request after a decision compare-and-set loses its fence. */
 async function _conflictOrExpire(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>
 {

@@ -4,7 +4,7 @@ import type { PersonaProfileId, PersonaRevisionId, UserId } from "./identifiers.
 export type PersonaInterviewCategory = "relationship_role" | "tone_language" | "answer_structure" | "challenge_support" | "initiative" | "approval_risk" | "working_habits" | "memory_boundaries";
 
 /** Lifecycle state of one onboarding interview attempt. */
-export type PersonaInterviewState = "in_progress" | "completed" | "retaken";
+export type PersonaInterviewState = "in_progress" | "completed";
 
 /** Review state of a generated persona revision. */
 export type PersonaRevisionState = "draft" | "approved";

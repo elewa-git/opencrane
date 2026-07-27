@@ -61,7 +61,8 @@ with a plain reason.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
   revisions, lineage, optimistic concurrency).
 - `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
-  publish path and its Postgres adapter.
+publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
+same database update, so no retired service can still look runnable.
 - `ManagedRunAdmissionPort` — the app-owned seam through which run-now AND the scheduler record an
   admission (`trigger: managed_invocation` or `schedule`).
 - Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, `PrismaAgentScheduleRepository`,

@@ -68,9 +68,11 @@ PostgreSQL owns the durable product record, including `AgentService`, `AgentRevi
 the immutable run input snapshot, conversation threads and ordered events, approvals, artifacts,
 skills, membership, grants, and audit evidence.
 
-The application starts only against the reviewed clean target baseline. Runtime Jobs hold
-attempt-scoped scratch and checkpoints; they do not replace the server's durable run, conversation,
-or artifact records.
+The application starts only against the reviewed clean target baseline. Database triggers protect
+the lifecycle and proof bindings that Prisma cannot express: an approval can consume its resume
+token once, but a stale approval decision is rejected rather than silently rewritten. Runtime Jobs
+hold attempt-scoped scratch and checkpoints; they do not replace the server's durable run,
+conversation, or artifact records.
 
 ## Runtime & config
 

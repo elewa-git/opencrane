@@ -70,7 +70,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 			return await this.prisma.$transaction(async function _record(transaction)
 			{
 				// 1. Lock the interview, proving its owner and keeping completion from racing an answer append.
-				const interviews = await transaction.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" | "retaken" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
+				const interviews = await transaction.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				if (interviews.length !== 1) return { status: "not_found_or_wrong_owner" } as const;
 				const interview = interviews[0];
 				if (interview.state !== "in_progress") return { status: "not_in_progress" } as const;
@@ -101,7 +101,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 			return await this.prisma.$transaction(async function _complete(transaction)
 			{
 				// 1. Lock the interview before counting evidence, sharing the same fence as answer append.
-				const interviews = await transaction.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" | "retaken" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
+				const interviews = await transaction.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				if (interviews.length !== 1) return { status: "not_found_or_wrong_owner" } as const;
 				const interview = interviews[0];
 				if (interview.state !== "in_progress") return { status: "not_in_progress" } as const;

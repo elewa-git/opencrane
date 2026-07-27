@@ -17,7 +17,6 @@ enum PersonaQuestionSetState {
 enum PersonaInterviewState {
   InProgress @map("in_progress")
   Completed  @map("completed")
-  Retaken    @map("retaken")
 }
 
 enum PersonaRevisionState {

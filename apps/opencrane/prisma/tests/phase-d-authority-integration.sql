@@ -1188,6 +1188,23 @@ SELECT pg_temp.assert_true(
     (SELECT "decided_at" <= clock_timestamp() AND "decided_at" < "expires_at"
      FROM "approval_requests" WHERE "id" = 'approval-1')
 );
+UPDATE "approval_requests"
+SET "resume_token_hash" = NULL
+WHERE "id" = 'approval-1';
+SELECT pg_temp.assert_true(
+    'approved ApprovalRequest consumes its resume token exactly once',
+    (SELECT "state" = 'approved' AND "resume_token_hash" IS NULL
+     FROM "approval_requests" WHERE "id" = 'approval-1')
+);
+SELECT pg_temp.expect_failure(
+    'approved ApprovalRequest cannot mutate after its resume token is consumed',
+    $statement$
+        UPDATE "approval_requests"
+        SET "decided_by" = 'replacement-approver'
+        WHERE "id" = 'approval-1'
+    $statement$,
+    'may only consume its resume token once'
+);
 
 INSERT INTO "approval_requests" (
     "id", "run_id", "attempt", "agent_revision_id", "agent_service_id", "silo_id",
@@ -1293,12 +1310,18 @@ INSERT INTO "approval_requests" (
 FROM "approval_requests" WHERE "id" = 'approval-1';
 
 UPDATE "agent_runs" SET "state" = 'running' WHERE "id" = 'run-action';
-UPDATE "approval_requests"
-SET "state" = 'approved', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-stale-state'
-WHERE "id" = 'approval-stale-state';
+SELECT pg_temp.expect_failure(
+    'approval decision fails when the run is no longer WaitingForApproval',
+    $statement$
+        UPDATE "approval_requests"
+        SET "state" = 'approved', "decided_by" = 'approver-1', "resume_token_hash" = 'resume-stale-state'
+        WHERE "id" = 'approval-stale-state'
+    $statement$,
+    'decision authority is no longer current'
+);
 SELECT pg_temp.assert_true(
-    'approval decision cancels when the run is no longer WaitingForApproval',
-    (SELECT "state" = 'cancelled' AND "resume_token_hash" IS NULL
+    'stale approval remains pending for the caller to resolve as a conflict',
+    (SELECT "state" = 'pending' AND "resume_token_hash" IS NULL
      FROM "approval_requests" WHERE "id" = 'approval-stale-state')
 );
 

@@ -71,6 +71,10 @@ early-failed attempt therefore cannot overlap a reclaimed one. Incomplete genera
 no current revision and remain absent from the user catalogue. The isolated worker never receives a
 content address, ArtifactStore endpoint, signed lease, or promotion receipt.
 
+Only an in-flight preprocessing job holds its source and output metadata in place. A completed or
+terminally failed job remains immutable audit evidence, but it does not indefinitely prevent an
+authorised artifact-deletion lifecycle once no active job needs those rows.
+
 ## Public surface
 
 - `__FinalizeArtifactRevision` — commit promoted bytes into a visible, immutable revision.
