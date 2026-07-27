@@ -9,7 +9,7 @@ import { join, relative } from "node:path";
 
 const [, , root] = process.argv;
 const errors = [];
-const personalDomains = ["personas", "conversations", "memory"];
+const personalDomains = ["configuration", "personas", "memory"];
 const executionDomains = [
 	{ directory: "inputs/main", project: "inputs", alias: "inputs" },
 	{ directory: "runs/main", project: "runs", alias: "runs" },

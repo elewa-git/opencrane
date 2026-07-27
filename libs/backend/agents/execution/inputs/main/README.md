@@ -108,5 +108,5 @@ decides service publication, membership, or scope attachment policy.
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [runs](../../runs/main/README.md) · [conversations](../../../personal/conversations/main/README.md) ·
+- Siblings: [runs](../../runs/main/README.md) ·
   [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

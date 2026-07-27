@@ -13,7 +13,7 @@ export enum WelcomeStep
 {
 	/** Greet the user by name and state the one-line value proposition. */
 	Welcome = 1,
-	/** Surface the user's resolved private OpenClaw workspace (tenant). */
+	/** Surface the user's governed personal-agent workspace. */
 	Workspace = 2,
 	/** Capture light, local-only personalisation (e.g. preferred name). */
 	Personalize = 3,

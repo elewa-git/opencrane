@@ -61,7 +61,7 @@ const registry = JSON.parse(readFileSync(input, "utf8"));
 if (action === "delete-runtime")
 {
   registry.workloads = registry.workloads.filter(function keep(workload) {
-    return workload.id !== "openclaw-tenant-runtime";
+    return workload.id !== "agent-runtime";
   });
 }
 else if (action === "duplicate-owner")
@@ -105,9 +105,9 @@ else if (action === "missing-classification-reason")
 else if (action === "spoof-local-owner")
 {
   const workload = registry.workloads.find(function find(candidate) {
-    return candidate.id === "fleet-platform-external";
+    return candidate.id === "opencrane-server";
   });
-  workload.localOwner = true;
+  workload.localOwner = false;
 }
 else if (action === "invalid-nested-owner")
 {
@@ -129,7 +129,7 @@ else if (action === "duplicate-runtime-anchor")
   registry.runtimeConstructs.push({
     path: "libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts",
     anchor: "kind: \"Deployment\"",
-    workloadIds: ["openclaw-tenant-runtime"],
+    workloadIds: ["agent-runtime"],
   });
 }
 else if (action === "duplicate-nonproducing-anchor")
@@ -242,7 +242,7 @@ rm -f "$BUILD_SOURCE_PROBE"
 rmdir "$(dirname "$BUILD_SOURCE_PROBE")"
 
 registry="$(mutate_registry delete-runtime)"
-expect_failure "required workload registration is missing: openclaw-tenant-runtime" \
+expect_failure "required workload registration is missing: agent-runtime" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 
 registry="$(mutate_registry duplicate-owner)"

@@ -29,11 +29,11 @@ import { _log } from "../log.js";
  */
 export async function _ResolveCallerClusterTenant(
   prisma: PrismaClient,
-  email: string | undefined,
+  subject: string | undefined,
   scopeClusterTenant?: string | undefined,
 ): Promise<string | null>
 {
-  const normalized = typeof email === "string" ? email.toLowerCase().trim() : "";
+  const normalized = typeof subject === "string" ? subject.trim() : "";
   if (!normalized)
   {
     return null;
@@ -43,19 +43,19 @@ export async function _ResolveCallerClusterTenant(
 
   try
   {
-    const matches = await prisma.tenant.findMany({
+    const matches = await prisma.orgMembership.findMany({
       where: {
-        email: { equals: normalized, mode: "insensitive" },
-        ...(scope ? { clusterTenantRef: scope } : {}),
+        subject: normalized,
+        ...(scope ? { clusterTenant: scope } : {}),
       },
-      select: { clusterTenantRef: true },
+      select: { clusterTenant: true },
       take: 2,
     });
     if (matches.length !== 1)
     {
       return null;
     }
-    return matches[0].clusterTenantRef ?? null;
+    return matches[0].clusterTenant;
   }
   catch (err)
   {

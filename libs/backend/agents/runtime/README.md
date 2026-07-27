@@ -38,8 +38,8 @@ stay isolated in the `layer:infra` launcher rather than leaking into those core 
 
 The launcher may consume Kubernetes manifest types but performs no input/output. The controller library
 may depend on that launcher, shared contracts, and observability; it does not import the app that
-composes it. No runtime package may import a model driver or legacy OpenClaw runtime. Canonical
-run/event persistence remains in its owning backend domain.
+composes it. Runtime packages do not import a model driver. Canonical run/event persistence remains
+in its owning backend domain.
 
 ## See also
 

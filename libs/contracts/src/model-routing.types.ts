@@ -1,7 +1,7 @@
 /**
  * Shared types for the model-routing registry (Track AIR): provider credentials and
- * model definitions. Provider keys are owned at opencrane-ui (Global) or ClusterTenant
- * scope — never per openclaw tenant — and OpenCrane stores only a reference to the
+ * model definitions. Provider keys are owned at installation (Global) or ClusterTenant
+ * scope, and OpenCrane stores only a reference to the
  * External-Secrets-synced k8s Secret, never the raw key.
  */
 

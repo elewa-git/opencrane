@@ -3,12 +3,11 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { LangfuseConfig, MetricsCallerScope } from "./model-routing-metrics.types.js";
 import { _ResolveCallerClusterTenant as _resolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
-import { _IsDevAuthMode } from "@opencrane/server/_infra/auth";
 
 /**
  * Default Langfuse v1 Metrics/Public API path. Confirmed against the Langfuse public-API docs
  * (GET /api/public/metrics, `query` JSON param). Overridable via `LANGFUSE_METRICS_PATH` so a v2
- * cutover (`/api/public/v2/metrics`) needs no code change.
+ * publication (`/api/public/v2/metrics`) needs no code change.
  * @see https://langfuse.com/docs/metrics/features/metrics-api
  */
 const _DEFAULT_METRICS_PATH = "/api/public/metrics";
@@ -43,8 +42,7 @@ function _resolveConfig(): LangfuseConfig | null
 }
 
 /**
- * Resolve the caller's scope for query injection (AIR.10). Mirrors the recommendations feed: no
- * session is the dev open-auth fallthrough (treat as operator); an operator forwards unconstrained;
+ * Resolve the caller's scope for query injection (AIR.10). An operator forwards unconstrained;
  * a non-operator's own ClusterTenant is resolved fresh from their IdP-verified email (fail-closed).
  *
  * @param prisma - Prisma client for the email→tenant→clusterTenantRef lookup.
@@ -55,12 +53,11 @@ async function _resolveCallerScope(prisma: PrismaClient, req: Request): Promise<
 {
   const authUser = req.session?.authUser;
 
-  // 1. No session: the dev-mode bypass treats the caller as operator (fresh local install / OPEN
-  //    dev backend); a real auth deployment FAILS CLOSED (non-operator, no tenant) so the proxy
-  //    403s rather than forwarding unconstrained metrics (AIR.0b).
+  // 1. No session fails closed so metrics can never become globally visible through missing
+  //    identity configuration.
   if (!authUser)
   {
-    return _IsDevAuthMode() ? { isOperator: true, clusterTenant: null } : { isOperator: false, clusterTenant: null };
+    return { isOperator: false, clusterTenant: null };
   }
 
   // 2. Platform operators forward the query unconstrained (no tenant filter injected).
@@ -99,7 +96,7 @@ function _buildUpstreamUrl(config: LangfuseConfig, req: Request, scope: MetricsC
     }
   }
 
-  // 2. Operator (and dev fallthrough) — no tenant constraint; forward as-is.
+  // 2. Operator — no tenant constraint; forward as-is.
   if (scope.isOperator)
   {
     return url;

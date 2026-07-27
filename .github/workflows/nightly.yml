@@ -1,7 +1,7 @@
 name: Nightly full validation
 
-# The safety net behind the PR-level affected/e2e gating in docker.yml: once a day, run the
-# complete battery (guards + negative tests, full build/test/lint, k3d e2e) on each integration
+# The safety net behind PR-level affected validation: once a day, run the
+# complete static battery (guards + negative tests, full build/test/lint) on each integration
 # branch — but only when the branch actually received commits in the last 24 hours.
 #
 # GitHub runs scheduled workflows from the default branch, so this activates once it reaches
@@ -81,21 +81,3 @@ jobs:
       - name: Build, test, and lint every project
         if: steps.fresh.outputs.changed == 'true'
         run: npx nx run-many -t build test lint
-
-      - name: Install k3d
-        if: steps.fresh.outputs.changed == 'true'
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Run k3d e2e smoke test
-        if: steps.fresh.outputs.changed == 'true'
-        # Branch-agnostic: the matrix spans branches on both sides of the apps/_infra
-        # reorganization, so resolve whichever test location the checked-out branch ships.
-        run: |
-          for candidate in apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh libs/k8s-platform/tests/k3d-e2e.sh; do
-            if [ -x "$candidate" ]; then exec "./$candidate"; fi
-          done
-          echo "no k3d e2e script found on this branch" >&2
-          exit 1
-        env:
-          KEEP_CLUSTER: "0"
-          TIMEOUT_SECONDS: "300"

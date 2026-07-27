@@ -64,8 +64,7 @@ not apply; never reorder.
 7. *(optional)* **Data & persistence** — Prisma models/tables owned, target baseline owner and clean-database setup boundary. Include for
    any package with a Prisma adapter.
 8. *(optional)* **Runtime & config** — required env/config and defaults. Include for apps and infra.
-9. *(optional)* **Status** — a banner for blue-frozen / deletion-boundary packages, stated first.
-10. **See also** — parent index + siblings.
+9. **See also** — parent index + siblings.
 
 **Bare minimum** (even the smallest stub): the titled purpose line (1), the breadcrumb (2), the
 public surface (4), a boundary/dependency one-liner (5–6), and See-also (10).
@@ -128,7 +127,7 @@ own no runtime flow, skip the diagram or use a one-line "used by" sketch.
 >
 > **In this flow:** `channel-targets` · the runtime action path
 > *(in a real README each other-package name is a relative link to its own README, e.g.*
-> `[channel-targets](../../agents/channel-targets/main/README.md)`*)*
+> `[channel-targets](../../libs/backend/server/agents/channel-targets/main/README.md)`*)*
 >
 > To decide, it confirms three things line up: the proof the agent gives that it really is who it
 > claims, the permission slip issued earlier, and what the system can independently see about the

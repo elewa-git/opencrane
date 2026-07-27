@@ -23,7 +23,7 @@ function ok(description: string, schema: object)
   };
 }
 
-/** OpenAPI path fragments owned by model routing and independent of legacy Skill rows. */
+/** OpenAPI path fragments owned by model routing. */
 export const _ModelRoutingOpenapiPaths = {
   "/model-routing/defaults": {
     get: {

@@ -68,7 +68,7 @@ function _ToShare(row: { id: string; payloadType: string; payloadId: string; sub
 /**
  * Inter-user sharing router (S4). A user shares an entitlement they themselves hold with
  * another user or group; the share is an `Allow` Grant on the recipient, which the
- * recipient's openclaw Tenant then inherits through the contract compiler (S4a). Sharing is
+ * recipient's user identity then resolves through the grant compiler. Sharing is
  * **least-privilege bounded**: the caller may only share a payload for which their own
  * compiled grants resolve to `Allow` — there is no privilege escalation. The sharer is
  * recorded (`Grant.sharedBy`) so they can list and revoke only their own shares.

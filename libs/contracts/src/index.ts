@@ -24,7 +24,6 @@ export {
   type ClusterTenantResources,
   type ClusterTenantStatus,
 } from "./cluster-tenant.types.js";
-export { _BuildOrgDomain, _BuildOrgWildcard, _BuildUserHost } from "./domain-topology.types.js";
 export { GrantAccess, GrantScope, GrantSubjectType, type Grant } from "./grant.types.js";
 export { type Group } from "./group.types.js";
 export { MemoryMutationKind, type MemoryDatasetIdentity, type MemoryFactReference, type MemoryMutationRequest, type MemoryProvenance } from "./memory.types.js";

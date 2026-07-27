@@ -84,4 +84,4 @@ behaviour is exercised by the `test:sql` target (`tests/memory-authority.sql`).
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [conversations](../../conversations/main/README.md) · [runs](../../runs/main/README.md) · [personas](../../personas/main/README.md)
+- Related authorities: [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [runs](../../../execution/runs/main/README.md) · [personas](../../personas/main/README.md)

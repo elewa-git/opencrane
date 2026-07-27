@@ -14,20 +14,10 @@
     "cognee",
     "litellm",
     "obot-gateway-controller",
-    "openclaw-tenant-runtime",
     "obot-dynamic-mcp-child",
     "postgres-database",
     "postgres-pooler",
     "postgres-database-privileges",
-    "ingress-nginx-controller",
-    "ingress-nginx-admission-create",
-    "ingress-nginx-admission-patch",
-    "external-dns-controller",
-    "cert-manager-controller",
-    "cert-manager-cainjector",
-    "cert-manager-webhook",
-    "cert-manager-startup-api-check",
-    "fleet-platform-external",
     "langfuse-web",
     "langfuse-worker",
     "langfuse-clickhouse",
@@ -41,6 +31,7 @@
       "setValues": [],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
@@ -52,7 +43,6 @@
       "id": "all-supported-pod-profiles",
       "setValues": [
         "langfuse.inCluster.enabled=true",
-        "controlPlaneSpa.enabled=true",
         "channelProxy.enabled=true",
         "artifactPreprocessor.enabled=true",
         "artifactPreprocessor.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -83,21 +73,6 @@
     }
   ],
   "runtimeConstructs": [
-    {
-      "path": "libs/server/_infra/api/src/k8s-apply.ts",
-      "anchor": "client.create(resource)",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
-    {
-      "path": "libs/server/_infra/api/src/k8s-apply.ts",
-      "anchor": "client.createNamespacedDeployment({ namespace, body: resource })",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
-    {
-      "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts",
-      "anchor": "kind: \"Deployment\"",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
     {
       "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
       "anchor": "kind: \"Job\"",
@@ -130,21 +105,6 @@
     },
     {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx",
-      "workloadIds": ["ingress-nginx-controller", "ingress-nginx-admission-create", "ingress-nginx-admission-patch"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local ed_args=(upgrade --install external-dns external-dns/external-dns",
-      "workloadIds": ["external-dns-controller"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local cm_args=(upgrade --install cert-manager jetstack/cert-manager",
-      "workloadIds": ["cert-manager-controller", "cert-manager-cainjector", "cert-manager-webhook", "cert-manager-startup-api-check"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
       "anchor": "helm_args=(upgrade --install \"$RELEASE\" \"$CHART_DIR\"",
       "workloadIds": [
         "opencrane-server",
@@ -166,11 +126,6 @@
     }
   ],
   "nonProducingRuntimeMatches": [
-    {
-      "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/destroy/tenant-cleanup.ts",
-      "anchor": "kind: \"Deployment\"",
-      "reason": "Deletion selector only; it cannot create a pod."
-    },
     {
       "path": "libs/backend/agents/runtime/controller/src/agent-controller.ts",
       "anchor": "kind: \"Job\"",
@@ -196,14 +151,7 @@
       { "member": "langfuse/charts/valkey/templates/primary/application.yaml", "status": "rendered", "workloadId": "langfuse-valkey-primary" }
     ]
   },
-  "nonWorkloadDynamicKinds": [
-    {
-      "path": "apps/_infra/deploy-k8s/templates/external-secrets-store.yaml",
-      "anchor": "kind: {{ eq (include \"opencrane.namespacedSecretStore\" .) \"true\" | ternary \"SecretStore\" \"ClusterSecretStore\" }}",
-      "resolvedKinds": ["SecretStore", "ClusterSecretStore"],
-      "reason": "This exact computed kind selects an External Secrets store scope and cannot create pods."
-    }
-  ],
+  "nonWorkloadDynamicKinds": [],
   "forbiddenPaths": [
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-certificate.yaml",
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-deployment.yaml",
@@ -344,16 +292,6 @@
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.obot.deployment\"" }
     },
     {
-      "id": "openclaw-tenant-runtime",
-      "podClass": "Deployment/openclaw-tenant-per-user",
-      "image": "ghcr.io/elewa-git/opencrane-openclaw-tenant:<immutable-tag>",
-      "owner": "apps/feat-openclaw-tenant",
-      "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts", "anchor": "kind: \"Deployment\"" },
-      "classification": "delete",
-      "reason": "Delete this OpenClaw runtime in the personal-agent runtime replacement slice."
-    },
-    {
       "id": "obot-dynamic-mcp-child",
       "podClass": "Obot-created Pod-or-Deployment/MCP-server",
       "image": "Obot catalog selected image",
@@ -392,96 +330,6 @@
       "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" },
       "classification": "survivor",
       "reason": "apps/postgres owns the pinned CNPG Pooler contract that bounds every application connection before PostgreSQL."
-    },
-    {
-      "id": "ingress-nginx-controller",
-      "podClass": "Deployment/ingress-nginx-controller",
-      "image": "unpinned ingress-nginx chart output",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO ingress."
-    },
-    {
-      "id": "ingress-nginx-admission-create",
-      "podClass": "Job/ingress-nginx-admission-create",
-      "image": "unpinned ingress-nginx chart hook image",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed ingress hook with the bundled ingress installer."
-    },
-    {
-      "id": "ingress-nginx-admission-patch",
-      "podClass": "Job/ingress-nginx-admission-patch",
-      "image": "unpinned ingress-nginx chart hook image",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed ingress hook with the bundled ingress installer."
-    },
-    {
-      "id": "external-dns-controller",
-      "podClass": "Deployment/external-dns",
-      "image": "unpinned external-dns chart output",
-      "owner": "external-substrate/external-dns",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install external-dns external-dns/external-dns" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO DNS management."
-    },
-    {
-      "id": "cert-manager-controller",
-      "podClass": "Deployment/cert-manager-controller",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO certificate management."
-    },
-    {
-      "id": "cert-manager-cainjector",
-      "podClass": "Deployment/cert-manager-cainjector",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed CA injector with the bundled certificate installer."
-    },
-    {
-      "id": "cert-manager-webhook",
-      "podClass": "Deployment/cert-manager-webhook",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed webhook with the bundled certificate installer."
-    },
-    {
-      "id": "cert-manager-startup-api-check",
-      "podClass": "Job/cert-manager-startupapicheck",
-      "image": "unpinned jetstack/cert-manager chart hook image",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed startup check with the bundled certificate installer."
-    },
-    {
-      "id": "fleet-platform-external",
-      "podClass": "Deployment/fleet-platform",
-      "image": "WeOwnAI-owned fleet release image",
-      "owner": "external-repository/elewa-git-WeOwnAI",
-      "localOwner": false,
-      "source": { "type": "external", "repository": "elewa-git/WeOwnAI", "contract": "fleet-platform release", "localEvidence": "README.md", "anchor": "The fleet operator" },
-      "classification": "survivor",
-      "reason": "The fleet app is intentionally absent from this repository; local render coverage is not claimed."
     },
     {
       "id": "langfuse-web",

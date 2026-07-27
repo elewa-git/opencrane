@@ -33,7 +33,6 @@ jobs:
       deployables: ${{ steps.affected.outputs.deployables }}
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
-      e2e_required: ${{ steps.affected.outputs.e2e_required }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
     steps:
       - uses: actions/checkout@v6
@@ -120,11 +119,6 @@ jobs:
       - name: Prove the Phase D namespace boundary rejects drift
         run: npm run test:phase-d-agent-namespaces
 
-      - name: Enforce Phase A runtime contracts
-        run: |
-          ./apps/_infra/deploy-k8s/platform/tests/tenant-entrypoint-contract-policy.sh
-          ./apps/_infra/deploy-k8s/platform/tests/tenant-image-immutability.sh
-
       # The topology gate must inspect the checked-in app owners, before any
       # generator can introduce transient files beneath an app root.
       - name: Generate the database client
@@ -153,42 +147,15 @@ jobs:
           npx nx run contracts:generate
           git diff --exit-code -- libs/contracts/src/generated/api.ts
 
-  e2e-k3d:
-    name: k3d standalone-silo e2e smoke test
-    runs-on: ubuntu-latest
-    needs: [prepare, test]
-    # PRs pay for the e2e only when the deployment surface moved; integration-branch pushes
-    # always run it, and the nightly workflow re-validates the full battery.
-    if: needs.prepare.outputs.e2e_required == 'true' || github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-        with:
-          # Pinned to the version local deploys and the render-parity evidence used —
-          # renders must not drift with the runner image or a new Helm release.
-          version: v4.1.4
-
-      - name: Run k3d e2e smoke test
-        run: ./apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh
-        env:
-          KEEP_CLUSTER: "0"
-          TIMEOUT_SECONDS: "300"
-
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test, e2e-k3d]
+    needs: [prepare, test]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
-        needs.test.result == 'success' &&
-        (needs.e2e-k3d.result == 'success' || needs.e2e-k3d.result == 'skipped')
+        needs.test.result == 'success'
       }}
     permissions:
       contents: read

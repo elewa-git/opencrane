@@ -22,7 +22,7 @@ export const _WELCOME_TOUR_CARDS: readonly WelcomeTourCard[] =
 	{
 		id: "workspace",
 		title: "Your workspace",
-		description: "Chat with your private OpenClaw assistant. Conversations and threads live here, isolated to your account."
+		description: "Chat with your governed personal agent. Conversations and runs remain owner-bound to your account."
 	},
 	{
 		id: "context",

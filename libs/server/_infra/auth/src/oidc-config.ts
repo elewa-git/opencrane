@@ -70,15 +70,13 @@ export function ___LoadOidcAuthConfig(): OidcAuthConfig
 /**
  * Read the platform-operator group allowlist that drives `isPlatformOperator`.
  *
- * Sourced from `OPENCRANE_PLATFORM_OPERATOR_GROUPS` (comma-separated, lowercased);
- * the legacy `OIDC_PLATFORM_OPERATOR_GROUPS` is honoured as a fallback. Empty when
- * neither is set, so the derived `isPlatformOperator` is false for everyone until a
+ * Sourced from `OPENCRANE_PLATFORM_OPERATOR_GROUPS` (comma-separated, lowercased).
+ * Empty when unset, so the derived `isPlatformOperator` is false for everyone until a
  * platform admin opts in — fail-closed, since OpenCrane has no role model yet.
  */
 function _readPlatformOperatorGroups(): string[]
 {
-  const primary = _readCsv(process.env.OPENCRANE_PLATFORM_OPERATOR_GROUPS);
-  return primary.length ? primary : _readCsv(process.env.OIDC_PLATFORM_OPERATOR_GROUPS);
+  return _readCsv(process.env.OPENCRANE_PLATFORM_OPERATOR_GROUPS);
 }
 
 /**

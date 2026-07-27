@@ -10,7 +10,7 @@ inside a running service and why.
 
 It owns two joined-up concerns:
 
-- **Logging** — `___CreateLogger` builds a fleet-consistent logger (built on `pino`, the Node logging library) that writes
+- **Logging** — `___CreateLogger` builds a platform-consistent logger (built on `pino`, the Node logging library) that writes
   JSON, one object per line, to standard output; the container platform collects stdout, so the lib
   never opens a file or a socket. `___BindConsole` redirects stray `console.*` calls into the same
   structured stream so nothing escapes as unstructured text.

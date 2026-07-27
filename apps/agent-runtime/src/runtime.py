@@ -18,12 +18,10 @@ checkpoint is written to the per-attempt scratch as a resume optimisation subord
 server state. Because the loop is configured with zero implicit retries, any executor failure
 surfaces as a real ``run.failed`` terminal report rather than a silent acknowledgement.
 
-Phase E slice 4 lands the offline conformance harness and fault-injection matrix that exercise this
-shell against independently authored neutral-event fixtures and a LiteLLM-compatible test double; both
-run in CI with no network (``tests/test_conformance.py`` and ``tests/test_fault_matrix.py``). The
-live-LiteLLM conformance leg, the adoption evidence for the pinned Pydantic AI package (ADR 0010), and
-the corresponding OpenClaw loop deletion remain gated on #337 and are not exercised by this offline
-slice.
+The offline conformance harness and fault-injection matrix exercise this shell against independently
+authored neutral-event fixtures and a LiteLLM-compatible test double; both run in CI with no network
+(``tests/test_conformance.py`` and ``tests/test_fault_matrix.py``). Live LiteLLM conformance remains a
+qualification test for the target runtime, but no superseded runtime is retained behind that test.
 """
 
 import asyncio
@@ -84,8 +82,8 @@ def _trace(operation: str, **attributes: object):
     package; when it is absent (this offline slice) the block is a transparent no-op while the
     structured wide-event logs still carry the run/attempt evidence. Attributes carry only non-secret
     run coordinates — never a token, key, or model content. Real OTLP export to the in-cluster
-    collector is part of the #337 live/adoption wiring, mirroring ``@opencrane/observability`` on the
-    TypeScript control plane.
+    collector is enabled by the deployed runtime environment, mirroring
+    ``@opencrane/observability`` on the TypeScript control plane.
     """
     try:
         from opentelemetry import trace
@@ -535,10 +533,9 @@ def _pydantic_ai_event_source(compiled_input: dict[str, object], cancel_event: t
     from ``steering_buffer`` ONLY immediately before issuing a model request node (the sole safe
     pre-model boundary), never mid-request or mid-tool.
 
-    The offline conformance harness drives this executor through an injected neutral-event source; the
-    live-LiteLLM leg that drives real Pydantic AI over the proxy is env-guarded and gated on #337
-    (ADR 0010 adoption), not run here. Offline tests inject a fake event source instead of importing
-    Pydantic AI.
+    The offline conformance harness drives this executor through an injected neutral-event source.
+    Live LiteLLM qualification is environment-guarded; offline tests inject a fake event source
+    instead of importing Pydantic AI.
     """
     from pydantic_ai import Agent
 
@@ -587,8 +584,8 @@ def _pydantic_ai_resume_source(run_id: str, attempt: int, input_generation: obje
     results so the loop continues from the approval boundary; the runtime authors no approval and
     chooses no terminal state. Steering and cancellation are observed exactly as in the start driver.
 
-    The offline conformance harness drives resume through an injected fake resume source; the
-    live-LiteLLM resume leg is env-guarded and gated on #337 (ADR 0010 adoption), not run here.
+    The offline conformance harness drives resume through an injected fake resume source. Live
+    LiteLLM resume qualification is environment-guarded and runs separately.
     """
     from pydantic_ai import Agent
 

@@ -1,6 +1,6 @@
 # @opencrane/backend/agents/execution/protocol — runtime protocol authority
 
-> [backend](../../../../README.md) › [agents](../../../README.md) › [execution](../../README.md) › protocol
+> [backend](../../../README.md) › [agents](../../README.md) › [execution](../README.md) › protocol
 
 ## What it owns
 
@@ -38,7 +38,7 @@ child-to-parent notification. A runtime cannot cancel itself; cancellation remai
  run / conversation / action authorities decide and persist the proposal
 ```
 
-**In this flow:** [execution/runs](../runs/main/README.md) · [personal/conversations](../../personal/conversations/main/README.md)
+**In this flow:** [execution/runs](../runs/main/README.md) · [conversation replay](../../../server/agents/conversation-replay/main/README.md)
 
 Invariant: an executor can only propose a result for a command OpenCrane already accepted for the
 exact current attempt and lease. The `cancelling` run state closes command, event-candidate, and
@@ -94,8 +94,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 ## Boundary
 
 The runtime opens its authenticated stream outward to OpenCrane. This library makes stale,
-replayed, expired, mismatched, cancelling, and terminal frames fail closed; it does not create an
-OpenClaw compatibility path, a cancellation side authority, or a second durable event authority.
+replayed, expired, mismatched, cancelling, and terminal frames fail closed. It owns admission only;
+cancellation and durable events remain with their canonical authorities.
 
 ## Data & persistence
 
@@ -123,12 +123,12 @@ Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent and 
 contracts, authorization, the integration authority, the three injected transport-port scopes, and
 shared contracts. The integration edge is read-only: it resolves and rechecks the revision's live
 custody reference before the Obot invocation port executes an allowed tool. The package never imports
-an app, a concrete transport adapter, a model driver, or a legacy runtime package.
+an app, a concrete transport adapter, or a model driver.
 
 ## See also
 
 - Parent group: [execution](../README.md)
-- Wire contract: [`@opencrane/contracts`](../../../../../contracts/README.md)
+- Wire contract: [`@opencrane/contracts`](../../../../contracts/README.md)
 - Run authority: [execution/runs](../runs/main/README.md)
 Personal and managed runtime Pods share the same protocol but not an identity plane: every tagged
 snapshot is re-bound to its deployment-owned namespace, projected-token audience, and ServiceAccount

@@ -10,7 +10,6 @@ import "./session.types.js";
 
 export { ___LoadOidcAuthConfig } from "./oidc-config.js";
 export type { OidcAuthConfig } from "./oidc-config.types.js";
-export { _IsDevAuthMode } from "./auth-mode.js";
 export { _RequestHost } from "./request-host.js";
 export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./identity-claims.js";
 export {

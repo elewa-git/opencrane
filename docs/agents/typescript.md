@@ -360,8 +360,8 @@ Each workspace package should have a single barrel export file at the package ro
 
 ```typescript
 // CORRECT
-import { TenantOperator } from "@opencrane/fleet-operator";
+import { __CreateRuntimeController } from "@opencrane/backend/agents/runtime/controller";
 
 // WRONG
-import { TenantOperator } from "@opencrane/fleet-operator/src/tenant-operator";
+import { __CreateRuntimeController } from "../../../libs/backend/agents/runtime/controller/src/core/runtime-controller";
 ```

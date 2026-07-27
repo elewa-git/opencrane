@@ -1,4 +1,4 @@
-# managed-agent-runtime — the managed (central) agent runtime plane
+# managed-agent-runtime — the managed-agent Job plane
 
 > [apps](../README.md) › managed-agent-runtime
 
@@ -6,7 +6,7 @@
 
 ## What it owns
 
-This app owns the **deployment surface for managed (central) agents** — the agents an organisation
+This app owns the **deployment surface for managed agents** — the agents an organisation
 runs on a schedule, distinct from a person's personal agent. It is **chart/deploy-only**: a
 dedicated Kubernetes namespace, one bounded connector-scoped ServiceAccount, and the
 default-deny + port-bounded explicit-egress NetworkPolicies that fence that namespace. A
@@ -19,7 +19,7 @@ The two planes differ only in identity and reach: the launcher projects a *manag
 (the `managed-agent-runtime-*` ServiceAccount class and the distinct
 `opencrane-managed-agent-runtime` projected-token audience), and this namespace's NetworkPolicies
 allow egress only to the control-plane stream and the channel-proxy / artifact / memory-gateway /
-LiteLLM / Obot services a central agent needs — everything else is denied.
+LiteLLM / Obot services a managed run needs — everything else is denied.
 
 ```text
  managed AgentService + schedule (control API)
@@ -55,9 +55,7 @@ ServiceAccount, ResourceQuota, default-deny NetworkPolicy, and explicit egress N
 ## Boundary
 
 Deployment-only. It creates no Pods on its own; the control-plane launcher creates managed-runtime
-Jobs into this namespace under the managed identity profile. The live-Obot end-to-end proof of a
-managed agent (and the subsequent deletion of the bespoke `apps/feat-central-agents` harvester) is a
-NAMED LATER GATE tracked under [#337](https://github.com/elewa-git/opencrane/issues/337).
+Jobs into this namespace under the managed identity profile.
 
 ## See also
 

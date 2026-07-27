@@ -14,10 +14,6 @@
 // Domain path imports
 // ---------------------------------------------------------------------------
 
-import { _AwarenessOpenapiPaths } from "@opencrane/backend/server/reporting/awareness";
-import { _TenantsOpenapiPaths } from "@opencrane/backend/server/tenancy/tenants";
-import { _ProjectionOpenapiPaths } from "@opencrane/backend/server/tenancy/projection";
-import { _PoliciesOpenapiPaths } from "@opencrane/backend/server/iam/policies";
 import { _McpOpenapiPaths } from "@opencrane/backend/server/gateways/mcp";
 import { _GrantsOpenapiPaths } from "@opencrane/backend/server/iam/grants";
 import { _GroupsOpenapiPaths } from "@opencrane/backend/server/iam/groups";
@@ -26,7 +22,6 @@ import { _ProvidersOpenapiPaths } from "@opencrane/backend/server/gateways/provi
 import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/model-routing";
 import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
 import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
-import { _MetricsOpenapiPaths } from "@opencrane/backend/server/reporting/metrics";
 import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
 import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
 import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
@@ -137,34 +132,6 @@ function created(description: string, schema: object)
 // ---------------------------------------------------------------------------
 // Shared schema references
 // ---------------------------------------------------------------------------
-
-const TenantSchema = {
-  type: "object" as const,
-  properties: {
-    name: { type: "string" },
-    displayName: { type: "string" },
-    email: { type: "string", format: "email" },
-    subject: { type: "string", description: "IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants." },
-    team: { type: "string" },
-    clusterTenantRef: { type: "string", description: "Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path." },
-    phase: { type: "string" },
-    ingressHost: { type: "string" },
-    createdAt: { type: "string", format: "date-time" },
-  },
-};
-
-const PolicySchema = {
-  type: "object" as const,
-  properties: {
-    name: { type: "string" },
-    namespace: { type: "string" },
-    tenantSelector: { type: "object" },
-    domains: { type: "array", items: { type: "string" } },
-    egressRules: { type: "array", items: { type: "object" } },
-    mcpServers: { type: "object" },
-    createdAt: { type: "string", format: "date-time" },
-  },
-};
 
 const McpServerCredentialSchema = {
   type: "object" as const,
@@ -521,38 +488,6 @@ const ModelRoutingDefaultWriteSchema = {
   },
 };
 
-const DatasetMembershipSchema = {
-  type: "object" as const,
-  required: ["org", "team", "department", "project", "personal"],
-  properties: {
-    org: { type: "array", items: { type: "string" } },
-    team: { type: "array", items: { type: "string" } },
-    department: { type: "array", items: { type: "string" } },
-    project: { type: "array", items: { type: "string" } },
-    personal: { type: "array", items: { type: "string" } },
-  },
-};
-
-const EffectiveContractSchema = {
-  type: "object" as const,
-  properties: {
-    contractId: { type: "string" },
-    contractVersion: { type: "string" },
-    tenant: { type: "object" },
-    awareness: { type: "object" },
-    mcp: { type: "object" },
-  },
-};
-
-const ProjectionDriftSchema = {
-  type: "object" as const,
-  properties: {
-    tenant: { type: "object" },
-    accessPolicy: { type: "object" },
-    evaluatedAt: { type: "string", format: "date-time" },
-    alertFired: { type: "boolean" },
-  },
-};
 
 const BudgetSchema = {
   type: "object" as const,
@@ -622,8 +557,6 @@ export const spec = {
     schemas: {
       Error: ErrorEnvelope,
       Pagination,
-      Tenant: TenantSchema,
-      Policy: PolicySchema,
       McpServer: McpServerSchema,
       McpServerCredential: McpServerCredentialSchema,
       McpCatalogServer: McpCatalogServerSchema,
@@ -676,20 +609,6 @@ export const spec = {
       AutoRoutingConfig: AutoRoutingConfigSchema,
       ModelRoutingDefault: ModelRoutingDefaultSchema,
       ModelRoutingDefaultWrite: ModelRoutingDefaultWriteSchema,
-      AwarenessRollout: {
-        type: "object",
-        properties: {
-          targetVersion: { type: "string" },
-          stableVersion: { type: "string" },
-          waves: { type: "array", items: { type: "string" } },
-          promotedWaves: { type: "array", items: { type: "string" } },
-          shadowMode: { type: "boolean" },
-          nextWave: { type: "string", nullable: true },
-        },
-      },
-      DatasetMembership: DatasetMembershipSchema,
-      EffectiveContract: EffectiveContractSchema,
-      ProjectionDrift: ProjectionDriftSchema,
       Budget: BudgetSchema,
       ThirdPartySource: ThirdPartySourceSchema,
       TokenUsage: TokenUsageSchema,
@@ -818,10 +737,6 @@ export const spec = {
   },
   paths: {
     // Compose domain paths in order — order matters for JSON serialization byte-identity
-    ..._AwarenessOpenapiPaths,
-    ..._TenantsOpenapiPaths,
-    ..._ProjectionOpenapiPaths,
-    ..._PoliciesOpenapiPaths,
     ..._McpOpenapiPaths,
     ..._GrantsOpenapiPaths,
     ..._GroupsOpenapiPaths,
@@ -830,7 +745,6 @@ export const spec = {
     ..._ModelRoutingOpenapiPaths,
     ..._SpendOpenapiPaths,
     ..._AuditOpenapiPaths,
-    ..._MetricsOpenapiPaths,
     ..._AuthorizationOpenapiPaths,
     ..._RuntimeSteeringOpenapiPaths,
     ..._SelfRunStatusOpenapiPaths,
@@ -900,39 +814,6 @@ export const spec = {
                 },
               },
             },
-          }),
-        },
-      },
-    },
-
-    "/auth/pod-token": {
-      post: {
-        operationId: "getPodConnection",
-        summary: "Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session",
-        description: "Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised against the live session through `/auth/gateway-resolve`, so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.",
-        tags: ["Auth"],
-        security: [],
-        responses: {
-          200: ok("The caller's OpenClaw pod gateway connection coordinates.", {
-            type: "object",
-            required: ["gatewayUrl", "tenant"],
-            properties: {
-              gatewayUrl: { type: "string", description: "The `wss://` OpenClaw gateway URL to open." },
-              tenant: { type: "string", description: "Resolved tenant (pod) name." },
-              ingressHost: { type: "string", description: "Host the tenant's OpenClaw pod is reachable at, when known." },
-            },
-          }),
-          401: ok("No authenticated session.", {
-            type: "object",
-            properties: { error: { type: "string" }, code: { type: "string" } },
-          }),
-          403: ok("Session has no email claim, or no tenant is provisioned for it.", {
-            type: "object",
-            properties: { error: { type: "string" }, code: { type: "string" } },
-          }),
-          409: ok("The tenant pod has no gateway URL / ingress host yet.", {
-            type: "object",
-            properties: { error: { type: "string" }, code: { type: "string" } },
           }),
         },
       },

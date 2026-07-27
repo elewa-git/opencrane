@@ -54,11 +54,11 @@ function _decide(
   });
 }
 
-/** Prisma stub whose tenant.findMany echoes a configurable row set. */
-function _prismaWith(rows: { clusterTenantRef: string | null }[]): { prisma: PrismaClient; findMany: ReturnType<typeof vi.fn> }
+/** Prisma stub whose orgMembership.findMany echoes a configurable row set. */
+function _prismaWith(rows: { clusterTenant: string }[]): { prisma: PrismaClient; findMany: ReturnType<typeof vi.fn> }
 {
   const findMany = vi.fn().mockResolvedValue(rows);
-  return { prisma: { tenant: { findMany } } as unknown as PrismaClient, findMany };
+  return { prisma: { orgMembership: { findMany } } as unknown as PrismaClient, findMany };
 }
 
 describe("_ClusterTenantScopeGuard — silo-scoped mutation authz (AIR.0b)", function _suite()
@@ -86,7 +86,7 @@ describe("_ClusterTenantScopeGuard — silo-scoped mutation authz (AIR.0b)", fun
 
   it("denies a non-operator a global-scoped mutation", async function _global()
   {
-    const { prisma, findMany } = _prismaWith([{ clusterTenantRef: "acme" }]);
+    const { prisma, findMany } = _prismaWith([{ clusterTenant: "acme" }]);
     const result = await _decide(prisma, { scope: "global", clusterTenant: null }, _req(_human("owner@acme.io")));
 
     expect(result.decision).toBe("deny");
@@ -97,12 +97,12 @@ describe("_ClusterTenantScopeGuard — silo-scoped mutation authz (AIR.0b)", fun
   {
     // Owner of several silos: an unscoped email match would be ambiguous, but the guard scopes the
     // lookup to the targeted silo so exactly the owned row matches.
-    const { prisma, findMany } = _prismaWith([{ clusterTenantRef: "elewa-be" }]);
+    const { prisma, findMany } = _prismaWith([{ clusterTenant: "elewa-be" }]);
     const result = await _decide(prisma, { scope: "clusterTenant", clusterTenant: "elewa-be" }, _req(_human("jente@elewa.ke")));
 
     expect(result.decision).toBe("allow");
     expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { email: { equals: "jente@elewa.ke", mode: "insensitive" }, clusterTenantRef: "elewa-be" },
+      where: { subject: "u-1", clusterTenant: "elewa-be" },
       take: 2,
     }));
   });

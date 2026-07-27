@@ -14,8 +14,7 @@ owns the client-side stores and caches that hold fetched data.
 | --- | --- |
 | [`core`](./core/README.md) | Frontend state-layer hub. |
 | [`gateways`](./gateways/README.md) | Gateway dependency-injection composition root. |
-| [`conversation/adapter`](./conversation/adapter/README.md) | Live conversation gateway. |
-| [`conversation/cache`](./conversation/cache/README.md) | IndexedDB conversation cache. |
+| [`conversation/adapter`](./conversation/adapter/README.md) | Canonical conversation replay reader. |
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
@@ -24,7 +23,6 @@ owns the client-side stores and caches that hold fetched data.
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
 | [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |
 | [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
-| [`tenant/adapter`](./tenant/adapter/README.md) | Live tenant gateway and store. |
 | [`utils/storage`](./utils/storage/README.md) | Safe browser-storage seam. |
 
 ```
@@ -33,8 +31,8 @@ owns the client-side stores and caches that hold fetched data.
       ▼
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
-      ├─ conversation/{adapter,cache,render}   assets/adapter   skills/adapter
-      ├─ mcp/adapter   provider-key/adapter   settings/adapter   tenant/adapter
+      ├─ conversation/{adapter,ag-ui,cache,render}   assets/adapter   skills/adapter
+      ├─ mcp/adapter   provider-key/adapter   settings/adapter
       └─ onboarding   utils/storage
       ▼ HTTP
    backend API

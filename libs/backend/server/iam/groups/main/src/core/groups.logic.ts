@@ -20,7 +20,6 @@ const _PRISMA_GRANT_SCOPE = {
 /** Typed Prisma subject values used during runtime lookups. */
 const _PRISMA_GRANT_SUBJECT_TYPE = {
   Group: "Group",
-  Tenant: "Tenant",
   User: "User",
 } as const;
 
@@ -30,8 +29,8 @@ const _PRISMA_GRANT_ACCESS = {
   Deny: "Deny",
 } as const;
 
-/** Typed Prisma payload value used for awareness grants persisted in Prisma. */
-const _PRISMA_AWARENESS_PAYLOAD_TYPE = "Awareness";
+/** Typed Prisma payload value used for MCP server grants persisted in Prisma. */
+const _PRISMA_MCP_SERVER_PAYLOAD_TYPE = "McpServer";
 
 /** Route scope lookup keyed by Prisma enum values. */
 const _ROUTE_SCOPE_BY_PRISMA_SCOPE = {
@@ -53,14 +52,12 @@ const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 /** Route subject lookup keyed by Prisma enum values. */
 const _ROUTE_SUBJECT_BY_PRISMA_SUBJECT = {
   [_PRISMA_GRANT_SUBJECT_TYPE.Group]: GrantSubjectType.Group,
-  [_PRISMA_GRANT_SUBJECT_TYPE.Tenant]: GrantSubjectType.Tenant,
   [_PRISMA_GRANT_SUBJECT_TYPE.User]: GrantSubjectType.User,
 };
 
 /** Prisma subject lookup keyed by route values. */
 const _PRISMA_SUBJECT_BY_ROUTE_SUBJECT = {
   group: _PRISMA_GRANT_SUBJECT_TYPE.Group,
-  tenant: _PRISMA_GRANT_SUBJECT_TYPE.Tenant,
   user: _PRISMA_GRANT_SUBJECT_TYPE.User,
 };
 
@@ -183,7 +180,7 @@ export async function updateGroup(prisma: PrismaClient, groupId: string, body: P
 
   // 3. Replace awareness grants wholesale because the route treats the submitted grant list as authoritative.
   await prisma.grant.deleteMany({
-    where: { groupId, payloadType: _PRISMA_AWARENESS_PAYLOAD_TYPE },
+    where: { groupId, payloadType: _PRISMA_MCP_SERVER_PAYLOAD_TYPE },
   });
   if (body.grants && body.grants.length > 0)
   {
@@ -218,7 +215,7 @@ export async function deleteGroup(prisma: PrismaClient, groupId: string): Promis
 {
   // 1. Remove linked awareness grants first so there are no dangling compiler rows after the group disappears.
   await prisma.grant.deleteMany({
-    where: { groupId, payloadType: _PRISMA_AWARENESS_PAYLOAD_TYPE },
+    where: { groupId, payloadType: _PRISMA_MCP_SERVER_PAYLOAD_TYPE },
   });
 
   // 2. Delete the group once linked grants are gone so the mutation stays referentially clean.
@@ -324,8 +321,8 @@ function _MapGrantResponse(grant: _GroupWithGrantsRow["grants"][number]): GroupG
 function _MapGrantCreateInput(groupId: string, grant: GroupGrantInput): Prisma.GrantCreateManyInput
 {
   return {
-    payloadType: _PRISMA_AWARENESS_PAYLOAD_TYPE,
-    payloadId: grant.payloadId ?? "awareness/default",
+    payloadType: _PRISMA_MCP_SERVER_PAYLOAD_TYPE,
+    payloadId: grant.payloadId ?? "mcp-server/default",
     scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[grant.scope] as Prisma.GrantCreateManyInput["scope"],
     subjectType: _PRISMA_SUBJECT_BY_ROUTE_SUBJECT[grant.subjectType] as Prisma.GrantCreateManyInput["subjectType"],
     subjectId: _ResolveGrantSubjectId(grant),

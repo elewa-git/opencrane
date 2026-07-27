@@ -23,7 +23,7 @@ new model into its own input snapshot; a run already in progress keeps its old s
                                       └──── applies only to the next RunInputSnapshot ────► next run
 ```
 
-**In this flow:** [conversations](../../conversations/main/README.md) · [personas](../../personas/main/README.md) · [execution inputs](../../../execution/inputs/main/README.md)
+**In this flow:** [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [personas](../../personas/main/README.md) · [execution inputs](../../../execution/inputs/main/README.md)
 
 The invariant is that a proposal is durable provenance, not mutable session state. Missing or
 cross-owner source coordinates fail closed. This foundation does not itself apply a patch; its
@@ -77,4 +77,4 @@ and later decision/application coordinates; it is not a replacement persona or a
 ## See also
 
 - Parent index: [personal](../../README.md)
-- Related state: [personas](../../personas/main/README.md) · [conversations](../../conversations/main/README.md)
+- Related state: [personas](../../personas/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md)

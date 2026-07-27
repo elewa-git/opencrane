@@ -4,12 +4,11 @@ import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 /**
  * The packaged "harvesting" central agent, expressed entirely as OpenCrane definition data.
  *
- * This proves the bespoke `apps/feat-central-agents` harvester is expressible as a managed
- * AgentService: a Draft `AgentRevision` referencing an Obot MCP integration assignment (an opaque
+ * The harvester is a managed AgentService: a Draft `AgentRevision` referencing an Obot MCP
+ * integration assignment (an opaque
  * custody reference + an allow-list of the exact tools it may call), Cognee dataset/scope targets as
- * revision-scope attachments, and a recurring schedule. It authors DATA only — no live Obot call, no
- * run. The live-Obot end-to-end proof (and the subsequent deletion of `apps/feat-central-agents`,
- * its bespoke connector, and the `HarvestingCursor` table) is a NAMED LATER GATE tracked under #337.
+ * revision-scope attachments, and a recurring schedule. It authors data only; execution remains
+ * under the governed managed-run path.
  */
 /** The Obot MCP tools the harvester is permitted to invoke; nothing outside this list is callable. */
 export const HARVESTING_ALLOWED_TOOLS: readonly string[] = ["slack.listChannels", "slack.getChannelHistory"];

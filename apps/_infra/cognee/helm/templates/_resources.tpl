@@ -13,7 +13,7 @@
 
        SILO role (S6 / ADR 0002): every ClusterTenant gets its OWN dedicated Cognee, so
        the bundled workload IS rendered here — but the Service is release-prefixed
-       (`<fullname>-cognee`, B5) instead of the legacy unprefixed `cognee` singleton, so
+       (`<fullname>-cognee`, B5), so
        two silos never collide. The opencrane-ui's COGNEE_ENDPOINT is derived from this
        release-prefixed Service by the `opencrane.cogneeEndpoint` helper.
 

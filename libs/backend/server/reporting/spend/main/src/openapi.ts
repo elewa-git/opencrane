@@ -84,42 +84,4 @@ export const _SpendOpenapiPaths = {
     },
   },
 
-  "/ai-budget/{tenantName}/spend": {
-    get: {
-      operationId: "getTenantSpend",
-      summary: "Get current spend and budget state for a tenant",
-      tags: ["AI Budget"],
-      parameters: [{ name: "tenantName", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Spend data.", { $ref: "#/components/schemas/Budget" }),
-        502: upstreamError(),
-      },
-    },
-  },
-
-  "/ai-budget/{tenantName}/litellm-key": {
-    get: {
-      operationId: "getTenantLiteLlmKey",
-      summary: "Get LiteLLM virtual key metadata for a tenant (never the key value)",
-      tags: ["AI Budget"],
-      parameters: [{ name: "tenantName", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("LiteLLM key metadata.", { type: "object" }),
-        404: notFound("No LiteLLM key for this tenant."),
-      },
-    },
-  },
-
-  "/ai-budget/{tenantName}/litellm-key/revoke": {
-    post: {
-      operationId: "revokeTenantLiteLlmKey",
-      summary: "Revoke the LiteLLM virtual key for a tenant",
-      tags: ["AI Budget"],
-      parameters: [{ name: "tenantName", in: "path", required: true, schema: { type: "string" } }],
-      responses: {
-        200: ok("Key revoked.", { type: "object" }),
-        502: upstreamError(),
-      },
-    },
-  },
 };

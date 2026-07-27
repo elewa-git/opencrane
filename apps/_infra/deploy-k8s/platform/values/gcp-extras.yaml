@@ -9,26 +9,12 @@
 #   helm install opencrane apps/fleet-platform \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml \
-#     --set hosting.gcp.projectId=YOUR_PROJECT_ID
+#     --set externalSecrets.gcp.projectId=YOUR_PROJECT_ID
 #
 # This overlay enables:
-#   - GCS-backed tenant storage (GCS Fuse CSI + Workload Identity)
 #   - GCE ingress (Google Cloud Load Balancer) instead of the default ingress
 #   - External Secrets backed by GCP Secret Manager
 #   - Cloud Logging / Error Reporting integration
-
-# GCS-backed tenant storage via Workload Identity + GCS Fuse CSI driver.
-hosting:
-  provider: gcp
-  gcp:
-    # projectId MUST be supplied (e.g. --set hosting.gcp.projectId=...).
-    projectId: "replace-with-gcp-project-id"
-    bucketPrefix: opencrane
-    csiDriver: gcsfuse.csi.storage.gke.io
-    # Optional GKE cluster location for the External Secrets Workload Identity
-    # binding. Leave empty to let external-secrets discover it from the metadata
-    # server (region or zone, e.g. "europe-west1").
-    clusterLocation: ""
 
 # Google Cloud Load Balancer ingress.
 ingress:
@@ -39,6 +25,11 @@ ingress:
 externalSecrets:
   enabled: true
   provider: gcp-secret-manager
+  gcp:
+    # projectId MUST be supplied for the Secret Manager store.
+    projectId: "replace-with-gcp-project-id"
+    # Optional GKE region or zone; empty lets External Secrets discover it.
+    clusterLocation: ""
 
 # Cloud-native observability (GKE auto-ingests structured logs).
 observability:

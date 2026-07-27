@@ -22,8 +22,6 @@
 ---
 {{ include "opencrane.server.service" . }}
 ---
-{{ include "opencrane.server.gatewayProxyService" . }}
----
 {{ include "opencrane.server.networkPolicy" . }}
 ---
 {{ include "opencrane.ui.deployment" . }}

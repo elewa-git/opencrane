@@ -13,9 +13,10 @@ Kubernetes underneath.
 
 ## Connect to the management API
 
-The management UI signs operators in through OIDC and makes same-origin requests with its
-session cookie. There is no static API token to copy into a terminal. Use the UI for operator
-actions and the [interactive API reference](/reference/api) to inspect the same contract.
+Operators sign in through OIDC and use the resulting session with the management API.
+There is no static API token to copy into a terminal. The current UI does not expose every
+management surface, so use an authenticated client and retrieve its contract through the
+[API reference](/reference/api).
 
 For TypeScript integrations, use the generated client described in the
 [Contracts SDK](/integrators/contracts-sdk).
@@ -23,5 +24,5 @@ For TypeScript integrations, use the generated client described in the
 ## Then
 
 1. **[Set up your domain](/guide/dns)** — point DNS at OpenCrane and turn on HTTPS.
-2. **[Create your first assistant](/guide/first-tenant)**.
-3. **[Connect to OpenClaw](/guide/connect)**.
+2. **[Create your first agent](/guide/first-agent)**.
+3. Start a governed run through the agent-services API and inspect its durable status.

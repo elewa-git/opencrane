@@ -1,64 +1,63 @@
 # How OpenCrane works
 
-A five-minute, plain-English tour of the main ideas. Once these click, the rest of
-the docs are easy.
+OpenCrane separates **durable control** from **replaceable execution**. The control plane
+decides what may run; bounded runtime Jobs perform only the admitted work.
 
 ## The big picture
 
-You run one **control plane** — the place you manage everything from (through the
-OpenCrane UI or management API). From there you hand out assistants to people and
-decide what each one can do.
-
-```
-        You ──▶  Control plane  ──▶  an assistant for each person
-                 (manage it all)      Alice · Bob · Carla · …
+```text
+person or schedule
+       │
+       ▼
+OpenCrane control plane
+       │  admit and freeze
+       ▼
+AgentRun + RunInputSnapshot
+       │  assign one attempt
+       ▼
+bounded runtime Job ──► ordered events and governed actions
 ```
 
 ## The words you'll see
 
-### Employee assistant
-A private AI coworker for **one person**. It has its own secure storage and its own
-web address, and it acts on that person's behalf. (In the API this is called
-a *tenant* — same thing.) → [Create one](/guide/first-tenant)
+### Agent service
+
+A governed agent definition. Its immutable revisions bind the persona, model posture,
+skills and other configuration used by a run. → [Create one](/guide/first-agent)
+
+### Agent run
+
+The durable record of one invocation. It carries its state, attempt number, frozen input
+digest, lineage, cost and terminal reason. A retry creates another attempt on the same run.
 
 ### Skill
-A **reusable ability** you can give to assistants — like installing an app. A skill
-might be "write a sales follow-up" or "review a pull request." You build a skill
-once and share it with whoever should have it. → [Agent skills](/guide/skills)
 
-### Tool (MCP)
-A **connection to another system** — Slack, Jira, your CRM — so an assistant can
-actually do things there, not just talk about them. These connections use a standard
-called **MCP** (Model Context Protocol), so "an MCP server" just means "one connected
-tool." → [Manage tools](/guide/tools)
+A reusable, versioned capability published through the skill catalogue.
+→ [Manage skills](/guide/skills)
 
-### Organizational knowledge
-Your company's information — from Slack, email, documents, tickets — gathered into a
-searchable index so assistants can answer with real, cited facts instead of guessing.
-→ [Connect knowledge](/guide/knowledge)
+### Tool
 
-### Scopes: how sharing works
-Everything you share has a **reach**: just one person, a project, a department, or
-the whole organization.
+An external action exposed through MCP or another governed executor. The runtime proposes
+the action; the control plane authorises and records it. → [Manage tools](/guide/tools)
 
-```
-personal  ▸  project  ▸  department  ▸  org
- (just me)   (a team)    (a division)   (everyone)
-```
+### Organisational knowledge
 
-You don't "create" a department like a folder — a scope is simply a label you attach
-to people, skills, and knowledge to decide how widely something is shared.
-→ [Organize your company](/guide/organize)
+Information retrieved from organisation-scoped and personal memory datasets, with provenance
+and access policy applied by the control plane. → [Connect knowledge](/guide/knowledge)
 
-### Access
-Nothing is shared by default. You **grant** access — per person, project, department,
-or org — to decide who can use which skills, tools, and knowledge.
-→ [Control access](/guide/permissions)
+### ClusterTenant
 
-## How it fits together
+The customer organisation and isolation boundary. It is not an individual assistant or user.
+→ [Organisation boundary](/operators/organisation-boundary)
 
-> You create an **assistant** for someone → grant it **access** to the **skills**,
-> **tools**, and **knowledge** appropriate for their **scope** → they sign in and get
-> to work. You set **budgets** and can review everything in the **audit log**.
+## What happens when work starts
 
-Ready? → **[Get OpenCrane running](/guide/getting-started)**
+1. OpenCrane authenticates the caller and resolves the organisation.
+2. It checks membership, grants, model posture and budget.
+3. It freezes accepted evidence into a `RunInputSnapshot`.
+4. The controller creates and releases the exact runtime Job for that attempt.
+5. The runtime streams normalised candidates back to OpenCrane.
+6. OpenCrane persists events before delivery and keeps tool execution under its own authority.
+7. A terminal outcome closes the run; the Job can disappear without losing the record.
+
+Ready? → [Install OpenCrane](/guide/getting-started)

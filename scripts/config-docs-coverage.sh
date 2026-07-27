@@ -12,11 +12,8 @@
 #   scripts/config-docs-coverage.sh --keys-only apps/_infra/deploy-k8s   # dump inventory
 #   scripts/config-docs-coverage.sh --strict         # exit 1 when gaps exist
 #
-# The fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150) — pass
-# --chart <path-to-checked-out-copy> to check it; it is no longer in the default list.
-#
-# A key counts as documented when its full dotted path (e.g. `gatewayProxy.
-# trustedProxies`) OR its final two segments appear anywhere in the docs
+# A key counts as documented when its full dotted path (for example
+# `agentController.claimLeaseSeconds`) or its final two segments appear anywhere in the docs
 # corpus (website/operators + website/guide + website/advanced). Heuristic on
 # purpose: false "documented" is possible, false "undocumented" is rare — so
 # the gap list is safe to act on.

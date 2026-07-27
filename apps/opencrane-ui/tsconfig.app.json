@@ -17,13 +17,7 @@
       "path": "../../libs/frontend/state/onboarding/tsconfig.lib.json"
     },
     {
-      "path": "../../libs/frontend/features/workspace/tsconfig.lib.json"
-    },
-    {
       "path": "../../libs/frontend/features/tools"
-    },
-    {
-      "path": "../../libs/frontend/features/customer-admin/tsconfig.lib.json"
     },
     {
       "path": "../../libs/frontend/features/welcome/tsconfig.lib.json"
@@ -36,12 +30,6 @@
     },
     {
       "path": "../../libs/frontend/state/utils/storage/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/frontend/state/tenant/adapter/tsconfig.lib.json"
-    },
-    {
-      "path": "../../libs/frontend/state/conversation/cache/tsconfig.lib.json"
     },
     {
       "path": "../../libs/frontend/state/core"

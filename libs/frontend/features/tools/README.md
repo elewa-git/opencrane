@@ -39,5 +39,5 @@ provider-key gateway and status).
 ## See also
 
 - Parent index: [features](../README.md)
-- Consumer: [features/workspace](../workspace/README.md)
+- Consumer: future workspace surface
 - Gateways: [state/mcp/adapter](../../state/mcp/adapter/README.md) · [state/provider-key/adapter](../../state/provider-key/adapter/README.md)

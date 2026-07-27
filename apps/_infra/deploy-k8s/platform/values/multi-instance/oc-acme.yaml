@@ -1,10 +1,7 @@
 # Reference values — OpenCrane instance "acme" (native multi-instance, single cluster).
 #
-# Install (CRDs are installed ONCE cluster-wide first — see docs/multi-instance.md).
-# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
-# paths below assume a checked-out copy of it.
-#   kubectl apply -f apps/fleet-platform/crds/
-#   helm install oc-acme apps/fleet-platform -n oc-acme --create-namespace --skip-crds \
+# Install the app-owned chart into an isolated namespace:
+#   helm install oc-acme apps/_infra/deploy-k8s -n oc-acme --create-namespace \
 #     -f apps/_infra/deploy-k8s/platform/values/multi-instance/oc-acme.yaml
 #
 # Pairs with oc-globex.yaml to demonstrate two strictly-isolated instances in one
@@ -17,16 +14,7 @@ multiInstance:
   # cross-instance default-deny NetworkPolicy are rendered for it.
   instanceNamespaces: [oc-acme]
   rbac: namespaced
-  # Fail closed: the operator refuses to start if WATCH_NAMESPACE is empty, so it
-  # can never reconcile oc-globex's Tenants.
-  requireWatchNamespace: true
   # Per-instance cert Issuer + SecretStore (no shared cluster-singleton).
-  certIssuer: namespaced
-  secretStore: namespaced
-
-fleetManager:
-  # Scope the watch to this instance's namespace only.
-  watchNamespace: oc-acme
 
 ingress:
   domain: acme.example.com

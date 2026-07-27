@@ -3,7 +3,6 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { ClusterTenantScopedResource } from "./cluster-tenant-scope.types.js";
 import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
-import { _IsDevAuthMode } from "@opencrane/server/_infra/auth";
 
 /**
  * Reusable authorization guard for mutations (POST/PUT/DELETE) on ClusterTenant-scoped
@@ -44,7 +43,7 @@ export function _ClusterTenantScopeGuard(
         return;
       }
 
-      // 2. Allowed (or open-auth fallthrough) → continue to the route handler.
+      // 2. Allowed → continue to the route handler.
       next();
     }).catch(next);
   };
@@ -66,12 +65,11 @@ async function _enforce(
 {
   const authUser = req.session?.authUser;
 
-  // 1. No established session. Honour the auth posture: under the dev-mode bypass (no OIDC, no env
-  //    token) allow it so a fresh local install / the OPEN dev backend isn't locked out; otherwise
-  //    FAIL CLOSED — a missing session in a real auth deployment must never reach a scoped mutation (AIR.0b).
+  // 1. No established session fails closed. Missing identity configuration cannot grant a
+  //    ClusterTenant-scoped mutation.
   if (!authUser)
   {
-    return _IsDevAuthMode() ? "allow" : "deny";
+    return "deny";
   }
 
   // 2. Platform operators may mutate any resource at any scope.
@@ -98,7 +96,7 @@ async function _enforce(
   //    silo. Scope the fail-closed lookup to that silo so a human who owns workspaces in more
   //    than one ClusterTenant is authorised for each (an unscoped email match would be ambiguous
   //    and deny them everywhere). A non-owner yields zero rows → null → deny.
-  const callerClusterTenant = await _ResolveCallerClusterTenant(prisma, authUser.email, resource.clusterTenant);
+  const callerClusterTenant = await _ResolveCallerClusterTenant(prisma, authUser.sub, resource.clusterTenant);
   if (callerClusterTenant && callerClusterTenant === resource.clusterTenant)
   {
     return "allow";

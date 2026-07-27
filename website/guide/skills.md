@@ -1,14 +1,13 @@
 # Agent skills
 
-A **skill** is a reusable ability you give to assistants — drafting a sales follow-up, reviewing
+A **skill** is a reusable ability you give to agents — drafting a sales follow-up, reviewing
 a pull request, summarising a support ticket. In OpenCrane a skill is a **versioned, reviewed,
 signed artifact**, not an executable snippet appended to someone's workspace: it can be shared
 across a team or the whole organisation without trusting mutable runtime-local files.
 
 ::: info Foundation in progress
 The ArtifactStore-backed publication authority is implemented, but the end-user catalogue,
-authoring, and sharing API and UI are not mounted yet. The retired bundle-registry endpoints are
-not a supported path.
+authoring, and sharing API and UI are not mounted yet.
 :::
 
 ## What a skill contains
@@ -45,8 +44,7 @@ Skills move from draft to shared ability through a governed pipeline:
 
 The implementation of the publication authority lives in
 [`libs/backend/server/agents/skills/main`](https://github.com/elewa-git/opencrane/blob/own-personal-ai-agent-setup/libs/backend/server/agents/skills/main).
-The public product workflow builds on that authority rather than restoring an OCI bundle
-registry or compatibility route.
+The public product workflow builds on that authority.
 
 Sharing follows the platform's scope model — personal, project, department, organisation — and
 promotion across scopes is an explicit review boundary: a skill drafted from a personal
@@ -82,7 +80,7 @@ When a skill demands more than instructions, execution crosses a real boundary:
 - A skill that needs **capabilities the agent shouldn't hold open**, **its own budget**, or a
   **lifetime beyond the conversation** runs as a [child run](/guide/child-runs) — its own
   identity, its own (smaller) capability set, its own audit trail.
-- **Tenant-authored Python never executes inside the conversational pod.** Trusted image-baked
+- **Organisation-authored Python never executes inside an agent runtime Job.** Trusted image-baked
   tools may run in-process, but user-authored code executes through an isolated tool Job with
   exactly the capability its declared requirements were reviewed against.
 

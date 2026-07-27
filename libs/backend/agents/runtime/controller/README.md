@@ -83,7 +83,7 @@ authority; Kubernetes remains an execution projection.
 
 Tagged `scope:agent-runtime-controller` and `layer:infra`; it may depend only on the runtime Job
 builder and shared contracts/observability. It never imports an app, OpenCrane-server infrastructure,
-Prisma, or the frozen OpenClaw controller.
+or Prisma.
 
 ## Runtime & config
 

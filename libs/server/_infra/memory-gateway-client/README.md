@@ -39,7 +39,7 @@ the gateway minted it; and a **fail-closed** default implementation,
 default ships until an authenticated memory-gateway transport is verified, so no code path can invent
 an empty recall or a fake write in the meantime.
 
-A central agent reads and writes shared knowledge scopes ONLY through this port (never Cognee
+A managed agent reads and writes shared knowledge scopes ONLY through this port (never Cognee
 directly), and every scoped write carries mandatory `MemoryProvenance` — the central-agent id, the
 revision, the run id, the timestamp, and the source reference. `__AssertMemoryProvenanceComplete`
 enforces this before any transport, so an unattributable record fails closed with
@@ -82,4 +82,4 @@ or app entrypoints.
 ## See also
 
 - Parent index: [_infra](../README.md) · [server libraries](../../README.md)
-- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md) · [tenant-hosting](../tenant-hosting/README.md) · [channel-proxy](../channel-proxy/README.md)
+- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md)

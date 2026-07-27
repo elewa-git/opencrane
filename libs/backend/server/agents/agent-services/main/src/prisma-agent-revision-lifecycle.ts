@@ -33,7 +33,6 @@ function _toPrismaSubjectType(value: DomainGrantSubjectType): GrantSubjectType
 	switch (value)
 	{
 		case "group": return GrantSubjectType.Group;
-		case "tenant": return GrantSubjectType.Tenant;
 		case "user": return GrantSubjectType.User;
 		default: throw new Error(`unknown subject type: ${value as string}`);
 	}

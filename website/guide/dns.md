@@ -1,56 +1,36 @@
 # Set up your domain
 
-Every organisation gets its own web address — `acme.opencrane.example.com`,
-`globex.opencrane.example.com`, and so on. All employees in an org use that single address.
-To make that work (with HTTPS), you point a domain at OpenCrane and let it handle
-certificates.
+Give the OpenCrane **organisation silo** one stable HTTPS host, such as
+`acme.opencrane.example.com`.
 
-You do this once.
+## Point DNS at the ingress
 
-## 1. Delegate your domain to OpenCrane's DNS zone
+Create an A, AAAA or CNAME record for the organisation host and point it at the cluster
+Ingress address. A wildcard record is optional when one DNS zone deliberately serves several
+organisation hosts.
 
-When OpenCrane manages your DNS (the default on GKE, via a Cloud DNS zone Terraform
-provisions), you do this **once** at your registrar: point your domain's **name servers**
-at the zone OpenCrane created — an **NS delegation**. After that, OpenCrane writes the
-records for you; you never touch individual records again.
-
-```
-# At your registrar, set the domain's NS records to the zone name servers
-# (Terraform prints them as the `dns_name_servers` output).
-opencrane.example.com.   NS   ns-cloud-a1.googledomains.com.
-opencrane.example.com.   NS   ns-cloud-a2.googledomains.com.   # …etc
+```text
+acme.opencrane.example.com  A  <ingress-address>
 ```
 
-The install-time records (the opencrane-api host, the apex, and the platform wildcard
-`*.opencrane.example.com` that lets every assistant appear at its own address instantly)
-are created in that zone for you. **Per-org records are written automatically at runtime**
-by the in-cluster **external-dns** controller, from the declarations OpenCrane's operator
-emits — so a new org's address resolves with zero manual DNS work.
+## Issue the certificate
 
-Not delegating? You can instead point an apex A record and a wildcard `*.<domain>` A
-record straight at the ingress IP at your own provider — but then per-org records and
-automatic HTTPS are your responsibility.
+Configure cert-manager or your certificate provider so the Ingress TLS Secret covers the
+exact organisation host. Keep DNS-provider credentials in a Kubernetes Secret and scope them
+to the required zone.
 
-## 2. Turn on automatic HTTPS
-
-OpenCrane issues a wildcard TLS certificate for you using Let's Encrypt. Because the
-certificate is a wildcard, it's validated through your DNS provider — so OpenCrane
-needs permission to create a temporary verification record. Configure it from the
-authenticated management UI. It sends the DNS configuration through the same-origin OIDC
-session rather than a reusable terminal token.
-
-The JSON body selects the provider and zone, gives Let's Encrypt a renewal email, and
-includes a provider token scoped to edit that zone. Build it from a protected file so
-the token does not land in shell history, and delete the request file afterwards.
-Certificates renew automatically;
-check the active issuer with authenticated `GET /api/v1/platform/dns`. The full schema
-is in [DNS configuration](/operators/dns-config#api-surface).
-
-::: tip Just testing locally?
-On a laptop install you can skip all of this — local mode doesn't need real DNS or
-public certificates.
+::: tip
+Runtime Jobs do not need DNS records. They initiate connections to the same-silo OpenCrane
+Service and have no public Ingress.
 :::
+
+## Verify
+
+Check that the host resolves, presents the expected certificate and serves
+`/api/v1/openapi.json`. The Ingress must not expose `/api/internal`.
+
+For operator details, see [DNS configuration](/operators/dns-config).
 
 ## Next
 
-Your domain is ready. → **[Create your first employee assistant](/guide/first-tenant)**
+→ [Create your first agent](/guide/first-agent)

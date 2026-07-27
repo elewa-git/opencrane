@@ -1,39 +1,38 @@
-# Connect organizational knowledge
+# Connect organisational knowledge
 
-::: tip What's organizational knowledge?
-Your company's own information — from Slack, email, documents, tickets — gathered
-into a searchable index. With it, an assistant answers from **real company facts,
-with citations**, instead of guessing.
+OpenCrane uses **Cognee-backed datasets** for durable memory and keeps access, provenance
+and dataset identity under control-plane governance.
+
+## Register sources and datasets
+
+Register the organisation's supported sources through the current API. The current UI does not
+expose knowledge management. Place content in datasets whose scope matches the intended
+audience: personal, project, department or organisation.
+
+## Grant access
+
+Grant both the acting subject and the agent service the required dataset capability. OpenCrane
+resolves those grants before admission and freezes the selected memory policy in the
+`RunInputSnapshot`.
+
+## During a run
+
+The runtime cannot select an arbitrary dataset. Memory actions pass through OpenCrane, which
+derives personal dataset identity from the verified silo, organisation and subject, then
+records provenance for durable facts.
+
+::: info
+The dataset and provenance authorities are present. The current server composition uses an
+unavailable memory-gateway transport, so runtime Cognee reads and writes fail closed until the
+authenticated transport is mounted.
 :::
 
-## How it works
-
-- OpenCrane runs **collectors** that continuously pull in knowledge from your systems
-  and organize it by [scope](/guide/organize) (personal, project, department, org).
-- During a conversation, an assistant **looks things up directly** and answers with
-  citations. OpenCrane never reads the conversation — it only decides which knowledge
-  an assistant is allowed to see.
-- What an assistant can reach is set by [access](/guide/permissions): a department's
-  documents only reach that department.
-
-## Keep every assistant consistent
-
-So every assistant behaves the same way when it looks things up — same rules for
-which sources to use, when to cite, and how fresh information must be — OpenCrane
-applies a shared set of rules across the fleet. You roll changes out gradually (to a
-few assistants first, then everyone) and can undo in one step. Inspect or change the
-rollout through the authenticated `/api/v1/awareness/rollout` endpoints; see
-[Awareness SLOs](/operators/awareness-slos) for the operational sequence.
-
-## Keep access boundaries consistent
-
-Knowledge access follows the assistant owner's authenticated identity, group
-membership, and dataset grants. Starting a new conversation never widens those
-rights; change them through the same [access controls](/guide/permissions) used for
-skills and tools.
+::: warning
+Do not use dataset names as the security boundary. Membership and grants decide access; a
+caller-provided dataset parameter cannot widen it.
+:::
 
 ## Going deeper
 
-How collection, datasets, and freshness work under the hood is in the
-[Retrieval & memory deep dive](/integrators/retrieval-memory). Health dashboards are
-in [Awareness SLOs](/operators/awareness-slos).
+See [Retrieval and memory](/integrators/retrieval-memory) for fact provenance, personal
+dataset binding and failure behaviour.

@@ -3,18 +3,17 @@
 - **Status:** Accepted; corrected 2026-07-16
 - **Date:** 2026-07-02
 - **Correction:** `#245` — separates Cilium security identity from optional SPIFFE/SPIRE identity
-- **Supersedes / superseded by:** supersedes the Linkerd substrate decision in
-  [ADR 0001](0001-cluster-tenant-virtual-network-isolation.md)
+- **Supersedes / superseded by:** supersedes the earlier Linkerd substrate decision retained in
+  version control
 - **Related:** [ADR 0002](0002-per-clustertenant-silo-architecture.md) ·
   [`docs/agents/architecture.md`](../agents/architecture.md) ·
   [`docs/agents/k8s.md`](../agents/k8s.md)
 
 ## Context
 
-ADR 0001 selected Linkerd over Cilium while the platform still needed a portable standard
-`NetworkPolicy` floor. The later platform direction selected Cilium as the enforcing CNI for the
-target architecture because it can enforce that floor while adding identity-aware L3/L4 policy,
-L7 policy, and FQDN egress.
+The earlier substrate decision selected Linkerd while the platform still needed a portable standard
+`NetworkPolicy` floor. The target platform instead uses Cilium as the enforcing CNI because it can
+enforce that floor while adding identity-aware L3/L4 policy, L7 policy, and FQDN egress.
 
 The original version of this ADR incorrectly described Cilium identity and SPIFFE/SPIRE identity as
 one substrate. They are different mechanisms:
@@ -60,12 +59,10 @@ mutual authentication beyond the projected-token and Cilium-policy baseline. Tha
 its own compatibility, failure-mode, rotation, observability, and operational gate. A future SVID
 must not be treated as interchangeable with a Cilium identity or as business authorization.
 
-### Linkerd is not a target dependency
+### Cilium is the supported policy substrate
 
-Linkerd is obsolete under this decision. New work adds no Linkerd dependency, and the slice that
-establishes the Cilium/default-deny target deletes the superseded Linkerd configuration, tests, and
-documentation. Version control preserves the prior implementation; no runtime compatibility path
-is retained.
+The supported platform uses Cilium plus the standard `NetworkPolicy` floor. Linkerd is not part of
+the runtime, deployment, or compatibility contract.
 
 ## Alternatives considered
 
@@ -85,6 +82,6 @@ is retained.
 - Target-cluster qualification must prove Cilium agent/operator readiness and live allow/deny
   enforcement before deployment; policy application is not best effort.
 - Target cluster choices must support the required Cilium mode. Superseded network-policy and mesh
-  configuration is deleted when the target substrate lands.
+  configuration is not supported.
 - SPIRE/SVID work no longer blocks the Cilium baseline and cannot be smuggled in as an assumed
   synonym for Cilium identity.

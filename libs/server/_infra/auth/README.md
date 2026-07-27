@@ -61,4 +61,4 @@ Tagged `scope:auth` (`layer:infra`): it may depend only on `scope:auth`, `scope:
 ## See also
 
 - Parent index: [_infra](../README.md) · [server libraries](../../README.md)
-- Siblings: [http](../http/README.md) · [api](../api/README.md) · [tenant-hosting](../tenant-hosting/README.md) · [channel-proxy](../channel-proxy/README.md) · [obot-custody](../obot-custody/README.md)
+- Siblings: [http](../http/README.md) · [api](../api/README.md) · [obot-custody](../obot-custody/README.md)

@@ -19,8 +19,8 @@ The backend that serves its APIs is [`apps/opencrane`](../opencrane/README.md) (
 this app only renders screens and calls that server.
 
 It composes the frontend feature and state libraries under `libs/frontend/*` — the route table
-lazy-loads a feature per screen (welcome/first-run, the customer-admin console, the MCP tool-admin
-console — MCP is the Model Context Protocol for connecting tools — and the workspace shell). Two beats
+lazy-loads the onboarding and MCP tool-administration screens. MCP is the Model Context Protocol for
+connecting tools. Two beats
 define what it *is* as a deployable:
 
 1. **The served asset** — a static bundle plus a hardened nginx config, so a browser can load it.
@@ -44,17 +44,16 @@ define what it *is* as a deployable:
 **Trust posture.** The nginx here serves the static SPA and nothing else — there is deliberately no
 `proxy_pass`. The `/api` and `/gateway` paths are routed to the backend by the silo chart's Ingress, so
 the SPA and the API share one origin without this container ever proxying. Inside the app, the platform
-surface is pinned to `"org"`: capabilities derive only from the org-admin claim, so a platform-operator
-claim grants nothing here. Change detection is zoneless (no zone.js is bundled), and swappable data
-gateways select mock (dev) or live (prod) from one environment flag. If the backend is unreachable the
-app degrades to its sign-in/no-tenant screens rather than exposing unauthorised actions.
+surface is pinned to `"org"`: capabilities derive only from the organisation-admin claim. Change
+detection is zoneless (no zone.js is bundled), and production data gateways always use the live API.
+If the backend is unreachable the app refuses authenticated actions.
 
 ## Public surface
 
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
-Route table `src/app/app.routes.ts`: `login`, `no-tenant`, `welcome` (first-run onboarding),
-`customer-admin`, `admin` (MCP tool admin), and `""` (the workspace shell); guarded by
-`OperatorAccessGuard` (authenticated + tenant present) and `FirstRunGuard`.
+Route table `src/app/app.routes.ts`: `login`, `welcome` (onboarding), and `admin` (MCP tool
+administration). The root route redirects to onboarding; administrative routes use
+`OperatorAccessGuard`.
 
 ## Boundary
 

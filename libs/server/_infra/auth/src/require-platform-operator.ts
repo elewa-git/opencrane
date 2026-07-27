@@ -1,7 +1,5 @@
 import type { RequestHandler } from "express";
 
-import { _IsDevAuthMode } from "./auth-mode.js";
-
 /**
  * Authorization guard restricting a route to the PLATFORM OPERATOR — the fleet-wide
  * superadmin (env-seeded via `OPENCRANE_PLATFORM_OPERATOR_GROUPS` / seed email). This is
@@ -12,10 +10,8 @@ import { _IsDevAuthMode } from "./auth-mode.js";
  * IAM-first: the decision is derived purely from the caller's IdP-verified session
  * (`session.authUser.isPlatformOperator`), never from request input.
  *
- * Posture, mirroring `_RequireOrgAdmin` / `_IsDevAuthMode`:
- *   1. No established session — FAIL OPEN under dev mode (no OIDC and no
- *      OIDC); FAIL CLOSED otherwise (403) — a real deployment must never
- *      let an unauthenticated or token-only caller reach a superadmin action.
+ * Posture:
+ *   1. No established session — fail closed (403).
  *   2. Session present — allow iff `isPlatformOperator`; else 403.
  *
  * TODO (S5): `isPlatformOperator` is the config-driven stopgap until OpenCrane has a role
@@ -25,19 +21,14 @@ import { _IsDevAuthMode } from "./auth-mode.js";
  */
 export function _RequirePlatformOperator(): RequestHandler
 {
-  /** Express handler: allow the verified platform operator (or dev-mode bypass), else 403. */
+  /** Express handler: allow the verified platform operator, else 403. */
   return function _platformOperatorHandler(req, res, next)
   {
     const authUser = req.session?.authUser;
 
-    // 1. No session — honour the auth posture: dev-mode opens the bypass, real auth denies.
+    // 1. No session is never an authority grant.
     if (!authUser)
     {
-      if (_IsDevAuthMode())
-      {
-        next();
-        return;
-      }
       _deny(res);
       return;
     }

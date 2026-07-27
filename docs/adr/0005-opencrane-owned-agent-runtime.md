@@ -1,74 +1,49 @@
 # ADR 0005 — OpenCrane-owned agent runtime
 
-- **Status:** Accepted; amended 2026-07-18 by [ADR 0007](0007-direct-target-refactor.md); the
-  TypeScript-toolkit clause and Gate L4 framing superseded 2026-07-21 by [ADR 0010](0010-language-neutral-agent-runtime.md)
-  (language-neutral runtime). The end-to-end OpenCrane ownership decision below otherwise stands.
+- **Status:** Accepted; runtime-language clause superseded by
+  [ADR 0010](0010-language-neutral-agent-runtime.md)
 - **Date:** 2026-07-16
-- **Task:** `#245` — Phase A decision record
-- **Supersedes / superseded by:** supersedes the 2026-06-19 decision to retain OpenClaw as the
-  platform runtime
-- **Amendment:** the accepted 2026-07-16 text made the frozen OpenClaw image a behavioral oracle
-  and its trajectories the bake-off fixtures. ADR 0007 retired that migration posture; the
-  consequences below reflect the amended direct-refactor form (original in git history)
-- **Related:** [`personal-agent-platform-architecture.md`](../design/personal-agent-platform-architecture.md) ·
-  [`openclaw-agent-loop-replacement-plan.md`](../design/openclaw-agent-loop-replacement-plan.md)
+- **Task:** `#245`
+- **Related:** [platform architecture](../design/personal-agent-platform-architecture.md) ·
+  [ADR 0008](0008-target-agent-contracts-and-workload-identity.md)
 
 ## Context
 
-The 2026-06-19 direction retained OpenClaw because it already supplied the personal-agent gateway,
-session, transcript, compaction, tool-loop, workspace, channel, and plugin behavior. The product
-roadmap has since pivoted: a person's assistant is the primary product and the front door to company
-agents, artifacts, memory, skills, approvals, schedules, and tools.
-
-OpenCrane already owns, or must own, the surrounding authority: OIDC and channel ingress, tenant and
-run identity, authorization, transcript/event durability, persona, memory policy, MCP grants,
-artifacts, skills, budgets, scheduling, workload isolation, approvals, retry, and audit. Keeping
-OpenClaw as a permanent peer would preserve two runtime contracts, two transcript/session models,
-and a large translation surface.
-
-The trigger for revisiting the June decision has therefore fired: **roadmap divergence caused by the
-personal-agent product pivot**.
+OpenCrane governs identity, authorization, run input, ordered events, approvals, budgets, artifacts,
+memory, scheduling, cancellation, retry, and audit. Allowing a model-loop framework or runtime
+workload to own parallel sessions, transcripts, tool policy, or recovery state would create two
+authorities for the same run.
 
 ## Decision
 
-OpenCrane will own the personal and managed-agent runtime end to end:
+OpenCrane owns the personal and managed-agent runtime end to end.
 
-- OpenCrane owns canonical `Thread`, `Message`, `Run`, ordered `RunEvent`, approval, transcript,
-  context/compaction, retry, cancellation, budgets, identity, memory, and tool policy.
-- One exact-pinned TypeScript toolkit drives only the bounded model/tool loop behind an
-  OpenCrane-owned `AgentLoopDriver` contract.
-- Python remains available for isolated authoring/tool Jobs; it is not a second conversational
-  runtime.
-- The target runtime contains no OpenClaw package, protocol, config renderer, transcript mirror,
-  workspace compatibility, plugin hook, or reverse bridge.
-- The OpenClaw image, installer, runtime, protocols, schemas, configuration, and deployment wiring
-  are deletion targets. They are not dependencies, fixture sources, behavior oracles, or
-  conformance baselines for the replacement.
+- The control plane owns canonical `Thread`, `AgentRun`, immutable `RunInputSnapshot`, ordered
+  `RunEvent`, approval, retry, cancellation, budget, and terminal state.
+- The runtime workload owns only the bounded model/tool loop behind the
+  `AgentRuntimeProtocol v1` boundary.
+- Framework classes, messages, identifiers, events, and checkpoints do not cross into public or
+  durable OpenCrane contracts.
+- External actions are candidates until the control plane authorizes, executes, and persists them.
+- The runtime has no direct Postgres access, Kubernetes RBAC, provider master secret, or authority to
+  append canonical events.
+- Recovery reconstructs an attempt from canonical state rather than workload-local files.
 
-The TypeScript toolkit is deliberately **not** selected by this ADR. Gate L4 runs
-`@openai/agents` and `ai`/`ToolLoopAgent` against the same independently authored target fixtures and
-real target LiteLLM matrix. It records one winner and exact dependency pins; the losing production
-adapter is removed.
+ADR 0010 replaces the original language-specific implementation clause. Runtime ownership remains
+unchanged.
 
 ## Alternatives considered
 
-- **Retain a lean OpenClaw runtime permanently** — rejected. It shortens the runtime build but keeps
-  the config/protocol/plugin/workspace/session compatibility tax indefinitely.
-- **Run OpenClaw and an owned toolkit as permanent peers** — rejected. It creates two authorities
-  and two operating matrices instead of replacing the obsolete runtime.
-- **Embed a second loop inside OpenClaw** — rejected. It adds a loop without removing the larger
-  OpenClaw runtime shell.
-- **Select a toolkit in the architecture ADR** — rejected. Provider, approval-resume,
-  cancellation, retry, event, and telemetry behavior must be measured by Gate L4.
+- **Let the loop framework own the transcript and session** — rejected because recovery and audit
+  would depend on framework-specific state.
+- **Run a shared worker with direct database and provider access** — rejected because it combines
+  orchestration, credential, and execution authorities.
+- **Allow the runtime to execute tools directly** — rejected because grants, approvals,
+  idempotency, and durable evidence must be enforced server-side.
 
 ## Consequences
 
-- OpenCrane assumes production responsibility for session correctness, reconnect, cancellation,
-  compaction, recovery, approval resume, and run persistence.
-- Runtime fixtures are authored from the accepted product contract, not observed or derived from
-  OpenClaw behavior.
-- CI forbids OpenClaw and retired-domain imports in replacement code from the first implementation
-  PR.
-- Each replacement slice deletes the OpenClaw installer, runtime, protocol, workspace,
-  pairing/device, transcript compatibility, tests, configuration, and deployment wiring it makes
-  obsolete.
+- OpenCrane assumes responsibility for reconnect, cancellation, approval resume, ordering, retry,
+  compaction, and terminal-state correctness.
+- Runtime implementations remain replaceable behind a language-neutral protocol.
+- Tests must prove the workload cannot become a second durable or authorization authority.

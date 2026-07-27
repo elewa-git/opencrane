@@ -107,8 +107,7 @@ Owns the `AgentService`, `AgentRevision` (with `parentRevisionId`/`sourceRevisio
 lineage and a required `ModelDefinition` reference), `AgentRevisionScopeAttachment` (revision-scoped `{ scope, subjectType, subjectId }` reusing
 the `GrantScope`/`GrantSubjectType` enums), `AgentRevisionSkillAssignment`,
 `AgentRevisionIntegrationAssignment`, and `AgentServiceSchedule` (cron, timezone, overlap policy,
-enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`. The retired
-single-owner shape (`ownerScope`/`ownerSubjectId`/`AgentServiceOwnerScope`) is dropped.
+enabled, catch-up window) models in `apps/opencrane/prisma/schema/agent-services.prisma`.
 
 ## See also
 

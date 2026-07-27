@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { _IsDevAuthMode, _RequireOrgAdmin } from "@opencrane/server/_infra/auth";
+import { _RequireOrgAdmin } from "@opencrane/server/_infra/auth";
 import { approveServer, clearCredential, connectOauth, disconnectOauth, getAccessPolicy, getDirectory, installServer, listAllServers, listEntitledCatalog, listInstalled, publishServer, rejectServer, setAccessPolicy, setCredential, setServerEnabled, uninstallServer } from "../core/mcp-operator.logic.js";
 import type { McpOperatorCaller } from "../core/mcp-operator.logic.types.js";
 import type { McpAccessPolicyRequest, McpEnabledRequest, McpInstallRequest } from "./mcp-operator.types.js";
@@ -193,9 +193,8 @@ export function mcpOperatorRouter(prisma: PrismaClient): Router
 /**
  * Resolve the calling user's identity + entitlement context from the session.
  *
- * Mirrors the platform's fail-open dev posture: an established session uses the
- * IdP-verified identity; an unauthenticated caller under dev-auth-mode is treated
- * as dev-open (full catalogue), and otherwise as an unknown caller (fail closed).
+ * An established session uses the IdP-verified identity. An unauthenticated caller
+ * receives an empty fail-closed context and never a synthetic catalogue grant.
  *
  * @param req - Incoming request carrying the optional auth session.
  * @returns The resolved caller context.
@@ -209,13 +208,7 @@ function _ResolveCaller(req: Request): McpOperatorCaller
     return { userId: authUser.sub ?? authUser.email ?? "unknown", groups: authUser.groups ?? [], devOpen: false };
   }
 
-  // 2. No session under dev-auth-mode — open the catalogue so local dev isn't locked out.
-  if (_IsDevAuthMode())
-  {
-    return { userId: "dev-user", groups: [], devOpen: true };
-  }
-
-  // 3. No session under real auth — fail closed (empty groups, not dev-open).
+  // 2. No session fails closed (empty groups, not dev-open).
   return { userId: "unknown", groups: [], devOpen: false };
 }
 

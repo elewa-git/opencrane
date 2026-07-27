@@ -123,10 +123,8 @@ resume, kills the active task on a positive cancel signal, absorbs steering at p
 boundaries, and writes an encrypted, version-tagged, replaceable local checkpoint subordinate to
 canonical server state. The controller creates or exact-adopts the suspended Job, releases the durable
 assignment, and registers the unique first Pod. The offline conformance harness and fault-injection
-matrix (`tests/test_conformance.py`, `tests/test_fault_matrix.py`) are built and CI-runnable; the
-live-LiteLLM conformance run over the pinned `pydantic-ai` package, the driver adoption evidence, and
-the corresponding OpenClaw loop deletion remain gated on
-[#337](https://github.com/elewa-git/opencrane/issues/337) (ADR 0010) and are not exercised offline.
+matrix (`tests/test_conformance.py`, `tests/test_fault_matrix.py`) are built and CI-runnable. The
+same conformance contract is used for live LiteLLM qualification.
 
 ## See also
 

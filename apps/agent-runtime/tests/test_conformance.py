@@ -5,10 +5,9 @@ neutral-event fixtures fed through a mock model loop that stands in for the boun
 over the per-silo LiteLLM proxy. Every fixture is written here from the protocol contract; none is
 derived from any transcript, and the harness imports no model framework and reaches no network.
 
-The live-LiteLLM conformance leg (driving the real, pinned ``pydantic-ai`` package against a live
-proxy) is the ADR 0010 adoption gate tracked by #337. It is explicitly guarded below and skipped
-offline; it is NEVER asserted as passing here. Passing this offline harness is a precondition for the
-live leg, not evidence of adoption.
+The live-LiteLLM conformance leg drives the pinned ``pydantic-ai`` package against a live proxy.
+It is explicitly environment-guarded and skipped offline; this suite does not claim that live
+qualification passed.
 
 Dimensions covered: streaming + usage, fragmented tool-call argument reassembly, tool ordering,
 malformed calls, slow progress, approvals (external action + resume), restart (checkpoint round-trip),
@@ -306,18 +305,18 @@ class ConformanceTelemetryTests(unittest.TestCase):
 
 
 class ConformanceLiveLiteLlmLegTests(unittest.TestCase):
-    """The live-LiteLLM conformance leg — GATED on #337, skipped offline, never asserted passing here.
+    """Run the live-LiteLLM conformance preflight only in an explicitly enabled environment.
 
     This leg drives the real pinned ``pydantic-ai`` package over a LiteLLM-compatible endpoint. It runs
-    only in the #337 adoption/conformance environment (both the framework installed and the endpoint
-    configured); offline it is skipped and contributes no PASS. Adoption is recorded by #337, not here.
+    only when both the framework and endpoint are configured; offline it is skipped and contributes
+    no live qualification evidence.
     """
 
     @unittest.skipUnless(
         importlib.util.find_spec("pydantic_ai") is not None and os.environ.get("OPENCRANE_RUNTIME_LIVE_CONFORMANCE") == "1",
-        "live-LiteLLM conformance is the #337 adoption gate; it is skipped unless the framework is installed and OPENCRANE_RUNTIME_LIVE_CONFORMANCE=1",
+        "live-LiteLLM conformance requires the framework and OPENCRANE_RUNTIME_LIVE_CONFORMANCE=1",
     )
-    def test_live_litellm_conformance_is_gated(self) -> None:  # pragma: no cover - #337 adoption env only
+    def test_live_litellm_conformance_is_enabled(self) -> None:  # pragma: no cover - live environment only
         """When explicitly enabled, the pinned driver symbols resolve for the live conformance run."""
         from pydantic_ai import Agent  # noqa: F401
         from pydantic_ai.models.openai import OpenAIModel  # noqa: F401

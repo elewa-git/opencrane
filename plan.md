@@ -8,8 +8,7 @@
 ## Decision record (2026-07-18)
 
 The [personal-agent platform architecture](docs/design/personal-agent-platform-architecture.md) is
-the target, refined by the
-[OpenClaw loop investigation](docs/design/openclaw-agent-loop-replacement-plan.md):
+the target:
 
 1. **Product:** OpenCrane owns Thread, Message, Run, RunEvent, approvals, transcript, compaction,
    retries, budgets, identity, memory, artifacts, and tool policy. The runtime is a replaceable
@@ -20,9 +19,7 @@ the target, refined by the
    obsolete schema, protocol, app, bridge, token path, database assumption, configuration switch,
    test, deployment unit, and document as its replacement becomes ready. Do not preserve, transform,
    or bridge existing OpenCrane state; build only the target product path. Historical transition
-   proposals are rejected. The
-   [direct-refactor plan](docs/design/personal-agent-platform-direct-refactor-plan.md) documents the
-   target-state build.
+   proposals are rejected.
 3. **Sequencing:** Phase A deletion debt and Phase B monorepo normalization are complete. Build the
    target foundations and fresh provisioning next; then the runtime and AgentService planes; then
    product surfaces; finally qualify the complete product and verify zero legacy residue.
@@ -37,9 +34,8 @@ the target, refined by the
 
 Toolkit selection remains evidence-driven: the offline Phase E conformance harness, immutable
 managed run admission and tagged personal/managed input contract, fault-injection matrix,
-controller, and runtime boundaries are built and CI-runnable. The
-[Phase E heavy-qualification runbook](docs/operators/phase-e-heavy-qualification.md) now starts with
-the live PostgreSQL, Obot, Cognee, and LiteLLM legs gated on
+controller, and runtime boundaries are built and CI-runnable. Live PostgreSQL, Obot, Cognee, and
+LiteLLM qualification remains gated on
 [#337](https://github.com/elewa-git/opencrane/issues/337)
 (→ [#246](https://github.com/elewa-git/opencrane/issues/246)); only passing evidence adopts the
 exact-pinned driver and permits deletion of the replaced live path.
@@ -54,8 +50,6 @@ requirements.
 
 ## Program — personal-agent platform
 
-The executable phase detail is in the
-[direct target-state refactor plan](docs/design/personal-agent-platform-direct-refactor-plan.md).
 Issues are cut when a phase opens. Each phase ends with architecture, reaper, validation, and
 independent-review gates before its PR is merged.
 
@@ -129,10 +123,9 @@ the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP, memory, and sandbox execution transports are ports
 with fail-closed stubs wired only in the composition root. The offline conformance harness and
-fault-injection matrix ARE built and CI-runnable (runtime protocol/reliability, attempt-scoped
-credential rejection, observability evidence); still gated on
-[#337](https://github.com/elewa-git/opencrane/issues/337) are the live-LiteLLM conformance leg,
-driver adoption evidence, and OpenClaw loop deletion — none of which has happened. The remaining
+fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
+credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
+evidence remain gated on [#337](https://github.com/elewa-git/opencrane/issues/337). The remaining
 E1/E2 product capabilities below are also incomplete.
 
 **Runtime lane** (→ [#246](https://github.com/elewa-git/opencrane/issues/246)): implement
@@ -167,10 +160,9 @@ memory-gateway scoped read/write with mandatory provenance, the attach-authority
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
 tested), and the first packaged central-agent DEFINITION (the harvester expressed as a managed
 `AgentService` + schedule + Obot MCP assignment, Obot stubbed). NOT done — a NAMED LATER GATE:
-**the harvesting-central-agent live-Obot proof**, which blocks the reaper deletion of
-`apps/feat-central-agents`, its bespoke Slack connector, and the `HarvestingCursor` table; tracked
-under [#337](https://github.com/elewa-git/opencrane/issues/337). Until that proof lands,
-`apps/feat-central-agents` and `HarvestingCursor` stay in place untouched.
+**the harvesting-central-agent live-Obot proof**, tracked under
+[#337](https://github.com/elewa-git/opencrane/issues/337), qualifies the target managed-agent
+definition against a live integration.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.

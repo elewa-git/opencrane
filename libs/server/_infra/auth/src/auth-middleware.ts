@@ -9,7 +9,6 @@ import type { OidcAuthConfig } from "./oidc-config.types.js";
  * Authentication is resolved in priority order:
  *   1. Public path bypass  — /healthz and /api/v1/auth/* never require a token.
  *   2. OIDC session        — a valid session cookie from the browser login flow.
- *   3. Dev-mode bypass     — when OIDC is not configured.
  *
  * The OIDC config is snapshotted when the factory is called —
  * once at startup in production; per-test in tests, so setting the env before
@@ -55,13 +54,6 @@ function _resolveAuth(
     return;
   }
 
-  // 3. Development mode is intentionally the only tokenless public posture.
-  if (!oidcConfig.enabled)
-  {
-    next();
-    return;
-  }
-
-  // 4. A real deployment requires a verified OIDC browser session.
+  // 3. Missing or disabled identity configuration never opens a tokenless API.
   res.status(401).json({ error: "OIDC session required" });
 }

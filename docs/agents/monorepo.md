@@ -118,9 +118,9 @@ architecture agent's explicit deployable inventory is a blocking gate, not optio
 
 ## Direct-replacement rule
 
-The target is a clean product, not a compatibility layer. It must not import superseded OpenClaw
-packages, add compatibility shims, dual-write, retain deprecated aliases, copy old data, or repair a
-component being removed. Git history is sufficient historical evidence.
+The target is a clean product, not a compatibility layer. Do not add compatibility shims, dual-write,
+retain deprecated aliases, copy superseded data, or repair a component being removed. Git history is
+sufficient historical evidence.
 
 Before editing an existing path, classify it as one of:
 

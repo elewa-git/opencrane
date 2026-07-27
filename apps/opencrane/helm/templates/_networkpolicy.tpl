@@ -12,15 +12,11 @@
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Tenant pods: /api/internal/contract/:name (runtime-contract re-pull; TokenReview
-#         inside the handler is the identity check, this is defence-in-depth).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
 #       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
 #         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
 #         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
-#   The operator's own /api/internal/tenant-models fetch is a localhost call within the
-#   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
 #
 # NetworkPolicy cannot filter by URL path — the path/port split IS the boundary: internal
 # routes only exist on the internal port, and only known platform pods may reach it.
@@ -140,16 +136,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
-    # Allow tenant pods to poll /api/internal/contract/:name on the INTERNAL port for
-    # runtime-contract re-pull (P4A.3). Identity is enforced by TokenReview inside the
-    # handler; this policy is defence-in-depth at the network layer.
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
   egress:
     {{- if .Values.agentController.kubernetesApiServerCidrs }}
     # TokenReview is the application-layer identity gate for controller and runtime calls. Keep the
@@ -217,26 +203,6 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
-    {{- if .Values.clustertenantManager.cognee.install }}
-    # Release-local durable memory and permission synchronization. BYO Cognee is
-    # expected to use HTTPS and is therefore covered by the port-443 rule above.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: cognee
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.cognee.service.port }}
-    {{- end }}
-    # The in-process gateway proxy connects directly to tenant Services.
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
-      ports:
-        - protocol: TCP
-          port: {{ .Values.tenant.gatewayPort }}
     {{- if .Values.langfuse.inCluster.enabled }}
     # Release-local Langfuse metrics and trace API.
     - to:
@@ -258,15 +224,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
-    {{- end }}
-    {{- if eq .Values.hosting.provider "gcp" }}
-    # GKE Workload Identity token exchange before GCS HTTPS calls.
-    - to:
-        - ipBlock:
-            cidr: 169.254.169.254/32
-      ports:
-        - protocol: TCP
-          port: 80
     {{- end }}
     # The only cross-namespace server call: the app-owned artifact byte plane.
     - to:

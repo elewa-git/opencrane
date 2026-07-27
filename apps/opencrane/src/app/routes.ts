@@ -2,20 +2,14 @@ import type { Express } from "express";
 import * as k8s from "@kubernetes/client-node";
 import { ActionExecutionState, AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
 
-import { aiBudgetRouter, tokenUsageRouter, spendRouter } from "@opencrane/backend/server/reporting/spend";
+import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/reporting/spend";
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
-import { _RegisterInternalTenantContract } from "@opencrane/backend/server/tenancy/contract";
-import { _IssueAttemptLiteLlmKey, _RegisterInternalTenantModels, modelRoutingDefaultsRouter, modelRoutingMetricsRouter } from "@opencrane/backend/server/gateways/model-routing";
-import { _RegisterInternalParticipation, awarenessRolloutRouter, awarenessParticipationRouter } from "@opencrane/backend/server/reporting/awareness";
+import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter, modelRoutingMetricsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
-import { metricsRouter, prometheusMetricsRouter } from "@opencrane/backend/server/reporting/metrics";
-import { policiesRouter } from "@opencrane/backend/server/iam/policies";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
-import { tenantsRouter } from "@opencrane/backend/server/tenancy/tenants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
-import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/server/knowledge/company-docs";
 import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
@@ -326,12 +320,8 @@ const _DEFERRED_APPROVAL_TTL_MILLISECONDS = 24 * 60 * 60 * 1000;
 /**
  * Mount the internal (`/api/internal/*`) routers. These MUST be registered BEFORE the
  * session `___AuthMiddleware` (see index.ts) — mounting them after it 401s every caller:
- *   - The NetworkPolicy-only `tenant-models` route takes no token; access is
- *     enforced at the network layer. The operator fetches `tenant-models` on its own
- *     reconcile hot path with no credential, so behind session auth it 401s → the model
- *     set is always null → replace-mode pods brick with an empty allowlist.
- *   - pod-identity routes (`contract`, `participation`) run their OWN TokenReview over a
- *     projected pod token, which the browser-session middleware cannot satisfy.
+ *   - runtime routes run their own TokenReview over a projected pod token, which the
+ *     browser-session middleware cannot satisfy.
  * @see apps/opencrane/helm/templates/_networkpolicy.tpl — the runtime-plane policies.
  */
 export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api): void
@@ -370,12 +360,6 @@ export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, auth
 			logger: _log,
 		}));
 	}
-  // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
-  // allowed model set + effective default at reconcile. Best-effort — never 404/500.
-  app.use("/api/internal/tenant-models", _RegisterInternalTenantModels(prisma));
-  // Note: /api/internal/contract enforces per-tenant identity via TokenReview — not NetworkPolicy-only.
-  app.use("/api/internal/contract", _RegisterInternalTenantContract(prisma, authApi));
-  app.use("/api/internal/awareness/participation", _RegisterInternalParticipation(prisma, authApi));
   // The runtime opens this internal SSE connection itself and performs its one-use bootstrap
   // exchange here. TokenReview is the identity boundary for both routers; the durable dispatch
   // authority mints fenced commands and admits candidates, and the bootstrap router binds the
@@ -413,11 +397,8 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   // `_RegisterInternalRoutes`, which index.ts calls BEFORE `___AuthMiddleware` so the
   // operator's tokenless reconcile fetch + the pod-identity TokenReview routes are not
   // gated by the browser-session auth. Do NOT re-mount them here.
-  app.use("/api/v1/metrics", metricsRouter(customApi, prisma));
   app.use("/api/v1/audit", auditRouter(prisma));
-  app.use("/api/v1/tenants", tenantsRouter(customApi, prisma, coreApi));
-  app.use("/api/v1/policies", policiesRouter(customApi, prisma));
-  app.use("/api/v1/ai-budget", aiBudgetRouter(coreApi, prisma));
+  app.use("/api/v1/ai-budget", aiBudgetRouter(prisma));
   app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
   app.use("/api/v1/groups", groupsRouter(prisma));
   app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma, runAdmission));
@@ -436,14 +417,10 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
   app.use("/api/v1/model-routing/metrics", modelRoutingMetricsRouter(prisma));
   app.use("/api/v1/third-party-sources", thirdPartySourcesRouter(prisma));
-  app.use("/api/v1/org/workspace-docs", companyDocsRouter(prisma, _BuildDocMergeReconciler()));
   // NOTE: the fleet / super-admin surfaces — ClusterTenant lifecycle, billing accounts, org
   // membership, platform DNS, and Zitadel administration — have moved to the cluster-wide
   // fleet-manager (Stage 4). The silo keeps ClusterTenant + OrgMembership as local READ-MODELS
   // (for per-org login + the org-admin gate) but no longer SERVES their management API.
-  app.use("/api/v1/awareness/rollout", awarenessRolloutRouter(prisma));
-  app.use("/api/v1/awareness/participation", awarenessParticipationRouter(prisma));
-  app.use("/api/v1/spend", spendRouter(prisma));
   app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
   // BYOK raw-key path — writes the silo's provider key Secret in the operator's own namespace
   // (POD_NAMESPACE, downward-API populated; "default" fallback mirrors config._readOwnNamespace).
@@ -451,6 +428,5 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/models", modelRegistryRouter(prisma));
   app.use("/api/v1/openapi.json", _OpenapiRouter(spec));
   app.get("/healthz", _CheckDbHealth(prisma));
-  app.use("/prom", prometheusMetricsRouter(prisma, customApi));
   return app;
 }

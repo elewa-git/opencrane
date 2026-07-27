@@ -5,14 +5,11 @@ import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
 import { WeOwnAiPreset } from "@opencrane/core";
-import { CONVERSATION_CACHE, PLATFORM_SURFACE } from "@opencrane/state/core";
-import { IndexedDbConversationCache } from "@opencrane/state/conversation/cache";
-import { UserTenantStore } from "@opencrane/state/tenant/adapter";
+import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { LOCAL_STORAGE_GATEWAY, SESSION_STORAGE_GATEWAY, WebLocalStorageAdapter, WebSessionStorageAdapter } from "@opencrane/state/utils/storage";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
 import { provideWebPlatform } from "@opencrane/platform";
 
-import { environment } from "../environments/environment";
 import { APP_ROUTES } from "./app.routes";
 
 /**
@@ -40,11 +37,6 @@ export const appConfig: ApplicationConfig =
 		{ provide: PLATFORM_SURFACE, useValue: "org" },
 		// Swappable data gateways are selected from one environment flag
 		// (mock in dev, live in prod) — see provideControlPlaneGateways.
-		...provideControlPlaneGateways(),
-		// Web local-transcript cache; a desktop build binds this token to a
-		// filesystem/SQLite store instead (see ConversationCache).
-		{ provide: CONVERSATION_CACHE, useClass: IndexedDbConversationCache },
-		// UserTenant store for the customer-admin console (not a gateway).
-		UserTenantStore
+		...provideControlPlaneGateways()
 	]
 };

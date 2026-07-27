@@ -62,8 +62,7 @@ or invalidates inputs already accepted for a run.
 The application layer supplies the Prisma-backed `SkillAuthorityRepository` and calls the use case.
 This package does not author, test, scan, or sign bundles, and it does not store bytes — it only
 records that a reviewed revision is now published, consistently with the artifact authority.
-It is not an OCI/package registry, has no internal bundle-download route, and does not configure or
-communicate with the retired `feat-skill-registry` workload. It does not re-evaluate or cancel
+It is not an OCI/package registry and has no internal bundle-download route. It does not re-evaluate or cancel
 already accepted runs; their immutable snapshots remain the audit record.
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,

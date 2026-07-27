@@ -87,7 +87,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 
 	it("accepts an answer for a question retained by the resumed interview revision", async function _answersPinnedQuestion()
 	{
-		const dependencies = _dependencies({ questions: { getQuestions: vi.fn().mockResolvedValue([{ id: "v1-only-question", category: "WorkingHabits", prompt: "legacy reviewed prompt", ordinal: 1 }]) } });
+		const dependencies = _dependencies({ questions: { getQuestions: vi.fn().mockResolvedValue([{ id: "v1-only-question", category: "WorkingHabits", prompt: "reviewed prompt", ordinal: 1 }]) } });
 		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interviews/interview-1/answers/v1-only-question").send({ value: "Use short written updates." });
 		expect(response.status).toBe(201);
 		expect(dependencies.interviews.recordAnswerAtomically).toHaveBeenCalledWith(expect.objectContaining({ questionId: "v1-only-question", value: "Use short written updates." }));

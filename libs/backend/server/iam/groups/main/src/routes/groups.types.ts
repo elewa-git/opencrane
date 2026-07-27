@@ -2,7 +2,7 @@
 export type GroupRouteScope = "org" | "department" | "project" | "personal";
 
 /** Supported subject types when writing grants. */
-export type GroupRouteSubjectType = "group" | "tenant" | "user";
+export type GroupRouteSubjectType = "group" | "user";
 
 /** Supported access outcomes for group-linked grants. */
 export type GroupRouteAccess = "allow" | "deny";

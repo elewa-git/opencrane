@@ -11,7 +11,9 @@ from the barrel only.
 - **`index.ts`** — the one barrel; re-exports everything below + the client.
 - **`client.ts`** — `___CreateControlPlaneClient(baseUrl)` builds an `openapi-fetch` client typed by `paths` and sends same-origin OIDC session cookies. Exports `paths`; `ControlPlaneClient` lives in `client.types.ts`.
 - **`generated/api.ts`** — **auto-generated**, do not hand-edit. The `paths` type map.
-- Domain type files (CRD-mirroring enums + DTOs): `cluster-tenant.types.ts` (the **ClusterTenant** customer/isolation unit), `grant.types.ts`, `group.types.ts`, `mcp-server.types.ts`, and `third-party-source.types.ts`. The per-user **UserTenant** gateway is the `Tenant` CRD (kind still `Tenant`); for the two-concept model see [`cluster-architecture.md` → Tenancy Model](../cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
+- Product contract files cover the ClusterTenant organisation boundary, grants, groups, MCP servers,
+  model routing, memory, approvals, runtime assignments, immutable run input, controller exchange,
+  artifact preprocessing, and the display-safe AG-UI event projection.
 
 ## The type-generation pipeline
 

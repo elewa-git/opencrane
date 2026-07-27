@@ -12,10 +12,9 @@ local source consumer.
 | `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
 | `provision.sh` | Optional local, GKE, or VPS cluster provisioning invoked before deployment. |
-| `deploy-single-tenant.sh` | One-organization orchestration across an external fleet chart and this repository's silo release. |
 | `terraform/` | GKE, networking, DNS, Artifact Registry, Workload Identity, and optional chart installation. |
 | `values/` | Reusable environment and multi-instance deployment profiles. |
-| `tests/` | k3d smoke tests plus isolation, entrypoint, and immutable-image conformance checks. |
+| `tests/` | Rendered network, pooler, key-permission, and skill-workload contract checks. |
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/server/_infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

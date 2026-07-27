@@ -23,7 +23,7 @@ export interface ByokProviderCatalog
    * Optional embedding model, registered directly with LiteLLM (see
    * `provision-byok-key.ts` `_ensureProviderEmbeddingModel`) — deliberately NOT a `models[]`
    * entry: every `models[]` class becomes a Global `ModelDefinition` row, and
-   * `tenant-models.ts` exposes ALL Global rows unconditionally as tenant-selectable CHAT
+   * The target model registry exposes all Global rows unconditionally as selectable chat
    * models. An embedding deployment must never appear there, so it bypasses `ModelDefinition`
    * entirely — internal callers needing it (Cognee, via its own dedicated LiteLLM key; see
    * `cognee-litellm-key.ts`) reference the slug directly. Absent ⇒ no embedding model for

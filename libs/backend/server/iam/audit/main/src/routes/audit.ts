@@ -16,10 +16,9 @@ export function auditRouter(prisma: PrismaClient): Router
 {
   const router = Router();
 
-  /** Query audit log entries, optionally filtered by tenant, with cursor pagination. */
+  /** Query audit log entries with cursor pagination. */
   router.get("/", async function _listAuditEntries(req, res)
   {
-    const tenant = req.query.tenant as string | undefined;
     const rawLimit = Number(req.query.limit ?? "100");
     const limit = Math.min(Number.isFinite(rawLimit) && rawLimit > 0 ? Math.floor(rawLimit) : 100, MAX_LIMIT);
     const cursor = req.query.cursor as string | undefined;
@@ -38,7 +37,6 @@ export function auditRouter(prisma: PrismaClient): Router
 
     const entries = await prisma.auditEntry.findMany({
       where: {
-        ...(tenant ? { tenant } : {}),
         ...(cursorDate ? { timestamp: { lt: cursorDate } } : {}),
       },
       orderBy: { timestamp: "desc" },
@@ -53,7 +51,6 @@ export function auditRouter(prisma: PrismaClient): Router
     {
       return {
         timestamp: e.timestamp.toISOString(),
-        tenant: e.tenant ?? undefined,
         action: e.action,
         resource: e.resource,
         message: e.message,

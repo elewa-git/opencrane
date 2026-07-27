@@ -86,5 +86,5 @@ OTLP backend. Two modes:
 ## See also
 
 - [Runbook](/operators/runbook) — operational procedures
-- [Awareness SLOs](/operators/awareness-slos) — what the platform watches
+- [Runbook](/operators/runbook) — how operators use these signals during incidents
 - [Model routing](/guide/model-routing) — cost & quality metrics built on this pipeline

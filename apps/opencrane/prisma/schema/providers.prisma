@@ -1,5 +1,5 @@
 /// Scope at which a provider credential or model definition is owned (Track AIR).
-/// Provider keys are central (Global) or per-customer (ClusterTenant) — NEVER per openclaw tenant.
+/// Provider keys are installation-wide (Global) or owned by one ClusterTenant.
 enum ModelRoutingScope {
   Global        @map("global")
   ClusterTenant @map("clusterTenant")

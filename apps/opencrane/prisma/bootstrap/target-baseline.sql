@@ -59,9 +59,6 @@ CREATE TYPE "ActionExecutionState" AS ENUM ('reserved', 'succeeded', 'failed');
 CREATE TYPE "ActionReplayMode" AS ENUM ('one_shot', 'idempotent');
 
 -- CreateEnum
-CREATE TYPE "ParticipationEventKind" AS ENUM ('agent_card', 'skill_execution', 'heartbeat');
-
--- CreateEnum
 CREATE TYPE "ChannelInvocationAction" AS ENUM ('command.forward', 'events.read');
 
 -- CreateEnum
@@ -69,9 +66,6 @@ CREATE TYPE "OrgRole" AS ENUM ('owner', 'admin', 'member');
 
 -- CreateEnum
 CREATE TYPE "OrgMemberStatus" AS ENUM ('active', 'suspended');
-
--- CreateEnum
-CREATE TYPE "DocProposalStatus" AS ENUM ('pending', 'approved', 'rejected');
 
 -- CreateEnum
 CREATE TYPE "ConversationThreadState" AS ENUM ('active', 'archived');
@@ -86,13 +80,13 @@ CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'complet
 CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'personal');
 
 -- CreateEnum
-CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'tenant', 'user');
+CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'user');
 
 -- CreateEnum
 CREATE TYPE "GrantAccess" AS ENUM ('allow', 'deny');
 
 -- CreateEnum
-CREATE TYPE "GrantPayloadType" AS ENUM ('awareness', 'mcp-server');
+CREATE TYPE "GrantPayloadType" AS ENUM ('mcp-server');
 
 -- CreateEnum
 CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
@@ -147,9 +141,6 @@ CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 
 
 -- CreateEnum
 CREATE TYPE "ModelRoutingScope" AS ENUM ('global', 'clusterTenant');
-
--- CreateEnum
-CREATE TYPE "DatasetScope" AS ENUM ('org', 'team', 'department', 'project', 'personal');
 
 -- CreateEnum
 CREATE TYPE "ThirdPartySourceKind" AS ENUM ('mcp-registry', 'anthropic-skills', 'git-repository', 'manual-upload');
@@ -397,7 +388,6 @@ CREATE TABLE "artifact_outbox_events" (
 CREATE TABLE "audit_log" (
     "id" SERIAL NOT NULL,
     "timestamp" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "tenant" TEXT,
     "action" TEXT NOT NULL,
     "resource" TEXT NOT NULL,
     "message" TEXT NOT NULL,
@@ -582,85 +572,6 @@ CREATE TABLE "action_execution_receipts" (
 );
 
 -- CreateTable
-CREATE TABLE "org_documents" (
-    "id" TEXT NOT NULL,
-    "source" TEXT NOT NULL,
-    "source_id" TEXT NOT NULL,
-    "owner" TEXT NOT NULL,
-    "team_scope" TEXT,
-    "department_scope" TEXT,
-    "project_scope" TEXT,
-    "sensitivity_tags" TEXT[],
-    "title" TEXT,
-    "content" TEXT NOT NULL,
-    "content_hash" TEXT,
-    "confidentiality" TEXT,
-    "jurisdiction" TEXT,
-    "retention_class" TEXT,
-    "acl_origin" TEXT NOT NULL,
-    "source_updated_at" TIMESTAMP(3) NOT NULL,
-    "freshness_recorded_at" TIMESTAMP(3) NOT NULL,
-    "ingest_cursor" TEXT NOT NULL,
-    "embedding_ready" BOOLEAN NOT NULL DEFAULT false,
-    "ingested_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "org_documents_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "harvesting_cursors" (
-    "id" TEXT NOT NULL,
-    "source" TEXT NOT NULL,
-    "cursor_value" TEXT NOT NULL,
-    "last_sync_at" TIMESTAMP(3) NOT NULL,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "harvesting_cursors_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "awareness_rollouts" (
-    "id" TEXT NOT NULL DEFAULT 'default',
-    "target_version" TEXT NOT NULL,
-    "stable_version" TEXT NOT NULL,
-    "waves" JSONB NOT NULL,
-    "promoted_waves" JSONB NOT NULL,
-    "shadow_mode" BOOLEAN NOT NULL DEFAULT false,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "awareness_rollouts_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "participation_events" (
-    "id" TEXT NOT NULL,
-    "tenant" TEXT NOT NULL,
-    "kind" "ParticipationEventKind" NOT NULL,
-    "idempotency_key" TEXT NOT NULL,
-    "outcome" TEXT,
-    "payload" JSONB,
-    "occurred_at" TIMESTAMP(3) NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "participation_events_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "tenant_participation" (
-    "tenant" TEXT NOT NULL,
-    "last_seen_at" TIMESTAMP(3) NOT NULL,
-    "running_contract_version" TEXT,
-    "agent_card" JSONB,
-    "skill_execution_count" INTEGER NOT NULL DEFAULT 0,
-    "policy_violation_count" INTEGER NOT NULL DEFAULT 0,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "tenant_participation_pkey" PRIMARY KEY ("tenant")
-);
-
--- CreateTable
 CREATE TABLE "channel_runtime_routes" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
@@ -707,58 +618,6 @@ CREATE TABLE "org_memberships" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "org_memberships_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "company_docs" (
-    "id" TEXT NOT NULL,
-    "name" TEXT NOT NULL,
-    "current_version" INTEGER NOT NULL DEFAULT 0,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "company_docs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "company_doc_versions" (
-    "id" TEXT NOT NULL,
-    "company_doc_id" TEXT NOT NULL,
-    "version" INTEGER NOT NULL,
-    "content" TEXT NOT NULL,
-    "created_by" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "company_doc_versions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "tenant_workspace_docs" (
-    "id" TEXT NOT NULL,
-    "tenant" TEXT NOT NULL,
-    "doc_name" TEXT NOT NULL,
-    "content" TEXT NOT NULL,
-    "last_reconciled_version" INTEGER NOT NULL DEFAULT 0,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "tenant_workspace_docs_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "doc_merge_proposals" (
-    "id" TEXT NOT NULL,
-    "tenant" TEXT NOT NULL,
-    "doc_name" TEXT NOT NULL,
-    "base_version" INTEGER NOT NULL,
-    "target_version" INTEGER NOT NULL,
-    "proposed_content" TEXT NOT NULL,
-    "diff" TEXT NOT NULL,
-    "status" "DocProposalStatus" NOT NULL DEFAULT 'pending',
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "decided_at" TIMESTAMP(3),
-    "decided_by" TEXT,
-
-    CONSTRAINT "doc_merge_proposals_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1072,20 +931,6 @@ CREATE TABLE "memory_outbox_events" (
 );
 
 -- CreateTable
-CREATE TABLE "server_metric_snapshots" (
-    "id" SERIAL NOT NULL,
-    "cpu_percent" DOUBLE PRECISION NOT NULL,
-    "memory_used_bytes" BIGINT NOT NULL,
-    "memory_total_bytes" BIGINT NOT NULL,
-    "storage_used_bytes" BIGINT NOT NULL,
-    "storage_total_bytes" BIGINT NOT NULL,
-    "active_tenants" INTEGER NOT NULL DEFAULT 0,
-    "sampled_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "server_metric_snapshots_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "model_routing_defaults" (
     "id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
@@ -1240,20 +1085,6 @@ CREATE TABLE "personal_configuration_changes" (
 );
 
 -- CreateTable
-CREATE TABLE "access_policies" (
-    "name" TEXT NOT NULL,
-    "description" TEXT,
-    "tenant_selector" JSONB,
-    "domains" JSONB,
-    "egress_rules" JSONB,
-    "mcp_servers" JSONB,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "access_policies_pkey" PRIMARY KEY ("name")
-);
-
--- CreateTable
 CREATE TABLE "provider_credentials" (
     "id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
@@ -1282,17 +1113,6 @@ CREATE TABLE "model_definitions" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "model_definitions_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "tenant_dataset_memberships" (
-    "tenant" TEXT NOT NULL,
-    "scope" "DatasetScope" NOT NULL,
-    "subject" TEXT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "tenant_dataset_memberships_pkey" PRIMARY KEY ("tenant","scope","subject")
 );
 
 -- CreateTable
@@ -1651,21 +1471,6 @@ CREATE TABLE "skill_workload_bootstraps" (
 );
 
 -- CreateTable
-CREATE TABLE "tenant_litellm_keys" (
-    "id" TEXT NOT NULL,
-    "tenant" TEXT NOT NULL,
-    "key_alias" TEXT NOT NULL,
-    "secret_name" TEXT NOT NULL,
-    "monthly_budget_usd" DECIMAL(12,2),
-    "issued_at" TIMESTAMP(3) NOT NULL,
-    "revoked_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "tenant_litellm_keys_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "token_usage_snapshots" (
     "id" SERIAL NOT NULL,
     "user_id" TEXT NOT NULL,
@@ -1697,23 +1502,6 @@ CREATE TABLE "account_budget_settings" (
     "updated_at" TIMESTAMP(3) NOT NULL,
 
     CONSTRAINT "account_budget_settings_pkey" PRIMARY KEY ("user_id")
-);
-
--- CreateTable
-CREATE TABLE "tenants" (
-    "name" TEXT NOT NULL,
-    "display_name" TEXT NOT NULL,
-    "email" TEXT NOT NULL,
-    "team" TEXT,
-    "phase" TEXT NOT NULL DEFAULT 'Pending',
-    "ingress_host" TEXT,
-    "cluster_tenant_ref" TEXT,
-    "subject" TEXT,
-    "awareness_wave" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "tenants_pkey" PRIMARY KEY ("name")
 );
 
 -- CreateIndex
@@ -1921,31 +1709,6 @@ CREATE INDEX "action_execution_receipts_run_id_attempt_state_idx" ON "action_exe
 CREATE INDEX "action_execution_receipts_replay_mode_state_idx" ON "action_execution_receipts"("replay_mode", "state");
 
 -- CreateIndex
-CREATE INDEX "org_documents_source_idx" ON "org_documents"("source");
-
--- CreateIndex
-CREATE INDEX "org_documents_owner_idx" ON "org_documents"("owner");
-
--- CreateIndex
-CREATE INDEX "org_documents_team_scope_idx" ON "org_documents"("team_scope");
-
--- Preserve the target query indexes for department and project document scope.
-CREATE INDEX "org_documents_department_scope_idx" ON "org_documents"("department_scope");
-CREATE INDEX "org_documents_project_scope_idx" ON "org_documents"("project_scope");
-
--- CreateIndex
-CREATE UNIQUE INDEX "org_documents_source_source_id_key" ON "org_documents"("source", "source_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "harvesting_cursors_source_key" ON "harvesting_cursors"("source");
-
--- CreateIndex
-CREATE INDEX "participation_events_tenant_idx" ON "participation_events"("tenant");
-
--- CreateIndex
-CREATE UNIQUE INDEX "participation_events_tenant_idempotency_key_key" ON "participation_events"("tenant", "idempotency_key");
-
--- CreateIndex
 CREATE INDEX "channel_runtime_routes_current_lookup_idx" ON "channel_runtime_routes"("silo_id", "agent_service_id", "action", "is_current", "expires_at");
 
 -- CreateIndex
@@ -1971,30 +1734,6 @@ CREATE INDEX "org_memberships_cluster_tenant_idx" ON "org_memberships"("cluster_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "org_memberships_cluster_tenant_subject_key" ON "org_memberships"("cluster_tenant", "subject");
-
--- CreateIndex
-CREATE UNIQUE INDEX "company_docs_name_key" ON "company_docs"("name");
-
--- CreateIndex
-CREATE INDEX "company_doc_versions_company_doc_id_idx" ON "company_doc_versions"("company_doc_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "company_doc_versions_company_doc_id_version_key" ON "company_doc_versions"("company_doc_id", "version");
-
--- CreateIndex
-CREATE INDEX "tenant_workspace_docs_tenant_idx" ON "tenant_workspace_docs"("tenant");
-
--- CreateIndex
-CREATE UNIQUE INDEX "tenant_workspace_docs_tenant_doc_name_key" ON "tenant_workspace_docs"("tenant", "doc_name");
-
--- CreateIndex
-CREATE INDEX "doc_merge_proposals_tenant_doc_name_idx" ON "doc_merge_proposals"("tenant", "doc_name");
-
--- CreateIndex
-CREATE INDEX "doc_merge_proposals_status_idx" ON "doc_merge_proposals"("status");
-
--- CreateIndex
-CREATE UNIQUE INDEX "doc_merge_proposals_tenant_doc_name_target_version_key" ON "doc_merge_proposals"("tenant", "doc_name", "target_version");
 
 -- CreateIndex
 CREATE INDEX "conversation_threads_silo_id_agent_service_id_state_idx" ON "conversation_threads"("silo_id", "agent_service_id", "state");
@@ -2153,9 +1892,6 @@ CREATE UNIQUE INDEX "memory_outbox_events_idempotency_key_key" ON "memory_outbox
 CREATE INDEX "memory_outbox_events_published_at_available_at_idx" ON "memory_outbox_events"("published_at", "available_at");
 
 -- CreateIndex
-CREATE INDEX "server_metric_snapshots_sampled_at_idx" ON "server_metric_snapshots"("sampled_at");
-
--- CreateIndex
 CREATE UNIQUE INDEX "model_routing_defaults_scope_cluster_tenant_key" ON "model_routing_defaults"("scope", "cluster_tenant");
 
 -- CreateIndex
@@ -2235,9 +1971,6 @@ CREATE INDEX "model_definitions_cluster_tenant_idx" ON "model_definitions"("clus
 
 -- CreateIndex
 CREATE UNIQUE INDEX "model_definitions_scope_cluster_tenant_public_model_name_key" ON "model_definitions"("scope", "cluster_tenant", "public_model_name");
-
--- CreateIndex
-CREATE INDEX "tenant_dataset_memberships_tenant_scope_idx" ON "tenant_dataset_memberships"("tenant", "scope");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "third_party_sources_name_key" ON "third_party_sources"("name");
@@ -2429,12 +2162,6 @@ CREATE UNIQUE INDEX "skill_workload_bootstraps_reference_hash_key" ON "skill_wor
 CREATE INDEX "skill_workload_bootstraps_expires_at_idx" ON "skill_workload_bootstraps"("expires_at");
 
 -- CreateIndex
-CREATE INDEX "tenant_litellm_keys_tenant_idx" ON "tenant_litellm_keys"("tenant");
-
--- CreateIndex
-CREATE INDEX "tenant_litellm_keys_tenant_revoked_at_idx" ON "tenant_litellm_keys"("tenant", "revoked_at");
-
--- CreateIndex
 CREATE INDEX "token_usage_snapshots_sampled_at_idx" ON "token_usage_snapshots"("sampled_at");
 
 -- CreateIndex
@@ -2501,9 +2228,6 @@ ALTER TABLE "artifact_revision_parents" ADD CONSTRAINT "artifact_revision_parent
 ALTER TABLE "artifact_outbox_events" ADD CONSTRAINT "artifact_outbox_events_artifact_id_revision_id_fkey" FOREIGN KEY ("artifact_id", "revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "audit_log" ADD CONSTRAINT "audit_log_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_catalog_id_catalog_revision_catalog_d_fkey" FOREIGN KEY ("catalog_id", "catalog_revision", "catalog_digest") REFERENCES "capability_catalog_revisions"("catalog_id", "revision", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2543,22 +2267,7 @@ ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipt
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_attempt_agent_service_id__fkey" FOREIGN KEY ("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") REFERENCES "workload_assignments"("run_id", "attempt", "agent_service_id", "agent_revision_id", "silo_id", "subject_id", "service_account_name", "namespace", "workload_kind", "workload_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "participation_events" ADD CONSTRAINT "participation_events_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tenant_participation" ADD CONSTRAINT "tenant_participation_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_route_id_silo_id_agent_service_fkey" FOREIGN KEY ("route_id", "silo_id", "agent_service_id", "action") REFERENCES "channel_runtime_routes"("id", "silo_id", "agent_service_id", "action") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "company_doc_versions" ADD CONSTRAINT "company_doc_versions_company_doc_id_fkey" FOREIGN KEY ("company_doc_id") REFERENCES "company_docs"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tenant_workspace_docs" ADD CONSTRAINT "tenant_workspace_docs_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "doc_merge_proposals" ADD CONSTRAINT "doc_merge_proposals_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_id_context_revision_id_fkey" FOREIGN KEY ("id", "context_revision_id") REFERENCES "conversation_context_revisions"("thread_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2660,9 +2369,6 @@ ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_crede
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "tenant_dataset_memberships" ADD CONSTRAINT "tenant_dataset_memberships_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "third_party_source_items" ADD CONSTRAINT "third_party_source_items_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2718,9 +2424,6 @@ ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id
 
 -- AddForeignKey
 ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "tenant_litellm_keys" ADD CONSTRAINT "tenant_litellm_keys_tenant_fkey" FOREIGN KEY ("tenant") REFERENCES "tenants"("name") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 
 -- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when thread_id is NULL.
@@ -2783,11 +2486,6 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_i
 CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"
     ON "memory_datasets"("silo_id", "scope_kind", "organization_id", COALESCE("scope_resource_id", ''));
 
--- Projection read models retain their required cardinality and scope guards.
-ALTER TABLE "tenant_dataset_memberships" ADD CONSTRAINT "tenant_dataset_memberships_scope_subject_check" CHECK (
-    ("scope" IN ('team', 'department', 'project', 'personal') AND LENGTH(BTRIM("subject")) > 0)
-    OR ("scope" = 'org' AND "subject" = 'default')
-);
 CREATE UNIQUE INDEX "model_routing_defaults_global_key"
     ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
 CREATE UNIQUE INDEX "org_memberships_one_owner_per_org"

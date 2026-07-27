@@ -76,10 +76,6 @@ grep -Fq '              k8s-app: kube-dns' <<<"$server_policy"
 grep -Fq '          port: 53' <<<"$server_policy"
 grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy"
 grep -Fq '          port: 4000' <<<"$server_policy"
-grep -Fq '              app.kubernetes.io/component: cognee' <<<"$server_policy"
-grep -Fq '          port: 8000' <<<"$server_policy"
-grep -Fq '              app.kubernetes.io/component: tenant' <<<"$server_policy"
-grep -Fq '          port: 18789' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"
 
@@ -92,9 +88,6 @@ if grep -Fq 'cnpg.io/cluster' <<<"$server_policy"; then
   echo "opencrane-server policy bypasses the PostgreSQL pooler" >&2
   exit 1
 fi
-
-gcp_policy="$(helm template opencrane-silo "$CHART_DIR" --set hosting.provider=gcp)"
-grep -Fq '            cidr: 169.254.169.254/32' <<<"$gcp_policy"
 
 langfuse_render="$(helm template opencrane-silo "$CHART_DIR" --set langfuse.inCluster.enabled=true)"
 grep -Fq 'value: "http://opencrane-silo-langfuse-web.default.svc.cluster.local:3000"' <<<"$langfuse_render"

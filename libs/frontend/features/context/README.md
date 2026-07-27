@@ -20,7 +20,7 @@ from the API itself or hold long-lived state — the workspace shell decides whe
 
 ## Boundary
 
-Consumed by `features/workspace`, which hosts it as the right pane. It must not import other
+Intended for the future workspace surface, which hosts it as the right pane. It must not import other
 feature packages; shared visuals come from `elements/ui`. Enforcement of what the agent may see
 lives on the server — this pane only displays it.
 
@@ -33,5 +33,5 @@ and `scope:shared` contracts. It depends on `@opencrane/core` (context models an
 ## See also
 
 - Parent index: [features](../README.md)
-- Consumer: [features/workspace](../workspace/README.md)
+- Consumer: future workspace surface
 - Shared visuals: [elements/ui](../../elements/ui/README.md)

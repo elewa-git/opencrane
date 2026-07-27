@@ -71,12 +71,12 @@ function _IsProjectionEvent(value: unknown): value is AgUiProjectionEvent
 {
 	if (typeof value !== "object" || value === null) return false;
 	const event = value as Record<string, unknown>;
-	if (event.type === "RUN_STARTED" || event.type === "RUN_FINISHED") return typeof event.threadId === "string" && typeof event.runId === "string";
-	if (event.type === "TEXT_MESSAGE_START") return typeof event.messageId === "string" && event.role === "assistant";
-	if (event.type === "TEXT_MESSAGE_CONTENT") return typeof event.messageId === "string" && typeof event.delta === "string";
-	if (event.type === "TEXT_MESSAGE_END") return typeof event.messageId === "string";
-	if (event.type === "TOOL_CALL_START") return typeof event.toolCallId === "string" && typeof event.toolCallName === "string";
-	if (event.type === "TOOL_CALL_ARGS" || event.type === "TOOL_CALL_END") return typeof event.toolCallId === "string";
-	if (event.type === "TOOL_CALL_RESULT") return typeof event.toolCallId === "string" && typeof event.content === "string";
-	return event.type === "CUSTOM" && typeof event.name === "string" && typeof event.value === "object" && event.value !== null && typeof (event.value as Record<string, unknown>).eventType === "string";
+	if (event["type"] === "RUN_STARTED" || event["type"] === "RUN_FINISHED") return typeof event["threadId"] === "string" && typeof event["runId"] === "string";
+	if (event["type"] === "TEXT_MESSAGE_START") return typeof event["messageId"] === "string" && event["role"] === "assistant";
+	if (event["type"] === "TEXT_MESSAGE_CONTENT") return typeof event["messageId"] === "string" && typeof event["delta"] === "string";
+	if (event["type"] === "TEXT_MESSAGE_END") return typeof event["messageId"] === "string";
+	if (event["type"] === "TOOL_CALL_START") return typeof event["toolCallId"] === "string" && typeof event["toolCallName"] === "string";
+	if (event["type"] === "TOOL_CALL_ARGS" || event["type"] === "TOOL_CALL_END") return typeof event["toolCallId"] === "string";
+	if (event["type"] === "TOOL_CALL_RESULT") return typeof event["toolCallId"] === "string" && typeof event["content"] === "string";
+	return event["type"] === "CUSTOM" && typeof event["name"] === "string" && typeof event["value"] === "object" && event["value"] !== null && typeof (event["value"] as Record<string, unknown>)["eventType"] === "string";
 }

@@ -28,7 +28,7 @@ its frozen inputs.
 ```
 
 **In this flow:** [execution/inputs](../../inputs/main/README.md) *(assembles the snapshot through this
-package's admission boundary)* · [conversations](../../../personal/conversations/main/README.md) *(stores the
+package's admission boundary)* · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) *(stores the
 run's ordered user-visible events)* · dispatcher *(polls the outbox and launches the workload)*
 
 Initial admission serialises the silo and request idempotency key before compiling any mutable
@@ -237,4 +237,4 @@ Cancellation reuses the same outbox with `RunCancellationRequested` and
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [inputs](../../inputs/main/README.md) · [conversations](../../../personal/conversations/main/README.md) · [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)
+- Siblings: [inputs](../../inputs/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

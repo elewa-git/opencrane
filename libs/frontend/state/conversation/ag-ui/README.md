@@ -33,8 +33,8 @@ server reader's responsibility because SSE identifiers are opaque.
 
 ## Boundary
 
-This package consumes only `@opencrane/contracts`. It has no OpenClaw protocol, mock gateway,
-network client, approval command, persistence, or Angular dependency.
+This package consumes only `@opencrane/contracts`. It has no network client, approval command,
+persistence, or Angular dependency.
 
 ## Dependency direction
 
@@ -44,4 +44,4 @@ frontend features.
 ## See also
 
 - Parent index: [state](../../README.md)
-- Related future boundary: [channel proxy](../../../../../backend/channel-proxy/main/README.md)
+- Related boundary: [channel proxy](../../../../backend/channel-proxy/main/README.md)

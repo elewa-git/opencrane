@@ -26,13 +26,6 @@ import { _CreateManagedExecutionEvidenceAuthority } from "./app/fleet-membership
 import { _CreateScheduleTicker } from "./app/scheduler-wiring.js";
 import { PrismaRunCancellationRepository, type RunCancellationRepository, type RunWorkloadCleanupClaim } from "@opencrane/backend/agents/execution/runs";
 import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
-import { OpenClawTenantLifecycle } from "@opencrane/backend/feat-openclaw-tenant";
-
-// In-silo controllers (Stage 5). The silo runs every in-silo reconcile loop over its OWN
-// namespace, so a silo stands on its own; the fleet-manager watches only the cluster-scoped
-// ClusterTenant CR and nothing inside a silo.
-import { _LoadOperatorConfig } from "./app/config.js";
-import { _BuildHostingAdapter } from "./hosting/index.js";
 
 // Route any stray console.* call (first-party or third-party) through the
 // structured logger so nothing reaches stdout unstructured / uncorrelated.
@@ -99,7 +92,7 @@ export function createApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi,
 
 /**
  * Build the INTERNAL Express app — a second listener serving ONLY the tokenless
- * `/api/internal/*` routes on {@link OpenClawTenantOperatorConfig.internalPort}.
+ * `/api/internal/*` routes on the configured `INTERNAL_PORT`.
  *
  * This listener is bound to its own port and exposed by a Service port the public
  * ingress never routes to; NetworkPolicy restricts it to platform pods. There is NO
@@ -281,19 +274,6 @@ runtimeRepairHandle.unref();
 const runtimeCleanupHandle = setInterval(function _cleanup() { void _ReconcileNextRuntimeWorkloadCleanup(runtimeRepairRepository, batchApi).catch(function _onError(err: unknown) { log.error({ err }, "runtime workload cleanup failed"); }); }, 5_000);
 runtimeCleanupHandle.unref();
 
-/** Frozen-blue OpenClaw tenant runtime composed behind its library lifecycle contract. */
-const openClawTenantLifecycle = new OpenClawTenantLifecycle({
-  kubeConfig: kc,
-  customApi,
-  coreApi,
-  prisma,
-  publicPort: port,
-  loadConfig: _LoadOperatorConfig,
-  buildHostingAdapter: _BuildHostingAdapter,
-  log,
-});
-void openClawTenantLifecycle.start();
-
 /**
  * Gracefully drain the server, disconnect Prisma, flush telemetry, and restore
  * console before exiting. A hard-exit timer guards against a stuck close so the
@@ -308,11 +288,10 @@ async function _shutdown(signal: string): Promise<void>
   const hardExit = setTimeout(function _force() { process.exit(1); }, 10_000);
   hardExit.unref();
 
-  // Stop the schedule ticker and the in-silo controller before disconnecting their DB dependencies.
+  // Stop the scheduler and runtime repair loops before disconnecting their DB dependencies.
 	if (schedulerHandle !== null) clearInterval(schedulerHandle);
 	clearInterval(runtimeRepairHandle);
 	clearInterval(runtimeCleanupHandle);
-  await openClawTenantLifecycle.stop();
 
   try
   {

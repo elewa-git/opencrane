@@ -12,7 +12,7 @@ import { mcpServersRouter } from "../routes/mcp-servers.js";
  * and the dev-mode/fail-closed posture matches the rest of the platform.
  */
 
-/** OIDC env that decides `_IsDevAuthMode`; cleared/restored around each test. */
+/** OIDC environment isolated so authentication configuration cannot leak between tests. */
 const _AUTH_ENV = ["OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI", "OIDC_SESSION_SECRET"] as const;
 
 /** Configure a complete OIDC setup so no-session guards must fail closed. */
@@ -124,12 +124,13 @@ describe("mcp-servers router — _RequireOrgAdmin gate (P0.5)", function _suite(
     expect(spies["mcpServer.delete"]).toHaveBeenCalled();
   });
 
-  it("opens the gate under dev mode when no session and no real auth is configured", async function _devOpen()
+  it("fails closed when no session is established", async function _denyUnauthenticated()
   {
-    const { prisma } = _mockPrisma();
+    const { prisma, spies } = _mockPrisma();
     const res = await request(_buildApp(prisma)).delete("/api/v1/mcp-servers/srv-1");
 
-    expect(res.status).not.toBe(403);
+    expect(res.status).toBe(403);
+    expect(spies["mcpServer.delete"]).toBeUndefined();
   });
 
   it("fails closed for an unauthenticated mutation when real auth is configured", async function _failClosed()

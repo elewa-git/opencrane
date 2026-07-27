@@ -117,4 +117,4 @@ template deterministically; profiles and interview evidence remain user-owned ru
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [conversations](../../conversations/main/README.md) · [memory](../../memory/main/README.md) · [runs](../../runs/main/README.md)
+- Related authorities: [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../memory/main/README.md) · [runs](../../../execution/runs/main/README.md)

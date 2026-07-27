@@ -26,7 +26,7 @@ own logical database inside the shared Cluster, and each authenticates only to i
  │  postgres (this chart)  ◄── HERE               │  declares desired Cluster + network boundary
  │   one CNPG Cluster + bounded PgBouncer Pooler  │
  │     ├── opencrane   ├── litellm                │  one logical DB + owner role per authority
- │     ├── obot        └── langfuse  (+ fleet)    │
+ │     ├── obot        └── langfuse               │
  │     └── database admin .........................│  inspect every DB; no durable writes/superuser
  └──────────────────────────────────────────────┘
         ▲ reconciled by                    ▲ connects to (own DB only)

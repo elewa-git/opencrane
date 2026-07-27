@@ -159,7 +159,7 @@ function _Scope(kind: FleetMembershipScopeKind, organizationId: string, resource
 function _Attachment(value: { scope: GrantScope; subjectType: GrantSubjectType; subjectId: string }): RevisionScopeAttachment
 {
 	const scopes = { [GrantScope.Org]: "org", [GrantScope.Department]: "department", [GrantScope.Team]: "team", [GrantScope.Project]: "project", [GrantScope.Personal]: "personal" } as const;
-	const subjectTypes = { [GrantSubjectType.Group]: "group", [GrantSubjectType.Tenant]: "tenant", [GrantSubjectType.User]: "user" } as const;
+	const subjectTypes = { [GrantSubjectType.Group]: "group", [GrantSubjectType.User]: "user" } as const;
 	return { scope: scopes[value.scope], subjectType: subjectTypes[value.subjectType], subjectId: value.subjectId };
 }
 

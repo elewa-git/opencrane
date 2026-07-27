@@ -1,116 +1,105 @@
 # Personal-agent platform product contract
 
-Status: **accepted product direction; implementation in progress**
+Status: **accepted**
 
-OpenCrane is a new product under active development. Existing OpenCrane installations are not a
-production estate to preserve or transition. They may be destroyed at any time and are not an input
-to the target architecture.
+OpenCrane provides governed personal and managed agents whose inputs, actions, and outcomes remain
+explainable and recoverable. This contract describes the durable product behaviour; implementation
+status belongs in the code, tests, and release notes.
 
 ## Product capabilities
 
-| Capability | Target contract |
-|------------|-----------------|
-| Organization identity and membership | Use OIDC and fleet lifecycle/membership as live external authorities. A cached membership revision is trusted only when its issuer signature verifies, its revision is the newest observed for that silo, and its bounded freshness has not expired. Fail closed after expiry. |
-| Personal agent conversation | Provide streaming messages, ordered history, tool events, abort, retry/recovery, and stable thread ownership through the Thread, Run, and RunEvent contracts. |
-| Persona and preferences | Require an onboarding interview before the first personal-agent session. Key answers select a versioned `SOUL.md` template and infuse a small set of explicit interview insights into a reviewable first PersonaRevision. The user approves, edits, or retakes it and may replace it later. |
-| Personal and agent memory | Store durable organization memory in Cognee with explicit dataset identity, scope, and provenance. |
-| Company, document, and artifact knowledge | Keep canonical bytes and versions in ArtifactStore and index derived knowledge in Cognee. |
-| Artifacts and documents | Provide uploads and generated outputs with ownership, hashes, MIME type, provenance, and conversation/run links. |
-| Models, BYOK, and budgets | Govern provider choice, model catalogs, routing, budgets, and usage through the new LiteLLM-backed contracts. |
-| MCP integrations | Provide a governed catalog, assignments, grants, scoped execution, and Obot-backed credential custody. |
-| Skills | Provide immutable skill revisions, entitlements, review, and artifact bytes. |
-| Schedules and managed runs | Provide schedules, pause/resume, approval, retry, and exactly-once intent through AgentRun, CronJob, and Job ownership. |
-| Audit and operations | Provide immutable security/product audit evidence, structured observability, backup/restore, and operator controls. |
-| Storage and retention | Retain target-product data indefinitely by default until an explicit user/administrator deletion. Put every durable state path on an explicitly mounted, expandable volume; never use an agent Pod filesystem as durable storage. |
-| Future updates | Roll each supported application update to ready, traffic-serving target Pods in under five minutes per silo, without copying product data or keeping a parallel predecessor runtime. |
-
-Awareness rollout/participation, pairing, BrokeredDevice, SessionScope, gateway-admin state,
-Tenant and AccessPolicy CRDs as business authority, and OpenClaw protocols/workspaces/plugins/runtime
-state are not target product capabilities.
+| Capability | Contract |
+|------------|----------|
+| Organisation identity and membership | Bind OIDC subjects to signed, revisioned organisation membership evidence. Unknown, expired, or unverifiable membership fails closed. |
+| Agents and revisions | Keep agent definitions stable and configuration immutable per revision. A run binds one exact revision. |
+| Conversations and runs | Provide stable threads, streaming output, ordered events, cancellation, retry, recovery, and terminal-state fencing. |
+| Run input | Persist one immutable `RunInputSnapshot` before dispatch. It binds identity, thread context, persona, memory references, tools, model route, and budget. |
+| Persona and preferences | Store reviewable, versioned persona and preference facts. Changes affect later snapshots only. |
+| Memory | Apply explicit dataset identity, scope, provenance, and authorization to durable personal and organisation memory. |
+| Artifacts | Store immutable bytes and revision metadata with ownership, hashes, media type, provenance, and run links. |
+| Models and budgets | Govern provider credentials, public model aliases, routes, quotas, and usage through control-plane policy. |
+| Integrations and tools | Bind immutable tool revisions to assignments and grants. Execute approved external actions server-side. |
+| Skills | Publish immutable, reviewable skill revisions and bind runs to exact assigned revisions. |
+| Schedules | Provide pause, resume, approval, retry, and idempotent managed-run intent. |
+| Audit and operations | Retain authorization decisions, security events, structured telemetry, backup evidence, and operator controls. |
 
 ## Authorization
 
-OpenCrane defines authorization directly:
+OpenCrane evaluates all applicable direct and group grants:
 
-1. compile all applicable direct and group grants;
-2. choose the highest priority;
-3. at equal priority, Deny wins;
-4. use timestamps only where a contract explicitly requires a deterministic tie-break;
-5. keep `project` as a separate containment dimension whose membership may span departments;
-6. treat dataset-membership rows as derived projections of grants, never as authority.
+1. collect the grants applicable to the subject, resource, and requested action;
+2. select the highest priority;
+3. when priorities are equal, `Deny` wins; and
+4. apply a timestamp tie-break only where the contract explicitly defines one.
 
-Department membership neither grants nor prevents project membership. Project grants are explicit
-and combine with the other grants through the priority and Deny-at-equal-priority rules.
+Projects are a containment dimension independent of departments. Membership of one does not imply
+membership of the other. Dataset membership and other read projections are derived from grants and
+never become authorization authorities themselves.
 
-## Identity and membership failure behavior
+## Identity failure behaviour
 
-- Fleet lifecycle and membership remain live external authorities.
-- Signed authority responses may be cached for a bounded operational freshness window.
-- A signed membership revision contains the silo/organization, monotonically increasing revision,
-  issued-at/expiry times, membership assertions, issuer identity, and signature. “Last signed” means
-  the highest revision the silo has verified from the fleet authority, not a locally editable copy.
-- Unknown membership, a missing subject binding, or a stale response must not authorize login, a
-  new run, grant expansion, administration, or capability renewal.
-- An authority read failure must never turn an unknown member into an active member.
-- The exact freshness SLO is an ordinary runtime reliability and security setting. It is not a
-  prerequisite for refactoring the product.
+A membership assertion contains the organisation, subject binding, monotonically increasing
+revision, issuer, issued-at and expiry times, and signature. OpenCrane accepts only the newest
+verified revision it has observed within its bounded freshness window.
 
-## Clean-build implementation rule
+An unknown subject, missing binding, invalid signature, stale revision, or unavailable identity
+authority cannot authorize sign-in, run admission, grant expansion, administration, or credential
+renewal. An outage must not turn an unknown member into an active member.
 
-Implement the target contracts directly. Do not add backwards compatibility, legacy schemas or
-protocols, dual reads or writes, migration utilities, importers, exporters, old database or object
-store readers, old keys or salts, static-token escapes, reverse bridges, deprecation shims, or
-transitional runtime slots.
+## Run and event contract
 
-Existing development data, credentials, deployments, clusters, stores, and generated state may be
-deleted. Development fixtures must be authored against the target contracts rather than copied,
-translated, or inferred from obsolete behavior.
+The durable hierarchy is `Thread -> AgentRun -> ordered RunEvent`. Before an attempt starts,
+OpenCrane persists the run and its exact immutable input snapshot. Events are accepted only through
+the control-plane admission path, use deterministic sequence ordering, and preserve one terminal
+outcome.
 
-Continuing OIDC, fleet, Cognee, Obot, LiteLLM, and other target dependencies are integrated through
-their current target contracts. Their use does not justify preserving an obsolete OpenCrane
-adapter, identifier, projection, credential, or data shape.
+Runtime assignments and commands are fenced by attempt. Retry creates a new attempt; it does not
+rewrite the evidence of an earlier one. Cancellation, approvals, usage, external-action results,
+and failures become canonical events before clients rely on them.
+
+## External-action contract
+
+The runtime may propose a tool call but cannot authorize or execute it. OpenCrane resolves the exact
+tool revision and then checks the snapshot, grant, approval, budget, and idempotency state. Only a
+server-owned executor receives the scoped credential and performs the action.
+
+If policy, approval, credential, budget, or audit persistence is unavailable, execution fails closed.
+A result that cannot be persisted is not reported as a durable success.
 
 ## Persona onboarding
 
-The first personal-agent session is blocked until the user completes or explicitly restarts the
-onboarding interview. The versioned question set covers at least: relationship/role, tone and
-language, answer structure, challenge-versus-support preference, initiative level, approval/risk
-boundaries, working habits, and memory boundaries. Answers select one reviewed `SOUL.md` template;
-three to five high-signal statements are rendered into explicit, provenance-linked fields. The
-generated result is previewed as a PersonaRevision and requires user approval. Runtime Pods receive
-only the compiled revision; they do not own or mutate a durable `SOUL.md` file.
+The first personal-agent session requires an approved persona revision. The onboarding interview
+captures role, tone and language, answer structure, challenge preference, initiative level, risk and
+approval boundaries, working habits, and memory boundaries. The user may review, edit, replace, or
+restart the result.
 
-## Storage, retention, and updates
+The runtime receives only the approved revision through the compiled input. It does not own or
+mutate durable persona files.
 
-- Postgres, ArtifactStore, Cognee, and every other durable store use explicitly mounted persistent
-  volumes whose StorageClass supports online expansion. Capacity thresholds alert and expand before
-  exhaustion; growth does not require copying user data into a new product path.
-- Target transcripts, persona revisions, memories, artifacts, runs, and audit evidence have no
-  automatic TTL or expiry. They remain until an explicit authorized deletion and its reference-safe
-  purge completes.
-- Agent-runtime workspaces are mounted scratch (`emptyDir` or lease-scoped ephemeral volumes), are
-  never authoritative or backed up, and are cleared on Pod replacement, scale-to-zero, or lease
-  expiry. Container root filesystems are non-authoritative and read-only where supported.
-- A future application rollout drains or fences active work, starts the one supported target image,
-  remounts its existing durable volumes, passes readiness, and resumes from canonical state in under
-  five minutes per silo. No parallel product runtime or data transformation is part of that SLO.
+## Storage and retention
 
-## Implementation acceptance
+Canonical transcripts, persona revisions, memory references, artifacts, runs, and audit evidence
+remain until an explicit authorized deletion and reference-safe purge completes. Durable stores use
+mounted persistent storage with backup and restore coverage.
 
-Each implemented slice must demonstrate:
+Runtime workspaces are non-authoritative scratch storage. Pod replacement, scale-to-zero, or lease
+expiry may clear them without losing product state.
 
-- tests authored against the target capability and authorization contracts;
-- no runtime dependency on an obsolete schema, protocol, store, credential, identifier, or API;
-- no compatibility, transfer, dual-write, static-token, or reverse-bridge path;
-- fail-closed identity, authorization, and credential behavior;
-- tenant isolation and scoped external-I/O authorization;
-- structured logs and traces for external-I/O paths;
-- backup/restore coverage for data created by the new product where that capability owns durable
-  state; and
+## Acceptance
+
+An implemented capability must demonstrate:
+
+- tests against the current capability and authorization contracts;
+- fail-closed identity, policy, credential, and persistence behaviour;
+- silo isolation and scoped external I/O;
+- immutable run input and ordered event evidence where execution is involved;
+- structured logs and traces for external I/O;
+- backup and restore coverage for owned durable state; and
 - independent review with no unresolved Critical or High security finding.
 
-Performance, availability, and cost are measured against the new product's stated SLOs and workload
-tests, not against an obsolete implementation.
+Live qualification validates behaviour against real dependencies and infrastructure. It is not an
+authority boundary and does not determine which product paths remain supported.
 
-> See also: [personal-agent platform architecture](personal-agent-platform-architecture.md) and
-> [direct-refactor implementation plan](personal-agent-platform-direct-refactor-plan.md).
+> See also: [platform architecture](personal-agent-platform-architecture.md),
+> [ADR 0008](../adr/0008-target-agent-contracts-and-workload-identity.md), and
+> [ADR 0011](../adr/0011-single-run-input-and-artifact-read-authorities.md).

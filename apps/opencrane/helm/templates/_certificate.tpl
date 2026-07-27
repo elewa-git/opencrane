@@ -8,13 +8,10 @@ The silo serves its control plane at the ORG host (`ingress.controlPlaneHost` =
 reference a TLS secret in its OWN namespace — so each silo must issue its own cert here, into
 the secret the opencrane-server Ingress references. The Issuer it references
 (`certManager.issuerName`) is normally created by THIS chart
-(`certManager.selfManagedIssuer=true`), or is a separately managed issuer when that flag is
-false — either way the kind
-(ClusterIssuer vs. namespaced Issuer) follows the SAME `opencrane.namespacedCertIssuer` helper
-the operator's CERT_MANAGER_ISSUER_KIND env var derives from, so they can never disagree.
+(`certManager.selfManagedIssuer=true`), or is a separately managed namespaced Issuer when
+that flag is false.
 */ -}}
 {{- $host := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
-{{- $issuerKind := ternary "Issuer" "ClusterIssuer" (eq (include "opencrane.namespacedCertIssuer" .) "true") -}}
 apiVersion: cert-manager.io/v1
 kind: Certificate
 metadata:
@@ -27,7 +24,7 @@ spec:
   secretName: {{ required "ingress.tls.secretName is required when ingress.tls.enabled" .Values.ingress.tls.secretName }}
   issuerRef:
     name: {{ required "certManager.issuerName is required when certManager.enabled" .Values.certManager.issuerName }}
-    kind: {{ $issuerKind }}
+    kind: Issuer
   dnsNames:
     - {{ $host | quote }}
 {{- end }}

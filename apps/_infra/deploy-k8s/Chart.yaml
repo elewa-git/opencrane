@@ -11,8 +11,8 @@ type: application
 version: 0.1.0
 appVersion: "0.1.0"
 keywords:
-  - openclaw
-  - multi-tenant
+  - governed-agents
+  - cluster-tenant
   - ai-gateway
 maintainers:
   - name: OpenCrane
