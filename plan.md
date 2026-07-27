@@ -221,7 +221,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#226](https://github.com/elewa-git/opencrane/issues/226) | Build membership management over authoritative target APIs |
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
-| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by ADR 0007 and this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
+| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
 
 ## Deferred research

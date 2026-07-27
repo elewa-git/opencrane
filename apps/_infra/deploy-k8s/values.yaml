@@ -465,9 +465,9 @@ clustertenantManager:
       port: 8000
     # -- Persist Cognee's identity/relational DB + graph + vector stores on a PVC so they
     #    survive pod restarts. WITHOUT this, all of Cognee's state lives on the pod's
-    #    ephemeral filesystem and is WIPED on every restart — resetting org memory AND
-    #    orphaning the per-tenant Cognee logins the operator registers (their cached Secrets
-    #    then 401). Only consumed when `install` is true.
+    #    ephemeral filesystem and is WIPED on every restart — resetting org memory and
+    #    invalidating every credential cached behind the memory gateway. Only consumed
+    #    when `install` is true.
     persistence:
       enabled: true
       # -- Size of the Cognee data volume. Grow-only: the GKE default StorageClass (pd.csi,
