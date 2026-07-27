@@ -1,6 +1,8 @@
 import { Router, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
+// Side-effect import: loads the express-session SessionData.authUser augmentation.
+import "@opencrane/server/_infra/auth";
 import type { LangfuseConfig, MetricsCallerScope } from "./model-routing-metrics.types.js";
 import { _ResolveCallerClusterTenant as _resolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
@@ -43,9 +45,9 @@ function _resolveConfig(): LangfuseConfig | null
 
 /**
  * Resolve the caller's scope for query injection (AIR.10). An operator forwards unconstrained;
- * a non-operator's own ClusterTenant is resolved fresh from their IdP-verified email (fail-closed).
+ * a non-operator's own ClusterTenant is resolved fresh from their IdP-verified subject (fail-closed).
  *
- * @param prisma - Prisma client for the email→tenant→clusterTenantRef lookup.
+ * @param prisma - Prisma client for the subject-to-ClusterTenant lookup.
  * @param req    - The incoming request carrying the session.
  * @returns The caller's resolved scope.
  */
@@ -66,8 +68,8 @@ async function _resolveCallerScope(prisma: PrismaClient, req: Request): Promise<
     return { isOperator: true, clusterTenant: null };
   }
 
-  // 3. Non-operator: resolve their own ClusterTenant fresh from the verified email (fail-closed).
-  const clusterTenant = await _resolveCallerClusterTenant(prisma, authUser.email);
+  // 3. Non-operator: resolve their own ClusterTenant from the stable IdP subject (fail-closed).
+  const clusterTenant = await _resolveCallerClusterTenant(prisma, authUser.sub);
   return { isOperator: false, clusterTenant };
 }
 

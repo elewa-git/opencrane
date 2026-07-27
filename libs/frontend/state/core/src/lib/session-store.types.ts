@@ -1,7 +1,7 @@
 /** Coarse capability flags the UI uses to show/hide management controls. */
 export interface Capabilities
 {
-	/** May reach the operator console (tenant/policy/budget management). */
+	/** May reach the operator console for policy and budget management. */
 	isOperator: boolean;
 
 	/**

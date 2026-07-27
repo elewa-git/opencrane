@@ -1,13 +1,31 @@
 import express from "express";
 import type { Express } from "express";
 import type { PrismaClient } from "@prisma/client";
+import session from "express-session";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Side-effect import: loads the express-session SessionData.authUser augmentation.
+import "@opencrane/server/_infra/auth";
+import type { AuthUser } from "@opencrane/server/_infra/auth";
 import { modelRegistryRouter } from "../routes/model-registry.js";
 
 /** In-memory model_definitions store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
+
+/** Build a complete OIDC platform-operator session for mutation route tests. */
+function _platformOperator(): AuthUser
+{
+  return {
+    sub: "operator-1",
+    issuer: "https://idp.example.test",
+    groups: ["platform-operators"],
+    isPlatformOperator: true,
+    isOrgAdmin: true,
+    email: "operator@example.test",
+    authenticatedAt: "2026-06-18T00:00:00.000Z",
+  };
+}
 
 /** Build a Prisma stub over an in-memory map keyed by model id, with optional credential rows. */
 function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = new Map()): PrismaClient
@@ -44,11 +62,20 @@ function _mockPrisma(store: Map<string, Row>, credentials: Map<string, Row> = ne
   } as unknown as PrismaClient;
 }
 
-/** Build a minimal app mounting only the model-registry router. */
-function _buildApp(prisma: PrismaClient): Express
+/** Build a minimal app mounting the model-registry router with an authenticated operator session. */
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator()): Express
 {
   const app = express();
   app.use(express.json());
+  app.use(session({ secret: "test-session-secret", resave: false, saveUninitialized: false }));
+  if (user)
+  {
+    app.use(function _seedSession(req, _res, next)
+    {
+      req.session.authUser = user;
+      next();
+    });
+  }
   app.use("/api/v1/models", modelRegistryRouter(prisma));
   return app;
 }

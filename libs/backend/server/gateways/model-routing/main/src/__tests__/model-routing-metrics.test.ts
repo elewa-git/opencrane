@@ -1,36 +1,51 @@
 import express from "express";
 import type { Express } from "express";
 import type { PrismaClient } from "@prisma/client";
+import session from "express-session";
 import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+// Side-effect import: loads the express-session SessionData.authUser augmentation.
+import "@opencrane/server/_infra/auth";
+import type { AuthUser } from "@opencrane/server/_infra/auth";
 import { modelRoutingMetricsRouter } from "../routes/model-routing-metrics.js";
 
-/** A session-bearing user used to exercise the scope-filter injection. */
-interface SessionUser
+/** Build a complete OIDC session identity accepted by the metrics scope resolver. */
+function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
 {
-  /** Verified email used by the fail-closed tenant lookup. */
-  email: string;
-  /** Whether the caller is a platform operator (no tenant filter injected). */
-  isPlatformOperator: boolean;
+  return {
+    sub: "user-1",
+    issuer: "https://idp.example.test",
+    groups: [],
+    isPlatformOperator: false,
+    isOrgAdmin: false,
+    email: "user@example.test",
+    authenticatedAt: "2026-06-18T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
-/** Build a Prisma stub whose tenant lookup resolves to a fixed clusterTenantRef. */
+/** Build a Prisma stub whose membership lookup resolves to a fixed ClusterTenant. */
 function _mockPrisma(tenantClusterTenant: string | null = null): PrismaClient
 {
   return {
-    tenant: { findMany: async function _fm() { return tenantClusterTenant ? [{ clusterTenantRef: tenantClusterTenant }] : []; } },
+    orgMembership: { findMany: async function _fm() { return tenantClusterTenant ? [{ clusterTenant: tenantClusterTenant }] : []; } },
   } as unknown as PrismaClient;
 }
 
-/** Build a minimal app mounting the metrics router, optionally seeding a session user. */
-function _buildApp(prisma: PrismaClient, user?: SessionUser): Express
+/** Build a minimal app mounting the metrics router with a canonical authenticated session. */
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true, isOrgAdmin: true })): Express
 {
   const app = express();
   app.use(express.json());
+  app.use(session({ secret: "test-session-secret", resave: false, saveUninitialized: false }));
   if (user)
   {
-    app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: SessionUser } }).session = { authUser: user }; next(); });
+    app.use(function _seedSession(req, _res, next)
+    {
+      req.session.authUser = user;
+      next();
+    });
   }
   app.use("/api/v1/model-routing/metrics", modelRoutingMetricsRouter(prisma));
   return app;
@@ -71,7 +86,7 @@ describe("modelRoutingMetricsRouter", function _suite()
     const fetchMock = vi.fn(async function _f() { return { ok: true, status: 200, json: async function _j() { return { data: [{ count: 7 }] }; } } as unknown as Response; });
     vi.stubGlobal("fetch", fetchMock);
 
-    const app = _buildApp(_mockPrisma(), { email: "op@platform.test", isPlatformOperator: true });
+    const app = _buildApp(_mockPrisma(), _authUser({ sub: "operator-1", email: "op@platform.test", isPlatformOperator: true, isOrgAdmin: true }));
     const res = await request(app).get("/api/v1/model-routing/metrics").query({ query: JSON.stringify({ view: "traces", filters: [] }) });
 
     expect(res.status).toBe(200);
@@ -94,7 +109,7 @@ describe("modelRoutingMetricsRouter", function _suite()
     const fetchMock = vi.fn(async function _f() { return { ok: true, status: 200, json: async function _j() { return {}; } } as unknown as Response; });
     vi.stubGlobal("fetch", fetchMock);
 
-    const app = _buildApp(_mockPrisma("acme"), { email: "user@acme.test", isPlatformOperator: false });
+    const app = _buildApp(_mockPrisma("acme"), _authUser({ sub: "user-acme", email: "user@acme.test" }));
     await request(app).get("/api/v1/model-routing/metrics").query({ query: JSON.stringify({ view: "traces", filters: [] }) });
 
     const [calledUrl] = fetchMock.mock.calls[0] as unknown as [string];
@@ -113,7 +128,7 @@ describe("modelRoutingMetricsRouter", function _suite()
     const fetchMock = vi.fn(async function _f() { return { ok: true, status: 200, json: async function _j() { return {}; } } as unknown as Response; });
     vi.stubGlobal("fetch", fetchMock);
 
-    const app = _buildApp(_mockPrisma(null), { email: "nobody@nowhere.test", isPlatformOperator: false });
+    const app = _buildApp(_mockPrisma(null), _authUser({ sub: "user-nowhere", email: "nobody@nowhere.test" }));
     const res = await request(app).get("/api/v1/model-routing/metrics").query({ query: JSON.stringify({ view: "traces", filters: [] }) });
 
     expect(res.status).toBe(403);
