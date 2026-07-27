@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - develop
       - own-personal-ai-agent-setup
   pull_request:
     branches:
       - main
+      - develop
       - own-personal-ai-agent-setup
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
@@ -58,7 +60,7 @@ jobs:
       - name: Select the last successful base
         uses: nrwl/nx-set-shas@v5
         with:
-          main-branch-name: ${{ github.base_ref || (github.ref_name == 'own-personal-ai-agent-setup' && 'own-personal-ai-agent-setup' || 'main') }}
+          main-branch-name: ${{ github.base_ref || github.ref_name }}
 
       - name: Emit affected deployable matrix
         id: affected
@@ -68,7 +70,22 @@ jobs:
     name: Build, test, and lint affected projects
     runs-on: ubuntu-latest
     needs: prepare
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: opencrane
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d opencrane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opencrane
       NX_BASE: ${{ needs.prepare.outputs.nx_base }}
       NX_HEAD: ${{ needs.prepare.outputs.nx_head }}
     steps:
@@ -123,6 +140,19 @@ jobs:
       # generator can introduce transient files beneath an app root.
       - name: Generate the database client
         run: npm run db:generate -w @opencrane/server
+
+      - name: Install the PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Apply the fresh target database baseline
+        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
+
+      # Every suite validates the shared target baseline. A baseline-only change belongs to the
+      # opencrane app and therefore cannot make the library-owned SQL suites "affected" in Nx.
+      - name: Run every PostgreSQL authority suite
+        run: npx nx run-many -t test:sql --parallel=1
 
       - name: Restore the Nx computation cache
         uses: actions/cache@v4

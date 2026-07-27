@@ -28,7 +28,23 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        branch: [main, own-personal-ai-agent-setup]
+        branch: [main, develop, own-personal-ai-agent-setup]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: opencrane
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d opencrane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opencrane
     steps:
       - uses: actions/checkout@v6
         with:
@@ -58,6 +74,20 @@ jobs:
       - name: Generate the database client
         if: steps.fresh.outputs.changed == 'true'
         run: npm run db:generate -w @opencrane/server
+
+      - name: Install the PostgreSQL client
+        if: steps.fresh.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client
+
+      - name: Apply the fresh target database baseline
+        if: steps.fresh.outputs.changed == 'true'
+        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
+
+      - name: Run every PostgreSQL authority suite
+        if: steps.fresh.outputs.changed == 'true'
+        run: npx nx run-many -t test:sql --parallel=1
 
       - name: Install Helm
         if: steps.fresh.outputs.changed == 'true'
