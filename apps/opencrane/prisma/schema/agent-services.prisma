@@ -59,12 +59,13 @@ model AgentRevision {
   digest              String
   promptPolicyVersion String                         @map("prompt_policy_version")
   personaRevisionId   String?                        @map("persona_revision_id")
-  modelPolicyId       String                         @map("model_policy_id")
+  modelDefinitionId   String                         @map("model_definition_id")
   budget              Json
   authoredBy          String                         @map("authored_by")
   createdAt           DateTime                       @default(now()) @map("created_at")
   publishedAt         DateTime?                      @map("published_at")
   agentService        AgentService                   @relation("AgentServiceRevisions", fields: [agentServiceId], references: [id], onDelete: Restrict)
+  modelDefinition     ModelDefinition                @relation(fields: [modelDefinitionId], references: [id], onDelete: Restrict)
   activeFor           AgentService[]                 @relation("ActiveAgentRevision")
   parentRevision      AgentRevision?                 @relation("AgentRevisionLineage", fields: [parentRevisionId], references: [id], onDelete: Restrict)
   childRevisions      AgentRevision[]                @relation("AgentRevisionLineage")

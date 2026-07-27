@@ -1,5 +1,8 @@
 BEGIN;
 
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('channel-model', 'global', 'channel-model', 'litellm-channel-model', 'channel-model', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
 BEGIN
@@ -15,8 +18,8 @@ $$;
 
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
 VALUES ('channel-service', 'silo-channel', 'managed', 'Channel agent', 'managed-agent', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_policy_id", "budget", "authored_by", "published_at")
-VALUES ('channel-revision', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'model-v1', '{}', 'user-1', clock_timestamp());
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by", "published_at")
+VALUES ('channel-revision', 'channel-service', 1, 'published', 'sha256:' || repeat('a', 64), 'prompt-v1', 'channel-model', '{}', 'user-1', clock_timestamp());
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'channel-revision' WHERE "id" = 'channel-service';
 INSERT INTO "conversation_threads" ("id", "silo_id", "agent_service_id", "updated_at") VALUES ('channel-thread', 'silo-channel', 'channel-service', clock_timestamp());
 INSERT INTO "conversation_participants" ("thread_id", "user_id") VALUES ('channel-thread', 'user-1');

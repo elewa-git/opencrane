@@ -154,11 +154,27 @@ export interface IdentityEnvelopeSource
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<IdentityEnvelopeInput>>;
 }
 
+/** Result of reconciling accepted personal changes before the run authority is read. */
+export interface PersonalConfigurationMaterialization
+{
+	/** Whether this admission advanced exactly one personal revision pair. */
+	readonly state: "materialized" | "unchanged";
+}
+
+/** Applies at most one already-accepted personal change inside the admission transaction. */
+export interface PersonalConfigurationMaterializationSource
+{
+	/** Reconciles the execution subject's accepted change before the active revision is frozen. */
+	materialize(command: SessionAssemblyCommand, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<PersonalConfigurationMaterialization>>;
+}
+
 /** Ports required by the one session-assembly entry point. */
 export interface SessionAssemblyAuthorities
 {
 	/** Run and snapshot admission authority. */
 	admission: RunAdmissionRepository;
+	/** Accepted personal-change materialisation before the exact active revision is loaded. */
+	personalConfiguration: PersonalConfigurationMaterializationSource;
 	/** Run authority revalidated only inside the admission transaction. */
 	runAuthority: RunAuthoritySource;
 	/** Approved-persona authority. */
@@ -169,7 +185,7 @@ export interface SessionAssemblyAuthorities
 	preferenceFacts: PreferenceFactSource;
 	/** Memory-scope authority. */
 	memoryScope: MemoryScopeSource;
-	/** Tool and model-policy authority. */
+	/** Tool and registered model-definition authority. */
 	toolPolicy: ToolPolicySource;
 	/** Future-admission skill eligibility authority. */
 	skillEligibility: SkillRevisionEligibilitySource;

@@ -1,5 +1,8 @@
 BEGIN;
 
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('integrations-model', 'global', 'integrations-model', 'litellm-integrations-model', 'integrations-model', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
 BEGIN
@@ -15,8 +18,8 @@ $$;
 
 INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at")
 VALUES ('integration-service', 'silo-integrations', 'managed', 'Integration agent', 'managed-agent', clock_timestamp());
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_policy_id", "budget", "authored_by")
-VALUES ('integration-revision', 'integration-service', 1, 'sha256:' || repeat('a', 64), 'prompt-v1', 'model-v1', '{}', 'user-1');
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('integration-revision', 'integration-service', 1, 'sha256:' || repeat('a', 64), 'prompt-v1', 'integrations-model', '{}', 'user-1');
 INSERT INTO "integrations" ("id", "silo_id", "obot_catalog_entry_id", "display_name", "updated_at")
 VALUES ('integration-1', 'silo-integrations', 'obot-catalog-1', 'Calendar', clock_timestamp());
 INSERT INTO "integration_custody_references" ("id", "integration_id", "silo_id", "obot_custody_reference", "expires_at")
@@ -27,8 +30,8 @@ VALUES ('integration-revision', 'integration-1', 'silo-integrations', 'custody-1
 SELECT pg_temp.expect_failure('duplicate integration assignment', $statement$
   INSERT INTO "agent_revision_integration_assignments" ("agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "allowed_tools")
   VALUES ('integration-revision', 'integration-1', 'silo-integrations', 'custody-1', ARRAY['calendar.write'])$statement$, 'agent_revision_integration_assignments_pkey');
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_policy_id", "budget", "authored_by")
-VALUES ('integration-revision-tools', 'integration-service', 2, 'sha256:' || repeat('b', 64), 'prompt-v1', 'model-v1', '{}', 'user-1');
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('integration-revision-tools', 'integration-service', 2, 'sha256:' || repeat('b', 64), 'prompt-v1', 'integrations-model', '{}', 'user-1');
 INSERT INTO "integrations" ("id", "silo_id", "obot_catalog_entry_id", "display_name", "updated_at")
 VALUES ('integration-tools', 'silo-integrations', 'obot-catalog-tools', 'Tasks', clock_timestamp());
 INSERT INTO "integration_custody_references" ("id", "integration_id", "silo_id", "obot_custody_reference", "expires_at")
@@ -50,8 +53,8 @@ SELECT pg_temp.expect_failure('published integration assignment is immutable', $
   UPDATE "agent_revision_integration_assignments" SET "allowed_tools" = ARRAY['calendar.write']
   WHERE "agent_revision_id" = 'integration-revision' AND "integration_id" = 'integration-1'$statement$, 'AgentRevision assignments are immutable');
 
-INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_policy_id", "budget", "authored_by")
-VALUES ('integration-revision-2', 'integration-service', 3, 'sha256:' || repeat('c', 64), 'prompt-v1', 'model-v1', '{}', 'user-1');
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by")
+VALUES ('integration-revision-2', 'integration-service', 3, 'sha256:' || repeat('c', 64), 'prompt-v1', 'integrations-model', '{}', 'user-1');
 UPDATE "integration_custody_references" SET "state" = 'revoked', "revoked_at" = clock_timestamp() WHERE "id" = 'custody-1';
 SELECT pg_temp.expect_failure('revoked custody reference cannot be assigned', $statement$
   INSERT INTO "agent_revision_integration_assignments" ("agent_revision_id", "integration_id", "silo_id", "custody_reference_id", "allowed_tools")

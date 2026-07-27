@@ -66,6 +66,8 @@ Tagged `scope:model-routing`: it may depend only on `scope:auth`, `scope:cluster
 
 Owns `ModelRoutingDefault` in `apps/opencrane/prisma/schema/model-routing.prisma`. Per-tenant model
 rows and provider credentials are owned by the [providers](../../providers/main/README.md) domain.
+An `AgentRevision` stores the provider domain's stable `ModelDefinition` identifier, rather than an
+unverified alias; this package's catalogue is therefore the allowlist source for executable models.
 
 ## See also
 

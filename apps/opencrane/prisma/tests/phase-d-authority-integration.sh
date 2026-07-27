@@ -77,6 +77,9 @@ wait_for_holder_sleeping() {
 }
 
 run_psql <<'SQL'
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('phase-d-model', 'global', 'phase-d-model', 'litellm-phase-d-model', 'phase-d-model', clock_timestamp());
+
 INSERT INTO "agent_services" (
   "id", "silo_id", "kind", "name",
   "workload_profile", "updated_at"
@@ -86,10 +89,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by"
+  "model_definition_id", "budget", "authored_by"
 ) VALUES (
   'dispatch-lock-revision', 'dispatch-lock-service', 1, 'draft',
-  'sha256:' || repeat('e', 64), 'prompt-v1', 'model-v1', '{}', 'dispatch-lock-user'
+  'sha256:' || repeat('e', 64), 'prompt-v1', 'phase-d-model', '{}', 'dispatch-lock-user'
 );
 UPDATE "agent_revisions"
 SET "state" = 'published', "published_at" = clock_timestamp()
@@ -182,10 +185,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by"
+  "model_definition_id", "budget", "authored_by"
 ) VALUES (
   'rev-race-assignment', 'svc-race-assignment', 1, 'draft', 'sha256:' || repeat('1', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race'
+  'prompt-v1', 'phase-d-model', '{}', 'user-race'
 );
 SQL
 
@@ -241,10 +244,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by"
+  "model_definition_id", "budget", "authored_by"
 ) VALUES (
   'rev-race-assignment-first', 'svc-race-assignment-first', 1, 'draft', 'sha256:' || repeat('6', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race'
+  'prompt-v1', 'phase-d-model', '{}', 'user-race'
 );
 SQL
 
@@ -299,10 +302,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by", "published_at"
+  "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
   'rev-race-activation', 'svc-race-activation', 1, 'published', 'sha256:' || repeat('2', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp()
+  'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp()
 );
 SQL
 
@@ -356,10 +359,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by", "published_at"
+  "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
   'rev-race-retirement', 'svc-race-retirement', 1, 'published', 'sha256:' || repeat('3', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp()
+  'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp()
 );
 SQL
 
@@ -413,12 +416,12 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by", "published_at"
+  "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES
   ('rev-race-run-rollover-1', 'svc-race-run-rollover', 1, 'published', 'sha256:' || repeat('7', 64),
-   'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp()),
+   'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp()),
   ('rev-race-run-rollover-2', 'svc-race-run-rollover', 2, 'published', 'sha256:' || repeat('8', 64),
-   'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp());
+   'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp());
 UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'rev-race-run-rollover-1'
 WHERE "id" = 'svc-race-run-rollover';
@@ -481,10 +484,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by", "published_at"
+  "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
   'rev-race-run-first', 'svc-race-run-first', 1, 'published', 'sha256:' || repeat('b', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp()
+  'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp()
 );
 UPDATE "agent_services"
 SET "state" = 'active', "active_revision_id" = 'rev-race-run-first'
@@ -673,10 +676,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by", "published_at"
+  "model_definition_id", "budget", "authored_by", "published_at"
 ) VALUES (
   'rev-race-action-authority', 'svc-race-action-authority', 1, 'published',
-  'sha256:' || repeat('e', 64), 'prompt-v1', 'model-v1', '{}', 'user-race', clock_timestamp()
+  'sha256:' || repeat('e', 64), 'prompt-v1', 'phase-d-model', '{}', 'user-race', clock_timestamp()
 );
 UPDATE "agent_services" SET "state" = 'active', "active_revision_id" = 'rev-race-action-authority'
 WHERE "id" = 'svc-race-action-authority';
@@ -863,10 +866,10 @@ INSERT INTO "agent_services" (
 );
 INSERT INTO "agent_revisions" (
   "id", "agent_service_id", "revision", "state", "digest", "prompt_policy_version",
-  "model_policy_id", "budget", "authored_by"
+  "model_definition_id", "budget", "authored_by"
 ) VALUES (
   'rev-race-cancel-proof', 'svc-race-cancel-proof', 1, 'draft', 'sha256:' || repeat('9', 64),
-  'prompt-v1', 'model-v1', '{}', 'user-race-cancel-proof'
+  'prompt-v1', 'phase-d-model', '{}', 'user-race-cancel-proof'
 );
 UPDATE "agent_revisions"
 SET "state" = 'published', "published_at" = clock_timestamp()
