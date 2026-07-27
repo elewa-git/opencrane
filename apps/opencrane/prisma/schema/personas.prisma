@@ -91,12 +91,14 @@ model PersonaInterview {
   id                 String                @id @default(cuid())
   personaProfileId   String                @map("persona_profile_id")
   userId             String                @map("user_id")
+  refreshChangeId    String?               @unique @map("refresh_change_id")
   questionSetId      String                @map("question_set_id")
   questionSetVersion Int                   @map("question_set_version")
   state              PersonaInterviewState @default(InProgress)
   startedAt          DateTime              @default(now()) @map("started_at")
   completedAt        DateTime?             @map("completed_at")
   profile            PersonaProfile        @relation(fields: [personaProfileId, userId], references: [id, userId], onDelete: Restrict)
+  refreshChange      PersonalConfigurationChange? @relation("PersonaRefreshInterview", fields: [refreshChangeId], references: [id], onDelete: Restrict)
   questionSet        PersonaQuestionSet    @relation(fields: [questionSetId, questionSetVersion], references: [id, version], onDelete: Restrict)
   answers            PersonaInterviewAnswer[]
   revisions          PersonaRevision[]

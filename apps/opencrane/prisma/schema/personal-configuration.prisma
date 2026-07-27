@@ -27,6 +27,7 @@ model PersonalConfigurationChange {
   decidedAt                DateTime?                        @map("decided_at")
   decidedBy                String?                          @map("decided_by")
   rejectionReason          String?                          @map("rejection_reason")
+  refreshInterview         PersonaInterview?                @relation("PersonaRefreshInterview")
 
   @@index([siloId, userId, proposedAt])
   @@index([sourceRunId])
