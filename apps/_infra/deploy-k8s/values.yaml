@@ -11,7 +11,7 @@ global:
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
 #    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,
-#    Obot, LiteLLM, and Langfuse while retaining one
+#    Obot and LiteLLM while retaining one
 #    pod/PVC footprint per silo. The per-namespace Cluster + per-database connection Secrets are
 #    provisioned by the deploy scripts (apps/_infra/deploy-k8s/deploy.sh → k8s-deploy.sh); the
 #    opencrane-ui consumes only its OpenCrane connection Secret. The silo is still the tenant scope,
@@ -663,37 +663,6 @@ litellm:
   # -- Optional explicit master key override. Leave empty to auto-generate when generateMasterKey=true.
   #    Placeholder is ignored when auto-generation is enabled.
   masterKey: "change-me-in-production"
-  # -- Trace capture (AIR.6): emit per-call traces from LiteLLM to a Langfuse
-  #    instance via LiteLLM's native langfuse success callback. This is the "log"
-  #    half of the shadow-measurement loop — it records {prompt, model, cost,
-  #    latency} per call so the optimizer (AIR.6/7) can read those traces back out
-  #    of Langfuse and join them by skill.
-  #    Two modes:
-  #      in-cluster (recommended): set langfuse.inCluster.enabled=true. The chart
-  #        deploys Langfuse as a subchart and auto-configures LiteLLM + opencrane-ui.
-  #        Leave litellm.langfuse.enabled=false in that case (auto-wired by templates).
-  #      external: set litellm.langfuse.enabled=true and supply host/keys below.
-  #    OFF by default: a default render is byte-identical with this disabled.
-  langfuse:
-    # -- Master switch. When false, no LANGFUSE_* / LITELLM_SUCCESS_CALLBACK env is
-    #    rendered and LiteLLM behaviour is unchanged.
-    enabled: false
-    # -- Base URL of the external Langfuse (e.g. https://langfuse.example.com).
-    #    Set on the container as LANGFUSE_HOST.
-    host: ""
-    # -- Inline Langfuse API keys. Used only when `enabled` and no `existingSecret`
-    #    is given; persisted into the chart-managed litellm Secret. Prefer
-    #    `existingSecret` in production.
-    publicKey: ""
-    secretKey: ""
-    # -- Existing Secret holding the Langfuse keys (preferred in production). When
-    #    set, the chart does not manage/persist the inline keys.
-    existingSecret: ""
-    # -- Keys within `existingSecret` (and the chart-managed Secret) for the public
-    #    and secret Langfuse keys.
-    publicKeyKey: LANGFUSE_PUBLIC_KEY
-    secretKeyKey: LANGFUSE_SECRET_KEY
-
 # -- Ingress settings
 ingress:
   enabled: true
@@ -981,10 +950,6 @@ networkPolicy:
     #    validating platform connectivity in a non-production environment; enabling it
     #    unvalidated can break all planes simultaneously).
     enabled: false
-    # -- Set to true to also render the OTEL collector HTTPS egress rule (rule 11).
-    #    Only needed when observability.otel.enabled=true AND the OTEL exporter sends
-    #    to an external backend (e.g. GCP Cloud Trace). Ignored when the policy is not rendered.
-    allowOtelEgress: false
 
 # -- External Secrets Operator integration
 externalSecrets:
@@ -1003,17 +968,12 @@ externalSecrets:
     # -- Optional GKE region or zone; empty lets External Secrets discover it.
     clusterLocation: ""
 
-# -- Cloud-native observability (no in-cluster stack needed)
+# -- Cloud-native observability
 observability:
-  # -- Enable structured logging for Cloud Logging (GKE auto-ingests)
-  cloudLogging: false
-  # -- Enable Cloud Error Reporting integration
-  cloudErrorReporting: false
-  # -- OpenTelemetry: every OpenCrane service emits structured JSON logs (trace-correlated)
-  #    and execution traces. An in-cluster OTEL Collector receives the traces over OTLP and
-  #    scrapes pod-stdout logs, then exports both to GCP Cloud Logging + Cloud Trace (or any
-  #    OTLP backend). Disabled by default — apps log to stdout regardless; turning this on
-  #    wires them to the collector and deploys it.
+  # -- OpenTelemetry: every OpenCrane service emits structured JSON logs and can export
+  #    execution traces over OTLP. Disabled by default; enabling it points apps at an
+  #    operator-supplied release-local Collector Service. This chart does not deploy,
+  #    configure, or manage the collector or its telemetry backend.
   otel:
     enabled: false
     # -- Per-app pino level (debug|info|warn|error). Consumed via LOG_LEVEL.
@@ -1021,147 +981,5 @@ observability:
     # -- NODE_ENV for the app containers (production = JSON logs, no pretty transport).
     nodeEnv: production
     collector:
-      # -- Topology: "daemonset" scrapes each node's pod stdout via the filelog receiver
-      #    (needed for the log pipeline); "deployment" runs a single collector for traces
-      #    only (use on GKE Autopilot, where hostPath DaemonSets are restricted — rely on
-      #    the platform's native stdout→Cloud Logging and set logs.collector=platform).
-      mode: daemonset
-      # -- Collector image (contrib distro carries the googlecloud + filelog components).
-      image: otel/opentelemetry-collector-contrib:0.115.0
-      # -- OTLP/HTTP port apps export traces to.
+      # -- OTLP/HTTP port exposed by the operator-supplied release-local collector.
       otlpPort: 4318
-      # -- Collector container resource requests/limits.
-      resources: {}
-    exporter:
-      # -- Export backend: "googlecloud" (Cloud Logging + Cloud Trace) or "otlp" (forward to
-      #    an external OTLP endpoint such as Tempo/Loki/another collector).
-      backend: googlecloud
-      otlp:
-        # -- Downstream OTLP endpoint when exporter.backend=otlp.
-        endpoint: ""
-    logs:
-      # -- Log pipeline: "filelog" (collector scrapes pod stdout — requires collector.mode=daemonset)
-      #    or "platform" (rely on the cloud's native stdout collection, e.g. GKE Autopilot →
-      #    Cloud Logging; the collector then handles traces only).
-      collector: filelog
-
-# -- In-cluster Langfuse LLM observability.
-#    When inCluster.enabled=true, the official Langfuse Helm subchart (v1.x) is deployed
-#    inside this release. The opencrane-ui metrics proxy and LiteLLM trace callback
-#    are auto-wired to the in-cluster service — no manual host/key configuration needed.
-#    k8s-deploy.sh creates the `opencrane-langfuse` Secret (stable across upgrades) and
-#    supplies Langfuse's own role and database on the per-silo CNPG server before the Helm install.
-#
-#    Structure: `langfuse.inCluster` is an OpenCrane-level switch consumed by our templates.
-#    All other keys (`langfuse.langfuse`, `langfuse.postgresql`, etc.) are forwarded verbatim
-#    to the langfuse subchart — see https://langfuse.github.io/langfuse-k8s for the full API.
-langfuse:
-  inCluster:
-    # -- Deploy Langfuse in-cluster as a Helm subchart. Disabled by default.
-    enabled: false
-    # -- k8s Secret created by k8s-deploy.sh containing stable generated credentials.
-    #    Required keys: NEXTAUTH_SECRET, SALT, ENCRYPTION_KEY,
-    #    LANGFUSE_INIT_PROJECT_PUBLIC_KEY, LANGFUSE_INIT_PROJECT_SECRET_KEY,
-    #    LANGFUSE_INIT_USER_PASSWORD.
-    existingSecret: "opencrane-langfuse"
-    # -- First-boot admin seeding (idempotent; values stored in DB after first run).
-    adminEmail: "admin@opencrane.ai"
-    adminName: "Admin"
-    orgId: "opencrane"
-    orgName: "OpenCrane"
-    projectId: "opencrane-llm"
-    projectName: "OpenCrane LLM"
-
-  # -- Langfuse app configuration (forwarded to the langfuse subchart's `langfuse:` key).
-  langfuse:
-    nextauth:
-      # -- NEXTAUTH_URL: the public URL Langfuse is served at.
-      #    k8s-deploy.sh sets this to https://langfuse.<base-domain> via --set.
-      url: "http://localhost:3000"
-      # -- NEXTAUTH_SECRET: pulled from the opencrane-langfuse Secret (stable).
-      secret:
-        secretKeyRef:
-          name: opencrane-langfuse
-          key: NEXTAUTH_SECRET
-    # -- SALT (hashes API keys). Pulled from the opencrane-langfuse Secret.
-    salt:
-      secretKeyRef:
-        name: opencrane-langfuse
-        key: SALT
-    # -- ENCRYPTION_KEY (256-bit hex, encrypts sensitive data). Pulled from Secret.
-    encryptionKey:
-      secretKeyRef:
-        name: opencrane-langfuse
-        key: ENCRYPTION_KEY
-    # -- Init-seeding env vars. Non-sensitive values inline; secrets from opencrane-langfuse.
-    #    Langfuse seeds org/project/user on first boot only; idempotent on subsequent starts.
-    additionalEnv:
-      - name: LANGFUSE_INIT_ORG_ID
-        value: "opencrane"
-      - name: LANGFUSE_INIT_ORG_NAME
-        value: "OpenCrane"
-      - name: LANGFUSE_INIT_PROJECT_ID
-        value: "opencrane-llm"
-      - name: LANGFUSE_INIT_PROJECT_NAME
-        value: "OpenCrane LLM"
-      - name: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
-        valueFrom:
-          secretKeyRef:
-            name: opencrane-langfuse
-            key: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
-      - name: LANGFUSE_INIT_PROJECT_SECRET_KEY
-        valueFrom:
-          secretKeyRef:
-            name: opencrane-langfuse
-            key: LANGFUSE_INIT_PROJECT_SECRET_KEY
-      - name: LANGFUSE_INIT_USER_EMAIL
-        value: "admin@opencrane.ai"
-      - name: LANGFUSE_INIT_USER_NAME
-        value: "Admin"
-      - name: LANGFUSE_INIT_USER_PASSWORD
-        valueFrom:
-          secretKeyRef:
-            name: opencrane-langfuse
-            key: LANGFUSE_INIT_USER_PASSWORD
-    # -- Disable public sign-up: the seeded user is the only entry point.
-    features:
-      signUpDisabled: true
-
-  # -- PostgreSQL: DISABLED bundled instance. k8s-deploy.sh provisions the `langfuse`
-  #    database and its distinct role on the per-silo CNPG server; host and credentials are
-  #    injected via --set at deploy time.
-  postgresql:
-    deploy: false
-    # -- Hostname injected by k8s-deploy.sh: <release>-postgres-pooler.<namespace>.svc.cluster.local
-    host: ""
-    auth:
-      username: "opencrane"
-      # -- Langfuse's own published connection Secret (not an OpenCrane credential).
-      existingSecret: "opencrane-postgres-langfuse-app"
-      secretKeys:
-        userPasswordKey: "password"
-        adminPasswordKey: "password"
-      database: "langfuse"
-
-  # -- ClickHouse: bundled single-node for trace/event storage (Langfuse v3 requirement).
-  #    replicaCount=1 + clusterEnabled=false = standalone mode (no ZooKeeper needed).
-  clickhouse:
-    deploy: true
-    replicaCount: 1
-    clusterEnabled: false
-    shards: 1
-    auth:
-      username: default
-      existingSecret: "opencrane-langfuse"
-      existingSecretKey: "CLICKHOUSE_PASSWORD"
-
-  # -- Redis (Valkey): bundled, single-node. Required by Langfuse for background jobs.
-  #    The `--maxmemory-policy noeviction` flag is included in the chart's default extraFlags.
-  redis:
-    deploy: true
-
-  # -- MinIO: bundled S3-compatible store for trace event blobs and exports.
-  s3:
-    deploy: true
-    forcePathStyle: true
-    bucket: langfuse

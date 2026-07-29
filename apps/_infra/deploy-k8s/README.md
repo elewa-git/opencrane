@@ -18,6 +18,11 @@ Think of it as the assembly point: each app owns its own workload templates, and
 them — unchanged — with one shared release context. It renders nothing customer-specific itself; it just
 wires the pieces and the per-silo networking together.
 
+An upgrade from a historical Langfuse-enabled release is fail-closed because Helm would otherwise
+partially delete its state. Back up or export required traces, follow the
+[legacy retirement runbook](../../../website/operators/hosting.md#retire-a-legacy-langfuse-install),
+then pass `--confirm-langfuse-retirement-after-backup`.
+
 ```
  deploy.sh  (per-ClusterTenant silo profile)
         │  helm dep build (from Chart.lock) → helm upgrade --install
@@ -28,7 +33,7 @@ wires the pieces and the per-silo networking together.
  │    server · opencrane-ui · channel-proxy · artifact-service  │
  │    · artifact-preprocessor · agent-controller                 │
  │    · skill-authoring · tool-runner                            │
- │    · cognee · litellm · obot · langfuse                       │
+ │    · cognee · litellm · obot                                  │
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
@@ -41,7 +46,7 @@ wires the pieces and the per-silo networking together.
 · [agent-controller](../../agent-controller/README.md) · [skill-authoring](../../skill-authoring/README.md)
 · [tool-runner](../../tool-runner/README.md)
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
-· [obot](../obot/README.md) · [langfuse](../langfuse/README.md)
+· [obot](../obot/README.md)
 
 A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress-nginx,
 external-dns, CloudNativePG, cert-manager) are external prerequisites a silo never installs. Dependencies
@@ -62,7 +67,7 @@ if the controller identity is compromised. The admission boundary requires Kuber
 
 `Entrypoint: deploy.sh` — the per-ClusterTenant silo deploy profile, a thin wrapper over the shared
 install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, and one
-pre-created PostgreSQL basic-auth Secret per logical database (server, obot, litellm, langfuse).
+pre-created PostgreSQL basic-auth Secret per logical database (server, obot, litellm).
 
 ## Boundary
 
@@ -112,4 +117,4 @@ package imports it.
   · [skill-authoring](../../skill-authoring/README.md) · [tool-runner](../../tool-runner/README.md)
   · [postgres](../../postgres/README.md)
 - Composed infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md) ·
-  [obot](../obot/README.md) · [langfuse](../langfuse/README.md)
+  [obot](../obot/README.md)

@@ -6,7 +6,7 @@ CHART="$ROOT_DIR/apps/postgres/helm"
 OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT"' EXIT
 
-DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"},{"name":"obot","owner":"obot","credentialsSecret":"postgres-obot-bootstrap"},{"name":"litellm","owner":"litellm","credentialsSecret":"postgres-litellm-bootstrap"},{"name":"langfuse","owner":"langfuse","credentialsSecret":"postgres-langfuse-bootstrap"}]'
+DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"postgres-opencrane-bootstrap"},{"name":"obot","owner":"obot","credentialsSecret":"postgres-obot-bootstrap"},{"name":"litellm","owner":"litellm","credentialsSecret":"postgres-litellm-bootstrap"}]'
 BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
@@ -31,7 +31,6 @@ grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$INSTANCE_POLICY"
 grep -q 'app.kubernetes.io/component: opencrane-server' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: mcp-gateway' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: litellm' <<<"$POOLER_POLICY"
-grep -q 'app.kubernetes.io/name: langfuse' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/cluster: opencrane-postgres' <<<"$POOLER_POLICY"
 grep -q '    - Egress' <<<"$POOLER_POLICY"
@@ -45,7 +44,7 @@ if grep -q 'namespaceSelector' <<<"$POOLER_POLICY"; then
   echo "postgres pooler boundary must not admit cross-namespace clients or destinations" >&2
   exit 1
 fi
-if grep -Eq 'app.kubernetes.io/(component: (opencrane-server|mcp-gateway|litellm)|name: langfuse)' <<<"$INSTANCE_POLICY"; then
+if grep -Eq 'app.kubernetes.io/component: (opencrane-server|mcp-gateway|litellm)' <<<"$INSTANCE_POLICY"; then
   echo "postgres instance policy allows an application to bypass the pooler" >&2
   exit 1
 fi
@@ -64,8 +63,8 @@ grep -q 'poolMode: "session"' "$OUTPUT"
 grep -q 'max_client_conn: "50"' "$OUTPUT"
 grep -q 'max_db_connections: "10"' "$OUTPUT"
 grep -q 'max_connections: "80"' "$OUTPUT"
-test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 3
-test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 4
+test "$(grep -c '^kind: Database$' "$OUTPUT")" -eq 2
+test "$(grep -c 'helm.sh/resource-policy: keep' "$OUTPUT")" -eq 3
 grep -q '^kind: Job$' "$OUTPUT"
 grep -q 'helm.sh/hook: post-install,post-upgrade' "$OUTPUT"
 grep -q 'activeDeadlineSeconds: 330' "$OUTPUT"
@@ -73,7 +72,7 @@ test "$(grep -c 'app.kubernetes.io/component: postgres-database-privileges' "$OU
 grep -q 'REVOKE CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q 'GRANT CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q -- '--single-transaction' "$OUTPUT"
-test "$(grep -c 'until psql' "$OUTPUT")" -eq 4
+test "$(grep -c 'until psql' "$OUTPUT")" -eq 3
 grep -q 'until recorded_baseline=' "$OUTPUT"
 grep -q "Timed out reading the target baseline from logical database" "$OUTPUT"
 grep -q "Timed out applying privileges for logical database" "$OUTPUT"
@@ -93,19 +92,16 @@ grep -q 'storageClass: "expandable-rwo"' "$OUTPUT"
 grep -q 'name: "postgres-opencrane-bootstrap"' "$OUTPUT"
 grep -q 'name: "postgres-obot-bootstrap"' "$OUTPUT"
 grep -q 'name: "postgres-litellm-bootstrap"' "$OUTPUT"
-grep -q 'name: "postgres-langfuse-bootstrap"' "$OUTPUT"
 grep -q 'postInitApplicationSQLRefs:' "$OUTPUT"
 grep -q 'key: target-baseline.sql' "$OUTPUT"
 grep -q 'name: "obot"' "$OUTPUT"
 grep -q 'name: "litellm"' "$OUTPUT"
-grep -q 'name: "langfuse"' "$OUTPUT"
 grep -q 'createdb: false' "$OUTPUT"
 grep -q 'createrole: false' "$OUTPUT"
 grep -q 'method: plugin' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: opencrane-server' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: mcp-gateway' "$OUTPUT"
 grep -q 'app.kubernetes.io/component: litellm' "$OUTPUT"
-grep -q 'app.kubernetes.io/name: langfuse' "$OUTPUT"
 grep -q 'name: EXPECTED_BASELINE_SHA256' "$OUTPUT"
 grep -q 'value: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "$OUTPUT"
 grep -q 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline"' "$OUTPUT"

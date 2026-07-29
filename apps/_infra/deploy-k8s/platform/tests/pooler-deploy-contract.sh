@@ -11,15 +11,8 @@ grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIP
 grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"
-grep -Fq '"$POSTGRES_POOLER_HOST" langfuse' "$DEPLOY_SCRIPT"
-grep -Fq 'langfuse.postgresql.host=${POSTGRES_POOLER_HOST}.${NAMESPACE}.svc.cluster.local' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.kubernetesApiServerCidrs[0]' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.kubernetesApiServerEndpointPort=$POSTGRES_KUBERNETES_API_ENDPOINT_PORT' "$DEPLOY_SCRIPT"
-
-if grep -Fq 'langfuse.postgresql.host=${POSTGRES_RELEASE}-rw.' "$DEPLOY_SCRIPT"; then
-  echo "Langfuse must use the CNPG Pooler, never the direct PostgreSQL Service." >&2
-  exit 1
-fi
 
 echo "pooler deploy contract: PASS"

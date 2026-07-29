@@ -57,7 +57,7 @@ export async function ___DoWithTrace<T>(
       catch (err)
       {
         // Record on the span before re-throwing so failed operations are still
-        // visible in Cloud Trace with their exception attached.
+        // visible in the configured trace backend with their exception attached.
         span.recordException(err as Error);
         span.setStatus({ code: SpanStatusCode.ERROR, message: err instanceof Error ? err.message : String(err) });
         throw err;

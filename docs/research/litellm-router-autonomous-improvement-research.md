@@ -2,6 +2,10 @@
 
 *Research into a future job that reviews routing choices, critically assesses them, and proposes improvements. It assumes OpenCrane's current provider-credential boundary: runtimes receive only their scoped LiteLLM access, while provider credentials stay outside tenant workloads. All claims are web-verified against primary sources (arXiv, official repositories and official documentation); citations are inline.*
 
+> **Status update (2026-07-29):** this is retained research, not the current deployment contract.
+> OpenCrane no longer bundles Langfuse. A lightweight LiteLLM-native OTLP trace proposal is tracked
+> in [#513](https://github.com/elewa-git/opencrane/issues/513).
+
 ---
 
 ## 1. TL;DR

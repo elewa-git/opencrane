@@ -300,7 +300,7 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
   //    — cost/latency/shuffle only), so native "auto" deterministically resolves to the cheapest
   //    deployment. The intelligent cost/quality router (RouteLLM + measurement, AIR track) can later
   //    re-point this same "auto" id without any caller change. Registered ONCE (first provider wins).
-  //    @todo - Do smart via RouteLLM & LangFuse
+  //    @todo - Select this default from the governed routing policy.
   const cheapest = catalog.models.find((m) => m.className === "fast") ?? catalog.models[catalog.models.length - 1];
   if (cheapest)
   {

@@ -172,6 +172,11 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Removed
 
+- **Operators can now run the OpenCrane stack without the bundled Langfuse data plane.** The
+  Langfuse workloads, database and credentials, LiteLLM callback, metrics proxy, and unused
+  dashboard are gone. Upgrades from a historical Langfuse-enabled release stop before mutation
+  until the operator confirms that required traces and state were backed up.
+
 - **OpenCrane now has one supported product surface: authenticated APIs, generated clients, and
   the UI.** The bundled `oc` command-line app and its active documentation are removed, eliminating
   a second client that had to duplicate every API and workflow change.

@@ -74,21 +74,4 @@ export const _ModelRoutingOpenapiPaths = {
       },
     },
   },
-
-  "/model-routing/metrics": {
-    get: {
-      operationId: "getRoutingMetrics",
-      summary: "Proxy a metrics query to the self-hosted Langfuse backend (server-side auth; non-operators scoped to their tenant)",
-      tags: ["Model Registry"],
-      parameters: [
-        { name: "query", in: "query", required: false, schema: { type: "string" }, description: "Langfuse v1 metrics `query` JSON, forwarded verbatim (a tenant filter is injected for non-operators)." },
-      ],
-      responses: {
-        200: ok("Upstream Langfuse metrics JSON (loosely-typed passthrough).", { type: "object", additionalProperties: true }),
-        403: { description: "A non-operator caller with no resolved ClusterTenant has no metrics scope (code FORBIDDEN_SCOPE).", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
-        502: { description: "The Langfuse backend was unreachable or returned a non-2xx status.", content: { "application/json": { schema: { type: "object", properties: { status: { type: "string" }, error: { type: "string" } } } } } },
-        503: { description: "The Langfuse backend is not configured (host/keys missing).", content: { "application/json": { schema: { type: "object", properties: { status: { type: "string" } } } } } },
-      },
-    },
-  },
 };

@@ -14,7 +14,6 @@
 # This overlay enables:
 #   - GCE ingress (Google Cloud Load Balancer) instead of the default ingress
 #   - External Secrets backed by GCP Secret Manager
-#   - Cloud Logging / Error Reporting integration
 
 # Google Cloud Load Balancer ingress.
 ingress:

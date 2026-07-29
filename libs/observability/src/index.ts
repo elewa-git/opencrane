@@ -3,9 +3,8 @@
  *
  * One place to build a fleet-consistent logger, propagate a correlation id
  * through async work without threading it by hand, route stray `console.*`
- * calls into structured logs, and emit OpenTelemetry traces to the in-cluster
- * collector (which forwards to GCP Cloud Logging + Cloud Trace, or any OTLP
- * backend behind a Helm toggle).
+ * calls into structured logs, and emit OpenTelemetry traces to an
+ * operator-configured OTLP endpoint.
  *
  * The side-effecting SDK bootstrap ({@link ___StartTelemetry}) is also available
  * via the dedicated `@opencrane/observability/telemetry` entry point so it can

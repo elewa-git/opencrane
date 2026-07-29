@@ -199,9 +199,6 @@
       "@opencrane/features/notifications": [
         "./libs/frontend/features/notifications/src/index.ts"
       ],
-      "@opencrane/features/metrics": [
-        "./libs/frontend/features/metrics/src/index.ts"
-      ],
       "@opencrane/state/core": [
         "./libs/frontend/state/core/src/index.ts"
       ],
@@ -240,9 +237,6 @@
     },
     {
       "path": "./libs/frontend/features/context"
-    },
-    {
-      "path": "./libs/frontend/features/metrics"
     },
     {
       "path": "./libs/frontend/features/welcome"

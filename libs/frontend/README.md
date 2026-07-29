@@ -17,7 +17,6 @@ directory hierarchy in the SPA.
 | Gateway governance | `features/tools`, `state/mcp/adapter`, `state/provider-key/adapter` | `server/gateways` |
 | Governed skill catalogue | `state/skills/adapter` | `server/agents/skills` |
 | Personal asset catalogue | `state/assets/adapter` | server-side artifact authority |
-| Reporting | `features/metrics` | `server/reporting` |
 | Shared browser composition | `core`, `platform`, `elements/*`, `state/core`, `state/gateways` | cross-cutting |
 
 `state/gateways` is Angular dependency-injection composition, not the server `gateways` domain.

@@ -79,7 +79,7 @@ reader-facing system view.
 | [`apps/artifact-preprocessor/`](apps/artifact-preprocessor/) | The bounded document-extraction worker. |
 | [`apps/skill-authoring/`](apps/skill-authoring/) | The isolated Job plane for candidate skill authoring. |
 | [`apps/tool-runner/`](apps/tool-runner/) | The isolated Job plane for governed tool execution. |
-| [`apps/_infra/`](apps/_infra/) | Deployment wrappers for PostgreSQL, Cognee, LiteLLM, Obot, Langfuse, and the Kubernetes release. |
+| [`apps/_infra/`](apps/_infra/) | Deployment wrappers for PostgreSQL, Cognee, LiteLLM, Obot, and the Kubernetes release. |
 | [`libs/backend/`](libs/backend/) | Server, agent, artifact, channel, and runtime capabilities. |
 | [`libs/frontend/`](libs/frontend/) | Reusable web features, elements, platform services, and state adapters. |
 | [`libs/contracts/`](libs/contracts/) | Shared API contracts and the generated TypeScript client. |
@@ -133,8 +133,7 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant acme \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --langfuse-postgres-credentials-secret opencrane-langfuse-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
 ```
 
 This installs the isolated `acme` ClusterTenant organisation boundary and serves its UI and REST API at

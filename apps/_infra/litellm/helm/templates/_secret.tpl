@@ -40,11 +40,6 @@
     {{- $resolvedSaltKey = randAlphaNum 48 -}}
   {{- end -}}
 {{- end -}}
-{{- /* Langfuse inline keys (AIR.6 trace capture): only persisted here when trace
-       capture is on AND no external langfuse.existingSecret is supplied. When an
-       existingSecret is given, the deployment sources the keys from there and the
-       chart manages nothing. */ -}}
-{{- $manageLangfuse := and .Values.litellm.langfuse.enabled (not .Values.litellm.langfuse.existingSecret) -}}
 apiVersion: v1
 kind: Secret
 metadata:
@@ -62,14 +57,6 @@ stringData:
   {{- end }}
   {{- if .Values.litellm.databaseUrl }}
   {{ .Values.litellm.databaseSecretKey }}: {{ .Values.litellm.databaseUrl | quote }}
-  {{- end }}
-  {{- if $manageLangfuse }}
-  {{- if .Values.litellm.langfuse.publicKey }}
-  {{ .Values.litellm.langfuse.publicKeyKey }}: {{ .Values.litellm.langfuse.publicKey | quote }}
-  {{- end }}
-  {{- if .Values.litellm.langfuse.secretKey }}
-  {{ .Values.litellm.langfuse.secretKeyKey }}: {{ .Values.litellm.langfuse.secretKey | quote }}
-  {{- end }}
   {{- end }}
 {{- end }}
 {{- end }}

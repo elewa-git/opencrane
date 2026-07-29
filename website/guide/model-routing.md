@@ -24,12 +24,6 @@ Changing a default affects future admissions. It does not change the model route
 an existing run.
 :::
 
-## Inspect metrics
-
-`GET /api/v1/model-routing/metrics` proxies an authenticated metrics query to the configured
-Langfuse backend. Non-operators are scoped to their resolved organisation. The route returns
-`503` when the backend is not configured and `502` when it is unavailable.
-
 ::: info
 Automated evaluation cases, savings measurements and approval proposals are not mounted in
 the current server composition.
@@ -39,4 +33,5 @@ the current server composition.
 
 - [Manage cost](/guide/budgets)
 - [Review activity](/guide/audit)
+- [Telemetry and logging](/operators/telemetry-logging)
 - [API reference](/reference/api)

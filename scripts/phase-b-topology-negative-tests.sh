@@ -14,7 +14,6 @@ RUNTIME_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-dupli
 RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
 APP_SOURCE_PROBE="$ROOT/apps/opencrane/src/phase-b-app-guard-probe.py"
 BUILD_SOURCE_PROBE="$ROOT/apps/opencrane/src/build/phase-b-build-source-guard-probe.py"
-ARCHIVE_PROBE="$ROOT/apps/_infra/deploy-k8s/charts/.phase-b-langfuse-probe.tgz"
 GENERATED_DIST_PROBE="$ROOT/apps/opencrane/dist/phase-b-generated-guard-probe.js"
 GENERATED_CACHE_PROBE="$ROOT/apps/opencrane/node_modules/.cache/phase-b-generated-guard-probe.mjs"
 
@@ -22,7 +21,7 @@ cleanup()
 {
   rm -f "$RENDER_PROBE" "$COMPUTED_KIND_PROBE" "$RUNTIME_PROBE" "$RUNTIME_COMMAND_PROBE"
   rm -f "$RUNTIME_DUPLICATE_PROBE" "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
-  rm -f "$APP_SOURCE_PROBE" "$BUILD_SOURCE_PROBE" "$ARCHIVE_PROBE"
+  rm -f "$APP_SOURCE_PROBE" "$BUILD_SOURCE_PROBE"
   rm -f "$GENERATED_DIST_PROBE" "$GENERATED_CACHE_PROBE"
   rmdir "$(dirname "$BUILD_SOURCE_PROBE")" 2>/dev/null || true
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then rm -rf "$TMP_DIR"; fi
@@ -115,10 +114,6 @@ else if (action === "invalid-nested-owner")
     return candidate.id === "cognee";
   });
   workload.owner = "apps/product/group";
-}
-else if (action === "archive")
-{
-  registry.archiveWorkloadInventory.archive = "apps/_infra/deploy-k8s/charts/.phase-b-langfuse-probe.tgz";
 }
 else if (action === "empty-runtime")
 {
@@ -277,14 +272,4 @@ registry="$(mutate_registry empty-runtime)"
 expect_failure "workloadIds must map the construct to at least one exact owner" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 
-mkdir -p "$TMP_DIR/archive"
-tar -xzf "$ROOT/apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz" -C "$TMP_DIR/archive"
-mkdir -p "$TMP_DIR/archive/langfuse/templates/phase-b-probe"
-printf '%s\n' 'apiVersion: batch/v1' 'kind: Job' 'metadata:' '  name: phase-b-archive-probe' \
-  >"$TMP_DIR/archive/langfuse/templates/phase-b-probe/job.yaml"
-tar -czf "$ARCHIVE_PROBE" -C "$TMP_DIR/archive" langfuse
-registry="$(mutate_registry archive)"
-expect_failure "unregistered upstream archive workload template: langfuse/templates/phase-b-probe/job.yaml" \
-  env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
-
-printf 'Phase B topology negative tests passed (18 rejection paths plus generated-output regression).\n'
+printf 'Phase B topology negative tests passed (17 rejection paths plus generated-output regression).\n'

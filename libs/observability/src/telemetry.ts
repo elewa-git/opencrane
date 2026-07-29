@@ -5,10 +5,9 @@
  * preloaded with `node --import`) so auto-instrumentation patches `http`,
  * `express`, `pg`, and `fetch` before the application graph loads.
  *
- * Only traces are exported in-process (OTLP/http-protobuf → the in-cluster
- * collector → Cloud Trace). Logs travel as JSON on stdout and are scraped by
- * the collector's filelog receiver; the auto pino instrumentation injects
- * `trace_id`/`span_id` into those JSON records so logs and traces correlate.
+ * Only traces are exported in-process over OTLP/http-protobuf to the configured
+ * operator-owned endpoint. Logs remain JSON on stdout; auto-instrumentation
+ * injects `trace_id`/`span_id` so a platform log pipeline can correlate them.
  */
 import { getNodeAutoInstrumentations } from "@opentelemetry/auto-instrumentations-node";
 import { OTLPTraceExporter } from "@opentelemetry/exporter-trace-otlp-proto";

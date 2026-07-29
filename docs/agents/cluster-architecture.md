@@ -18,7 +18,7 @@ organisation ingress
         +-> channel-proxy
         +-> opencrane server ---- PostgreSQL
                   |
-                  +---- Cognee · LiteLLM · Obot · Langfuse
+                  +---- Cognee · LiteLLM · Obot
                   |
                   +---- agent-controller
                              |

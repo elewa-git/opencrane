@@ -51,12 +51,11 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant acme \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --langfuse-postgres-credentials-secret opencrane-langfuse-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
 ```
 
 The script delegates to `apps/_infra/deploy-k8s/platform/k8s-deploy.sh` and installs the
-`opencrane-silo` umbrella chart. It does not install a second management plane. The four
+`opencrane-silo` umbrella chart. It does not install a second management plane. The three
 PostgreSQL bootstrap Secrets must already exist in the target namespace and use distinct
 credentials.
 
@@ -64,6 +63,27 @@ credentials.
 Do not deploy the personal and managed runtimes into the trusted server namespace. The server
 validates that all three namespaces are distinct and refuses to start on a collapsed boundary.
 :::
+
+## Retire a legacy Langfuse install
+
+Current OpenCrane releases do not include Langfuse. Upgrading a release that still contains the
+old subchart is intentionally blocked: Helm can remove its object-store volume while the retained
+PostgreSQL database and credentials survive, producing an unsafe partial retirement.
+
+Before upgrading:
+
+1. Export or back up any traces, scores, datasets and object-store content you need to retain.
+2. Inventory the release's Langfuse Database object, logical database and role, Secrets and PVCs.
+3. Decide which retained resources must be archived and which may be destroyed.
+4. Rerun the deploy command with `--confirm-langfuse-retirement-after-backup`. This authorises
+   Helm to remove the old managed workloads and unprotected volumes; it does not silently delete
+   retained resources.
+5. After the upgrade is healthy, revoke the old database role and API/application credentials,
+   then deliberately remove the retained Database object, Secrets and PVCs approved for
+   destruction. Verify the inventory is empty before considering retirement complete.
+
+The deploy gate can also be acknowledged through
+`OPENCRANE_CONFIRM_LANGFUSE_RETIREMENT_AFTER_BACKUP=1` in a controlled automation environment.
 
 ## What the release owns
 

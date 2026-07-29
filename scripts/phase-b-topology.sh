@@ -45,7 +45,6 @@ const appSourceClassifications = new Set([
   "test-config",
 ]);
 const workloadKindPattern = /^\s*kind:\s*(Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job)\s*$/m;
-const archiveWorkloadKindPattern = /^kind:\s*(Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job|{{[^\n]+}})\s*$/m;
 const renderedWorkloadKindPattern = /^kind:\s*(Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job)\s*$/m;
 const runtimeWorkloadLinePattern = /^(?:\s*kind:\s*["']?(?:Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job|Cluster)["']?,?\s*|.*\bkubectl\s+(?:run|create\s+(?:job|cronjob|deployment))\b.*|.*\bupgrade\s+--install\b.*|.*\.createNamespaced(?:Pod|Job|Deployment|StatefulSet|DaemonSet)\b.*)$/;
 
@@ -163,7 +162,7 @@ for (const workload of workloadRegistry.workloads ?? [])
     }
   }
   const source = workload.source ?? {};
-  const sourceIsRepositoryLocal = source.type === "file" || source.type === "archive-member";
+  const sourceIsRepositoryLocal = source.type === "file";
   if (workload.localOwner !== sourceIsRepositoryLocal)
   {
     fail(`${context}: localOwner must be derived from the source type, not self-declared`);
@@ -201,11 +200,9 @@ for (const workload of workloadRegistry.workloads ?? [])
 
   const sourceIdentity = source.type === "file"
     ? `file:${source.path}:${source.anchor}`
-    : source.type === "archive-member"
-      ? `archive:${source.archive}:${source.member}:${source.anchor}`
-      : source.type === "external"
-        ? `external:${source.repository}:${source.contract}`
-        : undefined;
+    : source.type === "external"
+      ? `external:${source.repository}:${source.contract}`
+      : undefined;
   const previousSource = sourceOwners.get(sourceIdentity);
   if (previousSource && previousSource.owner !== effectiveOwner)
   {
@@ -228,31 +225,6 @@ for (const workload of workloadRegistry.workloads ?? [])
         fail(`${context}: source anchor is stale in ${source.path}`);
       }
       if (source.coversLocalTemplate) coveredLocalTemplates.add(source.path);
-    }
-  }
-  else if (source.type === "archive-member")
-  {
-    const archive = workspacePath(source.archive ?? "");
-    if (!existsSync(archive)) fail(`${context}: archive ${source.archive} does not exist`);
-    else
-    {
-      try
-      {
-        const members = execFileSync("tar", ["-tzf", archive], { encoding: "utf8" }).split("\n");
-        if (!members.includes(source.member)) fail(`${context}: archive member ${source.member} is missing`);
-        else
-        {
-          const contents = execFileSync("tar", ["-xOzf", archive, source.member], { encoding: "utf8" });
-          if (!source.anchor || !contents.includes(source.anchor))
-          {
-            fail(`${context}: archive-member anchor is stale in ${source.member}`);
-          }
-        }
-      }
-      catch (err)
-      {
-        fail(`${context}: cannot inspect ${source.archive}: ${err.message}`);
-      }
     }
   }
   else if (source.type === "external")
@@ -545,63 +517,6 @@ for (const entry of nonProducingRuntimeMatches.values())
 }
 info.push(`${runtimeConstructs.size} runtime and installer workload constructs are exactly registered`);
 
-const archiveInventory = workloadRegistry.archiveWorkloadInventory ?? {};
-const archivePath = workspacePath(archiveInventory.archive ?? "");
-if (!existsSync(archivePath))
-{
-  fail(`archive workload inventory is missing ${archiveInventory.archive}`);
-}
-else
-{
-  const expectedMembers = new Map();
-  for (const entry of archiveInventory.members ?? [])
-  {
-    const context = `archive workload member '${entry.member ?? "<missing>"}'`;
-    if (!entry.member || expectedMembers.has(entry.member))
-    {
-      fail(`${context}: member is missing or duplicated`);
-      continue;
-    }
-    if (entry.status === "rendered")
-    {
-      if (!workloadIds.has(entry.workloadId)) fail(`${context}: rendered member needs a registered workloadId`);
-    }
-    else if (entry.status === "disabled-by-opencrane-values")
-    {
-      if (!entry.reason) fail(`${context}: disabled member needs an exact reason`);
-    }
-    else
-    {
-      fail(`${context}: unsupported status '${entry.status}'`);
-    }
-    expectedMembers.set(entry.member, entry);
-  }
-
-  try
-  {
-    const members = execFileSync("tar", ["-tzf", archivePath], { encoding: "utf8" }).trim().split("\n");
-    const actualMembers = new Set();
-    for (const member of members)
-    {
-      if (!/templates\/.*\.ya?ml$/.test(member)) continue;
-      const contents = execFileSync("tar", ["-xOzf", archivePath, member], { encoding: "utf8" });
-      if (archiveWorkloadKindPattern.test(contents)) actualMembers.add(member);
-    }
-    for (const member of actualMembers)
-    {
-      if (!expectedMembers.has(member)) fail(`unregistered upstream archive workload template: ${member}`);
-    }
-    for (const member of expectedMembers.keys())
-    {
-      if (!actualMembers.has(member)) fail(`stale upstream archive workload registration: ${member}`);
-    }
-    info.push(`${actualMembers.size} upstream archive workload templates are exactly inventoried`);
-  }
-  catch (err)
-  {
-    fail(`cannot inspect archive workload inventory: ${err.message}`);
-  }
-}
 
 const discoveredWorkloadTemplates = new Set();
 const nonWorkloadDynamicKinds = new Map();
