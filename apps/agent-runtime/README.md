@@ -45,13 +45,28 @@ into the OpenCrane server namespace.
 
 ## Public surface
 
-`Entrypoint: src/runtime.py` generates a per-run ES256 keypair, reads the projected bootstrap
-reference, and binds the public key once via the bootstrap exchange (failing closed on any refusal).
-It then reads the mounted projected token at connection time, opens the runtime-initiated stream,
-rejects any individual response line above 64 KiB, and executes each `start_attempt` command as a
-bounded Pydantic AI model/tool loop. The loop reaches the LiteLLM proxy only through an
+`Entrypoint: src/runtime.py` is a thin composition root. It loads the process settings, binds
+per-run public proof-key evidence, completes the one-use bootstrap, and maintains the outbound
+command stream. Five focused components collaborate beneath it:
+
+```text
+runtime.py
+├── bootstrap ───────────────► transport/http
+└── transport/stream ────────► attempts
+                                ├── model_loop
+                                └── protocol
+```
+
+`src/bootstrap/` owns proof binding, `src/transport/` owns control-plane I/O, `src/attempts/` executes
+commands, `src/model_loop/` adapts the bounded model loop, and `src/protocol/` projects stable
+candidates. The [source architecture](src/README.md) follows the complete runtime sequence and
+records the dependency, authority, retry, cancellation, and checkpoint rules in one place.
+
+The stream rejects any individual response line above 64 KiB and executes each `start_attempt`
+command as a bounded Pydantic AI model/tool loop. The loop reaches the LiteLLM proxy only through an
 attempt-scoped virtual key mounted as a group-readable Secret, performs zero implicit retries, and is
-driven with `agent.iter()` / `run_stream_events()` (never the `run_stream()` final-output shortcut).
+driven with `agent.iter()` and per-node `node.stream(run.ctx)` calls (never the `run_stream()`
+final-output shortcut).
 Raw framework events are normalized into stable protocol candidates while the attempt is active:
 output text, usage, and errors become bounded `event` candidates, while a model tool call becomes a
 bounded `external_action` candidate whose `toolRevisionId` is resolved from the compiled grant set
@@ -60,10 +75,11 @@ AI types, ids, and checkpoints never cross that seam. Resume injects only contro
 deferred tool results; cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real
 `run.failed` terminal report rather than a silent acknowledgement, and a dropped stream bounds further
-candidate emission. The one exception is the control plane's explicit bounded retry response before
-an external action has a durable invocation receipt: the runtime resubmits that exact candidate id
-until the server accepts it, exhausts its durable retry budget, or the active attempt/stream is
-cancelled, without misreporting a dispatch outage as a model failure.
+candidate emission. Non-terminal replay is allowed only for the control plane's explicit bounded
+pre-reservation response: the runtime resubmits that exact candidate id until the server accepts it,
+exhausts its durable retry budget, or the active attempt/stream is cancelled. A terminal candidate
+may also replay unchanged after an ambiguous network loss because the server may already have
+persisted it; an explicit HTTP refusal is never retried.
 
 ## Boundary
 
@@ -94,15 +110,15 @@ of the dependency graph; libraries do not import it. The wire contract is owned 
 - `OPENCRANE_RUNTIME_LITELLM_BASE_URL` — in-cluster LiteLLM proxy base URL the bounded loop calls.
 - `OPENCRANE_RUNTIME_LITELLM_KEY_PATH` — path of the mounted attempt-scoped LiteLLM key (defaults to
   `/var/run/opencrane/litellm/key`).
-- `OPENCRANE_RUNTIME_CHECKPOINT_DIR` — directory in the per-attempt scratch `emptyDir` for the
-  encrypted local resume checkpoint (defaults to `/tmp/opencrane/checkpoints`). The checkpoint is a
-  subordinate local optimisation only, encrypted with a process-lifetime in-memory key, never durable
-  state and never a source of truth.
+- `OPENCRANE_RUNTIME_CHECKPOINT_DIR` — directory for the encrypted local resume checkpoint (defaults
+  to `/tmp/opencrane/checkpoints`).
 - `/var/run/opencrane/bootstrap/reference` — read-only opaque lookup reference projected from the
   Pod annotation. It is not a credential and is never placed in an environment variable or argument.
 - `/var/run/opencrane/litellm/key` — the attempt-scoped LiteLLM virtual key, projected as a
   group-readable (`0440`) Secret volume. It is never the master key, never a provider secret, and
   never a plaintext environment variable.
+- `/tmp/opencrane/checkpoints/checkpoint.enc` — the replaceable encrypted local checkpoint. It is a
+  subordinate optimisation only, never durable state and never a source of truth.
 - Writable storage is only a per-attempt `emptyDir` capped at 1 GiB and mounted at `/tmp`.
 - Third-party dependencies are `cryptography` (P-256 proof-key generation) and
   `pydantic-ai-slim[openai]` (the bounded model/tool loop), both pinned in `deploy/requirements.txt`;
@@ -129,6 +145,7 @@ same conformance contract is used for live LiteLLM qualification.
 ## See also
 
 - Parent index: [apps](../README.md)
+- Source architecture: [agent runtime source](src/README.md)
 - Server transport: [agent-runtime-stream](../../libs/server/_infra/agent-runtime-stream/README.md)
 - Per-attempt resources: [runtime/k8s-launcher](../../libs/backend/agents/runtime/k8s-launcher/README.md)
 - Runtime protocol: [contracts](../../libs/contracts/README.md)

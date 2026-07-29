@@ -1,7 +1,7 @@
 # Runtime dependencies for the personal-agent runtime.
 #
 # `cryptography` — a maintained P-256 (ES256) key generator for the one-use bootstrap exchange. The
-# runtime generates a per-run keypair, binds its public half, and later signs capability proofs; the
+# runtime generates a per-run keypair and binds its public half; the
 # standard library has no elliptic-curve key generation.
 #
 # `pydantic-ai-slim[openai]` — the exact-pinned bounded model/tool loop driven over the per-silo

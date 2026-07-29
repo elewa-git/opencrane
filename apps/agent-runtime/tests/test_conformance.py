@@ -24,16 +24,23 @@ import threading
 import types
 import unittest
 
-from src import runtime
-from src.runtime import (
-    _arguments_digest,
-    _execute_resume_attempt,
-    _execute_start_attempt,
-    _normalize_event,
-    _read_checkpoint,
-    _translate_framework_event,
-    _write_checkpoint,
-    _zero_retry_openai_settings,
+from src.model_loop.checkpoints import (
+    read_checkpoint as _read_checkpoint,
+    write_checkpoint as _write_checkpoint,
+)
+from src.model_loop.driver import (
+    translate_framework_event as _translate_framework_event,
+    zero_retry_openai_settings as _zero_retry_openai_settings,
+)
+from src.observability import trace as _trace
+from src.attempts.execution import (
+    execute_cancel_attempt as _execute_cancel_attempt,
+    execute_resume_attempt as _execute_resume_attempt,
+    execute_start_attempt as _execute_start_attempt,
+)
+from src.protocol.candidates import (
+    arguments_digest as _arguments_digest,
+    normalize_event as _normalize_event,
 )
 
 
@@ -265,11 +272,16 @@ class ConformanceCompactionAndBudgetTests(unittest.TestCase):
         self.assertEqual(_normalize_event({"type": "usage", "inputTokens": None, "outputTokens": -3}), ("run.usage", {"inputTokens": 0, "outputTokens": 0}))
 
     def test_budget_exhausted_cancel_reason_stays_server_owned(self) -> None:
-        """A server budget cancel signal stops work without creating a second terminal candidate."""
+        """A budget cancel stops work and records only the server-owned cancellation reason."""
         cancel_command = {"kind": "cancel_attempt", "commandId": "cmd-cancel", "fence": 3, "assignment": {"runId": "run-conf", "attempt": 1}, "payload": {"reason": "budget_exhausted"}}
-        emitted: list[dict] = []
-        runtime._execute_cancel_attempt(cancel_command, "instance-conf", emitted.append, cancel_event=threading.Event())
-        self.assertEqual(emitted, [])
+        cancel_event = threading.Event()
+        buffer = io.StringIO()
+        with contextlib.redirect_stdout(buffer):
+            _execute_cancel_attempt(cancel_command, "instance-conf", cancel_event=cancel_event)
+        evidence = json.loads(buffer.getvalue())
+        self.assertTrue(cancel_event.is_set())
+        self.assertEqual(evidence["outcome"], "cancelled")
+        self.assertEqual(evidence["reason"], "budget_exhausted")
 
     def test_unknown_framework_event_is_dropped_not_compacted_into_output(self) -> None:
         """An unrecognized framework event is dropped (never accumulated) and logged for observability."""
@@ -300,7 +312,7 @@ class ConformanceTelemetryTests(unittest.TestCase):
 
     def test_trace_seam_is_a_transparent_no_op_offline(self) -> None:
         """The OTEL span seam is a transparent no-op when the SDK is absent (the offline slice)."""
-        with runtime._trace("agent_runtime.test", runId="run-conf", attempt=1) as span:
+        with _trace("agent_runtime.test", runId="run-conf", attempt=1) as span:
             self.assertIsNone(span)
 
 

@@ -10,32 +10,45 @@ reach no network.
 import contextlib
 import importlib.util
 import io
+import json
 import os
 import tempfile
 import threading
 import unittest
-from urllib.error import HTTPError
+from unittest import mock
+from urllib.error import HTTPError, URLError
 
-from src import runtime
-from src.runtime import (
-    BootstrapDeniedError,
-    _absorb_steering,
-    _arguments_digest,
-    _candidate,
-    _command_coordinates,
-    _execute_cancel_attempt,
-    _execute_resume_attempt,
-    _execute_start_attempt,
-    _iter_commands,
-    _normalize_event,
-    _post_candidate_with_retry,
-    _read_checkpoint,
-    _retry_delay,
-    _rfc7638_thumbprint,
-    _tool_call_candidate,
-    _write_checkpoint,
-    _zero_retry_openai_settings,
-    run_forever,
+from src.bootstrap.exchange import BootstrapDeniedError
+from src.bootstrap.proof import rfc7638_thumbprint as _rfc7638_thumbprint
+from src.constants import CHECKPOINT_FILENAME
+from src.model_loop.checkpoints import (
+    checkpoint_path as _checkpoint_path,
+    read_checkpoint as _read_checkpoint,
+    write_checkpoint as _write_checkpoint,
+)
+from src.model_loop.driver import (
+    absorb_steering as _absorb_steering,
+    build_zero_retry_agent as _build_zero_retry_agent,
+    zero_retry_openai_settings as _zero_retry_openai_settings,
+)
+from src.attempts.execution import (
+    execute_cancel_attempt as _execute_cancel_attempt,
+    execute_resume_attempt as _execute_resume_attempt,
+    execute_start_attempt as _execute_start_attempt,
+)
+from src.attempts.terminal import TerminalGate as _TerminalGate
+from src.protocol.candidates import (
+    arguments_digest as _arguments_digest,
+    candidate as _candidate,
+    command_coordinates as _command_coordinates,
+    normalize_event as _normalize_event,
+    tool_call_candidate as _tool_call_candidate,
+)
+from src.runtime import retry_delay as _retry_delay, run_forever
+from src.transport.http import post_candidate_with_retry as _post_candidate_with_retry
+from src.transport.stream import (
+    _AttemptWorkerRegistry,
+    iter_commands as _iter_commands,
 )
 
 
@@ -226,6 +239,17 @@ class RuntimeCommandFramingTests(unittest.TestCase):
         cancelled.set()
         self.assertEqual(list(_iter_commands(iter([b"event: command\n"]), cancelled)), [])
 
+    def test_new_worker_supersedes_prior_and_stream_loss_cancels_every_worker(self) -> None:
+        """Overlapping commands cannot leave an older worker alive after a replacement or EOF."""
+        workers = _AttemptWorkerRegistry()
+        first = workers.activate()
+        second = workers.activate()
+
+        self.assertTrue(first.is_set())
+        self.assertFalse(second.is_set())
+        workers.cancel_all()
+        self.assertTrue(second.is_set())
+
 
 class RuntimeNormalizerTests(unittest.TestCase):
     """Validate the neutral-event normalizer that keeps framework types out of candidates."""
@@ -337,8 +361,8 @@ class RuntimeCheckpointTests(unittest.TestCase):
         """A checkpoint tagged with an unknown version is discarded rather than trusted."""
         with tempfile.TemporaryDirectory() as directory:
             cipher = _ReversingCipher()
-            path = runtime._checkpoint_path(directory)
-            forged = cipher.encrypt(runtime.json.dumps({"checkpointVersion": 999, "runId": "r1", "attempt": 1, "inputGeneration": 3, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+            path = _checkpoint_path(directory)
+            forged = cipher.encrypt(json.dumps({"checkpointVersion": 999, "runId": "r1", "attempt": 1, "inputGeneration": 3, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
             with open(path, "wb") as handle:
                 handle.write(forged)
             self.assertIsNone(_read_checkpoint("r1", 1, 3, cipher=cipher, checkpoint_dir=directory))
@@ -350,8 +374,17 @@ class RuntimeCheckpointTests(unittest.TestCase):
             _write_checkpoint("r1", 1, 3, {"compiledInput": {"tag": "first"}}, cipher=cipher, checkpoint_dir=directory)
             _write_checkpoint("r1", 1, 3, {"compiledInput": {"tag": "second"}}, cipher=cipher, checkpoint_dir=directory)
             # Only the single fixed checkpoint file survives, holding the latest state.
-            self.assertEqual(os.listdir(directory), [runtime._CHECKPOINT_FILENAME])
+            self.assertEqual(os.listdir(directory), [CHECKPOINT_FILENAME])
             self.assertEqual(_read_checkpoint("r1", 1, 3, cipher=cipher, checkpoint_dir=directory), {"compiledInput": {"tag": "second"}})
+
+    def test_checkpoint_directory_environment_override_is_honoured(self) -> None:
+        """The documented checkpoint-directory setting remains part of the process contract."""
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
+            try:
+                self.assertEqual(_checkpoint_path(None), os.path.join(directory, CHECKPOINT_FILENAME))
+            finally:
+                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
 
 
 class RuntimeZeroRetryTests(unittest.TestCase):
@@ -387,7 +420,7 @@ class RuntimeZeroRetryTests(unittest.TestCase):
                 recorded["agent"] = kwargs
                 self.model = model
 
-        runtime._build_zero_retry_agent(
+        _build_zero_retry_agent(
             "silo-default",
             "http://litellm.svc.cluster.local",
             "sk-attempt",
@@ -542,28 +575,26 @@ class RuntimeResumeCancelTests(unittest.TestCase):
 
     def test_cancel_signals_the_active_task_without_a_runtime_terminal(self) -> None:
         """Cancel sets the shared event while the server retains the cancellation terminal outcome."""
-        emitted: list[dict] = []
         cancel_event = threading.Event()
-        _execute_cancel_attempt(_cancel_command(), "instance-1", emitted.append, cancel_event=cancel_event)
+        _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
         self.assertTrue(cancel_event.is_set())
-        self.assertEqual(emitted, [])
 
     def test_cancel_before_the_active_task_emits_no_candidate_without_coordinates(self) -> None:
         """A cancel frame lacking coordinates yields no candidate and no crash when no task is active."""
-        emitted: list[dict] = []
-        _execute_cancel_attempt({"kind": "cancel_attempt", "commandId": "c3", "fence": 1}, "instance-1", emitted.append, cancel_event=None)
-        self.assertEqual(emitted, [])
+        cancel_event = threading.Event()
+        _execute_cancel_attempt({"kind": "cancel_attempt", "commandId": "c3", "fence": 1}, "instance-1", cancel_event=cancel_event)
+        self.assertFalse(cancel_event.is_set())
 
     def test_completion_and_cancel_race_posts_exactly_one_terminal(self) -> None:
         """A cancel firing between the loop end and the completion post yields exactly one terminal."""
         emitted: list[dict] = []
         cancel_event = threading.Event()
-        gate = runtime._TerminalGate(cancel_event)
+        gate = _TerminalGate(cancel_event)
 
         def _source(_compiled, _cancel, _steer):
             yield {"type": "output_text", "text": "partial"}
             # Reader thread cancels in the check-then-act window, before the worker posts completion.
-            _execute_cancel_attempt(_cancel_command(), "instance-1", emitted.append, cancel_event=cancel_event, terminal_gate=gate)
+            _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
 
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
@@ -573,16 +604,16 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         """When completion wins the race, a late cancel is a no-op and does not add a second terminal."""
         emitted: list[dict] = []
         cancel_event = threading.Event()
-        gate = runtime._TerminalGate(cancel_event)
+        gate = _TerminalGate(cancel_event)
         _execute_start_attempt(_start_command(), "instance-1", emitted.append, event_source=lambda _compiled, _cancel, _steer: iter([]), cancel_event=cancel_event, terminal_gate=gate)
-        _execute_cancel_attempt(_cancel_command(), "instance-1", emitted.append, cancel_event=cancel_event, terminal_gate=gate)
+        _execute_cancel_attempt(_cancel_command(), "instance-1", cancel_event=cancel_event)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
 
     def test_failed_completion_delivery_retries_the_same_terminal_candidate(self) -> None:
-        """A lost terminal response retries the exact same candidate rather than inventing a failure."""
+        """An ambiguous terminal network loss retries one stable id rather than inventing a failure."""
         cancel_event = threading.Event()
-        gate = runtime._TerminalGate(cancel_event)
+        gate = _TerminalGate(cancel_event)
         delivered: list[dict] = []
         attempts = 0
 
@@ -590,7 +621,7 @@ class RuntimeResumeCancelTests(unittest.TestCase):
             nonlocal attempts
             attempts += 1
             if attempts == 1:
-                raise RuntimeError("stream reset")
+                raise URLError("connection reset before response")
             delivered.append(candidate)
 
         coordinates = _command_coordinates(_start_command(), "instance-1")
@@ -598,6 +629,37 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         self.assertTrue(gate.post_completion(_reject_completion, _candidate(coordinates, "run.completed", {})))
         self.assertEqual(attempts, 2)
         self.assertEqual([candidate["eventType"] for candidate in delivered], ["run.completed"])
+
+    def test_explicit_terminal_http_refusal_is_not_retried(self) -> None:
+        """A permanent server decision propagates once instead of creating an unbounded replay loop."""
+        gate = _TerminalGate(threading.Event())
+        coordinates = _command_coordinates(_start_command(), "instance-1")
+        assert coordinates is not None
+        terminal = _candidate(coordinates, "run.completed", {})
+        attempts = 0
+
+        def _reject(_candidate_body: dict) -> None:
+            nonlocal attempts
+            attempts += 1
+            raise HTTPError(
+                "https://control.example/candidates",
+                409,
+                "terminal conflict",
+                {},
+                io.BytesIO(b'{"accepted":false}'),
+            )
+
+        captured = io.StringIO()
+        with contextlib.redirect_stdout(captured):
+            with self.assertRaises(HTTPError) as raised:
+                gate.post_completion(_reject, terminal)
+
+        self.assertTrue(raised.exception.fp.closed)
+        self.assertEqual(attempts, 1)
+        refusal = json.loads(captured.getvalue())
+        self.assertEqual(refusal["event"], "terminal_candidate_refused")
+        self.assertEqual(refusal["candidateId"], terminal["candidateId"])
+        self.assertEqual(refusal["status"], 409)
 
 
 class RuntimePydanticAiDriverTests(unittest.TestCase):
@@ -628,12 +690,10 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
         os.environ["OPENCRANE_RUNTIME_TOKEN_PATH"] = self._token.name
         os.environ["OPENCRANE_RUNTIME_BOOTSTRAP_PATH"] = self._bootstrap.name
         os.environ["POD_UID"] = "pod-1"
-        self._original_generate = runtime._generate_proof_key
-        runtime._generate_proof_key = lambda: {"privateKey": None, "publicJwk": {"kty": "EC", "crv": "P-256", "x": "a", "y": "b"}, "thumbprint": "t"}
+        self._proof_key = {"publicJwk": {"kty": "EC", "crv": "P-256", "x": "a", "y": "b"}, "thumbprint": "t"}
 
     def tearDown(self) -> None:
         """Restore the real keygen and remove the temporary credential files."""
-        runtime._generate_proof_key = self._original_generate
         os.unlink(self._token.name)
         os.unlink(self._bootstrap.name)
         for name in ("OPENCRANE_RUNTIME_STREAM_URL", "OPENCRANE_RUNTIME_TOKEN_PATH", "OPENCRANE_RUNTIME_BOOTSTRAP_PATH", "POD_UID"):
@@ -650,7 +710,11 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
             opened.append(_instance)
             return 0
 
-        run_forever(open_stream=_open, perform_bootstrap=_deny)
+        run_forever(
+            open_stream=_open,
+            perform_bootstrap=_deny,
+            generate_key=lambda: self._proof_key,
+        )
         self.assertEqual(opened, [])
 
     def test_successful_bootstrap_precedes_the_stream(self) -> None:
@@ -668,8 +732,41 @@ class RuntimeBootstrapGateTests(unittest.TestCase):
             raise _Stop()
 
         with self.assertRaises(_Stop):
-            run_forever(open_stream=_open, perform_bootstrap=_bind)
+            run_forever(
+                open_stream=_open,
+                perform_bootstrap=_bind,
+                generate_key=lambda: self._proof_key,
+            )
         self.assertEqual(calls, ["bootstrap", "stream"])
+
+    def test_clean_stream_eof_uses_bounded_reconnect_backoff(self) -> None:
+        """A peer returning immediate 200/EOF cannot force the runtime into a hot reconnect loop."""
+        opens = 0
+
+        def _bind(_url: str, _token: str, _reference: str, _key: dict) -> None:
+            return None
+
+        class _Stop(Exception):
+            """Sentinel raised after observing the reconnect attempt."""
+
+        def _open(_url: str, _token: str, _instance: str, _pod: str) -> int:
+            nonlocal opens
+            opens += 1
+            if opens == 2:
+                raise _Stop()
+            return 0
+
+        with mock.patch("src.runtime.time.sleep") as sleep:
+            with self.assertRaises(_Stop):
+                run_forever(
+                    open_stream=_open,
+                    perform_bootstrap=_bind,
+                    generate_key=lambda: self._proof_key,
+                )
+
+        self.assertEqual(opens, 2)
+        sleep.assert_called_once()
+        self.assertGreater(sleep.call_args.args[0], 0)
 
 
 if __name__ == "__main__":
