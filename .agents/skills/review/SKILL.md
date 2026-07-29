@@ -69,6 +69,11 @@ scope, review those.
    - Import ordering and single-line imports (no multi-line import blocks, none mid-file).
    - Exported types/interfaces in `*.types.ts`, not mixed with implementation.
    - Function naming underscore-prefix convention (`_`, `_Pascal`, `__Pascal`, `___Pascal`).
+   - OpenCrane-owned categorical discriminants use elaborately documented string-backed enums in
+     their unions and branches. Confirm every `CATEGORICAL-LITERAL` warning before reporting it:
+     flag direct strings such as `patch.kind === "persona_refresh"` and point to the owning enum;
+     do not flag HTTP/MIME/schema/Kubernetes/third-party protocol literals, generated Prisma enums,
+     invalid-input fixtures, or one-off static data.
 5. **Test coverage and validation**
    - Tests exist for changed behaviour and for the regression being fixed.
    - Confirm relevant package validation ran. When in doubt, run it: e.g.

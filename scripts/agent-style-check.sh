@@ -19,6 +19,7 @@
 #   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/observability)
+#   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
 #   BRACE             opening { not on its own line for a multi-line fn/class (heuristic)
@@ -197,6 +198,14 @@ for f in "${CHECKABLE[@]}"; do
 			done < <(grep -nE '(^|[^.[:alnum:]_])console\.(log|warn|error|info|debug)\(' "$f" || true)
 			;;
 	esac
+
+	# CATEGORICAL-LITERAL — an OpenCrane-owned kind/type/status/state/reason/mode/action/
+	# outcome/decision branch should compare against a documented string-backed enum.
+	# External protocols and schema/data literals can look identical, so this remains a
+	# WARN for the reviewer to confirm rather than an automatic failure.
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" WARN CATEGORICAL-LITERAL "categorical property compared with a raw string — use the owning string-backed enum or verify an external/schema/data exemption"
+	done < <(grep -nE '(\.(kind|type|status|state|reason|mode|action|outcome|decision)[[:space:]]*(===|!==)[[:space:]]*"[^"]+"|"[^"]+"[[:space:]]*(===|!==)[[:space:]]*[^[:space:]]+\.(kind|type|status|state|reason|mode|action|outcome|decision))' "$f" || true)
 
 	# TYPES-IN-IMPL — exported interfaces/type aliases belong in *.types.ts.
 	# (A bare `types.ts` is a types file by intent — exempt.)

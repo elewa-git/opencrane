@@ -59,11 +59,13 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   browser, read canonical event storage, or create an approval-resume protocol.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
-  model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
+  model-routing types, `Memory*`, `Approval`, `AgentConfigPatchKinds`, `ThirdPartySource*`, `RuntimeAssignment`,
   `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIntegrationAssignment`,
   `MemoryFactReference`, `TenantModelSet`, and
   domain-topology host builders. A memory fact reference pins an immutable content digest and its
-  provenance rather than a mutable revision counter.
+  provenance rather than a mutable revision counter. `AgentConfigPatchKinds` is the one serialized
+  vocabulary shared by personal-configuration validation, schemas, and cross-authority persistence
+  filters.
 - `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
   must name before it can admit a run.
 - `AGENT_RUNTIME_PROTOCOL_V1`, the personal and managed runtime audience constants and validators,

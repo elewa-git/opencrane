@@ -1,13 +1,13 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, ModelRoutingScope, PersonalConfigurationChangeState, Prisma, type PrismaClient } from "@prisma/client";
 import { createHash } from "node:crypto";
-import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import { AgentConfigPatchKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 import { ___CanonicalizeJson } from "@opencrane/util";
 
 import { __ProposePersonalConfigurationChange } from "./personal-configuration.js";
 import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
-import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
-import type { DecidePersonalConfigurationChangeCommand, PersonalConfigurationChangeDecisionRepository, PersonalConfigurationChangeRepository, PersonalConfigurationChangeView, PersonalConfigurationChangeViewRepository, ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
+import { PersonalConfigurationChangeViewStates, PersonalConfigurationDecisionCodes, PersonalConfigurationProposalCodes, type DecidePersonalConfigurationChangeCommand, type PersonalConfigurationChangeDecisionRepository, type PersonalConfigurationChangeRepository, type PersonalConfigurationChangeView, type PersonalConfigurationChangeViewRepository, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration.types.js";
 import type { UpgradeSessionProposalReceipt, UpgradeSessionProposalRepository } from "./upgrade-session.types.js";
 
 /** Prisma adapter that proves a proposal's user, thread, run, profile, and service bindings atomically. */
@@ -33,7 +33,7 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 	}
 
 	/** Insert one request only after every mutable provenance coordinate agrees in one transaction. */
-	async proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: "proposed"; readonly changeId: string } | { readonly status: "provenance_conflict" } | { readonly status: "persistence_unavailable" }>
+	async proposeAtomically(command: ProposePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationProposalCodes.Proposed; readonly changeId: string } | { readonly status: PersonalConfigurationProposalCodes.ProvenanceConflict } | { readonly status: PersonalConfigurationProposalCodes.PersistenceUnavailable }>
 	{
 		const prisma = this.prisma;
 		try
@@ -44,47 +44,47 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 				{
 				// 1. Verify the personal profile remains owned by the initiating user in this silo.
 				const profile = await transaction.personaProfile.findFirst({ where: { id: command.personaProfileId, siloId: command.siloId, userId: command.userId }, select: { activeRevisionId: true } });
-				if (profile === null) return { status: "provenance_conflict" } as const;
+				if (profile === null) return { status: PersonalConfigurationProposalCodes.ProvenanceConflict } as const;
 
 				// 2. Verify the conversation, run, and personal service bind the same user and silo.
 				const thread = await transaction.conversationThread.findFirst({ where: { id: command.sourceThreadId, siloId: command.siloId, participants: { some: { userId: command.userId } } }, select: { agentServiceId: true } });
 				const run = await transaction.agentRun.findFirst({ where: { id: command.sourceRunId, siloId: command.siloId, threadId: command.sourceThreadId, agentServiceId: command.agentServiceId, delegatedUserId: command.userId }, select: { id: true } });
 				const service = await transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal }, select: { activeRevisionId: true } });
-				if (thread === null || thread.agentServiceId !== command.agentServiceId || run === null || service === null || profile.activeRevisionId !== command.expectedPersonaRevisionId || service.activeRevisionId !== command.expectedAgentRevisionId) return { status: "provenance_conflict" } as const;
+				if (thread === null || thread.agentServiceId !== command.agentServiceId || run === null || service === null || profile.activeRevisionId !== command.expectedPersonaRevisionId || service.activeRevisionId !== command.expectedAgentRevisionId) return { status: PersonalConfigurationProposalCodes.ProvenanceConflict } as const;
 
 				// 3. Persist only immutable request evidence; later approval owns the sole state transition.
 				const change = await transaction.personalConfigurationChange.create({ data: { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, agentServiceId: command.agentServiceId, sourceThreadId: command.sourceThreadId, sourceRunId: command.sourceRunId, sourceMessageId: command.sourceMessageId, requestedPatch: command.requestedPatch as Prisma.InputJsonValue, requestedPatchDigest: command.requestedPatchDigest, expectedPersonaRevisionId: command.expectedPersonaRevisionId, expectedAgentRevisionId: command.expectedAgentRevisionId, proposedAt: new Date(command.proposedAt) }, select: { id: true } });
-				return { status: "proposed", changeId: change.id } as const;
+				return { status: PersonalConfigurationProposalCodes.Proposed, changeId: change.id } as const;
 				});
 			});
 		}
 		catch (err)
 		{
 			this.logger.error({ err, operation: "personal_configuration.propose", siloId: command.siloId, sourceRunId: command.sourceRunId }, "Personal configuration proposal persistence failed");
-			return _isProvenanceConflict(err) ? { status: "provenance_conflict" } : { status: "persistence_unavailable" };
+			return _isProvenanceConflict(err) ? { status: PersonalConfigurationProposalCodes.ProvenanceConflict } : { status: PersonalConfigurationProposalCodes.PersistenceUnavailable };
 		}
 	}
 
 	/** Compare-and-set an owner decision while retaining immutable proposal provenance. */
-	async decideAtomically(command: DecidePersonalConfigurationChangeCommand): Promise<{ readonly status: "accepted" | "rejected" } | { readonly status: "not_found_or_not_owner" | "already_decided" | "persistence_unavailable" }>
+	async decideAtomically(command: DecidePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationDecisionCodes.Accepted | PersonalConfigurationDecisionCodes.Rejected } | { readonly status: PersonalConfigurationDecisionCodes.NotFoundOrNotOwner | PersonalConfigurationDecisionCodes.AlreadyDecided | PersonalConfigurationDecisionCodes.PersistenceUnavailable }>
 	{
 		try
 		{
-			const state = command.decision === "accepted" ? PersonalConfigurationChangeState.Accepted : PersonalConfigurationChangeState.Rejected;
+			const state = command.decision === PersonalConfigurationDecisionCodes.Accepted ? PersonalConfigurationChangeState.Accepted : PersonalConfigurationChangeState.Rejected;
 			const updated = await this.prisma.personalConfigurationChange.updateMany({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId, state: PersonalConfigurationChangeState.Proposed }, data: { state, decidedAt: new Date(command.decidedAt), decidedBy: command.userId, rejectionReason: command.rejectionReason } });
 			if (updated.count === 1) return { status: command.decision };
 			const existing = await this.prisma.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { state: true } });
-			return existing === null ? { status: "not_found_or_not_owner" } : { status: "already_decided" };
+			return existing === null ? { status: PersonalConfigurationDecisionCodes.NotFoundOrNotOwner } : { status: PersonalConfigurationDecisionCodes.AlreadyDecided };
 		}
 		catch (err)
 		{
 			this.logger.error({ err, operation: "personal_configuration.decide", siloId: command.siloId, changeId: command.changeId }, "Personal configuration decision persistence failed");
-			return { status: "persistence_unavailable" };
+			return { status: PersonalConfigurationDecisionCodes.PersistenceUnavailable };
 		}
 	}
 
 	/** Copy an accepted model selection into a fresh personal revision and make only that revision active. */
-	async materializeAtomically(command: MaterializePersonalConfigurationChangeCommand): Promise<{ readonly status: "applied"; readonly agentRevisionId: string } | { readonly status: "not_applicable" | "not_found_or_not_owner" | "not_accepted" | "stale_proposal" | "model_unavailable" | "persistence_unavailable" }>
+	async materializeAtomically(command: MaterializePersonalConfigurationChangeCommand): Promise<{ readonly status: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string } | { readonly status: PersonalConfigurationMaterializationCodes.NotApplicable | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.PersistenceUnavailable }>
 	{
 		try
 		{
@@ -92,28 +92,28 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 			{
 				// 1. Discover the immutable profile coordinate, then follow the shared profile-before-proposal lock order.
 				const candidate = await transaction.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { personaProfileId: true } });
-				if (candidate === null) return { status: "not_found_or_not_owner" } as const;
+				if (candidate === null) return { status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner } as const;
 				const profiles = await transaction.$queryRaw<readonly { readonly activeRevisionId: string | null }[]>(Prisma.sql`SELECT "active_revision_id" AS "activeRevisionId" FROM "persona_profiles" WHERE "id" = ${candidate.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "personal_configuration_changes" WHERE "id" = ${command.changeId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				const change = await transaction.personalConfigurationChange.findFirst({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId }, select: { state: true, personaProfileId: true, agentServiceId: true, expectedPersonaRevisionId: true, expectedAgentRevisionId: true, requestedPatch: true, appliedAgentRevisionId: true } });
-				if (change === null) return { status: "not_found_or_not_owner" } as const;
+				if (change === null) return { status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner } as const;
 				const patch = change.requestedPatch as unknown;
-				if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== "model_alias") return { status: "not_applicable" } as const;
-				if (change.state === PersonalConfigurationChangeState.Applied && change.appliedAgentRevisionId !== null) return { status: "applied", agentRevisionId: change.appliedAgentRevisionId } as const;
-				if (change.state !== PersonalConfigurationChangeState.Accepted) return { status: "not_accepted" } as const;
-				if (change.personaProfileId !== candidate.personaProfileId || profiles[0]?.activeRevisionId !== change.expectedPersonaRevisionId) return { status: "stale_proposal" } as const;
+				if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== AgentConfigPatchKinds.ModelAlias) return { status: PersonalConfigurationMaterializationCodes.NotApplicable } as const;
+				if (change.state === PersonalConfigurationChangeState.Applied && change.appliedAgentRevisionId !== null) return { status: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: change.appliedAgentRevisionId } as const;
+				if (change.state !== PersonalConfigurationChangeState.Accepted) return { status: PersonalConfigurationMaterializationCodes.NotAccepted } as const;
+				if (change.personaProfileId !== candidate.personaProfileId || profiles[0]?.activeRevisionId !== change.expectedPersonaRevisionId) return { status: PersonalConfigurationMaterializationCodes.StaleProposal } as const;
 
 				// 2. Lock the service and prove the proposal still describes its active personal revision.
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${change.agentServiceId} AND "silo_id" = ${command.siloId} FOR UPDATE`);
 				const service = await transaction.agentService.findFirst({ where: { id: change.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal, state: AgentServiceState.Active }, select: { id: true, activeRevisionId: true } });
-				if (service === null || service.activeRevisionId !== change.expectedAgentRevisionId || service.activeRevisionId === null) return { status: "stale_proposal" } as const;
+				if (service === null || service.activeRevisionId !== change.expectedAgentRevisionId || service.activeRevisionId === null) return { status: PersonalConfigurationMaterializationCodes.StaleProposal } as const;
 				const base = await transaction.agentRevision.findFirst({ where: { id: service.activeRevisionId, agentServiceId: service.id, state: AgentRevisionState.Published }, include: { skillAssignments: true, integrationAssignments: true, scopeAttachments: true } });
-				if (base === null || base.personaRevisionId !== change.expectedPersonaRevisionId) return { status: "stale_proposal" } as const;
+				if (base === null || base.personaRevisionId !== change.expectedPersonaRevisionId) return { status: PersonalConfigurationMaterializationCodes.StaleProposal } as const;
 
 				// 3. Resolve the caller-visible alias in this silo, preferring its tenant definition over a global default.
 				const models = await transaction.modelDefinition.findMany({ where: { publicModelName: patch.modelAlias.trim(), OR: [{ scope: ModelRoutingScope.ClusterTenant, clusterTenant: command.siloId }, { scope: ModelRoutingScope.Global, clusterTenant: null }] }, select: { id: true, scope: true } });
 				const model = models.find(function _tenant(candidate) { return candidate.scope === ModelRoutingScope.ClusterTenant; }) ?? models.find(function _global(candidate) { return candidate.scope === ModelRoutingScope.Global; });
-				if (model === undefined) return { status: "model_unavailable" } as const;
+				if (model === undefined) return { status: PersonalConfigurationMaterializationCodes.ModelUnavailable } as const;
 				const content = { promptPolicyVersion: base.promptPolicyVersion, personaRevisionId: base.personaRevisionId, modelDefinitionId: model.id, budget: base.budget, skills: base.skillAssignments.map(function _skill(assignment) { return { skillId: assignment.skillId, revisionId: assignment.skillRevisionId }; }), integrationAssignments: base.integrationAssignments.map(function _integration(assignment) { return { integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: assignment.allowedTools }; }), scopeAttachments: base.scopeAttachments.map(function _scope(attachment) { return { scope: _scopeValue(attachment.scope), subjectType: _subjectTypeValue(attachment.subjectType), subjectId: attachment.subjectId }; }) };
 				const revision = await transaction.agentRevision.create({ data: { agentServiceId: service.id, revision: base.revision + 1, parentRevisionId: base.id, changeMessage: `Owner accepted model alias: ${patch.modelAlias.trim()}`, state: AgentRevisionState.Draft, digest: _revisionDigest(service.id, base.revision + 1, content), promptPolicyVersion: base.promptPolicyVersion, personaRevisionId: base.personaRevisionId, modelDefinitionId: model.id, budget: base.budget as Prisma.InputJsonValue, authoredBy: command.userId, createdAt: new Date(command.materializedAt), skillAssignments: { create: base.skillAssignments.map(function _skillAssignment(assignment) { return { skillId: assignment.skillId, skillRevisionId: assignment.skillRevisionId }; }) }, integrationAssignments: { create: base.integrationAssignments.map(function _integrationAssignment(assignment) { return { integrationId: assignment.integrationId, siloId: assignment.siloId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: assignment.allowedTools }; }) }, scopeAttachments: { create: base.scopeAttachments.map(function _scopeAttachment(attachment) { return { scope: attachment.scope, subjectType: attachment.subjectType, subjectId: attachment.subjectId }; }) } }, select: { id: true } });
 
@@ -121,13 +121,13 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 				await transaction.agentRevision.update({ where: { id: revision.id }, data: { state: AgentRevisionState.Published, publishedAt: new Date(command.materializedAt) } });
 				await transaction.agentService.update({ where: { id: service.id }, data: { activeRevisionId: revision.id, updatedAt: new Date(command.materializedAt) } });
 				const applied = await transaction.personalConfigurationChange.updateMany({ where: { id: command.changeId, siloId: command.siloId, userId: command.userId, state: PersonalConfigurationChangeState.Accepted }, data: { state: PersonalConfigurationChangeState.Applied, appliedAgentRevisionId: revision.id } });
-				return applied.count === 1 ? { status: "applied", agentRevisionId: revision.id } as const : { status: "stale_proposal" } as const;
+				return applied.count === 1 ? { status: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: revision.id } as const : { status: PersonalConfigurationMaterializationCodes.StaleProposal } as const;
 			});
 		}
 		catch (err)
 		{
 			this.logger.error({ err, operation: "personal_configuration.materialize", siloId: command.siloId, changeId: command.changeId }, "Personal configuration materialization failed");
-			return { status: "persistence_unavailable" };
+			return { status: PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 		}
 	}
 
@@ -143,7 +143,7 @@ export class PrismaPersonalConfigurationChangeRepository implements PersonalConf
 
 		// 3. Reuse the proposal authority so current-revision provenance is checked atomically at insertion.
 		const result = await __ProposePersonalConfigurationChange(this, { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, personaProfileId: profile.id, agentServiceId: snapshot.agentServiceId, sourceThreadId: snapshot.threadId, sourceRunId: snapshot.runId, sourceMessageId: null, requestedPatch: candidate.arguments, requestedPatchDigest: candidate.argumentsDigest, expectedPersonaRevisionId: snapshot.personaRevisionId, expectedAgentRevisionId: snapshot.agentRevisionId, proposedAt: now });
-		if (result.outcome !== "proposed") throw new Error(`upgrade_session proposal denied: ${result.reason}`);
+		if (result.outcome !== PersonalConfigurationProposalCodes.Proposed) throw new Error(`upgrade_session proposal denied: ${result.reason}`);
 		return { changeId: result.changeId };
 	}
 }
@@ -158,11 +158,12 @@ function _toChangeView(change: { id: string; requestedPatch: Prisma.JsonValue; s
 /** Convert the database lifecycle enum to its stable product spelling. */
 function _state(state: PersonalConfigurationChangeState): PersonalConfigurationChangeView["state"]
 {
-	if (state === PersonalConfigurationChangeState.Proposed) return "proposed";
-	if (state === PersonalConfigurationChangeState.Accepted) return "accepted";
-	if (state === PersonalConfigurationChangeState.Applied) return "applied";
-	if (state === PersonalConfigurationChangeState.Rejected) return "rejected";
-	return "superseded";
+	if (state === PersonalConfigurationChangeState.Proposed) return PersonalConfigurationChangeViewStates.Proposed;
+	if (state === PersonalConfigurationChangeState.Accepted) return PersonalConfigurationChangeViewStates.Accepted;
+	if (state === PersonalConfigurationChangeState.Applied) return PersonalConfigurationChangeViewStates.Applied;
+	if (state === PersonalConfigurationChangeState.Rejected) return PersonalConfigurationChangeViewStates.Rejected;
+	if (state === PersonalConfigurationChangeState.Superseded) return PersonalConfigurationChangeViewStates.Superseded;
+	throw new Error(`unsupported personal configuration state: ${state}`);
 }
 
 /** Hash the same canonical revision content used by the managed definition authority. */

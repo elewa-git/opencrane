@@ -1,4 +1,5 @@
 import { PersonalConfigurationChangeState, PersonaInterviewState, PersonaQuestionSetState, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
 import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
 
@@ -36,7 +37,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				// 2. Claim only an accepted owner-bound persona-refresh proposal before any interview exists.
 				if (command.refreshConfigurationChangeId !== null)
 				{
-					const refresh = await transaction.personalConfigurationChange.findFirst({ where: { id: command.refreshConfigurationChangeId, siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: "persona_refresh" } } }, select: { id: true } });
+					const refresh = await transaction.personalConfigurationChange.findFirst({ where: { id: command.refreshConfigurationChangeId, siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: AgentConfigPatchKinds.PersonaRefresh } } }, select: { id: true } });
 					if (refresh === null) return { status: "refresh_change_unavailable" } as const;
 				}
 

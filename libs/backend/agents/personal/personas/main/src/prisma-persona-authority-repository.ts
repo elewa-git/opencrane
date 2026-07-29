@@ -1,4 +1,5 @@
 import { PersonalConfigurationChangeState, PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
+import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
 import type { ApprovePersonaCommand, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 
@@ -85,7 +86,7 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 				const interview = await transaction.personaInterview.findUnique({ where: { id: interviewId }, select: { refreshConfigurationChangeId: true } });
 				if (interview?.refreshConfigurationChangeId === null || interview === null) return { status: "approved" } as const;
 				const change = await transaction.personalConfigurationChange.updateMany({
-					where: { id: interview.refreshConfigurationChangeId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: "persona_refresh" } } },
+					where: { id: interview.refreshConfigurationChangeId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: AgentConfigPatchKinds.PersonaRefresh } } },
 					data: { state: PersonalConfigurationChangeState.Applied, appliedPersonaRevisionId: command.personaRevisionId },
 				});
 				return change.count === 1 ? { status: "approved" } as const : { status: "conflict" } as const;

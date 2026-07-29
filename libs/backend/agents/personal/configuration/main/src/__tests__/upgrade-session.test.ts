@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { AgentConfigPatchKinds, type RunInputSnapshot } from "@opencrane/contracts";
 
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-session.js";
 
@@ -22,7 +22,7 @@ describe("upgrade_session tool", function _UpgradeSessionSuite()
 	it("is first-party and never opens deferred approval for the invocation", function _Descriptor()
 	{
 		expect(UPGRADE_SESSION_TOOL).toMatchObject({ name: "upgrade_session", toolRevisionId: "opencrane:personal:upgrade_session:v1", requiresApproval: false });
-		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ additionalProperties: false })]) });
+		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ additionalProperties: false, properties: { kind: { const: AgentConfigPatchKinds.PersonaRefresh } } }), expect.objectContaining({ additionalProperties: false, properties: expect.objectContaining({ kind: { const: AgentConfigPatchKinds.ModelAlias } }) })]) });
 		expect(UPGRADE_SESSION_TOOL.parametersSchema).toMatchObject({ oneOf: expect.arrayContaining([expect.objectContaining({ properties: expect.objectContaining({ modelAlias: expect.objectContaining({ pattern: "\\S" }) }) })]) });
 	});
 });
