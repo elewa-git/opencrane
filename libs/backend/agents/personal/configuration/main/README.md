@@ -49,6 +49,9 @@ means the request is already user-approved or applied.
   `POST /api/v1/me/configuration/changes/:changeId/materialize` retry-safely applies an accepted
   model selection. Browser input cannot choose a user, silo, timestamp, revision,
   model-definition ID, or lifecycle state, and no endpoint mutates the current run snapshot.
+- `_CreatePersonalConfigurationRouter` is the ready-to-mount Prisma composition. It maps the shared
+  request principal to the configuration caller and reuses one repository for proposal, decision,
+  and materialisation authority.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
@@ -67,7 +70,8 @@ separate owners.
 ## Dependency direction
 
 Tagged `scope:personal-configuration` at the backend layer, it may depend only on itself and shared
-contracts. It cannot import another personal specialization, a server control-plane domain, or an app.
+contracts plus the narrow `scope:auth` request-principal seam. It cannot import another personal
+specialization, a server control-plane domain, or an app.
 
 ## Data & persistence
 

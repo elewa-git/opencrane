@@ -91,6 +91,8 @@ whole provisioning transaction.
 - `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts ordinary or
   proposal-bound refresh interviews, records one answer, and completes them using only
   session-and-host-derived ownership.
+- `_CreatePersonaOnboardingRouter` — the ready-to-mount Prisma composition. It maps the shared
+  request principal to the persona caller and owns every onboarding repository and the clock.
 
 ## Boundary
 
@@ -104,7 +106,7 @@ the composing app's structured logger rather than creating a second logging root
 ## Dependency direction
 
 Tagged `scope:personal-personas`: it may depend only on `scope:personal-personas` and `scope:shared`
-— never on apps or sibling domains.
+plus the narrow `scope:auth` request-principal seam — never on apps or sibling business domains.
 
 ## Data & persistence
 

@@ -4,10 +4,10 @@
 
 ## What it owns
 
-This package is the OpenCrane server's narrow transport for agent runtimes. Its
-`_CreateRuntimeTokenReviewer` factory binds the personal and managed projected-token audiences to
-distinct namespaces and ServiceAccount grammars before either runtime can use the shared transport.
-The transport turns an outbound request from a runtime Pod into an authenticated stream with bounded
+This package is the OpenCrane server's narrow transport for agent runtimes. The separate
+[workload-identity](../workload-identity/README.md) package first binds personal and managed
+projected-token audiences to distinct namespaces and ServiceAccount grammars. This transport then
+turns an outbound request from that reviewed runtime Pod into an authenticated stream with bounded
 inbound requests, without becoming an authority over runs, commands, or agent output.
 
 The transport first asks an injected TokenReview adapter which Kubernetes Pod presented the
@@ -43,9 +43,6 @@ The package does not repair identity, choose a run, mint a command, or persist a
 
 - `_RegisterInternalAgentRuntimeStream(options)` — builds the internal Express router for the
   authenticated stream and candidate endpoints.
-- `_CreateRuntimeTokenReviewer` — fail-closed Kubernetes TokenReview adapter for the distinct
-  personal/managed audiences, namespaces, ServiceAccount grammars, and bound Pod UID.
-- `RuntimeTokenReviewer` — identity-review port used by the stream transport.
 - `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
   runtime-instance binding.
@@ -57,7 +54,7 @@ The package does not repair identity, choose a run, mint a command, or persist a
 ## Boundary
 
 This is server-owned infrastructure, not an agent-product specialization. It owns HTTP parsing,
-server-sent-event framing, heartbeats, credential extraction, TokenReview delegation, and tracing.
+server-sent-event framing, heartbeats, bearer extraction, reviewer delegation, and tracing.
 It owns no Prisma client, assignment lookup, lease, command ordering source, candidate persistence,
 runtime process, or Kubernetes mutation.
 
@@ -68,9 +65,10 @@ candidate persistence, and the model/tool executor all live behind the injected 
 
 ## Dependency direction
 
-Tagged `scope:agent-runtime-stream` and `layer:infra`. It may import shared contracts and
-observability, while the `apps/opencrane` entrypoint injects business-authority adapters. It must not
-import apps, Prisma, or backend persistence implementations.
+Tagged `scope:agent-runtime-stream` and `layer:infra`. It may import shared contracts,
+observability, and the narrow `scope:workload-identity` port, while the `apps/opencrane` entrypoint
+injects business-authority adapters. It must not import apps, Prisma, or backend persistence
+implementations.
 
 ## Runtime & config
 
@@ -83,6 +81,7 @@ opens no listener by itself.
 ## See also
 
 - Parent index: [_infra](../README.md)
+- Identity adapter: [workload-identity](../workload-identity/README.md)
 - Runtime process: [agent-runtime](../../../../apps/agent-runtime/README.md)
 - Runtime authority: [backend/agents/runtime](../../../backend/agents/execution/protocol/README.md)
 - Shared protocol: [contracts](../../../contracts/README.md)

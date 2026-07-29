@@ -156,13 +156,11 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
 plane), execution authority via the Obot MCP-invocation port (allow-list enforced) and
-memory-gateway scoped read/write with mandatory provenance, the attach-authority + runtime
+memory-gateway scoped read/write with mandatory provenance, and the attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested), and the first packaged central-agent DEFINITION (the harvester expressed as a managed
-`AgentService` + schedule + Obot MCP assignment, Obot stubbed). NOT done — a NAMED LATER GATE:
-**the harvesting-central-agent live-Obot proof**, tracked under
-[#337](https://github.com/elewa-git/opencrane/issues/337), qualifies the target managed-agent
-definition against a live integration.
+tested). NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
+live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337). The repository
+does not retain an unqualified offline definition alongside that live acceptance gate.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.

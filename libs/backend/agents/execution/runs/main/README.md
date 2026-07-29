@@ -19,6 +19,7 @@ its frozen inputs.
  │   · PrismaRunAdmissionRepository          │  duplicate returns the first snapshot
  │   · RunAdmissionConcurrencyGate            │  bounded wait before a DB connection
  │   · PrismaRunCancellationRepository       │  fence first; clean exact Job; then terminal
+ │   · __CreateRuntimeWorkloadCleanupUseCase  │  cleanup policy behind a physical store port
  │   · __StartNextRunAttempt                 │  terminal run: attempt N → N+1
  │   · __ValidateRunWorkloadAssignment       │  Job/Pod identity == current attempt?
  └──────────────────────────────────────────┘
@@ -165,14 +166,20 @@ uncertainty fails closed.
   claim release work and register exactly one first Pod.
 - `PrismaRunCancellationRepository` — atomically fence one exact attempt, issue assigned or delayed
   orphan cleanup authority, lease that cleanup, and finalise cancellation only after confirmation.
+- `__CreateRuntimeWorkloadCleanupUseCase` — claim one cleanup event, apply the two-observation
+  orphan-absence policy, and confirm authoritative absence through a physical store port.
+- `RuntimeWorkloadCleanupStore` — Kubernetes-free port that reports exact absence or a
+  UID-preconditioned deletion request without becoming durable authority.
 - `RequestRunCancellation*`, `RunWorkloadCleanup*`, and `ConfirmRunWorkloadCleanup*` — the typed
   lifecycle, lease, server-derived Job projection, and physical-evidence outcomes.
 - `__CreateAgentControllerRunDispatchRouter` — projected-token-authenticated internal assignment and
   release API for the fixed `agent-controller` ServiceAccount.
 - `__CreateSelfRunStatusRouter` / `PrismaSelfRunStatusRepository` — authenticated product read of
   one personal run or the owner's latest fifty runs, including lifecycle, attempt, immutable
-  revision, and timestamps. The app derives the subject and silo from session and host; foreign or
+  revision, and timestamps. The router derives the subject and silo from session and host; foreign or
   absent single runs share the same non-disclosing 404.
+- `_CreateSelfRunStatusRouter` — the ready-to-mount Prisma composition that maps the shared request
+  principal into the self-run caller and supplies the status repository.
 - `RunDispatchRepository` / `AgentControllerTokenReviewer` — persistence and TokenReview ports used by that internal API.
 - `ClaimNextRunWorkloadReleaseResult` / `RegisterRunWorkloadPodResult` — release-claim and first-Pod
   registration outcomes used across the internal adapter boundary.
@@ -196,8 +203,10 @@ not run the agent, create/unsuspend the Job, or expose the private input snapsho
 controller. It does not treat the bootstrap reference as a credential and does not inspect
 Kubernetes itself. It owns only durable admission, attempts, dispatch leases, assignment
 integrity, release delivery, first-Pod registration, cancellation fencing, and cleanup
-confirmation. Kubernetes inspection and mutation remain in dedicated runtime processes; this
-package only says which exact work may be removed.
+confirmation. Kubernetes inspection and mutation remain in the dedicated
+[runtime cleanup adapter](../../../runtime/cleanup/main/README.md). The use case in this package
+decides when physical evidence may defer or confirm durable cleanup; it never sees a Kubernetes
+client or object.
 
 Child admission is not an alternate public run-start route. A caller must derive parent authority
 from the admitted parent run, use the target-authorization port backed by that parent's approved
@@ -219,7 +228,8 @@ suppressed outcome instead of silently losing the result or violating the event-
 ## Dependency direction
 
 Tagged `scope:execution-runs`: it may depend only on `scope:agents` (shared run models),
-`scope:authorization`, `scope:execution-runs`, and `scope:shared` — never on apps or sibling domains.
+`scope:auth`, `scope:authorization`, `scope:execution-runs`, and `scope:shared` — never on apps or
+sibling domains. The auth edge is limited to backend-type-free request-principal resolution.
 
 ## Data & persistence
 
@@ -237,4 +247,4 @@ Cancellation reuses the same outbox with `RunCancellationRequested` and
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [inputs](../../inputs/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)
+- Siblings: [inputs](../../inputs/main/README.md) · [runtime cleanup](../../../runtime/cleanup/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

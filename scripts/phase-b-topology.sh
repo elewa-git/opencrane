@@ -37,6 +37,7 @@ const appSourceClassifications = new Set([
   "delete",
   "hosting-composition",
   "prisma-composition",
+  "process-composition",
   "process-entrypoint",
   "process-instrumentation",
   "process-logging",

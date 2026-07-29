@@ -1,432 +1,137 @@
-import type { Express } from "express";
-import * as k8s from "@kubernetes/client-node";
-import { ActionExecutionState, AgentServiceKind, type Prisma, type PrismaClient } from "@prisma/client";
+import type { Express, Router } from "express";
+import type { PrismaClient } from "@prisma/client";
+import type * as k8s from "@kubernetes/client-node";
 
 import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/reporting/spend";
 import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
-import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter, modelRoutingMetricsRouter } from "@opencrane/backend/server/gateways/model-routing";
+import { modelRoutingDefaultsRouter, modelRoutingMetricsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
-import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
-import { _CreateRuntimeTokenReviewer, _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, type RunInputSnapshot } from "@opencrane/contracts";
 import { spec } from "@opencrane/backend/server/api-spec";
-import { PrismaRunDispatchRepository, PrismaRuntimeTerminalReporter, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
-import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
-import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
-import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
-import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
-import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
-import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
-import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
-import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
-import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
-import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
-import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter, type ArtifactPreprocessorTokenReviewer, type ReviewedArtifactPreprocessorIdentity } from "@opencrane/backend/server/agents/artifacts";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
+import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
+import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
+import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
+import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
+import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
+import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
+import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
+import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
 
-import { _CreateAgentServicesRouter } from "./agent-services-wiring.js";
-import { _CreateArtifactPreprocessOutputBroker, _CreateArtifactPreprocessSourceBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
-import { _CreatePersonaOnboardingRouter } from "./persona-onboarding-wiring.js";
-import { _CreateDeferredToolApprovalRouter } from "./deferred-tool-approval-wiring.js";
-import { _CreateSteeringIngestRouter } from "./steering-ingest-wiring.js";
-import { _CreateSelfConversationReplayRouter } from "./self-conversation-replay-wiring.js";
-import { _CreateSelfRunStatusRouter } from "./self-run-status-wiring.js";
-import { _CreatePersonalConfigurationRouter } from "./personal-configuration-wiring.js";
-import { _CreateSkillCatalogueRouter } from "./skill-catalogue-wiring.js";
-import { _CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue-wiring.js";
-import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
-
-/** Read a bounded, server-owned seconds setting and return milliseconds. */
-function _ReadBoundedSeconds(name: string, fallbackSeconds: number, minimumSeconds: number, maximumSeconds: number): number
-{
-	const raw = process.env[name]?.trim();
-	if (!raw) return fallbackSeconds * 1_000;
-	const seconds = Number(raw);
-	if (!Number.isSafeInteger(seconds) || seconds < minimumSeconds || seconds > maximumSeconds) throw new Error(`${name} must be an integer from ${minimumSeconds} through ${maximumSeconds}`);
-	return seconds * 1_000;
-}
-
-/** Read a bounded server-owned whole-number setting without converting it into a duration. */
-function _ReadBoundedInteger(name: string, fallback: number, minimum: number, maximum: number): number
-{
-	const raw = process.env[name]?.trim();
-	if (!raw) return fallback;
-	const value = Number(raw);
-	if (!Number.isSafeInteger(value) || value < minimum || value > maximum) throw new Error(`${name} must be an integer from ${minimum} through ${maximum}`);
-	return value;
-}
-
-/** Read the controller-registered route identity, leaving replay unreachable until it is configured. */
-function _ReadChannelReplayRouteId(): string | null
-{
-	const routeId = process.env.CHANNEL_REPLAY_ROUTE_ID?.trim();
-	return routeId || null;
-}
-
-/** Return whether one value is a bounded Kubernetes namespace DNS label. */
-function _IsNamespace(value: string): boolean
-{
-	return value.length <= 63 && /^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(value);
-}
+import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
+import type { RouteMount } from "./routes.types.js";
 
 /**
- * Read the server and runtime namespaces as one fail-closed deployment boundary.
- * The runtime namespace is explicit because it identifies untrusted workload subjects and durable
- * assignments; it must never silently collapse back into the OpenCrane server namespace.
- */
-function _ReadRuntimeNamespaceBoundary(): { readonly serverNamespace: string; readonly personalRuntimeNamespace: string; readonly managedRuntimeNamespace: string }
-{
-	const serverNamespace = process.env.POD_NAMESPACE?.trim() || "default";
-	const personalRuntimeNamespace = process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim();
-	const managedRuntimeNamespace = process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim();
-	if (!_IsNamespace(serverNamespace) || !personalRuntimeNamespace || !_IsNamespace(personalRuntimeNamespace) || !managedRuntimeNamespace || !_IsNamespace(managedRuntimeNamespace) || personalRuntimeNamespace === serverNamespace || managedRuntimeNamespace === serverNamespace || personalRuntimeNamespace === managedRuntimeNamespace)
-	{
-		throw new Error("personal and managed runtime namespaces must be valid, distinct, and different from POD_NAMESPACE");
-	}
-	return { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace };
-}
-
-/** Read the dedicated restricted preprocessing namespace as an explicit trust boundary. */
-function _ReadArtifactPreprocessorNamespace(serverNamespace: string): string
-{
-	const namespace = process.env.ARTIFACT_PREPROCESSOR_NAMESPACE?.trim();
-	if (!namespace || !_IsNamespace(namespace) || namespace === serverNamespace) throw new Error("ARTIFACT_PREPROCESSOR_NAMESPACE must be a valid namespace different from POD_NAMESPACE");
-	return namespace;
-}
-
-/**
- * Submit one audience-bound projected token and expose only an authenticated accepted review.
+ * Register the authenticated product API from functional route lists.
  *
- * The raw credential remains local to this traced Kubernetes call. A valid signature without the
- * exact requested audience is collapsed into the same denial as any other failed TokenReview.
+ * @param app - Public Express listener, already protected by browser-session authentication.
+ * @param prisma - Canonical product-authority database client.
+ * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
+ * @param runAdmission - Shared managed run-now and scheduler admission port.
+ * @param serverNamespace - Namespace in which provider Secrets are managed.
+ * @returns The configured public listener.
  */
-async function _ReviewProjectedToken(authApi: k8s.AuthenticationV1Api, token: string, audience: string): Promise<k8s.V1TokenReviewStatus | null>
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, serverNamespace: string): Express
 {
-	return ___DoWithTrace("kubernetes.projected_token.review", { audience }, async function _reviewToken(): Promise<k8s.V1TokenReviewStatus | null>
-	{
-		const body = new k8s.V1TokenReview();
-		body.spec = new k8s.V1TokenReviewSpec();
-		body.spec.token = token;
-		body.spec.audiences = [audience];
-		const review = await authApi.createTokenReview({ body });
-		const status = review.status;
-		return status?.authenticated && status.audiences?.includes(audience) ? status : null;
-	});
+	const identityAndAccessRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
+		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
+		{ method: "use", path: "/api/v1/shares", handler: sharesRouter(prisma) },
+		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
+	];
+	const agentRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/agent-services", handler: _CreateAgentServicesRouter(prisma, runAdmission, _log) },
+		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
+	];
+	const personalWorkspaceRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log) },
+	];
+	const gatewayRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(prisma) },
+		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
+		{ method: "use", path: "/api/v1/model-routing/metrics", handler: modelRoutingMetricsRouter(prisma) },
+		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
+		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
+		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma) },
+	];
+	const knowledgeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/third-party-sources", handler: thirdPartySourcesRouter(prisma) },
+	];
+	const reportingRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/ai-budget", handler: aiBudgetRouter(prisma) },
+		{ method: "use", path: "/api/v1/token-usage", handler: tokenUsageRouter(prisma) },
+	];
+	const infrastructureRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
+		{ method: "get", path: "/healthz", handler: _CheckDbHealth(prisma) },
+	];
+	_MountRouteAreas(app, [
+		identityAndAccessRoutes,
+		agentRoutes,
+		personalWorkspaceRoutes,
+		gatewayRoutes,
+		knowledgeRoutes,
+		reportingRoutes,
+		infrastructureRoutes,
+	]);
+	return app;
 }
 
 /**
- * Parse only the fixed agent-controller ServiceAccount subject in one silo namespace.
- * A valid token for any other namespaced identity must never inherit controller dispatch authority.
- */
-function _ParseAgentControllerSubject(username: string, expectedNamespace: string, audiences: readonly string[]): ReviewedAgentControllerIdentity | null
-{
-	const expectedUsername = `system:serviceaccount:${expectedNamespace}:${AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME}`;
-	if (username !== expectedUsername) return null;
-	return { username, namespace: expectedNamespace, serviceAccountName: AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, audiences };
-}
-
-/**
- * Build the app-owned TokenReview adapter for the sole agent-controller identity.
- * The adapter fixes audience, namespace, and ServiceAccount before exposing a reviewed identity to
- * the run-dispatch router; no caller-provided coordinate can widen those bindings.
- */
-function _CreateAgentControllerTokenReviewer(authApi: k8s.AuthenticationV1Api, serverNamespace: string): AgentControllerTokenReviewer
-{
-	return {
-		async __Review(token: string): Promise<ReviewedAgentControllerIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE);
-			return status ? _ParseAgentControllerSubject(status.user?.username ?? "", serverNamespace, status.audiences ?? []) : null;
-		},
-	};
-}
-
-/** Build the fixed TokenReview adapter for the dedicated artifact-preprocessor identity. */
-function _CreateArtifactPreprocessorTokenReviewer(authApi: k8s.AuthenticationV1Api, namespace: string): ArtifactPreprocessorTokenReviewer
-{
-	return {
-		async __Review(token: string): Promise<ReviewedArtifactPreprocessorIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE);
-			const username = status?.user?.username ?? "";
-			const expectedUsername = `system:serviceaccount:${namespace}:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`;
-			return status !== null && username === expectedUsername
-				? { username, namespace, serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: status.audiences ?? [] }
-				: null;
-		},
-	};
-}
-
-/** Build the TokenReview adapter for a worker identity chosen only by durable bootstrap authority. */
-function _CreateSkillWorkloadTokenReviewer(authApi: k8s.AuthenticationV1Api): SkillWorkloadBootstrapTokenReviewer
-{
-	return {
-		async __Review(token: string, audience: string): Promise<SkillWorkloadBootstrapIdentity | null>
-		{
-			const status = await _ReviewProjectedToken(authApi, token, audience);
-			const username = status?.user?.username ?? "";
-			const match = /^system:serviceaccount:([a-z0-9]([-a-z0-9]*[a-z0-9])?):([a-z0-9]([-a-z0-9]*[a-z0-9])?)$/.exec(username);
-			const podUid = status?.user?.extra?.["authentication.kubernetes.io/pod-uid"]?.[0];
-			return match && podUid ? { namespace: match[1], serviceAccountName: match[3], podUid } : null;
-		},
-	};
-}
-
-/**
- * Mint one attempt-scoped LiteLLM virtual key for a claimed run attempt.
+ * Register the workload-facing API from explicit controller, runtime, worker, and replay lists.
  *
- * This binds the run-dispatch repository's injected issuer to the model-routing gateway, which holds
- * the LiteLLM master key. Keeping the call here (not in the `scope:execution-runs` library) is why the
- * master key never reaches the outbound-only controller: only the minted virtual key rides the claim
- * response. The per-silo server already targets its own silo LiteLLM, so `siloId` needs no routing.
- * @param request - Alias, single model alias, silo, budget, and expiry the key is bound to.
- * @returns The transient minted key value.
+ * @param app - Internal Express listener, unreachable from the public ingress.
+ * @param prisma - Canonical product-authority database client.
+ * @param authApi - Kubernetes TokenReview client for workload identity.
+ * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  */
-async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promise<MintedAttemptModelKey>
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): void
 {
-	const minted = await _IssueAttemptLiteLlmKey({ keyAlias: request.keyAlias, modelAlias: request.modelAlias, maxBudgetUsd: request.maxBudgetUsd, expirySeconds: request.expirySeconds });
-	return { key: minted.key };
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
+	const internalControllerRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
+	];
+	const internalRuntimeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
+	];
+	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
+	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalReplayRoutes]);
 }
 
-/**
- * Assemble the composition-root external-action runner from the concrete transports.
- *
- * This is where the MCP (Obot custody), sandbox, and memory transports are bound to the pure
- * `__ExecuteExternalAction` boundary and the durable {@link PrismaToolInvocationRepository}, so no
- * `scope:agent-runtime` or `scope:authorization` package imports a transport. Every transport is its
- * fail-closed default until a real one is verified, so an admitted action reserves its invocation and
- * then fails closed rather than fabricating a tool result.
- *
- * @param prisma - Canonical product-authority client backing the tool-invocation receipts.
- * @returns A runner the dispatch authority invokes for each admitted external-action candidate.
- */
-function _CreateExternalActionRunner(prisma: PrismaClient): RuntimeExternalActionRunner
+/** Convert an optional capability router into a zero-or-one entry route list. */
+function _OptionalRoute(path: string, handler: Router | null): readonly RouteMount[]
 {
-	const repository = new PrismaToolInvocationRepository(prisma);
-	const personalConfiguration = new PrismaPersonalConfigurationChangeRepository(prisma);
-	const obotMcpInvocation = new __UnavailableObotMcpInvocationAdapter();
-	const integrations = new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock());
-	const sandboxExecutor = new __UnavailableSandboxJobExecutor();
-	const memoryGateway = new __UnavailableMemoryGatewayClient();
-	return {
-		async run(candidate, snapshot, compiledTools)
-		{
-			// The approval requirement is per-tool, derived from the resolved compiled tool grant.
-			const tool = compiledTools.find(function _match(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
-			const approvalRequired = tool?.requiresApproval ?? false;
-			let executor;
-			try
-			{
-				if (candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION && snapshot.identitySnapshot.kind !== "user") return { outcome: "denied" as const };
-				executor = candidate.toolRevisionId === UPGRADE_SESSION_TOOL_REVISION
-					? { execute: function _proposeUpgradeSession() { return personalConfiguration.proposeUpgradeSession(candidate, snapshot, new Date().toISOString()); } }
-					: __CreateExternalActionExecutor(candidate, { siloId: snapshot.siloId, subjectId: snapshot.identitySnapshot.executionSubjectId, cogneeDatasetId: _PersonalMemoryDatasetId(snapshot), agentRevisionId: snapshot.agentRevisionId, integrations, obotMcpInvocation, sandboxExecutor, memoryGateway });
-			}
-			catch (error)
-			{
-				return { outcome: "retryable" as const, error };
-			}
-			const result = await __ExecuteExternalAction(repository, { candidate, snapshot, compiledTools, approvalRequired }, executor, _log);
-			if (result.outcome === "denied") return { outcome: "denied" as const };
-			// A deferred invocation opens the pending approval that gates the eventual resume.
-			if (result.outcome === "deferred")
-			{
-				const deferred = await _OpenDeferredToolApproval(prisma, repository, candidate, snapshot.capabilitySetDigest, result.reservationId);
-				return { outcome: deferred ? "completed" as const : "denied" as const };
-			}
-			return { outcome: "completed" as const };
-		},
-	};
+	return handler === null ? [] : [{ method: "use", path, handler }];
 }
 
-/** Returns the personal Cognee dataset frozen in a snapshot, or null for every other scope. */
-function _PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
+/** Mount route areas in declaration order so neighbouring routers can intentionally share a path. */
+function _MountRouteAreas(app: Express, areas: readonly (readonly RouteMount[])[]): void
 {
-	if (snapshot.identitySnapshot.kind !== "user") return null;
-	const policy = snapshot.memoryQueryPolicy;
-	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
-	const record = policy as Readonly<Record<string, unknown>>;
-	if (record["scope"] !== "personal") return null;
-	const candidate = record["cogneeDatasetId"];
-	return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : null;
-}
-
-/** Compile normal grants, then add the sealed first-party upgrade intent only to personal sessions. */
-function _CreateRunInputCompiler(): RunInputCompiler
-{
-	const compile = __CreatePrismaRunInputCompiler();
-	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
+	for (const area of areas)
 	{
-		// 1. Compile the immutable snapshot normally before composition adds any built-in descriptor.
-		const input = await compile(snapshot, transaction);
-		// 2. Exclude non-conversation and non-persona snapshots without inferring a personal service.
-		if (!__IsUpgradeSessionAvailable(snapshot)) return input;
-		// 3. Prove the current service kind in the same compiler transaction; snapshot fields alone are insufficient.
-		const service = await transaction.agentService.findFirst({ where: { id: snapshot.agentServiceId, siloId: snapshot.siloId, kind: AgentServiceKind.Personal }, select: { id: true } });
-		// 4. Append and re-seal only the proven first-party tool, preserving the immutable snapshot itself.
-		return service === null ? input : __AppendCompiledTool(input, UPGRADE_SESSION_TOOL);
-	};
-}
-
-/** Open an approval or terminally fail its already-reserved invocation without allowing a replay. */
-async function _OpenDeferredToolApproval(prisma: PrismaClient, repository: PrismaToolInvocationRepository, candidate: { readonly runId: string; readonly attempt: number; readonly toolInvocationId: string; readonly toolRevisionId: string; readonly argumentsDigest: string }, capabilitySetDigest: string, reservationId: string): Promise<boolean>
-{
-	const expiresAt = new Date(Date.now() + _DEFERRED_APPROVAL_TTL_MILLISECONDS);
-	try
-	{
-		return await prisma.$transaction(async function _defer(transaction): Promise<boolean>
+		for (const route of area)
 		{
-			const result = await __DeferToolRequest(transaction, { runId: candidate.runId, attempt: candidate.attempt, toolInvocationRowId: reservationId, toolRevisionId: candidate.toolRevisionId, argumentsDigest: candidate.argumentsDigest, actionDigest: candidate.toolInvocationId, effectivePolicyDigest: capabilitySetDigest, approverPolicyRevision: "mcp-server-requires-approval", now: new Date(), expiresAt });
-			if (result.outcome !== "unavailable") return true;
-			const failed = await transaction.toolInvocation.updateMany({ where: { id: reservationId, state: ActionExecutionState.Reserved }, data: { state: ActionExecutionState.Failed, failureCode: "approval_unavailable", completedAt: new Date() } });
-			if (failed.count !== 1) throw new Error("deferred approval lost its reserved invocation fence");
-			return false;
-		});
-	}
-	catch
-	{
-		// A commit may have succeeded before its connection failed. A linked approval proves the reserved
-		// invocation is not stranded; otherwise compare-and-set it to the terminal failed state.
-		let approval = null;
-		try
-		{
-			approval = await prisma.approvalRequest.findFirst({ where: { runId: candidate.runId, attempt: candidate.attempt, actionDigest: candidate.toolInvocationId, toolInvocationRowId: reservationId } });
-		}
-		catch
-		{
-			// The compare-and-set below remains the best available terminalisation if a read failed.
-		}
-		if (approval !== null) return true;
-		try
-		{
-			return (await repository.markFailed(reservationId, "approval_defer_failed")).status === "failed";
-		}
-		catch
-		{
-			return false;
+			if (route.method === "get") app.get(route.path, route.handler);
+			else app.use(route.path, route.handler);
 		}
 	}
-}
-
-/** Bounded lifetime of a pending deferred-tool approval before it is no longer actionable. */
-const _DEFERRED_APPROVAL_TTL_MILLISECONDS = 24 * 60 * 60 * 1000;
-
-/**
- * Mount the internal (`/api/internal/*`) routers. These MUST be registered BEFORE the
- * session `___AuthMiddleware` (see index.ts) — mounting them after it 401s every caller:
- *   - runtime routes run their own TokenReview over a projected pod token, which the
- *     browser-session middleware cannot satisfy.
- * @see apps/opencrane/helm/templates/_networkpolicy.tpl — the runtime-plane policies.
- */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api): void
-{
-	const { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace } = _ReadRuntimeNamespaceBoundary();
-	const claimLeaseMilliseconds = _ReadBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300);
-	const assignmentTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400);
-	const publishedOutboxRetentionMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000);
-	const outboxPruneBatchSize = _ReadBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000);
-	const commandTtlMilliseconds = _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300);
-	const runtimePlanes = { personalRuntimeNamespace, managedRuntimeNamespace };
-	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { ...runtimePlanes, claimLeaseMilliseconds, assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds, outboxPruneBatchSize }, _IssueAttemptModelKey);
-	const skillWorkloadClaimsRepository = new PrismaSkillWorkloadClaimsRepository(prisma, claimLeaseMilliseconds);
-	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimePlanes);
-	const runtimeDispatchAuthority = new PrismaRuntimeDispatchAuthority(prisma, { ...runtimePlanes, commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _CreateRunInputCompiler(), _CreateExternalActionRunner(prisma), new PrismaRuntimeTerminalReporter());
-	const replayRouteId = _ReadChannelReplayRouteId();
-	if (replayRouteId !== null)
-	{
-		// The registered route ID pins this PEP to one controller-selected internal endpoint.
-		app.use("/api/internal/conversation-replay", __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }));
-	}
-	app.use("/api/internal/agent-controller", __CreateAgentControllerRunDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: runDispatchRepository, logger: _log }));
-	app.use("/api/internal/agent-controller", __CreateSkillWorkloadDispatchRouter({ tokenReviewer: _CreateAgentControllerTokenReviewer(authApi, serverNamespace), namespace: serverNamespace, repository: skillWorkloadClaimsRepository, logger: _log }));
-	app.use("/api/internal/agent-runtime", __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }));
-	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringInputRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }));
-	app.use("/api/internal/agent-runtime", __CreateSkillAuthoringCompletionRouter({ tokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi), repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }));
-	if (process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true")
-	{
-		const artifactPreprocessorNamespace = _ReadArtifactPreprocessorNamespace(serverNamespace);
-		app.use("/api/internal/artifact-preprocessor", __CreateArtifactPreprocessorRouter({
-			tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
-			namespace: artifactPreprocessorNamespace,
-			repository: new PrismaArtifactPreprocessRepository(prisma),
-			sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
-			outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, _ReadBoundedInteger("ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES", 16 * 1024 * 1024, 1_024, 64 * 1024 * 1024)),
-			logger: _log,
-		}));
-	}
-  // The runtime opens this internal SSE connection itself and performs its one-use bootstrap
-  // exchange here. TokenReview is the identity boundary for both routers; the durable dispatch
-  // authority mints fenced commands and admits candidates, and the bootstrap router binds the
-  // runtime's public proof key exactly once. Both are mounted under the same base path.
-  app.use("/api/internal/agent-runtime", __CreateRuntimeBootstrapRouter({
-    tokenReviewer: runtimeTokenReviewer,
-    runtimeNamespaces: [personalRuntimeNamespace, managedRuntimeNamespace],
-    repository: new PrismaRuntimeBootstrapExchange(prisma),
-    clock: { nowEpochMs(): number { return Date.now(); } },
-    logger: _log,
-  }));
-  app.use("/api/internal/agent-runtime", _RegisterInternalAgentRuntimeStream({
-    tokenReviewer: runtimeTokenReviewer,
-    authority: runtimeDispatchAuthority,
-    maxBodyBytes: 64 * 1024,
-    heartbeatMilliseconds: 15_000,
-	commandRecoveryMilliseconds: _ReadBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
-  }));
-}
-
-/**
- * Mount authenticated public API and infrastructure routes.
- *
- * @param app - Express application to register routes on.
- * @param prisma - Prisma client used by route handlers.
- * @param customApi - Kubernetes custom objects client.
- * @param coreApi - Kubernetes core API client.
- * @param authApi - Kubernetes authentication API client.
- * @param runAdmission - Shared, capacity-bounded admission path for managed run-now requests.
- * @returns The configured Express application.
- */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api, runAdmission: ManagedRunAdmissionPort): Express
-{
-  // NOTE: the internal (`/api/internal/*`) routers are mounted separately by
-  // `_RegisterInternalRoutes`, which index.ts calls BEFORE `___AuthMiddleware` so the
-  // operator's tokenless reconcile fetch + the pod-identity TokenReview routes are not
-  // gated by the browser-session auth. Do NOT re-mount them here.
-  app.use("/api/v1/audit", auditRouter(prisma));
-  app.use("/api/v1/ai-budget", aiBudgetRouter(prisma));
-  app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
-  app.use("/api/v1/groups", groupsRouter(prisma));
-  app.use("/api/v1/agent-services", _CreateAgentServicesRouter(prisma, runAdmission));
-  app.use("/api/v1/skills", _CreateSkillCatalogueRouter(prisma));
-  app.use("/api/v1/me/assets", _CreatePersonalArtifactCatalogueRouter(prisma));
-  app.use("/api/v1/me/persona", _CreatePersonaOnboardingRouter(prisma));
-  app.use("/api/v1/me/approvals", _CreateDeferredToolApprovalRouter(prisma));
-	app.use("/api/v1/me/runs", _CreateSteeringIngestRouter(prisma));
-	app.use("/api/v1/me/runs", _CreateSelfRunStatusRouter(prisma));
-	app.use("/api/v1/me/configuration", _CreatePersonalConfigurationRouter(prisma));
-	app.use("/api/v1/me/conversations", _CreateSelfConversationReplayRouter(prisma));
-  app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
-  app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
-  app.use("/api/v1/shares", sharesRouter(prisma));
-  app.use("/api/v1/resource-shares", resourceSharesRouter(prisma));
-  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
-  app.use("/api/v1/model-routing/metrics", modelRoutingMetricsRouter(prisma));
-  app.use("/api/v1/third-party-sources", thirdPartySourcesRouter(prisma));
-  // NOTE: the fleet / super-admin surfaces — ClusterTenant lifecycle, billing accounts, org
-  // membership, platform DNS, and Zitadel administration — have moved to the cluster-wide
-  // fleet-manager (Stage 4). The silo keeps ClusterTenant + OrgMembership as local READ-MODELS
-  // (for per-org login + the org-admin gate) but no longer SERVES their management API.
-  app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
-  // BYOK raw-key path — writes the silo's provider key Secret in the operator's own namespace
-  // (POD_NAMESPACE, downward-API populated; "default" fallback mirrors config._readOwnNamespace).
-  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, process.env.POD_NAMESPACE?.trim() || "default"));
-  app.use("/api/v1/models", modelRegistryRouter(prisma));
-  app.use("/api/v1/openapi.json", _OpenapiRouter(spec));
-  app.get("/healthz", _CheckDbHealth(prisma));
-  return app;
 }

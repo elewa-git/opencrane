@@ -4,6 +4,7 @@ export { __ReadConversationReplay } from "./conversation-replay.js";
 export { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
 export { __CreateConversationReplayRouter } from "./conversation-replay.router.js";
 export { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
+export { _CreateSelfConversationReplayRouter } from "./prisma-self-conversation-replay.router.js";
 export { _SelfConversationReplayOpenapiPaths } from "./openapi.js";
 export type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
 export type { SelfConversationReplayCaller, SelfConversationReplayRouterDependencies } from "./self-conversation-replay.router.types.js";

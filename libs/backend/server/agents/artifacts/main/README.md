@@ -89,6 +89,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   lifecycle operations; output leases remain internal projections rather than worker DTOs.
 - `__CreatePersonalArtifactCatalogueRouter` — serves `GET /api/v1/me/assets`, a bounded list of
   non-deleted asset metadata owned by the signed-in caller in the trusted host silo.
+- `_CreatePersonalArtifactCatalogueRouter` — the ready-to-mount Prisma composition that maps the
+  shared request principal to catalogue ownership and supplies the authority repository.
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
   the read-lease ports (`ArtifactReadLeaseRepository`, `ArtifactReadLeaseSigner`,
   `IssueArtifactReadLeaseCommand`), and the upload ports (`ArtifactServicePromotionPort`,
@@ -120,8 +122,8 @@ and audience. App composition alone may exchange brokered bytes with artifact-se
 ## Dependency direction
 
 Tagged `scope:artifacts`: it may depend only on `scope:artifacts` (the byte store, filesystem, and
-authorization siblings under `libs/backend/artifacts/`) and `scope:shared` — never on apps or other
-server domains.
+authorization siblings under `libs/backend/artifacts/`), `scope:auth` (only for request-principal
+resolution), and `scope:shared` — never on apps or other server domains.
 
 ## Data & persistence
 

@@ -56,6 +56,9 @@ with a plain reason.
 - `__CreateAgentServicesRouter` — the authoritative management router (catalogue / create / revise /
   compare / publish / restore / enable / pause / run-now / history / retire); the UI and parity client are
   clients of it. Composed with `AgentServicesRouterDependencies`, `ManagementCaller`, `ManagementClock`.
+- `_CreateAgentServicesRouter` — the ready-to-mount Prisma composition. It maps the authenticated
+  request principal into `ManagementCaller`, owns all database adapters and audit-evidence wiring,
+  and accepts only the shared run-admission port plus the process logger from the app.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
@@ -74,6 +77,9 @@ same database update, so no retired service can still look runnable.
   `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
   active revision's non-personal scope attachments with effective grants, and digests the complete
   capability-bearing revision inside the run-admission transaction.
+- `_CreateManagedExecutionEvidenceAuthority` — owns the fail-closed environment policy for fleet
+  issuer, key identifier, mounted public-key source, and maximum membership staleness. The public key
+  is reloaded for every decision so a projected Secret rotation takes effect immediately.
 - Types: the lifecycle commands/results (`AgentRevisionContent`, `CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
@@ -82,17 +88,19 @@ same database update, so no retired service can still look runnable.
 
 ## Boundary
 
-The application layer composes the use case with the Prisma adapter and calls it. This package does
-not author drafts, run agents, or resolve skills/integrations itself — it only flips the active
-pointer once a draft is proven publishable. It fails closed: any doubt is a `denied` outcome, never
-a silent partial publish.
+The application mounts the exported Prisma composition and supplies the cross-domain run-admission
+port. This package owns its router, caller mapping, database adapters, and publication-audit wiring.
+It does not author drafts, run agents, or resolve skills/integrations itself — it only flips the
+active pointer once a draft is proven publishable. It fails closed: any doubt is a `denied` outcome,
+never a silent partial publish.
 
 ## Dependency direction
 
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
-agent models), `scope:audit`, `scope:authorization`, `scope:grants`, `scope:membership`, and `scope:shared` — never on
-apps, gateways, or knowledge domains. run-now and session reading are injected by the app so this
-package never imports `scope:identity` or `scope:execution-runs`. The `scope:grants` edge is real and
+agent models), `scope:audit`, `scope:auth`, `scope:authorization`, `scope:grants`,
+`scope:membership`, and `scope:shared` — never on apps, gateways, or knowledge domains. The
+`scope:auth` edge resolves only the backend-type-free request principal; run admission remains an
+injected port, so this package never imports `scope:execution-runs`. The `scope:grants` edge is real and
 load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled

@@ -50,6 +50,8 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
 - `__CreateSelfConversationReplayRouter` exposes the same redacted snapshot to the authenticated
   participant at `GET /api/v1/me/conversations/:threadId/events`; it derives the subject and silo
   from session and host, never from request input.
+- `_CreateSelfConversationReplayRouter` is the ready-to-mount Prisma composition. It maps the
+  backend-type-free request principal into the participant caller and supplies the read repository.
 
 ## Boundary
 
@@ -62,8 +64,8 @@ context, cursor, thread, silo, or participant binding is wrong.
 ## Dependency direction
 
 Tagged `scope:conversation-replay` at the backend layer, it may use only its own scope,
-`scope:channel-targets`, and shared contracts. It cannot import an app, frontend state, or deployment
-package; the OpenCrane server app is the composition owner.
+`scope:auth`, `scope:channel-targets`, and shared contracts. The auth edge resolves request identity
+only. It cannot import an app, frontend state, or deployment package.
 
 ## Data & persistence
 

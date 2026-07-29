@@ -14,6 +14,7 @@ never look like a business capability. Each is owned by the server and by nothin
 | [`api`](./api/README.md) | Kubernetes API plumbing. |
 | [`auth`](./auth/README.md) | OIDC login and authorization substrate. |
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime-initiated HTTP/SSE framing; never run state. |
+| [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded projected workload identity parsing. |
 | [`http`](./http/README.md) | Express transport plumbing. |
 | [`memory-gateway-client`](./memory-gateway-client/README.md) | The personal-memory gateway port. |
 | [`obot-custody`](./obot-custody/README.md) | The Obot credential-custody port. |
@@ -28,7 +29,7 @@ never look like a business capability. Each is owned by the server and by nothin
    obot-custody ◄─────────┤
    memory-gateway-client ◄┤
    sandbox-execution ◄────┘
-   agent-runtime-stream ◄── outbound runtime Job
+   workload-identity ──► agent-runtime-stream ◄── outbound runtime Job
 ```
 
 ## Dependency rule for this tier

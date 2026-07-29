@@ -43,6 +43,10 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
 - `OidcAuthServiceBase`, `LoginClient`, `AuthStatus` — the login-flow service and per-org login seam.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`, `OrgMembershipFacts`.
+- `_ResolveRequestPrincipal`, `RequestPrincipal` — derive one authenticated subject, host-selected
+  silo, and organisation-admin flag without importing any backend-domain caller type.
+- `_CreateMountedPublicKeySource`, `MountedPublicKeySource` — fail-closed access to an absolute
+  projected public-key file, reloaded on each use so Secret rotation takes effect without restart.
 - `_RequirePlatformOperator`, `_RequireOrgAdmin`, `_RequireOrgManager` — authorization gates.
 - `per-org-client`, `request-silo`, `_RequestHost` — per-organisation clients and host/silo resolution.
 
@@ -50,8 +54,10 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 
 Consumed by the `apps/opencrane` server and the IAM, tenancy, and gateway backend domains. It
 establishes *who* the caller is and coarse gates (operator/admin); fine-grained per-action decisions
-belong to the authorization model. It reads config, sessions, and (optionally) tokens — it owns no
-business tables of its own.
+belong to the authorization model. Backend routers map `RequestPrincipal` into their own caller
+contracts, keeping this package independent of business types. It reads config, sessions, and
+(optionally) tokens. Its mounted-key source knows only how to reload public material; the consuming
+backend authority decides what that key is trusted to verify. It owns no business tables of its own.
 
 ## Dependency direction
 

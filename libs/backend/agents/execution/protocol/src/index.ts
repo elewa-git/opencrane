@@ -6,11 +6,13 @@ export type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchA
 export { __ExecuteExternalAction } from "./external-action-authority.js";
 export type { ExecuteExternalActionCommand, ExecuteExternalActionResult, ExternalActionExecutor, ExternalActionFailureReason } from "./external-action-authority.types.js";
 export { __CreateExternalActionExecutor } from "./external-action-executor.js";
+export { __CreateProductionRuntimeDispatchAuthority } from "./production-runtime-dispatch.js";
 export { __AdmitModelTerminal, __ClaimSteeringBoundary } from "./steering-authority.js";
 export type { AdmitModelTerminalCommand, AdmitModelTerminalResult, ClaimSteeringBoundaryCommand, ClaimSteeringBoundaryResult, PendingSteering, SteeringBoundaryClaim, SteeringBoundaryClaimResult, SteeringBoundaryRepository, SteeringDisposition } from "./steering-authority.types.js";
 export { PrismaSteeringBoundaryRepository } from "./prisma-steering-boundary-repository.js";
 export { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository.js";
 export type { SteeringRequestRepository, SubmitSteeringRequestCommand, SubmitSteeringRequestResult } from "./steering-request.types.js";
 export { __CreateSteeringIngestRouter } from "./steering-ingest.router.js";
+export { _CreateSteeringIngestRouter } from "./prisma-steering-ingest.router.js";
 export type { SteeringIngestCaller, SteeringIngestClock, SteeringIngestRouterDependencies } from "./steering-ingest.router.types.js";
 export { _RuntimeSteeringOpenapiPaths } from "./openapi.js";

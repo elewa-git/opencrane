@@ -14,5 +14,6 @@ export { PrismaPersonaOnboardingRepository } from "./prisma-persona-onboarding-r
 export { PrismaPersonaOnboardingStatusRepository } from "./prisma-persona-onboarding-status-repository.js";
 export { _PersonaOnboardingOpenapiPaths } from "./openapi.js";
 export { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
+export { _CreatePersonaOnboardingRouter } from "./prisma-persona-onboarding.router.js";
 export type { PersonaOnboardingCaller, PersonaOnboardingClock, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
 export type { PersonaOnboardingStatus, PersonaOnboardingStatusRepository } from "./persona-onboarding-status.types.js";

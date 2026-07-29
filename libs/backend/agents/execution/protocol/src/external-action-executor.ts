@@ -1,5 +1,5 @@
 import type { JsonValue } from "@opencrane/util";
-import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
 import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
@@ -33,6 +33,26 @@ function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string)
 	if (!args || typeof args !== "object" || Array.isArray(args)) return null;
 	const value = (args as { readonly [field: string]: JsonValue })[key];
 	return typeof value === "string" ? value : null;
+}
+
+/**
+ * Select the personal Cognee dataset frozen into an admitted snapshot.
+ *
+ * Runtime arguments and subject identifiers are deliberately ignored: memory recall is available
+ * only when admission sealed a non-empty dataset under a personal memory policy for a user identity.
+ *
+ * @param snapshot - Immutable run input snapshot admitted by the control plane.
+ * @returns The frozen dataset identifier, or null for every non-personal or malformed policy.
+ */
+export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
+{
+	if (snapshot.identitySnapshot.kind !== "user") return null;
+	const policy = snapshot.memoryQueryPolicy;
+	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
+	const record = policy as Readonly<Record<string, unknown>>;
+	if (record["scope"] !== "personal") return null;
+	const candidate = record["cogneeDatasetId"];
+	return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : null;
 }
 
 /** Parse the exact integration/tool identity minted by the target prompt compiler. */

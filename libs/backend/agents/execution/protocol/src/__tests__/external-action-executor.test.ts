@@ -1,10 +1,10 @@
-import type { RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
 
-import { __CreateExternalActionExecutor, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
+import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
 import type { IntegrationAssignmentUnavailableReason } from "../external-action-executor.types.js";
 
 /** Build a candidate for the given tool revision prefix. */
@@ -65,6 +65,14 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, cogneeDatasetId: null });
 		await expect(executor.execute()).rejects.toBeInstanceOf(MemoryScopeUnavailableError);
+	});
+
+	it("selects personal memory only from the frozen user policy", function _selectsFrozenMemory()
+	{
+		const snapshot = { identitySnapshot: { kind: "user" }, memoryQueryPolicy: { scope: "personal", cogneeDatasetId: "personal-1" } } as unknown as RunInputSnapshot;
+		expect(__PersonalMemoryDatasetId(snapshot)).toBe("personal-1");
+		expect(__PersonalMemoryDatasetId({ ...snapshot, identitySnapshot: { kind: "service" } } as unknown as RunInputSnapshot)).toBeNull();
+		expect(__PersonalMemoryDatasetId({ ...snapshot, memoryQueryPolicy: { scope: "personal" } } as unknown as RunInputSnapshot)).toBeNull();
 	});
 
 	it("refuses a tool revision that names no wired transport kind", async function _unsupported()

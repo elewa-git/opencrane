@@ -3,6 +3,7 @@ export { __MaterializePersonalConfigurationChange } from "./personal-configurati
 export { __ProposePersonalConfigurationChange } from "./personal-configuration.js";
 export { PrismaPersonalConfigurationChangeRepository } from "./prisma-personal-configuration-repository.js";
 export { __CreatePersonalConfigurationRouter } from "./personal-configuration.router.js";
+export { _CreatePersonalConfigurationRouter } from "./prisma-personal-configuration.router.js";
 export type { PersonalConfigurationCaller, PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
 export { _PersonalConfigurationOpenapiPaths } from "./openapi.js";
 export { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "./upgrade-session.js";

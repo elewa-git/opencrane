@@ -51,6 +51,8 @@ or invalidates inputs already accepted for a run.
   `published → revoked`, and conditionally clears the live current-revision pointer.
 - `__CreateSkillCatalogueRouter` — serves `GET /api/v1/skills`, a bounded catalogue of skill name,
   description, lifecycle, and current-revision state in the trusted host silo.
+- `_CreateSkillCatalogueRouter` — the ready-to-mount Prisma composition that authenticates through
+  the shared request-principal seam and supplies the catalogue authority.
 - `SkillCatalogueRepository` and `SkillCatalogueEntry` — the narrow read boundary and safe summary
   shape used by the browser catalogue.
 - Types: `SkillAuthorityRepository` (the persistence boundary), `PublishSkillRevisionCommand`,
@@ -73,7 +75,7 @@ publication, download, or execution API.
 ## Dependency direction
 
 Tagged `scope:skills`: it may depend only on `scope:artifacts`, `scope:cluster-tenants`,
-`scope:grants`, `scope:skills`, and `scope:shared` — never on apps, gateways, or other agent
+`scope:auth`, `scope:grants`, `scope:skills`, and `scope:shared` — never on apps, gateways, or other agent
 domains directly.
 
 ## Data & persistence

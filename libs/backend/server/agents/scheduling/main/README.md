@@ -48,29 +48,33 @@ keeps a delayed scheduler from creating a burst of concurrent runs for the same 
   `__IsValidCronExpression`, `__IsValidTimezone` — the cron + timezone evaluation primitives.
 - `__ScheduledRunIdempotencyKey` — the deterministic per-slot key.
 - `__NextBackoffDelayMs` — deterministic retry-delay hint for a transient admission failure.
+- `_CreateScheduleTicker`, `ScheduleTicker` — the ready-to-run Prisma composition that loads enabled
+  schedules, checks active scheduled runs, advances admitted cursors, and delegates every due slot
+  through the shared managed-run admission port.
 - Types: `AgentServiceSchedule`, `ScheduleOverlapPolicy`, `ScheduleTickDependencies`,
   `ScheduleTickResult`, `ScheduledSlotOutcome`, `ActiveScheduledRunLookup`, `RetryBackoffPolicy`,
   `ScheduleClock`, `CronExpression`, `WallClock`, `DueScheduledSlotsOptions`.
 
 ## Boundary
 
-The application composes a tick over the `AgentServiceSchedule` repository, the shared
-`ManagedRunAdmissionPort`, and an in-flight-run lookup, then runs it periodically. This package never
-touches Prisma, Kubernetes, or Obot directly, and it never executes shell or business logic — it
-decides which runs are due and delegates their creation.
+The application creates and periodically invokes the exported ticker. This package owns the
+Prisma schedule lookup, in-flight-run check, and cursor update, while the injected
+`ManagedRunAdmissionPort` remains the sole run-creation boundary. It never touches Kubernetes or
+Obot, and it never executes shell or agent business logic.
 
 ## Dependency direction
 
 Tagged `scope:agent-services` (it shares the managed-agent capability with the definition plane): it
 may depend only on `scope:agent-services`, `scope:agents`, `scope:audit`, `scope:authorization`,
-`scope:grants`, and `scope:shared`. It imports `ManagedRunAdmissionPort` from the sibling
+`scope:auth`, `scope:grants`, `scope:membership`, and `scope:shared`. It imports
+`ManagedRunAdmissionPort` from the sibling
 `agent-services` package and never the reverse, so there is no cycle.
 
 ## Data & persistence
 
-Stateless. The `AgentServiceSchedule` model it evaluates is owned by the sibling `agent-services`
-package in `apps/opencrane/prisma/schema/agent-services.prisma`; this package only consumes its
-dependency-light projection.
+The `AgentServiceSchedule` model it evaluates is owned by the sibling `agent-services` package in
+`apps/opencrane/prisma/schema/agent-services.prisma`. The ticker reads enabled schedules and advances
+`lastScheduledAt` only through slots that the admission authority accepted.
 
 ## See also
 
