@@ -16,6 +16,7 @@ describe("conversation replay cursor", function _Suite()
 		expect(__DecodeConversationReplayCursor({ cursor: "e.tampered" })).toBeNull();
 		expect(__DecodeConversationReplayCursor("wrong")).toBeNull();
 		expect(__DecodeConversationReplayCursor("e.eyJydW5JZCI6InJ1bi0xIn0")).toBeNull();
+		expect(__DecodeConversationReplayCursor(`e.${Buffer.from("[]").toString("base64url")}`)).toBeNull();
 		expect(__DecodeConversationReplayCursor(__EncodeConversationReplayCursor({ acceptedAt: "2026-07-23T10:00:00.000Z", runId: "run-1", sequence: 0 }))).toBeNull();
 	});
 });

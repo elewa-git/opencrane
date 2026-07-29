@@ -174,9 +174,11 @@ describe("ES256 capability proof", function _suite()
 	{
 		const validParts = _signProof(HEADER, CLAIMS).split(".");
 		const malformedJson = Buffer.from("{", "utf8").toString("base64url");
+		const arrayJson = Buffer.from("[]", "utf8").toString("base64url");
 
 		expect(__VerifyCapabilityProof("one.two", EXPECTATION)).toEqual({ valid: false, reason: "malformed_compact_proof" });
 		expect(__VerifyCapabilityProof(`${malformedJson}.${validParts[1]}.${validParts[2]}`, EXPECTATION)).toEqual({ valid: false, reason: "malformed_header" });
+		expect(__VerifyCapabilityProof(`${arrayJson}.${validParts[1]}.${validParts[2]}`, EXPECTATION)).toEqual({ valid: false, reason: "malformed_header" });
 		expect(__VerifyCapabilityProof(_signProof({ typ: "JWT", alg: "ES256", jwk: PUBLIC_JWK as unknown as JsonValue }, CLAIMS), EXPECTATION)).toEqual({ valid: false, reason: "malformed_header" });
 		expect(__VerifyCapabilityProof(_signProof({ typ: "dpop+jwt", alg: "none", jwk: PUBLIC_JWK as unknown as JsonValue }, CLAIMS), EXPECTATION)).toEqual({ valid: false, reason: "malformed_header" });
 	});

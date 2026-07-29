@@ -117,6 +117,28 @@ describe("modelRoutingMetricsRouter", function _suite()
     expect(forwarded.filters[0].column).toBe("metadata.clusterTenant");
   });
 
+  it("replaces non-object caller queries with a tenant-scoped object", async function _RejectsNonObjectQuery()
+  {
+    process.env.LANGFUSE_HOST = "https://lf.internal";
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+
+    const fetchMock = vi.fn(async function _Fetch(_input: string) { return { ok: true, status: 200, json: async function _Json() { return {}; } } as unknown as Response; });
+    vi.stubGlobal("fetch", fetchMock);
+    const app = _buildApp(_mockPrisma("acme"), _authUser({ sub: "user-acme", email: "user@acme.test" }));
+
+    for (const query of ["[]", "null", "7", "{"])
+    {
+      await request(app).get("/api/v1/model-routing/metrics").query({ query });
+    }
+
+    for (const call of fetchMock.mock.calls)
+    {
+      const forwarded = JSON.parse(new URL(String(call[0])).searchParams.get("query")!);
+      expect(forwarded).toEqual({ filters: [{ column: "metadata.clusterTenant", operator: "=", value: "acme", type: "string" }] });
+    }
+  });
+
   it("returns 403 for a non-operator with no resolved ClusterTenant (fail-closed, no upstream call)", async function _failClosed()
   {
     process.env.LANGFUSE_HOST = "https://lf.internal";
@@ -157,5 +179,18 @@ describe("modelRoutingMetricsRouter", function _suite()
 
     const res = await request(_buildApp(_mockPrisma())).get("/api/v1/model-routing/metrics");
     expect(res.status).toBe(502);
+  });
+
+  it("returns the documented 502 envelope when the upstream body is invalid JSON", async function _InvalidUpstreamJson()
+  {
+    process.env.LANGFUSE_HOST = "https://lf.internal";
+    process.env.LANGFUSE_PUBLIC_KEY = "pk";
+    process.env.LANGFUSE_SECRET_KEY = "sk";
+
+    vi.stubGlobal("fetch", vi.fn(async function _Fetch() { return { ok: true, status: 200, json: async function _Json() { throw new SyntaxError("invalid JSON"); } } as unknown as Response; }));
+
+    const res = await request(_buildApp(_mockPrisma())).get("/api/v1/model-routing/metrics");
+    expect(res.status).toBe(502);
+    expect(res.body).toEqual({ status: "upstream_error", error: "Metrics backend returned invalid JSON." });
   });
 });

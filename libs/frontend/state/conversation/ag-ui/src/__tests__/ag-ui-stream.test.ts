@@ -42,6 +42,8 @@ describe("AG-UI stream state", function _Suite()
 	{
 		expect(__DecodeAgUiSseRecord("id: event-1\nevent: ag-ui\ndata: {bad}\n\n")).toBeNull();
 		expect(__DecodeAgUiSseRecord("id: event-1\nevent: ag-ui\ndata: {\"type\":\"RUN_STARTED\"}\n\n")).toBeNull();
+		expect(__DecodeAgUiSseRecord("id: event-1\nevent: ag-ui\ndata: null\n\n")).toBeNull();
+		expect(__DecodeAgUiSseRecord("id: event-1\nevent: ag-ui\ndata: []\n\n")).toBeNull();
 		expect(__DecodeAgUiSseRecord("id: event-1\nevent: other\ndata: {}\n\n")).toBeNull();
 	});
 

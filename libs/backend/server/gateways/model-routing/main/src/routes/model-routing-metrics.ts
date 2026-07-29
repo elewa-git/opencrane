@@ -3,6 +3,7 @@ import type { PrismaClient } from "@prisma/client";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/server/_infra/auth";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 import type { LangfuseConfig, MetricsCallerScope } from "./model-routing-metrics.types.js";
 import { _ResolveCallerClusterTenant as _resolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
@@ -112,13 +113,20 @@ function _buildUpstreamUrl(config: LangfuseConfig, req: Request, scope: MetricsC
   const raw = url.searchParams.get("query");
   if (raw)
   {
-    try { parsed = JSON.parse(raw) as Record<string, unknown>; }
+    try { parsed = ___ParseAndValidateJson(raw, "Langfuse metrics query", _MetricsQueryObject); }
     catch { parsed = {}; }
   }
   const existing = Array.isArray(parsed.filters) ? (parsed.filters as unknown[]) : [];
   parsed.filters = [...existing, tenantFilter];
   url.searchParams.set("query", JSON.stringify(parsed));
   return url;
+}
+
+/** Require a caller-provided Langfuse query to be a JSON object before adding tenant scope. */
+function _MetricsQueryObject(value: unknown): Record<string, unknown>
+{
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("Langfuse metrics query must be an object");
+  return value as Record<string, unknown>;
 }
 
 /**
@@ -185,9 +193,17 @@ export function modelRoutingMetricsRouter(prisma: PrismaClient): Router
         return;
       }
 
-      // 7. Pass the upstream JSON through verbatim (loosely-typed passthrough).
-      const body = await upstream.json();
-      res.json(body);
+      // 7. Pass valid upstream JSON through verbatim. Invalid JSON is still an upstream failure,
+      //    so preserve this route's documented 502 envelope instead of leaking a generic 500.
+      try
+      {
+        const body = await upstream.json();
+        res.json(body);
+      }
+      catch
+      {
+        res.status(502).json({ status: "upstream_error", error: "Metrics backend returned invalid JSON." });
+      }
     }
     catch (err) { next(err); }
   });

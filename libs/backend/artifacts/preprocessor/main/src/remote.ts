@@ -5,6 +5,7 @@ import { pipeline } from "node:stream/promises";
 
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { ArtifactPreprocessorRemote, ArtifactPreprocessorRemoteConfig } from "./preprocessor.types.js";
 
@@ -33,7 +34,7 @@ async function _Claim(config: ArtifactPreprocessorRemoteConfig, signal: AbortSig
 			const response = await fetch(`${config.openCraneInternalUrl}/api/internal/artifact-preprocessor/jobs:claim`, { method: "POST", headers: { authorization: await _Authorization(config), "content-type": "application/json" }, body: "{}", signal: requestSignal });
 			if (response.status === 204) return null;
 			if (!response.ok) return _RejectResponse(response, `artifact preprocess claim failed with HTTP ${response.status}`);
-			return _ClaimFromUnknown(await _ReadBoundedJson(response, _MAXIMUM_CLAIM_RESPONSE_BYTES));
+			return _ReadBoundedAndValidateJson(response, _MAXIMUM_CLAIM_RESPONSE_BYTES, _ClaimFromUnknown);
 		}
 		finally
 		{
@@ -173,8 +174,16 @@ function _ClaimFromUnknown(value: unknown): ArtifactPreprocessorJobClaim
 	return claim as unknown as ArtifactPreprocessorJobClaim;
 }
 
-/** Read a small JSON authority response without accepting an unbounded body. */
-async function _ReadBoundedJson(response: Response, maximumBytes: number): Promise<unknown>
+/**
+ * Read a bounded authority response and return only the validator-owned protocol value.
+ *
+ * @param response - Authority response whose body remains untrusted.
+ * @param maximumBytes - Hard allocation ceiling enforced before and during streaming.
+ * @param validate - Protocol validator applied immediately after syntax decoding.
+ * @param validatorArguments - Additional request coordinates required by the validator.
+ * @returns The validated protocol value.
+ */
+async function _ReadBoundedAndValidateJson<T, TArguments extends readonly unknown[]>(response: Response, maximumBytes: number, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
 	// 1. Reject an impossible declared size before allocating any response storage.
 	const declaredLength = response.headers.get("content-length");
@@ -195,15 +204,8 @@ async function _ReadBoundedJson(response: Response, maximumBytes: number): Promi
 		chunks.push(chunk);
 	}
 
-	// 3. Parse only the now-bounded bytes into the protocol's exact structural validator.
-	try
-	{
-		return JSON.parse(Buffer.concat(chunks, byteLength).toString("utf8")) as unknown;
-	}
-	catch
-	{
-		throw new Error("artifact preprocess authority returned invalid JSON");
-	}
+	// 3. Parse only the now-bounded bytes and immediately apply the exact protocol validator.
+	return ___ParseAndValidateJson(Buffer.concat(chunks, byteLength).toString("utf8"), "artifact preprocess authority response", validate, ...validatorArguments);
 }
 
 /** Require an object to carry exactly the fixed protocol keys. */

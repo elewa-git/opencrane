@@ -16,7 +16,10 @@ It owns four things:
   behaviour is used everywhere rather than re-implemented.
 - **JSON trust-boundary parsing** — `___ParseAndValidateJson` parses raw JSON as `unknown`, then
   immediately delegates to a caller-owned validator that produces the generic result type. Optional
-  validator arguments carry contextual constraints without one-off parsing wrappers.
+  validator arguments carry contextual constraints without one-off parsing wrappers. Configuration
+  readers and HTTP adapters use this same parser after enforcing any transport-specific byte limit;
+  tolerant JSONL/rendering heuristics remain local because malformed fragments are part of their
+  best-effort protocol rather than an exceptional domain boundary.
 - **Canonical JSON and digest grammar** — `___CanonicalizeJson` serialises a JSON value to the one
   canonical string
   form defined by RFC 8785 (JSON Canonicalization Scheme): object keys sorted, whitespace and number

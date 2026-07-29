@@ -46,6 +46,8 @@ describe("artifact upload app composition", function _suite()
 		await expect(port.promote("signed-lease", _bytes())).rejects.toThrow("promotion failed with 403");
 		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({}), { status: 201 })));
 		await expect(port.promote("signed-lease", _bytes())).rejects.toThrow("returned no receipt");
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{", { status: 201 })));
+		await expect(port.promote("signed-lease", _bytes())).rejects.toThrow(/artifact service promotion response must contain valid JSON/);
 	});
 
 	it("uses the fixed read endpoint and dedicated read-lease header", async function _ReadsPinnedArtifact()

@@ -9,6 +9,7 @@ import { __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, 
 import type { ArtifactPreprocessOutputBroker, ArtifactPreprocessSourceBroker, ArtifactUploadResult, VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 /** Build the app-owned bridge from a proof-authorized command to the private artifact service. */
 export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): { upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult> }
@@ -37,11 +38,16 @@ export function _CreateArtifactServicePromotionPort(serviceUrl: string): { promo
 		{
 			const response = await fetch(`${serviceUrl}/v1/artifacts/promote`, { method: "POST", headers: { "x-opencrane-artifact-lease": lease }, body: Readable.toWeb(Readable.from(bytes)) as unknown as BodyInit, duplex: "half" } as RequestInit);
 			if (!response.ok) throw new Error(`artifact service promotion failed with ${response.status}`);
-			const body = await response.json() as { receipt?: unknown };
-			if (typeof body.receipt !== "string") throw new Error("artifact service promotion returned no receipt");
-			return { receipt: body.receipt };
+			return ___ParseAndValidateJson(await response.text(), "artifact service promotion response", _PromotionReceipt);
 		},
 	};
+}
+
+/** Validate the exact receipt returned after artifact promotion. */
+function _PromotionReceipt(value: unknown): { readonly receipt: string }
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value) || !("receipt" in value) || typeof value.receipt !== "string" || value.receipt.length === 0) throw new Error("artifact service promotion returned no receipt");
+	return { receipt: value.receipt };
 }
 
 /** Build the server-only HTTP client that retrieves bytes covered by one immutable read lease. */

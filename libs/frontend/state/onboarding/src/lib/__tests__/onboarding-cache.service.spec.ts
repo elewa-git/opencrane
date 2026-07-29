@@ -76,6 +76,24 @@ describe("OnboardingCacheService", () =>
 		expect(service.restoreState()).toBeNull();
 	});
 
+	it("rejects structurally present but invalid cached domain values", () =>
+	{
+		const { service, mockGateway } = _setup();
+		const account = { displayName: "Acme", adminEmail: "a@b.com", baseDomain: "a.com", name: "acme" };
+		const invalidStates = [
+			{ step: "Account", selection: { planId: "pro", account } },
+			{ step: OnboardingStep.Account, selection: null },
+			{ step: OnboardingStep.Account, selection: { planId: 7, account } },
+			{ step: OnboardingStep.Account, selection: { planId: "pro", account: { ...account, adminEmail: false } } },
+		];
+
+		for (const invalidState of invalidStates)
+		{
+			mockGateway.__seed(STATE_KEY, JSON.stringify(invalidState));
+			expect(service.restoreState()).toBeNull();
+		}
+	});
+
 	it("successfully parses and returns a valid saved state", () =>
 	{
 		const { service, mockGateway } = _setup();

@@ -27,7 +27,8 @@ signup completes.
 ## Public surface
 
 - `WelcomeOnboardingService` — the first-run completed flag as a signal (`completed`, `markComplete`, `reset`).
-- `OnboardingCacheService` — save/restore/clear the funnel step + selection across the OIDC redirect.
+- `OnboardingCacheService` — save/restore/clear the funnel step + selection across the OIDC redirect;
+  restored browser data is rebuilt only after its step, plan, and account fields pass domain validation.
 - `welcome-onboarding.util` — the pure completion-decision helper.
 - `onboarding.types` — the funnel step, account, selection, and payment/provision state types.
 
