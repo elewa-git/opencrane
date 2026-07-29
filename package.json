@@ -19,6 +19,7 @@
     "test:phase-b-topology": "./scripts/phase-b-topology-negative-tests.sh",
     "check:phase-d-agent-namespaces": "./scripts/phase-d-agent-namespace-boundary.sh",
     "test:phase-d-agent-namespaces": "./scripts/phase-d-agent-namespace-negative-tests.sh",
+    "docs:sync-openapi": "npm run refresh-openapi -w website",
     "docs:dev": "npm run dev -w website",
     "docs:build": "npm run build -w website",
     "docs:preview": "npm run preview -w website",

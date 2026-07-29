@@ -168,10 +168,12 @@ jobs:
       - name: Enforce monorepo dependency boundaries
         run: npm run lint:boundaries
 
-      - name: Verify the generated client when affected
+      - name: Verify API reference and generated client when affected
         if: needs.prepare.outputs.api_contract_changed == 'true'
         run: |
           npx nx run opencrane:build
+          npm run sync-openapi -w @opencrane/website
+          git diff --exit-code -- website/public/openapi.json
           npx nx run contracts:generate
           git diff --exit-code -- libs/contracts/src/generated/api.ts
 
