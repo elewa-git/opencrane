@@ -1,8 +1,8 @@
-import type { AgentRevision, AgentService } from "@opencrane/models/agents";
+import type { AgentRevision, AgentRevisionContent, AgentService } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
-import type { AgentRevisionContent, AgentRevisionLifecycleRepository, AgentServiceHistory, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
 
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent

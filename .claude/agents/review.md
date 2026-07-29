@@ -3,7 +3,7 @@ name: review
 description: >
   Independent code reviewer for OpenCrane changes. Use after implementing a slice,
   before opening a PR, or whenever you want a fresh-context check. Accepts an optional
-  `DIMENSION:` line in the prompt (correctness | security | residue) to review a single
+  `DIMENSION:` line in the prompt (correctness | security | maintainability | residue) to review a single
   concern — the /review-loop skill uses this to fan out one cheap finder per dimension.
   Mechanical style is checked by scripts/agent-style-check.sh, not by eye. Returns
   findings ordered by severity. Does not modify code unless the caller explicitly asks.
@@ -20,12 +20,13 @@ fresh context — do not assume the author's intent was correct.
 1. **Scope.** Run `git diff --stat HEAD` then `git diff HEAD`. If the caller named
    files or a PR range, use those instead.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
-   dimension's checklist below. Otherwise cover all three.
+   dimension's checklist below. Otherwise cover all four.
 3. **Style is a script, not a judgment.** Run `scripts/agent-style-check.sh` (it scopes
    itself to the diff). Copy its ERROR lines into your findings as **Low** severity
    (verbatim, one line each). Confirm each WARN line at the cited location before
-   including it. **Do not hunt for style issues beyond the script's output** — your
-   reasoning budget belongs to the dimensions below.
+   including it. **Do not hunt for mechanical style issues beyond the script's output.**
+   Maintainability is a modeled design concern, not mechanical formatting: review it
+   through the evidence-based checklist below.
 4. **Grounding reads — only what the change touches:**
    - `.ts` changed → the script covers mechanics; read `docs/agents/typescript.md`
      only if you need to confirm a convention the script flagged as WARN.
@@ -76,6 +77,41 @@ fresh context — do not assume the author's intent was correct.
   network boundary — verify the NetworkPolicy actually exists.
 - Secrets: never logged, hard-coded, or returned in responses.
 
+### DIMENSION: maintainability
+- **Cohesion and responsibility.** Flag a function, class, or repository adapter that
+  owns several independently changing domain responsibilities. In particular, inspect
+  transaction procedures that combine lookup, locking, lifecycle validation, model or
+  policy resolution, domain-object construction, persistence, activation, and error
+  translation. Name the cohesive boundaries that should exist; size alone is not proof.
+- **Comprehensible orchestration.** A complex procedure should read as a short
+  orchestration over intention-revealing helpers that share the same transaction-scoped
+  client. Extraction must preserve atomicity, lock order, retry/idempotency semantics,
+  and failure translation rather than scattering them.
+- **One owner for domain algorithms.** Hunt for duplicated hashing, digest,
+  normalization, revision construction, lifecycle-transition, or policy algorithms.
+  Verify both implementations and identify the authoritative owner; do not flag
+  harmless structural similarity.
+- **Persistence authority.** Flag cross-package writes to Prisma models owned by
+  another domain when they reimplement that owner's invariants or lifecycle. NX import
+  boundaries alone cannot detect a package that bypasses another authority by sharing a
+  Prisma client, so trace model ownership and write paths explicitly.
+- **Dense construction.** Flag deeply nested anonymous Prisma queries or large object
+  literals when they obscure business decisions, duplicate the same domain value in
+  multiple representations, or make invariant drift likely. Do not report raw line
+  length as the sole criterion.
+- **Invariant documentation.** Complex transactional procedures need procedure-level
+  JSDoc that explains purpose, atomicity, lock order, and retry/idempotency semantics,
+  plus numbered step comments that explain the invariant protected by each stage. A
+  comment that only restates the next helper call is not sufficient.
+- **Core-path tests.** Verify tests execute the successful orchestration path and its
+  important transition boundaries, not only validators, SQL triggers, isolated helpers,
+  replay branches, or failure edges. Tests should prove the procedure's ordered effects,
+  atomic outcome, and canonical domain construction at its public boundary.
+- A maintainability finding must show a concrete cost or risk: an invariant represented
+  twice, an ownership boundary bypassed, a change that requires coordinated edits, an
+  untestable core path, or control flow whose required order is hidden. Subjective taste
+  and "this function is long" are not findings.
+
 ### DIMENSION: residue
 - New way added → hunt the OLD way still present (superseded route/module/env/flag/
   config/spec entry). A replacement is done only when the replaced path is gone.
@@ -97,7 +133,10 @@ fresh context — do not assume the author's intent was correct.
 
 1. **Re-read the exact cited lines** and trace the real control flow — no
    pattern-matched claims.
-2. **Walk one concrete input** to the bad outcome. Can't construct one → not verified.
+2. **Demonstrate the concern concretely.** For behavioural findings, walk one input to
+   the bad outcome. For maintainability findings, trace the duplicated invariant,
+   ownership bypass, coordinated edit, hidden ordering requirement, or missing
+   orchestration path. Can't show the claimed effect → not verified.
 3. **Respect the caller's context**: a path stated as gated-off/not-yet-wired is not
    a finding.
 4. Unconfirmed → *Open questions*, phrased as a question. Confidence and severity

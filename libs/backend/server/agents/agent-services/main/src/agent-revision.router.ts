@@ -1,8 +1,9 @@
 import { Router, type Request, type Response } from "express";
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
+import type { AgentRevisionContent } from "@opencrane/models/agents";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
-import type { AgentRevisionContent, AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
 import type { AgentServicesRouterDependencies, ManagementCaller } from "./agent-revision.router.types.js";
 import { __PublishAgentRevision } from "./agent-publication.js";
 import type { PublishAgentRevisionFailureReason } from "./agent-publication.types.js";

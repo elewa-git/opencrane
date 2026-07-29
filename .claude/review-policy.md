@@ -45,6 +45,11 @@ otherwise — over-blocking wastes tokens.
 - Money: budget, spend, or billing logic.
 - Non-trivial control flow in production code (new branching, error handling, retries,
   concurrency) where a subtle bug would cause incorrect behaviour or data loss.
+- Maintainability-sensitive production changes: complex transaction orchestration,
+  repository adapters that span several domain responsibilities, cross-package Prisma
+  writes, duplicated domain algorithms, or core workflows whose success path is not
+  exercised through the public boundary. These need an evidence-based maintainability
+  pass; raw function or line length alone is not enough to block.
 
 **Allow (skip review) when the change is:**
 - Comments, JSDoc, logging, or formatting only.
@@ -63,3 +68,5 @@ Record changes here so the feedback loop is visible to the team.
 
 - _(initial)_ threshold=10; always-review covers auth/secret/network/iam/money; tests,
   type-only, and generated code are skipped.
+- 2026-07-29: model maintainability explicitly for complex transactions, persistence
+  ownership, duplicated domain algorithms, and untested core orchestration paths.

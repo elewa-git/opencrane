@@ -60,6 +60,11 @@ with a plain reason.
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
   revisions, lineage, optimistic concurrency).
+- `__MaterializeAgentRevisionModelSelectionWithinTransaction` — the narrow transaction-scoped
+  operation used when personal configuration must combine an accepted model selection with its own
+  journal transition. Agent-services proves the frozen source, reconstructs its canonical content,
+  changes only the model definition, appends and publishes the next revision, and activates it. The
+  caller owns the surrounding transaction and final proposal compare-and-set.
 - `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
 publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
 same database update, so no retired service can still look runnable.
@@ -74,18 +79,20 @@ same database update, so no retired service can still look runnable.
   `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
   active revision's non-personal scope attachments with effective grants, and digests the complete
   capability-bearing revision inside the run-admission transaction.
-- Types: the lifecycle commands/results (`AgentRevisionContent`, `CreateManagedAgentServiceCommand`,
+- Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
   contract (`PublishAgentRevisionCommand`/`Result`/`FailureReason`, `AtomicAgentRevisionPublication*`),
   and `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
+  The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
 
 ## Boundary
 
-The application layer composes the use case with the Prisma adapter and calls it. This package does
-not author drafts, run agents, or resolve skills/integrations itself — it only flips the active
-pointer once a draft is proven publishable. It fails closed: any doubt is a `denied` outcome, never
-a silent partial publish.
+The application layer composes the use case with the Prisma adapter and calls it. This package owns
+revision persistence and lifecycle. Personal configuration may call the narrow transaction-scoped
+model-selection operation, but cannot reproduce its revision projection, Prisma mapping, or
+lifecycle. This package does not run agents or resolve skills/integrations itself. It fails closed:
+any doubt is a `denied` outcome, never a silent partial publish.
 
 ## Dependency direction
 

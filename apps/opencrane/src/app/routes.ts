@@ -17,7 +17,7 @@ import { spec } from "@opencrane/backend/server/api-spec";
 import { PrismaRunDispatchRepository, PrismaRuntimeTerminalReporter, __CreateAgentControllerRunDispatchRouter, type AgentControllerTokenReviewer, type AttemptModelKeyMintRequest, type MintedAttemptModelKey, type ReviewedAgentControllerIdentity } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter, type SkillWorkloadBootstrapIdentity, type SkillWorkloadBootstrapTokenReviewer } from "@opencrane/backend/agents/skills/execution";
 import { __CreateExternalActionExecutor, __CreatePrismaRunInputCompiler, PrismaRuntimeDispatchAuthority, __ExecuteExternalAction, type RunInputCompiler, type RuntimeExternalActionRunner } from "@opencrane/backend/agents/execution/protocol";
-import { __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
+import { _CreatePersonalConfigurationRouter, __IsUpgradeSessionAvailable, PrismaPersonalConfigurationChangeRepository, UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
 import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs";
 import { PrismaRuntimeBootstrapExchange, PrismaToolInvocationRepository, __CreateRuntimeBootstrapRouter, __DeferToolRequest } from "@opencrane/backend/server/iam/authorization";
 import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
@@ -36,7 +36,6 @@ import { _CreateDeferredToolApprovalRouter } from "./deferred-tool-approval-wiri
 import { _CreateSteeringIngestRouter } from "./steering-ingest-wiring.js";
 import { _CreateSelfConversationReplayRouter } from "./self-conversation-replay-wiring.js";
 import { _CreateSelfRunStatusRouter } from "./self-run-status-wiring.js";
-import { _CreatePersonalConfigurationRouter } from "./personal-configuration-wiring.js";
 import { _CreateSkillCatalogueRouter } from "./skill-catalogue-wiring.js";
 import { _CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue-wiring.js";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
@@ -408,7 +407,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k
   app.use("/api/v1/me/approvals", _CreateDeferredToolApprovalRouter(prisma));
 	app.use("/api/v1/me/runs", _CreateSteeringIngestRouter(prisma));
 	app.use("/api/v1/me/runs", _CreateSelfRunStatusRouter(prisma));
-	app.use("/api/v1/me/configuration", _CreatePersonalConfigurationRouter(prisma));
+	app.use("/api/v1/me/configuration", _CreatePersonalConfigurationRouter(prisma, _log));
 	app.use("/api/v1/me/conversations", _CreateSelfConversationReplayRouter(prisma));
   app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
   app.use("/api/v1/mcp", mcpOperatorRouter(prisma));

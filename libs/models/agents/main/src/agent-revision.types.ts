@@ -35,6 +35,30 @@ export interface AgentBudget
 	readonly maxDurationMs: number;
 }
 
+/**
+ * Immutable executable content shared by every authority that creates an agent revision.
+ *
+ * Keeping this content shape below the persistence layer ensures revision authors, personal
+ * configuration materialization, and digest calculation all describe the same business fact.
+ */
+export interface AgentRevisionContent
+{
+	/** Versioned platform prompt-policy reference compiled into the revision. */
+	readonly promptPolicyVersion: string;
+	/** Approved persona revision, or null for a managed agent without a personal persona. */
+	readonly personaRevisionId: PersonaRevisionId | null;
+	/** Registered model-definition reference; carries no provider secret. */
+	readonly modelDefinitionId: string;
+	/** Immutable resource ceilings applied to each run. */
+	readonly budget: AgentBudget;
+	/** Immutable skill revisions exposed to the runtime. */
+	readonly skills: readonly SkillRevisionReference[];
+	/** Immutable integration and tool assignments exposed to the runtime. */
+	readonly integrationAssignments: readonly IntegrationAssignmentReference[];
+	/** Revision-scoped knowledge attachments authorised for the runtime. */
+	readonly scopeAttachments: readonly RevisionScopeAttachment[];
+}
+
 /** Immutable executable configuration of an agent service. */
 export interface AgentRevision
 {

@@ -1,23 +1,4 @@
-import type { AgentRevision, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, RevisionScopeAttachment, SiloId } from "@opencrane/models/agents";
-
-/** Immutable executable content authored for one managed-agent revision. */
-export interface AgentRevisionContent
-{
-	/** Versioned platform prompt-policy reference, diffed line by line. */
-	readonly promptPolicyVersion: string;
-	/** Approved persona revision, or null for a managed agent. */
-	readonly personaRevisionId: string | null;
-	/** Registered model-definition reference; carries no provider secret. */
-	readonly modelDefinitionId: string;
-	/** Immutable resource ceilings applied to each run. */
-	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxDurationMs: number };
-	/** Immutable skill revisions exposed to the runtime. */
-	readonly skills: readonly { readonly skillId: string; readonly revisionId: string }[];
-	/** Immutable integration and tool assignments exposed to the runtime. */
-	readonly integrationAssignments: readonly { readonly integrationId: string; readonly custodyReferenceId: string; readonly allowedTools: readonly string[] }[];
-	/** Revision-scoped knowledge scope attachments authorised for the runtime. */
-	readonly scopeAttachments: readonly RevisionScopeAttachment[];
-}
+import type { AgentRevision, AgentRevisionContent, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 
 /** Command that creates one managed AgentService with its first draft revision. */
 export interface CreateManagedAgentServiceCommand

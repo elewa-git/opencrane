@@ -24,10 +24,11 @@ Scope from the caller: **$ARGUMENTS** (if empty, review the working tree vs `HEA
 **Small-diff short-circuit:** if the diff is under ~80 changed lines, spawn ONE
 `review` agent covering all dimensions (no `DIMENSION:` line) and skip to Tier 2.
 
-Otherwise fan out THREE `review` agents **in a single message** (they are independent),
+Otherwise fan out FOUR `review` agents **in a single message** (they are independent),
 each prompt containing:
 
-- `DIMENSION: correctness` / `DIMENSION: security` / `DIMENSION: residue`
+- `DIMENSION: correctness` / `DIMENSION: security` / `DIMENSION: maintainability` /
+  `DIMENSION: residue`
 - The scope (files or git range) and any context you have (what the change is meant to
   do, what is intentionally gated off or mock-only — this prevents false positives).
 - "Skip step 3 of your procedure (the style script) — the orchestrator already ran it."
@@ -36,6 +37,13 @@ Skip the `security` finder when the diff plainly touches no auth/route/token/sec
 RBAC/network surface, and the `residue` finder when the change adds no replacement for
 an existing mechanism (pure addition). Say in the report which finders you skipped and
 why — never skip silently.
+
+Run the `maintainability` finder for every non-trivial production-code diff, especially
+transactions, repository adapters, domain construction, persistence writes, and
+orchestration changes. It may be skipped for documentation-only, generated, type-only,
+test-only, or demonstrably mechanical diffs; record that reason. Maintainability
+findings must cite a concrete cohesion, ownership, duplication, invariant-documentation,
+or core-path test problem. Function length or line length alone is not a finding.
 
 **Direct-replacement override:** never skip the residue finder for replacement or deletion work,
 even when the diff looks purely additive. New code must be checked for superseded imports,

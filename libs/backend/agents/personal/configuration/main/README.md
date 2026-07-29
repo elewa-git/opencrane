@@ -43,12 +43,19 @@ means the request is already user-approved or applied.
 - `__MaterializePersonalConfigurationChange` applies an accepted `model_alias` proposal by creating
   and activating the next immutable personal AgentRevision; persona refreshes remain on the
   interview-and-approval route.
-- `__CreatePersonalConfigurationRouter` and `PrismaPersonalConfigurationChangeRepository` provide
-  the owner-only configuration API. `GET /api/v1/me/configuration/changes` lists at most fifty
-  proposals, `POST /api/v1/me/configuration/changes/:changeId/decision` records consent, and
+- `__CreatePersonalConfigurationRouter` provides the owner-only configuration API.
+  `PrismaPersonalConfigurationChangeRepository` owns the proposal journal, decisions, history, and
+  upgrade-session bridge; a separate internal Prisma materializer owns the profile → proposal →
+  service lock procedure and the final proposal transition. Agent-services owns source-revision
+  validation, canonical cloning, publication, and activation. `GET /api/v1/me/configuration/changes`
+  lists at most fifty proposals,
+  `POST /api/v1/me/configuration/changes/:changeId/decision` records consent, and
   `POST /api/v1/me/configuration/changes/:changeId/materialize` retry-safely applies an accepted
   model selection. Browser input cannot choose a user, silo, timestamp, revision,
   model-definition ID, or lifecycle state, and no endpoint mutates the current run snapshot.
+- `_CreatePersonalConfigurationRouter` is the ready-to-mount Prisma composition. It maps the shared
+  request principal to the configuration caller and composes the journal and materializer without
+  exporting the internal transaction helpers.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
@@ -66,8 +73,10 @@ separate owners.
 
 ## Dependency direction
 
-Tagged `scope:personal-configuration` at the backend layer, it may depend only on itself and shared
-contracts. It cannot import another personal specialization, a server control-plane domain, or an app.
+Tagged `scope:personal-configuration` at the backend layer, it depends on the shared agent models,
+the agent-service model-selection materialization operation, and the narrow `scope:auth`
+request-principal seam. Dependency direction remains `personal configuration → agent services →
+agent models`; it cannot import another personal specialization or an app.
 
 ## Data & persistence
 
