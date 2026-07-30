@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 
 import { ___DoWithTrace } from "@opencrane/observability";
 import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim } from "@opencrane/contracts";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerPodRegistrationCommand, SkillWorkloadControllerReleaseClaim, SkillWorkloadControllerReleaseCommand, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";
 
@@ -38,18 +39,52 @@ function _AsObject(value: unknown): Record<string, unknown> | null
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-/** Read one bounded JSON response without trusting its content type alone. */
-async function _ReadJson(response: Response): Promise<unknown>
+/**
+ * Read one bounded skill-workload response and return only its validator-owned domain value.
+ *
+ * @param response - Internal authority response whose body remains untrusted.
+ * @param validate - Domain validator that binds the decoded payload to its expected contract.
+ * @param validatorArguments - Request coordinates used to reject mismatched authority responses.
+ * @returns The validated response value.
+ */
+async function _ReadAndValidateJson<T, TArguments extends readonly unknown[]>(response: Response, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
-	const text = await response.text();
-	if (Buffer.byteLength(text, "utf8") > _MAX_RESPONSE_BYTES) throw new Error("OpenCrane skill workload response exceeded the 16 KiB boundary");
-	try
+	// 1. Stream the body through the allocation ceiling before retaining or parsing it.
+	const text = await _ReadBoundedText(response);
+
+	// 2. Parse and validate together so no untyped authority response leaves this adapter.
+	return ___ParseAndValidateJson(text, "OpenCrane skill workload response", validate, ...validatorArguments);
+}
+
+/** Read one skill-workload response without allocating beyond its fixed protocol ceiling. */
+async function _ReadBoundedText(response: Response): Promise<string>
+{
+	const declaredLength = response.headers.get("content-length");
+	if (declaredLength !== null)
 	{
-		return JSON.parse(text) as unknown;
+		const parsedLength = Number(declaredLength);
+		if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > _MAX_RESPONSE_BYTES)
+		{
+			await response.body?.cancel();
+			throw new Error("OpenCrane skill workload response exceeded the 16 KiB boundary");
+		}
 	}
-	catch
+	if (response.body === null) throw new Error("OpenCrane skill workload authority returned no response body");
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let byteLength = 0;
+	while (true)
 	{
-		throw new Error("OpenCrane skill workload response was not valid JSON");
+		const result = await reader.read();
+		if (result.done) return Buffer.concat(chunks, byteLength).toString("utf8");
+		byteLength += result.value.byteLength;
+		if (byteLength > _MAX_RESPONSE_BYTES)
+		{
+			await reader.cancel();
+			throw new Error("OpenCrane skill workload response exceeded the 16 KiB boundary");
+		}
+		chunks.push(result.value);
 	}
 }
 
@@ -140,7 +175,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				const response = await fetchRequest(new URL(_CLAIM_PATH, baseUrl), { method: "POST", headers: _Headers(await readToken()), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload claim failed with HTTP ${response.status}`);
-				return _ParseClaim(await _ReadJson(response));
+				return _ReadAndValidateJson(response, _ParseClaim);
 			});
 		},
 		async __CommitAssignment(workloadId: string, command: AgentControllerSkillWorkloadAssignmentCommand, signal: AbortSignal): Promise<"assigned" | "idempotent" | "conflict">
@@ -152,7 +187,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload assignment failed with HTTP ${response.status}`);
-				return _ParseAssignment(await _ReadJson(response), workloadId, command);
+				return _ReadAndValidateJson(response, _ParseAssignment, workloadId, command);
 			});
 		},
 		async __ClaimRelease(signal: AbortSignal): Promise<SkillWorkloadControllerReleaseClaim | null>
@@ -162,7 +197,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				const response = await fetchRequest(new URL("/api/internal/agent-controller/skill-workloads:release-claim", baseUrl), { method: "POST", headers: _Headers(await readToken()), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload release claim failed with HTTP ${response.status}`);
-				return _ParseReleaseClaim(await _ReadJson(response));
+				return _ReadAndValidateJson(response, _ParseReleaseClaim);
 			});
 		},
 		async __CommitRelease(workloadId: string, command: SkillWorkloadControllerReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">
@@ -173,7 +208,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/release`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload release failed with HTTP ${response.status}`);
-				const outcome = _ParseReleaseResult(await _ReadJson(response), workloadId, command);
+				const outcome = await _ReadAndValidateJson(response, _ParseReleaseResult, workloadId, command);
 				if (outcome === "registered") throw new Error("OpenCrane returned a Pod-registration outcome for a Job release");
 				return outcome;
 			});
@@ -186,7 +221,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/pod-registration`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload Pod registration failed with HTTP ${response.status}`);
-				const outcome = _ParseReleaseResult(await _ReadJson(response), workloadId, command, command.podUid);
+				const outcome = await _ReadAndValidateJson(response, _ParseReleaseResult, workloadId, command, command.podUid);
 				if (outcome === "released") throw new Error("OpenCrane returned a Job-release outcome for Pod registration");
 				return outcome;
 			});

@@ -3,6 +3,7 @@ import { isAbsolute } from "node:path";
 
 import { ___DoWithTrace } from "@opencrane/observability";
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunAttemptClaimLease, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AgentControllerAuthority, AgentControllerFetch, AgentControllerHttpAuthorityOptions, AgentControllerTokenReader } from "./agent-controller.types.js";
 
@@ -44,21 +45,52 @@ function _AsObject(value: unknown): Record<string, unknown> | null
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
-/** Parse and bound one JSON response without trusting its content type alone. */
-async function _ReadJson(response: Response): Promise<unknown>
+/**
+ * Read one bounded controller response and return only the validator-owned domain value.
+ *
+ * @param response - Internal controller response whose body remains untrusted.
+ * @param validate - Domain validator that binds the decoded payload to its expected contract.
+ * @param validatorArguments - Request coordinates used to reject mismatched authority responses.
+ * @returns The validated response value.
+ */
+async function _ReadAndValidateJson<T, TArguments extends readonly unknown[]>(response: Response, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
-	const text = await response.text();
-	if (Buffer.byteLength(text, "utf8") > _MAX_RESPONSE_BYTES)
+	// 1. Stream the body through the allocation ceiling before retaining or parsing it.
+	const text = await _ReadBoundedText(response);
+
+	// 2. Parse and validate in one boundary operation so no untyped payload escapes this adapter.
+	return ___ParseAndValidateJson(text, "OpenCrane controller response", validate, ...validatorArguments);
+}
+
+/** Read one controller response without allocating beyond its fixed protocol ceiling. */
+async function _ReadBoundedText(response: Response): Promise<string>
+{
+	const declaredLength = response.headers.get("content-length");
+	if (declaredLength !== null)
 	{
-		throw new Error("OpenCrane controller response exceeded the 64 KiB boundary");
+		const parsedLength = Number(declaredLength);
+		if (!Number.isSafeInteger(parsedLength) || parsedLength < 0 || parsedLength > _MAX_RESPONSE_BYTES)
+		{
+			await response.body?.cancel();
+			throw new Error("OpenCrane controller response exceeded the 64 KiB boundary");
+		}
 	}
-	try
+	if (response.body === null) throw new Error("OpenCrane controller returned no response body");
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let byteLength = 0;
+	while (true)
 	{
-		return JSON.parse(text) as unknown;
-	}
-	catch
-	{
-		throw new Error("OpenCrane controller response was not valid JSON");
+		const result = await reader.read();
+		if (result.done) return Buffer.concat(chunks, byteLength).toString("utf8");
+		byteLength += result.value.byteLength;
+		if (byteLength > _MAX_RESPONSE_BYTES)
+		{
+			await reader.cancel();
+			throw new Error("OpenCrane controller response exceeded the 64 KiB boundary");
+		}
+		chunks.push(result.value);
 	}
 }
 
@@ -218,7 +250,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const response = await fetchRequest(new URL(_CLAIM_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane controller claim failed with HTTP ${response.status}`);
-				return _ParseClaim(await _ReadJson(response));
+				return _ReadAndValidateJson(response, _ParseClaim);
 			});
 		},
 		async __CommitAssignment(eventId: string, command: AgentControllerRunAttemptAssignmentCommand, signal: AbortSignal): Promise<AgentControllerRunAttemptAssignmentResult>
@@ -230,7 +262,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const path = `/api/internal/agent-controller/run-attempts/${encodeURIComponent(eventId)}/assignment`;
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(token), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane controller assignment failed with HTTP ${response.status}`);
-				return _ParseAssignmentResult(await _ReadJson(response), command);
+				return _ReadAndValidateJson(response, _ParseAssignmentResult, command);
 			});
 		},
 		async __ClaimWorkloadRelease(signal: AbortSignal): Promise<AgentControllerRunWorkloadReleaseClaim | null>
@@ -241,7 +273,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const response = await fetchRequest(new URL(_RELEASE_CLAIM_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane workload-release claim failed with HTTP ${response.status}`);
-				return _ParseWorkloadReleaseClaim(await _ReadJson(response));
+				return _ReadAndValidateJson(response, _ParseWorkloadReleaseClaim);
 			});
 		},
 		async __RegisterFirstPod(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand, signal: AbortSignal): Promise<AgentControllerRunWorkloadRegistrationResult>
@@ -253,7 +285,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const path = `/api/internal/agent-controller/workload-releases/${encodeURIComponent(eventId)}/registration`;
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(token), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane first-Pod registration failed with HTTP ${response.status}`);
-				return _ParseRegistrationResult(await _ReadJson(response), command);
+				return _ReadAndValidateJson(response, _ParseRegistrationResult, command);
 			});
 		},
 		async __PrunePublishedOutbox(signal: AbortSignal): Promise<number>
@@ -263,7 +295,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const token = await readToken();
 				const response = await fetchRequest(new URL(_OUTBOX_PRUNE_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane outbox prune failed with HTTP ${response.status}`);
-				return _ParsePrunedCount(await _ReadJson(response));
+				return _ReadAndValidateJson(response, _ParsePrunedCount);
 			});
 		},
 	};

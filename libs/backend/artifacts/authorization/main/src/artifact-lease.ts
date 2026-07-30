@@ -1,6 +1,6 @@
 import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
 
-import { ___CanonicalizeJson } from "@opencrane/util";
+import { ___CanonicalizeJson, ___ParseAndValidateJson } from "@opencrane/util";
 
 import { __IsSafeArtifactMediaType } from "./artifact-media-type.js";
 import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
@@ -77,12 +77,18 @@ function _verify(compact: string, publicKeyPem: string): Record<string, unknown>
 	if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/u.test(part))) return null;
 	try
 	{
-		const header = JSON.parse(Buffer.from(parts[0], "base64url").toString("utf8")) as Record<string, unknown>;
+		const header = ___ParseAndValidateJson(Buffer.from(parts[0], "base64url").toString("utf8"), "artifact JWS protected header", _ObjectPayload);
 		if (header.alg !== "EdDSA" || header.typ !== "JWT" || !verify(null, Buffer.from(`${parts[0]}.${parts[1]}`), createPublicKey(publicKeyPem), Buffer.from(parts[2], "base64url"))) return null;
-		const payload = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as unknown;
-		return typeof payload === "object" && payload !== null && !Array.isArray(payload) ? payload as Record<string, unknown> : null;
+		return ___ParseAndValidateJson(Buffer.from(parts[1], "base64url").toString("utf8"), "artifact JWS payload", _ObjectPayload);
 	}
 	catch { return null; }
+}
+
+/** Require one decoded JWS component to be a non-array object. */
+function _ObjectPayload(value: unknown): Record<string, unknown>
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("artifact JWS component must be an object");
+	return value as Record<string, unknown>;
 }
 
 function _leaseFromPayload(value: Record<string, unknown>): ArtifactWriteLeaseClaims | null

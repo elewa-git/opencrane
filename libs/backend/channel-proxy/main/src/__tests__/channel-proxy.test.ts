@@ -145,6 +145,18 @@ describe("channel proxy public boundary", () =>
 		expect(response.status).toBe(400);
 		expect(resolve).not.toHaveBeenCalled();
 	});
+
+	it("rejects malformed and non-object command JSON before target resolution", async function _RejectsInvalidCommandJson()
+	{
+		const resolve = vi.fn(async function _Resolve() { return _Target(); });
+		const dependencies = _Dependencies(resolve, vi.fn() as unknown as typeof fetch);
+		const malformed = await __ForwardCommand(_Request("/v1/commands", { method: "POST", headers: { "content-type": "application/json" }, body: "{" }), dependencies);
+		const array = await __ForwardCommand(_Request("/v1/commands", { method: "POST", headers: { "content-type": "application/json" }, body: "[]" }), dependencies);
+
+		expect(malformed.status).toBe(400);
+		expect(array.status).toBe(400);
+		expect(resolve).not.toHaveBeenCalled();
+	});
 });
 
 describe("channel proxy SSE relay", () =>

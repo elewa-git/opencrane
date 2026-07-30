@@ -50,4 +50,14 @@ describe("OpenCrane channel target resolver", () =>
 		const resolver = new __OpenCraneTargetResolver({ baseUrl: "http://opencrane.default.svc.cluster.local:8081", fetch: transport, readFile: async function _readFile() { return "token"; } });
 		await expect(resolver.resolve({ action: "command.forward", threadId: "thread-1", requestIdempotencyKey: "delivery-1", session: { cookie: "session=opaque", trustedHost: "acme.example.com" } }, new AbortController().signal)).rejects.toThrow("expired");
 	});
+
+	it("rejects invalid JSON and structurally untrusted resolver output", async function _RejectsInvalidResponses()
+	{
+		const request = { action: "command.forward" as const, threadId: "thread-1", requestIdempotencyKey: "delivery-1", session: { cookie: "session=opaque", trustedHost: "acme.example.com" } };
+		const invalidJson = new __OpenCraneTargetResolver({ baseUrl: "http://opencrane.default.svc.cluster.local:8081", fetch: vi.fn().mockResolvedValue(new Response("{", { status: 200 })) as unknown as typeof fetch, readFile: async function _ReadFile() { return "token"; } });
+		await expect(invalidJson.resolve(request, new AbortController().signal)).rejects.toThrow(/channel target response must contain valid JSON/);
+
+		const invalidShape = new __OpenCraneTargetResolver({ baseUrl: "http://opencrane.default.svc.cluster.local:8081", fetch: vi.fn().mockResolvedValue(Response.json([])) as unknown as typeof fetch, readFile: async function _ReadFile() { return "token"; } });
+		await expect(invalidShape.resolve(request, new AbortController().signal)).rejects.toThrow(/not an object/);
+	});
 });

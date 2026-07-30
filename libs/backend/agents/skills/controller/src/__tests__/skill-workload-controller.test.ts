@@ -84,6 +84,9 @@ describe("governed skill workload controller", function _DescribeController()
 	it("rejects incomplete or class-mismatched deployment profiles before polling", function _RejectsProfiles()
 	{
 		expect(function _MissingRunner() { __ValidateSkillWorkloadControllerProfiles({ authoring: _Profiles().authoring }); }).toThrow(/exactly authoring and tool-runner/);
+		expect(function _NullAuthoring() { __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring: null }); }).toThrow(/authoring profile must be one complete bounded object/);
+		expect(function _MissingResources() { const { resources: _resources, ...authoring } = _Profiles().authoring; __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring }); }).toThrow(/authoring profile must be one complete bounded object/);
+		expect(function _ExtendedResource() { const authoring = _Profiles().authoring; __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring: { ...authoring, resources: { requests: { ...authoring.resources.requests, "example.com/fpga": "8" }, limits: { ...authoring.resources.limits, "example.com/fpga": "8" } } } }); }).toThrow(/authoring profile must be one complete bounded object/);
 		expect(function _WrongKind() { __ValidateSkillWorkloadControllerProfiles({ ..._Profiles(), authoring: { ..._Profiles().authoring, kind: "tool-runner" } }); }).toThrow(/wrong workload class/);
 	});
 

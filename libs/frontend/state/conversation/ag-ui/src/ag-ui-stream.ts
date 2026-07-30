@@ -1,4 +1,5 @@
 import type { AgUiProjectionEvent } from "@opencrane/contracts";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AgUiStreamRecord, AgUiStreamState } from "./ag-ui-stream.types.js";
 
@@ -23,10 +24,17 @@ export function __DecodeAgUiSseRecord(frame: string): AgUiStreamRecord | null
 	if (!id || event !== "ag-ui" || !serialized || /[\r\n]/.test(id)) return null;
 	try
 	{
-		const data = JSON.parse(serialized) as unknown;
-		return _IsProjectionEvent(data) ? { id, event: "ag-ui", data } : null;
+		const data = ___ParseAndValidateJson(serialized, "AG-UI SSE data", _ProjectionEvent);
+		return { id, event: "ag-ui", data };
 	}
 	catch { return null; }
+}
+
+/** Return one supported projection event or reject the decoded transport value. */
+function _ProjectionEvent(value: unknown): AgUiProjectionEvent
+{
+	if (!_IsProjectionEvent(value)) throw new Error("AG-UI SSE data must contain a supported projection event");
+	return value;
 }
 
 /** Fold one replay record, refusing duplicate cursors without inferring order from opaque identifiers. */
