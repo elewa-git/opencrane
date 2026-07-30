@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 import { ___CreateLogger, type Logger } from "@opencrane/observability";
 
-import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationChangeMaterializationRepository, PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
 import { _MaterializePersonalConfigurationWithinTransaction } from "./prisma-personal-configuration-materialization.js";
 
 /** Prisma adapter that applies accepted personal model selections without owning proposal journaling. */
@@ -48,7 +48,7 @@ export class _PrismaPersonalConfigurationMaterializer implements PersonalConfigu
 				siloId: command.siloId,
 				changeId: command.changeId,
 			}, "Personal configuration materialization failed");
-			return { status: "persistence_unavailable" };
+			return { status: PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 		}
 	}
 }

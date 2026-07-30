@@ -1,3 +1,6 @@
+import { PersonalConfigurationDecisionCodes } from "./personal-configuration.types.js";
+import { PersonalConfigurationMaterializationCodes } from "./personal-configuration-materialization.types.js";
+
 /** OpenAPI path fragment for the signed-in owner's personal configuration proposal state. */
 export const _PersonalConfigurationOpenapiPaths = {
 	"/me/configuration/changes/{changeId}/materialize": {
@@ -9,7 +12,7 @@ export const _PersonalConfigurationOpenapiPaths = {
 			parameters: [{ name: "changeId", in: "path", required: true, schema: { type: "string" } }],
 			requestBody: { required: true, content: { "application/json": { schema: { type: "object", additionalProperties: false, maxProperties: 0 } } } },
 			responses: {
-				200: { description: "Model selection applied, or the accepted proposal belongs to the persona-refresh workflow.", content: { "application/json": { schema: { oneOf: [{ type: "object", required: ["changeId", "state", "agentRevisionId"], additionalProperties: false, properties: { changeId: { type: "string" }, state: { const: "applied" }, agentRevisionId: { type: "string" } } }, { type: "object", required: ["changeId", "state", "materialized"], additionalProperties: false, properties: { changeId: { type: "string" }, state: { const: "accepted" }, materialized: { const: false } } }] } } } },
+				200: { description: "Model selection applied, or the accepted proposal belongs to the persona-refresh workflow.", content: { "application/json": { schema: { oneOf: [{ type: "object", required: ["changeId", "state", "agentRevisionId"], additionalProperties: false, properties: { changeId: { type: "string" }, state: { const: PersonalConfigurationMaterializationCodes.Applied }, agentRevisionId: { type: "string" } } }, { type: "object", required: ["changeId", "state", "materialized"], additionalProperties: false, properties: { changeId: { type: "string" }, state: { const: PersonalConfigurationDecisionCodes.Accepted }, materialized: { const: false } } }] } } } },
 				400: { description: "The materialization request was not the exact empty-object shape.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 				401: { description: "No browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 				404: { description: "The proposal is absent or not owned by the caller.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
@@ -26,9 +29,9 @@ export const _PersonalConfigurationOpenapiPaths = {
 			description: "The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.",
 			tags: ["Personal configuration"],
 			parameters: [{ name: "changeId", in: "path", required: true, schema: { type: "string" } }],
-			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [{ type: "object", required: ["decision"], additionalProperties: false, properties: { decision: { const: "accepted" } } }, { type: "object", required: ["decision", "rejectionReason"], additionalProperties: false, properties: { decision: { const: "rejected" }, rejectionReason: { type: "string", minLength: 1, maxLength: 200, pattern: ".*\\S.*" } } }] } } } },
+			requestBody: { required: true, content: { "application/json": { schema: { oneOf: [{ type: "object", required: ["decision"], additionalProperties: false, properties: { decision: { const: PersonalConfigurationDecisionCodes.Accepted } } }, { type: "object", required: ["decision", "rejectionReason"], additionalProperties: false, properties: { decision: { const: PersonalConfigurationDecisionCodes.Rejected }, rejectionReason: { type: "string", minLength: 1, maxLength: 200, pattern: ".*\\S.*" } } }] } } } },
 			responses: {
-				200: { description: "Owner decision recorded.", content: { "application/json": { schema: { type: "object", required: ["changeId", "state"], properties: { changeId: { type: "string" }, state: { type: "string", enum: ["accepted", "rejected"] } } } } } },
+				200: { description: "Owner decision recorded.", content: { "application/json": { schema: { type: "object", required: ["changeId", "state"], properties: { changeId: { type: "string" }, state: { type: "string", enum: [PersonalConfigurationDecisionCodes.Accepted, PersonalConfigurationDecisionCodes.Rejected] } } } } } },
 				400: { description: "Decision body is not the exact accepted or rejected shape.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 				401: { description: "No browser session owns the request.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
 				404: { description: "Proposal is absent, terminal, or not owned by the caller.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },

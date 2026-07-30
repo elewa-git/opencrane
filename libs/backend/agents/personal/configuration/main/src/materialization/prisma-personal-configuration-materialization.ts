@@ -1,10 +1,11 @@
 import { PersonalConfigurationChangeState, Prisma } from "@prisma/client";
 
-import { __MaterializeAgentRevisionModelSelectionWithinTransaction } from "@opencrane/backend/server/agents/agent-services";
+import { __MaterializeAgentRevisionModelSelectionWithinTransaction, AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
+import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
 import { _IsPersonalConfigurationPatch } from "../configuration-patch.js";
-import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
-import type { LockedModelSelectionProposal, ProposalLockResult } from "./prisma-personal-configuration-materialization.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
+import { ProposalLockOutcomes, type LockedModelSelectionProposal, type ProposalLockResult } from "./prisma-personal-configuration-materialization.types.js";
 
 /**
  * Materializes an accepted personal model selection inside one caller-owned transaction.
@@ -26,7 +27,7 @@ export async function _MaterializePersonalConfigurationWithinTransaction(transac
 	// 1. Lock the profile and proposal in the shared order, then interpret lifecycle state.
 	// This freezes the persona head and makes duplicate owner requests replay-safe.
 	const proposalLock = await _LockModelSelectionProposal(transaction, command);
-	if (proposalLock.outcome === "terminal") return proposalLock.result;
+	if (proposalLock.outcome === ProposalLockOutcomes.Terminal) return proposalLock.result;
 	const proposal = proposalLock.proposal;
 
 	// 2. Lock the personal service before delegating any revision or activation decisions.
@@ -45,8 +46,8 @@ export async function _MaterializePersonalConfigurationWithinTransaction(transac
 		authoredBy: command.userId,
 		materializedAt: new Date(command.materializedAt),
 	});
-	if (materialized.status === "stale_source") return { status: "stale_proposal" };
-	if (materialized.status === "model_unavailable") return { status: "model_unavailable" };
+	if (materialized.status === AgentRevisionModelSelectionMaterializationCodes.StaleSource) return { status: PersonalConfigurationMaterializationCodes.StaleProposal };
+	if (materialized.status === AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable) return { status: PersonalConfigurationMaterializationCodes.ModelUnavailable };
 
 	// 4. Transition only the personal proposal journal after agent-services completes its mutation.
 	// A failed final compare-and-set throws so Prisma rolls every agent-service write back as well.
@@ -64,7 +65,7 @@ async function _LockModelSelectionProposal(transaction: Prisma.TransactionClient
 		},
 		select: { personaProfileId: true },
 	});
-	if (candidate === null) return _Terminal({ status: "not_found_or_not_owner" });
+	if (candidate === null) return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner });
 
 	const profiles = await transaction.$queryRaw<readonly { readonly activeRevisionId: string | null }[]>(Prisma.sql`
 		SELECT "active_revision_id" AS "activeRevisionId"
@@ -99,23 +100,23 @@ async function _LockModelSelectionProposal(transaction: Prisma.TransactionClient
 			appliedAgentRevisionId: true,
 		},
 	});
-	if (change === null) return _Terminal({ status: "not_found_or_not_owner" });
+	if (change === null) return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner });
 
 	const patch = change.requestedPatch as unknown;
-	if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== "model_alias")
+	if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== AgentConfigPatchKinds.ModelAlias)
 	{
-		return _Terminal({ status: "not_applicable" });
+		return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotApplicable });
 	}
 	if (change.state === PersonalConfigurationChangeState.Applied && change.appliedAgentRevisionId !== null)
 	{
 		return _Terminal({
-			status: "applied",
+			status: PersonalConfigurationMaterializationCodes.Applied,
 			agentRevisionId: change.appliedAgentRevisionId,
 		});
 	}
 	if (change.state !== PersonalConfigurationChangeState.Accepted)
 	{
-		return _Terminal({ status: "not_accepted" });
+		return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotAccepted });
 	}
 	if (
 		change.expectedAgentRevisionId === null
@@ -123,11 +124,11 @@ async function _LockModelSelectionProposal(transaction: Prisma.TransactionClient
 		|| profiles[0]?.activeRevisionId !== change.expectedPersonaRevisionId
 	)
 	{
-		return _Terminal({ status: "stale_proposal" });
+		return _Terminal({ status: PersonalConfigurationMaterializationCodes.StaleProposal });
 	}
 
 	return {
-		outcome: "ready",
+		outcome: ProposalLockOutcomes.Ready,
 		proposal: {
 			agentServiceId: change.agentServiceId,
 			expectedAgentRevisionId: change.expectedAgentRevisionId,
@@ -168,11 +169,11 @@ async function _ApplyProposal(transaction: Prisma.TransactionClient, command: Ma
 	{
 		throw new Error("personal configuration proposal lost its accepted state while locked");
 	}
-	return { status: "applied", agentRevisionId: revisionId };
+	return { status: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: revisionId };
 }
 
 /** Wrap a terminal materialization result for the lock-stage discriminated unions. */
-function _Terminal(result: PersonalConfigurationMaterializationPersistenceResult): { readonly outcome: "terminal"; readonly result: PersonalConfigurationMaterializationPersistenceResult }
+function _Terminal(result: PersonalConfigurationMaterializationPersistenceResult): { readonly outcome: ProposalLockOutcomes.Terminal; readonly result: PersonalConfigurationMaterializationPersistenceResult }
 {
-	return { outcome: "terminal", result };
+	return { outcome: ProposalLockOutcomes.Terminal, result };
 }
