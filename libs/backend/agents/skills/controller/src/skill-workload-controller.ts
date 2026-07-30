@@ -35,6 +35,37 @@ function _RequirePodUid(uid: string | undefined): string
 	return uid;
 }
 
+/** Return whether a boundary value is one non-array object with inspectable properties. */
+function _IsRecord(value: unknown): value is Readonly<Record<string, unknown>> { return typeof value === "object" && value !== null && !Array.isArray(value); }
+
+/** Return whether an object contains exactly the expected own-property names. */
+function _HasOnlyKeys(value: Readonly<Record<string, unknown>>, expected: readonly string[]): boolean { return Object.keys(value).length === expected.length && expected.every(function _HasKey(key): boolean { return Object.prototype.hasOwnProperty.call(value, key); }); }
+
+/** Canonicalize one CPU-and-memory resource map without forwarding extended Kubernetes resources. */
+function _ResourceMap(value: unknown): Readonly<Record<"cpu" | "memory", string>> | null
+{
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["cpu", "memory"]) || typeof value["cpu"] !== "string" || typeof value["memory"] !== "string") return null;
+	return { cpu: value["cpu"], memory: value["memory"] };
+}
+
+/** Validate and canonicalize one untrusted deployment profile for the hardened Job builder. */
+function _SkillWorkloadJobProfile(value: unknown): SkillWorkloadJobProfile | null
+{
+	// 1. Require the fixed workload discriminant before class-specific validation can run.
+	if (!_IsRecord(value) || !_HasOnlyKeys(value, ["kind", "image", "imagePullPolicy", "serverNamespace", "namespace", "serviceAccountName", "capabilityTokenAudience", "bootstrapUrl", "capabilityTokenPath", "bootstrapReferencePath", "scratchSize", "activeDeadlineSeconds", "ttlSecondsAfterFinished", "resources"]) || (value["kind"] !== "authoring" && value["kind"] !== "tool-runner")) return null;
+
+	// 2. Require every scalar field so the canonical builder never receives an assertion-created value.
+	if (typeof value["image"] !== "string" || (value["imagePullPolicy"] !== "Always" && value["imagePullPolicy"] !== "IfNotPresent" && value["imagePullPolicy"] !== "Never") || typeof value["serverNamespace"] !== "string" || typeof value["namespace"] !== "string" || typeof value["serviceAccountName"] !== "string" || typeof value["capabilityTokenAudience"] !== "string" || typeof value["bootstrapUrl"] !== "string" || typeof value["capabilityTokenPath"] !== "string" || typeof value["bootstrapReferencePath"] !== "string" || typeof value["scratchSize"] !== "string" || typeof value["activeDeadlineSeconds"] !== "number" || typeof value["ttlSecondsAfterFinished"] !== "number") return null;
+
+	// 3. Rebuild exact resource and profile objects so no unreviewed field can reach Kubernetes.
+	const resources = value["resources"];
+	if (!_IsRecord(resources) || !_HasOnlyKeys(resources, ["requests", "limits"])) return null;
+	const requests = _ResourceMap(resources["requests"]);
+	const limits = _ResourceMap(resources["limits"]);
+	if (requests === null || limits === null) return null;
+	return { kind: value["kind"], image: value["image"], imagePullPolicy: value["imagePullPolicy"], serverNamespace: value["serverNamespace"], namespace: value["namespace"], serviceAccountName: value["serviceAccountName"], capabilityTokenAudience: value["capabilityTokenAudience"], bootstrapUrl: value["bootstrapUrl"], capabilityTokenPath: value["capabilityTokenPath"], bootstrapReferencePath: value["bootstrapReferencePath"], scratchSize: value["scratchSize"], activeDeadlineSeconds: value["activeDeadlineSeconds"], ttlSecondsAfterFinished: value["ttlSecondsAfterFinished"], resources: { requests, limits } };
+}
+
 /** Validate both fixed deployment profiles through the canonical hardened Job builder. */
 export function __ValidateSkillWorkloadControllerProfiles(value: unknown): SkillWorkloadControllerProfiles
 {
@@ -50,7 +81,11 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 	const profiles: Record<"authoring" | "tool-runner", SkillWorkloadJobProfile> = {} as Record<"authoring" | "tool-runner", SkillWorkloadJobProfile>;
 	for (const kind of ["authoring", "tool-runner"] as const)
 	{
-		const profile = structuredClone(candidate[kind]) as SkillWorkloadJobProfile;
+		const profile = _SkillWorkloadJobProfile(candidate[kind]);
+		if (profile === null)
+		{
+			throw new Error(`skill workload controller ${kind} profile must be one complete bounded object`);
+		}
 		if (profile.kind !== kind)
 		{
 			throw new Error(`skill workload controller ${kind} profile has the wrong workload class`);

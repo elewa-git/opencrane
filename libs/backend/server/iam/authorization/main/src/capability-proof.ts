@@ -3,7 +3,7 @@ import { TextDecoder } from "node:util";
 
 import type { CapabilityProofClaims, CapabilityProofExpectation, CapabilityProofFailureReason, CapabilityProofVerification, CapabilityReference, Es256PublicJwk, InvalidCapabilityProof } from "@opencrane/models/authorization";
 import { __AuthorizationResourcesEqual, __IsAuthorizationResourceLocator } from "@opencrane/models/authorization";
-import { ___CanonicalizeJson } from "@opencrane/util";
+import { ___CanonicalizeJson, ___ParseAndValidateJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 /** Maximum compact proof size accepted before parsing. */
@@ -51,13 +51,18 @@ function _parseProtectedObject(encodedValue: string): Record<string, unknown> | 
 	if (decoded === null) return null;
 	try
 	{
-		const parsed = JSON.parse(UTF8_DECODER.decode(decoded)) as unknown;
-		return _isRecord(parsed) ? parsed : null;
+		return ___ParseAndValidateJson(UTF8_DECODER.decode(decoded), "protected capability proof object", _recordOrNull);
 	}
 	catch
 	{
 		return null;
 	}
+}
+
+/** Return an untrusted decoded value only when it is a non-array object. */
+function _recordOrNull(value: unknown): Record<string, unknown> | null
+{
+	return _isRecord(value) ? value : null;
 }
 
 /** Verifies that an unknown value is a non-empty string. */

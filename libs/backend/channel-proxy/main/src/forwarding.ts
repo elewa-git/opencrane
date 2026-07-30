@@ -1,4 +1,5 @@
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AuthorizedChannelTarget, ChannelProxyDependencies, DelegatedSession } from "./channel-proxy.types.js";
 import { __HasForgedIdentityHeaders, __ValidateOrigin } from "./origin-policy.js";
@@ -99,19 +100,20 @@ export async function __ForwardCommand(request: Request, dependencies: ChannelPr
 /** Parses only the command coordinates required before the proxy asks OpenCrane to authorize a route. */
 function _CommandCoordinates(body: Uint8Array, requestIdempotencyKey: string | null): { readonly threadId: string; readonly requestIdempotencyKey: string } | null
 {
-	// 1. Parse the bounded JSON body so the route authority never receives a body-only thread assertion.
-	let value: unknown;
 	try
 	{
-		value = JSON.parse(new TextDecoder().decode(body)) as unknown;
+		return ___ParseAndValidateJson(new TextDecoder().decode(body), "channel command body", _CommandCoordinatesFromUnknown, requestIdempotencyKey);
 	}
 	catch
 	{
 		return null;
 	}
-	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+}
 
-	// 2. Require opaque coordinates before resolution so a retry cannot create an unaddressable run.
+/** Validate the command coordinates required before asking OpenCrane to authorize a route. */
+function _CommandCoordinatesFromUnknown(value: unknown, requestIdempotencyKey: string | null): { readonly threadId: string; readonly requestIdempotencyKey: string } | null
+{
+	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
 	const record = value as Record<string, unknown>;
 	if (typeof record.threadId !== "string" || !_OpaqueIdentifierAllowed(record.threadId) || !requestIdempotencyKey || !_OpaqueIdentifierAllowed(requestIdempotencyKey)) return null;
 	return { threadId: record.threadId, requestIdempotencyKey };

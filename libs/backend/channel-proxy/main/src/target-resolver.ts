@@ -1,5 +1,7 @@
 import { readFile } from "node:fs/promises";
 
+import { ___ParseAndValidateJson } from "@opencrane/util";
+
 import type { AuthorizedChannelTarget, ChannelTargetResolver, OpenCraneResolverOptions, TargetResolutionRequest } from "./channel-proxy.types.js";
 
 /** Default path of the audience-bound channel-proxy workload token. */
@@ -65,8 +67,7 @@ export class __OpenCraneTargetResolver implements ChannelTargetResolver
 				throw new Error(`channel target resolution denied with status ${response.status}`);
 			}
 
-			const value: unknown = await response.json();
-			return _ParseTarget(value);
+			return ___ParseAndValidateJson(await response.text(), "channel target response", _ParseTarget);
 		}
 		finally
 		{
@@ -78,7 +79,7 @@ export class __OpenCraneTargetResolver implements ChannelTargetResolver
 /** Parse the narrow resolver response without trusting structural casts. */
 function _ParseTarget(value: unknown): AuthorizedChannelTarget
 {
-	if (!value || typeof value !== "object")
+	if (!value || typeof value !== "object" || Array.isArray(value))
 	{
 		throw new Error("channel target response is not an object");
 	}

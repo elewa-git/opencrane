@@ -14,6 +14,21 @@ function _Claim()
 	return { workloadId: "workload-1", siloId: "silo-a", kind: "authoring", skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
 }
 
+/** Return a chunked response that crosses the skill-workload allocation ceiling. */
+function _OversizedChunkedResponse(maximumBytes: number): Response
+{
+	let chunk = 0;
+	return new Response(new ReadableStream<Uint8Array>({
+		pull(controller)
+		{
+			if (chunk === 0) controller.enqueue(new Uint8Array(maximumBytes));
+			else if (chunk === 1) controller.enqueue(new Uint8Array(1));
+			else controller.close();
+			chunk += 1;
+		},
+	}));
+}
+
 describe("HTTP governed skill workload authority", function _DescribeAuthority()
 {
 	it("claims only an exact bounded database-issued workload response", async function _Claims()
@@ -40,5 +55,19 @@ describe("HTTP governed skill workload authority", function _DescribeAuthority()
 		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(fetch));
 
 		await expect(authority.__CommitAssignment("workload-1", { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}`, namespace: "opencrane-tools" }, new AbortController().signal)).rejects.toThrow(/mismatched/);
+	});
+
+	it("identifies invalid authority JSON before claim validation", async function _RejectsInvalidJson()
+	{
+		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(new Response("{", { status: 200 }))));
+
+		await expect(authority.__Claim(new AbortController().signal)).rejects.toThrow(/OpenCrane skill workload response must contain valid JSON/);
+	});
+
+	it("stops a chunked response as soon as it crosses the allocation ceiling", async function _BoundsChunkedResponse()
+	{
+		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(_OversizedChunkedResponse(16 * 1024))));
+
+		await expect(authority.__Claim(new AbortController().signal)).rejects.toThrow(/exceeded the 16 KiB boundary/);
 	});
 });

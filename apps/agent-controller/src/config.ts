@@ -2,6 +2,7 @@ import { isAbsolute } from "node:path";
 
 import { __ValidateAgentControllerRuntimeProfiles } from "@opencrane/backend/agents/runtime/controller";
 import { __ValidateSkillWorkloadControllerProfiles } from "@opencrane/backend/agents/skills/controller";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { AgentControllerProcessConfig } from "./config.types.js";
 
@@ -25,32 +26,6 @@ function _Integer(environment: NodeJS.ProcessEnv, name: string, fallback: number
 	return value;
 }
 
-/** Parse JSON while converting syntax errors into a stable configuration failure. */
-function _Json(value: string): unknown
-{
-	try
-	{
-		return JSON.parse(value) as unknown;
-	}
-	catch
-	{
-		throw new Error("AGENT_CONTROLLER_PROFILES_JSON must contain valid JSON");
-	}
-}
-
-/** Parse skill profile JSON while keeping its configuration failure distinct from runtime profiles. */
-function _SkillProfilesJson(value: string): unknown
-{
-	try
-	{
-		return JSON.parse(value) as unknown;
-	}
-	catch
-	{
-		throw new Error("AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON must contain valid JSON");
-	}
-}
-
 /** Read and fail-closed validate the complete agent-controller process configuration. */
 export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): AgentControllerProcessConfig
 {
@@ -62,8 +37,8 @@ export function _ReadConfig(environment: NodeJS.ProcessEnv = process.env): Agent
 	}
 
 	// 2. Validate every immutable profile and its dedicated runtime namespace at startup.
-	const profiles = __ValidateAgentControllerRuntimeProfiles(_Json(_Required(environment, "AGENT_CONTROLLER_PROFILES_JSON")));
-	const skillWorkloadProfiles = __ValidateSkillWorkloadControllerProfiles(_SkillProfilesJson(_Required(environment, "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON")));
+	const profiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_PROFILES_JSON"), "AGENT_CONTROLLER_PROFILES_JSON", __ValidateAgentControllerRuntimeProfiles);
+	const skillWorkloadProfiles = ___ParseAndValidateJson(_Required(environment, "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON"), "AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON", __ValidateSkillWorkloadControllerProfiles);
 	return {
 		openCraneInternalUrl: _Required(environment, "OPENCRANE_INTERNAL_URL"),
 		controllerTokenPath,

@@ -1,4 +1,5 @@
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log.js";
 import type { AttemptLiteLlmKey, AttemptLiteLlmKeyRequest } from "./attempt-litellm-key.types.js";
@@ -73,12 +74,15 @@ async function _mintLive(endpoint: string, masterKey: string, input: AttemptLite
     throw new Error(`litellm attempt key mint returned status ${response.status}`);
   }
 
-  const body = await response.json() as { key?: unknown };
-  if (typeof body.key !== "string" || body.key.length === 0)
-  {
-    throw new Error("litellm attempt key mint returned no key");
-  }
+  const key = ___ParseAndValidateJson(await response.text(), "LiteLLM attempt key response", _MintedKey);
 
   _log.info({ keyAlias: input.keyAlias, modelAlias: input.modelAlias }, "litellm attempt key minted");
-  return { key: body.key, keyAlias: input.keyAlias, modelAlias: input.modelAlias, expirySeconds: input.expirySeconds };
+  return { key, keyAlias: input.keyAlias, modelAlias: input.modelAlias, expirySeconds: input.expirySeconds };
+}
+
+/** Validate the non-empty virtual key returned by LiteLLM. */
+function _MintedKey(value: unknown): string
+{
+  if (typeof value !== "object" || value === null || Array.isArray(value) || !("key" in value) || typeof value.key !== "string" || value.key.length === 0) throw new Error("litellm attempt key mint returned no key");
+  return value.key;
 }

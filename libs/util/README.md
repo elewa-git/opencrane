@@ -9,11 +9,17 @@ across domain packages. "Pure" means every function returns a value computed onl
 arguments — no database, no network, no clock, no global state — so the results are identical every
 time and safe to call anywhere.
 
-It owns three things:
+It owns four things:
 
 - **Collection helpers** — `___SortBy` (stable sort by an optional key), `___SomeArray` and
   `___SomeRecord` (typed "does any element/value match?" checks). Small, but shared so the same
   behaviour is used everywhere rather than re-implemented.
+- **JSON trust-boundary parsing** — `___ParseAndValidateJson` parses raw JSON as `unknown`, then
+  immediately delegates to a caller-owned validator that produces the generic result type. Optional
+  validator arguments carry contextual constraints without one-off parsing wrappers. Configuration
+  readers and HTTP adapters use this same parser after enforcing any transport-specific byte limit;
+  tolerant JSONL/rendering heuristics remain local because malformed fragments are part of their
+  best-effort protocol rather than an exceptional domain boundary.
 - **Canonical JSON and digest grammar** — `___CanonicalizeJson` serialises a JSON value to the one
   canonical string
   form defined by RFC 8785 (JSON Canonicalization Scheme): object keys sorted, whitespace and number
@@ -34,6 +40,7 @@ platform-wide API. Invariant: purity and determinism — no hidden inputs, same 
 ## Public surface
 
 - `___SortBy`, `___SomeArray`, `___SomeRecord` — collection helpers.
+- `___ParseAndValidateJson` — parse untrusted JSON and return only the caller-validated generic type.
 - `___CanonicalizeJson` — RFC 8785 canonical JSON serialisation.
 - `___CloneCanonicalJson` — detached deep copy through the canonical JSON representation.
 - `___IsSha256Digest` — strict validator for the platform's lowercase SHA-256 digest grammar.

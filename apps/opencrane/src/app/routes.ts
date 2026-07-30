@@ -62,7 +62,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(prisma) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
-		{ method: "use", path: "/api/v1/model-routing/metrics", handler: modelRoutingMetricsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
 		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma) },

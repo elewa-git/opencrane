@@ -5,6 +5,7 @@ import type { Logger } from "pino";
 import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
 import { ModelRoutingScope } from "@opencrane/contracts";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration.js";
 import { _RegisterLiteLlmModel } from "./litellm-model-registration.js";
 import { _BYOK_PROVIDER_CATALOG } from "./byok-default-models.js";
@@ -415,11 +416,28 @@ async function _litellmRegisteredModelNames(endpoint: string, masterKey: string)
     {
       return new Set();
     }
-    const info = await response.json() as { data?: Array<{ model_name?: string }> };
-    return new Set((info.data ?? []).map(function _name(m) { return m.model_name ?? ""; }).filter(Boolean));
+    return ___ParseAndValidateJson(await response.text(), "LiteLLM model inventory response", _RegisteredModelNames);
   }
   catch
   {
     return new Set();
   }
+}
+
+/** Validate and collect the registered model names returned by LiteLLM. */
+function _RegisteredModelNames(value: unknown): Set<string>
+{
+  if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("LiteLLM model inventory must be an object");
+  const data = (value as Record<string, unknown>)["data"];
+  if (data === undefined) return new Set();
+  if (!Array.isArray(data)) throw new Error("LiteLLM model inventory data must be an array");
+  const names = data.map(function _Name(entry): string
+  {
+    if (typeof entry !== "object" || entry === null || Array.isArray(entry)) throw new Error("LiteLLM model inventory entry must be an object");
+    const modelName = (entry as Record<string, unknown>)["model_name"];
+    if (modelName === undefined) return "";
+    if (typeof modelName !== "string") throw new Error("LiteLLM model inventory name must be a string");
+    return modelName;
+  });
+  return new Set(names.filter(Boolean));
 }

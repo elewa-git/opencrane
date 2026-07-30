@@ -47,6 +47,23 @@ describe("artifact preprocessor remote adapter", function _suite()
 		}
 	});
 
+	it("rejects invalid claim JSON before it can become protocol state", async function _RejectsInvalidClaimJson()
+	{
+		const scratch = await mkdtemp(join(tmpdir(), "artifact-preprocessor-remote-"));
+		const tokenPath = join(scratch, "token");
+		await writeFile(tokenPath, "projected-token");
+		vi.stubGlobal("fetch", vi.fn(async function _Fetch() { return new Response("{", { status: 200, headers: { "content-length": "1" } }); }));
+		try
+		{
+			const remote = _CreateArtifactPreprocessorRemote({ openCraneInternalUrl: "http://opencrane", tokenPath, requestTimeoutMilliseconds: 1_000 });
+			await expect(remote.claim(new AbortController().signal)).rejects.toThrow(/artifact preprocess authority response must contain valid JSON/);
+		}
+		finally
+		{
+			await rm(scratch, { recursive: true, force: true });
+		}
+	});
+
 	it("cancels an anomalous claim response before clearing its deadline", async function _cancelRejectedResponse()
 	{
 		const scratch = await mkdtemp(join(tmpdir(), "artifact-preprocessor-remote-"));

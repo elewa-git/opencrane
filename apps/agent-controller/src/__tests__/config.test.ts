@@ -81,4 +81,10 @@ describe("agent-controller process config", function _Suite()
 		expect(function _TooFrequent() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS: "59999" }); }).toThrow(/OUTBOX_PRUNE_INTERVAL/);
 		expect(function _TooSlow() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_OUTBOX_PRUNE_INTERVAL_MS: "86400001" }); }).toThrow(/OUTBOX_PRUNE_INTERVAL/);
 	});
+
+	it("identifies the exact JSON configuration source whose syntax is invalid", function _RejectsInvalidJson()
+	{
+		expect(function _InvalidRuntimeProfiles() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_PROFILES_JSON: "{" }); }).toThrow(/AGENT_CONTROLLER_PROFILES_JSON must contain valid JSON/);
+		expect(function _InvalidSkillProfiles() { _ReadConfig({ ..._Environment(), AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON: "{" }); }).toThrow(/AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON must contain valid JSON/);
+	});
 });
