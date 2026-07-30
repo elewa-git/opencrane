@@ -19,13 +19,13 @@
 #   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/observability)
+#   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
 #   BRACE             opening { not on its own line for a multi-line fn/class (heuristic)
 #   TEST-LOCATION     *.test.ts file not placed under a __tests__ directory
 #   MISSING-README    new/changed package (project.json) with no sibling README.md
 #   README-SECTIONS   leaf package README missing a mandatory package-docs section
-#   CATEGORICAL-LITERAL direct string comparison of a common discriminant (review-required WARN)
 
 set -euo pipefail
 
@@ -199,11 +199,13 @@ for f in "${CHECKABLE[@]}"; do
 			;;
 	esac
 
-	# CATEGORICAL-LITERAL — the style checker cannot know whether a vocabulary is OpenCrane-owned,
-	# external, or an intentional invalid-input fixture. Emit a WARN for review to confirm ownership.
+	# CATEGORICAL-LITERAL — an OpenCrane-owned kind/type/status/state/reason/mode/action/
+	# outcome/decision branch should compare against a documented string-backed enum.
+	# External protocols and schema/data literals can look identical, so this remains a
+	# WARN for the reviewer to confirm rather than an automatic failure.
 	while IFS=: read -r ln _; do
-		_report "$f" "$ln" WARN CATEGORICAL-LITERAL "direct string comparison on a categorical discriminant — use a documented string-backed enum or confirm an explicit exemption"
-	done < <(grep -nE '\.(kind|status|outcome|reason|state|decision)[[:space:]]*(===|!==)[[:space:]]*"[^"]+"' "$f" || true)
+		_report "$f" "$ln" WARN CATEGORICAL-LITERAL "categorical property compared with a raw string — use the owning string-backed enum or verify an external/schema/data exemption"
+	done < <(grep -nE '(\.(kind|type|status|state|reason|mode|action|outcome|decision)[[:space:]]*(===|!==)[[:space:]]*"[^"]+"|"[^"]+"[[:space:]]*(===|!==)[[:space:]]*[^[:space:]]+\.(kind|type|status|state|reason|mode|action|outcome|decision))' "$f" || true)
 
 	# TYPES-IN-IMPL — exported interfaces/type aliases belong in *.types.ts.
 	# (A bare `types.ts` is a types file by intent — exempt.)
