@@ -21,7 +21,6 @@
 #                            [--oidc-session-secret SECRET]
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
-#                            [--confirm-langfuse-retirement-after-backup]
 #                            [--preflight] [--multi-ct]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
@@ -180,9 +179,6 @@ MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 # --verify runs an advisory post-deploy check (pods Running and host resolution). Never fails
 # the install. Also via OPENCRANE_VERIFY=1.
 VERIFY="${OPENCRANE_VERIFY:-0}"
-# A Langfuse-enabled release owns stateful workloads and PVCs that a normal Helm upgrade would
-# partially remove. Require an explicit, backup-aware operator decision before that transition.
-CONFIRM_LANGFUSE_RETIREMENT="${OPENCRANE_CONFIRM_LANGFUSE_RETIREMENT_AFTER_BACKUP:-0}"
 
 POSTGRES_RELEASE=""
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
@@ -206,7 +202,6 @@ while [[ $# -gt 0 ]]; do
     --oidc-session-secret) OIDC_SESSION_SECRET="$2"; shift 2 ;;
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
-    --confirm-langfuse-retirement-after-backup) CONFIRM_LANGFUSE_RETIREMENT="1"; shift ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
@@ -355,38 +350,6 @@ if [[ "$PREFLIGHT" == "1" ]]; then
   log "Preflight complete (no install performed). Re-run without --preflight to install."
   exit 0
 fi
-
-# Removing the Langfuse dependency from a prior release makes Helm delete its managed
-# workloads and unprotected PVCs. PostgreSQL Database objects and some Secrets can survive,
-# leaving a partial dataset and live credentials. Block before any mutation until the operator
-# confirms that export/backup and the retained-resource cleanup plan are complete.
-_require_explicit_langfuse_retirement() {
-  local status_output
-  if ! status_output="$(helm status "$RELEASE" -n "$NAMESPACE" 2>&1)"; then
-    if grep -Eqi 'release(:| )[[:space:]]*not found|release .* not found' <<<"$status_output"; then
-      return 0
-    fi
-    err "Cannot determine whether Helm release '$RELEASE' exists; refusing to cross the Langfuse retirement boundary: $status_output"
-    exit 1
-  fi
-
-  local prior_manifest
-  if ! prior_manifest="$(helm get manifest "$RELEASE" -n "$NAMESPACE" 2>&1)"; then
-    err "Cannot read the existing Helm manifest for '$RELEASE'; refusing to cross the Langfuse retirement boundary: $prior_manifest"
-    exit 1
-  fi
-  if ! grep -Eq 'Source: .*/charts/langfuse/|app\.kubernetes\.io/name: langfuse' <<<"$prior_manifest"; then
-    return 0
-  fi
-
-  if [[ "$CONFIRM_LANGFUSE_RETIREMENT" != "1" ]]; then
-    err "Existing release '$RELEASE' still contains Langfuse. This upgrade can delete Langfuse PVC-backed data while retained PostgreSQL/Secret resources survive. Export or back up required data, inventory the retained Database/PVC/Secret resources, then rerun with --confirm-langfuse-retirement-after-backup (or OPENCRANE_CONFIRM_LANGFUSE_RETIREMENT_AFTER_BACKUP=1). See website/operators/hosting.md#retire-a-legacy-langfuse-install."
-    exit 1
-  fi
-
-  warn "Langfuse retirement explicitly confirmed after backup. Helm may remove its managed workloads and unprotected PVCs; retained Database, role, Secret, and kept-volume cleanup remains an operator action."
-}
-_require_explicit_langfuse_retirement
 
 # Canonical artifact bytes are retained indefinitely on a mounted PVC. Pinning the resolved
 # class makes the claim stable across default-class changes, and refuses a class that cannot

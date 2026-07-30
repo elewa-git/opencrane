@@ -18,11 +18,6 @@ Think of it as the assembly point: each app owns its own workload templates, and
 them — unchanged — with one shared release context. It renders nothing customer-specific itself; it just
 wires the pieces and the per-silo networking together.
 
-An upgrade from a historical Langfuse-enabled release is fail-closed because Helm would otherwise
-partially delete its state. Back up or export required traces, follow the
-[legacy retirement runbook](../../../website/operators/hosting.md#retire-a-legacy-langfuse-install),
-then pass `--confirm-langfuse-retirement-after-backup`.
-
 ```
  deploy.sh  (per-ClusterTenant silo profile)
         │  helm dep build (from Chart.lock) → helm upgrade --install

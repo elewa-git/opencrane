@@ -128,18 +128,6 @@ if [[ -z "$CHART_DIR" ]]; then
   exit 1
 fi
 
-# This configurator performs a Helm upgrade with the current chart. A historical silo release
-# can still contain the removed Langfuse subchart, so refuse that retirement here and require the
-# backup-aware full deploy path to cross it deliberately.
-if ! PRIOR_MANIFEST="$(helm ${KCTX[@]+"${KCTX[@]}"} -n "$NAMESPACE" get manifest "$RELEASE" 2>&1)"; then
-  err "Cannot read the existing Helm manifest for '$RELEASE'; refusing to configure OIDC: $PRIOR_MANIFEST"
-  exit 1
-fi
-if grep -Eq 'Source: .*/charts/langfuse/|app\.kubernetes\.io/name: langfuse' <<<"$PRIOR_MANIFEST"; then
-  err "Release '$RELEASE' still contains legacy Langfuse resources. Back up required data and retire them through deploy.sh --confirm-langfuse-retirement-after-backup before configuring OIDC."
-  exit 1
-fi
-
 # Preserve the release's existing user-supplied values, then layer OIDC on top.
 # We capture them with `helm get values` and re-apply via -f rather than using
 # `--reuse-values`: --reuse-values bypasses the chart's values.yaml entirely, so
