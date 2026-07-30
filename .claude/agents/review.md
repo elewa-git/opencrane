@@ -99,6 +99,16 @@ fresh context — do not assume the author's intent was correct.
   literals when they obscure business decisions, duplicate the same domain value in
   multiple representations, or make invariant drift likely. Do not report raw line
   length as the sole criterion.
+- **Domain-result inference.** A generic transaction, retry, tracing, or orchestration
+  callback that repeatedly returns `{ status: "..." } as const` is usually compensating
+  for a missing return type. Prefer an explicit domain return type on the callback or an
+  extracted helper so every return branch is checked directly. Do not flag legitimate
+  const assertions used for immutable tuples or literal configuration where literal
+  inference is the intended contract.
+- **Minimal result shape.** When all outcomes have the same fields and differ only by a
+  string-backed enum discriminator, prefer one object type such as
+  `{ readonly status: OperationStatuses }`. Keep a discriminated union only when variants
+  have different payloads or correlated fields that consumers need to narrow safely.
 - **Invariant documentation.** Complex transactional procedures need procedure-level
   JSDoc that explains purpose, atomicity, lock order, and retry/idempotency semantics,
   plus numbered step comments that explain the invariant protected by each stage. A

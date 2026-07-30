@@ -125,6 +125,17 @@ maintainability pass.
    - Flag dense anonymous query/object construction when it hides domain choices,
      represents the same invariant twice, or makes drift likely. Raw function or line
      length alone is never sufficient evidence.
+   - Check domain-result typing at callback boundaries. A generic transaction, retry,
+     tracing, or orchestration callback that repeatedly returns `{ status: "..." } as const`
+     is usually compensating for an omitted return type. Prefer an explicit domain return
+     type on the callback or an extracted helper so every branch is checked directly.
+     Do not flag legitimate const assertions used for immutable tuples or literal
+     configuration where literal inference is itself the intended contract.
+   - Prefer the smallest result type that preserves real invariants. When every outcome
+     has the same fields and differs only by a string-backed enum discriminator, use one
+     object type such as `{ readonly status: OperationStatuses }`. Use a discriminated
+     union only when variants carry different payloads or field relationships that
+     consumers must narrow safely.
    - Complex transactional procedures need procedure-level JSDoc explaining purpose,
      atomicity, lock order, and retry/idempotency, plus numbered step comments explaining
      the invariant protected by each stage rather than restating helper names.
