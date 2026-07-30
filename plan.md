@@ -221,6 +221,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
 | [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
+| [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
 
 ## Deferred research
 
@@ -228,3 +229,6 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
   measured target workload, security, and cost evidence.
 - A generic plugin framework remains deferred until at least two concrete target modules require the
   same extension seam.
+- Lightweight model-call traceability remains deferred to
+  [#513](https://github.com/elewa-git/opencrane/issues/513): prefer LiteLLM-native OTLP GenAI spans
+  through an operator-supplied collector, with prompt and response content disabled by default.

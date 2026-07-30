@@ -576,23 +576,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/model-routing/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy a metrics query to the self-hosted Langfuse backend (server-side auth; non-operators scoped to their tenant) */
-        get: operations["getRoutingMetrics"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ai-budget/global": {
         parameters: {
             query?: never;
@@ -3574,63 +3557,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getRoutingMetrics: {
-        parameters: {
-            query?: {
-                /** @description Langfuse v1 metrics `query` JSON, forwarded verbatim (a tenant filter is injected for non-operators). */
-                query?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Upstream Langfuse metrics JSON (loosely-typed passthrough). */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description A non-operator caller with no resolved ClusterTenant has no metrics scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The Langfuse backend was unreachable or returned a non-2xx status. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        status?: string;
-                        error?: string;
-                    };
-                };
-            };
-            /** @description The Langfuse backend is not configured (host/keys missing). */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        status?: string;
-                    };
                 };
             };
         };

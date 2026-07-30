@@ -24,7 +24,7 @@ testing on its own, it belongs in a library, not here.
 | [`tool-runner`](./tool-runner/README.md) | Chart-only isolated tenant-tool Job plane with no standing worker. |
 | [`postgres`](./postgres/README.md) | The durable PostgreSQL deployable. |
 
-Vendored third-party infrastructure (Cognee, LiteLLM, Obot, Langfuse, and the Kubernetes release
+Vendored third-party infrastructure (Cognee, LiteLLM, Obot, and the Kubernetes release
 composer) lives one level down under [`apps/_infra`](./_infra/README.md) — see that index for the
 service map.
 

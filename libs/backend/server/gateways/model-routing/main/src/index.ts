@@ -19,6 +19,4 @@ export * from "./core/savings.js";
 export * from "./core/savings.types.js";
 export * from "./routes/model-routing-defaults.js";
 export * from "./routes/model-routing-defaults.types.js";
-export * from "./routes/model-routing-metrics.js";
-export * from "./routes/model-routing-metrics.types.js";
 export * from "./openapi.js";

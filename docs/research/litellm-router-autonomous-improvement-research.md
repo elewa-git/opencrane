@@ -2,6 +2,12 @@
 
 *Research into a future job that reviews routing choices, critically assesses them, and proposes improvements. It assumes OpenCrane's current provider-credential boundary: runtimes receive only their scoped LiteLLM access, while provider credentials stay outside tenant workloads. All claims are web-verified against primary sources (arXiv, official repositories and official documentation); citations are inline.*
 
+> **Historical status (2026-07-30):** this is retained design research, not the current deployment
+> contract. OpenCrane no longer bundles Langfuse. The Langfuse-dependent sections and API mappings
+> below are historical proposals, not supported current behaviour. A lightweight LiteLLM-native
+> OTLP trace proposal is tracked in
+> [#513](https://github.com/elewa-git/opencrane/issues/513).
+
 ---
 
 ## 1. TL;DR
@@ -266,7 +272,7 @@ For skills pinned to a fixed model (modes 1/2, **not** auto), run the shadow eva
 
 ---
 
-## 13. Evals via Langfuse — refinement to AIR.6/7
+## 13. Historical: evals via Langfuse — refinement to AIR.6/7
 
 Verified 2026-06-18 against langfuse.com/docs + the langfuse repo. **All Langfuse eval features are MIT/free on the OSS self-hosted build** (managed LLM-as-a-judge, online sampled-% production evals, datasets + experiments, annotation queues, public + v1 metrics APIs) — relicensed out of `ee/` into MIT in June 2025; only enterprise security/admin is paid (§8). This materially changes AIR.6's build:
 
@@ -279,7 +285,7 @@ Verified 2026-06-18 against langfuse.com/docs + the langfuse repo. **All Langfus
 
 WeOwnAI is a **separate proprietary Angular repo** and, per the locked rule, **just another API client**: `/auth/me` claims (`isPlatformOperator`, `clusterTenant`) **hide UI only**; the opencrane-api (the AIR.0b scope guard) is the enforcement point. Everything below is backed by AIR APIs that **already exist** plus two small opencrane-api enablers (see end).
 
-### Langfuse integration pattern (verified)
+### Historical Langfuse integration pattern (verified)
 - **Embed nothing** — Langfuse has no iframe/embed and no per-request SSO deep-link. Don't try to iframe it.
 - **Build native over the API** for the at-a-glance views (score trends, eval pass-rates, cost/latency tiles, per-tenant rollups): query Langfuse's **v1 Metrics + Public API** (v2 is Cloud-only today — design self-hosted views around **v1**), **proxied through the opencrane-api** so Langfuse project keys never reach the browser.
 - **Link out** to the full Langfuse UI for the expensive-to-rebuild deep surfaces: trace inspection, LLM-judge evaluator config, experiment A-vs-B comparison, annotation queues. A *seamless* SSO handoff needs enterprise SAML; without it users hit a Langfuse login (acceptable for the admin persona), or scope isolation stays entirely in our proxy.

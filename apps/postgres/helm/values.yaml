@@ -2,7 +2,7 @@ instances: 1
 image: ghcr.io/cloudnative-pg/postgresql:17.5
 
 # This is the physical-server budget, not an application default. The pooler below
-# reserves only 50 server connections across the logical databases, leaving 30
+# reserves only 30 server connections across the logical databases, leaving 50
 # for CNPG's management/replication work and controlled operator access.
 postgresql:
   maxConnections: 80
@@ -19,9 +19,6 @@ databases:
     credentialsSecret: ""
   - name: litellm
     owner: litellm
-    credentialsSecret: ""
-  - name: langfuse
-    owner: langfuse
     credentialsSecret: ""
 
 # A separate operational role may inspect every logical database in this one tenant
@@ -57,8 +54,8 @@ resources:
     memory: 2Gi
 
 # Every application connection goes through this CNPG-managed PgBouncer Pooler.
-# `maxDbConnections` is per logical database; with the four deployed databases,
-# 4 × 10 = 40 server connections stay below `postgresql.maxConnections` (80).
+# `maxDbConnections` is per logical database; with the three deployed databases,
+# 3 × 10 = 30 server connections stay below `postgresql.maxConnections` (80).
 # `maxClientConnections` bounds queued
 # client connections at the pooler instead of consuming PostgreSQL connections.
 pooler:
@@ -76,8 +73,6 @@ pooler:
         app.kubernetes.io/component: mcp-gateway
     - matchLabels:
         app.kubernetes.io/component: litellm
-    - matchLabels:
-        app.kubernetes.io/name: langfuse
 
 networkPolicy:
   enabled: true

@@ -203,20 +203,8 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
-    {{- if .Values.langfuse.inCluster.enabled }}
-    # Release-local Langfuse metrics and trace API.
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: langfuse
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app: web
-      ports:
-        - protocol: TCP
-          port: 3000
-    {{- end }}
     {{- if .Values.observability.otel.enabled }}
-    # Release-local OTEL collector for trace export.
+    # Release-local operator-supplied OTEL collector for trace export.
     - to:
         - podSelector:
             matchLabels:

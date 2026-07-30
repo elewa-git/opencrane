@@ -3,7 +3,7 @@ name: opencrane-silo
 description: >-
   OpenCrane SILO install — one per ClusterTenant, into the org's own namespace: the
   opencrane-server (per-silo control plane + in-silo controllers), the channel trust boundary,
-  and its dedicated runtime planes (Cognee, LiteLLM, Obot/MCP gateway, Langfuse), per-silo
+  and its dedicated runtime planes (Cognee, LiteLLM, Obot/MCP gateway), per-silo
   NetworkPolicies, and identity routing. Installed with apps/_infra/deploy-k8s/deploy.sh;
   `crds.install` defaults true, while a release that uses a separately managed shared CRD
   bundle sets it false. Still depends on the cert-manager issuer.
@@ -61,12 +61,3 @@ dependencies:
   - name: opencrane-obot
     version: 0.1.0
     repository: "file://../obot/helm"
-  # apps/_infra/langfuse owns this pinned upstream wrapper. Keep the dependency direct so
-  # parent values, release names, and every rendered upstream object remain unchanged.
-  # PINNED to an exact version (not a ">=" range): the deploy engine resolves deps from Chart.lock
-  # via `helm dep build`, so an open range would let every deploy silently ship whatever langfuse
-  # is newest at that moment — an untested version drift. Bump this deliberately + regenerate the lock.
-  - name: langfuse
-    version: "1.5.37"
-    repository: https://langfuse.github.io/langfuse-k8s
-    condition: langfuse.inCluster.enabled

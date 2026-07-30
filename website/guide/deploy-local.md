@@ -24,13 +24,12 @@ apps/_infra/deploy-k8s/deploy.sh \
   --cluster-tenant <org-name> \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
-  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-  --langfuse-postgres-credentials-secret opencrane-langfuse-postgres-bootstrap
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
 ```
 
 The chart installs trusted services and distinct restricted namespaces for personal,
 managed and worker Jobs. A single-node cluster does not collapse those boundaries. Create the
-four PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
+three PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
 
 ::: warning
 Single-node does not mean single namespace. OpenCrane refuses a deployment that places

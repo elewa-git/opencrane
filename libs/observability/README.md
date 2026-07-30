@@ -17,9 +17,8 @@ It owns two joined-up concerns:
 - **Correlation and tracing** — `___RunWithContext`/`___GetContext` carry a request id through async
   work without threading it by hand (so every log line from one request shares an id), and
   `___DoWithTrace` wraps an operation as an OpenTelemetry (OTEL) **span** — a timed, named unit of
-  work — exported to the in-cluster collector, which forwards to GCP Cloud Logging and Cloud Trace
-  (or any OTLP (OpenTelemetry Protocol) backend) behind a Helm toggle. `___RequestContext` is the Express middleware that
-  opens a per-request context and span.
+  work — exported over OTLP (OpenTelemetry Protocol) to operator-owned telemetry when configured.
+  `___RequestContext` is the Express middleware that opens a per-request context and span.
 
 Naming convention: wide, cross-cutting exports use the `___` (triple-underscore) prefix, marking
 them as intentional platform-wide API rather than local helpers. The side-effecting SDK bootstrap
@@ -43,7 +42,7 @@ correlation id follows the work — so a request can be traced end to end even a
 
 The only logging + tracing lib in the platform; services import it rather than calling `pino` or the
 OTEL SDK directly. It writes JSON to stdout and emits OTLP spans — it does not manage log files, log
-retention, or the collector deployment (that is Helm/infra).
+retention, or the collector deployment (that is operator-owned infrastructure).
 
 ## Dependency direction
 

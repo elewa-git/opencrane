@@ -14,7 +14,6 @@
 # This overlay enables:
 #   - GCE ingress (Google Cloud Load Balancer) instead of the default ingress
 #   - External Secrets backed by GCP Secret Manager
-#   - Cloud Logging / Error Reporting integration
 
 # Google Cloud Load Balancer ingress.
 ingress:
@@ -30,8 +29,3 @@ externalSecrets:
     projectId: "replace-with-gcp-project-id"
     # Optional GKE region or zone; empty lets External Secrets discover it.
     clusterLocation: ""
-
-# Cloud-native observability (GKE auto-ingests structured logs).
-observability:
-  cloudLogging: true
-  cloudErrorReporting: true

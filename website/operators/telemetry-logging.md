@@ -1,10 +1,10 @@
-# Telemetry & logging
+# Telemetry and logging
 
 ::: tip In plain terms
 When something goes wrong — or you just want to know what the platform is doing — you need
 to be able to *see* it. Every OpenCrane service writes clear, structured logs out of the box,
-and you can follow a single request as it moves across services. Turn on one switch and it
-all flows into your cloud dashboards.
+and you can follow a single request as it moves across services when you connect the services
+to an OpenTelemetry endpoint.
 :::
 
 ## What you get
@@ -15,8 +15,8 @@ all flows into your cloud dashboards.
   across every service it touches.
 - **Secrets stay out of the logs.** API keys, tokens, and connection strings are stripped
   before anything is written.
-- **One switch to your cloud.** Send logs and traces to GCP Cloud Logging + Cloud Trace (or any
-  OTLP backend) without wiring up each service.
+- **One trace endpoint for the fleet.** Point every service at an operator-supplied
+  OpenTelemetry Collector or compatible OTLP backend.
 
 ## Logs always work; tracing is the switch
 
@@ -34,17 +34,16 @@ observability:
     enabled: true
 ```
 
-That deploys a collector that gathers logs and traces from every service and ships them to
-your backend — logs and traces already lined up, so you can jump from a log line to the trace
-it belongs to.
+That configures the OpenCrane services to export traces to the release-local collector endpoint.
+The chart does **not** deploy that collector. Provide a compatible Service using the chart
+fullname plus `-otel-collector` in the release namespace on OTLP/HTTP port `4318`: for a release
+named `acme` the Service is `acme-opencrane-otel-collector`; the standard `opencrane-silo` release
+uses `opencrane-silo-otel-collector`. Its collector pods must carry
+`app.kubernetes.io/component: otel-collector` so the app-owned NetworkPolicies admit them.
+Configure the collector's exporters yourself.
 
-On GKE you can skip the collector entirely and let the platform ingest logs directly:
-
-```yaml
-observability:
-  cloudLogging: true
-  cloudErrorReporting: true
-```
+On GKE, the platform can ingest the structured stdout stream directly; no OpenCrane Helm switch is
+required.
 
 ---
 
@@ -63,19 +62,15 @@ Every service builds its logger and tracing from a single library
 - **Request correlation** — an `AsyncLocalStorage` context attaches a `requestId` to every log
   line for the life of a request, with no manual plumbing.
 - **Trace correlation** — once tracing is on, each record also carries `trace_id` and `span_id`,
-  so logs and traces line up in Cloud Trace.
+  so logs and traces line up in the configured trace backend.
 - **Redaction** — known secret fields are stripped from output by default.
 
-### Collector topology
+### Operator-supplied collector
 
-Enabling `observability.otel` deploys an in-cluster OpenTelemetry Collector. It receives traces
-over OTLP and scrapes pod stdout, then exports both to GCP Cloud Logging + Cloud Trace or any
-OTLP backend. Two modes:
-
-- **`daemonset`** (default) — runs on each node and scrapes pod stdout; needed for the log
-  pipeline.
-- **`deployment`** — a single collector for traces only; use on GKE Autopilot, where node-level
-  DaemonSets are restricted.
+OpenCrane exports traces over OTLP/HTTP and writes logs to stdout. The operator owns the
+release-local collector's receivers, processors, exporters, retention, and access controls.
+The OpenCrane chart only wires its applications to that expected Service and pod label; it does
+not install or configure a telemetry backend.
 
 ### Tuning verbosity
 
@@ -85,6 +80,5 @@ OTLP backend. Two modes:
 
 ## See also
 
-- [Runbook](/operators/runbook) — operational procedures
 - [Runbook](/operators/runbook) — how operators use these signals during incidents
-- [Model routing](/guide/model-routing) — cost & quality metrics built on this pipeline
+- [Model routing](/guide/model-routing) — how model defaults are resolved and frozen for execution

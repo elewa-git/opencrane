@@ -13,7 +13,6 @@ its slot; the shell itself is `workspace`.
 | --- | --- |
 | [`context`](./context/README.md) | The right-hand context pane. |
 | [`conversation`](./conversation/README.md) | The centre conversation pane. |
-| [`metrics`](./metrics/README.md) | The AI-usage metrics dashboard. |
 | [`notifications`](./notifications/README.md) | The notification popover. |
 | [`settings`](./settings/README.md) | The settings page. |
 | [`tools`](./tools/README.md) | Tools and tool-governance routes. |
@@ -26,7 +25,7 @@ its slot; the shell itself is `workspace`.
    conversation      context        notifications
    (centre pane)   (right pane)      (bell popover)
          │
-   routed pages: metrics · settings · tools · welcome
+   routed pages: settings · tools · welcome
 ```
 
 ## Dependency rule for this tier

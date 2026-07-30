@@ -171,8 +171,7 @@
           "type": "object",
           "description": "Platform-namespace default-deny floor (templates/networkpolicy-main-default-deny.yaml). Off by default; validate plane-to-plane connectivity before enabling in production. Mandatory (enforced by a Helm fail guard) when multiCt.enabled=true.",
           "properties": {
-            "enabled": { "type": "boolean" },
-            "allowOtelEgress": { "type": "boolean" }
+            "enabled": { "type": "boolean" }
           }
         }
       }

@@ -17,13 +17,7 @@
     "obot-dynamic-mcp-child",
     "postgres-database",
     "postgres-pooler",
-    "postgres-database-privileges",
-    "langfuse-web",
-    "langfuse-worker",
-    "langfuse-clickhouse",
-    "langfuse-zookeeper",
-    "langfuse-valkey-primary",
-    "langfuse-minio"
+    "postgres-database-privileges"
   ],
   "renderProfiles": [
     {
@@ -42,7 +36,6 @@
     {
       "id": "all-supported-pod-profiles",
       "setValues": [
-        "langfuse.inCluster.enabled=true",
         "channelProxy.enabled=true",
         "artifactPreprocessor.enabled=true",
         "artifactPreprocessor.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
@@ -54,9 +47,6 @@
         "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       ],
       "expectedRenderedPodClasses": [
-        "Deployment/opencrane-s3",
-        "Deployment/opencrane-langfuse-web",
-        "Deployment/opencrane-langfuse-worker",
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
@@ -65,10 +55,7 @@
         "Deployment/opencrane-agent-controller",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
-        "Deployment/opencrane-mcp-gateway",
-        "StatefulSet/opencrane-zookeeper",
-        "StatefulSet/opencrane-clickhouse-shard0",
-        "StatefulSet/opencrane-redis-primary"
+        "Deployment/opencrane-mcp-gateway"
       ]
     }
   ],
@@ -115,13 +102,7 @@
         "agent-controller",
         "cognee",
         "litellm",
-        "obot-gateway-controller",
-        "langfuse-web",
-        "langfuse-worker",
-        "langfuse-clickhouse",
-        "langfuse-zookeeper",
-        "langfuse-valkey-primary",
-        "langfuse-minio"
+        "obot-gateway-controller"
       ]
     }
   ],
@@ -132,25 +113,6 @@
       "reason": "This is a Secret owner reference to an already-created attempt Job; it cannot create a pod."
     }
   ],
-  "archiveWorkloadInventory": {
-    "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz",
-    "members": [
-      { "member": "langfuse/templates/web/deployment.yaml", "status": "rendered", "workloadId": "langfuse-web" },
-      { "member": "langfuse/templates/worker/deployment.yaml", "status": "rendered", "workloadId": "langfuse-worker" },
-      { "member": "langfuse/charts/clickhouse/templates/statefulset.yaml", "status": "rendered", "workloadId": "langfuse-clickhouse" },
-      { "member": "langfuse/charts/clickhouse/charts/zookeeper/templates/statefulset.yaml", "status": "rendered", "workloadId": "langfuse-zookeeper" },
-      { "member": "langfuse/charts/minio/templates/standalone/deployment.yaml", "status": "rendered", "workloadId": "langfuse-minio" },
-      { "member": "langfuse/charts/minio/templates/provisioning-job.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile does not configure MinIO provisioning jobs." },
-      { "member": "langfuse/charts/minio/templates/distributed/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile uses standalone MinIO." },
-      { "member": "langfuse/charts/postgresql/templates/update-password/job.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/primary/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/backup/cronjob.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/read/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/valkey/templates/replicas/application.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables Valkey replicas." },
-      { "member": "langfuse/charts/valkey/templates/sentinel/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables Valkey sentinel." },
-      { "member": "langfuse/charts/valkey/templates/primary/application.yaml", "status": "rendered", "workloadId": "langfuse-valkey-primary" }
-    ]
-  },
   "nonWorkloadDynamicKinds": [],
   "forbiddenPaths": [
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-certificate.yaml",
@@ -330,60 +292,6 @@
       "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" },
       "classification": "survivor",
       "reason": "apps/postgres owns the pinned CNPG Pooler contract that bounds every application connection before PostgreSQL."
-    },
-    {
-      "id": "langfuse-web",
-      "podClass": "Deployment/langfuse-web",
-      "renderedPodClass": "Deployment/opencrane-langfuse-web",
-      "image": "langfuse/langfuse:3.201.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/templates/web/deployment.yaml", "anchor": "kind: Deployment" }
-    },
-    {
-      "id": "langfuse-worker",
-      "podClass": "Deployment/langfuse-worker",
-      "renderedPodClass": "Deployment/opencrane-langfuse-worker",
-      "image": "langfuse/langfuse-worker:3.201.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/templates/worker/deployment.yaml", "anchor": "kind: Deployment" }
-    },
-    {
-      "id": "langfuse-clickhouse",
-      "podClass": "StatefulSet/langfuse-clickhouse-shard",
-      "renderedPodClass": "StatefulSet/opencrane-clickhouse-shard0",
-      "image": "clickhouse:25.2.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/clickhouse/templates/statefulset.yaml", "anchor": "kind: StatefulSet" }
-    },
-    {
-      "id": "langfuse-zookeeper",
-      "podClass": "StatefulSet/langfuse-zookeeper",
-      "renderedPodClass": "StatefulSet/opencrane-zookeeper",
-      "image": "zookeeper:3.9.3",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/clickhouse/charts/zookeeper/templates/statefulset.yaml", "anchor": "kind: StatefulSet" }
-    },
-    {
-      "id": "langfuse-valkey-primary",
-      "podClass": "StatefulSet/langfuse-valkey-primary",
-      "renderedPodClass": "StatefulSet/opencrane-redis-primary",
-      "image": "valkey:8.0.2",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/valkey/templates/primary/application.yaml", "anchor": "kind: {{ .Values.primary.kind }}" }
-    },
-    {
-      "id": "langfuse-minio",
-      "podClass": "Deployment/langfuse-minio-standalone",
-      "renderedPodClass": "Deployment/opencrane-s3",
-      "image": "minio:2024.12.18",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/minio/templates/standalone/deployment.yaml", "anchor": "kind: Deployment" }
     }
   ]
 }

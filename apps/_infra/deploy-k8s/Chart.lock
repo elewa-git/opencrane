@@ -38,8 +38,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.1.0
-- name: langfuse
-  repository: https://langfuse.github.io/langfuse-k8s
-  version: 1.5.37
-digest: sha256:818ac28a0bfde83304e3d0f7168c098b675374d034f901565795b12331592757
-generated: "2026-07-26T18:08:19.730055+03:00"
+digest: sha256:916d6c4833b4d140a42309f132e0f0c2228e5d923aff32ba4a0c892e404303e0
+generated: "2026-07-29T14:32:19.105118+03:00"

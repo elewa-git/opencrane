@@ -6,7 +6,7 @@
 # per-ClusterTenant silo — the dedicated stack a single ClusterTenant runs on shared
 # nodes: its own operator + channel proxy + Obot + LiteLLM + Cognee + opencrane-ui,
 # per-CT networking, and one app-owned PostgreSQL server with isolated logical databases
-# and credentials for OpenCrane, Obot, LiteLLM, and Langfuse.
+# and credentials for OpenCrane, Obot, and LiteLLM.
 #
 # The CLUSTER-WIDE infrastructure (ingress controller, CloudNativePG, cert-manager) is an
 # external prerequisite. A silo never installs these shared controllers. It creates only
@@ -20,7 +20,6 @@
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
-#       --langfuse-postgres-credentials-secret opencrane-langfuse-postgres-bootstrap \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
 #
@@ -71,7 +70,7 @@ fi
 
 # The silo lives in its own namespace so its per-CT DB + planes are isolated from every other
 # silo and from the central release. One CNPG Cluster in that namespace hosts its isolated
-# OpenCrane, Obot, LiteLLM, and Langfuse logical databases. Default `opencrane-<cluster-tenant>`;
+# OpenCrane, Obot, and LiteLLM logical databases. Default `opencrane-<cluster-tenant>`;
 # --namespace overrides.
 [[ -n "$NAMESPACE" ]] || NAMESPACE="opencrane-${CLUSTER_TENANT}"
 

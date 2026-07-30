@@ -26,7 +26,6 @@
 #                            [--postgres-owner OWNER]
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
-#                            --langfuse-postgres-credentials-secret NAME [--langfuse-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
 #                            [--postgres-values FILE]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
@@ -158,8 +157,6 @@ OBOT_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_OBOT_POSTGRES_CREDENTIALS_SECRET:-
 OBOT_POSTGRES_OWNER="${OPENCRANE_OBOT_POSTGRES_OWNER:-obot}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SECRET:-}"
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
-LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-}"
-LANGFUSE_POSTGRES_OWNER="${OPENCRANE_LANGFUSE_POSTGRES_OWNER:-langfuse}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
@@ -214,8 +211,6 @@ while [[ $# -gt 0 ]]; do
     --obot-postgres-owner) OBOT_POSTGRES_OWNER="$2"; shift 2 ;;
     --litellm-postgres-credentials-secret) LITELLM_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
-    --langfuse-postgres-credentials-secret) LANGFUSE_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
-    --langfuse-postgres-owner) LANGFUSE_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
@@ -298,7 +293,6 @@ _run_preflight() {
   _preflight_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
   _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
-  _preflight_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
   _preflight_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
   # 2. NetworkPolicy-enforcing CNI — the platform's isolation model is built on
@@ -390,34 +384,6 @@ if [[ -z "${LITELLM_SALT_KEY:-}" ]]; then
   LITELLM_SALT_KEY="$(_read_secret opencrane-litellm LITELLM_SALT_KEY)"
   LITELLM_SALT_KEY="${LITELLM_SALT_KEY:-sk-$(_gen_secret)}"
 fi
-# Langfuse stable credentials. SALT, ENCRYPTION_KEY, and API keys MUST remain constant
-# after the first deploy — changing them orphans stored trace data and breaks NEXTAUTH
-# sessions. Re-use existing values from the secret; only generate fresh ones on first install.
-_gen_secret_256() { openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -dc 'a-f0-9' | head -c 64; }
-LANGFUSE_NEXTAUTH_SECRET="$(_read_secret opencrane-langfuse NEXTAUTH_SECRET)"
-LANGFUSE_NEXTAUTH_SECRET="${LANGFUSE_NEXTAUTH_SECRET:-$(_gen_secret)}"
-LANGFUSE_SALT="$(_read_secret opencrane-langfuse SALT)"
-LANGFUSE_SALT="${LANGFUSE_SALT:-$(_gen_secret)}"
-# ENCRYPTION_KEY must be 256 bits = 64 hex characters.
-LANGFUSE_ENCRYPTION_KEY="$(_read_secret opencrane-langfuse ENCRYPTION_KEY)"
-LANGFUSE_ENCRYPTION_KEY="${LANGFUSE_ENCRYPTION_KEY:-$(_gen_secret_256)}"
-LANGFUSE_PUBLIC_KEY="$(_read_secret opencrane-langfuse LANGFUSE_INIT_PROJECT_PUBLIC_KEY)"
-LANGFUSE_PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-pk-lf-$(_gen_secret | head -c 24)}"
-LANGFUSE_SECRET_KEY="$(_read_secret opencrane-langfuse LANGFUSE_INIT_PROJECT_SECRET_KEY)"
-LANGFUSE_SECRET_KEY="${LANGFUSE_SECRET_KEY:-sk-lf-$(_gen_secret | head -c 24)}"
-LANGFUSE_ADMIN_PASSWORD="$(_read_secret opencrane-langfuse LANGFUSE_INIT_USER_PASSWORD)"
-LANGFUSE_ADMIN_PASSWORD="${LANGFUSE_ADMIN_PASSWORD:-$(_gen_secret)}"
-# ClickHouse internal password (stable: changing it after init requires manual CH user management).
-LANGFUSE_CH_PASSWORD="$(_read_secret opencrane-langfuse CLICKHOUSE_PASSWORD)"
-LANGFUSE_CH_PASSWORD="${LANGFUSE_CH_PASSWORD:-$(_gen_secret)}"
-# Bitnami sub-subchart passwords inside the Langfuse chart. Bitnami charts require the
-# existing password to be re-supplied on every upgrade; we read-or-generate so the upgrade
-# never fails regardless of whether Langfuse is enabled. The values are stable after first
-# creation because each is read back from the cluster secret before generating a new one.
-LANGFUSE_S3_ROOT_PASSWORD="$(_read_secret opencrane-s3 root-password)"
-LANGFUSE_S3_ROOT_PASSWORD="${LANGFUSE_S3_ROOT_PASSWORD:-$(_gen_secret)}"
-LANGFUSE_REDIS_PASSWORD="$(_read_secret opencrane-redis valkey-password)"
-LANGFUSE_REDIS_PASSWORD="${LANGFUSE_REDIS_PASSWORD:-$(_gen_secret)}"
 
 log "Target cluster: $(kubectl config current-context)"
 log "Namespace: $NAMESPACE   Release: $RELEASE   Image tag: $IMAGE_TAG"
@@ -470,7 +436,6 @@ _require_postgres_bootstrap() {
 _require_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
 _require_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
 _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
-_require_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
 _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
 POSTGRES_RELEASE="${RELEASE}-postgres"
@@ -517,8 +482,8 @@ if [[ "$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX" -eq 0 ]]; then
 fi
 
 _install_postgres_server() {
-  local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}}]'
-  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
+  local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
+  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"}]"
   local postgres_args=(upgrade --install "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR"
     --namespace "$NAMESPACE"
     --set-json "databases=$databases_json"
@@ -541,7 +506,7 @@ _install_postgres_server() {
   # CNPG Pooler resources do not publish a Kubernetes Ready condition; the managed Deployment does.
   kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm" "${POSTGRES_RELEASE}-langfuse"; do
+  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   done
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
@@ -578,16 +543,14 @@ _install_postgres_server
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
-LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-langfuse-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
 # The one replica of the OpenCrane server gets five Prisma connections at most.
 # This leaves 75 of the 80 physical-server connections outside Prisma's process
-# pool and keeps the 50-connection PgBouncer database budget authoritative.
+# pool and keeps the 30-connection PgBouncer database budget authoritative.
 _publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 _publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
 _publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
-_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" langfuse
 _publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 
 _assert_distinct_cnpg_app_credentials() {
@@ -611,7 +574,7 @@ _assert_distinct_cnpg_app_credentials() {
     done
   done
 }
-_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
+_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
 
 # Per-database app secrets are canonical. Adapt only the key/name required by third-party charts.
 OBOT_DSN_SECRET="${RELEASE}-obot"
@@ -667,17 +630,6 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Langfuse secret. Contains stable credentials for the in-cluster Langfuse subchart.
-# SALT, ENCRYPTION_KEY, and API keys MUST be stable once set.
-kubectl create secret generic opencrane-langfuse -n "$NAMESPACE" \
-  --from-literal=NEXTAUTH_SECRET="$LANGFUSE_NEXTAUTH_SECRET" \
-  --from-literal=SALT="$LANGFUSE_SALT" \
-  --from-literal=ENCRYPTION_KEY="$LANGFUSE_ENCRYPTION_KEY" \
-  --from-literal=CLICKHOUSE_PASSWORD="$LANGFUSE_CH_PASSWORD" \
-  --from-literal=LANGFUSE_INIT_PROJECT_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
-  --from-literal=LANGFUSE_INIT_PROJECT_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
-  --from-literal=LANGFUSE_INIT_USER_PASSWORD="$LANGFUSE_ADMIN_PASSWORD" \
-  --dry-run=client -o yaml | kubectl apply -f -
 
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
@@ -699,14 +651,9 @@ if [[ -n "$OIDC_ISSUER_URL" ]]; then
 fi
 
 # 3. The OpenCrane chart.
-# Fetch subchart dependencies (Langfuse, and any others declared in Chart.yaml) — from Chart.lock,
-# NOT by re-resolving the version constraints. `helm dep build` rebuilds charts/ to exactly the
-# versions the committed Chart.lock pins, so a deploy ships the SAME subcharts CI validated and never
-# silently drifts to a newer langfuse (the dependency is pinned to an exact version in Chart.yaml).
-# It also won't rewrite the vendored Chart.lock/.tgz on every run the way `dep update` does. Bumping a
-# dependency is a deliberate edit (change Chart.yaml + run `helm dep update` once + commit the lock).
-log "Adding Langfuse Helm repository…"
-helm repo add langfuse https://langfuse.github.io/langfuse-k8s --force-update >/dev/null
+# Rebuild local chart dependencies from the committed lock without re-resolving
+# versions. This does not rewrite Chart.lock, so deploys use the same app-owned
+# chart versions that CI validated.
 log "Fetching chart dependencies (from Chart.lock)…"
 helm dep build "$CHART_DIR"
 
@@ -780,21 +727,6 @@ CP_TAG="${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>
 # in the chart. Setting it explicitly here keeps one source of truth for release hosts.
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set "ingress.domain=$BASE_DOMAIN")
-# Langfuse has its own database and role on this ClusterTenant's shared PostgreSQL server.
-# It never receives the OpenCrane, Obot, or LiteLLM credential.
-helm_args+=(--set-string "langfuse.postgresql.host=${POSTGRES_POOLER_HOST}.${NAMESPACE}.svc.cluster.local")
-helm_args+=(--set-string "langfuse.postgresql.auth.username=$LANGFUSE_POSTGRES_OWNER")
-helm_args+=(--set-string "langfuse.postgresql.auth.existingSecret=$LANGFUSE_POSTGRES_APP_SECRET")
-helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.userPasswordKey=password")
-helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.adminPasswordKey=password")
-helm_args+=(--set-string "langfuse.postgresql.auth.database=langfuse")
-helm_args+=(--set "langfuse.s3.auth.rootPassword=$LANGFUSE_S3_ROOT_PASSWORD")
-helm_args+=(--set "global.valkey.password=$LANGFUSE_REDIS_PASSWORD")
-helm_args+=(--set "langfuse.clickhouse.auth.password=$LANGFUSE_CH_PASSWORD")
-# Bitnami sub-subchart conditions default to deploy:true in the Langfuse chart even
-# when langfuse.inCluster.enabled=false; pass passwords unconditionally so Bitnami's
-# upgrade password-validation templates are satisfied regardless of Langfuse state.
-[[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set-string "langfuse.langfuse.nextauth.url=https://langfuse.${BASE_DOMAIN}")
 # OIDC human login is required by the deploy profile and rendered when an issuer URL is supplied.
 # --set-string (NOT --set): a large numeric Zitadel clientId passed via --set is YAML-parsed
 # as a float and rendered in scientific notation (e.g. 3.78…e+17) → Zitadel App.NotFound and

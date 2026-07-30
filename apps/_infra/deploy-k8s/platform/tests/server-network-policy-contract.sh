@@ -14,6 +14,11 @@ runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
+otel_rendered="$(helm template acme "$CHART_DIR" --set observability.otel.enabled=true)"
+otel_default_deny_rendered="$(helm template acme "$CHART_DIR" \
+  --set observability.otel.enabled=true \
+  --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
+  --show-only templates/networkpolicy-main-default-deny.yaml)"
 server_policy="$(printf '%s\n' "$rendered" | awk '
   function flush_document() {
     if (is_policy && is_server_policy) {
@@ -78,6 +83,12 @@ grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy
 grep -Fq '          port: 4000' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"
+grep -Fq 'value: "http://acme-opencrane-otel-collector.default.svc:4318"' <<<"$otel_rendered"
+grep -Fq '              app.kubernetes.io/component: otel-collector' <<<"$otel_rendered"
+if grep -Fq '          port: 4318' <<<"$otel_default_deny_rendered"; then
+  echo "platform default-deny must not widen OTLP egress beyond app-owned collector selectors" >&2
+  exit 1
+fi
 
 if grep -Fq '              app.kubernetes.io/component: mcp-gateway' <<<"$server_policy"; then
   echo "opencrane-server policy grants unused MCP gateway egress" >&2
@@ -88,11 +99,5 @@ if grep -Fq 'cnpg.io/cluster' <<<"$server_policy"; then
   echo "opencrane-server policy bypasses the PostgreSQL pooler" >&2
   exit 1
 fi
-
-langfuse_render="$(helm template opencrane-silo "$CHART_DIR" --set langfuse.inCluster.enabled=true)"
-grep -Fq 'value: "http://opencrane-silo-langfuse-web.default.svc.cluster.local:3000"' <<<"$langfuse_render"
-grep -Fq '              app.kubernetes.io/name: langfuse' <<<"$langfuse_render"
-grep -Fq '              app: web' <<<"$langfuse_render"
-grep -Fq '          port: 3000' <<<"$langfuse_render"
 
 echo "opencrane-server network policy contract: PASS"

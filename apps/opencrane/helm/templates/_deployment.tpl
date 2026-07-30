@@ -151,24 +151,6 @@ spec:
                   key: {{ .Values.litellm.secretKey }}
             {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
-            {{- /* Langfuse metrics proxy (AIR.10): wire the opencrane-ui to the in-cluster
-                   Langfuse when it is deployed as a subchart. LANGFUSE_HOST points at the
-                   in-cluster Service; public/secret keys come from the opencrane-langfuse
-                   Secret created by k8s-deploy.sh (never appear in rendered manifests). */ -}}
-            {{- if .Values.langfuse.inCluster.enabled }}
-            - name: LANGFUSE_HOST
-              value: "http://{{ .Release.Name }}-langfuse-web.{{ .Release.Namespace }}.svc.cluster.local:3000"
-            - name: LANGFUSE_PUBLIC_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.langfuse.inCluster.existingSecret }}
-                  key: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
-            - name: LANGFUSE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.langfuse.inCluster.existingSecret }}
-                  key: LANGFUSE_INIT_PROJECT_SECRET_KEY
-            {{- end }}
             # Server-owned Kubernetes operations are restricted to this release namespace.
             - name: POD_NAMESPACE
               valueFrom:

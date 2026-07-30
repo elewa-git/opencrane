@@ -8,8 +8,7 @@ import { _log } from "../log.js";
  * null on a missing/ambiguous subject or any lookup failure — never an arbitrary pick and never
  * taken from request input.
  *
- * Single source of truth (Track AIR) for the ClusterTenant scope guard (mutation authz), the
- * read-time scope filters (the savings-recommendation feed + the metrics proxy), and `/auth/me`
+ * Single source of truth for the ClusterTenant scope guard (mutation authz) and `/auth/me`
  * introspection. Keep these on one implementation so the fail-closed rule cannot drift between
  * call sites.
  *
