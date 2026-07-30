@@ -3,7 +3,7 @@ import { AgentRevisionState, AgentServiceKind, AgentServiceState, GrantScope, Gr
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
 import type { AgentBudget, AgentRevisionContent, GrantScope as DomainGrantScope, GrantSubjectType as DomainGrantSubjectType } from "@opencrane/models/agents";
 
-import type { CreateAgentRevisionWithinTransactionCommand, MaterializeAgentRevisionModelSelectionWithinTransactionCommand, MaterializeAgentRevisionModelSelectionWithinTransactionResult } from "./prisma-agent-revision-writer.types.js";
+import { AgentRevisionModelSelectionMaterializationCodes, type CreateAgentRevisionWithinTransactionCommand, type MaterializeAgentRevisionModelSelectionWithinTransactionCommand, type MaterializeAgentRevisionModelSelectionWithinTransactionResult } from "./prisma-agent-revision-writer.types.js";
 
 /** Include every nested assignment required to map a persisted revision back to the domain model. */
 export const _AGENT_REVISION_INCLUDE = {
@@ -185,7 +185,7 @@ export async function __MaterializeAgentRevisionModelSelectionWithinTransaction(
 	});
 	if (service === null || service.activeRevisionId !== command.expectedSourceRevisionId)
 	{
-		return { status: "stale_source" };
+		return { status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
 	}
 
 	// 2. Load the exact published source and prove its persona is still the accepted one.
@@ -200,7 +200,7 @@ export async function __MaterializeAgentRevisionModelSelectionWithinTransaction(
 	});
 	if (source === null || source.personaRevisionId !== command.expectedPersonaRevisionId)
 	{
-		return { status: "stale_source" };
+		return { status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
 	}
 
 	// 3. Prove the active source is also the latest persisted revision in this service lineage.
@@ -212,7 +212,7 @@ export async function __MaterializeAgentRevisionModelSelectionWithinTransaction(
 	});
 	if (latest?.id !== source.id)
 	{
-		return { status: "stale_source" };
+		return { status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
 	}
 
 	// 4. Resolve the owner-visible alias only after every source fence has passed.
@@ -224,7 +224,7 @@ export async function __MaterializeAgentRevisionModelSelectionWithinTransaction(
 	);
 	if (modelDefinitionId === null)
 	{
-		return { status: "model_unavailable" };
+		return { status: AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable };
 	}
 
 	// 5. Reconstruct one canonical content value and append the next immutable draft.
@@ -262,7 +262,7 @@ export async function __MaterializeAgentRevisionModelSelectionWithinTransaction(
 			updatedAt: command.materializedAt,
 		},
 	});
-	return { status: "materialized", agentRevisionId: draft.id };
+	return { status: AgentRevisionModelSelectionMaterializationCodes.Materialized, agentRevisionId: draft.id };
 }
 
 /** Resolve a public model alias with tenant scope taking precedence over the global fallback. */

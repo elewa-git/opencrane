@@ -41,6 +41,12 @@ fresh context — do not assume the author's intent was correct.
 
 ### DIMENSION: correctness
 - Logic bugs, edge cases, off-by-one, unhandled null/undefined.
+- **Categorical contract drift:** OpenCrane-owned discriminants that select control flow, define a
+  durable union, or cross a package/persistence/API boundary use elaborately documented,
+  string-backed enums. Confirm each `CATEGORICAL-LITERAL` script warning before reporting it. A
+  branch such as `patch.kind === "persona_refresh"` is a finding when the category is ours; HTTP
+  methods, MIME/schema/Kubernetes/third-party protocol values, generated Prisma enums, deliberate
+  invalid-input fixtures, and one-off static data are not.
 - Unintended violations of the declared target contract. In direct-replacement work, compatibility
   shims, dual writes, old-protocol fallbacks, and preservation of code classified for deletion are
   defects.

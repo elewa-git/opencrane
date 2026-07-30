@@ -2,6 +2,8 @@ import { Router, type Request, type Response } from "express";
 
 import { __DecidePersonalConfigurationChange } from "./personal-configuration-decision.js";
 import { __MaterializePersonalConfigurationChange } from "./personal-configuration-materialization.js";
+import { PersonalConfigurationDecisionCodes } from "./personal-configuration.types.js";
+import { PersonalConfigurationMaterializationCodes } from "./personal-configuration-materialization.types.js";
 import type { PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
 
 /** Create the browser-session-authenticated personal configuration proposal state router. */
@@ -33,9 +35,9 @@ export function __CreatePersonalConfigurationRouter(dependencies: PersonalConfig
 		try
 		{
 			const result = await __DecidePersonalConfigurationChange(dependencies.decisions, { siloId: caller.siloId, userId: caller.userId, changeId, decision: decision.decision, rejectionReason: decision.rejectionReason, decidedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome !== "denied") { response.status(200).json({ changeId, state: result.outcome }); return; }
-			if (result.reason === "not_found_or_not_owner" || result.reason === "already_decided") { response.status(404).json({ error: "configuration_change_not_found" }); return; }
-			if (result.reason === "persistence_unavailable") { response.status(503).json({ error: "configuration_decision_unavailable" }); return; }
+			if (result.outcome !== PersonalConfigurationDecisionCodes.Denied) { response.status(200).json({ changeId, state: result.outcome }); return; }
+			if (result.reason === PersonalConfigurationDecisionCodes.NotFoundOrNotOwner || result.reason === PersonalConfigurationDecisionCodes.AlreadyDecided) { response.status(404).json({ error: "configuration_change_not_found" }); return; }
+			if (result.reason === PersonalConfigurationDecisionCodes.PersistenceUnavailable) { response.status(503).json({ error: "configuration_decision_unavailable" }); return; }
 			response.status(400).json({ error: "invalid_configuration_decision" });
 		}
 		catch (err)
@@ -54,13 +56,13 @@ export function __CreatePersonalConfigurationRouter(dependencies: PersonalConfig
 		try
 		{
 			const result = await __MaterializePersonalConfigurationChange(dependencies.materializer, { siloId: caller.siloId, userId: caller.userId, changeId, materializedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied")
+			if (result.outcome === PersonalConfigurationMaterializationCodes.Denied)
 			{
 				response.status(_materializationDenialStatus(result.reason)).json({ error: result.reason });
 				return;
 			}
 
-			response.status(200).json(result.outcome === "applied" ? { changeId, state: "applied", agentRevisionId: result.agentRevisionId } : { changeId, state: "accepted", materialized: false });
+			response.status(200).json(result.outcome === PersonalConfigurationMaterializationCodes.Applied ? { changeId, state: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: result.agentRevisionId } : { changeId, state: PersonalConfigurationDecisionCodes.Accepted, materialized: false });
 		}
 		catch (err)
 		{
@@ -73,21 +75,21 @@ export function __CreatePersonalConfigurationRouter(dependencies: PersonalConfig
 }
 
 /** Accept only the closed decision payload; callers cannot supply ownership or application fields. */
-function _decision(body: unknown): { readonly decision: "accepted" | "rejected"; readonly rejectionReason: string | null } | null
+function _decision(body: unknown): { readonly decision: PersonalConfigurationDecisionCodes.Accepted | PersonalConfigurationDecisionCodes.Rejected; readonly rejectionReason: string | null } | null
 {
 	if (body === null || typeof body !== "object" || Array.isArray(body)) return null;
 	const values = body as Record<string, unknown>;
-	if (values.decision === "accepted" && Object.keys(values).length === 1) return { decision: "accepted", rejectionReason: null };
-	if (values.decision === "rejected" && typeof values.rejectionReason === "string" && Object.keys(values).length === 2) return { decision: "rejected", rejectionReason: values.rejectionReason };
+	if (values.decision === PersonalConfigurationDecisionCodes.Accepted && Object.keys(values).length === 1) return { decision: PersonalConfigurationDecisionCodes.Accepted, rejectionReason: null };
+	if (values.decision === PersonalConfigurationDecisionCodes.Rejected && typeof values.rejectionReason === "string" && Object.keys(values).length === 2) return { decision: PersonalConfigurationDecisionCodes.Rejected, rejectionReason: values.rejectionReason };
 	return null;
 }
 
 /** Map an accepted-proposal materialization refusal to a bounded self-only HTTP response. */
 function _materializationDenialStatus(reason: string): number
 {
-	if (reason === "persistence_unavailable") return 503;
-	if (reason === "not_found_or_not_owner") return 404;
-	if (reason === "not_accepted" || reason === "stale_proposal") return 409;
+	if (reason === PersonalConfigurationMaterializationCodes.PersistenceUnavailable) return 503;
+	if (reason === PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner) return 404;
+	if (reason === PersonalConfigurationMaterializationCodes.NotAccepted || reason === PersonalConfigurationMaterializationCodes.StaleProposal) return 409;
 	return 422;
 }
 

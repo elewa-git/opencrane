@@ -68,6 +68,9 @@ with a plain reason.
   journal transition. Agent-services proves the frozen source, reconstructs its canonical content,
   changes only the model definition, appends and publishes the next revision, and activates it. The
   caller owns the surrounding transaction and final proposal compare-and-set.
+- `AgentRevisionModelSelectionMaterializationCodes` — the documented cross-package result vocabulary
+  for that model-selection seam. It preserves its serialized outcomes while preventing personal
+  configuration from inventing or drifting from agent-services' source-fence results.
 - `__PublishAgentRevision` + `PrismaAgentServicePublicationRepository` — the reused compare-and-swap
 publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
 same database update, so no retired service can still look runnable.

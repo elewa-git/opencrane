@@ -81,10 +81,58 @@ Rules to check:
 4. **Exported interfaces and type aliases in `*.types.ts`** — not in the implementation file.
 5. **Function naming** — file-private: `_camelCase`; same-package export: `_PascalCase`; same-domain: `__PascalCase`; wide/global: `___PascalCase`.
 6. **New tests under `__tests__/`** — a `*.test.ts` co-located next to the source file it tests, instead of under a `__tests__` directory, is a violation. See [Test File Location](#test-file-location).
+7. **Categorical branches use documented string-backed enums** — confirm every
+   `CATEGORICAL-LITERAL` warning is either replaced with the owning enum or is an explicit external
+   protocol/schema/data exemption.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
 
 The self-review table is a self-check and is **not** sufficient on its own — an independent review gate may still fire. See [Mandatory Independent Review](./workflow.md#mandatory-independent-review-policy-driven-gate) in `workflow.md`.
+
+## String-Backed Enums For Categorical Control Flow
+
+OpenCrane-owned categorical values must use a documented string-backed enum when they select a
+control-flow branch, define a durable discriminated union, or cross a package, persistence, or API
+boundary. Do not repeat serialized values in comparisons, `switch` cases, validators, schema
+builders, or persistence filters.
+
+The enum is the canonical vocabulary; its string values preserve readable JSON and existing wire or
+database compatibility. Put a cross-package vocabulary in the lowest dependency-neutral model or
+`@opencrane/contracts` package, then import it through that package's barrel. Keep adapter-only
+Prisma enums at the persistence edge and map them explicitly.
+
+Every enum needs JSDoc that explains its authority boundary, serialization commitments, and why the
+categories exist. Every member also needs JSDoc that explains the domain meaning and any authority
+it does or does not grant.
+
+```typescript
+// WRONG — the union and branch can silently drift from schemas and persistence filters.
+export type AgentConfigPatch = { readonly kind: "persona_refresh" } | { readonly kind: "model_alias" };
+if (patch.kind === "persona_refresh") return _StartInterview();
+
+// CORRECT — one documented vocabulary retains the same serialized strings everywhere.
+/**
+ * Stable discriminants persisted with every personal configuration proposal.
+ *
+ * These values are shared by validation, storage filters, and public schemas.
+ */
+export enum AgentConfigPatchKinds
+{
+	/** Starts reviewed persona onboarding; it never carries replacement persona text. */
+	PersonaRefresh = "persona_refresh",
+	/** Selects a registered model alias for a future immutable agent revision. */
+	ModelAlias = "model_alias",
+}
+
+export type AgentConfigPatch = { readonly kind: AgentConfigPatchKinds.PersonaRefresh } | { readonly kind: AgentConfigPatchKinds.ModelAlias };
+if (patch.kind === AgentConfigPatchKinds.PersonaRefresh) return _StartInterview();
+```
+
+Do not manufacture enums for data that OpenCrane does not own: HTTP methods, MIME types, OpenAPI or
+JSON-Schema keywords, Kubernetes kinds, third-party protocol constants, Prisma's generated enum
+values, deliberate invalid-input fixtures, and one-off static identifiers remain strings. The
+reviewer must confirm ownership and categorical reuse before reporting the style check's
+`CATEGORICAL-LITERAL` warning.
 
 ## Inline Step Comments
 

@@ -25,6 +25,7 @@
 #   TEST-LOCATION     *.test.ts file not placed under a __tests__ directory
 #   MISSING-README    new/changed package (project.json) with no sibling README.md
 #   README-SECTIONS   leaf package README missing a mandatory package-docs section
+#   CATEGORICAL-LITERAL direct string comparison of a common discriminant (review-required WARN)
 
 set -euo pipefail
 
@@ -197,6 +198,12 @@ for f in "${CHECKABLE[@]}"; do
 			done < <(grep -nE '(^|[^.[:alnum:]_])console\.(log|warn|error|info|debug)\(' "$f" || true)
 			;;
 	esac
+
+	# CATEGORICAL-LITERAL — the style checker cannot know whether a vocabulary is OpenCrane-owned,
+	# external, or an intentional invalid-input fixture. Emit a WARN for review to confirm ownership.
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" WARN CATEGORICAL-LITERAL "direct string comparison on a categorical discriminant — use a documented string-backed enum or confirm an explicit exemption"
+	done < <(grep -nE '\.(kind|status|outcome|reason|state|decision)[[:space:]]*(===|!==)[[:space:]]*"[^"]+"' "$f" || true)
 
 	# TYPES-IN-IMPL — exported interfaces/type aliases belong in *.types.ts.
 	# (A bare `types.ts` is a types file by intent — exempt.)

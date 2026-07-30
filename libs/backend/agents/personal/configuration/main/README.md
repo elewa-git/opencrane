@@ -61,6 +61,11 @@ means the request is already user-approved or applied.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
   and authored-persona workflow; `model_alias` requests a human-visible model alias. It cannot carry
   raw SOUL text, budgets, credentials, policy IDs, tools, skills, integrations, or revision IDs.
+- `AgentConfigPatchKinds` is the shared durable patch vocabulary from `@opencrane/contracts`.
+  `PersonalConfigurationProposalCodes`, `PersonalConfigurationDecisionCodes`,
+  `PersonalConfigurationMaterializationCodes`, and `PersonalConfigurationChangeViewStates` are this
+  package's documented result and lifecycle vocabularies. Their member values preserve the JSON and
+  API spellings while keeping validators, persistence, routes, and schemas compiler-linked.
 
 ## Boundary
 

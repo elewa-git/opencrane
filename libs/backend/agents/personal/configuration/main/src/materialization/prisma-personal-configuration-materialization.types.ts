@@ -1,5 +1,19 @@
 import type { PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
 
+/**
+ * Internal lock-stage outcomes for the proposal-before-service materialization procedure.
+ *
+ * These values never leave the materialization module. They make its control-flow boundary explicit:
+ * only a ready lock may acquire the service lock, while terminal means a safe replay or refusal.
+ */
+export enum ProposalLockOutcomes
+{
+	/** Profile and proposal locks proved a model-selection proposal ready for service processing. */
+	Ready = "ready",
+	/** Locking reached a final replay/refusal outcome and must not perform later writes. */
+	Terminal = "terminal",
+}
+
 /** Accepted owner-bound proposal after profile and proposal locks prove its recorded persona head. */
 export interface LockedModelSelectionProposal
 {
@@ -15,5 +29,5 @@ export interface LockedModelSelectionProposal
 
 /** Successful proposal-lock result, or a terminal outcome that requires no further database work. */
 export type ProposalLockResult =
-	| { readonly outcome: "ready"; readonly proposal: LockedModelSelectionProposal }
-	| { readonly outcome: "terminal"; readonly result: PersonalConfigurationMaterializationPersistenceResult };
+	| { readonly outcome: ProposalLockOutcomes.Ready; readonly proposal: LockedModelSelectionProposal }
+	| { readonly outcome: ProposalLockOutcomes.Terminal; readonly result: PersonalConfigurationMaterializationPersistenceResult };

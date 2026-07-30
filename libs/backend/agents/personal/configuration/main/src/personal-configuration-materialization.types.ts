@@ -13,18 +13,45 @@ export interface MaterializePersonalConfigurationChangeCommand
 
 /** Stable outcome from applying an accepted personal model selection. */
 export type MaterializePersonalConfigurationChangeResult =
-	| { readonly outcome: "applied"; readonly agentRevisionId: string }
-	| { readonly outcome: "not_applicable" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_not_owner" | "not_accepted" | "stale_proposal" | "model_unavailable" | "persistence_unavailable" };
+	| { readonly outcome: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string }
+	| { readonly outcome: PersonalConfigurationMaterializationCodes.NotApplicable }
+	| { readonly outcome: PersonalConfigurationMaterializationCodes.Denied; readonly reason: PersonalConfigurationMaterializationCodes.InvalidCommand | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 
 /** Atomic persistence outcome after evaluating and, when possible, applying one accepted proposal. */
 export type PersonalConfigurationMaterializationPersistenceResult =
-	| { readonly status: "applied"; readonly agentRevisionId: string }
-	| { readonly status: "not_applicable" | "not_found_or_not_owner" | "not_accepted" | "stale_proposal" | "model_unavailable" | "persistence_unavailable" };
+	| { readonly status: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string }
+	| { readonly status: PersonalConfigurationMaterializationCodes.NotApplicable | PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner | PersonalConfigurationMaterializationCodes.NotAccepted | PersonalConfigurationMaterializationCodes.StaleProposal | PersonalConfigurationMaterializationCodes.ModelUnavailable | PersonalConfigurationMaterializationCodes.PersistenceUnavailable };
 
 /** Persistence boundary that materialises a proposal without changing an in-flight run. */
 export interface PersonalConfigurationChangeMaterializationRepository
 {
 	/** Applies the accepted model-alias proposal to a fresh immutable personal AgentRevision. */
 	materializeAtomically(command: MaterializePersonalConfigurationChangeCommand): Promise<PersonalConfigurationMaterializationPersistenceResult>;
+}
+/**
+ * Stable outcomes from materializing an accepted personal model-alias proposal.
+ *
+ * These values cross the router, materialization authority, and Prisma adapter. The enum is the
+ * only package-owned vocabulary for those boundaries; its strings remain existing API values.
+ */
+export enum PersonalConfigurationMaterializationCodes
+{
+	/** The proposal was applied to a new immutable agent revision. */
+	Applied = "applied",
+	/** The accepted proposal belongs to another configuration workflow. */
+	NotApplicable = "not_applicable",
+	/** The owner-bound command was malformed. */
+	InvalidCommand = "invalid_command",
+	/** No proposal belongs to the supplied user and silo. */
+	NotFoundOrNotOwner = "not_found_or_not_owner",
+	/** The proposal has not been accepted. */
+	NotAccepted = "not_accepted",
+	/** A later persona or service revision invalidated the proposal. */
+	StaleProposal = "stale_proposal",
+	/** The requested model alias is not available in the owner silo. */
+	ModelUnavailable = "model_unavailable",
+	/** Persistence failed before an authoritative materialization result was available. */
+	PersistenceUnavailable = "persistence_unavailable",
+	/** The authority refused the materialization request. */
+	Denied = "denied",
 }

@@ -44,8 +44,24 @@ export interface MaterializeAgentRevisionModelSelectionWithinTransactionCommand
 	readonly materializedAt: Date;
 }
 
+/**
+ * Stable results from agent-services' model-selection transaction seam.
+ *
+ * Personal configuration consumes these values across a package boundary, so agent-services owns
+ * the vocabulary and preserves the strings while callers compile against one shared contract.
+ */
+export enum AgentRevisionModelSelectionMaterializationCodes
+{
+	/** A new immutable revision was appended and activated. */
+	Materialized = "materialized",
+	/** No registered model definition matches the owner-visible alias in the silo. */
+	ModelUnavailable = "model_unavailable",
+	/** The service or source revision changed after the proposal was accepted. */
+	StaleSource = "stale_source",
+}
+
 /** Result of the agent-service-owned model-selection materialization. */
 export type MaterializeAgentRevisionModelSelectionWithinTransactionResult =
-	| { readonly status: "materialized"; readonly agentRevisionId: string }
-	| { readonly status: "model_unavailable" }
-	| { readonly status: "stale_source" };
+	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.Materialized; readonly agentRevisionId: string }
+	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable }
+	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
