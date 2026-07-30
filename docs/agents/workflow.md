@@ -57,6 +57,26 @@ Emoji convention (derived from commit history; the count is how often it already
 When an intent isn't covered above, pick the closest [gitmoji](https://gitmoji.dev/) and prefer
 reusing an emoji already in this table over introducing a new one.
 
+## Language-neutral module-growth gate
+
+Before adding substantial production code in any language, run:
+
+```bash
+npm run check:module-growth
+```
+
+For a branch or PR range, use `npm run check:module-growth -- --diff <base-ref>`. The checker is
+diff-scoped and excludes tests, generated code, dependencies, fixtures, and build output.
+
+- A review candidate requires a responsibility inventory and the maintainability review dimension.
+- A module that crosses or grows beyond the configured hard maximum must be split or receive a
+  temporary exact-path exception with an owner, reason, and expiry.
+- Size is only the trigger. Architecture and review findings must demonstrate a concrete cohesion,
+  ownership, dependency, ordering, or core-path testing problem.
+
+See [`maintainability.md`](./maintainability.md) for the cross-language policy and exception
+contract.
+
 ## Mandatory Independent Review (Policy-Driven Gate)
 
 The [self-review compliance table](./typescript.md#self-review-before-finishing) is a self-check and
@@ -75,18 +95,23 @@ does **not** update that package's `README.md` in the same change is an incomple
 review gate treats a stale or missing package README as a finding. See
 [`package-docs.md`](./package-docs.md) for the standard.
 
-Run `scripts/agent-style-check.sh` before delegating — mechanical style violations are
-cheaper to fix pre-review than to have the reviewer report back.
+Run `scripts/agent-style-check.sh` and `npm run check:module-growth` before delegating. The first
+checks TypeScript mechanics; the second produces language-neutral architecture candidates.
+Mechanical errors are cheaper to fix before review, while module-growth warnings give the reviewer
+the exact files that need a responsibility inventory.
 
-**How the gate decides** (two `Stop` hooks run in parallel):
+**How the gate decides**:
 
 - `.claude/hooks/require-review.sh` — a free shell pre-filter. It skips the obvious
-  cases (no TypeScript change, trivial size, test/type-only/generated files,
+  cases (no supported production-source change, trivial size, test/type-only/generated files,
   already-reviewed) and escalates the rest. It writes `.claude/.review-context.md`
   for the judge.
-- A **Haiku agent hook** reads that context plus `.claude/review-policy.md` and judges
-  whether the change carries real risk (auth, secrets, network, IAM, money, or
-  non-trivial production control flow). It blocks (`ok:false`) only when warranted.
+- In Claude Code, a **Haiku agent hook** reads that context plus `.claude/review-policy.md` in
+  parallel with the pre-filter. It judges whether the change carries real risk (auth, secrets,
+  network, IAM, money, or non-trivial production control flow) and blocks only when warranted.
+- In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter and translates `JUDGE` into a
+  blocking `Stop` continuation that requires the independent review agent. Only a fresh, explicit
+  `SKIP` lets the turn end; a checker crash, missing context, or unknown verdict blocks closed.
 
 **`.claude/review-policy.md` is the single tunable surface.** If review fires too often
 and burns tokens — or misses something — edit that file (threshold, `always-review`

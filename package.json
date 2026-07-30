@@ -14,6 +14,8 @@
     "test": "nx run-many -t test",
     "lint": "nx run-many -t lint",
     "lint:boundaries": "eslint .",
+    "check:module-growth": "node scripts/module-growth-check.mjs",
+    "test:module-growth": "node --test scripts/__tests__/module-growth-check.test.mjs",
     "test:phase-a-forbidden-references": "./scripts/phase-a-forbidden-references-negative-tests.sh",
     "check:phase-b-topology": "./scripts/phase-b-topology.sh",
     "test:phase-b-topology": "./scripts/phase-b-topology-negative-tests.sh",

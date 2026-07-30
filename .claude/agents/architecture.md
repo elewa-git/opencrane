@@ -18,11 +18,13 @@ Read these before reaching a verdict:
 
 1. `AGENTS.md`;
 2. `docs/agents/monorepo.md`;
-3. `docs/agents/architecture.md`, `docs/agents/cluster-architecture.md`, and
+3. `docs/agents/maintainability.md` when a changed production module triggers the
+   language-neutral growth checker;
+4. `docs/agents/architecture.md`, `docs/agents/cluster-architecture.md`, and
    `docs/agents/app-specific.md` when the slice touches identity, Kubernetes, apps, or libraries;
    also `docs/agents/package-docs.md` when the slice adds or moves a package;
-4. the selected `plan.md` entry and its linked issue/design acceptance criteria;
-5. for personal-agent replacement work, the active direct-refactor plan and the target architecture
+5. the selected `plan.md` entry and its linked issue/design acceptance criteria;
+6. for personal-agent replacement work, the active direct-refactor plan and the target architecture
    it links.
 
 Inventory live `apps/`, `libs/`, NX projects, and rendered manifests before using the static package
@@ -127,6 +129,15 @@ preserves the old implementation, so no compatibility or operational-retention g
 
 ## Other architecture checks
 
+- Treat `scripts/module-growth-check.mjs` findings as mandatory responsibility-inventory triggers
+  across every supported production language. For each candidate, classify configuration/identity,
+  external I/O, orchestration, domain policy, protocol translation, persistence, retry/cancellation,
+  and observability/lifecycle ownership. BLOCK only when that inventory proves independently
+  changing responsibilities, a hidden dependency direction, coordinated-edit risk, or an
+  untestable core path. Raw line count alone is never a blocker.
+- When a split is required, name the functional owners, inputs, outputs, authority boundaries,
+  dependency direction, failure/concurrency semantics, and public tests. Reject cosmetic helper
+  extraction that leaves the original file as the detailed owner of every step.
 - Preserve one authority per business fact and explicit upstream/downstream contracts.
 - Apply IAM-first identity, dedicated KSA, least-privilege RBAC, default-disabled token automount,
   narrow projected audiences, and fail-closed network policy rules.

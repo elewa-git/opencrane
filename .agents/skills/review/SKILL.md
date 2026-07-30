@@ -54,8 +54,10 @@ maintainability pass.
 - Cite `file:line` for every finding so the author can jump straight to it.
 - **Verify before you assert.** Re-read the cited lines and trace the actual behaviour;
   never report a speculative, pattern-matched, or unconfirmed claim as a finding.
-- **Mechanical style comes from the script.** Run `scripts/agent-style-check.sh`; do
-  not substitute subjective style hunting for the modeled maintainability review.
+- **Mechanical candidates come from scripts.** Run `scripts/agent-style-check.sh` and
+  `npm run check:module-growth`; do not substitute subjective style hunting for the
+  modeled maintainability review. Module-growth output triggers a responsibility
+  inventory but is never a finding by itself.
 
 ## Review checklist
 
@@ -109,6 +111,10 @@ maintainability pass.
      and in what order), not just "this looks unused." When the caller
      asks for fixes, perform the removal following that sequencing.
 8. **Maintainability and readability (a modeled design concern, not cosmetic style)**
+   - For every language-neutral module-growth candidate, inventory configuration/identity,
+     external I/O, orchestration, domain policy, protocol translation, persistence,
+     retry/cancellation, and observability/lifecycle ownership. A threshold crossing is
+     only a trigger; report a finding only when the inventory proves a concrete problem.
    - Check cohesion: a function, class, or repository adapter should not own several
      independently changing responsibilities. Inspect transactions that combine
      lookup, locking, lifecycle validation, policy/model resolution, domain-object

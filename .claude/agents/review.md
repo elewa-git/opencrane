@@ -21,15 +21,17 @@ fresh context — do not assume the author's intent was correct.
    files or a PR range, use those instead.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
    dimension's checklist below. Otherwise cover all four.
-3. **Style is a script, not a judgment.** Run `scripts/agent-style-check.sh` (it scopes
-   itself to the diff). Copy its ERROR lines into your findings as **Low** severity
+3. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`
+   and `npm run check:module-growth` (both scope themselves to the diff). Copy style
+   ERROR lines into your findings as **Low** severity
    (verbatim, one line each). Confirm each WARN line at the cited location before
    including it. **Do not hunt for mechanical style issues beyond the script's output.**
-   Maintainability is a modeled design concern, not mechanical formatting: review it
-   through the evidence-based checklist below.
+   Module-growth output is a responsibility-inventory trigger, not a finding: review the
+   cited module through the evidence-based maintainability checklist below.
 4. **Grounding reads — only what the change touches:**
-   - `.ts` changed → the script covers mechanics; read `docs/agents/typescript.md`
+   - `.ts` changed → the style script covers mechanics; read `docs/agents/typescript.md`
      only if you need to confirm a convention the script flagged as WARN.
+   - any production module-growth candidate → `docs/agents/maintainability.md`.
    - auth/routes/tokens changed → `docs/agents/architecture.md` (IAM-first policy).
    - RBAC/NetworkPolicy/service accounts changed → `docs/agents/k8s.md`.
    - `plan.md` changed → `docs/agents/workflow.md` § Planning Discipline.
@@ -83,6 +85,11 @@ fresh context — do not assume the author's intent was correct.
   transaction procedures that combine lookup, locking, lifecycle validation, model or
   policy resolution, domain-object construction, persistence, activation, and error
   translation. Name the cohesive boundaries that should exist; size alone is not proof.
+- **Cross-language module growth.** For every module reported by
+  `scripts/module-growth-check.mjs`, inventory configuration/identity, external I/O,
+  orchestration, domain policy, protocol translation, persistence, retry/cancellation,
+  and observability/lifecycle responsibilities. Report only a verified boundary problem;
+  a threshold crossing by itself is not a finding.
 - **Comprehensible orchestration.** A complex procedure should read as a short
   orchestration over intention-revealing helpers that share the same transaction-scoped
   client. Extraction must preserve atomicity, lock order, retry/idempotency semantics,

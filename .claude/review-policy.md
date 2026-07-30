@@ -19,10 +19,10 @@ not the keys.
 <!-- GATE-CONFIG-START -->
 threshold=10
 always-review=auth token secret credential oidc iam rbac networkpolicy network-policy egress middleware bearer session budget spend payment
-never-review-paths=__tests__/ .test.ts .spec.ts .types.ts /generated/ /dist/
+never-review-paths=__tests__/ /tests/ /test/ /spec/ /test_ _test.go Test.java Test.kt .test. .spec. .types.ts /generated/ /dist/ /fixtures/ /vendor/
 <!-- GATE-CONFIG-END -->
 
-- **threshold** — TypeScript changes of this many total lines or fewer skip the gate
+- **threshold** — supported production-source changes of this many total lines or fewer skip the gate
   (unless an `always-review` keyword matches). Raise it to review less; lower to review more.
 - **always-review** — case-insensitive keywords. If any changed file path or diff line
   contains one, the change is escalated to the Haiku judge regardless of size.
@@ -33,7 +33,7 @@ never-review-paths=__tests__/ .test.ts .spec.ts .types.ts /generated/ /dist/
 
 ## Judgment guidance (read by the Haiku judge)
 
-You are deciding whether a TypeScript change needs an independent `@review` pass before
+You are deciding whether a production-source change needs an independent `@review` pass before
 the turn ends. Block (`ok:false`) only when the change carries real risk. Allow (`ok:true`)
 otherwise — over-blocking wastes tokens.
 
@@ -50,6 +50,9 @@ otherwise — over-blocking wastes tokens.
   writes, duplicated domain algorithms, or core workflows whose success path is not
   exercised through the public boundary. These need an evidence-based maintainability
   pass; raw function or line length alone is not enough to block.
+- Any file reported by the language-neutral module-growth checker. Treat the report as a
+  responsibility-inventory trigger, then judge the real cohesion, dependency direction,
+  authority ownership, ordering, and public test seam.
 
 **Allow (skip review) when the change is:**
 - Comments, JSDoc, logging, or formatting only.
@@ -70,3 +73,5 @@ Record changes here so the feedback loop is visible to the team.
   type-only, and generated code are skipped.
 - 2026-07-29: model maintainability explicitly for complex transactions, persistence
   ownership, duplicated domain algorithms, and untested core orchestration paths.
+- 2026-07-30: extend the pre-filter and module-growth trigger across supported production
+  languages; keep size as a review trigger rather than a modeled finding.
