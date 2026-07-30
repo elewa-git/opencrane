@@ -99,8 +99,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   under `libs/backend/server`, and server-process support lives under `libs/server/_infra`.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
-  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, Obot, and
-  Langfuse live under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
+  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, and Obot live
+  under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
 
 - **Platform developers can reuse functional server capabilities without importing an app root.**
   Tenant reconciliation, identity, projection, connection auth, policy reconciliation, channel
@@ -697,6 +697,9 @@ Per-org domain serving, the full multi-tenant deploy pipeline, and the identity-
   Microsoft Entra dependency.** `website/security/identity.md` now states this plainly and
   documents the expected `groups`/`roles` claim names (`OIDC_GROUPS_CLAIM`/`OIDC_ROLES_CLAIM`)
   and how the operator-group and seed-email parameters are configured at install.
+
+> The 0.4.0 entries below record release-time capabilities. The Langfuse integration and metrics
+> endpoint described there were removed in Unreleased.
 
 ## [0.4.0] — 2026-06-19
 

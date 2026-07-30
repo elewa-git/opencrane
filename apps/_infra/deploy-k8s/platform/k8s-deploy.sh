@@ -688,8 +688,9 @@ if [[ -n "$OIDC_ISSUER_URL" ]]; then
 fi
 
 # 3. The OpenCrane chart.
-# Fetch subchart dependencies from the committed lock so deploys use the same
-# local app-owned chart versions that CI validated.
+# Rebuild local chart dependencies from the committed lock without re-resolving
+# versions. This does not rewrite Chart.lock, so deploys use the same app-owned
+# chart versions that CI validated.
 log "Fetching chart dependencies (from Chart.lock)…"
 helm dep build "$CHART_DIR"
 

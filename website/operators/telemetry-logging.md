@@ -80,6 +80,5 @@ not install or configure a telemetry backend.
 
 ## See also
 
-- [Runbook](/operators/runbook) — operational procedures
 - [Runbook](/operators/runbook) — how operators use these signals during incidents
-- [Model routing](/guide/model-routing) — cost & quality metrics built on this pipeline
+- [Model routing](/guide/model-routing) — how model defaults are resolved and frozen for execution

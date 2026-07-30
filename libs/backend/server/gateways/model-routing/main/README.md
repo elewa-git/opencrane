@@ -40,8 +40,8 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
 
 ## Public surface
 
-- `modelRoutingDefaultsRouter`, `_RegisterInternalTenantModels` — the
-  routers, mounted at `/api/v1/model-routing/*` and `/api/internal/tenant-models`.
+- `modelRoutingDefaultsRouter` — the routing-defaults router, mounted at
+  `/api/v1/model-routing/defaults`.
 - `_ResolveSkillModel` — resolve a skill's effective model by the locked precedence chain.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
   `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.

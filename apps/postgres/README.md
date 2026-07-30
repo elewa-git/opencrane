@@ -57,7 +57,7 @@ batch in one transaction, and leaves a short Job-deadline grace period for the f
 diagnostic. A persistent failure still blocks the Helm hook.
 
 The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
-budget permits at most ten server connections per logical database (forty across the deployed
+budget permits at most ten server connections per logical database (thirty across the deployed
 databases) while PostgreSQL permits eighty. The OpenCrane server's one replica is further capped at
 five Prisma connections with a five-second acquisition timeout. That means a burst waits at PgBouncer
 instead of holding every PostgreSQL connection while a run-admission transaction waits on a service

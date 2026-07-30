@@ -237,7 +237,8 @@ NODE_ENV + LOG_LEVEL are always emitted so logs are consistent JSON. The OTEL_*
 vars are emitted only when observability.otel.enabled, pointing apps at the
 operator-supplied release-local collector Service; omitting them leaves @opencrane/observability's
 startTelemetry a no-op (it keys off OTEL_EXPORTER_OTLP_ENDPOINT). The service name
-is also set in code, so this stays correct even if the env var is dropped.
+is also set in code, so this stays correct even if the env var is dropped. This chart
+does not deploy the operator-supplied collector.
 */}}
 {{- define "opencrane.observabilityEnv" -}}
 {{- $ctx := .ctx -}}
