@@ -39,7 +39,7 @@ The current composition includes:
 | `/me/assets` | Personal artifact catalogue |
 | `/skills` | Skill catalogue and publication |
 | `/mcp-servers`, `/mcp` | MCP registration and operator surfaces |
-| `/models`, `/model-routing` | Model registry, defaults and metrics |
+| `/models`, `/model-routing` | Model registry and routing defaults |
 | `/providers` | Provider credential references and bring-your-own-key configuration |
 | `/groups`, `/shares`, `/resource-shares` | Organisation-scoped access and sharing |
 | `/audit`, `/ai-budget`, `/token-usage` | Governance evidence and spend controls |
