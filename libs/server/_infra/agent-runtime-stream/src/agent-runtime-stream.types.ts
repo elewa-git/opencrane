@@ -1,35 +1,7 @@
 import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeStreamOpen } from "@opencrane/contracts";
+import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/server/_infra/workload-identity";
 
 import type { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
-
-/** Verified workload identity associated with one runtime-initiated connection. */
-export interface RuntimeWorkloadIdentity
-{
-	/** Kubernetes ServiceAccount subject returned by TokenReview. */
-	readonly subject: string;
-	/** Kubernetes namespace parsed from the authenticated subject. */
-	readonly namespace: string;
-	/** Kubernetes ServiceAccount name parsed from the authenticated subject. */
-	readonly serviceAccountName: string;
-	/** Kubernetes Pod UID asserted by TokenReview for this projected token. */
-	readonly podUid: string;
-}
-
-/** Minimal TokenReview seam; the app supplies the Kubernetes API implementation. */
-export interface RuntimeTokenReviewer
-{
-	/** Verify a projected token and return the authenticated workload identity. */
-	__Review(token: string): Promise<RuntimeWorkloadIdentity | null>;
-}
-
-/** Deployment-owned namespaces for the mutually exclusive personal and managed runtime identities. */
-export interface RuntimeTokenReviewerConfig
-{
-	/** Namespace containing only personal `agent-runtime-*` workload identities. */
-	readonly personalRuntimeNamespace: string;
-	/** Namespace containing only managed `managed-agent-runtime-*` workload identities. */
-	readonly managedRuntimeNamespace: string;
-}
 
 /** Durable command authority injected by the server app, never owned by this transport. */
 export interface RuntimeCommandStreamAuthority

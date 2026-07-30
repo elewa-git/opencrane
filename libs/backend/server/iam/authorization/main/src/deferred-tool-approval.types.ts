@@ -55,6 +55,29 @@ export type DeferToolRequestResult =
 	| { readonly outcome: "already_deferred"; readonly approvalRequestId: string }
 	| { readonly outcome: "unavailable" };
 
+/** Exact reserved external-action coordinates needed to open a deferred approval. */
+export interface OpenDeferredToolApprovalCommand
+{
+	/** Logical run proposing the external action. */
+	readonly runId: string;
+	/** Current positive run attempt. */
+	readonly attempt: number;
+	/** Runtime invocation identifier used as the approval action digest. */
+	readonly toolInvocationId: string;
+	/** Immutable tool revision being invoked. */
+	readonly toolRevisionId: string;
+	/** Digest of the normalised action arguments. */
+	readonly argumentsDigest: string;
+	/** Digest of the effective capability set admitted for this attempt. */
+	readonly capabilitySetDigest: string;
+	/** Durable ToolInvocation row already reserved before approval creation. */
+	readonly reservationId: string;
+	/** Trusted server instant used for approval creation and failure terminalisation. */
+	readonly now: Date;
+	/** Hard server-owned expiry for the pending approval. */
+	readonly expiresAt: Date;
+}
+
 /** Result of atomically deciding one pending deferred tool request. */
 export type DecideDeferredToolRequestResult =
 	| { readonly outcome: "approved"; readonly deferredToolResult: JsonValue }

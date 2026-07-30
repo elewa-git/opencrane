@@ -88,6 +88,9 @@
       "@opencrane/backend/agents/execution/runs": [
         "./libs/backend/agents/execution/runs/main/src/index.ts"
       ],
+      "@opencrane/backend/agents/execution/admission": [
+        "./libs/backend/agents/execution/admission/main/src/index.ts"
+      ],
       "@opencrane/backend/agents/execution/protocol": [
         "./libs/backend/agents/execution/protocol/src/index.ts"
       ],
@@ -133,8 +136,14 @@
       "@opencrane/server/_infra/agent-runtime-stream": [
         "./libs/server/_infra/agent-runtime-stream/src/index.ts"
       ],
+      "@opencrane/server/_infra/workload-identity": [
+        "./libs/server/_infra/workload-identity/src/index.ts"
+      ],
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/cleanup": [
+        "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
       ],
       "@opencrane/backend/agents/skills/k8s-launcher": [
         "./libs/backend/agents/skills/k8s-launcher/src/index.ts"

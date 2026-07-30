@@ -15,6 +15,7 @@ later boundaries.
 | [`execution/protocol`](../execution/protocol/README.md) | Admission of runtime commands and candidate output against the current durable attempt authority. |
 | [`k8s-launcher`](./k8s-launcher/README.md) | Pure suspended Job construction for the dedicated runtime namespace. |
 | [`controller`](./controller/README.md) | Crash-safe assignment, UID-fenced Job release, and exact first-Pod registration. |
+| [`cleanup`](./cleanup/main/README.md) | Exact Job checks and UID-preconditioned deletion after durable cleanup claims. |
 
 ```text
 OpenCrane run authority
@@ -22,12 +23,13 @@ OpenCrane run authority
         ▼
 execution/protocol ── accepted command/candidate
         │
-        └────► controller ──► k8s-launcher ──► suspended attempt Job
+        ├────► controller ──► k8s-launcher ──► suspended attempt Job
                                             │ assigned Job UID
                                             ▼
                                       conditional release
                                             │ first Pod UID
                                             └────► run authority
+        └────► cleanup ─────────────────────► exact read + UID-fenced delete
 ```
 
 The boundary is language-neutral: a Python, TypeScript, or future runtime must satisfy the same
@@ -36,10 +38,11 @@ stay isolated in the `layer:infra` launcher rather than leaking into those core 
 
 ## Dependency rule for this tier
 
-The launcher may consume Kubernetes manifest types but performs no input/output. The controller library
-may depend on that launcher, shared contracts, and observability; it does not import the app that
-composes it. Runtime packages do not import a model driver. Canonical run/event persistence remains
-in its owning backend domain.
+The launcher may consume Kubernetes manifest types but performs no input/output. The controller and
+cleanup libraries may depend on that launcher and shared contracts; neither imports the app that
+composes it. Cleanup implements the execution/runs physical store contract structurally, preserving
+the backend-to-infrastructure dependency direction. Runtime packages do not import a model driver.
+Canonical run/event persistence remains in its owning backend domain.
 
 ## See also
 
@@ -47,5 +50,6 @@ in its owning backend domain.
 - Current authority: [execution/protocol](../execution/protocol/README.md)
 - Job contract: [runtime/k8s-launcher](./k8s-launcher/README.md)
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
+- Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
 - Server stream transport: [agent-runtime-stream](../../../server/_infra/agent-runtime-stream/README.md)

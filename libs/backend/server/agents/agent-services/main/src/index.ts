@@ -7,6 +7,7 @@ export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, Ag
 export { __MaterializeAgentRevisionModelSelectionWithinTransaction } from "./prisma-agent-revision-writer.js";
 export { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle.js";
 export { __CreateAgentServicesRouter } from "./agent-revision.router.js";
+export { _CreateAgentServicesRouter } from "./prisma-agent-services.router.js";
 export type { AgentServicesRouterDependencies, ManagementCaller, ManagementClock } from "./agent-revision.router.types.js";
 export { _AgentServicesOpenapiPaths } from "./openapi.js";
 export { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __ValidateAttachAuthority } from "./scope-attachment-authority.js";
@@ -16,4 +17,5 @@ export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.j
 export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 export { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
 export { __ManagedAgentServicePrincipal, PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.js";
+export { _CreateManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.factory.js";
 export type { ManagedExecutionEvidence, ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types.js";

@@ -57,9 +57,10 @@ invocation receipt retains that bounded authority reason and the action boundary
 credential-free structured event; it never collapses a policy revocation into a transport failure.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
-Its external-action adapter routes an admitted action through injected integration custody, sandbox,
-or memory ports; the app supplies those concrete ports and composes the library with the stream
-transport and the existing run/conversation authorities. An integration action has the fixed
+Its production composition factory binds external actions to integration custody, sandbox, and
+memory ports, the authorization-owned deferred approval transaction, and the canonical run terminal
+reporter. The app supplies only process persistence, fixed policy values, and logging, then hands
+the resulting authority to the stream transport. An integration action has the fixed
 `integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
 are rechecked at execution, so the runtime never sees either credential or mutable permission state.
 
@@ -72,6 +73,9 @@ are rechecked at execution, so the runtime never sees either credential or mutab
   runtime-instance binding on stream loss.
 - `__CreatePrismaRunInputCompiler` — binds the deterministic prompt compiler to the control-plane
   Prisma reads used by the dispatch transaction.
+- `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
+  including first-party personal-session tool augmentation, external-action routing, frozen memory
+  dataset selection, deferred approval recovery, retry bounds, and canonical terminal reporting.
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected integration
   custody, sandbox, or memory port and fails closed for unsupported revisions. Third-party tools use
   only `integration:<integrationId>:<toolName>` identities frozen from the AgentRevision assignment.
@@ -90,6 +94,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 - `__CreateSteeringIngestRouter`, `PrismaSteeringRequestRepository` — the self-only product surface
   and durable queue for a user's instruction to a live run. It records the instruction against the
   current owner-bound attempt but never changes input generation from the HTTP request.
+- `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
+  authenticated request principal into the steering caller and supplies the queue and clock.
 
 ## Boundary
 
@@ -119,11 +125,14 @@ browser connection therefore cannot drop an instruction or force a model turn to
 
 ## Dependency direction
 
-Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent and execution-input
-contracts, authorization, the integration authority, the three injected transport-port scopes, and
-shared contracts. The integration edge is read-only: it resolves and rechecks the revision's live
-custody reference before the Obot invocation port executes an allowed tool. The package never imports
-an app, a concrete transport adapter, or a model driver.
+Tagged `scope:execution-protocol` (`layer:backend`): it may depend on agent, execution-run,
+execution-input, and personal-configuration contracts, authentication, authorization, the
+integration authority, the three injected transport-port scopes, and shared contracts. The
+authentication edge resolves only the
+backend-type-free request principal. The integration edge is read-only: it resolves and rechecks the revision's live
+custody reference before the Obot invocation port executes an allowed tool. Its fail-closed
+transport adapters implement those narrow ports without exposing credentials. The package never
+imports an app or a model driver.
 
 ## See also
 

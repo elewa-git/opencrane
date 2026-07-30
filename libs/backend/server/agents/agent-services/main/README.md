@@ -56,6 +56,9 @@ with a plain reason.
 - `__CreateAgentServicesRouter` — the authoritative management router (catalogue / create / revise /
   compare / publish / restore / enable / pause / run-now / history / retire); the UI and parity client are
   clients of it. Composed with `AgentServicesRouterDependencies`, `ManagementCaller`, `ManagementClock`.
+- `_CreateAgentServicesRouter` — the ready-to-mount Prisma composition. It maps the authenticated
+  request principal into `ManagementCaller`, owns all database adapters and audit-evidence wiring,
+  and accepts only the shared run-admission port plus the process logger from the app.
 - Lifecycle use cases: `__CreateManagedAgentService`, `__ReviseAgentRevision`, `__RestoreAgentRevision`,
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
@@ -79,17 +82,22 @@ same database update, so no retired service can still look runnable.
   `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
   active revision's non-personal scope attachments with effective grants, and digests the complete
   capability-bearing revision inside the run-admission transaction.
+- `_CreateManagedExecutionEvidenceAuthority` — owns the fail-closed environment policy for fleet
+  issuer, key identifier, mounted public-key source, and maximum membership staleness. The public key
+  is reloaded for every decision so a projected Secret rotation takes effect immediately.
 - Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish
-  contract (`PublishAgentRevisionCommand`/`Result`/`FailureReason`, `AtomicAgentRevisionPublication*`),
-  and `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
+  contract
+  (`PublishAgentRevisionCommand`/`Result`/`FailureReason`, `AtomicAgentRevisionPublication*`), and
+  `AgentPublicationAuditEvidencePort` — the seam through which publication records audit evidence.
   The shared `AgentRevisionContent` domain value lives in `@opencrane/models/agents`.
 
 ## Boundary
 
-The application layer composes the use case with the Prisma adapter and calls it. This package owns
-revision persistence and lifecycle. Personal configuration may call the narrow transaction-scoped
+The application mounts the exported Prisma composition and supplies the cross-domain run-admission
+port. This package owns its router, caller mapping, database adapters, revision persistence, and
+publication-audit wiring. Personal configuration may call the narrow transaction-scoped
 model-selection operation, but cannot reproduce its revision projection, Prisma mapping, or
 lifecycle. This package does not run agents or resolve skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
@@ -97,9 +105,10 @@ any doubt is a `denied` outcome, never a silent partial publish.
 ## Dependency direction
 
 Tagged `scope:agent-services`: it may depend only on `scope:agent-services`, `scope:agents` (shared
-agent models), `scope:audit`, `scope:authorization`, `scope:grants`, `scope:membership`, and `scope:shared` — never on
-apps, gateways, or knowledge domains. run-now and session reading are injected by the app so this
-package never imports `scope:identity` or `scope:execution-runs`. The `scope:grants` edge is real and
+agent models), `scope:audit`, `scope:auth`, `scope:authorization`, `scope:grants`,
+`scope:membership`, and `scope:shared` — never on apps, gateways, or knowledge domains. The
+`scope:auth` edge resolves only the backend-type-free request principal; run admission remains an
+injected port, so this package never imports `scope:execution-runs`. The `scope:grants` edge is real and
 load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__ValidateAttachAuthority`
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled

@@ -13,13 +13,16 @@ export type { RuntimeTerminalEventType, RuntimeTerminalReportCommand, RuntimeTer
 export { PrismaAgentRunAuthorityRepository } from "./prisma-run-authority.js";
 export { PrismaRunAdmissionRepository } from "./prisma-run-admission-repository.js";
 export { PrismaRunCancellationRepository } from "./prisma-run-cancellation-repository.js";
+export { __CreateRuntimeWorkloadCleanupUseCase } from "./runtime-workload-cleanup.js";
 export { PrismaRunDispatchRepository } from "./prisma-run-dispatch-repository.js";
 export { __CreateAgentControllerRunDispatchRouter } from "./run-dispatch.router.js";
 export { __CreateSelfRunStatusRouter } from "./self-run-status.router.js";
+export { _CreateSelfRunStatusRouter } from "./prisma-self-run-status.router.js";
 export { PrismaSelfRunStatusRepository } from "./prisma-self-run-status-repository.js";
 export { _SelfRunStatusOpenapiPaths } from "./openapi.js";
 export type { AgentControllerRunDispatchRouterDependencies, AgentControllerTokenReviewer, AttemptModelKeyIssuer, AttemptModelKeyMintRequest, ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, MintedAttemptModelKey, RegisterRunWorkloadPodResult, ReviewedAgentControllerIdentity, RunDispatchRepository, RunDispatchRepositoryConfig } from "./run-dispatch.types.js";
 export type { SelfRunStatus, SelfRunStatusCaller, SelfRunStatusRepository, SelfRunStatusRouterDependencies } from "./self-run-status.router.types.js";
 export type { ClaimNextRunWorkloadCleanupResult, ConfirmRunWorkloadCleanupCommand, ConfirmRunWorkloadCleanupResult, RepairExpiredRunResult, RequestRunCancellationCommand, RequestRunCancellationResult, RunCancellationRepository, RunCancellationRepositoryConfig, RunWorkloadCleanupClaim, RunWorkloadCleanupClaimLease, RunWorkloadCleanupMode, RunWorkloadCleanupProjection } from "./run-cancellation.types.js";
+export type { RuntimeWorkloadCleanupReconcileResult, RuntimeWorkloadCleanupStore, RuntimeWorkloadCleanupStoreResult, RuntimeWorkloadCleanupUseCase, RuntimeWorkloadCleanupUseCaseDependencies } from "./runtime-workload-cleanup.types.js";
 export { RunAdmissionConcurrencyGate } from "./run-admission-concurrency.js";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";

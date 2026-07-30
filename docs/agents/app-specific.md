@@ -45,8 +45,8 @@ authority.
 ## Server infrastructure
 
 [`libs/server/_infra`](../../libs/server/_infra/README.md) contains process-specific seams for HTTP,
-authentication, Kubernetes access, the runtime stream, memory, credential custody, and sandbox
-execution. These packages contain no business-domain authority.
+authentication, Kubernetes access, projected workload identity, the runtime stream, memory,
+credential custody, and sandbox execution. These packages contain no business-domain authority.
 
 ## Frontend libraries
 

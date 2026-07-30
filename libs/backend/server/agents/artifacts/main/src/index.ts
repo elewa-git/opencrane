@@ -6,6 +6,7 @@ export { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.j
 export { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing.js";
 export { __UploadArtifact } from "./artifact-upload.js";
 export { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router.js";
+export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifact-catalogue.router.js";
 export { _PersonalArtifactsOpenapiPaths } from "./openapi.js";
 export type { ArtifactAuthorityRepository, ArtifactStorePromotionReceipt, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, FinalizeArtifactRevisionResult, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
 export type { ArtifactPreprocessCompletionRequest, ArtifactPreprocessOutputBroker, ArtifactPreprocessOutputLeaseProjection, ArtifactPreprocessOutputLeaseRequest, ArtifactPreprocessRepository, ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceRead, ArtifactPreprocessorRouterDependencies, ArtifactPreprocessorTokenReviewer, ReviewedArtifactPreprocessorIdentity } from "./artifact-preprocessing.types.js";

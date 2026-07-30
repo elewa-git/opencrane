@@ -2,9 +2,10 @@ import { json, Router, type Response } from "express";
 
 import { AGENT_RUNTIME_PROTOCOL_V1, type RuntimeCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
+import type { RuntimeWorkloadIdentity } from "@opencrane/server/_infra/workload-identity";
 
 import { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
-import type { RuntimeCandidateAdmission, RuntimeStreamTransportOptions, RuntimeWorkloadIdentity } from "./agent-runtime-stream.types.js";
+import type { RuntimeCandidateAdmission, RuntimeStreamTransportOptions } from "./agent-runtime-stream.types.js";
 
 /** Validate a bounded runtime instance identifier without accepting executable syntax. */
 function _IsRuntimeInstanceId(value: unknown): value is string

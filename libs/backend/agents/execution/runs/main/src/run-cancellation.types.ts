@@ -48,7 +48,12 @@ export interface RunWorkloadCleanupProjection
 	readonly agentRevisionId: string;
 	/** Dedicated runtime namespace containing the deterministic Job. */
 	readonly namespace: string;
-	/** Runtime profile required to reconstruct and compare an unassigned suspended Job. */
+	/**
+	 * Immutable profile name retained with cleanup authority for durable audit.
+	 *
+	 * The cleanup adapter rebinds only fields actually projected into the Job; it does not select or
+	 * reconstruct deployment policy from this name.
+	 */
 	readonly workloadProfile: string;
 	/** Opaque bootstrap reference expected on the Job Pod template. */
 	readonly bootstrapReference: string;
