@@ -536,17 +536,14 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         emitted: list[dict] = []
         captured: dict = {}
 
-        def _resume_source(run_id, attempt, input_generation, deferred_tool_results, _cancel, _steer):
-            captured["runId"] = run_id
-            captured["attempt"] = attempt
-            captured["inputGeneration"] = input_generation
+        def _resume_source(compiled_input, deferred_tool_results, _cancel, _steer):
+            captured["compiledInput"] = compiled_input
             captured["deferred"] = deferred_tool_results
             return iter([{"type": "output_text", "text": "resumed"}, {"type": "usage", "inputTokens": 1, "outputTokens": 2}])
 
         _execute_resume_attempt(_resume_command(), "instance-1", emitted.append, resume_event_source=_resume_source)
         self.assertEqual(captured["deferred"], {"t1": {"ok": True}})
-        self.assertEqual(captured["inputGeneration"], 7)
-        self.assertEqual((captured["runId"], captured["attempt"]), ("r1", 1))
+        self.assertEqual(captured["compiledInput"], {})
         event_types = [candidate["eventType"] for candidate in emitted]
         self.assertEqual(event_types, ["run.resumed", "run.output_text", "run.usage", "run.completed"])
         self.assertEqual(emitted[0]["payload"], {"inputGeneration": 7})
@@ -557,12 +554,34 @@ class RuntimeResumeCancelTests(unittest.TestCase):
         command["payload"]["steeringRequests"] = [{"text": "Prioritise the current decision."}]
         captured: dict = {}
 
-        def _resume_source(_run_id, _attempt, _generation, _deferred, _cancel, steering_buffer):
+        def _resume_source(_compiled_input, _deferred, _cancel, steering_buffer):
             captured["steering"] = steering_buffer[:]
             return iter([])
 
         _execute_resume_attempt(command, "instance-1", lambda _candidate: None, resume_event_source=_resume_source)
         self.assertEqual(captured["steering"], ["Prioritise the current decision."])
+
+    def test_resume_passes_the_injected_cipher_recovery_to_the_driver(self) -> None:
+        """The model driver receives the exact coordinate-checked checkpoint, never a second cipher read."""
+        emitted: list[dict] = []
+        captured: dict = {}
+        cipher = _ReversingCipher()
+        compiled_input = _compiled_input()
+
+        def _resume_source(recovered_input, _deferred, _cancel, _steering):
+            captured["compiledInput"] = recovered_input
+            return iter([])
+
+        with tempfile.TemporaryDirectory() as directory:
+            os.environ["OPENCRANE_RUNTIME_CHECKPOINT_DIR"] = directory
+            try:
+                _write_checkpoint("r1", 1, 7, {"compiledInput": compiled_input}, cipher=cipher, checkpoint_dir=directory)
+                _execute_resume_attempt(_resume_command(), "instance-1", emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
+            finally:
+                os.environ.pop("OPENCRANE_RUNTIME_CHECKPOINT_DIR", None)
+
+        self.assertEqual(captured["compiledInput"], compiled_input)
+        self.assertEqual([candidate["eventType"] for candidate in emitted], ["run.resumed", "run.completed"])
 
     def test_missing_resume_payload_is_a_terminal_failure(self) -> None:
         """A resume command without a payload surfaces `run.failed`, never a silent ack."""

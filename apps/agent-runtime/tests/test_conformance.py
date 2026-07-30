@@ -202,9 +202,8 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
 
         captured: dict = {}
 
-        def _resume_source(run_id, attempt, input_generation, deferred, _cancel, _steering):
+        def _resume_source(_compiled_input, deferred, _cancel, _steering):
             captured["deferred"] = deferred
-            captured["inputGeneration"] = input_generation
             return iter([{"type": "output_text", "text": "done"}, {"type": "usage", "inputTokens": 1, "outputTokens": 1}])
 
         resume_emitted: list[dict] = []

@@ -12,7 +12,6 @@ from collections.abc import Callable, Iterator
 
 from ..config import environment, read_attempt_litellm_key
 from ..constants import DEFAULT_LITELLM_KEY_PATH
-from .checkpoints import read_checkpoint
 
 
 def absorb_steering(steering_buffer: list[str]) -> list[str]:
@@ -150,27 +149,20 @@ def pydantic_ai_event_source(
 
 
 def pydantic_ai_resume_source(
-    run_id: str,
-    attempt: int,
-    input_generation: object,
+    compiled_input: dict[str, object],
     deferred_tool_results: object,
     cancel_event: threading.Event,
     steering_buffer: list[str],
-    *,
-    checkpoint_cipher: object | None = None,
 ) -> Iterator[dict[str, object]]:
-    """Resume only from agreeing local context and control-plane-authorised tool results.
+    """Resume from attempt-owned compiled context and control-plane-authorised tool results.
 
-    The server supplies the run coordinates, input generation, and deferred results. The checkpoint
-    contributes only the compiled input needed by the framework adapter. If the local state is absent
-    or disagrees, this function raises instead of inventing context or weakening the grant set.
+    The attempts layer supplies the one coordinate-checked compiled input recovery and owns every
+    checkpoint/cipher decision. This persistence-free adapter only translates that exact immutable
+    context into a bounded framework resume, so it cannot reread a checkpoint with a different
+    process cipher or silently select stale tool grants.
     """
     from pydantic_ai import Agent
 
-    state = read_checkpoint(run_id, attempt, input_generation, cipher=checkpoint_cipher)
-    compiled_input = state.get("compiledInput") if isinstance(state, dict) else None
-    if not isinstance(compiled_input, dict):
-        raise RuntimeError("no agreeing local checkpoint to resume from")
     agent = _agent_for(compiled_input)
 
     async def _collect() -> list[dict[str, object]]:
