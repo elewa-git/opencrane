@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "warningLines": 350,
+  "maximumLines": 500,
+  "largeAdditionLines": 150,
+  "sourceExtensions": [
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".go",
+    ".h",
+    ".hpp",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".kts",
+    ".mjs",
+    ".php",
+    ".prisma",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".swift",
+    ".tf",
+    ".ts",
+    ".tsx"
+  ],
+  "exceptions": []
+}

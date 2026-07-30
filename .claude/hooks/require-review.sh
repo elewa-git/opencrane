@@ -6,7 +6,8 @@
 # matcher array concurrently). It does the cheap, deterministic work so the Haiku
 # judge barely runs on the obvious cases:
 #
-#   - Computes the TypeScript change set (tracked diff vs HEAD + untracked .ts bodies).
+#   - Computes the supported production-source change set (tracked diff vs HEAD + untracked bodies).
+#   - Runs the deterministic module-growth classifier and routes every candidate to judgment.
 #   - Writes .claude/.review-context.md (VERDICT + diff + policy) for the Haiku hook to read.
 #   - Resolves SKIP cases (no code / trivial / already-reviewed / loop-guard) so the
 #     agent can short-circuit to ok:true after a single read.
@@ -43,7 +44,15 @@ _write_context_and_exit() {
     printf '%s\n' "${changed_files:-}"
     echo "---"
     echo "DIFF:"
-    printf '%s\n' "${ts_diff:-}"
+    printf '%s\n' "${code_diff:-}"
+    if [ -n "${untracked_body:-}" ]; then
+      echo "---"
+      echo "UNTRACKED_SOURCE_BODIES:"
+      printf '%s\n' "$untracked_body"
+    fi
+    echo "---"
+    echo "MODULE_GROWTH:"
+    printf '%s\n' "${growth_output:-}"
   } > "$context" 2>/dev/null || true
   exit 0
 }
@@ -52,10 +61,20 @@ _write_context_and_exit() {
 #    record the current state as reviewed and let the stop proceed. Prevents loops.
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null || echo false)"
 
-# 4. Build the TypeScript change set.
-ts_diff="$(git diff HEAD -- '*.ts' 2>/dev/null || true)"
-changed_files="$(git diff HEAD --name-only -- '*.ts' 2>/dev/null || true)"
-untracked_files="$(git ls-files --others --exclude-standard -- '*.ts' 2>/dev/null || true)"
+# 4. Build the language-neutral source change set from the same committed extension policy used by
+#    scripts/module-growth-check.mjs. Tests/generated paths are filtered by review policy below.
+source_paths=()
+while IFS= read -r pattern; do
+  [ -n "$pattern" ] && source_paths+=("$pattern")
+done < <(node -e 'const p=require("./docs/agents/module-growth-policy.json"); for (const e of p.sourceExtensions) console.log(`:(icase)*${e}`)' 2>/dev/null)
+if [ ${#source_paths[@]} -eq 0 ]; then
+  # Fail open to the broad Git diff but closed to the model judge: a broken policy must never make
+  # production changes disappear from review.
+  source_paths=('*')
+fi
+code_diff="$(git diff HEAD -- "${source_paths[@]}" 2>/dev/null || true)"
+changed_files="$(git diff HEAD --name-only -- "${source_paths[@]}" 2>/dev/null || true)"
+untracked_files="$(git ls-files --others --exclude-standard -- "${source_paths[@]}" 2>/dev/null || true)"
 untracked_body=""
 if [ -n "$untracked_files" ]; then
   changed_files="$(printf '%s\n%s' "$changed_files" "$untracked_files" | sed '/^$/d')"
@@ -64,13 +83,15 @@ if [ -n "$untracked_files" ]; then
 fi
 
 # 5. Measure size and hash the change set (used for the trivial check and the marker).
-tracked_lines="$(git diff HEAD --numstat -- '*.ts' 2>/dev/null | awk '{a+=$1; r+=$2} END {print a+r+0}')"
+tracked_lines="$(git diff HEAD --numstat -- "${source_paths[@]}" 2>/dev/null | awk '{a+=$1; r+=$2} END {print a+r+0}')"
 untracked_lines="0"
 if [ -n "$untracked_body" ]; then
   untracked_lines="$(printf '%s\n' "$untracked_body" | wc -l | tr -d ' ')"
 fi
 total_lines=$(( ${tracked_lines:-0} + ${untracked_lines:-0} ))
-current_hash="$(printf '%s\n%s' "$ts_diff" "$untracked_body" | shasum -a 256 | awk '{print $1}')"
+growth_output="$(node scripts/module-growth-check.mjs 2>&1)"
+growth_status=$?
+current_hash="$(printf '%s\n%s\n%s\n%s' "$changed_files" "$code_diff" "$untracked_body" "$growth_output" | shasum -a 256 | awk '{print $1}')"
 
 # 6. Loop guard resolved here (needs current_hash): record reviewed state, allow stop.
 if [ "$stop_active" = "true" ]; then
@@ -78,8 +99,8 @@ if [ "$stop_active" = "true" ]; then
   _write_context_and_exit "SKIP"
 fi
 
-# 7. No TypeScript changes at all -> nothing to judge.
-if [ -z "$ts_diff" ] && [ -z "$untracked_files" ]; then
+# 7. No supported source changes at all -> nothing to judge.
+if [ -z "$code_diff" ] && [ -z "$untracked_files" ]; then
   _write_context_and_exit "SKIP"
 fi
 
@@ -100,13 +121,17 @@ never="$(printf '%s\n' "$cfg" | sed -n 's/^never-review-paths=//p' | head -1)"
 
 # 10. Critical-keyword check: does any always-review keyword appear in the paths or diff?
 critical="no"
-haystack="$(printf '%s\n%s' "$changed_files" "$ts_diff" | tr '[:upper:]' '[:lower:]')"
+haystack="$(printf '%s\n%s\n%s' "$changed_files" "$code_diff" "$untracked_body" | tr '[:upper:]' '[:lower:]')"
 for kw in $always; do
   if printf '%s' "$haystack" | grep -qF "$(printf '%s' "$kw" | tr '[:upper:]' '[:lower:]')"; then
     critical="yes"
     break
   fi
 done
+if [ "$growth_status" -ne 0 ] \
+  || printf '%s\n' "$growth_output" | grep -qE '[[:space:]](ERROR|WARN)[[:space:]]+MODULE-GROWTH-'; then
+  critical="yes"
+fi
 
 # 11. All-excluded check: does EVERY changed file match a never-review path substring?
 all_excluded="yes"
