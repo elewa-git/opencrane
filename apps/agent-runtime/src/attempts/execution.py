@@ -177,9 +177,7 @@ def execute_resume_attempt(
     ):
         try:
             for neutral_event in resume_event_source(
-                coordinates["runId"],
-                coordinates["attempt"],
-                input_generation,
+                compiled_input,
                 deferred_tool_results,
                 cancel_event,
                 steering_buffer,
