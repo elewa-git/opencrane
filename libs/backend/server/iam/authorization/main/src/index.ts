@@ -19,6 +19,10 @@ export { PrismaToolInvocationRepository } from "./prisma-tool-invocation-reposit
 export type { ToolInvocationFailureResult, ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "./tool-invocation.types.js";
 export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";
+export { PrismaRbacAuthority } from "./prisma-rbac-authority.js";
+export type { RbacAuthority, RbacDecisionCommand, RbacDecisionEvidence, RbacDecisionResult, RbacDenialReason } from "./rbac-authority.types.js";
+export { __CreateRbacRouter } from "./rbac.router.js";
+export type { RbacRouterDependencies } from "./rbac.router.types.js";
 export { __CreateRuntimeBootstrapRouter } from "./runtime-bootstrap.router.js";
 export { PrismaRuntimeBootstrapExchange } from "./prisma-runtime-bootstrap-exchange.js";
 export type { RuntimeBootstrapClock, RuntimeBootstrapExchangeRecord, RuntimeBootstrapExchangeRepository, RuntimeBootstrapLogger, RuntimeBootstrapReviewedIdentity, RuntimeBootstrapRouterDependencies, RuntimeBootstrapSubmission, RuntimeBootstrapTokenReviewer } from "./runtime-bootstrap.types.js";
