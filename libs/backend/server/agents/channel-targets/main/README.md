@@ -78,7 +78,7 @@ scope in `eslint.config.mjs`; it is therefore governed only by the shared backen
 
 Owns `ChannelRuntimeRoute` and `ChannelInvocationContext` in
 `apps/opencrane/prisma/schema/channel-targets.prisma`. A companion SQL authority test lives in
-`tests/channel-targets-authority.sql`.
+`src/__tests__/channel-targets-authority.sql`.
 
 ## See also
 

@@ -218,6 +218,8 @@ transaction. First-Pod registration publishes the release event atomically, leav
 Pod is trusted but its release command can be reclaimed.
 Cancellation reuses the same outbox with `RunCancellationRequested` and
 `RunWorkloadCleanupRequested`; no second cleanup queue or revocation authority exists.
+The package's three Postgres authority suites live with its other tests under `src/__tests__/` and
+run together through the `test:sql` target.
 
 ## See also
 

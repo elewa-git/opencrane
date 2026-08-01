@@ -130,7 +130,7 @@ resolution), and `scope:shared` — never on apps or other server domains.
 Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLease`,
 `ArtifactPreprocessJob`, and `ArtifactOutboxEvent` in
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test in
-`tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
+`src/__tests__/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
 immutable source lineage.
 
 ## See also

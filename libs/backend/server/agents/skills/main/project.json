@@ -26,7 +26,7 @@
     "test:sql": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/skill-authority.sql",
+        "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh src/__tests__/skill-authority.sql",
         "cwd": "libs/backend/server/agents/skills/main"
       }
     }
