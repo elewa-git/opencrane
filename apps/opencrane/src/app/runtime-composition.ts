@@ -191,7 +191,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param prisma - Canonical product-authority database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
- * @returns Routers sharing one runtime reviewer and dispatch authority.
+ * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
  */
 export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): InternalRuntimeComposition
 {
