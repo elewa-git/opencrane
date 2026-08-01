@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
-import { createReadStream } from "node:fs";
-import { link, lstat, mkdir, open, stat, unlink } from "node:fs/promises";
+import { link, lstat, mkdir, open, unlink } from "node:fs/promises";
 import type { FileHandle } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -116,8 +115,8 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		return { leaseId: staged.leaseId, contentAddress: staged.contentAddress, byteLength: staged.byteLength, mediaType: staged.mediaType, created };
 	}
 
-	/** Opens immutable bytes only by a strict canonical address, never a caller-provided path. */
-	async read(contentAddress: string): Promise<ArtifactByteStream | null>
+	/** Returns one regular canonical file's byte length without opening a stream. */
+	async byteLength(contentAddress: string): Promise<number | null>
 	{
 		if (!___IsSha256ContentAddress(contentAddress))
 		{
@@ -125,11 +124,38 @@ export class __FilesystemArtifactStore implements ArtifactStore
 		}
 		try
 		{
-			await stat(this._contentPath(contentAddress));
-			return createReadStream(this._contentPath(contentAddress));
+			const canonicalFile = await lstat(this._contentPath(contentAddress));
+			return canonicalFile.isFile() ? canonicalFile.size : null;
 		}
 		catch (error)
 		{
+			if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
+			throw error;
+		}
+	}
+
+	/** Opens immutable bytes only by a strict canonical address, never a caller-provided path. */
+	async read(contentAddress: string): Promise<ArtifactByteStream | null>
+	{
+		if (!___IsSha256ContentAddress(contentAddress))
+		{
+			throw new Error("invalid ArtifactStore content address");
+		}
+		let canonicalFile: FileHandle | null = null;
+		try
+		{
+			canonicalFile = await open(this._contentPath(contentAddress), "r");
+			const openedFile = await canonicalFile.stat();
+			if (!openedFile.isFile())
+			{
+				await canonicalFile.close();
+				return null;
+			}
+			return canonicalFile.createReadStream();
+		}
+		catch (error)
+		{
+			await canonicalFile?.close().catch(function _ignoreAlreadyClosedFile() {});
 			if (error instanceof Error && "code" in error && error.code === "ENOENT") return null;
 			throw error;
 		}

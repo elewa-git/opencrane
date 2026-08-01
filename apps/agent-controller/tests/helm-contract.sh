@@ -3,18 +3,31 @@ set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
 CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
+SOURCE_CHART_ROOT="$(mktemp -d)"
+CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
+IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
 DISABLED="$(mktemp)"
 ROLE="$(mktemp)"
 BINDING="$(mktemp)"
+CLEANUP_ROLE="$(mktemp)"
+CLEANUP_BINDING="$(mktemp)"
 RUNTIME_NAMESPACE="$(mktemp)"
 RUNTIME_QUOTA="$(mktemp)"
+MANAGED_RUNTIME_QUOTA="$(mktemp)"
 ADMISSION="$(mktemp)"
+SKILL_URL_OVERRIDE="$(mktemp)"
 SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$ADMISSION" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+
+# The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
+# this contract always renders the source template under test without refreshing remote dependencies.
+cp -R "$CHART_ROOT/." "$SOURCE_CHART_ROOT"
+helm package "$ROOT/apps/agent-controller/helm" --destination "$SOURCE_CHART_ROOT/charts" >/dev/null
+CHART_ROOT="$SOURCE_CHART_ROOT"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \
@@ -22,6 +35,10 @@ render_enabled() {
     --set agentController.enabled=true \
     --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
     --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
+    --set-string managedAgentRuntimePlane.managedAgentRuntime.namespace=oc-opencrane-managed-runtime \
+    --set-string managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName=managed-agent-runtime-default \
+    --set-string agentController.skillWorkloadProfiles.authoring.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc \
+    --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set agentController.kubernetesApiServerEndpointPort=6443 \
@@ -30,11 +47,15 @@ render_enabled() {
 
 render_enabled > "$MANIFEST"
 render_enabled --set agentController.enabled=false > "$DISABLED"
+render_enabled --set-string agentController.openCraneInternalUrl=http://override.example:8081 > "$SKILL_URL_OVERRIDE"
 
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$ROLE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: agent-controller\n/ { print $0 }' "$MANIFEST" > "$BINDING"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: Role\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_ROLE"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: RoleBinding\n/ && $0 ~ /\n  name: oc-opencrane-runtime-cleanup\n/ { print $0 }' "$MANIFEST" > "$CLEANUP_BINDING"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: Namespace\n/ && $0 ~ /\n  name: oc-opencrane-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_NAMESPACE"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: oc-opencrane-agent-runtime\n/ { print $0 }' "$MANIFEST" > "$RUNTIME_QUOTA"
+awk 'BEGIN { RS="---" } $0 ~ /\nkind: ResourceQuota\n/ && $0 ~ /\n  name: managed-agent-runtime\n/ && $0 ~ /\n  namespace: oc-opencrane-managed-runtime\n/ { print $0 }' "$MANIFEST" > "$MANAGED_RUNTIME_QUOTA"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: ValidatingAdmissionPolicy\n/ { print $0 }' "$MANIFEST" > "$ADMISSION"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-opencrane-server\n/ { print $0 }' "$MANIFEST" > "$SERVER_POLICY"
 awk 'BEGIN { RS="---" } $0 ~ /\nkind: NetworkPolicy\n/ && $0 ~ /\n  name: oc-opencrane-agent-controller\n/ { print $0 }' "$MANIFEST" > "$CONTROLLER_POLICY"
@@ -81,10 +102,45 @@ fi
 test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
 grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
+# The same controller KSA has an independently namespaced least-privilege RoleBinding for managed
+# runtime attempts; it receives no cluster role and no permission outside the two exact namespaces.
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'name: agent-controller'
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["jobs"]'
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["secrets"]'
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'namespace: server-ns'
 
-# Both processes receive the literal cross-namespace contract; neither infers it from Pod metadata.
-grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$MANIFEST" | grep -Fq 'value: "oc-opencrane-runtime"'
-grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$MANIFEST" | grep -Fq 'value: "oc-opencrane-runtime"'
+# Only the OpenCrane server receives runtime Job deletion, through a separately named Role.
+test -s "$CLEANUP_ROLE"
+grep -Fq 'namespace: oc-opencrane-runtime' "$CLEANUP_ROLE"
+grep -Fq 'resources: ["jobs"]' "$CLEANUP_ROLE"
+grep -Fq 'verbs: ["get", "delete"]' "$CLEANUP_ROLE"
+if grep -Eq '"(create|list|patch|update|watch)"|resources: \["(pods|secrets)"\]' "$CLEANUP_ROLE"; then
+  echo "runtime cleanup Role exceeds server-owned Job observation/deletion authority" >&2
+  exit 1
+fi
+test -s "$CLEANUP_BINDING"
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'name: oc-opencrane-opencrane-server'
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'namespace: server-ns'
+
+# Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
+# exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
+grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["get", "create", "patch"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["list"]'
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(delete|update|watch)"'; then
+  echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
+  exit 1
+fi
+
+# The controller receives both profile-owned namespaces in one immutable map; it never gets a
+# process-wide runtime namespace that could let one profile borrow another's RoleBinding.
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"namespace\":\"oc-opencrane-runtime\"'
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"namespace\":\"oc-opencrane-managed-runtime\"'
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"identityProfile\":\"managed\"'
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"serviceAccountName\":\"managed-agent-runtime-default\"'
 grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -Fq 'namespace: server-ns'
 
 # Helm, not the controller, owns the namespace-wide network boundary.
@@ -122,8 +178,48 @@ grep -A2 -F '  matchConstraints:' "$ADMISSION" | grep -Fq '    matchPolicy: Exac
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq 'resources: ["jobs"]' "$ADMISSION"
 grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-controller"' "$ADMISSION"
-grep -Fq "request.subResource == \"\"" "$ADMISSION"
-grep -Fq "request.operation == 'CREATE' && object.spec.suspend == true" "$ADMISSION"
+grep -Fq 'name: oc-opencrane-runtime-70514623e3-personal-default' "$ADMISSION"
+grep -Fq 'name: oc-opencrane-runtime-70514623e3-managed-default' "$ADMISSION"
+grep -Fq 'kubernetes.io/metadata.name: "oc-opencrane-runtime"' "$ADMISSION"
+grep -Fq 'kubernetes.io/metadata.name: "oc-opencrane-managed-runtime"' "$ADMISSION"
+grep -Fq '"managed-agent-runtime-default"' "$ADMISSION"
+grep -Fq '"opencrane-managed-agent-runtime"' "$ADMISSION"
+# Skill namespaces also receive controller Job create/get, so their own fail-closed admission policy
+# must bind the same identity to the exact suspended, class-specific worker envelopes.
+grep -Eq 'name: .*skill-workloads' "$ADMISSION"
+grep -Fq 'values: ["skill-authoring", "tool-runner"]' "$ADMISSION"
+grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
+grep -Fq "object.spec.suspend == true" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].name == 'skill-authoring'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].name == 'tool-runner'" "$ADMISSION"
+grep -Fq "object.metadata.annotations['opencrane.ai/capability-reference'].matches('^skill-bootstrap-v1_[a-f0-9]{64}$')" "$ADMISSION"
+grep -Fq "object.spec.template.metadata.annotations['opencrane.ai/capability-reference'] == object.metadata.annotations['opencrane.ai/capability-reference']" "$ADMISSION"
+grep -Fq 'object.spec.template.metadata.labels.size() == 2' "$ADMISSION"
+grep -Fq "object.spec.template.metadata.labels['opencrane.ai/skill-workload'] == object.metadata.labels['opencrane.ai/skill-workload']" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-skill-authoring@sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].image == \"ghcr.io/elewa-git/opencrane-tool-runner@sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env.size() == 3" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[0].name == 'OPENCRANE_SKILL_BOOTSTRAP_URL'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[1].name == 'OPENCRANE_SKILL_TOKEN_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKILL_BOOTSTRAP_REFERENCE_PATH'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/capability-reference']\"" "$ADMISSION"
+grep -Fq "object.spec.template.spec.volumes[2].name == 'scratch'" "$ADMISSION"
+grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime'
+if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://override.example:8081'; then
+  echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2
+  exit 1
+fi
+if grep -Fq 'OPENCRANE_SKILL_CAPABILITY_REFERENCE' "$ADMISSION"; then
+  echo "governed worker admission must project its opaque reference through a read-only file" >&2
+  exit 1
+fi
+if grep -Fq 'request.subResource' "$ADMISSION"; then
+  echo "Job-only admission must not dereference the optional subResource request field" >&2
+  exit 1
+fi
+grep -Fq "request.operation == 'CREATE' ||" "$ADMISSION"
+grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ADMISSION"
 grep -Fq "oldObject.spec.suspend == true && object.spec.suspend == false" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers.size() == 1" "$ADMISSION"
 grep -Fq "!has(object.spec.template.spec.containers[0].livenessProbe)" "$ADMISSION"
@@ -138,13 +234,32 @@ grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.requests.cp
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.requests.memory).compareTo(quantity("128Mi")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.cpu).compareTo(quantity("1000m")) == 0' "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.containers[0].resources.limits.memory).compareTo(quantity("1Gi")) == 0' "$ADMISSION"
-grep -Fq "object.spec.template.spec.containers[0].env.size() == 5" "$elewa-gitN"
+grep -Fq "object.spec.template.spec.containers[0].env.size() == 5" "$ADMISSION"
+grep -Fq "!has(object.spec.template.spec.containers[0].envFrom)" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_RUNTIME_LITELLM_BASE_URL'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.containers[0].volumeMounts.size() == 4" "$ADMISSION"
+grep -Fq 'SERVER_INTERNAL_PORT="$4"' "$CONFORMANCE"
+grep -Fq 'LITELLM_PORT="$5"' "$CONFORMANCE"
+if grep -Fq 'cluster.local:3001' "$CONFORMANCE"; then
+  echo "Admission conformance must use the deployed internal server port" >&2
+  exit 1
+fi
+grep -Fq '        runAsUser: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        runAsGroup: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        fsGroup: 65532' "$IDENTITY_CONFORMANCE"
+grep -Fq '        fsGroupChangePolicy: OnRootMismatch' "$IDENTITY_CONFORMANCE"
+grep -Fq '          type: RuntimeDefault' "$IDENTITY_CONFORMANCE"
+grep -Fq 'for (let attempt = 1; attempt <= 10; attempt += 1)' "$IDENTITY_CONFORMANCE"
+grep -Fq 'signal: AbortSignal.timeout(2000)' "$IDENTITY_CONFORMANCE"
+grep -Fq 'if (response.status !== 200 && response.status !== 204)' "$IDENTITY_CONFORMANCE"
 grep -Fq "object.spec.template.spec.volumes.size() == 4" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'litellm-key'" "$ADMISSION"
 grep -Fq "secret.name.matches('^litellm-key-[a-f0-9]{32}$')" "$ADMISSION"
 grep -Fq 'quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity("1Gi")) == 0' "$ADMISSION"
+grep -Fq 'count/jobs.batch: "20"' "$MANAGED_RUNTIME_QUOTA"
+grep -Fq 'count/secrets: "20"' "$MANAGED_RUNTIME_QUOTA"
+grep -Fq 'limits.memory: "20Gi"' "$MANAGED_RUNTIME_QUOTA"
+grep -Fq 'count/secrets: "20"' "$RUNTIME_QUOTA"
 if grep -Eq 'resources\.(requests|limits)\.[a-z]+ == quantity|emptyDir\.sizeLimit == quantity' "$ADMISSION"; then
   echo "admission compares a serialized resource string directly with a CEL Quantity" >&2
   exit 1
@@ -154,14 +269,13 @@ grep -Fq "'batch.kubernetes.io/controller-uid', 'batch.kubernetes.io/job-name'" 
 grep -Fq "object.spec.template == oldObject.spec.template" "$ADMISSION"
 grep -Fq 'validationActions: [Deny]' "$MANIFEST"
 
-# Disabled still tells OpenCrane the deployment-owned namespace boundary, but renders no namespace,
-# controller RBAC, network policy or cluster-scoped admission residue.
-grep -A2 -F 'name: AGENT_RUNTIME_NAMESPACE' "$DISABLED" | grep -Fq 'value: "oc-opencrane-runtime"'
+# Disabled renders no controller-owned namespace, RBAC, network policy, profile map, or
+# cluster-scoped admission residue.
 grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -Fq 'port: 443'
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
 grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
-if grep -Eq 'kind: ValidatingAdmissionPolicy|kind: Namespace|name: agent-controller|opencrane.ai/runtime-release' "$DISABLED"; then
+if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime|name: oc-opencrane-managed-runtime|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_PROFILES_JSON' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
 fi
@@ -173,6 +287,30 @@ if render_enabled --set-string agentController.runtimeNamespace='bad/name' >/dev
 fi
 if render_enabled --set-string agentController.runtimeNamespace=server-ns >/dev/null 2>&1; then
   echo "server namespace was accepted as the runtime namespace" >&2
+  exit 1
+fi
+if render_enabled --set-string managedAgentRuntimePlane.managedAgentRuntime.namespace=oc-opencrane-runtime >/dev/null 2>&1; then
+  echo "personal namespace was accepted as the managed runtime namespace" >&2
+  exit 1
+fi
+if render_enabled --set-string managedAgentRuntimePlane.managedAgentRuntime.serviceAccountName=agent-runtime-default >/dev/null 2>&1; then
+  echo "personal runtime ServiceAccount was accepted as the managed runtime identity" >&2
+  exit 1
+fi
+if render_enabled --set-string agentController.runtimeProfile.name=managed-default >/dev/null 2>&1; then
+  echo "reserved managed profile name was accepted for the personal runtime" >&2
+  exit 1
+fi
+if render_enabled --set-string agentController.runtimeProfile.name=bad/name >/dev/null 2>&1; then
+  echo "invalid personal runtime profile name was accepted" >&2
+  exit 1
+fi
+if render_enabled --set managedAgentRuntimePlane.managedAgentRuntime.egress.channelProxyPort=8089 >/dev/null 2>&1; then
+  echo "managed runtime egress accepted a channel-proxy port that differs from the Service" >&2
+  exit 1
+fi
+if render_enabled --set managedAgentRuntimePlane.managedAgentRuntime.egress.artifactServicePort=8089 >/dev/null 2>&1; then
+  echo "managed runtime egress accepted an ArtifactStore port that differs from the Service" >&2
   exit 1
 fi
 if render_enabled --set-string agentController.runtimeProfile.serviceAccountName=agent-controller >/dev/null 2>&1; then

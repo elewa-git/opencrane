@@ -4,18 +4,27 @@ import { Prisma, type PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
+// Side-effect import: loads the express-session SessionData.authUser augmentation.
+import "@opencrane/server/_infra/auth";
+import type { AuthUser } from "@opencrane/server/_infra/auth";
 import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults.js";
 
 /** In-memory model_routing_defaults store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
 
-/** A simple session-bearing user, used to exercise the ClusterTenant scope guard. */
-interface SessionUser
+/** Build a complete OIDC session identity accepted by the ClusterTenant scope guard. */
+function _authUser(overrides: Partial<AuthUser> = {}): AuthUser
 {
-  /** Verified email used by the guard's fail-closed tenant lookup. */
-  email: string;
-  /** Whether the caller is a platform operator (may mutate any scope). */
-  isPlatformOperator: boolean;
+  return {
+    sub: "user-1",
+    issuer: "https://idp.example.test",
+    groups: [],
+    isPlatformOperator: false,
+    isOrgAdmin: false,
+    email: "user@example.test",
+    authenticatedAt: "2026-06-18T00:00:00.000Z",
+    ...overrides,
+  };
 }
 
 /** Build a Prisma stub over an in-memory map keyed by the unique (scope, clusterTenant) pair. */
@@ -24,8 +33,14 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
   let seq = 0;
   function _key(scope: string, clusterTenant: string | null): string { return `${scope}:${clusterTenant ?? ""}`; }
   return {
-    tenant: {
-      findMany: async function _findMany() { return tenantClusterTenant ? [{ clusterTenantRef: tenantClusterTenant }] : []; },
+    orgMembership: {
+      findMany: async function _findMany(args: { where?: { clusterTenant?: string } })
+      {
+        const requestedClusterTenant = args.where?.clusterTenant;
+        return tenantClusterTenant && (!requestedClusterTenant || requestedClusterTenant === tenantClusterTenant)
+          ? [{ clusterTenant: tenantClusterTenant }]
+          : [];
+      },
     },
     modelRoutingDefault: {
       findMany: async function _list(args?: { where?: { clusterTenant?: string } })
@@ -75,14 +90,18 @@ function _mockPrisma(store: Map<string, Row>, tenantClusterTenant: string | null
   } as unknown as PrismaClient;
 }
 
-/** Build a minimal app mounting the defaults router, optionally seeding a session user. */
-function _buildApp(prisma: PrismaClient, user?: SessionUser): Express
+/** Build a minimal app mounting the defaults router with a canonical authenticated session. */
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isPlatformOperator: true, isOrgAdmin: true })): Express
 {
   const app = express();
   app.use(express.json());
   if (user)
   {
-    app.use(function _seedSession(req, _res, next) { (req as unknown as { session: { authUser: SessionUser } }).session = { authUser: user }; next(); });
+    app.use(function _seedSession(req, _res, next)
+    {
+      Object.defineProperty(req, "session", { configurable: true, value: { authUser: user } });
+      next();
+    });
   }
   app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
   return app;
@@ -128,7 +147,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
     const raced: Row = { id: "default-raced", scope: "Global", clusterTenant: null, defaultModel: "openai/gpt-4o", autoConfig: null, createdAt: new Date(), updatedAt: new Date() };
     let firstFind = true;
     const prisma = {
-      tenant: { findMany: async function _fm() { return []; } },
+      orgMembership: { findMany: async function _fm() { return []; } },
       modelRoutingDefault: {
         // First lookup (pre-create) sees nothing; the post-P2002 lookup finds the racer's row.
         findFirst: async function _ff() { if (firstFind) { firstFind = false; return null; } return raced; },
@@ -183,7 +202,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
 
   it("scope guard: a non-operator may NOT upsert a Global default (403)", async function _guardGlobalDenied()
   {
-    const app = _buildApp(_mockPrisma(new Map()), { email: "user@acme.test", isPlatformOperator: false });
+    const app = _buildApp(_mockPrisma(new Map()), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: "x" });
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN_SCOPE");
@@ -192,7 +211,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
   it("scope guard: a non-operator may upsert a default for their OWN ClusterTenant", async function _guardOwnCt()
   {
     const store = new Map<string, Row>();
-    const app = _buildApp(_mockPrisma(store, "acme"), { email: "user@acme.test", isPlatformOperator: false });
+    const app = _buildApp(_mockPrisma(store, "acme"), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", clusterTenant: "acme", defaultModel: "x" });
     expect(res.status).toBe(200);
     expect(res.body.clusterTenant).toBe("acme");
@@ -200,7 +219,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
 
   it("scope guard: a non-operator may NOT upsert a default for another ClusterTenant (403)", async function _guardOtherCt()
   {
-    const app = _buildApp(_mockPrisma(new Map(), "acme"), { email: "user@acme.test", isPlatformOperator: false });
+    const app = _buildApp(_mockPrisma(new Map(), "acme"), _authUser({ sub: "user-acme" }));
     const res = await request(app).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", clusterTenant: "other", defaultModel: "x" });
     expect(res.status).toBe(403);
     expect(res.body.code).toBe("FORBIDDEN_SCOPE");
@@ -232,7 +251,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
     process.env.OIDC_SESSION_SECRET = "test-session-secret";
     try
     {
-      const res = await request(_buildApp(_mockPrisma(new Map())))
+      const res = await request(_buildApp(_mockPrisma(new Map()), null))
         .put("/api/v1/model-routing/defaults")
         .send({ defaultModel: "openai/gpt-4o" });
 

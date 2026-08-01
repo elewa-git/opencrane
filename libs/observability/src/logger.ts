@@ -4,7 +4,7 @@
  * Every app creates its root logger here so logging is consistent across the
  * fleet: JSON to stdout (or an explicitly selected destination), context fields injected via a
  * mixin, secrets redacted, and — once {@link ___StartTelemetry} has run — every
- * record carries `trace_id`/`span_id` for correlation with Cloud Trace.
+ * record carries `trace_id`/`span_id` for correlation with the configured trace backend.
  */
 import pino from "pino";
 import type { Logger } from "pino";

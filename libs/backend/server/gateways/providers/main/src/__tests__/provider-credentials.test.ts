@@ -4,10 +4,27 @@ import type { PrismaClient } from "@prisma/client";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
+// Side-effect import: loads the express-session SessionData.authUser augmentation.
+import "@opencrane/server/_infra/auth";
+import type { AuthUser } from "@opencrane/server/_infra/auth";
 import { providerCredentialsRouter } from "../routes/provider-credentials.js";
 
 /** In-memory provider_credentials store backing the mock Prisma client. */
 type Row = Record<string, unknown>;
+
+/** Build a complete OIDC platform-operator session for mutation route tests. */
+function _platformOperator(): AuthUser
+{
+  return {
+    sub: "operator-1",
+    issuer: "https://idp.example.test",
+    groups: ["platform-operators"],
+    isPlatformOperator: true,
+    isOrgAdmin: true,
+    email: "operator@example.test",
+    authenticatedAt: "2026-06-18T00:00:00.000Z",
+  };
+}
 
 /** Build a Prisma stub over an in-memory map keyed by credential id. */
 function _mockPrisma(store: Map<string, Row>): PrismaClient
@@ -41,11 +58,19 @@ function _mockPrisma(store: Map<string, Row>): PrismaClient
   } as unknown as PrismaClient;
 }
 
-/** Build a minimal app mounting only the provider-credentials router. */
-function _buildApp(prisma: PrismaClient): Express
+/** Build a minimal app mounting the credential router with an authenticated operator session. */
+function _buildApp(prisma: PrismaClient, user: AuthUser | null = _platformOperator()): Express
 {
   const app = express();
   app.use(express.json());
+  if (user)
+  {
+    app.use(function _seedSession(req, _res, next)
+    {
+      Object.defineProperty(req, "session", { configurable: true, value: { authUser: user } });
+      next();
+    });
+  }
   app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
   return app;
 }

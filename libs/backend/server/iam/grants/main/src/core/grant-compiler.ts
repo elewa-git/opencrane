@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma, PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/observability";
 
@@ -31,7 +31,6 @@ const _GRANT_ROW_SELECT = {
 
 /** Typed Prisma payload values used during runtime lookups. */
 const _PRISMA_GRANT_PAYLOAD_TYPE = {
-  Awareness: "Awareness",
   McpServer: "McpServer",
 } as const;
 
@@ -53,12 +52,11 @@ const _PRISMA_GRANT_SCOPE = {
 /** Typed Prisma subject values used during runtime lookups. */
 const _PRISMA_GRANT_SUBJECT_TYPE = {
   Group: "Group",
-  Tenant: "Tenant",
   User: "User",
 } as const;
 
 /** Principal subject types that resolve directly against the caller identifier. */
-const _DIRECT_SUBJECT_TYPES = [_PRISMA_GRANT_SUBJECT_TYPE.Tenant, _PRISMA_GRANT_SUBJECT_TYPE.User];
+const _DIRECT_SUBJECT_TYPES = [_PRISMA_GRANT_SUBJECT_TYPE.User];
 
 /** Compiler-facing access enum lookup keyed by Prisma enum values. */
 const _COMPILER_ACCESS_BY_PRISMA_ACCESS = {
@@ -68,7 +66,6 @@ const _COMPILER_ACCESS_BY_PRISMA_ACCESS = {
 
 /** Compiler-facing payload enum lookup keyed by Prisma enum values. */
 const _COMPILER_PAYLOAD_BY_PRISMA_PAYLOAD = {
-  [_PRISMA_GRANT_PAYLOAD_TYPE.Awareness]: GrantCompilerPayloadType.Awareness,
   [_PRISMA_GRANT_PAYLOAD_TYPE.McpServer]: GrantCompilerPayloadType.McpServer,
 };
 
@@ -84,7 +81,6 @@ const _COMPILER_SCOPE_BY_PRISMA_SCOPE = {
 /** Compiler-facing subject enum lookup keyed by Prisma enum values. */
 const _COMPILER_SUBJECT_BY_PRISMA_SUBJECT = {
   [_PRISMA_GRANT_SUBJECT_TYPE.Group]: GrantCompilerSubjectType.Group,
-  [_PRISMA_GRANT_SUBJECT_TYPE.Tenant]: GrantCompilerSubjectType.Tenant,
   [_PRISMA_GRANT_SUBJECT_TYPE.User]: GrantCompilerSubjectType.User,
 };
 
@@ -104,6 +100,8 @@ type _GrantRow = {
   subjectId: string;
   createdAt: Date;
 };
+/** Read surface shared by a full Prisma client and an existing transaction fence. */
+type _GrantCompilerPrisma = PrismaClient | Prisma.TransactionClient;
 
 /**
  * Compile effective grant decisions for a single principal and payload family.
@@ -111,7 +109,7 @@ type _GrantRow = {
  * Thin wrapper over {@link compileForPrincipals} for the common single-principal case
  * (a user session, an awareness lookup). Preserved so existing callers are unchanged.
  *
- * @param principalId - Tenant or user identifier being evaluated.
+ * @param principalId - User identifier being evaluated.
  * @param payloadType - Payload family to compile.
  * @param prisma - Prisma client used to load groups and grants.
  * @returns Final decision per payload identifier.
@@ -119,24 +117,22 @@ type _GrantRow = {
 export async function compile(
   principalId: string,
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   return compileForPrincipals([principalId], payloadType, prisma);
 }
 
 /**
- * Compile effective grant decisions over a SET of principals (S4 inheritance).
+ * Compile effective grant decisions over a set of user principals.
  *
- * An openclaw Tenant is 1:1 with one ClusterTenant user and must act with that user's
- * entitlements, so its contract is compiled over `{tenant-name, subject}` — the union of
- * direct grants on any principal in the set PLUS group grants for every group that
- * contains any principal. The precedence pass is unchanged and deterministic: highest
+ * The compiler unions direct grants on any principal in the set plus group grants for every
+ * group that contains any principal. The precedence pass is deterministic: highest
  * priority wins, deny beats allow at equal priority, newest `createdAt` breaks the tie —
  * so a user-level Deny still overrides a tenant-level Allow regardless of which principal
  * carried it. Duplicate/empty ids are dropped so the set is minimal.
  *
- * @param principalIds - Tenant and/or user identifiers whose grants are unioned.
+ * @param principalIds - User identifiers whose grants are unioned.
  * @param payloadType - Payload family to compile.
  * @param prisma - Prisma client used to load groups and grants.
  * @returns Final decision per payload identifier.
@@ -144,7 +140,7 @@ export async function compile(
 export async function compileForPrincipals(
   principalIds: string[],
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   // 0. Normalise to a minimal, distinct principal set (drop empties + duplicates), then run the
@@ -174,7 +170,7 @@ export async function compileForPrincipals(
 async function _compileForResolvedPrincipals(
   principals: string[],
   payloadType: GrantCompilerPayloadType,
-  prisma: PrismaClient,
+  prisma: _GrantCompilerPrisma,
 ): Promise<CompiledGrantDecision[]>
 {
   // An empty set has nothing to compile, so short-circuit before touching the DB.
@@ -187,7 +183,7 @@ async function _compileForResolvedPrincipals(
   const groupRows: _GroupRow[] = await prisma.group.findMany(_GROUP_ROW_SELECT);
 
   // 2. Resolve every group that contains ANY principal in the set, because a group grant is
-  //    inherited when the user OR the tenant is a member.
+  //    inherited when any requested user is a member.
   const matchingGroupIds = groupRows.filter(function _matchGroup(group: _GroupRow)
   {
     return _GroupHasAnyPrincipal(group.members, principals);
@@ -380,8 +376,6 @@ function _ToPrismaPayloadType(payloadType: GrantCompilerPayloadType): _PrismaGra
 {
   switch (payloadType)
   {
-    case GrantCompilerPayloadType.Awareness:
-      return _PRISMA_GRANT_PAYLOAD_TYPE.Awareness;
     case GrantCompilerPayloadType.McpServer:
       return _PRISMA_GRANT_PAYLOAD_TYPE.McpServer;
   }

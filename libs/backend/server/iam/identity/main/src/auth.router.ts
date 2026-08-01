@@ -1,23 +1,19 @@
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { _ConnectionsAuthRouter } from "@opencrane/backend/server/tenancy/connections";
-
 import type { OidcAuthService } from "./oidc.service.js";
 
 /**
  * Build the auth router covering:
  *  - Session introspection (GET /me)
- *  - OpenClaw connection broker (POST /pod-token)
  *  - OIDC browser flow (GET /login, GET /callback, POST /logout)
  *
  * All routes in this router are mounted before `___AuthMiddleware` and are
  * therefore public — authentication is enforced per-handler where required.
  *
  * @param authService  - OIDC auth service instance.
- * @param prisma       - Prisma client injected into the connection sub-router.
  */
-export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient): Router
+export function ___AuthRouter(authService: OidcAuthService, _prisma: PrismaClient): Router
 {
   const router = Router();
 
@@ -37,9 +33,6 @@ export function ___AuthRouter(authService: OidcAuthService, prisma: PrismaClient
       next(err);
     }
   });
-
-  // Connection routes own their session checks because this router is mounted before auth middleware.
-  router.use(_ConnectionsAuthRouter(prisma));
 
   // --------------------------------------------------------------------------
   // OIDC browser flow

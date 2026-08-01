@@ -8,8 +8,7 @@
 ## Decision record (2026-07-18)
 
 The [personal-agent platform architecture](docs/design/personal-agent-platform-architecture.md) is
-the target, refined by the
-[OpenClaw loop investigation](docs/design/openclaw-agent-loop-replacement-plan.md):
+the target:
 
 1. **Product:** OpenCrane owns Thread, Message, Run, RunEvent, approvals, transcript, compaction,
    retries, budgets, identity, memory, artifacts, and tool policy. The runtime is a replaceable
@@ -20,9 +19,7 @@ the target, refined by the
    obsolete schema, protocol, app, bridge, token path, database assumption, configuration switch,
    test, deployment unit, and document as its replacement becomes ready. Do not preserve, transform,
    or bridge existing OpenCrane state; build only the target product path. Historical transition
-   proposals are rejected. The
-   [direct-refactor plan](docs/design/personal-agent-platform-direct-refactor-plan.md) documents the
-   target-state build.
+   proposals are rejected.
 3. **Sequencing:** Phase A deletion debt and Phase B monorepo normalization are complete. Build the
    target foundations and fresh provisioning next; then the runtime and AgentService planes; then
    product surfaces; finally qualify the complete product and verify zero legacy residue.
@@ -35,10 +32,13 @@ the target, refined by the
    isolated; controller and channel-proxy trust boundaries are separate apps; legacy CRDs and
    OpenClaw authorities disappear.
 
-Toolkit selection remains evidence-driven: the offline Phase E conformance harness and fault-injection
-matrix are built and CI-runnable, but choosing and adopting the exact-pinned driver waits on the
-live-LiteLLM conformance leg, gated on [#337](https://github.com/elewa-git/opencrane/issues/337)
-(→ [#246](https://github.com/elewa-git/opencrane/issues/246)).
+Toolkit selection remains evidence-driven: the offline Phase E conformance harness, immutable
+managed run admission and tagged personal/managed input contract, fault-injection matrix,
+controller, and runtime boundaries are built and CI-runnable. Live PostgreSQL, Obot, Cognee, and
+LiteLLM qualification remains gated on
+[#337](https://github.com/elewa-git/opencrane/issues/337)
+(→ [#246](https://github.com/elewa-git/opencrane/issues/246)); only passing evidence adopts the
+exact-pinned driver and permits deletion of the replaced live path.
 
 ## Current state
 
@@ -50,8 +50,6 @@ requirements.
 
 ## Program — personal-agent platform
 
-The executable phase detail is in the
-[direct target-state refactor plan](docs/design/personal-agent-platform-direct-refactor-plan.md).
 Issues are cut when a phase opens. Each phase ends with architecture, reaper, validation, and
 independent-review gates before its PR is merged.
 
@@ -100,9 +98,9 @@ custody/credential/discovery slices from `main` per
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
 
-### Phase E — personal runtime and AgentService plane (parallel work lanes)
+### Phase E — personal runtime and AgentService plane (implementation complete; live qualification next)
 
-**In progress:** the active PR stack now defines immutable run input, the fenced runtime protocol,
+**Implementation complete offline:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
 the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
 crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
 Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,
@@ -118,18 +116,16 @@ positive `cancel_attempt` stop signal (with exactly-once terminal reporting unde
 surfaces model tool calls as external-action candidates validated against the immutable snapshot and
 reserved before dispatch through an injected tool-invocation authority. A tool grant flagged
 `requiresApproval` defers: the reserved invocation opens a pending `ApprovalRequest`, so the
-pause is reachable end to end. The deferred-tool DECIDE authority and single-use resume feed
-(`resumeTokenHash`-consumed) are built and unit-covered, and steering is absorbed only at safe
-pre-model boundaries with an exactly-once ordered claim that advances a fenced input generation. The
+pause is reachable end to end. The owner-bound approval-DECISION and steering-INGEST APIs are built:
+an owner may decide only their own pending tool approval or queue bounded text only to their own live
+run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
+the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
 state (no server-side checkpoint model). The MCP, memory, and sandbox execution transports are ports
-with fail-closed stubs wired only in the composition root. NOT yet built: the human
-approval-DECISION HTTP endpoint and the steering-INGEST HTTP surface are the operator/product plane in
-Phase F (#224), so approval and steering are not end-to-end live. The offline conformance harness and
-fault-injection matrix ARE built and CI-runnable (runtime protocol/reliability, attempt-scoped
-credential rejection, observability evidence); still gated on
-[#337](https://github.com/elewa-git/opencrane/issues/337) are the live-LiteLLM conformance leg,
-driver adoption evidence, and OpenClaw loop deletion — none of which has happened. The remaining
+with fail-closed stubs wired only in the composition root. The offline conformance harness and
+fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
+credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
+evidence remain gated on [#337](https://github.com/elewa-git/opencrane/issues/337). The remaining
 E1/E2 product capabilities below are also incomplete.
 
 **Runtime lane** (→ [#246](https://github.com/elewa-git/opencrane/issues/246)): implement
@@ -160,14 +156,11 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
 plane), execution authority via the Obot MCP-invocation port (allow-list enforced) and
-memory-gateway scoped read/write with mandatory provenance, the attach-authority + runtime
+memory-gateway scoped read/write with mandatory provenance, and the attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested), and the first packaged central-agent DEFINITION (the harvester expressed as a managed
-`AgentService` + schedule + Obot MCP assignment, Obot stubbed). NOT done — a NAMED LATER GATE:
-**the harvesting-central-agent live-Obot proof**, which blocks the reaper deletion of
-`apps/feat-central-agents`, its bespoke Slack connector, and the `HarvestingCursor` table; tracked
-under [#337](https://github.com/elewa-git/opencrane/issues/337). Until that proof lands,
-`apps/feat-central-agents` and `HarvestingCursor` stay in place untouched.
+tested). NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
+live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337). The repository
+does not retain an unqualified offline definition alongside that live acceptance gate.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
@@ -212,7 +205,7 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#128](https://github.com/elewa-git/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
 | [#129](https://github.com/elewa-git/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
 | [#133](https://github.com/elewa-git/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#135](https://github.com/elewa-git/opencrane/issues/135) | Remove broad provider-secret broadcast with the owning legacy path |
+| [#353](https://github.com/elewa-git/opencrane/issues/353) | Remove provider-secret broadcast and obsolete plaintext provider-key paths |
 | [#136](https://github.com/elewa-git/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
 | [#150](https://github.com/elewa-git/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
 | [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
@@ -226,8 +219,9 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
 | [#226](https://github.com/elewa-git/opencrane/issues/226) | Build membership management over authoritative target APIs |
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
-| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by ADR 0007 and this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
+| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
+| [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
 
 ## Deferred research
 
@@ -235,3 +229,6 @@ to create, share, schedule, observe, revoke, and delete agents and assets.
   measured target workload, security, and cost evidence.
 - A generic plugin framework remains deferred until at least two concrete target modules require the
   same extension seam.
+- Lightweight model-call traceability remains deferred to
+  [#513](https://github.com/elewa-git/opencrane/issues/513): prefer LiteLLM-native OTLP GenAI spans
+  through an operator-supplied collector, with prompt and response content disabled by default.

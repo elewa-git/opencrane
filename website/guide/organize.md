@@ -37,15 +37,15 @@ The same four scopes appear everywhere you share or restrict something:
 
 ## Grouping people
 
-When you create an assistant, you can tag the person's team — see
-[Create your first employee assistant](/guide/first-tenant). That team label is what
+When you create an agent service, you can tag its team scope — see
+[Create your first agent](/guide/first-agent). That team label is what
 you then reference when you share skills with "engineering" or give a department
 access to a tool — so everyone in that group is covered at once.
 
 ## A simple way to start
 
 1. Decide your **departments** (e.g. Engineering, Sales, Support).
-2. Tag each person's assistant with their `--team`.
+2. Assign each agent service and subject to the scopes it should use.
 3. Share company-wide skills and knowledge at **org** scope; keep team-specific things
    at **department** or **project** scope.
 

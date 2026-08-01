@@ -34,6 +34,21 @@ function _Registration(): AgentControllerRunWorkloadRegistrationCommand
 	return { claimedAt: "2026-07-20T00:02:00.000Z", deliveryCount: 2, runId: "run-1", attempt: 1, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", namespace: "silo-a-runtime", serviceAccountName: "agent-runtime-default", workloadUid: "job-uid", workloadProfile: "personal-default", bootstrapReference: "bootstrap-ref-1", podUid: "pod-uid" };
 }
 
+/** Return a chunked response that crosses the controller allocation ceiling. */
+function _OversizedChunkedResponse(maximumBytes: number): Response
+{
+	let chunk = 0;
+	return new Response(new ReadableStream<Uint8Array>({
+		pull(controller)
+		{
+			if (chunk === 0) controller.enqueue(new Uint8Array(maximumBytes));
+			else if (chunk === 1) controller.enqueue(new Uint8Array(1));
+			else controller.close();
+			chunk += 1;
+		},
+	}));
+}
+
 describe("agent-controller OpenCrane HTTP authority", function _Suite()
 {
 	it("claims and commits over the exact projected-token-authenticated routes", async function _CallsAuthority()
@@ -84,6 +99,8 @@ describe("agent-controller OpenCrane HTTP authority", function _Suite()
 
 		const malformed = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _malformed() { return new Response(JSON.stringify({ lease: {}, attempt: {} }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
 		await expect(malformed.__Claim(new AbortController().signal)).rejects.toThrow(/malformed controller claim/);
+		const invalidJson = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _invalidJson() { return new Response("{", { status: 200 }); }, readToken: async function _token() { return "token"; } });
+		await expect(invalidJson.__Claim(new AbortController().signal)).rejects.toThrow(/OpenCrane controller response must contain valid JSON/);
 		const malformedRelease = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _malformedRelease() { return new Response(JSON.stringify({ ..._ReleaseBody(), workload: { ..._ReleaseBody().workload, assignmentExpiresAt: "2026-07-20T01:00:00Z" } }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
 		await expect(malformedRelease.__ClaimWorkloadRelease(new AbortController().signal)).rejects.toThrow(/malformed workload-release claim/);
 
@@ -92,5 +109,12 @@ describe("agent-controller OpenCrane HTTP authority", function _Suite()
 
 		const mismatchedPod = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _mismatchedPod() { return new Response(JSON.stringify({ outcome: "registered", runId: "run-1", attempt: 1, workloadUid: "job-uid", podUid: "foreign-pod" }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
 		await expect(mismatchedPod.__RegisterFirstPod("event-1", _Registration(), new AbortController().signal)).rejects.toThrow(/mismatched first-Pod/);
+	});
+
+	it("stops a chunked response as soon as it crosses the allocation ceiling", async function _BoundsChunkedResponse()
+	{
+		const authority = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _oversized() { return _OversizedChunkedResponse(64 * 1024); }, readToken: async function _token() { return "token"; } });
+
+		await expect(authority.__Claim(new AbortController().signal)).rejects.toThrow(/exceeded the 64 KiB boundary/);
 	});
 });

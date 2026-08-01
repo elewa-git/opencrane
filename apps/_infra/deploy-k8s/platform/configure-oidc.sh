@@ -3,7 +3,7 @@
 # OpenCrane — configure OIDC human-login on an EXISTING install
 #
 # Standalone, surgical OIDC configurator. It does NOT re-run the full deploy
-# (no CNPG / ingress-nginx / cert-manager / external-dns work) — it only:
+# (no infrastructure-controller work) — it only:
 #   1. creates/updates the `opencrane-oidc` Secret (client + session secret), and
 #   2. `helm upgrade --reuse-values` of the `opencrane` release, overriding ONLY
 #      the clustertenantManager.oidc.* values.

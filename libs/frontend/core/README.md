@@ -27,17 +27,16 @@ a feature never calls `fetch` directly and never guesses a request or response s
 - `lib/models/*.types.ts` — shared data models (DTOs), enums, and colour/label maps (`scope`, `session`, `thread`,
   `context`, `notification`, `settings`, `mcp`, `plan`).
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
-- `ControlPlaneApiService` + `FleetManagerApiService` — the typed HTTP clients, plus their
-  `CONTROL_PLANE_BASE_URL` / `FLEET_MANAGER_BASE_URL` injection tokens.
+- `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
 - `WeOwnAiPreset` (`lib/theme/weownai-preset`) — the PrimeNG (the component library) theme preset.
 - `lib/utils/*` — framework-agnostic helpers (`_ToggleId`, collection helpers).
 
 ## Boundary
 
-Consumed by every other frontend package. The Control Plane client types against
-`@opencrane/contracts` (generated intra-repo from the backend's OpenAPI spec, so the same source of
-truth as the server); the Fleet Manager client types against a pinned external spec. It must never
-import backend application source — the network contract is the only coupling.
+Consumed by every other frontend package. The control-plane client types against
+`@opencrane/contracts`, generated from the backend's OpenAPI spec so the browser and server use the
+same contract. It must never import backend application source — the network contract is the only
+coupling.
 
 ## Dependency direction
 

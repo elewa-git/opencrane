@@ -1,7 +1,5 @@
 import type { RequestHandler } from "express";
 
-import { _IsDevAuthMode } from "./auth-mode.js";
-
 /**
  * Reusable authorization guard restricting a route to organisation admins — the role
  * allowed to curate the MCP catalogue and approve servers (P0.5).
@@ -10,8 +8,8 @@ import { _IsDevAuthMode } from "./auth-mode.js";
  * (`session.authUser.isOrgAdmin`, set from `OPENCRANE_ORG_ADMIN_GROUPS`), never from
  * request input.
  *
- * Posture, mirroring `_RequirePlatformOperator` / `_IsDevAuthMode`:
- *   1. No established session — FAIL OPEN under dev mode; FAIL CLOSED otherwise (403).
+ * Posture:
+ *   1. No established session — fail closed (403).
  *   2. Session present — allow iff `isOrgAdmin` (platform operators are org admins by
  *      derivation, being the broader role).
  *
@@ -19,20 +17,14 @@ import { _IsDevAuthMode } from "./auth-mode.js";
  */
 export function _RequireOrgAdmin(): RequestHandler
 {
-  /** Express handler: allow verified org admins (or the dev-mode bypass), else 403. */
+  /** Express handler: allow verified org admins, else 403. */
   return function _orgAdminHandler(req, res, next)
   {
     const authUser = req.session?.authUser;
 
-    // 1. No session — honour the auth posture: dev-mode opens the bypass, otherwise deny.
+    // 1. No session is never an authority grant.
     if (!authUser)
     {
-      if (_IsDevAuthMode())
-      {
-        next();
-        return;
-      }
-
       _deny(res);
       return;
     }

@@ -45,37 +45,49 @@ enum RunOutboxEventKind {
   RunResumeRequested          @map("run.resume_requested")
 }
 
+/// Immutable outcome of attempting to append one terminal child's result to its parent stream.
+enum ChildRunCompletionDeliveryOutcome {
+  Delivered            @map("delivered")
+  NoParentStream       @map("no_parent_stream")
+  ParentStreamTerminal @map("parent_stream_terminal")
+}
+
 /// One logical run authority. Retries atomically increment `attempt`; there is no AgentRunAttempt.
 model AgentRun {
-  id                      String                   @id @default(cuid())
-  siloId                  String                   @map("silo_id")
-  agentServiceId          String                   @map("agent_service_id")
-  agentRevisionId         String                   @map("agent_revision_id")
-  threadId                String?                  @map("thread_id")
-  trigger                 AgentRunTrigger
-  delegatedUserId         String?                  @map("delegated_user_id")
-  requestIdempotencyKey   String                   @map("request_idempotency_key")
-  rootRunId               String                   @map("root_run_id")
-  parentRunId             String?                  @map("parent_run_id")
-  attempt                 Int                      @default(1)
-  state                   AgentRunState            @default(Accepted)
-  effectiveContractDigest String                   @map("effective_contract_digest")
-  inputSnapshotDigest     String                   @map("input_snapshot_digest")
-  acceptedAt              DateTime                 @default(now()) @map("accepted_at")
-  startedAt               DateTime?                @map("started_at")
-  finishedAt              DateTime?                @map("finished_at")
-  terminalReason          AgentRunTerminalReason?  @map("terminal_reason")
-  costAmount              Decimal?                 @map("cost_amount") @db.Decimal(18, 6)
-  costCurrency            String?                  @map("cost_currency")
-  revision                AgentRevision            @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
-  service                 AgentService             @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
-  inputSnapshot           RunInputSnapshot?
-  workloadAssignments     WorkloadAssignment[]
-  proofKeys               RunProofKey[]
-  approvalRequests        ApprovalRequest[]
-  executionReceipts       ActionExecutionReceipt[]
-  toolInvocations         ToolInvocation[]
-  outboxEvents            OutboxEvent[]
+  id                       String                   @id @default(cuid())
+  siloId                   String                   @map("silo_id")
+  agentServiceId           String                   @map("agent_service_id")
+  agentRevisionId          String                   @map("agent_revision_id")
+  threadId                 String?                  @map("thread_id")
+  trigger                  AgentRunTrigger
+  delegatedUserId          String?                  @map("delegated_user_id")
+  requestIdempotencyKey    String                   @map("request_idempotency_key")
+  rootRunId                String                   @map("root_run_id")
+  parentRunId              String?                  @map("parent_run_id")
+  attempt                  Int                      @default(1)
+  state                    AgentRunState            @default(Accepted)
+  effectiveContractDigest  String                   @map("effective_contract_digest")
+  inputSnapshotDigest      String                   @map("input_snapshot_digest")
+  acceptedAt               DateTime                 @default(now()) @map("accepted_at")
+  startedAt                DateTime?                @map("started_at")
+  finishedAt               DateTime?                @map("finished_at")
+  terminalReason           AgentRunTerminalReason?  @map("terminal_reason")
+  costAmount               Decimal?                 @map("cost_amount") @db.Decimal(18, 6)
+  costCurrency             String?                  @map("cost_currency")
+  revision                 AgentRevision            @relation(fields: [agentServiceId, agentRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+  service                  AgentService             @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+  inputSnapshot            RunInputSnapshot?
+  workloadAssignments      WorkloadAssignment[]
+  proofKeys                RunProofKey[]
+  approvalRequests         ApprovalRequest[]
+  executionReceipts        ActionExecutionReceipt[]
+  toolInvocations          ToolInvocation[]
+  outboxEvents             OutboxEvent[]
+  steeringRequests         RuntimeSteeringRequest[]
+  spawnedChildReservations ChildRunReservation[]    @relation("ChildRunReservationParent")
+  childReservation         ChildRunReservation?     @relation("ChildRunReservationChild")
+  childCompletionDelivery  ChildRunCompletionDelivery? @relation("ChildRunCompletionDeliveryChild")
+  receivedChildCompletions ChildRunCompletionDelivery[] @relation("ChildRunCompletionDeliveryParent")
 
   @@unique([siloId, requestIdempotencyKey])
   @@unique([id, agentServiceId, agentRevisionId])
@@ -87,6 +99,41 @@ model AgentRun {
   @@index([threadId, acceptedAt])
   @@index([rootRunId])
   @@map("agent_runs")
+}
+
+/// Append-only proof that a terminal child was delivered to its direct parent's stream or deliberately suppressed.
+model ChildRunCompletionDelivery {
+  childRunId          String                            @id @map("child_run_id")
+  parentRunId         String                            @map("parent_run_id")
+  parentEventSequence Int?                              @map("parent_event_sequence")
+  outcome             ChildRunCompletionDeliveryOutcome
+  deliveredAt         DateTime                          @default(now()) @map("delivered_at")
+  childRun            AgentRun                          @relation("ChildRunCompletionDeliveryChild", fields: [childRunId], references: [id], onDelete: Restrict)
+  parentRun           AgentRun                          @relation("ChildRunCompletionDeliveryParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+
+  @@index([parentRunId])
+  @@map("child_run_completion_deliveries")
+}
+
+/// Immutable token and cost allocation made by a parent for one governed child run.
+///
+/// This row is committed with its accepted child run. It makes the parent/root lineage and the
+/// budget carved from the parent auditable, while allowing a parent-locked transaction to count
+/// durable allocations rather than trust a caller-provided remaining budget.
+model ChildRunReservation {
+  childRunId       String   @id @map("child_run_id")
+  parentRunId      String   @map("parent_run_id")
+  rootRunId        String   @map("root_run_id")
+  depth            Int
+  maxTokens        Int      @map("max_tokens")
+  maxCostUsdMicros BigInt   @map("max_cost_usd_micros")
+  createdAt        DateTime @default(now()) @map("created_at")
+  parentRun        AgentRun @relation("ChildRunReservationParent", fields: [parentRunId], references: [id], onDelete: Restrict)
+  childRun         AgentRun @relation("ChildRunReservationChild", fields: [childRunId], references: [id], onDelete: Restrict)
+
+  @@index([parentRunId])
+  @@index([rootRunId])
+  @@map("child_run_reservations")
 }
 
 model RunInputSnapshot {
@@ -105,7 +152,7 @@ model RunInputSnapshot {
   memoryFacts             Json     @map("memory_facts")
   identitySnapshot        Json     @map("identity_snapshot")
   modelRoute              Json     @map("model_route")
-  toolGrantIds            String[] @default([]) @map("tool_grant_ids")
+  integrationAssignments  Json     @map("integration_assignments")
   skillRevisionIds        String[] @default([]) @map("skill_revision_ids")
   memoryQueryPolicy       Json     @map("memory_query_policy")
   budgetPolicy            Json     @map("budget_policy")

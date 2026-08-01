@@ -63,4 +63,4 @@ and `scope:shared` packages — never on backend domains, the frontend, or app e
 ## See also
 
 - Parent index: [_infra](../README.md) · [server libraries](../../README.md)
-- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md) · [tenant-hosting](../tenant-hosting/README.md) · [channel-proxy](../channel-proxy/README.md)
+- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [obot-custody](../obot-custody/README.md)

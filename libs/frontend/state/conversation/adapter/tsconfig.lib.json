@@ -14,7 +14,7 @@
   ],
   "references": [
     {
-      "path": "../render/tsconfig.lib.json"
+      "path": "../ag-ui/tsconfig.lib.json"
     },
     {
       "path": "../../core"

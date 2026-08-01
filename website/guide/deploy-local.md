@@ -1,65 +1,41 @@
 # Local, VM or VPS
 
-Run all of OpenCrane on a **single machine** — your laptop, a VM, or a VPS. This is
-the fastest way to try it, demo it, or serve a small team. Everything (control plane,
-operator, assistants, database) runs in one lightweight Kubernetes node.
+Run one **OpenCrane organisation silo** on a small Kubernetes cluster. This is suitable
+for evaluation and single-node environments where control-plane downtime is acceptable.
 
-## On your laptop
+## Prerequisites
 
-The bundled local test script spins up a local [k3d](https://k3d.io) cluster and
-installs the full stack:
+- Kubernetes 1.30 or newer.
+- A default StorageClass.
+- An ingress controller if you need browser access.
+- A CNI that enforces `NetworkPolicy`.
+- PostgreSQL Secrets required by the deployment profile.
 
-```bash
-# 1. Start a k3d cluster
-k3d cluster create opencrane --agents 1 --port "8080:80@loadbalancer"
+## Install the silo
 
-# 2. Bootstrap the full local stack
-apps/_infra/deploy-k8s/platform/tests/k3d-local.sh
-```
-
-That's enough to create assistants through the UI or management API. Tear it down anytime;
-nothing leaves your machine.
-
-## On a VM or VPS
-
-For an always-on single server (a cloud VM, or a box under your desk), use
-[k3s](https://k3s.io) — a tiny, production-grade Kubernetes that's perfect for one
-node:
+Use the same app-owned entrypoint as a production cluster:
 
 ```bash
-# 1. Install k3s (gives you a one-node cluster + kubectl)
-curl -sfL https://get.k3s.io | sh -
-export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
+export OIDC_ISSUER_URL=https://identity.example.com
+export OIDC_CLIENT_ID=<organisation-client-id>
 
-# 2. Install OpenCrane — fleet release (cluster bootstrap + fleet-manager)
-apps/fleet-platform/deploy.sh --base-domain <your-domain>
-
-# 3. Install a silo release for your organisation
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain <your-domain> \
-  --cluster-tenant <org-name>
+  --cluster-tenant <org-name> \
+  --postgres-credentials-secret opencrane-postgres-bootstrap \
+  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
 ```
 
-Point your domain at the server's IP (see [Set up your domain](/guide/dns)) and you
-have a real, public deployment on a single host.
+The chart installs trusted services and distinct restricted namespaces for personal,
+managed and worker Jobs. A single-node cluster does not collapse those boundaries. Create the
+three PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
 
-::: tip One-command single-tenant install
-For a server running exactly one organisation you can use the single-tenant
-orchestrator, which runs the fleet pass then the silo pass for you:
-
-```bash
-apps/_infra/deploy-k8s/platform/deploy-single-tenant.sh \
-  --base-domain <your-domain> \
-  --org-name <org> --org-owner-email owner@example.com
-```
-:::
-
-::: tip When to move to a cluster
-A single machine is great up to a point. When you need high availability, more
-capacity, or auto-scaling, the same deploy scripts work on a managed Kubernetes
-cluster — see [Cluster deployment](/guide/deploy-cluster).
+::: warning
+Single-node does not mean single namespace. OpenCrane refuses a deployment that places
+untrusted runtime Jobs beside the trusted server.
 :::
 
 ## Next
 
-→ **[Set up your domain](/guide/dns)** → **[Create your first assistant](/guide/first-tenant)**
+→ [Set up your domain](/guide/dns) → [Create your first agent](/guide/first-agent)

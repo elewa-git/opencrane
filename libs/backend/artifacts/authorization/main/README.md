@@ -1,4 +1,4 @@
-# @opencrane/backend/artifacts/authorization — artifact write-lease & receipt authority
+# @opencrane/backend/artifacts/authorization — artifact lease & receipt authority
 
 > [backend](../../../README.md) › [artifacts](../../README.md) › authorization
 
@@ -33,16 +33,22 @@ using EdDSA, a standard signature scheme) that only OpenCrane's keys can produce
 
 The two tokens use **separate keys and audiences** on purpose: a lease is addressed to
 `artifact-service` and a receipt back to `opencrane`, so one can never be replayed as the other.
-Verification is strict — wrong type, wrong audience, bad signature, or a lease outside its ±5-minute
-issue window returns `null`. Invariant: a genuine, unexpired, correctly-typed token is the only thing
+An **immutable read lease** is a separate permission slip for one exact artifact revision, content
+address, length, and media type. It cannot be used to upload, list, or select another artifact.
+Verification is strict — wrong type, wrong audience, bad signature, unsafe media type, an expiry more
+than five minutes after issuance, a future issue time, or an issue time more than five minutes ago
+returns `null`. Invariant: a genuine, unexpired, correctly-typed token is the only thing
 that opens each gate; anything else fails closed, so a forged slip can never authorise a write and a
 forged receipt can never finalise a catalog entry.
 
 ## Public surface
 
 - `__SignArtifactWriteLease(claims, privateKeyPem, now)` / `__VerifyArtifactWriteLease(compact, publicKeyPem, now)` — mint and check the pre-upload permission slip.
+- `__SignArtifactReadLease(claims, privateKeyPem, now)` / `__VerifyArtifactReadLease(compact, publicKeyPem, now)` — mint and check a pinned immutable-read permission slip.
 - `__SignArtifactPromotionReceipt(claims, privateKeyPem)` / `__VerifyArtifactPromotionReceipt(compact, publicKeyPem)` — mint and check the post-upload proof.
-- `ArtifactWriteLeaseClaims` / `ArtifactPromotionReceiptClaims` — the exact fields carried by each token.
+- `__IsSafeArtifactMediaType(value)` — apply the shared response-safe media-type grammar used by
+  write leases, read leases, receipts, and catalogue read issuance.
+- `ArtifactWriteLeaseClaims` / `ArtifactReadLeaseClaims` / `ArtifactPromotionReceiptClaims` — the exact fields carried by each token.
 
 ## Boundary
 

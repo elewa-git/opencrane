@@ -55,75 +55,6 @@
           }
         }
       },
-      "Tenant": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "subject": {
-            "type": "string",
-            "description": "IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants."
-          },
-          "team": {
-            "type": "string"
-          },
-          "clusterTenantRef": {
-            "type": "string",
-            "description": "Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path."
-          },
-          "phase": {
-            "type": "string"
-          },
-          "ingressHost": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "Policy": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "namespace": {
-            "type": "string"
-          },
-          "tenantSelector": {
-            "type": "object"
-          },
-          "domains": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "egressRules": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "mcpServers": {
-            "type": "object"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "McpServer": {
         "type": "object",
         "properties": {
@@ -781,21 +712,6 @@
           }
         }
       },
-      "ProviderKey": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "type": "string"
-          },
-          "configured": {
-            "type": "boolean"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
       "ByokProviderKeyStatus": {
         "type": "object",
         "required": [
@@ -1273,116 +1189,6 @@
           }
         }
       },
-      "AwarenessRollout": {
-        "type": "object",
-        "properties": {
-          "targetVersion": {
-            "type": "string"
-          },
-          "stableVersion": {
-            "type": "string"
-          },
-          "waves": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "promotedWaves": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "shadowMode": {
-            "type": "boolean"
-          },
-          "nextWave": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "DatasetMembership": {
-        "type": "object",
-        "required": [
-          "org",
-          "team",
-          "department",
-          "project",
-          "personal"
-        ],
-        "properties": {
-          "org": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "team": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "department": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "project": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "personal": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "EffectiveContract": {
-        "type": "object",
-        "properties": {
-          "contractId": {
-            "type": "string"
-          },
-          "contractVersion": {
-            "type": "string"
-          },
-          "tenant": {
-            "type": "object"
-          },
-          "awareness": {
-            "type": "object"
-          },
-          "mcp": {
-            "type": "object"
-          }
-        }
-      },
-      "ProjectionDrift": {
-        "type": "object",
-        "properties": {
-          "tenant": {
-            "type": "object"
-          },
-          "accessPolicy": {
-            "type": "object"
-          },
-          "evaluatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "alertFired": {
-            "type": "boolean"
-          }
-        }
-      },
       "Budget": {
         "type": "object",
         "properties": {
@@ -1447,6 +1253,228 @@
           "recordedAt": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "SelfRunStatus": {
+        "type": "object",
+        "required": [
+          "runId",
+          "attempt",
+          "state",
+          "threadId",
+          "agentRevisionId",
+          "acceptedAt",
+          "finishedAt"
+        ],
+        "properties": {
+          "runId": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "queued",
+              "assigned",
+              "running",
+              "waiting_for_approval",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "threadId": {
+            "type": "string",
+            "nullable": true
+          },
+          "agentRevisionId": {
+            "type": "string"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SelfDeferredToolApproval": {
+        "type": "object",
+        "required": [
+          "approvalRequestId",
+          "runId",
+          "attempt",
+          "toolRevisionId",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "approvalRequestId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "attempt": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "toolRevisionId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentService": {
+        "type": "object",
+        "required": [
+          "id",
+          "siloId",
+          "kind",
+          "name",
+          "state",
+          "activeRevisionId",
+          "workloadProfile",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "siloId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "managed"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "retired"
+            ]
+          },
+          "activeRevisionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "workloadProfile": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PersonalConfigurationChange": {
+        "type": "object",
+        "required": [
+          "changeId",
+          "requestedPatch",
+          "state",
+          "sourceThreadId",
+          "sourceRunId",
+          "proposedAt",
+          "decidedAt",
+          "rejectionReason"
+        ],
+        "properties": {
+          "changeId": {
+            "type": "string"
+          },
+          "requestedPatch": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "persona_refresh"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "modelAlias"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "model_alias"
+                  },
+                  "modelAlias": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": ".*\\S.*"
+                  }
+                }
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted",
+              "applied",
+              "rejected",
+              "superseded"
+            ]
+          },
+          "sourceThreadId": {
+            "type": "string"
+          },
+          "sourceRunId": {
+            "type": "string"
+          },
+          "proposedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -1593,1128 +1621,6 @@
     }
   },
   "paths": {
-    "/awareness/rollout": {
-      "get": {
-        "operationId": "getAwarenessRollout",
-        "summary": "Show the fleet awareness contract rollout state",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "responses": {
-          "200": {
-            "description": "Current rollout state.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setAwarenessRollout",
-        "summary": "Define (or redefine) the awareness rollout; resets the frontier",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "targetVersion"
-                ],
-                "properties": {
-                  "targetVersion": {
-                    "type": "string"
-                  },
-                  "stableVersion": {
-                    "type": "string"
-                  },
-                  "waves": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "shadowMode": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Rollout defined.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/promote": {
-      "post": {
-        "operationId": "promoteAwarenessRollout",
-        "summary": "Advance the rollout frontier (one wave, or up to a named wave)",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "wave": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Frontier advanced.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/rollback": {
-      "post": {
-        "operationId": "rollbackAwarenessRollout",
-        "summary": "One-step rollback: return every wave to the stable version",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "responses": {
-          "200": {
-            "description": "Rolled back.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/resolve/{tenant}": {
-      "get": {
-        "operationId": "resolveAwarenessVersion",
-        "summary": "Resolve the awareness contract version a tenant runs",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "parameters": [
-          {
-            "name": "tenant",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resolved version.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "tenant": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "promoted": {
-                      "type": "boolean"
-                    },
-                    "shadow": {
-                      "type": "boolean"
-                    },
-                    "wave": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/participation": {
-      "get": {
-        "operationId": "getFleetParticipation",
-        "summary": "Fleet participation, drift, and policy-violation monitoring",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "parameters": [
-          {
-            "name": "severity",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "critical",
-                "warning"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Fleet participation report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "total": {
-                      "type": "integer"
-                    },
-                    "participating": {
-                      "type": "integer"
-                    },
-                    "drifted": {
-                      "type": "integer"
-                    },
-                    "critical": {
-                      "type": "integer"
-                    },
-                    "warning": {
-                      "type": "integer"
-                    },
-                    "tenants": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "tenant": {
-                            "type": "string"
-                          },
-                          "lastSeenAt": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "runningContractVersion": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "expectedContractVersion": {
-                            "type": "string"
-                          },
-                          "participating": {
-                            "type": "boolean"
-                          },
-                          "drifted": {
-                            "type": "boolean"
-                          },
-                          "policyViolations": {
-                            "type": "integer"
-                          },
-                          "severity": {
-                            "type": "string",
-                            "enum": [
-                              "ok",
-                              "warning",
-                              "critical"
-                            ]
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants": {
-      "get": {
-        "operationId": "listTenants",
-        "summary": "List all tenants",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "clusterTenantRef",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Return only tenants attached to this parent ClusterTenant (customer)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Tenant"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createTenant",
-        "summary": "Create a new tenant (admin/import path; dual-write: K8s CRD + database)",
-        "description": "Internal seeding (owner-default on org create; member workspace on first login) is the production funnel — this route is the admin/import path. Every workspace it creates must be routable (email) and subject-bound; when a parent clusterTenantRef is given the subject must be a member of that org.",
-        "tags": [
-          "Tenants"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "name",
-                  "displayName",
-                  "email",
-                  "subject"
-                ],
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "displayName": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "subject": {
-                    "type": "string",
-                    "description": "IdP-verified subject (OIDC `sub`) to bind the workspace to. Required — subject-less pods degrade the compiled contract to {tenant} only."
-                  },
-                  "team": {
-                    "type": "string"
-                  },
-                  "clusterTenantRef": {
-                    "type": "string",
-                    "description": "Parent ClusterTenant (customer) to attach this tenant to."
-                  },
-                  "monthlyBudgetUsd": {
-                    "type": "number"
-                  },
-                  "resources": {
-                    "type": "object"
-                  },
-                  "policyRef": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Tenant created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing email or subject.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "No models registered for this scope (NO_MODELS_REGISTERED) — the same ≥1-model onboarding gate the internal seed funnel enforces.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Tenant CR did not appear in Kubernetes within the SLO window.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}": {
-      "get": {
-        "operationId": "getTenant",
-        "summary": "Get a single tenant by name",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Tenant"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateTenant",
-        "summary": "Update a tenant (dual-write: K8s CRD + database)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "displayName": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "subject": {
-                    "type": "string",
-                    "description": "Re-bind the workspace to this IdP subject; must be a member of the (new or existing) parent org."
-                  },
-                  "team": {
-                    "type": "string"
-                  },
-                  "clusterTenantRef": {
-                    "type": "string",
-                    "description": "Parent ClusterTenant (customer) to attach this tenant to."
-                  },
-                  "monthlyBudgetUsd": {
-                    "type": "number"
-                  },
-                  "resources": {
-                    "type": "object"
-                  },
-                  "policyRef": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Tenant updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteTenant",
-        "summary": "Delete a tenant (offboarding teardown: cut the runtime pod, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/suspend": {
-      "post": {
-        "operationId": "suspendTenant",
-        "summary": "Suspend a tenant (scale deployment to zero)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant suspended.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/resume": {
-      "post": {
-        "operationId": "resumeTenant",
-        "summary": "Resume a suspended tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant resumed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/datasets": {
-      "get": {
-        "operationId": "getTenantDatasets",
-        "summary": "Get dataset memberships for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Dataset memberships.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetMembership"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateTenantDatasets",
-        "summary": "Update dataset memberships for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DatasetMembership"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Dataset memberships updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetMembership"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid membership payload.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/effective-contract": {
-      "get": {
-        "operationId": "getTenantEffectiveContract",
-        "summary": "Compile the effective awareness, MCP, and skill contract for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Effective contract.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EffectiveContract"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/drift": {
-      "get": {
-        "operationId": "getTenantProjectionDrift",
-        "summary": "Detect drift between Tenant CRDs and PostgreSQL projection rows",
-        "tags": [
-          "Tenants"
-        ],
-        "responses": {
-          "200": {
-            "description": "Drift report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/repair": {
-      "post": {
-        "operationId": "repairTenantProjection",
-        "summary": "Repair Tenant projection rows from CRD source of truth",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "dryRun",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            },
-            "description": "When true (default), report planned changes without applying them."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Repair report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/drift": {
-      "get": {
-        "operationId": "getPolicyProjectionDrift",
-        "summary": "Detect drift between AccessPolicy CRDs and PostgreSQL projection rows",
-        "tags": [
-          "Policies"
-        ],
-        "responses": {
-          "200": {
-            "description": "Drift report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/repair": {
-      "post": {
-        "operationId": "repairPolicyProjection",
-        "summary": "Repair AccessPolicy projection rows from CRD source of truth",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "dryRun",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Repair report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies": {
-      "get": {
-        "operationId": "listPolicies",
-        "summary": "List all access policies",
-        "tags": [
-          "Policies"
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Policy"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createPolicy",
-        "summary": "Create an access policy (dual-write: K8s CRD + database)",
-        "tags": [
-          "Policies"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Policy created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/{name}": {
-      "get": {
-        "operationId": "getPolicy",
-        "summary": "Get a single access policy by name",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Policy"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Policy not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updatePolicy",
-        "summary": "Update an access policy",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Policy updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deletePolicy",
-        "summary": "Delete an access policy",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/mcp-servers": {
       "get": {
         "operationId": "listMcpServers",
@@ -4588,111 +3494,6 @@
         }
       }
     },
-    "/providers/keys": {
-      "get": {
-        "operationId": "listProviderKeys",
-        "summary": "List configured provider API keys (configured status only, never the key value)",
-        "tags": [
-          "Provider Keys"
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider key status list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderKey"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/keys/{provider}": {
-      "put": {
-        "operationId": "upsertProviderKey",
-        "summary": "Create or update a provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "apiKey"
-                ],
-                "properties": {
-                  "apiKey": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Key updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderKey"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProviderKey",
-        "summary": "Delete a configured provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Key deleted."
-          },
-          "404": {
-            "description": "Provider key not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/providers/byok": {
       "get": {
         "operationId": "listByokProviderKeys",
@@ -5500,82 +4301,6 @@
         }
       }
     },
-    "/model-routing/metrics": {
-      "get": {
-        "operationId": "getRoutingMetrics",
-        "summary": "Proxy a metrics query to the self-hosted Langfuse backend (server-side auth; non-operators scoped to their tenant)",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Langfuse v1 metrics `query` JSON, forwarded verbatim (a tenant filter is injected for non-operators)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Upstream Langfuse metrics JSON (loosely-typed passthrough).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A non-operator caller with no resolved ClusterTenant has no metrics scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The Langfuse backend was unreachable or returned a non-2xx status.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "The Langfuse backend is not configured (host/keys missing).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/ai-budget/global": {
       "get": {
         "operationId": "getGlobalBudget",
@@ -5736,145 +4461,14 @@
         }
       }
     },
-    "/ai-budget/{tenantName}/spend": {
-      "get": {
-        "operationId": "getTenantSpend",
-        "summary": "Get current spend and budget state for a tenant",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Spend data.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Budget"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai-budget/{tenantName}/litellm-key": {
-      "get": {
-        "operationId": "getTenantLiteLlmKey",
-        "summary": "Get LiteLLM virtual key metadata for a tenant (never the key value)",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "LiteLLM key metadata.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No LiteLLM key for this tenant.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai-budget/{tenantName}/litellm-key/revoke": {
-      "post": {
-        "operationId": "revokeTenantLiteLlmKey",
-        "summary": "Revoke the LiteLLM virtual key for a tenant",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Key revoked.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/audit": {
       "get": {
         "operationId": "listAuditEntries",
-        "summary": "Query audit log entries with optional tenant filter and cursor pagination",
+        "summary": "Query audit log entries with cursor pagination",
         "tags": [
           "Audit"
         ],
         "parameters": [
-          {
-            "name": "tenant",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to a specific tenant."
-          },
           {
             "name": "limit",
             "in": "query",
@@ -5924,79 +4518,52 @@
         }
       }
     },
-    "/metrics/server": {
+    "/me/approvals": {
       "get": {
-        "operationId": "getServerMetrics",
-        "summary": "Get latest server utilisation snapshot (CPU, memory, storage, active tenants)",
+        "operationId": "listMyPendingToolApprovals",
+        "summary": "List the signed-in owner's pending tool approvals",
+        "description": "The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.",
         "tags": [
-          "Metrics"
+          "Approvals"
         ],
         "responses": {
           "200": {
-            "description": "Server utilisation snapshot.",
+            "description": "Pending owner-bound tool approvals.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "cpuPercent",
-                    "memoryUsedBytes",
-                    "memoryTotalBytes",
-                    "storageUsedBytes",
-                    "storageTotalBytes",
-                    "activeTenants",
-                    "sampledAt"
+                    "approvals"
                   ],
                   "properties": {
-                    "cpuPercent": {
-                      "type": "number",
-                      "description": "CPU utilisation percentage (0–100)."
-                    },
-                    "memoryUsedBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "memoryTotalBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "storageUsedBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "storageTotalBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "activeTenants": {
-                      "type": "integer"
-                    },
-                    "sampledAt": {
-                      "type": "string",
-                      "format": "date-time"
+                    "approvals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfDeferredToolApproval"
+                      }
                     }
                   }
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/metrics/projection-drift": {
-      "get": {
-        "operationId": "getProjectionDriftMetrics",
-        "summary": "Get projection drift metrics with threshold evaluation and alert state",
-        "tags": [
-          "Metrics"
-        ],
-        "responses": {
-          "200": {
-            "description": "Projection drift metrics.",
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectionDrift"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not read pending approvals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -6004,40 +4571,1142 @@
         }
       }
     },
-    "/token-usage": {
-      "get": {
-        "operationId": "listTokenUsage",
-        "summary": "List token usage records",
+    "/me/approvals/{approvalRequestId}/decision": {
+      "post": {
+        "operationId": "decideDeferredToolApproval",
+        "summary": "Approve or deny one pending tool action owned by the signed-in user",
+        "description": "The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.",
         "tags": [
-          "Token Usage"
+          "Approvals"
         ],
         "parameters": [
           {
-            "name": "tenant",
-            "in": "query",
+            "name": "approvalRequestId",
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
+            },
+            "description": "Opaque identifier for the pending approval."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "denied"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision recorded or identical terminal decision replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "approvalRequestId",
+                    "state"
+                  ],
+                  "properties": {
+                    "approvalRequestId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "denied"
+                      ]
+                    }
+                  }
+                }
+              }
             }
           },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 100
+          "400": {
+            "description": "The request body is not the exact decision shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
             }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The approval is absent, terminal in another way, or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The approval expired before the decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not persist the decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs/{runId}/steering": {
+      "post": {
+        "operationId": "submitRuntimeSteering",
+        "summary": "Queue one signed-in owner's instruction for a running agent",
+        "description": "The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.",
+        "tags": [
+          "Runs"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque run identifier."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Steering request queued for the current run attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "steeringRequestId",
+                    "attempt",
+                    "state"
+                  ],
+                  "properties": {
+                    "steeringRequestId": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not one bounded text instruction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The owned run has no steerable live attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not persist the instruction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs": {
+      "get": {
+        "operationId": "listMyRuns",
+        "summary": "List a signed-in owner's fifty most recent personal runs",
+        "description": "The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.",
+        "tags": [
+          "Runs"
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent canonical lifecycle views for the owned runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runs"
+                  ],
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfRunStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Run status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs/{runId}": {
+      "get": {
+        "operationId": "getMyRunStatus",
+        "summary": "Return one signed-in owner's personal run status",
+        "description": "The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.",
+        "tags": [
+          "Runs"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque run identifier."
           }
         ],
         "responses": {
           "200": {
-            "description": "Token usage records.",
+            "description": "Current canonical lifecycle view for the owned run.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TokenUsage"
+                  "$ref": "#/components/schemas/SelfRunStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The run identifier is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Run status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/persona": {
+      "get": {
+        "operationId": "getMyPersonaOnboarding",
+        "summary": "Return the signed-in owner's resumable persona onboarding state",
+        "tags": [
+          "Persona"
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable onboarding progress without compiled persona instructions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state",
+                    "interviewId",
+                    "answeredQuestionCount",
+                    "questionCount",
+                    "personaRevisionId"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "interview",
+                        "review",
+                        "ready"
+                      ]
+                    },
+                    "interviewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "answeredQuestionCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "questionCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "personaRevisionId": {
+                      "type": "string",
+                      "nullable": true
+                    }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Onboarding status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/conversations/{threadId}/events": {
+      "get": {
+        "operationId": "replayMyConversationEvents",
+        "summary": "Replay the signed-in participant's canonical conversation events",
+        "description": "The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected thread.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque conversation-thread identifier."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism."
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque canonical event cursor. It must match cursor when both are supplied."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded text/event-stream replay. An empty stream does not disclose whether the thread exists or belongs to another participant.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The thread identifier or replay cursor is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Canonical history could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent-services": {
+      "get": {
+        "operationId": "listManagedAgentServices",
+        "summary": "List managed agent services in the signed-in caller's silo",
+        "description": "The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.",
+        "tags": [
+          "Agent services"
+        ],
+        "responses": {
+          "200": {
+            "description": "Managed agent services in the selected silo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "services"
+                  ],
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentService"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The management authority could not read the catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes/{changeId}/materialize": {
+      "post": {
+        "operationId": "materializeMyPersonalConfigurationChange",
+        "summary": "Apply one accepted personal model selection to future runs",
+        "description": "The server derives the owner, silo, trusted time, active personal revision, and registered model definition. It creates and activates a new immutable AgentRevision; it never rewrites an active run snapshot. Accepted persona refreshes remain in their proposal-bound interview flow.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "parameters": [
+          {
+            "name": "changeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "maxProperties": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model selection applied, or the accepted proposal belongs to the persona-refresh workflow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "changeId",
+                        "state",
+                        "agentRevisionId"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "changeId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "applied"
+                        },
+                        "agentRevisionId": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "changeId",
+                        "state",
+                        "materialized"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "changeId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "accepted"
+                        },
+                        "materialized": {
+                          "const": false
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The materialization request was not the exact empty-object shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The proposal is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The proposal is not accepted or no longer matches the active revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The selected model alias is not available in the caller's silo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The accepted model selection could not be applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes/{changeId}/decision": {
+      "post": {
+        "operationId": "decideMyPersonalConfigurationChange",
+        "summary": "Accept or reject one signed-in owner's configuration proposal",
+        "description": "The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "parameters": [
+          {
+            "name": "changeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "decision"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "decision": {
+                        "const": "accepted"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "decision",
+                      "rejectionReason"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "decision": {
+                        "const": "rejected"
+                      },
+                      "rejectionReason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": ".*\\S.*"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner decision recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changeId",
+                    "state"
+                  ],
+                  "properties": {
+                    "changeId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "accepted",
+                        "rejected"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Decision body is not the exact accepted or rejected shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proposal is absent, terminal, or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Decision could not be persisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes": {
+      "get": {
+        "operationId": "listMyPersonalConfigurationChanges",
+        "summary": "List the signed-in owner's personal configuration proposals",
+        "description": "The server derives the owner and silo from session and host. It returns at most fifty durable future-session proposals, never a mutable run snapshot.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-bound configuration proposal history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changes"
+                  ],
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersonalConfigurationChange"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Configuration proposal history could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills": {
+      "get": {
+        "operationId": "listSkills",
+        "summary": "List governed skills in the signed-in caller's silo",
+        "description": "The server derives the silo from the browser session and request host. It returns at most two hundred catalogue summaries, never skill bundles, artifact addresses, manifests, review evidence, signatures, or workload coordinates.",
+        "tags": [
+          "Skills"
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-safe governed skill catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "skills"
+                  ],
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "state",
+                          "currentRevisionId",
+                          "currentRevisionState",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "retired"
+                            ]
+                          },
+                          "currentRevisionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "currentRevisionState": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "draft",
+                              "review",
+                              "published",
+                              "rejected",
+                              "revoked",
+                              null
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The skill catalogue could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/assets": {
+      "get": {
+        "operationId": "listMyAssets",
+        "summary": "List the signed-in owner's assets",
+        "description": "The server derives the owner and silo from the browser session and request host. It returns at most fifty non-deleted asset metadata records, never bytes, content addresses, provenance, leases, receipts, or outbox data.",
+        "tags": [
+          "Personal assets"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-bound personal asset metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "assets"
+                  ],
+                  "properties": {
+                    "assets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "state",
+                          "currentRevisionId",
+                          "mediaType",
+                          "byteLength",
+                          "indexState",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "generated",
+                              "skill",
+                              "upload"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "deletion_pending"
+                            ]
+                          },
+                          "currentRevisionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mediaType": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "byteLength": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          },
+                          "indexState": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "pending",
+                              "indexed",
+                              "failed",
+                              "removal_pending",
+                              "removed",
+                              null
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Personal asset metadata could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -6159,101 +5828,6 @@
                           "format": "date-time"
                         }
                       }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/pod-token": {
-      "post": {
-        "operationId": "getPodConnection",
-        "summary": "Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session",
-        "description": "Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised against the live session through `/auth/gateway-resolve`, so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "The caller's OpenClaw pod gateway connection coordinates.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "gatewayUrl",
-                    "tenant"
-                  ],
-                  "properties": {
-                    "gatewayUrl": {
-                      "type": "string",
-                      "description": "The `wss://` OpenClaw gateway URL to open."
-                    },
-                    "tenant": {
-                      "type": "string",
-                      "description": "Resolved tenant (pod) name."
-                    },
-                    "ingressHost": {
-                      "type": "string",
-                      "description": "Host the tenant's OpenClaw pod is reachable at, when known."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No authenticated session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Session has no email claim, or no tenant is provisioned for it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The tenant pod has no gateway URL / ingress host yet.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
                     }
                   }
                 }

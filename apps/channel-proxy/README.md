@@ -58,6 +58,11 @@ Commands are JSON envelopes that include an opaque `threadId` and use the standa
 request header. The proxy validates those routing coordinates before asking OpenCrane to authorize a
 target; it otherwise leaves the command payload uninterpreted.
 
+The composed library also contains a pure, versioned AG-UI event encoder for a future
+server-authorized replay reader. This app does not expose it yet: `GET /v1/events` remains an opaque
+bounded relay, and the proxy still has no database, replay reader, approval-decision route, or
+approval-resume authority.
+
 ## Boundary
 
 Stateless and product-logic-free: it holds no database and no session, and consumers behind it (the
@@ -94,7 +99,7 @@ library composed by the silo umbrella chart
 ([`apps/_infra/deploy-k8s`](../_infra/deploy-k8s/README.md)).
 The final image pins the upstream Node user's numeric UID and GID (`1000:1000`) so Kubernetes can
 enforce the chart's `runAsNonRoot` policy before the container starts.
-elewa-git
+
 ## See also
 
 - Parent index: [apps](../README.md)

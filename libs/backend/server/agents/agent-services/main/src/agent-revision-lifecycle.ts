@@ -1,7 +1,8 @@
+import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
 import { __DiffAgentRevisions, __IsAgentServiceTransitionAllowed } from "@opencrane/models/agents";
-import type { AgentRevisionId, AgentServiceId, AgentServiceState } from "@opencrane/models/agents";
+import type { AgentRevisionContent, AgentRevisionId, AgentServiceId, AgentServiceState } from "@opencrane/models/agents";
 
-import type { AgentRevisionContent, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, AppendAgentRevisionResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, AppendAgentRevisionResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 
 /** Returns whether a string carries a non-empty value after trimming. */
 function _isPresent(value: string): boolean
@@ -29,7 +30,7 @@ function _isUniqueBy<T>(items: readonly T[], key: (item: T) => string): boolean
 function _isContentValid(content: AgentRevisionContent): boolean
 {
 	return _isPresent(content.promptPolicyVersion)
-		&& _isPresent(content.modelPolicyId)
+		&& _isPresent(content.modelDefinitionId)
 		&& (content.personaRevisionId === null || _isPresent(content.personaRevisionId))
 		&& _isPositiveInteger(content.budget.maxTurns)
 		&& _isPositiveInteger(content.budget.maxTokens)
@@ -60,7 +61,7 @@ function _actionState(action: AgentServiceLifecycleAction): AgentServiceState
  */
 export async function __CreateManagedAgentService(repository: AgentRevisionLifecycleRepository, command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
 {
-	if (!_isPresent(command.siloId) || !_isPresent(command.name) || !_isPresent(command.workloadProfile) || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
+	if (!_isPresent(command.siloId) || !_isPresent(command.name) || command.workloadProfile !== MANAGED_AGENT_RUNTIME_PROFILE_NAME || !_isPresent(command.authoredBy) || !_isPresent(command.changeMessage) || command.content.personaRevisionId !== null || !_isContentValid(command.content) || !Number.isFinite(Date.parse(createdAt)))
 	{
 		return { outcome: "denied", reason: "invalid_command" };
 	}

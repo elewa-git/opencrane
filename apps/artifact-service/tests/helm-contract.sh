@@ -69,7 +69,7 @@ if grep -A40 'name: opencrane-artifact-service' "$OUTPUT" | grep -qE 'kind: (Rol
 fi
 
 if grep -q 'name: opencrane-opencrane-server-default' "$OUTPUT"; then
-  echo "opencrane server must not retain the legacy cluster-wide RBAC role" >&2
+  echo "opencrane server must not receive a cluster-wide RBAC role" >&2
   exit 1
 fi
 

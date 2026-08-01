@@ -14,12 +14,28 @@ function _Profiles(): AgentControllerRuntimeProfiles
 {
 	return {
 		"personal-default": {
+			namespace: "silo-a-runtime",
 			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			imagePullPolicy: "IfNotPresent",
 			runtimeStreamUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-runtime",
 				litellmBaseUrl: "http://litellm.silo-a.svc.cluster.local:4000",
 				serverNamespace: "silo-a",
 				serviceAccountName: "agent-runtime-default",
+			projectedTokenTtlSeconds: 600,
+			scratchSize: "64Mi",
+			activeDeadlineSeconds: 900,
+			ttlSecondsAfterFinished: 0,
+			resources: { requests: { cpu: "25m", memory: "64Mi" }, limits: { cpu: "250m", memory: "128Mi" } },
+		},
+		"managed-default": {
+			namespace: "silo-a-managed-runtime",
+			identityProfile: "managed",
+			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			imagePullPolicy: "IfNotPresent",
+			runtimeStreamUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-runtime",
+			litellmBaseUrl: "http://litellm.silo-a.svc.cluster.local:4000",
+			serverNamespace: "silo-a",
+			serviceAccountName: "managed-agent-runtime-default",
 			projectedTokenTtlSeconds: 600,
 			scratchSize: "64Mi",
 			activeDeadlineSeconds: 900,
@@ -74,7 +90,7 @@ function _Kubernetes(overrides: Partial<AgentControllerKubernetesStore>): AgentC
 /** Compose controller options from focused fake ports. */
 function _Options(authority: AgentControllerAuthority, kubernetes: AgentControllerKubernetesStore): AgentControllerOptions
 {
-	return { authority, kubernetes, profiles: _Profiles(), runtimeNamespace: "silo-a-runtime", pollIntervalMilliseconds: 1_000, log: _log };
+	return { authority, kubernetes, profiles: _Profiles(), pollIntervalMilliseconds: 1_000, log: _log };
 }
 
 describe("agent-controller orchestration", function _Suite()
@@ -124,16 +140,33 @@ describe("agent-controller orchestration", function _Suite()
 		expect(await __ReconcileNextAgentRuntimeAttempt(_Options(authority, kubernetes), new AbortController().signal)).toEqual({ outcome: "idle" });
 	});
 
-	it("fails closed before resource creation for another namespace or an unknown profile", async function _RejectsUnownedClaim()
+	it("fails closed before resource creation for a profile namespace mismatch or an unknown profile", async function _RejectsUnownedClaim()
 	{
 		let resourceCalls = 0;
 		const kubernetes = _Kubernetes({ async __EnsureSuspendedJob(expected) { resourceCalls += 1; return expected; } });
 		const otherNamespace = _Authority({ async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, namespace: "silo-b" } }; } });
 		const unknownProfile = _Authority({ async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, workloadProfile: "unknown" } }; } });
 
-		await expect(__ReconcileNextAgentRuntimeAttempt(_Options(otherNamespace, kubernetes), new AbortController().signal)).rejects.toThrow(/outside this controller silo/);
+		await expect(__ReconcileNextAgentRuntimeAttempt(_Options(otherNamespace, kubernetes), new AbortController().signal)).rejects.toThrow(/bounded workload profile namespace/);
 		await expect(__ReconcileNextAgentRuntimeAttempt(_Options(unknownProfile, kubernetes), new AbortController().signal)).rejects.toThrow(/no configured runtime profile/);
 		expect(resourceCalls).toBe(0);
+	});
+
+	it("reconciles a managed profile only in its separate managed runtime namespace", async function _ReconcilesManagedProfile()
+	{
+		let committed: AgentControllerRunAttemptAssignmentCommand | null = null;
+		const authority = _Authority({
+			async __Claim() { return { ..._Claim(), attempt: { ..._Claim().attempt, namespace: "silo-a-managed-runtime", workloadProfile: "managed-default" } }; },
+			async __CommitAssignment(_eventId, command) { committed = command; return { outcome: "assigned", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }; },
+		});
+		const kubernetes = _Kubernetes({
+			async __EnsureSuspendedJob(expected) { return { ...expected, metadata: { ...expected.metadata, uid: "managed-job-uid" } }; },
+			async __EnsureAttemptKeySecret() {},
+		});
+
+		await __ReconcileNextAgentRuntimeAttempt(_Options(authority, kubernetes), new AbortController().signal);
+
+		expect(committed).toMatchObject({ namespace: "silo-a-managed-runtime", serviceAccountName: "managed-agent-runtime-default", workloadUid: "managed-job-uid" });
 	});
 
 	it("never commits when Job creation fails or its API-issued UID is missing", async function _StopsBeforeCommit()
@@ -169,7 +202,7 @@ describe("agent-controller orchestration", function _Suite()
 		expect(calls).toEqual(["claim-release", "release-job", "find-pod", "register-pod"]);
 		expect(registered).toMatchObject({ claimedAt: _ReleaseClaim().lease.claimedAt, deliveryCount: 1, runId: "run-1", attempt: 3, workloadUid: "job-uid-1", podUid: "pod-uid-1", bootstrapReference: "bootstrap-ref-1" });
 		expect(result).toEqual({ outcome: "registered", eventId: "release-1", runId: "run-1", attempt: 3, workloadUid: "job-uid-1", podUid: "pod-uid-1" });
-		expect(reconcileTraceFields).toMatchObject({ operation: "agent_controller.workload_release.reconcile", namespace: "silo-a-runtime" });
+		expect(reconcileTraceFields).toMatchObject({ operation: "agent_controller.workload_release.reconcile" });
 		expect(JSON.stringify(reconcileTraceFields)).not.toContain("bootstrap");
 	});
 
@@ -259,11 +292,11 @@ describe("agent-controller orchestration", function _Suite()
 	it("rejects a deployment profile with a non-Kubernetes image pull policy", function _RejectsInvalidPullPolicy()
 	{
 		const profile = { ..._Profiles()["personal-default"], imagePullPolicy: "Sometimes" };
-		expect(function _InvalidProfile() { __ValidateAgentControllerRuntimeProfiles({ "personal-default": profile }, "silo-a-runtime"); }).toThrow(/image pull policy/);
+		expect(function _InvalidProfile() { __ValidateAgentControllerRuntimeProfiles({ "personal-default": profile }); }).toThrow(/image pull policy/);
 	});
 
 	it("rejects a profile that collapses the runtime namespace into the server namespace", function _RejectsSameNamespace()
 	{
-		expect(function _SameNamespace() { __ValidateAgentControllerRuntimeProfiles(_Profiles(), "silo-a"); }).toThrow(/namespaces separate/);
+		expect(function _SameNamespace() { __ValidateAgentControllerRuntimeProfiles({ "personal-default": { ..._Profiles()["personal-default"], namespace: "silo-a" } }); }).toThrow(/unique runtime namespace separate/);
 	});
 });

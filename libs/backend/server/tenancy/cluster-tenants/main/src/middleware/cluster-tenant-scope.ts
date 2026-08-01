@@ -3,7 +3,8 @@ import type { PrismaClient } from "@prisma/client";
 
 import type { ClusterTenantScopedResource } from "./cluster-tenant-scope.types.js";
 import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
-import { _IsDevAuthMode } from "@opencrane/server/_infra/auth";
+// Side-effect import: loads the express-session `SessionData.authUser` augmentation.
+import "@opencrane/server/_infra/auth";
 
 /**
  * Reusable authorization guard for mutations (POST/PUT/DELETE) on ClusterTenant-scoped
@@ -11,19 +12,20 @@ import { _IsDevAuthMode } from "@opencrane/server/_infra/auth";
  *
  * The rule (AIR.0b), in priority order:
  *   1. A platform operator (session `isPlatformOperator`) may mutate any resource at any scope.
- *   2. A non-operator may mutate only a `clusterTenant`-scoped resource in a silo they own a
- *      workspace in. Global-scoped mutations are operator-only.
+ *   2. A non-operator may mutate only a `clusterTenant`-scoped resource in a silo where their
+ *      stable IdP subject has an authoritative organisation membership. Global mutations are
+ *      operator-only.
  *
- * Ownership is resolved fresh from the caller's IdP-verified email via the shared
- * `_ResolveCallerClusterTenant`, scoped to the resource's own silo so a human who owns workspaces
- * in more than one ClusterTenant is authorised for each — never taken from a self-asserted claim
- * or request input. `/auth/me` uses the same resolver (scoped by request host instead).
+ * Membership is resolved fresh from the caller's IdP-verified subject via the shared
+ * `_ResolveCallerClusterTenant`, scoped to the resource's own silo so a human who belongs to more
+ * than one ClusterTenant is authorised for each — never taken from a self-asserted tenant claim or
+ * request input. `/auth/me` uses the same resolver (scoped by request host instead).
  *
  * The guard is applied per-router and reads the *resource* scope/clusterTenant from the request
  * via the supplied `resolveResource` callback, which is run after the request body / params are
  * available. Reads (GET) are intentionally NOT guarded — any authenticated caller may list/read.
  *
- * @param prisma          - Prisma client used for the fail-closed email→tenant→clusterTenantRef lookup.
+ * @param prisma          - Prisma client used for the fail-closed subject-to-membership lookup.
  * @param resolveResource - Resolves the scope + owning clusterTenant of the resource the request targets.
  * @returns An Express middleware enforcing the rule above (403 on denial).
  */
@@ -44,7 +46,7 @@ export function _ClusterTenantScopeGuard(
         return;
       }
 
-      // 2. Allowed (or open-auth fallthrough) → continue to the route handler.
+      // 2. Allowed → continue to the route handler.
       next();
     }).catch(next);
   };
@@ -55,7 +57,7 @@ export function _ClusterTenantScopeGuard(
  * Extracted from the closure so the async DB lookup can be awaited cleanly.
  *
  * @param req             - Incoming request (carries the session and the body/params).
- * @param prisma          - Prisma client for the email→tenant→clusterTenantRef lookup.
+ * @param prisma          - Prisma client for the subject-to-membership lookup.
  * @param resolveResource - Resolves the targeted resource's scope + owning clusterTenant.
  */
 async function _enforce(
@@ -66,12 +68,11 @@ async function _enforce(
 {
   const authUser = req.session?.authUser;
 
-  // 1. No established session. Honour the auth posture: under the dev-mode bypass (no OIDC, no env
-  //    token) allow it so a fresh local install / the OPEN dev backend isn't locked out; otherwise
-  //    FAIL CLOSED — a missing session in a real auth deployment must never reach a scoped mutation (AIR.0b).
+  // 1. No established session fails closed. Missing identity configuration cannot grant a
+  //    ClusterTenant-scoped mutation.
   if (!authUser)
   {
-    return _IsDevAuthMode() ? "allow" : "deny";
+    return "deny";
   }
 
   // 2. Platform operators may mutate any resource at any scope.
@@ -94,11 +95,11 @@ async function _enforce(
     return "deny";
   }
 
-  // 5. ClusterTenant-scoped: allow only when the caller owns a workspace in the resource's
-  //    silo. Scope the fail-closed lookup to that silo so a human who owns workspaces in more
-  //    than one ClusterTenant is authorised for each (an unscoped email match would be ambiguous
-  //    and deny them everywhere). A non-owner yields zero rows → null → deny.
-  const callerClusterTenant = await _ResolveCallerClusterTenant(prisma, authUser.email, resource.clusterTenant);
+  // 5. ClusterTenant-scoped: allow only when the caller has an authoritative membership in the
+  //    resource's silo. Scope the fail-closed lookup to that silo so a human who belongs to more
+  //    than one ClusterTenant is authorised for each (an unscoped subject match would be ambiguous
+  //    and deny them everywhere). A non-member yields zero rows → null → deny.
+  const callerClusterTenant = await _ResolveCallerClusterTenant(prisma, authUser.sub, resource.clusterTenant);
   if (callerClusterTenant && callerClusterTenant === resource.clusterTenant)
   {
     return "allow";

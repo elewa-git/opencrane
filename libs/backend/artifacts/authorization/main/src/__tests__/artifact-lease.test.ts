@@ -1,8 +1,8 @@
-import { generateKeyPairSync } from "node:crypto";
+import { createPrivateKey, generateKeyPairSync, sign } from "node:crypto";
 
 import { describe, expect, it } from "vitest";
 
-import { __SignArtifactPromotionReceipt, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactWriteLease } from "../artifact-lease.js";
+import { __SignArtifactPromotionReceipt, __SignArtifactReadLease, __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "../artifact-lease.js";
 
 const _leaseKeys = generateKeyPairSync("ed25519");
 const _receiptKeys = generateKeyPairSync("ed25519");
@@ -10,6 +10,15 @@ const _leasePrivateKey = _leaseKeys.privateKey.export({ type: "pkcs8", format: "
 const _leasePublicKey = _leaseKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
 const _receiptPrivateKey = _receiptKeys.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
 const _receiptPublicKey = _receiptKeys.publicKey.export({ type: "spki", format: "pem" }).toString();
+
+/** Signs an adversarial payload without the production claim validator to exercise verification. */
+function _SignUncheckedReadLease(payload: Record<string, unknown>): string
+{
+	const header = Buffer.from(JSON.stringify({ alg: "EdDSA", typ: "JWT" })).toString("base64url");
+	const body = Buffer.from(JSON.stringify(payload)).toString("base64url");
+	const signingInput = `${header}.${body}`;
+	return `${signingInput}.${sign(null, Buffer.from(signingInput), createPrivateKey(_leasePrivateKey)).toString("base64url")}`;
+}
 
 describe("ArtifactStore signed internal protocol", function _suite()
 {
@@ -30,6 +39,29 @@ describe("ArtifactStore signed internal protocol", function _suite()
 		expect(__VerifyArtifactWriteLease(atPastBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-past-boundary" });
 		expect(__VerifyArtifactWriteLease(beforePastBoundary, _leasePublicKey, now)).toBeNull();
 		expect(__VerifyArtifactWriteLease(atFutureBoundary, _leasePublicKey, now)).toMatchObject({ leaseId: "lease-future-boundary" });
+	});
+
+	it("keeps one immutable read lease distinct from upload authority", function _readLeaseRoundTrip()
+	{
+		const now = 1_750_000_000;
+		const compact = __SignArtifactReadLease({ leaseId: "read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "application/gzip", action: "artifact.read", expiresAtEpochSeconds: now + 300 }, _leasePrivateKey, now);
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, now)).toMatchObject({ leaseId: "read-1", action: "artifact.read" });
+		expect(__VerifyArtifactWriteLease(compact, _leasePublicKey, now)).toBeNull();
+		expect(__VerifyArtifactReadLease(compact, _receiptPublicKey, now)).toBeNull();
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, now - 1)).toBeNull();
+		expect(__VerifyArtifactReadLease(compact, _leasePublicKey, now + 300)).toBeNull();
+	});
+
+	it("rejects read leases longer than five minutes or with unsafe response media types", function _boundedReadLease()
+	{
+		const now = 1_750_000_000;
+		const base = { leaseId: "read-1", siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 12, mediaType: "text/plain", action: "artifact.read" as const };
+		expect(function _tooLongReadLease(): string { return __SignArtifactReadLease({ ...base, expiresAtEpochSeconds: now + 301 }, _leasePrivateKey, now); }).toThrow(/invalid artifact read lease claims/);
+		expect(function _unsafeMediaType(): string { return __SignArtifactReadLease({ ...base, mediaType: "text/plain\r\nX-Injected: yes", expiresAtEpochSeconds: now + 60 }, _leasePrivateKey, now); }).toThrow(/invalid artifact read lease claims/);
+		const parameterized = __SignArtifactReadLease({ ...base, mediaType: "text/plain; charset=utf-8", expiresAtEpochSeconds: now + 60 }, _leasePrivateKey, now);
+		expect(__VerifyArtifactReadLease(parameterized, _leasePublicKey, now)).toMatchObject({ mediaType: "text/plain; charset=utf-8" });
+		const overlongSignedPayload = _SignUncheckedReadLease({ typ: "opencrane.artifact-read-lease", aud: "artifact-service", iat: now, ...base, expiresAtEpochSeconds: now + 301 });
+		expect(__VerifyArtifactReadLease(overlongSignedPayload, _leasePublicKey, now)).toBeNull();
 	});
 
 	it("keeps service promotion receipts distinct from write-lease authority", function _receiptRoundTrip()

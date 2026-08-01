@@ -55,4 +55,4 @@ and `scope:shared` contracts — never backend code or app source. Its one inter
 
 - Parent index: [elements](../README.md)
 - Sibling: [ui](../ui/README.md)
-- Consumer: [features/workspace](../../features/workspace/README.md)
+- Intended consumer: the future product workspace surface.

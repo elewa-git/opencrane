@@ -14,14 +14,15 @@ owns the client-side stores and caches that hold fetched data.
 | --- | --- |
 | [`core`](./core/README.md) | Frontend state-layer hub. |
 | [`gateways`](./gateways/README.md) | Gateway dependency-injection composition root. |
-| [`conversation/adapter`](./conversation/adapter/README.md) | Live conversation gateway. |
-| [`conversation/cache`](./conversation/cache/README.md) | IndexedDB conversation cache. |
+| [`conversation/adapter`](./conversation/adapter/README.md) | Canonical conversation replay reader. |
 | [`conversation/render`](./conversation/render/README.md) | Vendored render view-models. |
+| [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
+| [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |
 | [`onboarding`](./onboarding/README.md) | Shared onboarding persistence. |
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
 | [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |
-| [`tenant/adapter`](./tenant/adapter/README.md) | Live tenant gateway and store. |
+| [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
 | [`utils/storage`](./utils/storage/README.md) | Safe browser-storage seam. |
 
 ```
@@ -30,15 +31,16 @@ owns the client-side stores and caches that hold fetched data.
       ▼
     core  ── defines ports, holds stores ──  gateways (wires ports → adapters)
       │
-      ├─ conversation/{adapter,cache,render}   mcp/adapter   provider-key/adapter
-      ├─ settings/adapter   tenant/adapter   onboarding   utils/storage
+      ├─ conversation/{adapter,ag-ui,cache,render}   assets/adapter   skills/adapter
+      ├─ mcp/adapter   provider-key/adapter   settings/adapter
+      └─ onboarding   utils/storage
       ▼ HTTP
    backend API
 ```
 
 ## Dependency rule for this tier
 
-State packages carry `scope:web` and `type:state`. They may import shared contracts and each other
+State packages carry `scope:web`, `layer:frontend`, and `type:lib`. They may import shared contracts and each other
 within the state layer (adapters depend on the ports and stores in `core`; `gateways` wires them
 together). They must **not** import a [`feature`](../features/README.md) or a backend package —
 data flows up to features, dependencies point down to the API. Never import an app.

@@ -11,5 +11,3 @@ export * from "./openapi-route.js";
 export * from "./rate-limit.js";
 export type * from "./rate-limit.types.js";
 export * from "./transport-security.middleware.js";
-export * from "./trusted-proxies.js";
-export type * from "./trusted-proxies.types.js";

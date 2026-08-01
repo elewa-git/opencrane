@@ -1,17 +1,48 @@
 {{- define "opencrane.server.rbac" -}}
+{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $runtimeNamespaces := list (include "opencrane.agentController.runtimeNamespace" .) $managedRuntimeNamespace -}}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: {{ include "opencrane.fullname" . }}-opencrane-server
   labels:
     {{- include "opencrane.labels" . | nindent 4 }}
-{{- /*
-  Grant the OpenCrane server only over explicitly owned namespaces. A sibling artifact namespace
-  is deliberately never listed here, so the catalog process cannot read its receipt-signing key.
-*/}}
+{{- range $runtimeNamespace := $runtimeNamespaces }}
+---
+# Runtime cleanup is server-fenced in Postgres first. This Role grants only the physical
+# observation and UID-preconditioned deletion required after that durable claim exists.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ printf "%s-runtime-cleanup" (include "opencrane.fullname" $) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $runtimeNamespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+rules:
+  - apiGroups: ["batch"]
+    resources: ["jobs"]
+    verbs: ["get", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ printf "%s-runtime-cleanup" (include "opencrane.fullname" $) | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $runtimeNamespace }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ printf "%s-runtime-cleanup" (include "opencrane.fullname" $) | trunc 63 | trimSuffix "-" }}
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opencrane.fullname" $ }}-opencrane-server
+    namespace: {{ $.Release.Namespace }}
+{{- end }}
 ---
 # TokenReview is cluster-scoped and is required only for projected workload credentials on
-# internal pod-identity routes. The runtime ServiceAccount receives no Kubernetes RBAC at all.
+# internal pod-identity routes. Runtime Job ServiceAccounts receive no Kubernetes RBAC at all.
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
 metadata:
@@ -37,43 +68,8 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "opencrane.fullname" . }}-opencrane-server
     namespace: {{ .Release.Namespace }}
-{{- $namespaces := include "opencrane.instanceNamespaces" . | fromJsonArray }}
-{{- range $ns := $namespaces }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: {{ include "opencrane.fullname" $ }}-opencrane-server
-  namespace: {{ $ns }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-rules:
-{{ include "opencrane.clustertenantManagerRbacRules" $ | nindent 2 }}
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: RoleBinding
-metadata:
-  name: {{ include "opencrane.fullname" $ }}-opencrane-server
-  namespace: {{ $ns }}
-  labels:
-    {{- include "opencrane.labels" $ | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: Role
-  name: {{ include "opencrane.fullname" $ }}-opencrane-server
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "opencrane.fullname" $ }}-opencrane-server
-    namespace: {{ $.Release.Namespace }}
-{{- end }}
----
 {{- /*
-  Stage 4: the silo READS the cluster-scoped ClusterTenant CR to resolve a host's per-org
-  login client (per-org-client.ts: get by name, list by vanityDomain). ClusterTenant is
-  cluster-scoped, so a get/list/watch grant cannot live in the namespaced Role above — it
-  needs this minimal ClusterRole, rendered in BOTH modes. READ-ONLY: the fleet-manager owns
-  ClusterTenant writes + provisioning; the silo never mutates the CR. (Platform-DNS / Zitadel
-  cluster-scoped grants moved to fleet-manager-platform-dns-rbac.yaml + the fleet operator RBAC.)
+  Per-org OIDC login may read the ClusterTenant host/client binding. It never mutates the CR.
 */}}
 apiVersion: rbac.authorization.k8s.io/v1
 kind: ClusterRole
@@ -101,77 +97,4 @@ subjects:
   - kind: ServiceAccount
     name: {{ include "opencrane.fullname" . }}-opencrane-server
     namespace: {{ .Release.Namespace }}
-{{- if .Values.clustertenantManager.standaloneSeed.name }}
----
-{{- /*
-  STANDALONE SELF-SEED ONLY: when CLUSTER_TENANT_SEED_NAME is set, there is no fleet-manager
-  to create/bind this silo's own ClusterTenant CR. Grant only the verbs the boot seed uses:
-  create the cluster-scoped CR and patch its status.boundNamespace/phase. Fleet-managed silos
-  stay read-only via the role above.
-*/}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ct-seed-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-rules:
-  - apiGroups: ["opencrane.io"]
-    resources: ["clustertenants"]
-    verbs: ["create"]
-  - apiGroups: ["opencrane.io"]
-    resources: ["clustertenants/status"]
-    resourceNames: [{{ .Values.clustertenantManager.standaloneSeed.name | quote }}]
-    verbs: ["patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ct-seed-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ct-seed-{{ .Release.Namespace }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "opencrane.fullname" . }}-opencrane-server
-    namespace: {{ .Release.Namespace }}
-{{- end }}
-{{- if .Values.clustertenantManager.manageTenantNamespaces }}
----
-{{- /*
-  When `clustertenantManager.manageTenantNamespaces=true`, grant the control plane the
-  cluster-scoped `namespaces` verbs it needs to create + PSA-label each ClusterTenant's namespace
-  itself. When namespace provisioning is delegated, this block is not rendered and the service
-  account never holds this grant. Namespaces are cluster-scoped, so this cannot be a namespaced
-  Role. Kept minimal — no delete: get/list/watch/create/patch only.
-*/}}
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ns-manage-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-rules:
-  - apiGroups: [""]
-    resources: ["namespaces"]
-    verbs: ["get", "list", "watch", "create", "patch"]
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRoleBinding
-metadata:
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ns-manage-{{ .Release.Namespace }}
-  labels:
-    {{- include "opencrane.labels" . | nindent 4 }}
-roleRef:
-  apiGroup: rbac.authorization.k8s.io
-  kind: ClusterRole
-  name: {{ include "opencrane.fullname" . }}-opencrane-server-ns-manage-{{ .Release.Namespace }}
-subjects:
-  - kind: ServiceAccount
-    name: {{ include "opencrane.fullname" . }}-opencrane-server
-    namespace: {{ .Release.Namespace }}
-{{- end }}
 {{- end }}

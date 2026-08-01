@@ -20,8 +20,6 @@ project_id = "your-gcp-project-id"
 # domain       = ""                 # e.g. "opencrane.example.com"
 
 # --- Opt-in cloud extras (all default false → plain Kubernetes when off) ------
-# enable_app_deploy        = false  # also install the Helm chart via Terraform
 # enable_custom_vpc        = false  # dedicated VPC + Cloud NAT (else default VPC)
 # enable_artifact_registry = false  # GCP Artifact Registry (else ghcr.io images)
-# enable_cloud_dns         = false  # managed Cloud DNS records (needs app deploy)
-# enable_gcs_storage       = false  # GCS tenant storage + Workload Identity
+# enable_cloud_dns         = false  # managed authoritative Cloud DNS zone

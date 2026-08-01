@@ -15,21 +15,24 @@ import tempfile
 import threading
 import unittest
 
-from src import runtime
-from src.runtime import (
-    _MAX_FRAME_BYTES,
-    _arguments_digest,
-    _candidate,
-    _command_coordinates,
-    _execute_cancel_attempt,
-    _execute_start_attempt,
-    _iter_commands,
-    _read_checkpoint,
-    _retry_delay,
-    _tool_call_candidate,
-    _write_checkpoint,
-    _TerminalGate,
+from src.constants import MAX_FRAME_BYTES as _MAX_FRAME_BYTES
+from src.model_loop.checkpoints import (
+    checkpoint_path as _checkpoint_path,
+    read_checkpoint as _read_checkpoint,
+    write_checkpoint as _write_checkpoint,
 )
+from src.attempts.execution import (
+    execute_cancel_attempt as _execute_cancel_attempt,
+    execute_start_attempt as _execute_start_attempt,
+)
+from src.attempts.terminal import TerminalGate as _TerminalGate
+from src.protocol.candidates import (
+    arguments_digest as _arguments_digest,
+    command_coordinates as _command_coordinates,
+    tool_call_candidate as _tool_call_candidate,
+)
+from src.runtime import retry_delay as _retry_delay
+from src.transport.stream import iter_commands as _iter_commands
 
 
 class _ReversingCipher:
@@ -114,23 +117,23 @@ class FaultTerminalGateTests(unittest.TestCase):
         cancel_event = threading.Event()
         gate = _TerminalGate(cancel_event)
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=lambda _c, _x, _s: iter([]), cancel_event=cancel_event, terminal_gate=gate)
-        _execute_cancel_attempt(_cancel_command(), "instance-fault", emitted.append, cancel_event=cancel_event, terminal_gate=gate)
+        _execute_cancel_attempt(_cancel_command(), "instance-fault", cancel_event=cancel_event)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
         self.assertEqual(terminals, ["run.completed"])
 
-    def test_cancel_in_the_check_then_act_window_posts_exactly_one_terminal(self) -> None:
-        """A cancel firing between loop end and completion post yields exactly one cancelled terminal."""
+    def test_cancel_in_the_check_then_act_window_posts_no_runtime_terminal(self) -> None:
+        """A cancel firing between loop end and completion post leaves terminal state server-owned."""
         emitted: list[dict] = []
         cancel_event = threading.Event()
         gate = _TerminalGate(cancel_event)
 
         def _source(_compiled, _cancel, _steering):
             yield {"type": "output_text", "text": "partial"}
-            _execute_cancel_attempt(_cancel_command(), "instance-fault", emitted.append, cancel_event=cancel_event, terminal_gate=gate)
+            _execute_cancel_attempt(_cancel_command(), "instance-fault", cancel_event=cancel_event)
 
         _execute_start_attempt(_start_command(), "instance-fault", emitted.append, event_source=_source, cancel_event=cancel_event, terminal_gate=gate)
         terminals = [candidate["eventType"] for candidate in emitted if candidate["eventType"] in ("run.completed", "run.error", "run.cancelled")]
-        self.assertEqual(terminals, ["run.cancelled"])
+        self.assertEqual(terminals, [])
 
 
 class FaultStreamLossTests(unittest.TestCase):
@@ -176,8 +179,8 @@ class FaultStaleAuthorityTests(unittest.TestCase):
         """A checkpoint tagged with an unknown version is discarded rather than replayed as state."""
         with tempfile.TemporaryDirectory() as directory:
             cipher = _ReversingCipher()
-            path = runtime._checkpoint_path(directory)
-            forged = cipher.encrypt(runtime.json.dumps({"checkpointVersion": 404, "runId": "run-fault", "attempt": 2, "inputGeneration": 5, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
+            path = _checkpoint_path(directory)
+            forged = cipher.encrypt(json.dumps({"checkpointVersion": 404, "runId": "run-fault", "attempt": 2, "inputGeneration": 5, "state": {}}, sort_keys=True, separators=(",", ":")).encode("utf-8"))
             with open(path, "wb") as handle:
                 handle.write(forged)
             self.assertIsNone(_read_checkpoint("run-fault", 2, 5, cipher=cipher, checkpoint_dir=directory))

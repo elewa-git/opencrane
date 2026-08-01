@@ -58,10 +58,6 @@ Tagged `scope:<tag>`: it may depend only on <…> — never on apps or sibling d
 
 <Required env/config and defaults. Apps and infra only.>
 
-## Status
-
-<Banner for blue-frozen / deletion-boundary packages. Delete otherwise.>
-
 ## See also
 
 - Parent index: [<group>](../README.md)

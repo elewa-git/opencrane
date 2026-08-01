@@ -32,6 +32,7 @@ function _record(overrides: Partial<RuntimeBootstrapExchangeRecord> = {}): Runti
 		bootstrapId: _BOOTSTRAP_REFERENCE,
 		bootstrapSiloId: "silo-1",
 		bootstrapSubjectId: "user-1",
+		bootstrapAudience: "opencrane-agent-runtime",
 		bootstrapServiceAccountName: "agent-runtime-personal",
 		bootstrapNamespace: "runtime-ns",
 		bootstrapWorkloadKind: "job",
@@ -43,6 +44,7 @@ function _record(overrides: Partial<RuntimeBootstrapExchangeRecord> = {}): Runti
 		bootstrapExpiresAtEpochMs: Date.parse("2026-07-20T00:05:00.000Z"),
 		assignmentSiloId: "silo-1",
 		assignmentSubjectId: "user-1",
+		assignmentAudience: "opencrane-agent-runtime",
 		assignmentWorkloadKind: "job",
 		assignmentWorkloadUid: "wl-1",
 		assignmentPodUid: "pod-1",
@@ -66,7 +68,7 @@ function _app(options: { record: RuntimeBootstrapExchangeRecord | null; consumpt
 	app.use(express.json());
 	app.use("/api/internal/agent-runtime", __CreateRuntimeBootstrapRouter({
 		tokenReviewer: { async __Review(token: string) { return token === "valid" ? (options.identity === undefined ? _identity : options.identity) : null; } },
-		namespace: "runtime-ns",
+		runtimeNamespaces: ["runtime-ns", "managed-runtime-ns"],
 		repository,
 		clock: { nowEpochMs(): number { return Date.parse("2026-07-20T00:01:00.000Z"); } },
 		logger: { error() {} },
@@ -86,6 +88,23 @@ describe("__CreateRuntimeBootstrapRouter", function _describeBootstrapRouter()
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ receiptId: "receipt-1" });
 		expect(consume).toHaveBeenCalledTimes(1);
+	});
+
+	it("preserves the managed audience and namespace through bootstrap consumption", async function _ConsumesManagedBootstrap()
+	{
+		const managedIdentity: RuntimeBootstrapReviewedIdentity = { subject: "system:serviceaccount:managed-runtime-ns:managed-agent-runtime-default", namespace: "managed-runtime-ns", serviceAccountName: "managed-agent-runtime-default", podUid: "pod-1" };
+		const record = _record({
+			bootstrapAudience: "opencrane-managed-agent-runtime",
+			bootstrapNamespace: "managed-runtime-ns",
+			bootstrapServiceAccountName: "managed-agent-runtime-default",
+			assignmentAudience: "opencrane-managed-agent-runtime",
+		});
+		const { app, consume } = _app({ record, identity: managedIdentity, consumption: { status: "consumed", receiptId: "receipt-managed" } });
+
+		const response = await request(app).post("/api/internal/agent-runtime/bootstrap").set("authorization", "Bearer valid").send({ bootstrapReference: _BOOTSTRAP_REFERENCE, ..._proofKey() });
+
+		expect(response.status).toBe(200);
+		expect(consume).toHaveBeenCalledWith(expect.objectContaining({ audience: "opencrane-managed-agent-runtime", namespace: "managed-runtime-ns", serviceAccountName: "managed-agent-runtime-default" }));
 	});
 
 	it("fails closed on a replayed bootstrap", async function _replay()

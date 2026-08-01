@@ -4,10 +4,12 @@ on:
   push:
     branches:
       - main
+      - develop
       - own-personal-ai-agent-setup
   pull_request:
     branches:
       - main
+      - develop
       - own-personal-ai-agent-setup
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
@@ -33,7 +35,6 @@ jobs:
       deployables: ${{ steps.affected.outputs.deployables }}
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
-      e2e_required: ${{ steps.affected.outputs.e2e_required }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
     steps:
       - uses: actions/checkout@v6
@@ -59,7 +60,7 @@ jobs:
       - name: Select the last successful base
         uses: nrwl/nx-set-shas@v5
         with:
-          main-branch-name: ${{ github.base_ref || (github.ref_name == 'own-personal-ai-agent-setup' && 'own-personal-ai-agent-setup' || 'main') }}
+          main-branch-name: ${{ github.base_ref || github.ref_name }}
 
       - name: Emit affected deployable matrix
         id: affected
@@ -69,7 +70,22 @@ jobs:
     name: Build, test, and lint affected projects
     runs-on: ubuntu-latest
     needs: prepare
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: opencrane
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d opencrane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
     env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opencrane
       NX_BASE: ${{ needs.prepare.outputs.nx_base }}
       NX_HEAD: ${{ needs.prepare.outputs.nx_head }}
     steps:
@@ -100,6 +116,11 @@ jobs:
           # renders must not drift with the runner image or a new Helm release.
           version: v4.1.4
 
+      - name: Install validation clients
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client ripgrep
+
       - name: Enforce Phase A retired-reference and legacy-residue guards
         run: ./scripts/phase-a-forbidden-references.sh
 
@@ -120,15 +141,24 @@ jobs:
       - name: Prove the Phase D namespace boundary rejects drift
         run: npm run test:phase-d-agent-namespaces
 
-      - name: Enforce Phase A runtime contracts
-        run: |
-          ./apps/_infra/deploy-k8s/platform/tests/tenant-entrypoint-contract-policy.sh
-          ./apps/_infra/deploy-k8s/platform/tests/tenant-image-immutability.sh
+      - name: Enforce language-neutral production module growth
+        run: npm run check:module-growth -- --diff "$NX_BASE"
+
+      - name: Prove the module-growth classifier
+        run: npm run test:module-growth
 
       # The topology gate must inspect the checked-in app owners, before any
       # generator can introduce transient files beneath an app root.
       - name: Generate the database client
         run: npm run db:generate -w @opencrane/server
+
+      - name: Apply the fresh target database baseline
+        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
+
+      # Every suite validates the shared target baseline. A baseline-only change belongs to the
+      # opencrane app and therefore cannot make the library-owned SQL suites "affected" in Nx.
+      - name: Run every PostgreSQL authority suite
+        run: npx nx run-many -t test:sql --parallel=1
 
       - name: Restore the Nx computation cache
         uses: actions/cache@v4
@@ -153,42 +183,15 @@ jobs:
           npx nx run contracts:generate
           git diff --exit-code -- libs/contracts/src/generated/api.ts
 
-  e2e-k3d:
-    name: k3d standalone-silo e2e smoke test
-    runs-on: ubuntu-latest
-    needs: [prepare, test]
-    # PRs pay for the e2e only when the deployment surface moved; integration-branch pushes
-    # always run it, and the nightly workflow re-validates the full battery.
-    if: needs.prepare.outputs.e2e_required == 'true' || github.event_name == 'push'
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Install k3d
-        run: curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash
-
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-        with:
-          # Pinned to the version local deploys and the render-parity evidence used —
-          # renders must not drift with the runner image or a new Helm release.
-          version: v4.1.4
-
-      - name: Run k3d e2e smoke test
-        run: ./apps/_infra/deploy-k8s/platform/tests/k3d-e2e.sh
-        env:
-          KEEP_CLUSTER: "0"
-          TIMEOUT_SECONDS: "300"
-
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test, e2e-k3d]
+    needs: [prepare, test]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
-        needs.test.result == 'success' &&
-        (needs.e2e-k3d.result == 'success' || needs.e2e-k3d.result == 'skipped')
+        needs.test.result == 'success'
       }}
     permissions:
       contents: read

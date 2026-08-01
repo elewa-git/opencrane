@@ -61,4 +61,4 @@ never on backend domains, the frontend, or app entrypoints.
 ## See also
 
 - Parent index: [_infra](../README.md) · [server libraries](../../README.md)
-- Siblings: [auth](../auth/README.md) · [api](../api/README.md) · [tenant-hosting](../tenant-hosting/README.md) · [channel-proxy](../channel-proxy/README.md) · [obot-custody](../obot-custody/README.md)
+- Siblings: [auth](../auth/README.md) · [api](../api/README.md) · [obot-custody](../obot-custody/README.md)

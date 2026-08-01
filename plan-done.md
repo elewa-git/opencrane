@@ -1298,9 +1298,10 @@ freeze. Deployable ownership now lives under `apps/*`, reusable implementation l
 clean import seam.
 
 - [x] **Every rendered workload has an explicit app owner.** OpenCrane server, UI, migration,
-  Cognee, LiteLLM, Obot, and Langfuse workloads are owned by their app packages. The
+  Cognee, LiteLLM, Obot, and Langfuse workloads were owned by their app packages. The
   `apps/opencrane-infra` chart is an umbrella composition layer instead of the implementation home
-  for those workloads.
+  for those workloads. **Superseded note (2026-07-29):** the Langfuse workload was later removed;
+  this item preserves the Phase B completion evidence.
 - [x] **The server app is composition and process lifecycle.** Tenant/OpenClaw reconciliation,
   policy reconciliation, identity, projection, connection auth, channel proxying, tenant hosting,
   transport security, and OpenAPI ownership moved to canonical backend and infrastructure
@@ -1356,9 +1357,10 @@ runtime behavior.
 This follow-up made the repository layout match its ownership model without changing rendered
 workloads or runtime behaviour.
 
-- [x] **Deployment-only owners are visibly separated.** Cognee, Langfuse, LiteLLM, and Obot now
-  live under `apps/_infra`; `apps/_infra/deploy-k8s` owns the installation chart and its database
-  schema deployment component.
+- [x] **Deployment-only owners are visibly separated.** Cognee, Langfuse, LiteLLM, and Obot moved
+  under `apps/_infra`; `apps/_infra/deploy-k8s` owns the installation chart and its database
+  schema deployment component. **Superseded note (2026-07-29):** Langfuse was subsequently removed;
+  this statement records the repository layout at completion.
 - [x] **Database schema deployment has one owner.** The former `opencrane-migrate` app is gone;
   OpenCrane owns the Prisma schema and server image, while the install chart owns the pre-install
   and pre-upgrade Job that runs `prisma migrate deploy`.

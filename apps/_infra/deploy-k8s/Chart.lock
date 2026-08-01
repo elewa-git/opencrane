@@ -14,8 +14,20 @@ dependencies:
 - name: opencrane-artifact-service
   repository: file://../../artifact-service/helm
   version: 0.1.0
+- name: opencrane-artifact-preprocessor
+  repository: file://../../artifact-preprocessor/helm
+  version: 0.1.0
 - name: opencrane-agent-controller
   repository: file://../../agent-controller/helm
+  version: 0.1.0
+- name: opencrane-managed-agent-runtime
+  repository: file://../../managed-agent-runtime/helm
+  version: 0.1.0
+- name: opencrane-skill-authoring
+  repository: file://../../skill-authoring/helm
+  version: 0.1.0
+- name: opencrane-tool-runner
+  repository: file://../../tool-runner/helm
   version: 0.1.0
 - name: opencrane-cognee
   repository: file://../cognee/helm
@@ -26,8 +38,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.1.0
-- name: langfuse
-  repository: https://langfuse.github.io/langfuse-k8s
-  version: 1.5.37
-digest: sha256:919555ead4d4c50d7112e840741e55a0ab50f43f0c02889aad74975195db5800
-generated: "2026-07-22T12:45:26.421421+03:00"
+digest: sha256:916d6c4833b4d140a42309f132e0f0c2228e5d923aff32ba4a0c892e404303e0
+generated: "2026-07-29T14:32:19.105118+03:00"

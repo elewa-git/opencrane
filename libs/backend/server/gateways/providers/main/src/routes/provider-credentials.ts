@@ -79,8 +79,8 @@ function _validateWrite(body: Record<string, unknown>): { error: string; code: s
 /**
  * CRUD router for {@link ProviderCredential} — provider API credential *references*.
  *
- * Credentials are owned at Global (opencrane-ui) or ClusterTenant scope, NEVER per
- * openclaw tenant. The body carries only a `secretRef` (the External-Secrets-synced k8s
+ * Credentials are owned at installation or ClusterTenant scope. The body carries only a
+ * `secretRef` (the External-Secrets-synced Kubernetes
  * Secret name) plus an optional `litellmCredentialName`; a request carrying a raw key is
  * rejected with 400. Mutations are gated by the ClusterTenant scope guard (AIR.0b).
  *

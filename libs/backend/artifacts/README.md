@@ -5,9 +5,9 @@
 An **artifact** is any stored file or output — a document, an image, a tool result — named by the
 hash of its own bytes. That naming scheme is **CAS** (content-addressed storage): the file's name
 *is* the fingerprint of its content, so identical content is stored once and a name can never point
-at the wrong bytes. These three packages are the stack that stores artifacts safely: one decides
-*whether* a write is allowed, one lays the bytes down on disk, and one runs the promotion protocol
-that ties the two together.
+at the wrong bytes. These four packages store artifacts safely and derive bounded text from PDFs:
+one decides *whether* a write is allowed, one lays the bytes down on disk, one runs promotion, and
+one implements the brokered preprocessing protocol.
 
 ## Map
 
@@ -15,6 +15,7 @@ that ties the two together.
 | --- | --- |
 | [`authorization`](./authorization/main/README.md) | Artifact write-lease and receipt authority. |
 | [`filesystem`](./filesystem/main/README.md) | On-disk content-addressed store. |
+| [`preprocessor`](./preprocessor/main/README.md) | Fenced PDF extraction and broker-only remote worker protocol. |
 | [`store`](./store/main/README.md) | Artifact promotion protocol and validation guards. |
 
 ```
@@ -28,11 +29,14 @@ that ties the two together.
             │
             ▼
      filesystem .......... the one place the bytes actually live on disk
+
+   OpenCrane broker ◄────► preprocessor
+      source/output bytes   bounded scratch + PDF-to-text
 ```
 
 ## Dependency rule for this tier
 
-All three carry `layer:backend` and `scope:artifacts`. They may import each other and the shared
+All four carry `layer:backend` and `scope:artifacts`. They may import each other and the shared
 artifact model plus shared contracts (`scope:shared`) — nothing else, and never an app. Keeping the
 whole stack in one scope is deliberate: authorization, protocol, and on-disk layout move together.
 

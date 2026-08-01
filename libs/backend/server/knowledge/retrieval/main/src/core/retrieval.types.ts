@@ -36,13 +36,13 @@ export interface RetrievalQueryRequest
   /** Full-text search query string. */
   query: string;
 
-  /** Tenant name used to resolve the AccessPolicy for authorization. */
+  /** Subject used to resolve retrieval authorization. */
   tenantName: string;
 
   /** Optional team scope to restrict results to documents owned by a team. */
   teamScope?: string;
 
-  /** Dataset scope used for AccessPolicy-compatible dataset authorization (defaults to "org"). */
+  /** Dataset scope used for retrieval authorization (defaults to "org"). */
   datasetScope?: DatasetScope;
 
   /** Dataset identifier inside the selected scope (defaults to "default" for org scope). */

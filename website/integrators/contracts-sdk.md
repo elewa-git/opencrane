@@ -36,13 +36,12 @@ npx openapi-typescript openapi/opencrane.json -o src/api/generated.ts
 
 ## The spec is the source of truth
 
-The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**, so the
-SDK and the [interactive API reference](/reference/api) on this site never drift from
-the implementation.
+The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**. Retrieve the
+deployed contract through the [API reference](/reference/api) before generating a client.
 
 ## Related
 
-- [API reference (interactive)](/reference/api)
+- [API reference](/reference/api)
 - [API overview](/reference/api-overview)
 - Full package README:
   [`libs/contracts/README.md`](https://github.com/elewa-git/opencrane/blob/main/libs/contracts/README.md)

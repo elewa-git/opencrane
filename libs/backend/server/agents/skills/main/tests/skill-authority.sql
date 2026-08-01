@@ -1,5 +1,8 @@
 BEGIN;
 
+INSERT INTO "model_definitions" ("id", "scope", "public_model_name", "litellm_model_id", "upstream_model", "updated_at")
+VALUES ('skill-model', 'global', 'skill-model', 'litellm-skill-model', 'skill-model', clock_timestamp());
+
 CREATE FUNCTION pg_temp.expect_failure(test_name TEXT, statement TEXT, expected_message TEXT) RETURNS VOID LANGUAGE plpgsql AS $$
 DECLARE actual_message TEXT;
 BEGIN
@@ -23,6 +26,19 @@ UPDATE "skill_revisions" SET "state"='published', "reviewed_by"='reviewer-1', "t
 UPDATE "skills" SET "current_revision_id"='skill-revision-1' WHERE "id"='skill-1';
 SELECT pg_temp.expect_failure('published skill content is immutable', $statement$UPDATE "skill_revisions" SET "manifest"='{"changed":true}' WHERE "id"='skill-revision-1'$statement$, 'content is immutable');
 SELECT pg_temp.expect_failure('published skill signature evidence is immutable', $statement$UPDATE "skill_revisions" SET "signature"='replacement-signature' WHERE "id"='skill-revision-1'$statement$, 'review and signature evidence is immutable');
+SELECT pg_temp.expect_failure('current skill revision cannot become revoked without clearing its pointer', $statement$UPDATE "skill_revisions" SET "state"='revoked', "revoked_at"=clock_timestamp() WHERE "id"='skill-revision-1'; SET CONSTRAINTS "current_skill_revisions_remain_published" IMMEDIATE$statement$, 'current SkillRevision must remain Published');
+INSERT INTO "agent_services" ("id", "silo_id", "kind", "name", "workload_profile", "updated_at") VALUES ('skill-service-1','silo-skill','managed','skill test service','standard',clock_timestamp());
+INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "digest", "prompt_policy_version", "model_definition_id", "budget", "authored_by") VALUES ('skill-agent-revision-1','skill-service-1',1,'sha256:'||repeat('a',64),'prompt-v1','skill-model','{}','user-1');
+INSERT INTO "agent_revision_skill_assignments" ("agent_revision_id", "skill_id", "skill_revision_id") VALUES ('skill-agent-revision-1','skill-1','skill-revision-1');
+UPDATE "skill_revisions" SET "state"='revoked', "revoked_at"=clock_timestamp() WHERE "id"='skill-revision-1';
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM "skill_revisions" WHERE "id"='skill-revision-1' AND "state"='revoked' AND "revoked_at" IS NOT NULL) THEN
+        RAISE EXCEPTION 'FAIL: assigned SkillRevision must be revocable for future admission fencing';
+    END IF;
+END;
+$$;
+UPDATE "skills" SET "current_revision_id"=NULL WHERE "id"='skill-1';
 INSERT INTO "artifact_revisions" ("id", "artifact_id", "revision", "content_address", "byte_length", "media_type", "provenance", "created_by") VALUES ('skill-artifact-revision-2','skill-artifact',2,'sha256:'||repeat('d',64),101,'application/gzip','{"source":"skill-authoring"}','user-1');
 UPDATE "artifacts" SET "current_revision_id"='skill-artifact-revision-2' WHERE "id"='skill-artifact';
 SELECT pg_temp.expect_failure('published skill keeps pinned artifact bytes', $statement$UPDATE "artifact_revisions" SET "state"='deletion_pending', "deletion_requested_at"=clock_timestamp() WHERE "id"='skill-artifact-revision'$statement$, 'keeps its ArtifactRevision Published');

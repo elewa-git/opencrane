@@ -1,4 +1,6 @@
 {{- define "opencrane.server.deployment" -}}
+{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -33,12 +35,6 @@ spec:
             # Internal-only API listener (/api/internal/*) — separate socket, off the ingress.
             - name: internal
               containerPort: {{ .Values.clustertenantManager.service.internalPort }}
-            {{- if .Values.gatewayProxy.enabled }}
-            # -- In-process identity-routing gateway proxy (DOMAIN.T4), now silo-local (Stage 5):
-            #    the wildcard Ingress routes the gateway WS upgrade here.
-            - name: gateway-proxy
-              containerPort: {{ .Values.gatewayProxy.port }}
-            {{- end }}
           env:
             - name: NAMESPACE
               valueFrom:
@@ -57,53 +53,35 @@ spec:
               value: {{ .Values.agentController.outboxRetentionSeconds | quote }}
             - name: AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE
               value: {{ .Values.agentController.outboxPruneBatchSize | quote }}
-            # The server accepts runtime assignments only for this Helm-owned restricted namespace.
-            - name: AGENT_RUNTIME_NAMESPACE
+            - name: AGENT_RUN_ADMISSION_MAX_CONCURRENT
+              value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
+            - name: AGENT_RUN_ADMISSION_MAX_QUEUED
+              value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
+            - name: OPENCRANE_FLEET_MEMBERSHIP_ISSUER_ID
+              value: {{ required "clustertenantManager.fleetMembership.trustedIssuerId is required" .Values.clustertenantManager.fleetMembership.trustedIssuerId | quote }}
+            - name: OPENCRANE_FLEET_MEMBERSHIP_KEY_ID
+              value: {{ required "clustertenantManager.fleetMembership.issuerKeyId is required" .Values.clustertenantManager.fleetMembership.issuerKeyId | quote }}
+            - name: OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE
+              value: /var/run/opencrane/fleet-membership/public-key.pem
+            - name: OPENCRANE_FLEET_MEMBERSHIP_MAX_STALENESS_MS
+              value: {{ .Values.clustertenantManager.fleetMembership.maximumStalenessMs | quote }}
+            # The server binds each runtime identity class to its own Helm-owned restricted namespace.
+            - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
+            - name: AGENT_RUNTIME_MANAGED_NAMESPACE
+              value: {{ $managedRuntimeNamespace | quote }}
+            # The preprocessing router TokenReviews only this Helm-owned worker namespace.
+            - name: ARTIFACT_PREPROCESSOR_ENABLED
+              value: {{ .Values.artifactPreprocessor.enabled | quote }}
+            - name: ARTIFACT_PREPROCESSOR_NAMESPACE
+              value: {{ include "opencrane.artifactPreprocessor.namespace" . | quote }}
+            - name: ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES
+              value: {{ .Values.artifactPreprocessor.maximumOutputBytes | quote }}
             {{- include "opencrane.observabilityEnv" (dict "ctx" $ "component" "opencrane-server") | nindent 12 }}
-            - name: INGRESS_DOMAIN
-              value: {{ .Values.ingress.domain | quote }}
-            # -- Platform base domain used to derive each org's Zitadel redirect URI
-            #    (`<org>.<base>/api/v1/auth/callback`, S3 / Phase 2a). Mounted for BOTH roles
-            #    on purpose: it is needed by Zitadel *provisioning* (central-only) AND by
-            #    Zitadel *consumption* — a silo builds the same redirect URI when its tenants
-            #    log in via their pre-provisioned per-org OIDC client. Only the provisioning
-            #    side (mgmtApiUrl + SA key, below) is gated central-only.
-            - name: PLATFORM_BASE_DOMAIN
-              value: {{ .Values.ingress.domain | quote }}
-            {{- if .Values.certManager.enabled }}
-            # cert-manager namespace `PUT /api/v1/platform/dns` writes the
-            # DNS-01 credentials Secret into (must match the namespaced RBAC Role).
-            - name: CERT_MANAGER_NAMESPACE
-              value: {{ default "cert-manager" .Values.certManager.namespace | quote }}
-            {{- if eq (include "opencrane.namespacedCertIssuer" .) "true" }}
-            # MI.4 namespaced cert-issuer mode: `PUT /api/v1/platform/dns` upserts a
-            # per-instance *Issuer* and writes the DNS-01 Secret INTO this pod's own
-            # namespace (NAMESPACE, above), not a cluster-wide ClusterIssuer + shared
-            # cert-manager ns — so two instances never collide. The namespace is left
-            # to the runtime NAMESPACE default; only the kind is forced here.
-            - name: PLATFORM_DNS_ISSUER_KIND
-              value: "Issuer"
-            {{- end }}
-            {{- end }}
-            # -- Cognee endpoint, resolved by role (ADR 0002): silo + bundled Cognee →
-            #    release-prefixed in-cluster Service; central / BYO → configured endpoint.
-            - name: COGNEE_ENDPOINT
-              value: {{ include "opencrane.cogneeEndpoint" . | quote }}
-            - name: COGNEE_PERMISSIONS_TIMEOUT_MS
-              value: {{ .Values.clustertenantManager.cognee.permissionsTimeoutMs | quote }}
-            - name: COGNEE_ENABLE_BACKEND_ACCESS_CONTROL
-              value: {{ ternary "true" "false" .Values.clustertenantManager.cognee.backendAccessControl | quote }}
-            # -- Tenancy profile: the fleet self-service gates (OPENCRANE_BILLING_ENABLED /
-            #    OPENCRANE_CLUSTER_TENANT_MANAGER_ENABLED) and the single-tenant ClusterTenant
-            #    seed moved to the fleet-manager (Stage 4) — the fleet owns the ClusterTenant
-            #    registry + management surface. The silo keeps only its per-org LOGIN OIDC below.
             {{- with .Values.clustertenantManager.oidc }}
             {{- if .issuerUrl }}
-            # -- OIDC human-login session (opencrane-ui only). Rendered iff issuerUrl is
-            #    set; otherwise the opencrane-ui stays in token/development auth mode.
-            #    Zitadel is the single trusted issuer (Mode-2 broker, no upstream Entra) —
-            #    standards-only, so any spec-compliant issuer at OIDC_ISSUER_URL works.
+            # OIDC is the only public human-authentication path. When it is absent the API
+            # remains fail-closed; the chart never enables a tokenless development posture.
             - name: OIDC_ISSUER_URL
               value: {{ .issuerUrl | quote }}
             - name: OIDC_CLIENT_ID
@@ -156,12 +134,7 @@ spec:
             {{- end }}
             {{- end }}
             {{- end }}
-            # NOTE: Zitadel MANAGEMENT env (ZITADEL_MGMT_*) moved to the fleet-manager (Stage 4):
-            # the fleet is the sole IAM_OWNER holder that provisions per-org orgs + rotates the SA
-            # key. The silo's per-org LOGIN above uses OIDC discovery only — no management client.
-            # -- LiteLLM base endpoint, resolved via sharedPlatform scope (B5):
-            #    instance mode → release-prefixed in-cluster Service; shared mode →
-            #    sharedPlatform.litellm.shared.endpoint.
+            # LiteLLM remains a target model-routing dependency.
             - name: LITELLM_ENDPOINT
               value: {{ include "opencrane.litellmEndpoint" . | quote }}
             - name: LITELLM_SPEND_PATH_TEMPLATE
@@ -177,184 +150,12 @@ spec:
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
             {{- end }}
-            {{- /* Optional, short-lived TEST bootstrap: when bootstrap.providerKey.existingSecret is
-                   set, the operator self-provisions this silo's OpenAI BYOK key on boot (writes the
-                   encrypted Secret + LiteLLM credential + seeds a default model). OFF by default;
-                   the raw key lives only in the named Secret, never in this chart. Delete the Secret
-                   (or clear existingSecret) to stop re-applying. Not for production — one shared key
-                   per silo, no per-tenant spend isolation. */ -}}
-            {{- if .Values.bootstrap.providerKey.existingSecret }}
-            - name: OPENCRANE_BOOTSTRAP_OPENAI_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.bootstrap.providerKey.existingSecret }}
-                  key: {{ .Values.bootstrap.providerKey.secretKey }}
-                  optional: true
-            {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
-            {{- /* Langfuse metrics proxy (AIR.10): wire the opencrane-ui to the in-cluster
-                   Langfuse when it is deployed as a subchart. LANGFUSE_HOST points at the
-                   in-cluster Service; public/secret keys come from the opencrane-langfuse
-                   Secret created by k8s-deploy.sh (never appear in rendered manifests). */ -}}
-            {{- if .Values.langfuse.inCluster.enabled }}
-            - name: LANGFUSE_HOST
-              value: "http://{{ .Release.Name }}-langfuse-web.{{ .Release.Namespace }}.svc.cluster.local:3000"
-            - name: LANGFUSE_PUBLIC_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.langfuse.inCluster.existingSecret }}
-                  key: LANGFUSE_INIT_PROJECT_PUBLIC_KEY
-            - name: LANGFUSE_SECRET_KEY
-              valueFrom:
-                secretKeyRef:
-                  name: {{ .Values.langfuse.inCluster.existingSecret }}
-                  key: LANGFUSE_INIT_PROJECT_SECRET_KEY
-            {{- end }}
-            # ============================================================================
-            # In-silo controllers (Stage 5). The opencrane-server runs every in-silo
-            # reconcile loop over its OWN namespace — TenantOperator, PolicyOperator,
-            # idle-suspend, projection repair, and the in-process gateway proxy — so a
-            # silo stands on its own. The fleet-manager
-            # watches only the cluster-scoped ClusterTenant CR. All of the env below is what
-            # `_LoadOperatorConfig` reads; it moved here from the fleet-manager deployment.
-            # ============================================================================
-            # -- This pod's own namespace (downward API): the operator's `ownNamespace`, the
-            #    base host for runtime-plane URL fallbacks.
+            # Server-owned Kubernetes operations are restricted to this release namespace.
             - name: POD_NAMESPACE
               valueFrom:
                 fieldRef:
                   fieldPath: metadata.namespace
-            # -- This pod's own IP (downward API): expands the opt-in `auto` trusted-proxy
-            #    token into a pod-range CIDR.
-            - name: POD_IP
-              valueFrom:
-                fieldRef:
-                  fieldPath: status.podIP
-            # -- The silo watches Tenant + AccessPolicy CRs in its OWN namespace, so the watch
-            #    scope is this pod's namespace (downward API).
-            - name: WATCH_NAMESPACE
-              valueFrom:
-                fieldRef:
-                  fieldPath: metadata.namespace
-            - name: REQUIRE_WATCH_NAMESPACE
-              value: {{ (.Values.multiInstance).requireWatchNamespace | quote }}
-            - name: TENANT_DEFAULT_IMAGE
-              value: "{{ .Values.tenant.defaultImage.repository }}:{{ .Values.tenant.defaultImage.tag }}"
-            # -- Per-org domain provisioning inputs (also consumed by the tenant runtime).
-            - name: INGRESS_IP
-              value: {{ .Values.ingress.externalIp | quote }}
-            - name: CERT_MANAGER_ISSUER_NAME
-              value: {{ .Values.certManager.issuerName | quote }}
-            - name: CERT_MANAGER_ISSUER_KIND
-              value: {{ if eq (include "opencrane.namespacedCertIssuer" .) "true" }}"Issuer"{{ else }}"ClusterIssuer"{{ end }}
-            - name: INGRESS_TLS_ENABLED
-              value: {{ .Values.ingress.tls.enabled | quote }}
-            - name: INGRESS_TLS_SECRET_NAME
-              value: {{ .Values.ingress.tls.secretName | quote }}
-            - name: GATEWAY_PORT
-              value: {{ .Values.tenant.gatewayPort | quote }}
-            - name: CLUSTER_DOMAIN
-              value: {{ .Values.clusterDomain | default "svc.cluster.local" | quote }}
-            # -- OC-2 / CONN.4 trusted-proxy allowlist: the CIDR(s)/IP(s) the OpenClaw gateway
-            #    trusts X-Forwarded-User from. EMPTY ⇒ trust nothing; a NetworkPolicy locks the
-            #    gateway port to the ingress. Set to the ingress pod source range, or `auto` to
-            #    derive a pod-range CIDR from POD_IP.
-            - name: GATEWAY_TRUSTED_PROXIES
-              value: {{ join "," .Values.tenant.gateway.trustedProxies | quote }}
-            {{- with .Values.tenant.gateway.trustedProxiesAutoMask }}
-            - name: GATEWAY_TRUSTED_PROXIES_AUTO_MASK
-              value: {{ . | quote }}
-            {{- end }}
-            {{- if .Values.gatewayProxy.enabled }}
-            # -- Identity-routing gateway proxy, folded in-process (DOMAIN.T4): the silo runs a
-            #    WS proxy on GATEWAY_PROXY_PORT; the wildcard Ingress routes the gateway WS
-            #    upgrade here, and the proxy delegates auth to this same control plane.
-            - name: GATEWAY_PROXY_ENABLED
-              value: "true"
-            - name: GATEWAY_PROXY_PORT
-              value: {{ .Values.gatewayProxy.port | quote }}
-            - name: GATEWAY_PROXY_ALLOWED_ORIGINS
-              value: {{ join "," .Values.gatewayProxy.allowedOrigins | quote }}
-            - name: GATEWAY_PROXY_ALLOWED_ORIGIN_BASE_DOMAINS
-              value: {{ default (list .Values.ingress.domain) .Values.gatewayProxy.allowedOriginBaseDomains | join "," | quote }}
-            - name: GATEWAY_PROXY_RATE_LIMIT_PER_MINUTE
-              value: {{ .Values.gatewayProxy.rateLimitPerMinute | quote }}
-            {{- end }}
-            - name: HOSTING_PROVIDER
-              value: {{ .Values.hosting.provider | quote }}
-            {{- if eq .Values.hosting.provider "gcp" }}
-            - name: GCP_PROJECT_ID
-              value: {{ .Values.hosting.gcp.projectId | quote }}
-            - name: GCP_BUCKET_PREFIX
-              value: {{ .Values.hosting.gcp.bucketPrefix | quote }}
-            - name: GCP_CSI_DRIVER
-              value: {{ .Values.hosting.gcp.csiDriver | quote }}
-            {{- end }}
-            - name: TENANT_STORAGE_CLASS
-              value: {{ .Values.tenant.storage.storageClassName | quote }}
-            - name: IDLE_TIMEOUT_MINUTES
-              value: {{ .Values.fleetManager.idleTimeoutMinutes | quote }}
-            - name: IDLE_CHECK_INTERVAL_SECONDS
-              value: {{ .Values.fleetManager.idleCheckIntervalSeconds | quote }}
-            # -- Linkerd identity substrate gate (S5 / ADR 0001), default off. When true the
-            #    silo reconcile annotates its namespace for mesh injection and emits the per-silo
-            #    deny-by-default Server + MeshTLSAuthentication + AuthorizationPolicy. Fails
-            #    closed if the Linkerd policy CRDs are absent — a safe no-op without Linkerd.
-            - name: LINKERD_MESH_ENABLED
-              value: {{ .Values.fleetManager.linkerdMeshEnabled | quote }}
-            # -- The clean target runs one local ClusterTenant authority topology.
-            # -- Whether this silo creates per-ClusterTenant namespaces itself (standalone) or
-            #    defers to the fleet-manager (default). Paired with the gated namespace-management
-            #    ClusterRole in _rbac.tpl (this chart).
-            - name: MANAGE_TENANT_NAMESPACES
-              value: {{ .Values.clustertenantManager.manageTenantNamespaces | default false | quote }}
-            {{- if not (kindIs "invalid" .Values.clustertenantManager.manageOwnDomain) }}
-            # -- Explicit override for per-org domain ownership.
-            - name: MANAGE_OWN_DOMAIN
-              value: {{ .Values.clustertenantManager.manageOwnDomain | quote }}
-            {{- end }}
-            {{- if .Values.clustertenantManager.standaloneSeed.name }}
-            # -- Standalone ClusterTenant self-seed (#151 item 4): the operator creates + binds
-            #    its OWN ClusterTenant CR on boot from these fields. Ignored by the operator
-            #    when a seed is intentionally configured (see config.ts's standaloneSeedName doc).
-            - name: CLUSTER_TENANT_SEED_NAME
-              value: {{ .Values.clustertenantManager.standaloneSeed.name | quote }}
-            {{- if .Values.clustertenantManager.standaloneSeed.displayName }}
-            - name: CLUSTER_TENANT_SEED_DISPLAY_NAME
-              value: {{ .Values.clustertenantManager.standaloneSeed.displayName | quote }}
-            {{- end }}
-            {{- if .Values.clustertenantManager.standaloneSeed.ownerEmail }}
-            - name: CLUSTER_TENANT_SEED_OWNER_EMAIL
-              value: {{ .Values.clustertenantManager.standaloneSeed.ownerEmail | quote }}
-            {{- end }}
-            {{- if .Values.clustertenantManager.standaloneSeed.ownerSubject }}
-            - name: CLUSTER_TENANT_SEED_OWNER_SUBJECT
-              value: {{ .Values.clustertenantManager.standaloneSeed.ownerSubject | quote }}
-            {{- end }}
-            {{- if .Values.clustertenantManager.standaloneSeed.tier }}
-            - name: CLUSTER_TENANT_SEED_TIER
-              value: {{ .Values.clustertenantManager.standaloneSeed.tier | quote }}
-            {{- end }}
-            {{- end }}
-            # -- Runtime-plane endpoint retained for the target Obot adapter.
-            - name: MCP_GATEWAY_URL
-              value: {{ include "opencrane.mcpGatewayUrl" . | quote }}
-            - name: PROJECTED_TOKEN_TTL_SECONDS
-              value: {{ .Values.projectedIdentity.ttlSeconds | quote }}
-            # -- Internal API base the DB-less operator calls on ITS OWN in-pod internal
-            #    listener (localhost : internalPort). The internal routes are no longer on the
-            #    public port, so this must target the internal port.
-            - name: CLUSTERTENANT_MANAGER_INTERNAL_URL
-              value: {{ printf "http://localhost:%v" .Values.clustertenantManager.service.internalPort | quote }}
-            # -- Internal API SERVICE URL injected into tenant pods (and other planes) to reach
-            #    /api/internal/* from a DIFFERENT pod — a pod's localhost is itself, so it uses
-            #    the Service DNS on the internal port.
-            - name: CLUSTERTENANT_MANAGER_INTERNAL_SERVICE_URL
-              value: {{ printf "http://%s-opencrane-server.%s.svc:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.clustertenantManager.service.internalPort | quote }}
-            - name: LITELLM_ENABLED
-              value: {{ .Values.litellm.enabled | quote }}
-            - name: LITELLM_DEFAULT_MONTHLY_BUDGET_USD
-              value: {{ .Values.litellm.defaultMonthlyBudgetUsd | quote }}
             - name: ARTIFACT_SERVICE_URL
               value: {{ printf "http://%s-artifact-service.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) (default (printf "%s-artifacts" .Release.Namespace) .Values.artifactService.namespace) .Values.artifactService.service.port | quote }}
             - name: ARTIFACT_LEASE_PRIVATE_KEY_PATH
@@ -364,6 +165,9 @@ spec:
           volumeMounts:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
+              readOnly: true
+            - name: fleet-membership-key
+              mountPath: /var/run/opencrane/fleet-membership
               readOnly: true
           livenessProbe:
             httpGet:
@@ -389,4 +193,11 @@ spec:
                 path: lease-private.pem
               - key: receipt-public.pem
                 path: receipt-public.pem
+        - name: fleet-membership-key
+          secret:
+            secretName: {{ required "clustertenantManager.fleetMembership.existingSecret is required" .Values.clustertenantManager.fleetMembership.existingSecret | quote }}
+            defaultMode: 0440
+            items:
+              - key: {{ required "clustertenantManager.fleetMembership.publicKeyKey is required" .Values.clustertenantManager.fleetMembership.publicKeyKey | quote }}
+                path: public-key.pem
 {{- end }}

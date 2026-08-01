@@ -1,0 +1,4 @@
+# Fixed validator roots. The generated lock resolves and hashes their complete transitive closure.
+ruff==0.16.0
+mypy==2.3.0
+pytest==9.1.1

@@ -5,7 +5,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash '/Users/jenterosseel/Documents/GitHub/opencrane-2/.codex/hooks/require-review.sh'"
+            "command": "bash \"$(git rev-parse --show-toplevel)/.codex/hooks/require-review.sh\""
           }
         ]
       }

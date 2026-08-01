@@ -4,14 +4,18 @@
 
 ## What it owns
 
-This package is the OpenCrane server's narrow transport for personal-agent runtimes. It turns an
-outbound request from a runtime Pod into an authenticated stream with bounded inbound requests,
-without becoming an authority over runs, commands, or agent output.
+This package is the OpenCrane server's narrow transport for agent runtimes. The separate
+[workload-identity](../workload-identity/README.md) package first binds personal and managed
+projected-token audiences to distinct namespaces and ServiceAccount grammars. This transport then
+turns an outbound request from that reviewed runtime Pod into an authenticated stream with bounded
+inbound requests, without becoming an authority over runs, commands, or agent output.
 
 The transport first asks an injected TokenReview adapter which Kubernetes Pod presented the
 credential. It then validates the stream opening frame, emits only commands supplied by an injected
 domain authority, and forwards runtime candidates back to that authority for acceptance or refusal.
-Heartbeats keep an idle connection alive without inventing work.
+After an accepted candidate it wakes local idle streams to re-check the durable authority. A bounded
+recovery wait re-checks even if that disposable wake-up signal is lost. Heartbeats keep the
+connection alive without inventing work.
 
 ```text
  agent-runtime Pod
@@ -22,11 +26,11 @@ Heartbeats keep an idle connection alive without inventing work.
  └───────────────┬──────────────────────┘
                  │ verified identity + parsed command/candidate
                  ▼
- personal-agent run authority ........ decides and persists
+ agent run authority ................. decides and persists
 ```
 
 **In this flow:** [agent-runtime](../../../../apps/agent-runtime/README.md) ·
-[runtime authority](../../../backend/agents/runtime/main/README.md) ·
+[runtime authority](../../../backend/agents/execution/protocol/README.md) ·
 [wire contracts](../../../contracts/README.md)
 
 Invariant: transport syntax never becomes business authority. A token/Pod mismatch, malformed input,
@@ -39,18 +43,18 @@ The package does not repair identity, choose a run, mint a command, or persist a
 
 - `_RegisterInternalAgentRuntimeStream(options)` — builds the internal Express router for the
   authenticated stream and candidate endpoints.
-- `RuntimeTokenReviewer` — port through which the OpenCrane app verifies projected Kubernetes
-  credentials.
-- `RuntimeCommandStreamAuthority` — port through which the personal-agent domain supplies commands,
+- `RuntimeCommandStreamAuthority` — port through which the agent run authority supplies commands,
   admits candidate output, and (optionally) is told when a stream was lost so it can release its
   runtime-instance binding.
-- `RuntimeStreamTransportOptions` — fixed body, heartbeat, and polling limits plus the two authority
-  ports.
+- `RuntimeCommandWakeup` — process-local hint fan-out for waking idle streams; it stores no command
+  and never authorizes work.
+- `RuntimeStreamTransportOptions` — fixed body, heartbeat, recovery, and wake-up limits plus the
+  two authority ports.
 
 ## Boundary
 
-This is server-owned infrastructure, not a personal-agent domain. It owns HTTP parsing,
-server-sent-event framing, heartbeats, credential extraction, TokenReview delegation, and tracing.
+This is server-owned infrastructure, not an agent-product specialization. It owns HTTP parsing,
+server-sent-event framing, heartbeats, bearer extraction, reviewer delegation, and tracing.
 It owns no Prisma client, assignment lookup, lease, command ordering source, candidate persistence,
 runtime process, or Kubernetes mutation.
 
@@ -61,19 +65,23 @@ candidate persistence, and the model/tool executor all live behind the injected 
 
 ## Dependency direction
 
-Tagged `scope:agent-runtime-stream` and `layer:infra`. It may import shared contracts and
-observability, while the `apps/opencrane` entrypoint injects business-authority adapters. It must not
-import apps, Prisma, or backend persistence implementations.
+Tagged `scope:agent-runtime-stream` and `layer:infra`. It may import shared contracts,
+observability, and the narrow `scope:workload-identity` port, while the `apps/opencrane` entrypoint
+injects business-authority adapters. It must not import apps, Prisma, or backend persistence
+implementations.
 
 ## Runtime & config
 
-The composing app supplies maximum request bytes, heartbeat interval, command-poll interval, the
-TokenReview port, and the command/candidate authority. This library reads no environment variables
-and opens no listener by itself.
+The composing app supplies maximum request bytes, heartbeat interval, recovery interval, both
+runtime-plane namespaces, and command/candidate authority. The recovery interval is deliberately much slower than
+the old one-second poll: accepted candidates wake streams promptly, while the durable recovery read
+keeps a lost local signal from losing a command. This library reads no environment variables and
+opens no listener by itself.
 
 ## See also
 
 - Parent index: [_infra](../README.md)
+- Identity adapter: [workload-identity](../workload-identity/README.md)
 - Runtime process: [agent-runtime](../../../../apps/agent-runtime/README.md)
-- Runtime authority: [backend/agents/runtime](../../../backend/agents/runtime/main/README.md)
+- Runtime authority: [backend/agents/runtime](../../../backend/agents/execution/protocol/README.md)
 - Shared protocol: [contracts](../../../contracts/README.md)

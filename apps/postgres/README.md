@@ -18,7 +18,7 @@ expandable mounted storage, ingress isolation, and optional plugin-based backup/
 data is retained indefinitely; the Cluster survives Helm uninstall, and deleting a database is an
 explicit operator action, never a release side-effect.
 
-It sits beneath everything else in the silo — the server, LiteLLM, Obot, and Langfuse each get their
+It sits beneath everything else in the silo — the server, LiteLLM, and Obot each get their
 own logical database inside the shared Cluster, and each authenticates only to its own:
 
 ```
@@ -26,16 +26,15 @@ own logical database inside the shared Cluster, and each authenticates only to i
  │  postgres (this chart)  ◄── HERE               │  declares desired Cluster + network boundary
  │   one CNPG Cluster + bounded PgBouncer Pooler  │
  │     ├── opencrane   ├── litellm                │  one logical DB + owner role per authority
- │     ├── obot        └── langfuse  (+ fleet)    │
+ │     └── obot                                    │
  │     └── database admin .........................│  inspect every DB; no durable writes/superuser
  └──────────────────────────────────────────────┘
         ▲ reconciled by                    ▲ connects to (own DB only)
-   CloudNativePG operator (vendor)    opencrane server · litellm · obot · langfuse
+   CloudNativePG operator (vendor)    opencrane server · litellm · obot
 ```
 
 **In this flow:** [opencrane server](../opencrane/README.md) ·
-[litellm](../_infra/litellm/README.md) · [obot](../_infra/obot/README.md) ·
-[langfuse](../_infra/langfuse/README.md)
+[litellm](../_infra/litellm/README.md) · [obot](../_infra/obot/README.md)
 
 CNPG bootstraps the first database from one immutable, content-addressed ConfigMap containing the
 OpenCrane-owned target SQL, then declaratively reconciles the remaining least-privilege roles and
@@ -53,9 +52,12 @@ authorities or leaking them into command arguments or logs. Clean setup publishe
 `scripts/publish-initdb-baseline-config-map.sh`; physical recovery does not execute that SQL because
 the backup already contains the schema and its protected, superuser-owned baseline marker. The
 privileges hook verifies that in-database marker before application deployment can continue.
+It retries transient CNPG rollout disconnects within a fixed shell budget, applies each privilege
+batch in one transaction, and leaves a short Job-deadline grace period for the final PostgreSQL
+diagnostic. A persistent failure still blocks the Helm hook.
 
 The pooler is deliberately part of the data boundary rather than an optional optimisation. Its default
-budget permits at most ten server connections per logical database (fifty across the deployed
+budget permits at most ten server connections per logical database (thirty across the deployed
 databases) while PostgreSQL permits eighty. The OpenCrane server's one replica is further capped at
 five Prisma connections with a five-second acquisition timeout. That means a burst waits at PgBouncer
 instead of holding every PostgreSQL connection while a run-admission transaction waits on a service
@@ -155,8 +157,7 @@ helm upgrade --install opencrane-postgres apps/postgres/helm \
   --set networkPolicy.kubernetesApiServerEndpointPort="$KUBERNETES_API_ENDPOINT_PORT" \
   --set databases[0].credentialsSecret=opencrane-postgres-bootstrap \
   --set databases[1].credentialsSecret=opencrane-obot-postgres-bootstrap \
-  --set databases[2].credentialsSecret=opencrane-litellm-postgres-bootstrap \
-  --set databases[3].credentialsSecret=opencrane-langfuse-postgres-bootstrap
+  --set databases[2].credentialsSecret=opencrane-litellm-postgres-bootstrap
 kubectl wait --for=condition=Ready cluster/opencrane-postgres \
   --namespace opencrane --timeout=5m
 ```
@@ -179,5 +180,5 @@ control path available whether the cluster enforces egress before or after Servi
 
 - Parent index: [apps](../README.md)
 - Consumers: [opencrane server](../opencrane/README.md) · [litellm](../_infra/litellm/README.md) ·
-  [obot](../_infra/obot/README.md) · [langfuse](../_infra/langfuse/README.md)
+  [obot](../_infra/obot/README.md)
 - Silo chart that composes it: [apps/_infra/deploy-k8s](../_infra/deploy-k8s/README.md)

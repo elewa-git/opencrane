@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
+import type { AgentRevisionLifecycleDenial, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick.js";
 import type { AgentServiceSchedule, ScheduleTickDependencies } from "../schedule-tick.types.js";
@@ -31,7 +31,7 @@ class _DedupingAdmission
 /** Admission port that always fails with a fixed reason, for denial/backoff coverage. */
 class _DenyingAdmission
 {
-	constructor(private readonly reason: string) {}
+	constructor(private readonly reason: AgentRevisionLifecycleDenial) {}
 	readonly commands: ManagedRunNowCommand[] = [];
 	async admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
 	{
@@ -146,7 +146,7 @@ describe("schedule tick", function _TickSuite()
 
 	it("schedules a backed-off retry and stops advancing on a transient denial", async function _TransientRetry()
 	{
-		const admission = new _DenyingAdmission("run_admission_unavailable");
+		const admission = new _DenyingAdmission("membership_stale");
 		const result = await __RunScheduleTick(_schedule(), "rev-1", _deps(admission, "2026-07-01T02:30:00.000Z"));
 		if (result.status !== "ticked") throw new Error("expected ticked");
 		const first = result.outcomes[0];
@@ -157,6 +157,15 @@ describe("schedule tick", function _TickSuite()
 		expect(result.nextLastScheduledAt).toBe("2026-07-01T00:00:00.000Z");
 		// Only the first due slot was attempted before stopping.
 		expect(admission.commands).toHaveLength(1);
+	});
+
+	it("retries a capacity rejection without advancing the schedule cursor", async function _CapacityRetry()
+	{
+		const admission = new _DenyingAdmission("admission_concurrency_limited");
+		const result = await __RunScheduleTick(_schedule(), "rev-1", _deps(admission, "2026-07-01T02:30:00.000Z"));
+		if (result.status !== "ticked") throw new Error("expected ticked");
+		expect(result.outcomes[0]).toMatchObject({ outcome: "retry_hint", reason: "admission_concurrency_limited", retryAfterMs: 1_000 });
+		expect(result.nextLastScheduledAt).toBe("2026-07-01T00:00:00.000Z");
 	});
 
 	it("records a permanent denial and advances past it", async function _PermanentDeny()

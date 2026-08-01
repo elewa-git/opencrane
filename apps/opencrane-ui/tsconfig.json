@@ -14,13 +14,7 @@
   ],
   "references": [
     {
-      "path": "../../libs/frontend/features/workspace"
-    },
-    {
       "path": "../../libs/frontend/features/tools"
-    },
-    {
-      "path": "../../libs/frontend/features/customer-admin"
     },
     {
       "path": "../../libs/frontend/features/welcome"

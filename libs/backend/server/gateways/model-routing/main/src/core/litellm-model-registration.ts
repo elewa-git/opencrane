@@ -1,4 +1,5 @@
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log.js";
 import type { LiteLlmModelRegistration } from "./litellm-model-registration.types.js";
@@ -93,8 +94,7 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
       return _placeholderModelId(input);
     }
 
-    const payload = await response.json() as { model_id?: string; id?: string; model_info?: { id?: string } };
-    const litellmModelId = payload.model_id ?? payload.id ?? payload.model_info?.id ?? _placeholderModelId(input);
+    const litellmModelId = ___ParseAndValidateJson(await response.text(), "LiteLLM model registration response", _RegisteredModelId, input);
     _log.info({ publicModelName: input.publicModelName, litellmModelId }, "litellm model registered");
     return litellmModelId;
   }
@@ -104,6 +104,21 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
     _log.warn({ publicModelName: input.publicModelName, err }, "litellm model registration errored; using placeholder id");
     return _placeholderModelId(input);
   }
+}
+
+/** Select one non-empty LiteLLM deployment id or use the deterministic local placeholder. */
+function _RegisteredModelId(value: unknown, input: LiteLlmModelRegistration): string
+{
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return _placeholderModelId(input);
+  const payload = value as Record<string, unknown>;
+  if (typeof payload["model_id"] === "string" && payload["model_id"].length > 0) return payload["model_id"];
+  if (typeof payload["id"] === "string" && payload["id"].length > 0) return payload["id"];
+  if (typeof payload["model_info"] === "object" && payload["model_info"] !== null && !Array.isArray(payload["model_info"]))
+  {
+    const nestedId = (payload["model_info"] as Record<string, unknown>)["id"];
+    if (typeof nestedId === "string" && nestedId.length > 0) return nestedId;
+  }
+  return _placeholderModelId(input);
 }
 
 /**

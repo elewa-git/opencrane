@@ -7,16 +7,6 @@ when set, else the derived default `platform.<ingress.domain>` — never under t
 wildcard `*.<ingress.domain>`. See docs/agents/cluster-architecture.md → "Tenancy Model".
 */ -}}
 {{- $host := .Values.ingress.controlPlaneHost | default (printf "platform.%s" .Values.ingress.domain) -}}
-{{- /* SPA backend for the `/` rule below: the chart-native Deployment/Service
-       (opencrane-ui-spa-{deployment,service}.yaml) when controlPlaneSpa.enabled,
-       else ingress.sameOrigin.spaService/spaPort unchanged (the external-Service seam
-       from the "fall back / to opencrane-ui when no SPA is configured" fix). */ -}}
-{{- $spaService := .Values.ingress.sameOrigin.spaService -}}
-{{- $spaPort := .Values.ingress.sameOrigin.spaPort -}}
-{{- if .Values.controlPlaneSpa.enabled -}}
-{{- $spaService = printf "%s-opencrane-ui-spa" (include "opencrane.fullname" .) -}}
-{{- $spaPort = .Values.controlPlaneSpa.service.port -}}
-{{- end -}}
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
@@ -71,31 +61,13 @@ spec:
                 port:
                   number: {{ .Values.channelProxy.service.port }}
           {{- end }}
-          {{- if .Values.gatewayProxy.enabled }}
-          - path: /gateway
-            pathType: Prefix
-            backend:
-              service:
-                name: {{ include "opencrane.fullname" . }}-gateway-proxy
-                port:
-                  number: {{ .Values.gatewayProxy.port }}
-          {{- end }}
-          # `/` → the org-admin SPA when one is configured (WeOwnAI/frontend deploys),
-          # else the control plane itself — so a standalone/headless silo with no SPA
-          # still serves `/` instead of 502ing. `/api` + `/gateway` are unconditional
-          # either way; the removed legacy path was the `*.<domain>` wildcard, not this.
+          # `/` is always owned by the release-local OpenCrane SPA.
           - path: /
             pathType: Prefix
             backend:
               service:
-                {{- if $spaService }}
-                name: {{ $spaService }}
+                name: {{ include "opencrane.fullname" . }}-opencrane-ui-spa
                 port:
-                  number: {{ $spaPort }}
-                {{- else }}
-                name: {{ include "opencrane.fullname" . }}-opencrane-server
-                port:
-                  number: {{ .Values.clustertenantManager.service.port }}
-                {{- end }}
+                  number: {{ .Values.controlPlaneSpa.service.port }}
 {{- end }}
 {{- end }}

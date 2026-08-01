@@ -89,10 +89,9 @@ function _decisionOf(state: ApprovalRequestState): DeferredToolDecision | null
  * cancelled/expired out from under the reviewer) returns `conflict` rather than mutating a terminal
  * approval. The caller commits this in the same transaction that transitions the owning run state.
  *
- * Scope: this decision authority is built and unit-covered here. The human-facing approval-DECISION
- * HTTP endpoint that calls it is an operator/product surface delivered in Phase F (#224); until then
- * the pause is reachable (a sensitive tool defers and opens a pending approval) but the decision is
- * not yet driven by an external route.
+ * The browser-facing Phase F decision route supplies only an authenticated owner, a silo, and the
+ * terminal choice. This authority rechecks that ownership against the durable row and mints no
+ * browser-controlled result or resume credential, so a caller cannot redirect a pending action.
  *
  * @param transaction - Prisma transaction already holding the owning run's approval fence.
  * @param command - Exact pending request, reviewer decision, and trusted instant.
@@ -102,27 +101,35 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 {
 	// 1. Lock and reload the exact approval row bound to the run attempt before any state change.
 	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
-	if (approval === null || approval.runId !== command.runId || approval.attempt !== command.attempt || approval.toolInvocationRowId === null) return { outcome: "conflict" };
+	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.toolInvocationRowId === null) return { outcome: "conflict" };
 
 	// 2. A previously decided request replays idempotently or conflicts on a differing outcome.
 	const priorDecision = _decisionOf(approval.state);
 	if (priorDecision !== null) return priorDecision === command.decision ? { outcome: "already_decided", decision: priorDecision } : { outcome: "conflict" };
 	if (approval.state !== ApprovalRequestState.Pending) return { outcome: "conflict" };
+	if (approval.expiresAt.getTime() <= command.now.getTime())
+	{
+		const expired = await transaction.approvalRequest.updateMany({
+			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { lte: command.now } },
+			data: { state: ApprovalRequestState.Expired, decidedAt: command.now, decidedBy: null, resumeTokenHash: null },
+		});
+		return expired.count === 1 ? { outcome: "expired" } : { outcome: "conflict" };
+	}
 
 	// 3. Deny by closing the pending row; no result and no resume token are recorded.
 	if (command.decision === "denied")
 	{
 		const denied = await transaction.approvalRequest.updateMany({
-			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending },
+			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 			data: { state: ApprovalRequestState.Denied, decidedAt: command.now, decidedBy: command.decidedBy },
 		});
-		return denied.count === 1 ? { outcome: "denied" } : { outcome: "conflict" };
+		return denied.count === 1 ? { outcome: "denied" } : _conflictOrExpire(transaction, command);
 	}
 
 	// 4. Approve atomically, recording the authorized deferred result and single-use resume-token hash.
 	const deferredToolResult: JsonValue = command.deferredToolResult ?? null;
 	const approved = await transaction.approvalRequest.updateMany({
-		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending },
+		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 		data: {
 			state: ApprovalRequestState.Approved,
 			decidedAt: command.now,
@@ -131,5 +138,16 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 			deferredToolResult: deferredToolResult as unknown as Prisma.InputJsonValue,
 		},
 	});
-	return approved.count === 1 ? { outcome: "approved", deferredToolResult } : { outcome: "conflict" };
+	return approved.count === 1 ? { outcome: "approved", deferredToolResult } : _conflictOrExpire(transaction, command);
+}
+/** Terminalise a just-expired owner-bound request after a decision compare-and-set loses its fence. */
+async function _conflictOrExpire(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>
+{
+	const approval = await transaction.approvalRequest.findUnique({ where: { id: command.approvalRequestId } });
+	if (approval === null || approval.siloId !== command.siloId || approval.subjectId !== command.subjectId || approval.state !== ApprovalRequestState.Pending || approval.expiresAt.getTime() > command.now.getTime()) return { outcome: "conflict" };
+	const expired = await transaction.approvalRequest.updateMany({
+		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { lte: command.now } },
+		data: { state: ApprovalRequestState.Expired, decidedAt: command.now, decidedBy: null, resumeTokenHash: null },
+	});
+	return expired.count === 1 ? { outcome: "expired" } : { outcome: "conflict" };
 }

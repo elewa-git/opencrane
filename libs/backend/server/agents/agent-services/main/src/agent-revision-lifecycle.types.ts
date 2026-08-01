@@ -1,23 +1,4 @@
-import type { AgentRevision, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, RevisionScopeAttachment, SiloId } from "@opencrane/models/agents";
-
-/** Immutable executable content authored for one managed-agent revision. */
-export interface AgentRevisionContent
-{
-	/** Versioned platform prompt-policy reference, diffed line by line. */
-	readonly promptPolicyVersion: string;
-	/** Approved persona revision, or null for a managed agent. */
-	readonly personaRevisionId: string | null;
-	/** Stable model-routing policy reference; carries no provider secret. */
-	readonly modelPolicyId: string;
-	/** Immutable resource ceilings applied to each run. */
-	readonly budget: { readonly maxTurns: number; readonly maxTokens: number; readonly maxDurationMs: number };
-	/** Immutable skill revisions exposed to the runtime. */
-	readonly skills: readonly { readonly skillId: string; readonly revisionId: string }[];
-	/** Immutable integration and tool assignments exposed to the runtime. */
-	readonly integrationAssignments: readonly { readonly integrationId: string; readonly custodyReferenceId: string; readonly allowedTools: readonly string[] }[];
-	/** Revision-scoped knowledge scope attachments authorised for the runtime. */
-	readonly scopeAttachments: readonly RevisionScopeAttachment[];
-}
+import type { AgentRevision, AgentRevisionContent, AgentRevisionDiff, AgentRevisionId, AgentRun, AgentService, AgentServiceId, AgentServiceState, SiloId } from "@opencrane/models/agents";
 
 /** Command that creates one managed AgentService with its first draft revision. */
 export interface CreateManagedAgentServiceCommand
@@ -121,9 +102,22 @@ export type AgentRevisionLifecycleDenial =
 	| "service_retired"
 	| "revision_not_found"
 	| "revision_service_mismatch"
+	| "model_definition_unavailable"
 	| "transition_not_allowed"
 	| "service_not_runnable"
-	| "run_admission_unavailable";
+	| "run_not_admittable"
+	| "revision_unavailable"
+	| "persona_unavailable"
+	| "thread_unavailable"
+	| "memory_scope_unavailable"
+	| "tool_policy_unavailable"
+	| "skill_unavailable"
+	| "budget_unavailable"
+	| "membership_stale"
+	| "identity_unavailable"
+	| "persistence_unavailable"
+	| "authority_conflict"
+	| "admission_concurrency_limited";
 
 /** Result of creating a managed service. */
 export type CreateManagedAgentServiceResult =
@@ -159,6 +153,8 @@ export interface AgentServiceHistory
 /** Concurrency-capable persistence boundary for the managed-agent definition plane. */
 export interface AgentRevisionLifecycleRepository
 {
+	/** Lists managed service identities in the caller's silo, newest first, for catalogue discovery. */
+	listManagedServices(siloId: SiloId): Promise<readonly AgentService[]>;
 	/** Loads one stable service identity scoped to the caller's silo, or null when absent. */
 	getService(agentServiceId: AgentServiceId, siloId: SiloId): Promise<AgentService | null>;
 	/** Loads one immutable revision whose parent service is in the caller's silo, or null. */
@@ -179,7 +175,7 @@ export interface AgentRevisionLifecycleRepository
 export type ManagedRunAdmissionResult =
 	| { readonly outcome: "accepted"; readonly runId: string }
 	| { readonly outcome: "idempotent"; readonly runId: string }
-	| { readonly outcome: "denied"; readonly reason: string };
+	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
 
 /** App-owned boundary that records a managed run admission on the shared run substrate. */
 export interface ManagedRunAdmissionPort

@@ -5,7 +5,7 @@ export type McpServerRouteScope = "org" | "department" | "project" | "personal";
 export type McpServerRouteAccess = "allow" | "deny";
 
 /** Supported subject types for MCP grants. */
-export type McpServerRouteSubjectType = "group" | "tenant" | "user";
+export type McpServerRouteSubjectType = "group" | "user";
 
 /** Supported transport modes for MCP endpoints. */
 export type McpServerRouteTransport = "streamable-http" | "sse" | "websocket";

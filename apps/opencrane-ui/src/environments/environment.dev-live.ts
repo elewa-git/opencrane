@@ -9,10 +9,8 @@ import { GatewayMode } from "@opencrane/state/gateways";
  * (`apps/opencrane-ui/proxy.conf.json`). The committed default (`environment.ts`)
  * stays on mocks so the plain `nx serve`/unit-test path is unaffected.
  */
-export const environment: { gatewayMode: GatewayMode; liveConversation?: boolean } =
+export const environment: { gatewayMode: GatewayMode } =
 {
 	/** Bind every swappable gateway to its live implementation where one exists. */
-	gatewayMode: "live",
-	/** Enable the live OpenClaw conversation gateway (W3a). */
-	liveConversation: true
+	gatewayMode: "live"
 };

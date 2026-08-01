@@ -2,7 +2,7 @@
 
 > Deep-dive for `libs/contracts`. Index: [`../app-specific.md`](../app-specific.md). Verified June 2026.
 
-**The keystone.** Single source of truth for cross-package types and the typed opencrane-api client.
+**The keystone.** Single source of truth for cross-package types and the typed opencrane-server client.
 Consumed by opencrane-server, frontend, external integrations, and backend domain packages. Import
 from the barrel only.
 
@@ -11,13 +11,15 @@ from the barrel only.
 - **`index.ts`** — the one barrel; re-exports everything below + the client.
 - **`client.ts`** — `___CreateControlPlaneClient(baseUrl)` builds an `openapi-fetch` client typed by `paths` and sends same-origin OIDC session cookies. Exports `paths`; `ControlPlaneClient` lives in `client.types.ts`.
 - **`generated/api.ts`** — **auto-generated**, do not hand-edit. The `paths` type map.
-- Domain type files (CRD-mirroring enums + DTOs): `cluster-tenant.types.ts` (the **ClusterTenant** customer/isolation unit), `grant.types.ts`, `group.types.ts`, `mcp-server.types.ts`, and `third-party-source.types.ts`. The per-user **UserTenant** gateway is the `Tenant` CRD (kind still `Tenant`); for the two-concept model see [`cluster-architecture.md` → Tenancy Model](../cluster-architecture.md#tenancy-model--clustertenant-vs-usertenant).
+- Product contract files cover the ClusterTenant organisation boundary, grants, groups, MCP servers,
+  model routing, memory, approvals, runtime assignments, immutable run input, controller exchange,
+  artifact preprocessing, and the display-safe AG-UI event projection.
 
 ## The type-generation pipeline
 
-The opencrane-api emits `dist/apps/opencrane/openapi.json`; the contracts `generate` script runs
-`openapi-typescript dist/apps/opencrane/openapi.json -o src/generated/api.ts`. So **the OpenAPI spec drives the client types** — after changing a
-opencrane-api route's request/response shape, regenerate here rather than hand-typing. Runtime client
+The opencrane-server emits `dist/apps/opencrane/openapi.json`; the contracts `generate` script runs
+`openapi-typescript dist/apps/opencrane/openapi.json -o src/generated/api.ts`. So **the OpenAPI spec drives the client types** — after changing an
+opencrane-server route's request/response shape, regenerate here rather than hand-typing. Runtime client
 is `openapi-fetch` (tiny, typed `GET`/`POST`/… over `paths`).
 
 ## CRD-mirroring enums (the canonical values)

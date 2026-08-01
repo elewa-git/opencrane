@@ -170,7 +170,7 @@ spec:
         - protocol: TCP
           port: 53
     {{- if .Values.observability.otel.enabled }}
-    # Telemetry export is allowed only to the release-local collector when tracing is enabled.
+    # Telemetry export is allowed only to the operator-supplied release-local collector.
     - to:
         - podSelector:
             matchLabels:

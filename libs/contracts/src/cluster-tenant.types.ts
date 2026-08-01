@@ -28,15 +28,15 @@ export enum ClusterTenantPhase
   Pending = "pending",
   /** A provisioner is building the customer's boundary. */
   Provisioning = "provisioning",
-  /** The boundary exists and openclaws can attach. */
+  /** The boundary exists and governed workloads can be scheduled. */
   Ready = "ready",
   /** Provisioning failed; see `message`. */
   Failed = "failed",
 }
 
 /**
- * Compute placement policy for a cluster tenant. The operator stamps the
- * resulting `nodeSelector`/`tolerations` onto each attached openclaw pod.
+ * Compute placement policy for a cluster tenant. Runtime launchers stamp the
+ * resulting `nodeSelector` and tolerations onto governed workloads.
  */
 export interface ClusterTenantCompute
 {
@@ -100,9 +100,8 @@ export interface ClusterTenantObservedStatus
 }
 
 /**
- * Shared API contract for a cluster tenant — the first-class customer / isolation
- * unit that sits above the `Tenant`/openclaw CRD. The control plane emits this
- * shape; the operator reconciles attached openclaws into the bound namespace.
+ * Shared API contract for a cluster tenant, the first-class customer and isolation unit.
+ * The control plane emits this shape and governed workload launchers use its boundary.
  */
 export interface ClusterTenant
 {

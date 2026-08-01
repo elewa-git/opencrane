@@ -1,4 +1,5 @@
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
+import type { AgentRuntimeProjectedTokenAudience, ManagedAgentRuntimeProjectedTokenAudience } from "@opencrane/contracts";
 
 import type { RuntimeBootstrapRepository } from "./runtime-proof.types.js";
 
@@ -49,6 +50,8 @@ export interface RuntimeBootstrapExchangeRecord
 	readonly bootstrapSiloId: string;
 	/** Subject recorded on the bootstrap row. */
 	readonly bootstrapSubjectId: string;
+	/** Projected-token audience recorded on the bootstrap row. */
+	readonly bootstrapAudience: AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
 	/** ServiceAccount recorded on the bootstrap row. */
 	readonly bootstrapServiceAccountName: string;
 	/** Namespace recorded on the bootstrap row. */
@@ -71,6 +74,8 @@ export interface RuntimeBootstrapExchangeRecord
 	readonly assignmentSiloId: string;
 	/** Subject recorded on the independent assignment row. */
 	readonly assignmentSubjectId: string;
+	/** Projected-token audience recorded on the independent assignment row. */
+	readonly assignmentAudience: AgentRuntimeProjectedTokenAudience | ManagedAgentRuntimeProjectedTokenAudience;
 	/** Controller workload kind recorded on the independent assignment row. */
 	readonly assignmentWorkloadKind: "job" | "deployment";
 	/** Controller workload UID recorded on the independent assignment row. */
@@ -106,8 +111,8 @@ export interface RuntimeBootstrapRouterDependencies
 {
 	/** Dedicated projected-token identity reviewer for the runtime audience. */
 	readonly tokenReviewer: RuntimeBootstrapTokenReviewer;
-	/** Exact namespace in which the runtime ServiceAccount must exist. */
-	readonly namespace: string;
+	/** Exact personal and managed namespaces in which runtime ServiceAccounts may exist. */
+	readonly runtimeNamespaces: readonly [string, string];
 	/** Durable bootstrap load-and-consume authority. */
 	readonly repository: RuntimeBootstrapExchangeRepository;
 	/** Trusted server clock. */

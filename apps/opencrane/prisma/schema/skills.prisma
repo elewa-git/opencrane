@@ -16,6 +16,21 @@ enum SkillTrustClass {
   SandboxedPython      @map("sandboxed_python")
 }
 
+/// Isolated Job class selected by the durable skill-work authority.
+enum SkillWorkloadKind {
+  Authoring  @map("authoring")
+  ToolRunner @map("tool_runner")
+}
+
+/// Durable lifecycle of one governed worker request; Kubernetes reports identity, never terminal state.
+enum SkillWorkloadState {
+  Pending    @map("pending")
+  Assigned   @map("assigned")
+  Succeeded  @map("succeeded")
+  Failed     @map("failed")
+  Cancelled  @map("cancelled")
+}
+
 model Skill {
   id                String       @id @default(cuid())
   siloId            String       @map("silo_id")
@@ -57,6 +72,7 @@ model SkillRevision {
   revokedAt              DateTime?          @map("revoked_at")
   skill                  Skill              @relation("SkillRevisions", fields: [skillId], references: [id], onDelete: Restrict)
   currentFor             Skill[]            @relation("CurrentSkillRevision")
+  workloads              SkillWorkload[]
 
   @@unique([skillId, revision])
   @@unique([skillId, id])
@@ -64,4 +80,52 @@ model SkillRevision {
   @@index([artifactRevisionId])
   @@index([state, trustClass])
   @@map("skill_revisions")
+}
+
+/// One canonical future Job request, never a Kubernetes queue or worker-owned receipt.
+model SkillWorkload {
+  id               String             @id @default(cuid())
+  siloId           String             @map("silo_id")
+  kind             SkillWorkloadKind
+  state            SkillWorkloadState @default(Pending)
+  skillRevisionId  String             @map("skill_revision_id")
+  toolInvocationId String?            @unique @map("tool_invocation_id")
+  claimedAt        DateTime?          @map("claimed_at")
+  deliveryCount    Int                @default(0) @map("delivery_count")
+  workloadUid      String?            @unique @map("workload_uid")
+  workerPodUid     String?            @unique @map("worker_pod_uid")
+  releaseClaimedAt DateTime?          @map("release_claimed_at")
+  releaseDeliveryCount Int             @default(0) @map("release_delivery_count")
+  releaseExpiresAt DateTime?           @map("release_expires_at")
+  releasedAt        DateTime?          @map("released_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  completedAt      DateTime?          @map("completed_at")
+  failureCode      String?            @map("failure_code")
+  cancelledAt      DateTime?          @map("cancelled_at")
+  skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
+  toolInvocation   ToolInvocation?    @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  bootstrap        SkillWorkloadBootstrap?
+
+  @@index([siloId, state, createdAt])
+  @@index([state, releaseClaimedAt])
+  @@map("skill_workloads")
+}
+
+/// One hashed, one-use worker bootstrap bound to an assigned governed skill Job.
+model SkillWorkloadBootstrap {
+  id                 String        @id @default(cuid())
+  skillWorkloadId    String        @unique @map("skill_workload_id")
+  referenceHash      String        @unique @map("reference_hash")
+  audience           String
+  serviceAccountName String        @map("service_account_name")
+  namespace          String
+  workloadUid        String        @map("workload_uid")
+  expiresAt          DateTime      @map("expires_at")
+  consumedAt         DateTime?     @map("consumed_at")
+  consumedByPodUid   String?       @map("consumed_by_pod_uid")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  skillWorkload      SkillWorkload @relation(fields: [skillWorkloadId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("skill_workload_bootstraps")
 }

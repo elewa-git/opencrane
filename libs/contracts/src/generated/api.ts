@@ -4,306 +4,6 @@
  */
 
 export interface paths {
-    "/awareness/rollout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Show the fleet awareness contract rollout state */
-        get: operations["getAwarenessRollout"];
-        /** Define (or redefine) the awareness rollout; resets the frontier */
-        put: operations["setAwarenessRollout"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/awareness/rollout/promote": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Advance the rollout frontier (one wave, or up to a named wave) */
-        post: operations["promoteAwarenessRollout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/awareness/rollout/rollback": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** One-step rollback: return every wave to the stable version */
-        post: operations["rollbackAwarenessRollout"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/awareness/rollout/resolve/{tenant}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Resolve the awareness contract version a tenant runs */
-        get: operations["resolveAwarenessVersion"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/awareness/participation": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Fleet participation, drift, and policy-violation monitoring */
-        get: operations["getFleetParticipation"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List all tenants */
-        get: operations["listTenants"];
-        put?: never;
-        /**
-         * Create a new tenant (admin/import path; dual-write: K8s CRD + database)
-         * @description Internal seeding (owner-default on org create; member workspace on first login) is the production funnel — this route is the admin/import path. Every workspace it creates must be routable (email) and subject-bound; when a parent clusterTenantRef is given the subject must be a member of that org.
-         */
-        post: operations["createTenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a single tenant by name */
-        get: operations["getTenant"];
-        /** Update a tenant (dual-write: K8s CRD + database) */
-        put: operations["updateTenant"];
-        post?: never;
-        /** Delete a tenant (offboarding teardown: cut the runtime pod, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets) */
-        delete: operations["deleteTenant"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/{name}/suspend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Suspend a tenant (scale deployment to zero) */
-        post: operations["suspendTenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/{name}/resume": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Resume a suspended tenant */
-        post: operations["resumeTenant"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/{name}/datasets": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get dataset memberships for a tenant */
-        get: operations["getTenantDatasets"];
-        /** Update dataset memberships for a tenant */
-        put: operations["updateTenantDatasets"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/{name}/effective-contract": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Compile the effective awareness, MCP, and skill contract for a tenant */
-        get: operations["getTenantEffectiveContract"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/drift": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Detect drift between Tenant CRDs and PostgreSQL projection rows */
-        get: operations["getTenantProjectionDrift"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tenants/repair": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Repair Tenant projection rows from CRD source of truth */
-        post: operations["repairTenantProjection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/policies/drift": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Detect drift between AccessPolicy CRDs and PostgreSQL projection rows */
-        get: operations["getPolicyProjectionDrift"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/policies/repair": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Repair AccessPolicy projection rows from CRD source of truth */
-        post: operations["repairPolicyProjection"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/policies": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List all access policies */
-        get: operations["listPolicies"];
-        put?: never;
-        /** Create an access policy (dual-write: K8s CRD + database) */
-        post: operations["createPolicy"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/policies/{name}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get a single access policy by name */
-        get: operations["getPolicy"];
-        /** Update an access policy */
-        put: operations["updatePolicy"];
-        post?: never;
-        /** Delete an access policy */
-        delete: operations["deletePolicy"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/mcp-servers": {
         parameters: {
             query?: never;
@@ -731,41 +431,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/providers/keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List configured provider API keys (configured status only, never the key value) */
-        get: operations["listProviderKeys"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/providers/keys/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Create or update a provider API key */
-        put: operations["upsertProviderKey"];
-        post?: never;
-        /** Delete a configured provider API key */
-        delete: operations["deleteProviderKey"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/providers/byok": {
         parameters: {
             query?: never;
@@ -911,23 +576,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/model-routing/metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Proxy a metrics query to the self-hosted Langfuse backend (server-side auth; non-operators scoped to their tenant) */
-        get: operations["getRoutingMetrics"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/ai-budget/global": {
         parameters: {
             query?: never;
@@ -981,57 +629,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/ai-budget/{tenantName}/spend": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get current spend and budget state for a tenant */
-        get: operations["getTenantSpend"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ai-budget/{tenantName}/litellm-key": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get LiteLLM virtual key metadata for a tenant (never the key value) */
-        get: operations["getTenantLiteLlmKey"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/ai-budget/{tenantName}/litellm-key/revoke": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Revoke the LiteLLM virtual key for a tenant */
-        post: operations["revokeTenantLiteLlmKey"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/audit": {
         parameters: {
             query?: never;
@@ -1039,7 +636,7 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Query audit log entries with optional tenant filter and cursor pagination */
+        /** Query audit log entries with cursor pagination */
         get: operations["listAuditEntries"];
         put?: never;
         post?: never;
@@ -1049,15 +646,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/metrics/server": {
+    "/me/approvals": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get latest server utilisation snapshot (CPU, memory, storage, active tenants) */
-        get: operations["getServerMetrics"];
+        /**
+         * List the signed-in owner's pending tool approvals
+         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.
+         */
+        get: operations["listMyPendingToolApprovals"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1066,15 +666,58 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/metrics/projection-drift": {
+    "/me/approvals/{approvalRequestId}/decision": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get projection drift metrics with threshold evaluation and alert state */
-        get: operations["getProjectionDriftMetrics"];
+        get?: never;
+        put?: never;
+        /**
+         * Approve or deny one pending tool action owned by the signed-in user
+         * @description The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.
+         */
+        post: operations["decideDeferredToolApproval"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs/{runId}/steering": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Queue one signed-in owner's instruction for a running agent
+         * @description The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.
+         */
+        post: operations["submitRuntimeSteering"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/runs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List a signed-in owner's fifty most recent personal runs
+         * @description The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.
+         */
+        get: operations["listMyRuns"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1083,15 +726,175 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/token-usage": {
+    "/me/runs/{runId}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List token usage records */
-        get: operations["listTokenUsage"];
+        /**
+         * Return one signed-in owner's personal run status
+         * @description The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.
+         */
+        get: operations["getMyRunStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the signed-in owner's resumable persona onboarding state */
+        get: operations["getMyPersonaOnboarding"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/conversations/{threadId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Replay the signed-in participant's canonical conversation events
+         * @description The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected thread.
+         */
+        get: operations["replayMyConversationEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/agent-services": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List managed agent services in the signed-in caller's silo
+         * @description The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.
+         */
+        get: operations["listManagedAgentServices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/configuration/changes/{changeId}/materialize": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Apply one accepted personal model selection to future runs
+         * @description The server derives the owner, silo, trusted time, active personal revision, and registered model definition. It creates and activates a new immutable AgentRevision; it never rewrites an active run snapshot. Accepted persona refreshes remain in their proposal-bound interview flow.
+         */
+        post: operations["materializeMyPersonalConfigurationChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/configuration/changes/{changeId}/decision": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept or reject one signed-in owner's configuration proposal
+         * @description The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.
+         */
+        post: operations["decideMyPersonalConfigurationChange"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/configuration/changes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's personal configuration proposals
+         * @description The server derives the owner and silo from session and host. It returns at most fifty durable future-session proposals, never a mutable run snapshot.
+         */
+        get: operations["listMyPersonalConfigurationChanges"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/skills": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List governed skills in the signed-in caller's silo
+         * @description The server derives the silo from the browser session and request host. It returns at most two hundred catalogue summaries, never skill bundles, artifact addresses, manifests, review evidence, signatures, or workload coordinates.
+         */
+        get: operations["listSkills"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/assets": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the signed-in owner's assets
+         * @description The server derives the owner and silo from the browser session and request host. It returns at most fifty non-deleted asset metadata records, never bytes, content addresses, provenance, leases, receipts, or outbox data.
+         */
+        get: operations["listMyAssets"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1114,26 +917,6 @@ export interface paths {
         get: operations["getAuthStatus"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/pod-token": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session
-         * @description Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised against the live session through `/auth/gateway-resolve`, so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.
-         */
-        post: operations["getPodConnection"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1234,31 +1017,6 @@ export interface components {
             /** @description Opaque cursor for the next page. Absent when hasMore is false. */
             nextCursor?: string;
             hasMore: boolean;
-        };
-        Tenant: {
-            name?: string;
-            displayName?: string;
-            /** Format: email */
-            email?: string;
-            /** @description IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants. */
-            subject?: string;
-            team?: string;
-            /** @description Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path. */
-            clusterTenantRef?: string;
-            phase?: string;
-            ingressHost?: string;
-            /** Format: date-time */
-            createdAt?: string;
-        };
-        Policy: {
-            name?: string;
-            namespace?: string;
-            tenantSelector?: Record<string, never>;
-            domains?: string[];
-            egressRules?: Record<string, never>[];
-            mcpServers?: Record<string, never>;
-            /** Format: date-time */
-            createdAt?: string;
         };
         McpServer: {
             id?: string;
@@ -1496,12 +1254,6 @@ export interface components {
             resource?: string;
             message?: string;
         };
-        ProviderKey: {
-            provider?: string;
-            configured?: boolean;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
         ByokProviderKeyStatus: {
             /**
              * @description The provider this status describes.
@@ -1705,35 +1457,6 @@ export interface components {
                 explorationRate: number;
             };
         };
-        AwarenessRollout: {
-            targetVersion?: string;
-            stableVersion?: string;
-            waves?: string[];
-            promotedWaves?: string[];
-            shadowMode?: boolean;
-            nextWave?: string | null;
-        };
-        DatasetMembership: {
-            org: string[];
-            team: string[];
-            department: string[];
-            project: string[];
-            personal: string[];
-        };
-        EffectiveContract: {
-            contractId?: string;
-            contractVersion?: string;
-            tenant?: Record<string, never>;
-            awareness?: Record<string, never>;
-            mcp?: Record<string, never>;
-        };
-        ProjectionDrift: {
-            tenant?: Record<string, never>;
-            accessPolicy?: Record<string, never>;
-            /** Format: date-time */
-            evaluatedAt?: string;
-            alertFired?: boolean;
-        };
         Budget: {
             monthlyLimitUsd?: number;
             currentSpendUsd?: number;
@@ -1757,6 +1480,63 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
+        };
+        SelfRunStatus: {
+            runId: string;
+            attempt: number;
+            /** @enum {string} */
+            state: "accepted" | "queued" | "assigned" | "running" | "waiting_for_approval" | "cancelling" | "completed" | "failed" | "cancelled";
+            threadId: string | null;
+            agentRevisionId: string;
+            /** Format: date-time */
+            acceptedAt: string;
+            /** Format: date-time */
+            finishedAt: string | null;
+        };
+        SelfDeferredToolApproval: {
+            approvalRequestId: string;
+            runId: string;
+            attempt: number;
+            toolRevisionId: string;
+            /** Format: date-time */
+            expiresAt: string;
+            /** Format: date-time */
+            createdAt: string;
+        };
+        AgentService: {
+            id: string;
+            siloId: string;
+            /** @enum {string} */
+            kind: "managed";
+            name: string;
+            /** @enum {string} */
+            state: "draft" | "active" | "paused" | "retired";
+            activeRevisionId: string | null;
+            workloadProfile: string;
+            /** Format: date-time */
+            createdAt: string;
+            /** Format: date-time */
+            updatedAt: string;
+        };
+        PersonalConfigurationChange: {
+            changeId: string;
+            requestedPatch: {
+                /** @constant */
+                kind: "persona_refresh";
+            } | {
+                /** @constant */
+                kind: "model_alias";
+                modelAlias: string;
+            };
+            /** @enum {string} */
+            state: "proposed" | "accepted" | "applied" | "rejected" | "superseded";
+            sourceThreadId: string;
+            sourceRunId: string;
+            /** Format: date-time */
+            proposedAt: string;
+            /** Format: date-time */
+            decidedAt: string | null;
+            rejectionReason: string | null;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */
@@ -1810,779 +1590,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    getAwarenessRollout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Current rollout state. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwarenessRollout"];
-                };
-            };
-        };
-    };
-    setAwarenessRollout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    targetVersion: string;
-                    stableVersion?: string;
-                    waves?: string[];
-                    shadowMode?: boolean;
-                };
-            };
-        };
-        responses: {
-            /** @description Rollout defined. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwarenessRollout"];
-                };
-            };
-        };
-    };
-    promoteAwarenessRollout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: {
-            content: {
-                "application/json": {
-                    wave?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Frontier advanced. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwarenessRollout"];
-                };
-            };
-        };
-    };
-    rollbackAwarenessRollout: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Rolled back. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AwarenessRollout"];
-                };
-            };
-        };
-    };
-    resolveAwarenessVersion: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tenant: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Resolved version. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        tenant?: string;
-                        version?: string;
-                        promoted?: boolean;
-                        shadow?: boolean;
-                        wave?: string;
-                    };
-                };
-            };
-            /** @description Tenant not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getFleetParticipation: {
-        parameters: {
-            query?: {
-                severity?: "critical" | "warning";
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Fleet participation report. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        total?: number;
-                        participating?: number;
-                        drifted?: number;
-                        critical?: number;
-                        warning?: number;
-                        tenants?: {
-                            tenant?: string;
-                            lastSeenAt?: string | null;
-                            runningContractVersion?: string | null;
-                            expectedContractVersion?: string;
-                            participating?: boolean;
-                            drifted?: boolean;
-                            policyViolations?: number;
-                            /** @enum {string} */
-                            severity?: "ok" | "warning" | "critical";
-                        }[];
-                    };
-                };
-            };
-        };
-    };
-    listTenants: {
-        parameters: {
-            query?: {
-                /** @description Return only tenants attached to this parent ClusterTenant (customer). */
-                clusterTenantRef?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tenant"][];
-                };
-            };
-        };
-    };
-    createTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    name: string;
-                    displayName: string;
-                    /** Format: email */
-                    email: string;
-                    /** @description IdP-verified subject (OIDC `sub`) to bind the workspace to. Required — subject-less pods degrade the compiled contract to {tenant} only. */
-                    subject: string;
-                    team?: string;
-                    /** @description Parent ClusterTenant (customer) to attach this tenant to. */
-                    clusterTenantRef?: string;
-                    monthlyBudgetUsd?: number;
-                    resources?: Record<string, never>;
-                    policyRef?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Tenant created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-            /** @description Missing email or subject. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description No models registered for this scope (NO_MODELS_REGISTERED) — the same ≥1-model onboarding gate the internal seed funnel enforces. */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Tenant CR did not appear in Kubernetes within the SLO window. */
-            504: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Tenant"];
-                };
-            };
-            /** @description Tenant not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    displayName?: string;
-                    /** Format: email */
-                    email?: string;
-                    /** @description Re-bind the workspace to this IdP subject; must be a member of the (new or existing) parent org. */
-                    subject?: string;
-                    team?: string;
-                    /** @description Parent ClusterTenant (customer) to attach this tenant to. */
-                    clusterTenantRef?: string;
-                    monthlyBudgetUsd?: number;
-                    resources?: Record<string, never>;
-                    policyRef?: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Tenant updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-            /** @description Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    deleteTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant deleted. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    suspendTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant suspended. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    resumeTenant: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Tenant resumed. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    getTenantDatasets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Dataset memberships. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DatasetMembership"];
-                };
-            };
-            /** @description Tenant not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updateTenantDatasets: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["DatasetMembership"];
-            };
-        };
-        responses: {
-            /** @description Dataset memberships updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DatasetMembership"];
-                };
-            };
-            /** @description Invalid membership payload. */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Tenant not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getTenantEffectiveContract: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Effective contract. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["EffectiveContract"];
-                };
-            };
-            /** @description Tenant not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getTenantProjectionDrift: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Drift report. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    repairTenantProjection: {
-        parameters: {
-            query?: {
-                /** @description When true (default), report planned changes without applying them. */
-                dryRun?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Repair report. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    getPolicyProjectionDrift: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Drift report. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    repairPolicyProjection: {
-        parameters: {
-            query?: {
-                dryRun?: boolean;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Repair report. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    listPolicies: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Policy"][];
-                };
-            };
-        };
-    };
-    createPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description Policy created. */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
-    getPolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy detail. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Policy"];
-                };
-            };
-            /** @description Policy not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    updatePolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": Record<string, never>;
-            };
-        };
-        responses: {
-            /** @description Policy updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-        };
-    };
-    deletePolicy: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Policy deleted. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        name?: string;
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
     listMcpServers: {
         parameters: {
             query?: never;
@@ -3947,83 +2954,6 @@ export interface operations {
             };
         };
     };
-    listProviderKeys: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Provider key status list. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKey"][];
-                };
-            };
-        };
-    };
-    upsertProviderKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": {
-                    apiKey: string;
-                };
-            };
-        };
-        responses: {
-            /** @description Key updated. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProviderKey"];
-                };
-            };
-        };
-    };
-    deleteProviderKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Key deleted. */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Provider key not found. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     listByokProviderKeys: {
         parameters: {
             query?: never;
@@ -4631,63 +3561,6 @@ export interface operations {
             };
         };
     };
-    getRoutingMetrics: {
-        parameters: {
-            query?: {
-                /** @description Langfuse v1 metrics `query` JSON, forwarded verbatim (a tenant filter is injected for non-operators). */
-                query?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Upstream Langfuse metrics JSON (loosely-typed passthrough). */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description A non-operator caller with no resolved ClusterTenant has no metrics scope (code FORBIDDEN_SCOPE). */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-            /** @description The Langfuse backend was unreachable or returned a non-2xx status. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        status?: string;
-                        error?: string;
-                    };
-                };
-            };
-            /** @description The Langfuse backend is not configured (host/keys missing). */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        status?: string;
-                    };
-                };
-            };
-        };
-    };
     getGlobalBudget: {
         parameters: {
             query?: never;
@@ -4804,104 +3677,9 @@ export interface operations {
             };
         };
     };
-    getTenantSpend: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tenantName: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Spend data. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Budget"];
-                };
-            };
-            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    getTenantLiteLlmKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tenantName: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description LiteLLM key metadata. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            /** @description No LiteLLM key for this tenant. */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
-    revokeTenantLiteLlmKey: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                tenantName: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Key revoked. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": Record<string, never>;
-                };
-            };
-            /** @description Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error. */
-            502: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Error"];
-                };
-            };
-        };
-    };
     listAuditEntries: {
         parameters: {
             query?: {
-                /** @description Filter to a specific tenant. */
-                tenant?: string;
                 /** @description Maximum entries to return. */
                 limit?: number;
                 /** @description Opaque cursor from a previous response for keyset pagination. */
@@ -4927,7 +3705,7 @@ export interface operations {
             };
         };
     };
-    getServerMetrics: {
+    listMyPendingToolApprovals: {
         parameters: {
             query?: never;
             header?: never;
@@ -4936,32 +3714,196 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Server utilisation snapshot. */
+            /** @description Pending owner-bound tool approvals. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": {
-                        /** @description CPU utilisation percentage (0–100). */
-                        cpuPercent: number;
-                        /** Format: int64 */
-                        memoryUsedBytes: number;
-                        /** Format: int64 */
-                        memoryTotalBytes: number;
-                        /** Format: int64 */
-                        storageUsedBytes: number;
-                        /** Format: int64 */
-                        storageTotalBytes: number;
-                        activeTenants: number;
-                        /** Format: date-time */
-                        sampledAt: string;
+                        approvals: components["schemas"]["SelfDeferredToolApproval"][];
                     };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not read pending approvals. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
     };
-    getProjectionDriftMetrics: {
+    decideDeferredToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque identifier for the pending approval. */
+                approvalRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @enum {string} */
+                    decision: "approved" | "denied";
+                };
+            };
+        };
+        responses: {
+            /** @description Decision recorded or identical terminal decision replayed. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approvalRequestId: string;
+                        /** @enum {string} */
+                        state: "approved" | "denied";
+                    };
+                };
+            };
+            /** @description The request body is not the exact decision shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval is absent, terminal in another way, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The approval expired before the decision. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the decision. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    submitRuntimeSteering: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    text: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Steering request queued for the current run attempt. */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        steeringRequestId: string;
+                        attempt: number;
+                        /** @enum {string} */
+                        state: "pending";
+                    };
+                };
+            };
+            /** @description The body is not one bounded text instruction. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The owned run has no steerable live attempt. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not persist the instruction. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyRuns: {
         parameters: {
             query?: never;
             header?: never;
@@ -4970,36 +3912,545 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Projection drift metrics. */
+            /** @description Recent canonical lifecycle views for the owned runs. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectionDrift"];
+                    "application/json": {
+                        runs: components["schemas"]["SelfRunStatus"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
     };
-    listTokenUsage: {
+    getMyRunStatus: {
         parameters: {
-            query?: {
-                tenant?: string;
-                limit?: number;
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Opaque run identifier. */
+                runId: string;
             };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current canonical lifecycle view for the owned run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SelfRunStatus"];
+                };
+            };
+            /** @description The run identifier is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    getMyPersonaOnboarding: {
+        parameters: {
+            query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description Token usage records. */
+            /** @description Durable onboarding progress without compiled persona instructions. */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TokenUsage"][];
+                    "application/json": {
+                        /** @enum {string} */
+                        state: "interview" | "review" | "ready";
+                        interviewId: string | null;
+                        answeredQuestionCount: number;
+                        questionCount: number;
+                        personaRevisionId: string | null;
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Onboarding status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    replayMyConversationEvents: {
+        parameters: {
+            query?: {
+                /** @description Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism. */
+                cursor?: string;
+            };
+            header?: {
+                /** @description Opaque canonical event cursor. It must match cursor when both are supplied. */
+                "Last-Event-ID"?: string;
+            };
+            path: {
+                /** @description Opaque conversation-thread identifier. */
+                threadId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description A bounded text/event-stream replay. An empty stream does not disclose whether the thread exists or belongs to another participant. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/event-stream": string;
+                };
+            };
+            /** @description The thread identifier or replay cursor is malformed. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Canonical history could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listManagedAgentServices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Managed agent services in the selected silo. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        services: components["schemas"]["AgentService"][];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The management authority could not read the catalogue. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    materializeMyPersonalConfigurationChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Model selection applied, or the accepted proposal belongs to the persona-refresh workflow. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changeId: string;
+                        /** @constant */
+                        state: "applied";
+                        agentRevisionId: string;
+                    } | {
+                        changeId: string;
+                        /** @constant */
+                        state: "accepted";
+                        /** @constant */
+                        materialized: false;
+                    };
+                };
+            };
+            /** @description The materialization request was not the exact empty-object shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The proposal is absent or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The proposal is not accepted or no longer matches the active revision. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The selected model alias is not available in the caller's silo. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The accepted model selection could not be applied. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    decideMyPersonalConfigurationChange: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                changeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @constant */
+                    decision: "accepted";
+                } | {
+                    /** @constant */
+                    decision: "rejected";
+                    rejectionReason: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Owner decision recorded. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changeId: string;
+                        /** @enum {string} */
+                        state: "accepted" | "rejected";
+                    };
+                };
+            };
+            /** @description Decision body is not the exact accepted or rejected shape. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Proposal is absent, terminal, or not owned by the caller. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Decision could not be persisted. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyPersonalConfigurationChanges: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-bound configuration proposal history. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        changes: components["schemas"]["PersonalConfigurationChange"][];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Configuration proposal history could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listSkills: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Browser-safe governed skill catalogue. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        skills: {
+                            id: string;
+                            name: string;
+                            description: string;
+                            /** @enum {string} */
+                            state: "active" | "retired";
+                            currentRevisionId: string | null;
+                            /** @enum {string|null} */
+                            currentRevisionState: "draft" | "review" | "published" | "rejected" | "revoked" | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The skill catalogue could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    listMyAssets: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owner-bound personal asset metadata. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        assets: {
+                            id: string;
+                            /** @enum {string} */
+                            kind: "document" | "generated" | "skill" | "upload";
+                            /** @enum {string} */
+                            state: "active" | "deletion_pending";
+                            currentRevisionId: string | null;
+                            mediaType: string | null;
+                            byteLength: string | null;
+                            /** @enum {string|null} */
+                            indexState: "pending" | "indexed" | "failed" | "removal_pending" | "removed" | null;
+                            /** Format: date-time */
+                            createdAt: string;
+                            /** Format: date-time */
+                            updatedAt: string;
+                        }[];
+                    };
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description Personal asset metadata could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
                 };
             };
         };
@@ -5055,69 +4506,6 @@ export interface operations {
                             /** Format: date-time */
                             authenticatedAt?: string;
                         } | null;
-                    };
-                };
-            };
-        };
-    };
-    getPodConnection: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description The caller's OpenClaw pod gateway connection coordinates. */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        /** @description The `wss://` OpenClaw gateway URL to open. */
-                        gatewayUrl: string;
-                        /** @description Resolved tenant (pod) name. */
-                        tenant: string;
-                        /** @description Host the tenant's OpenClaw pod is reachable at, when known. */
-                        ingressHost?: string;
-                    };
-                };
-            };
-            /** @description No authenticated session. */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error?: string;
-                        code?: string;
-                    };
-                };
-            };
-            /** @description Session has no email claim, or no tenant is provisioned for it. */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error?: string;
-                        code?: string;
-                    };
-                };
-            };
-            /** @description The tenant pod has no gateway URL / ingress host yet. */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        error?: string;
-                        code?: string;
                     };
                 };
             };

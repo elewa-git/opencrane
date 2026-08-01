@@ -1,4 +1,6 @@
 {{- define "opencrane.server.networkPolicy" -}}
+{{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
+{{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- if .Values.networkPolicy.enabled }}
 # Network policy for the OpenCrane server.
 #
@@ -10,12 +12,11 @@
 #     to this port, so the internal routes are unreachable from the internet even though the
 #     org ingress forwards `/api`. Permitted to the internal port:
 #       - Channel proxy: /api/internal/channel-targets:resolve (TokenReview + delegated session).
-#       - Tenant pods: /api/internal/contract/:name (runtime-contract re-pull; TokenReview
-#         inside the handler is the identity check, this is defence-in-depth).
 #       - Per-attempt agent-runtime Job: outbound `/api/internal/agent-runtime/*` only; its projected
 #         ServiceAccount token is TokenReviewed inside the route, so this rule is only the L3/4 floor.
-#   The operator's own /api/internal/tenant-models fetch is a localhost call within the
-#   opencrane-ui pod, so it is not subject to this NetworkPolicy at all.
+#       - Governed skill Jobs: bootstrap acknowledgement, authoring input, and terminal completion only.
+#         Their default-deny namespaces permit this single server destination and DNS; TokenReview binds
+#         each request to the registered Pod. ArtifactStore remains unreachable from worker namespaces.
 #
 # NetworkPolicy cannot filter by URL path — the path/port split IS the boundary: internal
 # routes only exist on the internal port, and only known platform pods may reach it.
@@ -52,6 +53,21 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- if .Values.artifactPreprocessor.enabled }}
+    # The dedicated artifact preprocessor can reach only the brokered internal API.
+    # TokenReview binds its projected token to the exact worker ServiceAccount and namespace.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ include "opencrane.artifactPreprocessor.namespace" . }}
+          podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: artifact-preprocessor
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    {{- end }}
     # The controller authenticates its fixed KSA and projected audience before it may claim or
     # commit an assignment; this rule exposes only the internal listener at the L3/4 floor.
     - from:
@@ -65,8 +81,8 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
-    # The personal-agent runtime owns no listener and can only initiate this connection.
-    # TokenReview fixes its exact projected-token audience and ServiceAccount subject in-process.
+    # Runtime Jobs own no listener and can only initiate this connection. TokenReview fixes each
+    # personal or managed audience to its distinct namespace and ServiceAccount subject in-process.
     {{- if .Values.agentController.enabled }}
     - from:
         - namespaceSelector:
@@ -75,6 +91,38 @@ spec:
           podSelector:
             matchLabels:
               app.kubernetes.io/component: agent-runtime
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $managedRuntimeNamespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: agent-runtime
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    # Governed skill Jobs have no general network access. Admission fixes their component,
+    # ServiceAccount and projected-token audience; the route TokenReviews the registered Pod UID.
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-skill-authoring").skillAuthoring.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: skill-authoring
+      ports:
+        - protocol: TCP
+          port: {{ .Values.clustertenantManager.service.internalPort }}
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ (index .Values "opencrane-tool-runner").toolRunner.namespace | quote }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: tool-runner
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.internalPort }}
@@ -88,16 +136,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.service.port }}
-    # Allow tenant pods to poll /api/internal/contract/:name on the INTERNAL port for
-    # runtime-contract re-pull (P4A.3). Identity is enforced by TokenReview inside the
-    # handler; this policy is defence-in-depth at the network layer.
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.service.internalPort }}
   egress:
     {{- if .Values.agentController.kubernetesApiServerCidrs }}
     # TokenReview is the application-layer identity gate for controller and runtime calls. Keep the
@@ -129,7 +167,7 @@ spec:
     - to:
         - podSelector:
             matchLabels:
-              cnpg.io/poolerName: {{ printf "%s-postgres-pooler" .Release.Name | trunc 63 | trimSuffix "-" }}
+              cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
       ports:
         - protocol: TCP
           port: 5432
@@ -165,40 +203,8 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
-    {{- if .Values.clustertenantManager.cognee.install }}
-    # Release-local durable memory and permission synchronization. BYO Cognee is
-    # expected to use HTTPS and is therefore covered by the port-443 rule above.
-    - to:
-        - podSelector:
-            matchLabels:
-              {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: cognee
-      ports:
-        - protocol: TCP
-          port: {{ .Values.clustertenantManager.cognee.service.port }}
-    {{- end }}
-    # The in-process gateway proxy connects directly to tenant Services.
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
-      ports:
-        - protocol: TCP
-          port: {{ .Values.tenant.gatewayPort }}
-    {{- if .Values.langfuse.inCluster.enabled }}
-    # Release-local Langfuse metrics and trace API.
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: langfuse
-              app.kubernetes.io/instance: {{ .Release.Name }}
-              app: web
-      ports:
-        - protocol: TCP
-          port: 3000
-    {{- end }}
     {{- if .Values.observability.otel.enabled }}
-    # Release-local OTEL collector for trace export.
+    # Release-local operator-supplied OTEL collector for trace export.
     - to:
         - podSelector:
             matchLabels:
@@ -206,15 +212,6 @@ spec:
       ports:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
-    {{- end }}
-    {{- if eq .Values.hosting.provider "gcp" }}
-    # GKE Workload Identity token exchange before GCS HTTPS calls.
-    - to:
-        - ipBlock:
-            cidr: 169.254.169.254/32
-      ports:
-        - protocol: TCP
-          port: 80
     {{- end }}
     # The only cross-namespace server call: the app-owned artifact byte plane.
     - to:
@@ -229,5 +226,58 @@ spec:
         - protocol: TCP
           port: {{ .Values.artifactService.service.port }}
 ---
+{{- end }}
+{{- if .Values.agentController.enabled }}
+# Worker charts own namespace-wide default-deny. The server owns this strictly additive path because
+# it owns the worker-facing bootstrap, authoring-input, and completion identity boundaries and knows the
+# internal listener contract.
+{{- $serverSelector := include "opencrane.selectorLabels" . }}
+{{- $internalPort := .Values.clustertenantManager.service.internalPort }}
+{{- range $worker := (list
+  (dict "name" "skill-authoring-bootstrap" "namespace" (index $.Values "opencrane-skill-authoring").skillAuthoring.namespace "component" "skill-authoring")
+  (dict "name" "tool-runner-bootstrap" "namespace" (index $.Values "opencrane-tool-runner").toolRunner.namespace "component" "tool-runner")) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ printf "%s-%s" (include "opencrane.fullname" $) $worker.name | trunc 63 | trimSuffix "-" }}
+  namespace: {{ $worker.namespace | quote }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $worker.component }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $worker.component }}
+  policyTypes:
+    - Egress
+  egress:
+    # A worker can bootstrap, read its server-brokered authoring input, and complete only through the internal listener.
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- $serverSelector | nindent 14 }}
+              app.kubernetes.io/component: opencrane-server
+      ports:
+        - protocol: TCP
+          port: {{ $internalPort }}
+    {{- if $.Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+---
+{{- end }}
 {{- end }}
 {{- end }}

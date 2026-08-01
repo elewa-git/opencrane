@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -114,6 +114,47 @@ describe("filesystem ArtifactStore", function _suite()
 			await expect(store.read("../../etc/passwd")).rejects.toThrow(/invalid ArtifactStore content address/);
 			expect(await store.purge(promotion.contentAddress)).toEqual({ purged: true });
 			expect(await store.purge(promotion.contentAddress)).toEqual({ purged: false });
+		}
+		finally
+		{
+			await rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	it("keeps an eagerly opened canonical file readable across a concurrent purge", async function _eagerReadHandle()
+	{
+		const rootPath = await mkdtemp(join(tmpdir(), "opencrane-artifact-store-"));
+		try
+		{
+			const store = new __FilesystemArtifactStore({ rootPath });
+			const staged = await store.stage({ lease: _lease("lease-1"), bytes: _bytes("artifact"), expectedContentAddress: null, expectedByteLength: null, mediaType: "text/plain" });
+			const promotion = await store.promote(staged);
+			const stream = await store.read(promotion.contentAddress);
+			expect(stream).not.toBeNull();
+
+			expect(await store.purge(promotion.contentAddress)).toEqual({ purged: true });
+			expect(stream === null ? null : (await _collect(stream)).toString("utf8")).toBe("artifact");
+		}
+		finally
+		{
+			await rm(rootPath, { recursive: true, force: true });
+		}
+	});
+
+	it("reports only regular canonical-object lengths and treats absent or non-file paths as unavailable", async function _canonicalByteLength()
+	{
+		const rootPath = await mkdtemp(join(tmpdir(), "opencrane-artifact-store-"));
+		try
+		{
+			const store = new __FilesystemArtifactStore({ rootPath });
+			const staged = await store.stage({ lease: _lease("lease-1"), bytes: _bytes("artifact"), expectedContentAddress: null, expectedByteLength: null, mediaType: "text/plain" });
+			const promotion = await store.promote(staged);
+			const nonFileAddress = `sha256:${"b".repeat(64)}`;
+			await mkdir(join(rootPath, "sha256", "bb", "b".repeat(64)), { recursive: true });
+
+			expect(await store.byteLength(promotion.contentAddress)).toBe(8);
+			expect(await store.byteLength(`sha256:${"a".repeat(64)}`)).toBeNull();
+			expect(await store.byteLength(nonFileAddress)).toBeNull();
 		}
 		finally
 		{

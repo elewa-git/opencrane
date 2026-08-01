@@ -1,5 +1,5 @@
 import type { CapabilityProofExpectation } from "@opencrane/models/authorization";
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
 import { __ComputeEs256JwkThumbprint, __NormalizeDpopTargetUri, __VerifyCapabilityProof } from "./capability-proof.js";
@@ -43,7 +43,7 @@ function _validateBootstrap(claim: RuntimeBootstrapClaim, expectation: RuntimeBo
 
 	// 3. Compare every assignment and run-attempt field, then enforce the hard expiry.
 	if (claim.siloId !== expectation.siloId) return "silo_mismatch";
-	if (claim.audience !== AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || expectation.audience !== AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE) return "projected_token_audience_mismatch";
+	if (!_IsRuntimeAudience(claim.audience) || claim.audience !== expectation.audience) return "projected_token_audience_mismatch";
 	if (claim.subjectId !== expectation.subjectId) return "subject_mismatch";
 	if (claim.serviceAccountName !== expectation.serviceAccountName) return "service_account_mismatch";
 	if (claim.namespace !== expectation.namespace) return "namespace_mismatch";
@@ -56,6 +56,12 @@ function _validateBootstrap(claim: RuntimeBootstrapClaim, expectation: RuntimeBo
 	if (claim.agentRevisionId !== expectation.agentRevisionId) return "revision_mismatch";
 	if (!Number.isSafeInteger(expectation.nowEpochMs) || !Number.isSafeInteger(claim.expiresAtEpochMs) || expectation.nowEpochMs >= claim.expiresAtEpochMs) return "expired";
 	return null;
+}
+
+/** Return whether one projected-token audience belongs to a supported runtime identity plane. */
+function _IsRuntimeAudience(value: string): boolean
+{
+	return value === AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE || value === MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE;
 }
 
 /** Digests the exact verified action authority and observed request without proof issuance time. */

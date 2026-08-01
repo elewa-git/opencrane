@@ -58,6 +58,14 @@ legitimate request — never hand out access it should not.
   effect exactly once (or returns the earlier result on an allowed idempotent retry).
 - `__CancelPendingRunApprovalAuthority` — closes only pending approvals for an exact run attempt on
   a caller-owned database transaction, clearing every late-resume token atomically with cancellation.
+- `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository`,
+  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only pending approval inbox, decision
+  surface, and their persistence adapters. The router derives the person and silo from the signed-in
+  browser session; the list omits arguments, proof data, policy digests, and resume credentials.
+- `_CreateDeferredToolApprovalRouter` — the ready-to-mount Prisma composition that maps the shared
+  authenticated request principal into the approval caller and owns the adapters and clock.
+- `__OpenDeferredToolApproval` — atomically links a reserved external action to its approval, then
+  recovers an ambiguous commit or terminalises the reservation so it cannot be replayed.
 - `__DigestCanonicalJson` — a stable hash of a request used across the checks above.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
@@ -73,9 +81,17 @@ replayed id all return a denial, never an allow. The personal-runs domain owns r
 must delegate approval-row cancellation through this package's transaction-level port; it never
 writes authorization tables directly.
 
+For a deferred tool action, the API is deliberately narrower than the database record: the browser
+cannot name a run, choose an executor result, or provide a resume token. It may only approve or deny
+the pending action attached to its own subject in its own silo. An expired request is terminalised
+before any decision is recorded; a decision whose run, workload, or proof is stale becomes a typed
+conflict rather than a silently cancelled approval; and a successful approval wakes the existing
+runtime command path exactly once.
+
 ## Dependency direction
 
 Tagged `scope:authorization`: it may depend only on `scope:audit` (to record decisions) and
+`scope:auth` (to resolve backend-type-free request identity), `scope:authorization`, and
 `scope:shared` — never on apps or other sibling domains.
 
 ## Data & persistence

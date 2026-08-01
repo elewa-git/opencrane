@@ -1,8 +1,10 @@
 import { Inject, Injectable } from "@angular/core";
 
-import { OnboardingSelection, OnboardingStep } from "./onboarding.types";
-
 import { SESSION_STORAGE_GATEWAY, StorageGateway } from "@opencrane/state/utils/storage";
+import { ___ParseAndValidateJson } from "@opencrane/util";
+
+import { OnboardingStep } from "./onboarding.types";
+import type { OnboardingSelection } from "./onboarding.types";
 
 /**
  * Headless state service for persisting the self-serve onboarding flow.
@@ -38,12 +40,7 @@ export class OnboardingCacheService
 
 		try
 		{
-			const parsed = JSON.parse(raw) as { step: OnboardingStep; selection: OnboardingSelection };
-			if (typeof parsed === "object" && parsed !== null && "step" in parsed && "selection" in parsed)
-			{
-				return parsed;
-			}
-			return null;
+			return ___ParseAndValidateJson(raw, "onboarding session state", _OnboardingState);
 		}
 		catch
 		{
@@ -57,4 +54,36 @@ export class OnboardingCacheService
 	{
 		this._storage.removeItem(this._STATE_KEY);
 	}
+}
+
+/** Validate and rebuild the cached onboarding state instead of trusting browser storage. */
+function _OnboardingState(value: unknown): { step: OnboardingStep; selection: OnboardingSelection }
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("onboarding session state must be an object");
+	const state = value as Record<string, unknown>;
+	if (!_IsOnboardingStep(state["step"])) throw new Error("onboarding session state contains an invalid step");
+	if (typeof state["selection"] !== "object" || state["selection"] === null || Array.isArray(state["selection"])) throw new Error("onboarding session state contains an invalid selection");
+	const selection = state["selection"] as Record<string, unknown>;
+	if (typeof selection["planId"] !== "string" && selection["planId"] !== null) throw new Error("onboarding session state contains an invalid plan");
+	if (typeof selection["account"] !== "object" || selection["account"] === null || Array.isArray(selection["account"])) throw new Error("onboarding session state contains an invalid account");
+	const account = selection["account"] as Record<string, unknown>;
+	if (typeof account["displayName"] !== "string" || typeof account["adminEmail"] !== "string" || typeof account["baseDomain"] !== "string" || typeof account["name"] !== "string") throw new Error("onboarding session state contains invalid account fields");
+	return {
+		step: state["step"],
+		selection: {
+			planId: selection["planId"],
+			account: { displayName: account["displayName"], adminEmail: account["adminEmail"], baseDomain: account["baseDomain"], name: account["name"] },
+		},
+	};
+}
+
+/** Return whether one persisted numeric value is an actual onboarding step. */
+function _IsOnboardingStep(value: unknown): value is OnboardingStep
+{
+	return value === OnboardingStep.Plan
+		|| value === OnboardingStep.Account
+		|| value === OnboardingStep.SignUp
+		|| value === OnboardingStep.Payment
+		|| value === OnboardingStep.Provision
+		|| value === OnboardingStep.Status;
 }

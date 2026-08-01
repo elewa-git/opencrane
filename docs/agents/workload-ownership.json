@@ -6,31 +6,18 @@
     "opencrane-ui",
     "channel-proxy",
     "artifact-service",
+    "artifact-preprocessor",
     "agent-controller",
     "agent-runtime",
+    "skill-authoring",
+    "tool-runner",
     "cognee",
     "litellm",
     "obot-gateway-controller",
-    "openclaw-tenant-runtime",
     "obot-dynamic-mcp-child",
     "postgres-database",
     "postgres-pooler",
-    "postgres-database-privileges",
-    "ingress-nginx-controller",
-    "ingress-nginx-admission-create",
-    "ingress-nginx-admission-patch",
-    "external-dns-controller",
-    "cert-manager-controller",
-    "cert-manager-cainjector",
-    "cert-manager-webhook",
-    "cert-manager-startup-api-check",
-    "fleet-platform-external",
-    "langfuse-web",
-    "langfuse-worker",
-    "langfuse-clickhouse",
-    "langfuse-zookeeper",
-    "langfuse-valkey-primary",
-    "langfuse-minio"
+    "postgres-database-privileges"
   ],
   "renderProfiles": [
     {
@@ -38,6 +25,7 @@
       "setValues": [],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
@@ -48,52 +36,44 @@
     {
       "id": "all-supported-pod-profiles",
       "setValues": [
-        "langfuse.inCluster.enabled=true",
-        "controlPlaneSpa.enabled=true",
         "channelProxy.enabled=true",
+        "artifactPreprocessor.enabled=true",
+        "artifactPreprocessor.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "agentController.enabled=true",
         "agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32",
         "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-        "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
       ],
       "expectedRenderedPodClasses": [
-        "Deployment/opencrane-s3",
-        "Deployment/opencrane-langfuse-web",
-        "Deployment/opencrane-langfuse-worker",
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
         "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-artifact-preprocessor",
         "Deployment/opencrane-agent-controller",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
-        "Deployment/opencrane-mcp-gateway",
-        "StatefulSet/opencrane-zookeeper",
-        "StatefulSet/opencrane-clickhouse-shard0",
-        "StatefulSet/opencrane-redis-primary"
+        "Deployment/opencrane-mcp-gateway"
       ]
     }
   ],
   "runtimeConstructs": [
     {
-      "path": "libs/server/_infra/api/src/k8s-apply.ts",
-      "anchor": "client.create(resource)",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
-    {
-      "path": "libs/server/_infra/api/src/k8s-apply.ts",
-      "anchor": "client.createNamespacedDeployment({ namespace, body: resource })",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
-    {
-      "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts",
-      "anchor": "kind: \"Deployment\"",
-      "workloadIds": ["openclaw-tenant-runtime"]
-    },
-    {
       "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
       "anchor": "kind: \"Job\"",
       "workloadIds": ["agent-runtime"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["skill-authoring"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["tool-runner"]
     },
     {
       "path": "libs/backend/agents/runtime/controller/src/kubernetes-agent-controller-store.ts",
@@ -101,24 +81,14 @@
       "workloadIds": ["agent-runtime"]
     },
     {
+      "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
+      "workloadIds": ["skill-authoring", "tool-runner"]
+    },
+    {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
       "anchor": "local postgres_args=(upgrade --install \"$POSTGRES_RELEASE\" \"$POSTGRES_CHART_DIR\"",
       "workloadIds": ["postgres-database"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx",
-      "workloadIds": ["ingress-nginx-controller", "ingress-nginx-admission-create", "ingress-nginx-admission-patch"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local ed_args=(upgrade --install external-dns external-dns/external-dns",
-      "workloadIds": ["external-dns-controller"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local cm_args=(upgrade --install cert-manager jetstack/cert-manager",
-      "workloadIds": ["cert-manager-controller", "cert-manager-cainjector", "cert-manager-webhook", "cert-manager-startup-api-check"]
     },
     {
       "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
@@ -128,58 +98,22 @@
         "opencrane-ui",
         "channel-proxy",
         "artifact-service",
+        "artifact-preprocessor",
         "agent-controller",
         "cognee",
         "litellm",
-        "obot-gateway-controller",
-        "langfuse-web",
-        "langfuse-worker",
-        "langfuse-clickhouse",
-        "langfuse-zookeeper",
-        "langfuse-valkey-primary",
-        "langfuse-minio"
+        "obot-gateway-controller"
       ]
     }
   ],
   "nonProducingRuntimeMatches": [
-    {
-      "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/destroy/tenant-cleanup.ts",
-      "anchor": "kind: \"Deployment\"",
-      "reason": "Deletion selector only; it cannot create a pod."
-    },
     {
       "path": "libs/backend/agents/runtime/controller/src/agent-controller.ts",
       "anchor": "kind: \"Job\"",
       "reason": "This is a Secret owner reference to an already-created attempt Job; it cannot create a pod."
     }
   ],
-  "archiveWorkloadInventory": {
-    "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz",
-    "members": [
-      { "member": "langfuse/templates/web/deployment.yaml", "status": "rendered", "workloadId": "langfuse-web" },
-      { "member": "langfuse/templates/worker/deployment.yaml", "status": "rendered", "workloadId": "langfuse-worker" },
-      { "member": "langfuse/charts/clickhouse/templates/statefulset.yaml", "status": "rendered", "workloadId": "langfuse-clickhouse" },
-      { "member": "langfuse/charts/clickhouse/charts/zookeeper/templates/statefulset.yaml", "status": "rendered", "workloadId": "langfuse-zookeeper" },
-      { "member": "langfuse/charts/minio/templates/standalone/deployment.yaml", "status": "rendered", "workloadId": "langfuse-minio" },
-      { "member": "langfuse/charts/minio/templates/provisioning-job.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile does not configure MinIO provisioning jobs." },
-      { "member": "langfuse/charts/minio/templates/distributed/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile uses standalone MinIO." },
-      { "member": "langfuse/charts/postgresql/templates/update-password/job.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/primary/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/backup/cronjob.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/postgresql/templates/read/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables bundled PostgreSQL." },
-      { "member": "langfuse/charts/valkey/templates/replicas/application.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables Valkey replicas." },
-      { "member": "langfuse/charts/valkey/templates/sentinel/statefulset.yaml", "status": "disabled-by-opencrane-values", "reason": "The pinned OpenCrane profile disables Valkey sentinel." },
-      { "member": "langfuse/charts/valkey/templates/primary/application.yaml", "status": "rendered", "workloadId": "langfuse-valkey-primary" }
-    ]
-  },
-  "nonWorkloadDynamicKinds": [
-    {
-      "path": "apps/_infra/deploy-k8s/templates/external-secrets-store.yaml",
-      "anchor": "kind: {{ eq (include \"opencrane.namespacedSecretStore\" .) \"true\" | ternary \"SecretStore\" \"ClusterSecretStore\" }}",
-      "resolvedKinds": ["SecretStore", "ClusterSecretStore"],
-      "reason": "This exact computed kind selects an External Secrets store scope and cannot create pods."
-    }
-  ],
+  "nonWorkloadDynamicKinds": [],
   "forbiddenPaths": [
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-certificate.yaml",
     "apps/_infra/deploy-k8s/templates/clustertenant-manager-deployment.yaml",
@@ -240,6 +174,16 @@
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactService.resources\"" }
     },
     {
+      "id": "artifact-preprocessor",
+      "podClass": "Deployment/artifact-preprocessor",
+      "renderedPodClass": "Deployment/opencrane-artifact-preprocessor",
+      "image": "ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:<release-digest>",
+      "owner": "apps/artifact-preprocessor",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/artifact-preprocessor/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactPreprocessor.resources\"" }
+    },
+    {
       "id": "agent-controller",
       "podClass": "Deployment/agent-controller",
       "renderedPodClass": "Deployment/opencrane-agent-controller",
@@ -258,6 +202,26 @@
       "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" },
       "classification": "survivor",
       "reason": "The agent controller creates one suspended, zero-retry Job per durable run attempt."
+    },
+    {
+      "id": "skill-authoring",
+      "podClass": "Job/skill-authoring-attempt",
+      "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
+      "owner": "apps/skill-authoring",
+      "localOwner": true,
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "classification": "survivor",
+      "reason": "The agent controller will create isolated draft-capability authoring Jobs only after a durable claim exists."
+    },
+    {
+      "id": "tool-runner",
+      "podClass": "Job/tool-runner-invocation",
+      "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
+      "owner": "apps/tool-runner",
+      "localOwner": true,
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" },
+      "classification": "survivor",
+      "reason": "The agent controller will create isolated capability-bound tool Jobs only after a durable claim and reply protocol exists."
     },
     {
       "id": "cognee",
@@ -288,16 +252,6 @@
       "localOwner": true,
       "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.obot.deployment\"" }
-    },
-    {
-      "id": "openclaw-tenant-runtime",
-      "podClass": "Deployment/openclaw-tenant-per-user",
-      "image": "ghcr.io/elewa-git/opencrane-openclaw-tenant:<immutable-tag>",
-      "owner": "apps/feat-openclaw-tenant",
-      "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/feat-openclaw-tenant/main/src/reconcilers/tenants/deploy/3-deployment.ts", "anchor": "kind: \"Deployment\"" },
-      "classification": "delete",
-      "reason": "Delete this OpenClaw runtime in the personal-agent runtime replacement slice."
     },
     {
       "id": "obot-dynamic-mcp-child",
@@ -338,150 +292,6 @@
       "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" },
       "classification": "survivor",
       "reason": "apps/postgres owns the pinned CNPG Pooler contract that bounds every application connection before PostgreSQL."
-    },
-    {
-      "id": "ingress-nginx-controller",
-      "podClass": "Deployment/ingress-nginx-controller",
-      "image": "unpinned ingress-nginx chart output",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO ingress."
-    },
-    {
-      "id": "ingress-nginx-admission-create",
-      "podClass": "Job/ingress-nginx-admission-create",
-      "image": "unpinned ingress-nginx chart hook image",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed ingress hook with the bundled ingress installer."
-    },
-    {
-      "id": "ingress-nginx-admission-patch",
-      "podClass": "Job/ingress-nginx-admission-patch",
-      "image": "unpinned ingress-nginx chart hook image",
-      "owner": "external-substrate/ingress-nginx",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed ingress hook with the bundled ingress installer."
-    },
-    {
-      "id": "external-dns-controller",
-      "podClass": "Deployment/external-dns",
-      "image": "unpinned external-dns chart output",
-      "owner": "external-substrate/external-dns",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install external-dns external-dns/external-dns" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO DNS management."
-    },
-    {
-      "id": "cert-manager-controller",
-      "podClass": "Deployment/cert-manager-controller",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository installer; the target product requires BYO certificate management."
-    },
-    {
-      "id": "cert-manager-cainjector",
-      "podClass": "Deployment/cert-manager-cainjector",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed CA injector with the bundled certificate installer."
-    },
-    {
-      "id": "cert-manager-webhook",
-      "podClass": "Deployment/cert-manager-webhook",
-      "image": "unpinned jetstack/cert-manager chart output",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed webhook with the bundled certificate installer."
-    },
-    {
-      "id": "cert-manager-startup-api-check",
-      "podClass": "Job/cert-manager-startupapicheck",
-      "image": "unpinned jetstack/cert-manager chart hook image",
-      "owner": "external-substrate/cert-manager",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh", "anchor": "upgrade --install cert-manager jetstack/cert-manager" },
-      "classification": "delete",
-      "reason": "Delete this repository-installed startup check with the bundled certificate installer."
-    },
-    {
-      "id": "fleet-platform-external",
-      "podClass": "Deployment/fleet-platform",
-      "image": "WeOwnAI-owned fleet release image",
-      "owner": "external-repository/elewa-git-WeOwnAI",
-      "localOwner": false,
-      "source": { "type": "external", "repository": "elewa-git/WeOwnAI", "contract": "fleet-platform release", "localEvidence": "README.md", "anchor": "The fleet operator" },
-      "classification": "survivor",
-      "reason": "The fleet app is intentionally absent from this repository; local render coverage is not claimed."
-    },
-    {
-      "id": "langfuse-web",
-      "podClass": "Deployment/langfuse-web",
-      "renderedPodClass": "Deployment/opencrane-langfuse-web",
-      "image": "langfuse/langfuse:3.201.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/templates/web/deployment.yaml", "anchor": "kind: Deployment" }
-    },
-    {
-      "id": "langfuse-worker",
-      "podClass": "Deployment/langfuse-worker",
-      "renderedPodClass": "Deployment/opencrane-langfuse-worker",
-      "image": "langfuse/langfuse-worker:3.201.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/templates/worker/deployment.yaml", "anchor": "kind: Deployment" }
-    },
-    {
-      "id": "langfuse-clickhouse",
-      "podClass": "StatefulSet/langfuse-clickhouse-shard",
-      "renderedPodClass": "StatefulSet/opencrane-clickhouse-shard0",
-      "image": "clickhouse:25.2.1",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/clickhouse/templates/statefulset.yaml", "anchor": "kind: StatefulSet" }
-    },
-    {
-      "id": "langfuse-zookeeper",
-      "podClass": "StatefulSet/langfuse-zookeeper",
-      "renderedPodClass": "StatefulSet/opencrane-zookeeper",
-      "image": "zookeeper:3.9.3",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/clickhouse/charts/zookeeper/templates/statefulset.yaml", "anchor": "kind: StatefulSet" }
-    },
-    {
-      "id": "langfuse-valkey-primary",
-      "podClass": "StatefulSet/langfuse-valkey-primary",
-      "renderedPodClass": "StatefulSet/opencrane-redis-primary",
-      "image": "valkey:8.0.2",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/valkey/templates/primary/application.yaml", "anchor": "kind: {{ .Values.primary.kind }}" }
-    },
-    {
-      "id": "langfuse-minio",
-      "podClass": "Deployment/langfuse-minio-standalone",
-      "renderedPodClass": "Deployment/opencrane-s3",
-      "image": "minio:2024.12.18",
-      "owner": "apps/_infra/langfuse",
-      "localOwner": true,
-      "source": { "type": "archive-member", "archive": "apps/_infra/deploy-k8s/charts/langfuse-1.5.37.tgz", "member": "langfuse/charts/minio/templates/standalone/deployment.yaml", "anchor": "kind: Deployment" }
     }
   ]
 }

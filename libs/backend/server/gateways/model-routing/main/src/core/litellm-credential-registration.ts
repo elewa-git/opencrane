@@ -84,7 +84,7 @@ async function _upsertLive(endpoint: string, masterKey: string, input: LiteLlmCr
     await _deleteLive(endpoint, masterKey, input.credentialName);
 
     // 2. Create the credential carrying the raw key inline. LiteLLM encrypts it at rest with
-    //    LITELLM_SALT_KEY; the key is never echoed back and never written to OpenClaw's config.
+    //    LITELLM_SALT_KEY; the key is never echoed back or copied into a runtime configuration.
     const response = await fetch(`${endpoint}/credentials`, {
       method: "POST",
       headers: {

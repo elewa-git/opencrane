@@ -7,6 +7,8 @@ export interface MemoryFactSource
 	readonly messageId: string | null;
 	/** True only for an explicit user statement with no artifact or message coordinate. */
 	readonly explicitUserStatement: boolean;
+	/** Authenticated user who made the explicit statement, otherwise null. */
+	readonly explicitUserId: string | null;
 }
 
 /** Catalog metadata recorded after Cognee accepts durable fact content. */
@@ -35,7 +37,7 @@ export interface RecordMemoryFactCommand
 }
 
 /** Atomic memory catalog persistence result. */
-export type AtomicRecordMemoryFactResult = { readonly status: "recorded" } | { readonly status: "idempotent" } | { readonly status: "dataset_not_found" } | { readonly status: "dataset_retired" } | { readonly status: "correction_conflict" } | { readonly status: "conflict" };
+export type AtomicRecordMemoryFactResult = { readonly status: "recorded" } | { readonly status: "idempotent" } | { readonly status: "invalid_command" } | { readonly status: "dataset_not_found" } | { readonly status: "dataset_retired" } | { readonly status: "correction_conflict" } | { readonly status: "conflict" };
 
 /** Persistence boundary committing catalog provenance and Cognee outbox intent together. */
 export interface MemoryCatalogRepository

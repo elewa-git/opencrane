@@ -1,107 +1,67 @@
-# Obot MCP gateway
+# MCP gateway
 
-OpenCrane runs **Obot** as the in-cluster gateway for MCP (Model Context Protocol)
-tools. This page separates Obot's runtime catalogue from OpenCrane's API-first
-governance and per-tenant access decisions.
+OpenCrane keeps **MCP registration and authorisation** in the control plane while Obot
+provides custody for MCP server connections and execution.
 
-> See also: [Agent workspace and control](/integrators/agent-workspace) (how
-> allowed tools appear to an agent), [Control access](/guide/permissions) (the admin
-> workflow), and [Identity and connection auth](/security/identity) (human and workload identity).
+> See also: [Governed agent runtime](/integrators/agent-runtime) (external-action flow),
+> [Control access](/guide/permissions) (grants), and
+> [Identity and runtime authentication](/security/identity) (run proof).
 
-## What Obot owns
+## Responsibility split
 
-Obot is the upstream [`obot-platform/obot`](https://github.com/obot-platform/obot)
-runtime gateway. It holds MCP server connections and starts container-backed MCP
-servers in the silo namespace.
+| Component | Responsibility |
+|---|---|
+| OpenCrane MCP registry | Definitions, revisions and organisation-scoped publication |
+| Run input compiler | Freezes the allowed tool revisions for one run |
+| OpenCrane action executor | Re-derives arguments, checks approval and records receipts |
+| Obot custody adapter | Invokes the authorised MCP operation without exposing credentials |
+| Runtime Job | Emits an action candidate and receives only the authorised result |
 
-Obot loads its default catalogue from the local directory configured by
-`mcpGateway.catalog.path`. Operators populate that directory through a deployment
-mechanism such as a catalogue volume or git-sync sidecar. When Obot authentication is
-enabled, an administrator can also add Git Source URLs through Obot Admin.
+An MCP registration does not by itself grant an agent access. The acting subject and agent
+service must both pass membership and grant resolution before the tool revision enters the
+run's compiled capability set.
 
-Obot does not poll the OpenCrane control plane for catalogue entries. Publishing an
-OpenCrane `McpServer` record therefore governs what OpenCrane advertises and entitles;
-it does not silently install that server into Obot. Keep the Obot catalogue source and
-the OpenCrane governance record aligned as one operator workflow.
+## Invocation flow
 
+```text
+runtime emits external_action candidate
+       │
+       ▼
+OpenCrane verifies run proof and arguments digest
+       │
+       ├── approval required ──► durable approval request
+       │
+       ▼
+reserve one tool invocation
+       │
+       ▼
+Obot custody executes authorised MCP call
+       │
+       ▼
+receipt committed ──► result resumes the run
 ```
-catalogue volume / Git Source URL ──▶ Obot catalogue ──▶ MCP runtime pods
-                                           ▲
-                                           │ tool calls
-tenant agent ──────────────────────────────┘
-     ▲
-     │ effective AccessPolicy + grants + TOOLS.md
-     │
-OpenCrane UI / API ──▶ control-plane governance records
-```
 
-## API-first governance
+OpenCrane reserves the invocation before external I/O. Replays return the durable result or a
+stable conflict rather than executing the external action twice.
 
-The authenticated OpenCrane API owns the product-facing catalogue, installation and
-access workflows:
-
-| Audience | Endpoint | Purpose |
-|----------|----------|---------|
-| User | `GET /api/v1/mcp/catalog` | List published servers the caller is entitled to see |
-| User | `/api/v1/mcp/installed` | Install, remove and inspect the caller's tools |
-| User | `/api/v1/mcp/installed/{serverId}/credential` | Connect or clear a write-only credential |
-| Org admin | `/api/v1/mcp/servers` | Review, approve, publish, disable and reject servers |
-| Org admin | `/api/v1/mcp/servers/{id}/access` | Read or replace server access rules |
-| Platform admin | `/api/v1/mcp-servers` | Manage the underlying server registry and scoped grants |
-| Org admin | `/api/v1/policies` | Manage AccessPolicies, including MCP allow/deny sets |
-
-The routes are mounted in
-[`libs/backend/server/gateways/mcp/main/src/routes`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/gateways/mcp/main/src/routes)
-and use the same authentication and authorisation gates as the OpenCrane UI. Custom
-integrations should use these routes or the generated contracts client rather than
-writing control-plane tables directly.
-
-## Per-tenant access
-
-A tenant receives an effective `AccessPolicy` through its explicit `policyRef`, a
-matching selector, or the operator default. The control plane combines that policy
-with user, group and tenant grants, then exposes the resulting MCP allow/deny decision
-in the tenant's effective contract.
-
-The same compiled decision determines which tools are rendered into the
-platform-owned `TOOLS.md`. An agent therefore sees only tools that its identity and
-policy permit. There is no separate tool-policy field on the Tenant resource.
-
-::: warning Catalogue presence is not entitlement
-A server can exist in Obot without being visible to a tenant. Conversely, an
-OpenCrane governance record is not usable until the corresponding catalogue entry is
-available in Obot. Treat runtime installation and API governance as two required
-halves of one change.
+::: info Current transport status
+The registry, grant, approval and durable invocation authorities are implemented. The current
+server composition injects an unavailable Obot custody adapter, so authenticated MCP execution
+fails closed until that transport is mounted.
 :::
 
-## Deployment and network posture
+::: warning
+Never place MCP credentials or a direct Obot client in the runtime. That would let a model
+response bypass grants, approvals and durable invocation receipts.
+:::
 
-- The Obot app owns its Deployment and Service templates under
-  `apps/_infra/obot/helm/templates/`; the silo chart composes that app-owned unit from
-  `apps/_infra/deploy-k8s/templates/app-rollups.yaml`.
-- `OBOT_SERVER_MCPRUNTIME_BACKEND=kubernetes` makes Obot start MCP servers as pods in
-  the silo namespace.
-- There is no external Obot ingress. NetworkPolicy admits the gateway only from the
-  tenant, control-plane and operator workloads.
-- Authentication is disabled by default and must be enabled before using per-user
-  credentials or Obot access policies. Enabling it requires the documented one-time
-  OIDC bootstrap in the `mcpGateway.auth` Helm values.
-- Credential encryption at rest is separately gated by
-  `mcpGateway.encryptionAtRest.enabled`; production deployments that store credentials
-  should enable it with a dedicated key Secret.
+## Failure posture
 
-## Operating the catalogue
+- An unregistered or ungranted tool revision is denied.
+- An arguments-digest mismatch is denied.
+- A required approval pauses the run.
+- An unavailable custody adapter fails closed.
+- A late result from a cancelled or replaced attempt is not accepted.
 
-1. Put a reviewed MCP catalogue entry in the directory mounted at
-   `mcpGateway.catalog.path`, or add its Git Source URL in authenticated Obot Admin.
-2. Create or update the corresponding OpenCrane governance record through the
-   authenticated API.
-3. Approve and publish the server, then assign its access rules or grants.
-4. Confirm the intended user can see it through `GET /api/v1/mcp/catalog` and that an
-   unintended user cannot.
-5. Verify the tenant's platform-owned `TOOLS.md` reflects the same decision after the
-   effective-contract refresh.
-
-The chart deliberately leaves `mcpGateway.catalog.path` empty unless the operator
-provides a catalogue source. An empty source means Obot has no default managed tools;
-it is not repaired by a background control-plane sync.
+Source: [`libs/backend/server/gateways/mcp/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/gateways/mcp/main/README.md)
+and [`libs/backend/agents/execution/protocol`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md).

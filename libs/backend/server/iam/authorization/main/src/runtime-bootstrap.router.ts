@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName } from "@opencrane/contracts";
+import { ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName } from "@opencrane/contracts";
 import type { Es256PublicJwk } from "@opencrane/models/authorization";
 
 import { __ConsumeRuntimeBootstrap } from "./runtime-proof.js";
@@ -73,14 +73,20 @@ export function __CreateRuntimeBootstrapRouter(dependencies: RuntimeBootstrapRou
 	return router;
 }
 
-/** TokenReview one bearer and require the exact expected runtime namespace and identity grammar. */
+/** TokenReview one bearer and require one exact runtime namespace and matching identity grammar. */
 async function _ReviewIdentity(request: Request, dependencies: RuntimeBootstrapRouterDependencies): Promise<RuntimeBootstrapReviewedIdentity | null>
 {
 	const token = _BearerValue(request.header("authorization"));
 	if (!token) return null;
 	const identity = await dependencies.tokenReviewer.__Review(token);
-	if (identity === null || identity.namespace !== dependencies.namespace || !___IsAgentRuntimeServiceAccountName(identity.serviceAccountName) || identity.podUid.trim().length === 0) return null;
+	if (identity === null || !dependencies.runtimeNamespaces.includes(identity.namespace) || (!_IsRuntimeServiceAccountName(identity.serviceAccountName)) || identity.podUid.trim().length === 0) return null;
 	return identity;
+}
+
+/** Accept either bounded runtime class; durable bootstrap evidence fixes which one is authoritative. */
+function _IsRuntimeServiceAccountName(value: string): boolean
+{
+	return ___IsAgentRuntimeServiceAccountName(value) || ___IsManagedAgentRuntimeServiceAccountName(value);
 }
 
 /** Read one unambiguous standard bearer credential. */
@@ -122,7 +128,7 @@ function _BuildClaim(record: RuntimeBootstrapExchangeRecord, submission: Runtime
 	return {
 		bootstrapId: record.bootstrapId,
 		siloId: record.bootstrapSiloId,
-		audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE,
+		audience: record.bootstrapAudience,
 		subjectId: record.bootstrapSubjectId,
 		serviceAccountName: record.bootstrapServiceAccountName,
 		namespace: record.bootstrapNamespace,
@@ -144,7 +150,7 @@ function _BuildExpectation(record: RuntimeBootstrapExchangeRecord, identity: Run
 {
 	return {
 		siloId: record.assignmentSiloId,
-		audience: AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE,
+		audience: record.assignmentAudience,
 		subjectId: record.assignmentSubjectId,
 		serviceAccountName: identity.serviceAccountName,
 		namespace: identity.namespace,

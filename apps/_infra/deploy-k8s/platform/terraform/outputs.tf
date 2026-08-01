@@ -21,18 +21,6 @@ output "registry_url"
   value       = local.registry_url
 }
 
-output "ingress_ip"
-{
-  description = "External IP for the ingress controller (null until the app is deployed)"
-  value       = one(module.app_deploy[*].ingress_ip)
-}
-
-output "control_plane_url"
-{
-  description = "URL for the OpenCrane control plane (null until the app is deployed)"
-  value       = one(module.app_deploy[*].control_plane_url)
-}
-
 output "dns_name_servers"
 {
   description = "Cloud DNS name servers (empty unless enable_cloud_dns is on). Delegate your domain to these."
@@ -42,13 +30,7 @@ output "dns_name_servers"
 output "dns_setup_instructions"
 {
   description = "Manual DNS guidance when Cloud DNS is disabled."
-  value       = length(module.dns) > 0 ? "Cloud DNS zone + shared DNS-writer GSA managed by Terraform — delegate ${var.domain} to the dns_name_servers output at your registrar (NS delegation), and pass dns_writer_service_account_email to k8s-deploy.sh --dns-writer-gsa so cert-manager DNS-01 can issue. external-dns reconciles per-org records at runtime. The install-time platform A-records (apex, *.<domain>, opencrane-ui host) are written only once the ingress IP is known (Terraform app-deploy, or re-apply after the LB IP is assigned); until then add them at your registrar pointing at the ingress IP (kubectl get svc -n ingress-nginx)." : "Point an A record for your domain and a wildcard *.<domain> at the ingress IP (run: kubectl get ingress -A) at your DNS provider."
-}
-
-output "dns_writer_service_account_email"
-{
-  description = "Shared DNS-writer GSA (roles/dns.admin) impersonated by external-dns + cert-manager DNS-01 (empty unless enable_cloud_dns is on)."
-  value       = length(module.dns) > 0 ? module.dns[0].dns_writer_service_account_email : ""
+  value       = length(module.dns) > 0 ? "Delegate ${var.domain} to dns_name_servers, then point the required host records at the ingress address after deployment." : "Create the required host records at your DNS provider after the ingress address is known."
 }
 
 output "kubeconfig_command"

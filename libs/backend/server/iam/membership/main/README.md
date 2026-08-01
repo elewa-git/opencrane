@@ -54,6 +54,11 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
 - `PrismaFleetMembershipAuthorityRepository` — the database-backed store of signed revisions and the
   highest-accepted high-water mark. It can own a transaction or join the run-admission transaction,
   so the snapshot and membership high-water mark cannot commit separately.
+- `Ed25519FleetMembershipSignatureVerifier` — verifies the detached base64url signature over the
+  recomputed canonical membership payload digest using only exact issuer-key IDs from mounted
+  public-key files. A stored assertion cannot change independently of its signature.
+- `__DigestFleetMembershipSignedPayload` — the shared issuer/verifier contract that canonicalizes
+  every issuer, time, silo, subject, assertion, and scope field before signing.
 - Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
   `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
   `FleetMembershipAdmissionExpectation`, and `TrustedFleetMembershipEvidence`.

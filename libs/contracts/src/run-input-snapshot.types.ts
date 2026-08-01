@@ -3,23 +3,70 @@ import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/arti
 import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
 
-/** Immutable identity facts resolved before a runtime receives the snapshot. */
-export interface RunInputSnapshotIdentity
+/** Signed membership evidence pinned into either kind of execution identity. */
+export interface RunInputSnapshotFleetMembershipEvidence
 {
-  /** Subject that caused this exact run to execute. */
-  executionSubjectId: string;
-  /** Highest verified fleet-membership revision accepted for this run. */
-  fleetMembershipRevision: number;
-  /** Issuer that signed the accepted fleet-membership revision. */
-  fleetMembershipIssuer: string;
-  /** Signing key that verified the exact accepted fleet-membership revision. */
-  fleetMembershipIssuerKeyId: string;
-  /** Stable signed assertion identifier bound to the execution subject. */
-  fleetMembershipAssertionId: string;
-  /** Digest of the verified signed membership payload. */
-  fleetMembershipPayloadDigest: string;
-  /** UTC expiry after which the pinned membership evidence must not admit work. */
-  fleetMembershipTrustedUntil: string;
+	/** Organization selected by the verified fleet-membership assertion. */
+	organizationId: string;
+	/** Highest verified fleet-membership revision accepted for this run. */
+	fleetMembershipRevision: number;
+	/** Issuer that signed the accepted fleet-membership revision. */
+	fleetMembershipIssuer: string;
+	/** Signing key that verified the exact accepted fleet-membership revision. */
+	fleetMembershipIssuerKeyId: string;
+	/** Stable signed assertion identifier bound to the execution subject. */
+	fleetMembershipAssertionId: string;
+	/** Digest of the verified signed membership payload. */
+	fleetMembershipPayloadDigest: string;
+	/** UTC expiry after which the pinned membership evidence must not admit work. */
+	fleetMembershipTrustedUntil: string;
+}
+
+/** Immutable identity for a run exercised by a human member. */
+export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
+{
+	/** Discriminant that prevents a service principal from being mistaken for a user. */
+	kind: "user";
+	/** Human subject whose verified membership and grants authorize this exact run. */
+	executionSubjectId: string;
+}
+
+/** One exact non-personal scope attachment admitted for a managed service. */
+export interface ManagedRunInputScopeAttachment
+{
+	/** Domain scope of the attached resource. */
+	scope: string;
+	/** Kind of subject named by the attachment. */
+	subjectType: string;
+	/** Stable identifier of the attached subject. */
+	subjectId: string;
+}
+
+/** Immutable identity for a run exercised by an active managed AgentService. */
+export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
+{
+	/** Discriminant that prevents service evidence from falling through to personal-user paths. */
+	kind: "service";
+	/** Canonical derived principal in `agent-service:<AgentServiceId>` form. */
+	executionSubjectId: string;
+	/** Active managed service whose revision owns this exact execution authority. */
+	agentServiceId: AgentServiceId;
+	/** Canonically sorted effective non-personal scope attachments admitted at run assembly. */
+	effectiveScopeAttachments: readonly ManagedRunInputScopeAttachment[];
+	/** SHA-256 digest binding the admitted scope-attachment set into service capability evidence. */
+	effectiveScopeAttachmentDigest: string;
+}
+
+/** Immutable, tagged execution identity resolved before a runtime receives the snapshot. */
+export type RunInputSnapshotIdentity = UserRunInputSnapshotIdentity | ServiceRunInputSnapshotIdentity;
+
+/** Immutable integration tool allowance selected by the executing AgentRevision. */
+export interface RunInputSnapshotIntegrationAssignment
+{
+  /** Integration selected by the revision. */
+  integrationId: string;
+  /** Exact tool names the revision permits through that integration. */
+  allowedTools: readonly string[];
 }
 
 /** Deterministic, immutable inputs compiled before a runtime assignment. */
@@ -51,13 +98,13 @@ export interface RunInputSnapshot
   memoryFacts: readonly MemoryFactReference[];
   /** Authorised memory retrieval policy selected for this run. */
   memoryQueryPolicy: JsonValue;
-  /** Immutable grants that expose tools to the selected revision. */
-  toolGrantIds: readonly string[];
+  /** Immutable third-party integration tool allowances selected by the revision. */
+  integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[];
   /** Server-selected model route without provider credentials. */
   modelRoute: JsonValue;
   /** Immutable token, cost, time, and tool limits. */
   budgetPolicy: JsonValue;
-  /** Execution identity and verified fleet-membership evidence. */
+	/** Tagged execution identity and verified fleet-membership evidence. */
   identitySnapshot: RunInputSnapshotIdentity;
   /** Digest of the effective proof-bound capability set. */
   capabilitySetDigest: string;

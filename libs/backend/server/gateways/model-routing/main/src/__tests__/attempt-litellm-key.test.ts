@@ -15,7 +15,7 @@ function _fetchMock(response: { ok: boolean; status: number; body: unknown })
 	{
 		_captured.url = url;
 		_captured.init = init;
-		return { ok: response.ok, status: response.status, json: async function _json() { return response.body; } } as unknown as Response;
+		return new Response(JSON.stringify(response.body), { status: response.status });
 	});
 }
 
@@ -79,5 +79,12 @@ describe("_IssueAttemptLiteLlmKey", function _describeIssuer()
 		vi.stubGlobal("fetch", _fetchMock({ ok: true, status: 200, body: {} }));
 
 		await expect(_IssueAttemptLiteLlmKey({ keyAlias: "attempt-run1-1", modelAlias: "silo-default", maxBudgetUsd: 2, expirySeconds: 3600 })).rejects.toThrow(/returned no key/);
+	});
+
+	it("identifies invalid JSON before it can become an attempt key", async function _RejectsInvalidJson()
+	{
+		vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{", { status: 200 })));
+
+		await expect(_IssueAttemptLiteLlmKey({ keyAlias: "attempt-run1-1", modelAlias: "silo-default", maxBudgetUsd: 2, expirySeconds: 3600 })).rejects.toThrow(/LiteLLM attempt key response must contain valid JSON/);
 	});
 });

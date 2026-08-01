@@ -1,7 +1,9 @@
 import { Router, type Request, type Response } from "express";
+import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
+import type { AgentRevisionContent } from "@opencrane/models/agents";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
-import type { AgentRevisionContent, AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleDenial, AgentServiceLifecycleAction } from "./agent-revision-lifecycle.types.js";
 import type { AgentServicesRouterDependencies, ManagementCaller } from "./agent-revision.router.types.js";
 import { __PublishAgentRevision } from "./agent-publication.js";
 import type { PublishAgentRevisionFailureReason } from "./agent-publication.types.js";
@@ -18,13 +20,19 @@ function _isNonEmptyString(value: unknown): value is string
 	return typeof value === "string" && value.trim().length > 0;
 }
 
+/** Returns whether a string is safe as one segment of the runtime integration tool revision. */
+function _isToolRevisionSegment(value: unknown): value is string
+{
+	return _isNonEmptyString(value) && !value.includes(":");
+}
+
 /** Parses and validates the immutable executable content from a request body. */
 function _parseContent(raw: unknown): AgentRevisionContent | null
 {
 	if (raw === null || typeof raw !== "object") return null;
 	const body = raw as Record<string, unknown>;
 	const budget = body.budget as Record<string, unknown> | undefined;
-	if (!_isNonEmptyString(body.promptPolicyVersion) || !_isNonEmptyString(body.modelPolicyId) || budget === undefined || typeof budget !== "object") return null;
+	if (body.promptPolicyVersion !== PROMPT_COMPILER_VERSION || !_isNonEmptyString(body.modelDefinitionId) || budget === undefined || typeof budget !== "object") return null;
 	if (typeof budget.maxTurns !== "number" || typeof budget.maxTokens !== "number" || typeof budget.maxDurationMs !== "number") return null;
 	const personaRevisionId = body.personaRevisionId === undefined || body.personaRevisionId === null ? null : body.personaRevisionId;
 	if (personaRevisionId !== null && !_isNonEmptyString(personaRevisionId)) return null;
@@ -32,7 +40,7 @@ function _parseContent(raw: unknown): AgentRevisionContent | null
 	const integrationAssignments = _parseIntegrations(body.integrationAssignments);
 	const scopeAttachments = _parseScopeAttachments(body.scopeAttachments);
 	if (skills === null || integrationAssignments === null || scopeAttachments === null) return null;
-	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelPolicyId: body.modelPolicyId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
+	return { promptPolicyVersion: body.promptPolicyVersion, personaRevisionId, modelDefinitionId: body.modelDefinitionId, budget: { maxTurns: budget.maxTurns, maxTokens: budget.maxTokens, maxDurationMs: budget.maxDurationMs }, skills, integrationAssignments, scopeAttachments };
 }
 
 /** Parses the optional skill-reference array. */
@@ -52,7 +60,7 @@ function _parseIntegrations(raw: unknown): AgentRevisionContent["integrationAssi
 	const assignments = raw.map(function _assignment(entry)
 	{
 		const item = entry as Record<string, unknown>;
-		if (!_isNonEmptyString(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId) || !Array.isArray(item?.allowedTools) || !item.allowedTools.every(_isNonEmptyString)) return null;
+		if (!_isToolRevisionSegment(item?.integrationId) || !_isNonEmptyString(item?.custodyReferenceId) || !Array.isArray(item?.allowedTools) || !item.allowedTools.every(_isToolRevisionSegment)) return null;
 		return { integrationId: item.integrationId, custodyReferenceId: item.custodyReferenceId, allowedTools: item.allowedTools as string[] };
 	});
 	return assignments.some(assignment => assignment === null) ? null : (assignments as AgentRevisionContent["integrationAssignments"]);
@@ -93,10 +101,23 @@ function _denialStatus(reason: AgentRevisionLifecycleDenial): number
 		case "service_not_found": return 404;
 		case "revision_not_found": return 404;
 		case "revision_service_mismatch": return 409;
+		case "model_definition_unavailable": return 422;
 		case "service_retired": return 409;
 		case "transition_not_allowed": return 409;
 		case "service_not_runnable": return 409;
-		case "run_admission_unavailable": return 503;
+		case "membership_stale": return 503;
+		case "persistence_unavailable": return 503;
+		case "admission_concurrency_limited": return 503;
+		case "authority_conflict": return 409;
+		case "run_not_admittable":
+		case "revision_unavailable":
+		case "persona_unavailable":
+		case "thread_unavailable":
+		case "memory_scope_unavailable":
+		case "tool_policy_unavailable":
+		case "skill_unavailable":
+		case "budget_unavailable":
+		case "identity_unavailable": return 409;
 		default: return 400;
 	}
 }
@@ -163,6 +184,17 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 		if (caller === null) { res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" }); return null; }
 		return caller;
 	}
+
+	router.get("/", async function _list(req: Request, res: Response)
+	{
+		try
+		{
+			const caller = _requireCaller(req, res);
+			if (caller === null) return;
+			res.status(200).json({ services: await lifecycle.listManagedServices(caller.siloId) });
+		}
+		catch (error) { _fail(res, error, "list"); }
+	});
 
 	router.post("/", async function _create(req: Request, res: Response)
 	{
@@ -258,7 +290,12 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 			const body = (req.body ?? {}) as Record<string, unknown>;
 			if (!_isNonEmptyString(body.requestIdempotencyKey)) { res.status(400).json({ error: "requestIdempotencyKey is required.", code: "VALIDATION_ERROR" }); return; }
 			const result = await __AdmitManagedRunNow(lifecycle, runAdmission, { agentServiceId: String(req.params.serviceId), siloId: caller.siloId, requestedBy: caller.subjectId, requestIdempotencyKey: body.requestIdempotencyKey, trigger: "managed_invocation", scheduledSlot: null });
-			if (result.outcome === "denied") { res.status(_runDenialStatus(result.reason)).json({ error: "Run-now denied.", code: result.reason.toUpperCase() }); return; }
+			if (result.outcome === "denied")
+			{
+				if (result.reason === "admission_concurrency_limited") res.set("Retry-After", "1");
+				res.status(_runDenialStatus(result.reason)).json({ error: "Run-now denied.", code: result.reason.toUpperCase() });
+				return;
+			}
 			res.status(result.outcome === "accepted" ? 202 : 200).json({ outcome: result.outcome, runId: result.runId });
 		}
 		catch (error) { _fail(res, error, "run-now"); }
@@ -376,11 +413,13 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 }
 
 /** Maps a run-now denial reason to a fail-closed HTTP status. */
-function _runDenialStatus(reason: string): number
+function _runDenialStatus(reason: AgentRevisionLifecycleDenial): number
 {
 	if (reason === "service_not_found") return 404;
 	if (reason === "service_not_runnable") return 409;
-	if (reason === "run_admission_unavailable") return 503;
+	if (reason === "membership_stale" || reason === "persistence_unavailable") return 503;
+	if (reason === "admission_concurrency_limited") return 503;
+	if (reason === "authority_conflict" || reason === "run_not_admittable" || reason === "revision_unavailable" || reason === "persona_unavailable" || reason === "thread_unavailable" || reason === "memory_scope_unavailable" || reason === "tool_policy_unavailable" || reason === "skill_unavailable" || reason === "budget_unavailable" || reason === "identity_unavailable") return 409;
 	return 400;
 }
 

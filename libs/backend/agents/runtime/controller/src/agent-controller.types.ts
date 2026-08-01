@@ -3,8 +3,15 @@ import type { Logger } from "@opencrane/observability";
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 import type { AgentRuntimeJobProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
+/** One deployment-owned runtime profile and the sole namespace where it may create workloads. */
+export interface AgentControllerRuntimeProfile extends AgentRuntimeJobProfile
+{
+	/** Dedicated namespace containing only Jobs and Pods of this identity profile. */
+	readonly namespace: string;
+}
+
 /** Immutable runtime profiles keyed by the authority-owned profile name. */
-export type AgentControllerRuntimeProfiles = Readonly<Record<string, AgentRuntimeJobProfile>>;
+export type AgentControllerRuntimeProfiles = Readonly<Record<string, AgentControllerRuntimeProfile>>;
 
 /** OpenCrane authority operations available to the outbound-only controller. */
 export interface AgentControllerAuthority
@@ -48,8 +55,6 @@ export interface AgentControllerOptions
 	readonly kubernetes: AgentControllerKubernetesStore;
 	/** Profiles selected by the claimed workload-profile name. */
 	readonly profiles: AgentControllerRuntimeProfiles;
-	/** Sole dedicated runtime namespace this per-silo controller may mutate. */
-	readonly runtimeNamespace: string;
 	/** Delay after an empty poll or a handled reconciliation failure. */
 	readonly pollIntervalMilliseconds: number;
 	/** Delay between durable outbox-retention maintenance attempts. */

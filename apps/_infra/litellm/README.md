@@ -51,4 +51,4 @@ An app entrypoint (`type:app`, `scope:litellm`); composed by the silo chart, imp
 - Parent index: [_infra](../README.md)
 - Silo chart that composes it: [deploy-k8s](../deploy-k8s/README.md)
 - Database it uses: [apps/postgres](../../postgres/README.md)
-- Sibling infra: [cognee](../cognee/README.md) · [obot](../obot/README.md) · [langfuse](../langfuse/README.md)
+- Sibling infra: [cognee](../cognee/README.md) · [obot](../obot/README.md)

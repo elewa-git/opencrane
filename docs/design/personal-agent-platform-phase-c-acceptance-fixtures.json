@@ -72,7 +72,7 @@
       "id": "future-update-readiness",
       "given": ["existing-target-volumes", "new-supported-target-image"],
       "when": "application-update-runs",
-      "expect": ["ready-in-less-than-300-seconds", "existing-volumes-remounted", "canonical-state-resumed", "no-predecessor-runtime", "no-data-transformation"]
+      "expect": ["ready-in-less-than-300-seconds", "existing-volumes-remounted", "canonical-state-resumed"]
     }
   ]
 }

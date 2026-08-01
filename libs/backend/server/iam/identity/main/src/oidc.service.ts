@@ -5,7 +5,6 @@ import type { PrismaClient } from "@prisma/client";
 
 import { OidcAuthServiceBase, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, type AuthUser, type LoginClient } from "@opencrane/server/_infra/auth";
 
-import { _AdoptMemberOnLogin } from "./adopt-member.js";
 import { _MirrorGroupsOnLogin } from "./mirror-groups.js";
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
@@ -37,7 +36,6 @@ export class OidcAuthService extends OidcAuthServiceBase
    * targets — or the TenantOperator never picks up the CRD (it is NOT the projection-repair
    * `NAMESPACE`, which can differ).
    */
-  private watchNamespace: string;
 
   /**
    * @param log            - Parent logger; a child scoped to `oidc-auth` is derived by the base.
@@ -49,12 +47,11 @@ export class OidcAuthService extends OidcAuthServiceBase
    * @param watchNamespace - The TenantOperator's watch namespace; where first-login member
    *                         workspaces are seeded (parity with the owner-default seed).
    */
-  constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, watchNamespace = "default")
+  constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null)
   {
     super(log, prisma);
     this.prisma = prisma;
     this.customApi = customApi;
-    this.watchNamespace = watchNamespace;
   }
 
   /**
@@ -79,7 +76,7 @@ export class OidcAuthService extends OidcAuthServiceBase
    */
   protected override async enrichStatusUser(req: Request, authUser: AuthUser): Promise<Record<string, unknown>>
   {
-    const clusterTenant = await _ResolveCallerClusterTenant(this.prisma, authUser.email, _ClusterTenantFromHost(_RequestHost(req)));
+    const clusterTenant = await _ResolveCallerClusterTenant(this.prisma, authUser.sub, _ClusterTenantFromHost(_RequestHost(req)));
     return { clusterTenant };
   }
 
@@ -91,16 +88,6 @@ export class OidcAuthService extends OidcAuthServiceBase
    */
   protected override async onLoginEstablished(req: Request, authUser: AuthUser): Promise<void>
   {
-    await _AdoptMemberOnLogin({
-      prisma: this.prisma,
-      customApi: this.customApi,
-      namespace: this.watchNamespace,
-      host: _RequestHost(req),
-      subject: authUser.sub,
-      email: authUser.email,
-      log: this.log,
-    });
-
     // Mirror the user's `group:*` project-role claims into the persisted Group.members (#126 S4b).
     // Independent of adoption + best-effort; the token stays the live source for request-time groups.
     await _MirrorGroupsOnLogin({ prisma: this.prisma, subject: authUser.sub, groups: authUser.groups, log: this.log });
@@ -115,7 +102,7 @@ export class OidcAuthService extends OidcAuthServiceBase
  * @param watchNamespace - The TenantOperator's watch namespace, where first-login member workspaces
  *                         are seeded (defaults to `"default"` for dev/test).
  */
-export function ___CreateOidcAuthService(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, watchNamespace = "default"): OidcAuthService
+export function ___CreateOidcAuthService(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, _watchNamespace = "default"): OidcAuthService
 {
-  return new OidcAuthService(log, prisma, customApi, watchNamespace);
+  return new OidcAuthService(log, prisma, customApi);
 }

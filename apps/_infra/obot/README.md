@@ -47,4 +47,4 @@ An app entrypoint (`type:app`, `scope:obot`); composed by the silo chart, import
 
 - Parent index: [_infra](../README.md)
 - Silo chart that composes it: [deploy-k8s](../deploy-k8s/README.md)
-- Sibling infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md) · [langfuse](../langfuse/README.md)
+- Sibling infra: [cognee](../cognee/README.md) · [litellm](../litellm/README.md)

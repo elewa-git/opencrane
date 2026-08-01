@@ -39,23 +39,42 @@ Invariant: the client's types are a faithful projection of the server's publishe
 after any API change so the two never silently diverge. `RunInputSnapshot` is the cross-domain
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
-provider credentials or mutable source objects.
+provider credentials or mutable source objects. Its integration assignments record only an
+integration identifier and the revision-approved tool names; a custody reference stays behind the
+server boundary and is rechecked when a tool is invoked. Identity is explicitly tagged: a user run
+pins a human's signed fleet membership, while a managed run pins the derived service principal, its
+signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
+user record by accident.
+
+`PROMPT_COMPILER_VERSION` is the single version pin shared by revision authoring, admission, and
+the deterministic compiler. A revision that names another version is not admissible, preventing a
+runtime from silently interpreting a frozen snapshot with different assembly rules.
 
 ## Public surface
 
 - `___CreateControlPlaneClient`, `ControlPlaneClient`, `paths` — the typed HTTP client and its path map.
+- `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`, `AgUiSseRecord`,
+  `__ProjectAgUiEvent`, and `__EncodeAgUiSseRecord` — the display-safe input, output, projection,
+  and SSE-record contract used by the server-owned AG-UI replay path. They do not authenticate a
+  browser, read canonical event storage, or create an approval-resume protocol.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`, `MemoryFactReference`, `TenantModelSet`, and
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIntegrationAssignment`,
+  `MemoryFactReference`, `TenantModelSet`, and
   domain-topology host builders. A memory fact reference pins an immutable content digest and its
   provenance rather than a mutable revision counter.
-- `AGENT_RUNTIME_PROTOCOL_V1`, `AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE`,
-  `___IsAgentRuntimeServiceAccountName`, `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and
-  `RuntimeCandidate` — the private workload protocol for a personal-agent process that opens its own
-  authenticated stream. The opening frame binds the runtime instance to the Pod UID independently
-  verified from its Kubernetes credential. The audience constant and shared validator keep Job
-  issuance and TokenReview admission on one bounded identity grammar.
+- `PROMPT_COMPILER_VERSION` — the immutable compiler-version pin every executable agent revision
+  must name before it can admit a run.
+- `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
+  personal-configuration validators, persistence, and public schemas. It keeps the readable JSON
+  values stable while making patch branches compile against one shared owner.
+- `AGENT_RUNTIME_PROTOCOL_V1`, the personal and managed runtime audience constants and validators,
+  `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
+  protocol for an agent process that opens its own authenticated stream. The opening frame binds the
+  runtime instance to the Pod UID independently verified from its Kubernetes credential. Personal
+  and managed runtimes use distinct projected-token audiences and ServiceAccount grammars, so one
+  workload class cannot borrow the other's transport identity.
 - `AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE`, `AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME`, and
   `AgentControllerRunAttempt*` — the private controller handshake for claiming one authorised run,
   reporting the Kubernetes-issued Job identity, and committing that identity under the same database
@@ -65,6 +84,11 @@ provider credentials or mutable source objects.
   locator projected through the Job's downward API, never a bearer credential. These types expose
   only immutable workload coordinates; they never expose the run-input body or let the controller
   choose a user, revision, namespace, runtime profile, or replacement Pod.
+- `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
+  `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
+  claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs
+  carry only an expiring attempt fence and bounded source metadata; storage addresses, content
+  addresses, leases, receipts, and catalogue coordinates remain server-private.
 - Re-exported model types: the agent, artifact, authorization, and platform-policy DTOs.
 
 ## Boundary

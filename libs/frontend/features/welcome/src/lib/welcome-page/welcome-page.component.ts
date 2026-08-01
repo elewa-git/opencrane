@@ -18,8 +18,8 @@ import { _EMPTY_PERSONALIZATION, _IsFirstStep, _IsLastStep, _NextStep, _Previous
  *
  * A single page drives a PrimeNG Stepper through Welcome → Workspace →
  * Personalize → Tour → Finish, with enum-first step state ({@link WelcomeStep})
- * and pure step logic in `welcome.util.ts`. It reads identity and the resolved
- * pod from {@link SessionStore} (never mutating it), keeps personalisation
+ * and pure step logic in `welcome.util.ts`. It reads identity and the authoritative
+ * ClusterTenant claim from {@link SessionStore} (never mutating it), keeps personalisation
  * local, and on Finish marks onboarding complete via
  * {@link WelcomeOnboardingService} and navigates to the workspace (`"/"`).
  *
@@ -55,13 +55,13 @@ export class WelcomePageComponent
 		return this._session.displayName() ?? "there";
 	});
 
-	/** The caller's resolved private workspace (pod), if one is provisioned yet. */
-	public readonly tenant = this._session.currentTenant;
+	/** Authoritative ClusterTenant bound to the caller's signed-in identity. */
+	public readonly clusterTenant = computed((): string | null => this._session.user()?.clusterTenant ?? null);
 
 	/** Whether a workspace has resolved (drives the ready vs provisioning panel). */
 	public readonly hasWorkspace: Signal<boolean> = computed((): boolean =>
 	{
-		return this.tenant() !== undefined;
+		return this.clusterTenant() !== null;
 	});
 
 	/** The current onboarding step (writable; advanced/retreated via the machine). */

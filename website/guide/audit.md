@@ -1,17 +1,22 @@
 # Review activity
 
-::: tip What's in the audit log?
-A record of every **administrative action** — who created or paused an assistant,
-changed a policy, shared a skill, connected a tool, or adjusted a budget. It does
-**not** record anyone's conversations with their assistant.
+OpenCrane records **governance decisions and durable run evidence** so operators can explain
+who requested work, which revision ran, what was authorised and how it ended.
+
+## What to inspect
+
+- agent service and immutable revision;
+- organisation and delegated subject;
+- run state, attempt and terminal reason;
+- frozen input and capability digests;
+- approval requests and action receipts;
+- token use, cost and cancellation evidence; and
+- ordered conversation events where the caller is authorised to replay them.
+
+Use the authenticated `/api/v1/audit` surface. Retrieve current filters and pagination from
+the [API reference](/reference/api); the current UI does not expose an audit view.
+
+::: tip
+Search by run id first. Pod names are replaceable execution details and do not identify the
+durable product record.
 :::
-
-## Look it up
-
-Look up the most recent activity across your company, or everything about one
-assistant, and feed the results into another tool if you like. Query the authenticated
-`GET /api/v1/audit` endpoint; filters and cursor pagination are documented in the
-[interactive API reference](/reference/api).
-
-The log is kept accurate even if part of the system is briefly unavailable, so it's a
-reliable record for reviews and compliance.

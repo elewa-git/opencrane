@@ -7,20 +7,19 @@
 Part of the OpenCrane **frontend state layer** (the code between the browser UI and the backend). When
 a chat message arrives it is raw data — text, tool calls, file references, markdown. Before the UI can
 draw it, that data has to be turned into a **view-model**: a plain, already-shaped object the template
-can render without further logic. This package owns those pure view-model builders, **vendored** (copied
-in, with attribution) from the OpenClaw chat UI so OpenCrane matches its rendering behaviour without
-depending on the OpenClaw product.
+can render without further logic. This package owns those pure view-model builders and the
+attributed third-party code they reuse.
 
 It is pure and does no input/output: no HTTP, no storage, no Angular. It holds the chat/tool/canvas
 view-model types, the builders that fold a message stream into them, and a **sanitised markdown
 pipeline** — markdown converted to HTML and then run through a strict tag/attribute allowlist so a
 message can never inject unsafe markup (only `data:` image URIs, dangerous link schemes stripped). The
 Angular rendering surface that consumes these view-models is re-implemented separately in
-`features/conversation`; this package is just the data-shaping half.
+the future product conversation feature; this package is just the data-shaping half.
 
 Invariant: pure functions only, and the markdown sanitiser's security posture (allowlist,
-scheme/host-local blocking, HTML escaping) is preserved verbatim from upstream. Vendored under the MIT
-licence — see `THIRD_PARTY_NOTICES.md`; the `.upstream/` directory pins the exact source it derives from.
+scheme/host-local blocking, HTML escaping) stays intact. Reused third-party code retains its MIT
+attribution inline in the source file that carries it.
 
 ## Public surface
 
@@ -31,7 +30,7 @@ licence — see `THIRD_PARTY_NOTICES.md`; the `.upstream/` directory pins the ex
 
 ## Boundary
 
-Consumed by `features/conversation` and `elements/a2ui` (the rendering surfaces). It builds view-models
+Consumed by future product conversation UI and `elements/a2ui` (the rendering surfaces). It builds view-models
 and sanitises markup only; it never fetches, caches, or streams — the conversation adapter does that.
 
 ## Dependency direction
@@ -39,12 +38,7 @@ and sanitises markup only; it never fetches, caches, or streams — the conversa
 Tagged `scope:web` (`type:state`): it may depend only on other `scope:web` and `scope:shared`
 packages — here third-party render/sanitiser libraries — never on apps or server domains.
 
-## Status
-
-Vendored from OpenClaw (MIT). Divergences from upstream (dropped docs-link rewriting and control-ui
-route detection) are intentional and documented in the source headers.
-
 ## See also
 
 - Parent index: [state](../../README.md)
-- Siblings: [conversation/adapter](../adapter/README.md) · [conversation/cache](../cache/README.md)
+- Sibling: [conversation/adapter](../adapter/README.md)

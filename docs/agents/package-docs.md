@@ -64,8 +64,7 @@ not apply; never reorder.
 7. *(optional)* **Data & persistence** — Prisma models/tables owned, target baseline owner and clean-database setup boundary. Include for
    any package with a Prisma adapter.
 8. *(optional)* **Runtime & config** — required env/config and defaults. Include for apps and infra.
-9. *(optional)* **Status** — a banner for blue-frozen / deletion-boundary packages, stated first.
-10. **See also** — parent index + siblings.
+9. **See also** — parent index + siblings.
 
 **Bare minimum** (even the smallest stub): the titled purpose line (1), the breadcrumb (2), the
 public surface (4), a boundary/dependency one-liner (5–6), and See-also (10).
@@ -128,7 +127,7 @@ own no runtime flow, skip the diagram or use a one-line "used by" sketch.
 >
 > **In this flow:** `channel-targets` · the runtime action path
 > *(in a real README each other-package name is a relative link to its own README, e.g.*
-> `[channel-targets](../../agents/channel-targets/main/README.md)`*)*
+> `[channel-targets](../../libs/backend/server/agents/channel-targets/main/README.md)`*)*
 >
 > To decide, it confirms three things line up: the proof the agent gives that it really is who it
 > claims, the permission slip issued earlier, and what the system can independently see about the
@@ -178,7 +177,7 @@ to; a backend authority with a diagram lands near the top of its range and that 
 | Frontend state (port/adapter) | `libs/frontend/state/*` | the gateway port it defines/implements, the HTTP surface it adapts, write-only invariants, consumer | 30–50 lines |
 | Frontend core / platform | `libs/frontend/{core,platform}` | the cross-cutting primitives it holds, FORK-shared status | 30–55 lines |
 | Deployable app | `apps/opencrane`, `apps/opencrane-ui`, `apps/channel-proxy`, `apps/artifact-service` | what it composes, trust/runtime posture, entrypoint, deploy unit | 45–100 lines |
-| Vendored infra app | `apps/_infra/{cognee,litellm,obot,langfuse}`, `apps/postgres` | upstream link, **why we run it**, pinned image/version, config knobs, what OpenCrane owns vs the vendor | 30–55 lines |
+| Vendored infra app | `apps/_infra/{cognee,litellm,obot}`, `apps/postgres` | upstream link, **why we run it**, pinned image/version, config knobs, what OpenCrane owns vs the vendor | 30–55 lines |
 | Server infra lib | `libs/server/_infra/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
 | Group / area index | grouping dirs | the child map table + the tier dependency rule + a child diagram | 25–45 lines |
 

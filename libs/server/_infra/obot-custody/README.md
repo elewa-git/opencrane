@@ -68,4 +68,4 @@ Tagged `scope:obot-custody` (`layer:infra`): it may depend only on `scope:obot-c
 ## See also
 
 - Parent index: [_infra](../README.md) · [server libraries](../../README.md)
-- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [tenant-hosting](../tenant-hosting/README.md) · [channel-proxy](../channel-proxy/README.md)
+- Siblings: [api](../api/README.md) · [auth](../auth/README.md) · [http](../http/README.md) · [memory gateway](../memory-gateway-client/README.md)

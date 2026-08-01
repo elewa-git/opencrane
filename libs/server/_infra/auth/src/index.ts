@@ -10,8 +10,11 @@ import "./session.types.js";
 
 export { ___LoadOidcAuthConfig } from "./oidc-config.js";
 export type { OidcAuthConfig } from "./oidc-config.types.js";
-export { _IsDevAuthMode } from "./auth-mode.js";
 export { _RequestHost } from "./request-host.js";
+export { _ResolveRequestPrincipal } from "./request-principal.js";
+export type { RequestPrincipal } from "./request-principal.types.js";
+export { _CreateMountedPublicKeySource } from "./mounted-public-key.js";
+export type { MountedPublicKeySource } from "./mounted-public-key.types.js";
 export { _ResolveIdentityClaims, _ReadStringArrayClaim } from "./identity-claims.js";
 export {
   _buildCurrentUrl,

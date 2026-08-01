@@ -1,7 +1,6 @@
 /** Supported payload types compiled from the generic Grant table. */
 export enum GrantCompilerPayloadType
 {
-  Awareness = "awareness",
   McpServer = "mcp-server",
 }
 
@@ -16,7 +15,6 @@ export enum GrantCompilerAccess
 export enum GrantCompilerSubjectType
 {
   Group = "group",
-  Tenant = "tenant",
   User = "user",
 }
 

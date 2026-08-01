@@ -15,6 +15,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 
 ### Added
 
+- **Operators can now admit managed agents through the immutable, fail-closed run authority.**
+  Run-now and scheduled work derive a dedicated service principal, verify its current
+  Ed25519-signed fleet membership, intersect the active revision's exact non-personal knowledge
+  attachments with effective grants, and atomically persist the run, snapshot, and dispatch
+  request. Managed Jobs use their distinct projected identity and can never inherit the requesting
+  administrator, scheduler, personal memory, or personal configuration tools.
+
 - **Platform developers can now build the personal-agent data model, APIs, and policies from one
   canonical target contract.** Pure packages define personal and managed AgentServices, immutable
   revisions and runs, ordered transcripts and events, content-addressed artifacts and skills, and
@@ -92,8 +99,8 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   under `libs/backend/server`, and server-process support lives under `libs/server/_infra`.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
-  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, Obot, and
-  Langfuse live under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
+  OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, and Obot live
+  under `apps/_infra`; and `apps/_infra/deploy-k8s` composes those app-owned charts.
 
 - **Platform developers can reuse functional server capabilities without importing an app root.**
   Tenant reconciliation, identity, projection, connection auth, policy reconciliation, channel
@@ -164,6 +171,10 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   gap.
 
 ### Removed
+
+- **Operators can now run the OpenCrane stack without the bundled Langfuse data plane.** The
+  Langfuse workloads, database and credentials, LiteLLM callback, metrics proxy, and unused
+  dashboard are gone.
 
 - **OpenCrane now has one supported product surface: authenticated APIs, generated clients, and
   the UI.** The bundled `oc` command-line app and its active documentation are removed, eliminating
@@ -685,6 +696,9 @@ Per-org domain serving, the full multi-tenant deploy pipeline, and the identity-
   Microsoft Entra dependency.** `website/security/identity.md` now states this plainly and
   documents the expected `groups`/`roles` claim names (`OIDC_GROUPS_CLAIM`/`OIDC_ROLES_CLAIM`)
   and how the operator-group and seed-email parameters are configured at install.
+
+> The 0.4.0 entries below record release-time capabilities. The Langfuse integration and metrics
+> endpoint described there were removed in Unreleased.
 
 ## [0.4.0] — 2026-06-19
 

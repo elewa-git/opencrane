@@ -25,10 +25,9 @@ export const _AuditOpenapiPaths = {
   "/audit": {
     get: {
       operationId: "listAuditEntries",
-      summary: "Query audit log entries with optional tenant filter and cursor pagination",
+      summary: "Query audit log entries with cursor pagination",
       tags: ["Audit"],
       parameters: [
-        { name: "tenant", in: "query", schema: { type: "string" }, description: "Filter to a specific tenant." },
         { name: "limit", in: "query", schema: { type: "integer", default: 100, minimum: 1, maximum: 1000 }, description: "Maximum entries to return." },
         { name: "cursor", in: "query", schema: { type: "string" }, description: "Opaque cursor from a previous response for keyset pagination." },
       ],

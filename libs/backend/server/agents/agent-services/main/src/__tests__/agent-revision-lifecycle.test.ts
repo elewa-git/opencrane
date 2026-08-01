@@ -1,13 +1,13 @@
-import type { AgentRevision, AgentService } from "@opencrane/models/agents";
+import type { AgentRevision, AgentRevisionContent, AgentService } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
-import type { AgentRevisionContent, AgentRevisionLifecycleRepository, AgentServiceHistory, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
+import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
 
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
 {
-	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelPolicyId: "model-a", budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }], ...overrides };
+	return { promptPolicyVersion: "prompt-v1", personaRevisionId: null, modelDefinitionId: "model-definition-a", budget: { maxTurns: 5, maxTokens: 1000, maxDurationMs: 30000 }, skills: [], integrationAssignments: [], scopeAttachments: [{ scope: "project", subjectType: "group", subjectId: "proj-1" }], ...overrides };
 }
 
 /** Minimal in-memory definition-plane repository, silo-scoped like the Prisma adapter. */
@@ -16,6 +16,11 @@ class _Repository implements AgentRevisionLifecycleRepository
 	readonly services = new Map<string, AgentService>();
 	readonly revisions: AgentRevision[] = [];
 	private counter = 0;
+
+	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
+	{
+		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === "managed").sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
+	}
 
 	async getService(id: string, siloId: string): Promise<AgentService | null>
 	{
@@ -56,7 +61,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		// Silo-scope the source lookup exactly like the Prisma adapter: a foreign-silo source is a 404.
 		const source = this.revisions.find(revision => revision.id === command.sourceRevisionId && this._siloService(revision.agentServiceId, command.siloId) !== null);
 		if (source === undefined) return { outcome: "denied", reason: "revision_not_found" };
-		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelPolicyId: source.modelPolicyId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), integrationAssignments: source.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })), scopeAttachments: source.scopeAttachments.map(attachment => ({ ...attachment })) };
+		const content: AgentRevisionContent = { promptPolicyVersion: source.promptPolicyVersion, personaRevisionId: source.personaRevisionId, modelDefinitionId: source.modelDefinitionId, budget: source.budget, skills: source.skills.map(skill => ({ skillId: skill.skillId, revisionId: skill.revisionId })), integrationAssignments: source.integrationAssignments.map(assignment => ({ integrationId: assignment.integrationId, custodyReferenceId: assignment.custodyReferenceId, allowedTools: [...assignment.allowedTools] })), scopeAttachments: source.scopeAttachments.map(attachment => ({ ...attachment })) };
 		return { outcome: "revised", revision: this._append(command.agentServiceId, head.revision + 1, head.id, source.id, content, command.authoredBy, command.changeMessage, createdAt) };
 	}
 
@@ -67,7 +72,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		if (service.state !== command.expectedState) return { outcome: "conflict", currentState: service.state };
 		if (command.action === "enable" && service.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
 		const state = command.action === "enable" ? "active" : command.action === "pause" ? "paused" : "retired";
-		const updated: AgentService = { ...service, state, updatedAt: changedAt };
+		const updated: AgentService = { ...service, state, activeRevisionId: command.action === "retire" ? null : service.activeRevisionId, updatedAt: changedAt };
 		this.services.set(service.id, updated);
 		return { outcome: "changed", service: updated };
 	}
@@ -95,7 +100,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 	/** Appends one immutable draft revision to the in-memory store. */
 	private _append(agentServiceId: string, revision: number, parentRevisionId: string | null, sourceRevisionId: string | null, content: AgentRevisionContent, authoredBy: string, changeMessage: string, createdAt: string): AgentRevision
 	{
-		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelPolicyId: content.modelPolicyId, skills: content.skills.map(skill => ({ ...skill })), integrationAssignments: content.integrationAssignments.map(assignment => ({ ...assignment, allowedTools: [...assignment.allowedTools] })), scopeAttachments: content.scopeAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
+		const record: AgentRevision = { id: `revision-${++this.counter}`, agentServiceId, revision, parentRevisionId, sourceRevisionId, changeMessage, state: "draft", digest: `sha256:${revision}`, promptPolicyVersion: content.promptPolicyVersion, personaRevisionId: content.personaRevisionId, modelDefinitionId: content.modelDefinitionId, skills: content.skills.map(skill => ({ ...skill })), integrationAssignments: content.integrationAssignments.map(assignment => ({ ...assignment, allowedTools: [...assignment.allowedTools] })), scopeAttachments: content.scopeAttachments.map(attachment => ({ ...attachment })), budget: content.budget, authoredBy, createdAt, publishedAt: null };
 		this.revisions.push(record);
 		return record;
 	}
@@ -134,6 +139,14 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(withPersona).toEqual({ outcome: "denied", reason: "invalid_command" });
 	});
 
+	it("rejects a workload profile the deployed controller cannot resolve", async function _unknownProfile()
+	{
+		const repository = new _Repository();
+		const created = await __CreateManagedAgentService(repository, { siloId: _SILO, name: "Reporter", workloadProfile: "reports-v2", authoredBy: "admin-1", changeMessage: "initial", content: _content() }, _NOW);
+		expect(created).toEqual({ outcome: "denied", reason: "invalid_command" });
+		expect(repository.services.size).toBe(0);
+	});
+
 	it("rejects duplicate scope attachments with a validation denial, not a persistence error", async function _duplicateAttachment()
 	{
 		const repository = new _Repository();
@@ -145,7 +158,7 @@ describe("managed agent revision lifecycle", function _suite()
 	{
 		const repository = new _Repository();
 		const seed = await _seedService(repository);
-		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ modelPolicyId: "model-b" }) }, _NOW);
+		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ modelDefinitionId: "model-definition-b" }) }, _NOW);
 		expect(revised.outcome).toBe("revised");
 		const stale = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit-2", content: _content() }, _NOW);
 		expect(stale.outcome).toBe("conflict");
@@ -155,13 +168,13 @@ describe("managed agent revision lifecycle", function _suite()
 	{
 		const repository = new _Repository();
 		const seed = await _seedService(repository);
-		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ modelPolicyId: "model-b" }) }, _NOW);
+		const revised = await __ReviseAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedParentRevisionId: seed.revisionId, authoredBy: "admin-1", changeMessage: "edit", content: _content({ modelDefinitionId: "model-definition-b" }) }, _NOW);
 		if (revised.outcome !== "revised") throw new Error("expected revised");
 		const restored = await __RestoreAgentRevision(repository, { siloId: _SILO, agentServiceId: seed.serviceId, sourceRevisionId: seed.revisionId, expectedParentRevisionId: revised.revision.id, authoredBy: "admin-1", changeMessage: "restore v1" }, _NOW);
 		if (restored.outcome !== "revised") throw new Error("expected revised");
 		expect(restored.revision.sourceRevisionId).toBe(seed.revisionId);
 		expect(restored.revision.parentRevisionId).toBe(revised.revision.id);
-		expect(restored.revision.modelPolicyId).toBe("model-a");
+		expect(restored.revision.modelDefinitionId).toBe("model-definition-a");
 	});
 
 	it("enforces legal state transitions and optimistic concurrency", async function _state()
@@ -175,6 +188,17 @@ describe("managed agent revision lifecycle", function _suite()
 		expect(badTransition).toEqual({ outcome: "denied", reason: "transition_not_allowed" });
 		const staleState = await __ChangeAgentServiceState(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedState: "paused", action: "enable" }, _NOW);
 		expect(staleState.outcome).toBe("conflict");
+	});
+
+	it("clears the active revision when a service retires", async function _retire()
+	{
+		const repository = new _Repository();
+		const seed = await _seedService(repository);
+		repository.services.set(seed.serviceId, { ...repository.services.get(seed.serviceId)!, state: "active", activeRevisionId: seed.revisionId });
+
+		const retired = await __ChangeAgentServiceState(repository, { siloId: _SILO, agentServiceId: seed.serviceId, expectedState: "active", action: "retire" }, _NOW);
+
+		expect(retired).toEqual(expect.objectContaining({ outcome: "changed", service: expect.objectContaining({ state: "retired", activeRevisionId: null }) }));
 	});
 
 	it("compares two revisions of the same service", async function _compare()

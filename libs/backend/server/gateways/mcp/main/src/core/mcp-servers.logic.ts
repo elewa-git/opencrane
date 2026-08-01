@@ -35,7 +35,6 @@ const _PRISMA_GRANT_SCOPE = {
 /** Typed Prisma subject values used during runtime lookups. */
 const _PRISMA_GRANT_SUBJECT_TYPE = {
   Group: "Group",
-  Tenant: "Tenant",
   User: "User",
 } as const;
 
@@ -82,14 +81,12 @@ const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
 /** Route subject lookup keyed by Prisma enum values. */
 const _ROUTE_SUBJECT_BY_PRISMA_SUBJECT = {
   [_PRISMA_GRANT_SUBJECT_TYPE.Group]: GrantSubjectType.Group,
-  [_PRISMA_GRANT_SUBJECT_TYPE.Tenant]: GrantSubjectType.Tenant,
   [_PRISMA_GRANT_SUBJECT_TYPE.User]: GrantSubjectType.User,
 };
 
 /** Prisma subject lookup keyed by route values. */
 const _PRISMA_SUBJECT_BY_ROUTE_SUBJECT = {
   group: _PRISMA_GRANT_SUBJECT_TYPE.Group,
-  tenant: _PRISMA_GRANT_SUBJECT_TYPE.Tenant,
   user: _PRISMA_GRANT_SUBJECT_TYPE.User,
 };
 

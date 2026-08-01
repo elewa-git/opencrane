@@ -13,7 +13,7 @@ import { mcpOperatorRouter } from "../routes/mcp-operator.js";
  * response ever serialises credential material.
  */
 
-/** OIDC env that decides `_IsDevAuthMode`; cleared/restored around each test. */
+/** OIDC environment isolated so authentication configuration cannot leak between tests. */
 const _AUTH_ENV = ["OIDC_ISSUER_URL", "OIDC_CLIENT_ID", "OIDC_CLIENT_SECRET", "OIDC_REDIRECT_URI", "OIDC_SESSION_SECRET"] as const;
 
 /** Configure a complete OIDC setup so no-session guards must fail closed. */
@@ -139,12 +139,12 @@ describe("mcp-operator router", function _suite()
       expect(spies["mcpServer.findMany"]).toHaveBeenCalled();
     });
 
-    it("opens the gate under dev mode when no session and no real auth", async function _devOpen()
+    it("fails closed when no session is established", async function _denyUnauthenticated()
     {
       const { prisma } = _mockPrisma();
       const res = await request(_buildApp(prisma)).get("/api/v1/mcp/servers");
 
-      expect(res.status).not.toBe(403);
+      expect(res.status).toBe(403);
     });
   });
 

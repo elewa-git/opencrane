@@ -1,32 +1,26 @@
-# Architecture Decision Records
+# Architecture decision records
 
-Long-lived design decisions for the OpenCrane platform. An ADR captures **why** a
-decision was made, the alternatives that were weighed, and the consequences we accepted —
-so a later reader (or a later agent) does not relitigate a settled question.
+Long-lived design decisions for the OpenCrane platform. An ADR records why a decision exists, the
+alternatives considered, and the consequences accepted.
 
-These records are engineering history: they sit next to the agent guidance in
-[`docs/agents/`](../agents/) and complement the forward plans at the repo root
-(`plan.md`, `silo-multi-tenant-plan.md`). Reader-facing operator and integrator docs live
-in [`website/`](../../website); an ADR may be the source a website page summarises, but it
-is not itself published.
+Reader-facing operator and integrator documentation lives in [`website/`](../../website). An ADR may
+ground a published page, but it is not itself published.
 
 | ADR | Title | Status |
 |-----|-------|--------|
-| [0001](0001-cluster-tenant-virtual-network-isolation.md) | ClusterTenant-as-virtual-network strict isolation (substrate) | Superseded by 0003 |
-| [0002](0002-per-clustertenant-silo-architecture.md) | Per-ClusterTenant silo architecture (dedicated operator, planes, API/DB per tenant) | Accepted |
-| [0003](0003-cilium-spiffe-identity-substrate.md) | Cilium identity and network-policy substrate | Accepted; corrected 2026-07-16 |
-| [0005](0005-opencrane-owned-agent-runtime.md) | OpenCrane-owned agent runtime | Accepted; amended 2026-07-18; toolkit clause superseded by 0010 |
-| [0006](0006-rewrite-freeze-whole-silo-cutover.md) | Rewrite freeze with whole-silo blue/green cutover | Superseded by 0007 |
-| [0007](0007-direct-target-refactor.md) | Direct target refactor without an estate migration | Accepted |
-| [0008](0008-target-agent-contracts-and-workload-identity.md) | Target agent contracts and workload identity | Accepted |
-| [0010](0010-language-neutral-agent-runtime.md) | Language-neutral agent runtime (Pydantic AI first qualification) | Accepted |
+| [0002](0002-per-clustertenant-silo-architecture.md) | Per-ClusterTenant silo architecture | Accepted |
+| [0003](0003-cilium-spiffe-identity-substrate.md) | Cilium identity and network-policy substrate | Accepted |
+| [0005](0005-opencrane-owned-agent-runtime.md) | OpenCrane-owned agent runtime | Accepted; runtime-language clause superseded by 0010 |
+| [0008](0008-target-agent-contracts-and-workload-identity.md) | Agent contracts and workload identity | Accepted; clarified by 0011 |
+| [0010](0010-language-neutral-agent-runtime.md) | Language-neutral agent runtime | Accepted |
+| [0011](0011-single-run-input-and-artifact-read-authorities.md) | Single run-input and artifact-read authorities | Accepted |
 
 ## Writing a new ADR
 
-- Number sequentially (`NNNN-short-slug.md`); never reuse or renumber.
-- Keep the shape: **Status · Context · Decision · Alternatives considered · Consequences**.
-- Record the **decided** outcome. Open questions belong in a plan file, not an ADR.
-- When a decision changes, write a new ADR that supersedes the old one and flip the old
-  one's status to `Superseded by NNNN` — never rewrite history in place.
-- Reference the originating task ID (e.g. `task_5164276f`) so the record traces back to the
-  roadmap that requested it.
+- Number sequentially (`NNNN-short-slug.md`); do not reuse or renumber an accepted identifier.
+- Use the shape **Status · Context · Decision · Alternatives considered · Consequences**.
+- Record a durable outcome. Work sequencing, qualification logs, and temporary investigation notes
+  belong in plans, tests, release notes, or issue evidence.
+- When a durable decision changes, add an ADR that names the exact clause it supersedes. Remove
+  transformation-only records once they no longer describe a supported contract; version control
+  retains their history.

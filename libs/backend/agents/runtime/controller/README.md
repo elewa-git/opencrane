@@ -6,7 +6,8 @@
 
 This package is the narrow reconciliation step between OpenCrane's durable run authority and
 Kubernetes execution state. It first claims an authorised attempt, resolves its named runtime
-profile, and creates the still-suspended Job in a dedicated runtime namespace. It then creates the
+profile, verifies that profile's dedicated runtime namespace, and creates the still-suspended Job
+there. It then creates the
 attempt's immutable, Job-owned LiteLLM key Secret from the transient virtual key delivered on the
 claim response — before the Job can be released — so the released Pod is admitted and the Secret is
 garbage-collected with the Job. A second durable reconciliation releases only the exact assigned Job
@@ -38,8 +39,8 @@ accepted by OpenCrane.
 [OpenCrane server](../../../../../apps/opencrane/README.md) ·
 [agent-controller app](../../../../../apps/agent-controller/README.md)
 
-Invariant: deployment owns one fail-closed policy for the dedicated runtime namespace, while this
-controller creates only deterministic Jobs. An existing Job is adopted only when its complete owned
+Invariant: deployment owns one fail-closed policy and one least-privilege RoleBinding per configured
+runtime namespace, while this controller creates only deterministic Jobs. An existing Job is adopted only when its complete owned
 contract matches. Release converts the durable assignment's absolute expiry into a conservative
 whole-second deadline, then tests Job UID, resource version, `suspend=true`, and the profile deadline
 before lowering that deadline and unsuspending in one patch. The bound reserves both the database
@@ -82,12 +83,13 @@ authority; Kubernetes remains an execution projection.
 
 Tagged `scope:agent-runtime-controller` and `layer:infra`; it may depend only on the runtime Job
 builder and shared contracts/observability. It never imports an app, OpenCrane-server infrastructure,
-Prisma, or the frozen OpenClaw controller.
+or Prisma.
 
 ## Runtime & config
 
-The app supplies one runtime namespace, a bounded poll interval, and an immutable profile map whose
-server namespace must be valid and different. The HTTP
+The app supplies a bounded poll interval and an immutable profile map. Every profile supplies one
+unique runtime namespace, which must be valid and different from its server namespace; a claim in a
+different namespace is refused before Kubernetes I/O. The HTTP
 adapter rereads its projected token for every request so kubelet rotation needs no process restart.
 The Kubernetes adapter relies on a Role in the runtime namespace granting `get/create/patch` for
 Jobs, `list` for Pods, and `create` (only) for Secrets. It has no Kubernetes Networking client. It lists Pods with both the Job-controller UID

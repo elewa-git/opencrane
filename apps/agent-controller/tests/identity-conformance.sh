@@ -43,6 +43,14 @@ spec:
       serviceAccountName: agent-controller
       automountServiceAccountToken: false
       restartPolicy: Never
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65532
+        runAsGroup: 65532
+        fsGroup: 65532
+        fsGroupChangePolicy: OnRootMismatch
+        seccompProfile:
+          type: RuntimeDefault
       containers:
         - name: tokenreview-conformance
           image: opencrane/opencrane-server:e2e
@@ -52,11 +60,28 @@ spec:
             - |
               import { readFile } from "node:fs/promises";
               const token = (await readFile("/var/run/opencrane/tokens/opencrane.token", "utf8")).trim();
-              const response = await fetch("http://${SERVICE_NAME}.${SERVER_NAMESPACE}.svc.cluster.local:${INTERNAL_PORT}/api/internal/agent-controller/run-attempts:claim", {
-                method: "POST",
-                headers: { authorization: "Bearer " + token, "content-type": "application/json" },
-                body: "{}",
-              });
+              const url = "http://${SERVICE_NAME}.${SERVER_NAMESPACE}.svc.cluster.local:${INTERNAL_PORT}/api/internal/agent-controller/run-attempts:claim";
+              let response;
+              let lastTransportError;
+              for (let attempt = 1; attempt <= 10; attempt += 1) {
+                try {
+                  response = await fetch(url, {
+                    method: "POST",
+                    headers: { authorization: "Bearer " + token, "content-type": "application/json" },
+                    body: "{}",
+                    signal: AbortSignal.timeout(2000),
+                  });
+                  break;
+                } catch (error) {
+                  lastTransportError = error;
+                  if (attempt < 10) {
+                    await new Promise((resolve) => setTimeout(resolve, 2000));
+                  }
+                }
+              }
+              if (!response) {
+                throw new Error("controller TokenReview conformance transport failed after 10 attempts", { cause: lastTransportError });
+              }
               if (response.status !== 200 && response.status !== 204) {
                 throw new Error("controller TokenReview conformance failed with HTTP " + response.status);
               }

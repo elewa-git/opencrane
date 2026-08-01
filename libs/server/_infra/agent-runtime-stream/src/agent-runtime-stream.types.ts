@@ -1,24 +1,7 @@
 import type { RuntimeCandidate, RuntimeCommandEnvelope, RuntimeStreamOpen } from "@opencrane/contracts";
+import type { RuntimeTokenReviewer, RuntimeWorkloadIdentity } from "@opencrane/server/_infra/workload-identity";
 
-/** Verified workload identity associated with one runtime-initiated connection. */
-export interface RuntimeWorkloadIdentity
-{
-	/** Kubernetes ServiceAccount subject returned by TokenReview. */
-	readonly subject: string;
-	/** Kubernetes namespace parsed from the authenticated subject. */
-	readonly namespace: string;
-	/** Kubernetes ServiceAccount name parsed from the authenticated subject. */
-	readonly serviceAccountName: string;
-	/** Kubernetes Pod UID asserted by TokenReview for this projected token. */
-	readonly podUid: string;
-}
-
-/** Minimal TokenReview seam; the app supplies the Kubernetes API implementation. */
-export interface RuntimeTokenReviewer
-{
-	/** Verify a projected token and return the authenticated workload identity. */
-	__Review(token: string): Promise<RuntimeWorkloadIdentity | null>;
-}
+import type { RuntimeCommandWakeup } from "./runtime-command-wakeup.js";
 
 /** Durable command authority injected by the server app, never owned by this transport. */
 export interface RuntimeCommandStreamAuthority
@@ -55,6 +38,8 @@ export interface RuntimeStreamTransportOptions
 	readonly maxBodyBytes: number;
 	/** Heartbeat interval for an idle, runtime-initiated SSE connection. */
 	readonly heartbeatMilliseconds: number;
-	/** Bounded wait before polling the authority again when no command is ready. */
-	readonly commandPollMilliseconds: number;
+	/** Bounded durable recovery interval after a local wake-up is missed or unavailable. */
+	readonly commandRecoveryMilliseconds: number;
+	/** Optional process-local wake-up fan-out; it never stores or authorizes commands. */
+	readonly commandWakeup?: RuntimeCommandWakeup;
 }

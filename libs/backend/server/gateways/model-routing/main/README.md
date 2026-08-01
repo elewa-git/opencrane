@@ -24,7 +24,7 @@ It also holds per-tenant model allowlists and the maths for evaluating candidate
  │                                     │  ClusterTenant then Global) · per-tenant allowlist
  │                                     │  · shadow-router maths (off-policy eval, savings)
  └────────────────────────────────────┘
-        │  the model id for this request  (+ routing defaults API, metrics)
+        │  the model id for this request  (+ routing defaults API)
         ▼
  agent runtime calls LiteLLM with the resolved model
 ```
@@ -40,8 +40,8 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
 
 ## Public surface
 
-- `modelRoutingDefaultsRouter`, `modelRoutingMetricsRouter`, `_RegisterInternalTenantModels` — the
-  routers, mounted at `/api/v1/model-routing/*` and `/api/internal/tenant-models`.
+- `modelRoutingDefaultsRouter` — the routing-defaults router, mounted at
+  `/api/v1/model-routing/defaults`.
 - `_ResolveSkillModel` — resolve a skill's effective model by the locked precedence chain.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
   `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
@@ -66,6 +66,8 @@ Tagged `scope:model-routing`: it may depend only on `scope:auth`, `scope:cluster
 
 Owns `ModelRoutingDefault` in `apps/opencrane/prisma/schema/model-routing.prisma`. Per-tenant model
 rows and provider credentials are owned by the [providers](../../providers/main/README.md) domain.
+An `AgentRevision` stores the provider domain's stable `ModelDefinition` identifier, rather than an
+unverified alias; this package's catalogue is therefore the allowlist source for executable models.
 
 ## See also
 

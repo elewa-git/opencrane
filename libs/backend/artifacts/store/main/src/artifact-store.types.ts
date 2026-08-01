@@ -145,6 +145,8 @@ export interface ArtifactStore
 	stage(command: StageArtifactCommand): Promise<StagedArtifact>;
 	/** Atomically promotes staged bytes to their immutable content address. */
 	promote(staged: StagedArtifact): Promise<ArtifactStorePromotion>;
+	/** Returns the size of one regular canonical object, or null when it is absent or not a regular file. */
+	byteLength(contentAddress: string): Promise<number | null>;
 	/** Reads canonical bytes by an already-authorized immutable content address. */
 	read(contentAddress: string): Promise<ArtifactByteStream | null>;
 	/** Removes bytes only after the OpenCrane authority proved no active lease or reference remains. */

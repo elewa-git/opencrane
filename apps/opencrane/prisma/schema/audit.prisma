@@ -1,14 +1,10 @@
 model AuditEntry {
   id        Int      @id @default(autoincrement())
   timestamp DateTime @default(now())
-  tenant    String?
   action    String
   resource  String
   message   String
   metadata  Json?
-  tenantRef Tenant?  @relation(fields: [tenant], references: [name])
-
-  @@index([tenant])
   @@index([timestamp])
   @@map("audit_log")
 }

@@ -19,6 +19,9 @@ It owns two kinds of thing:
 - A **pure revision diff** (`__DiffAgentRevisions`): line-level prompt diff plus semantic
   field-level configuration diff, flagging security-relevant widening (broader scopes, tools,
   credentials, or budgets) for reviewer confirmation. It reads only stable references, never secrets.
+- A **canonical revision digest** (`__DigestAgentRevisionContent`) over the complete
+  `AgentRevisionContent`. Every revision-writing authority hashes the same domain value it persists,
+  so managed and personal revision paths cannot silently disagree about executable content.
 - **Pure decision functions** over those types:
   - `state-transitions` holds the small lookup tables of which state may legally follow which (for
     example a run may go `running → completed` but never `completed → running`), and answers a plain
@@ -38,9 +41,10 @@ a legal move, never invent one.
 ## Public surface
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
-  `RevisionScopeAttachment`, `GrantScope`, `GrantSubjectType`, `Thread`, `Message`, `RunEvent`, and
-  the `*Id` identifier aliases.
-- Revision diff: `__DiffAgentRevisions` and its `AgentRevisionDiff` result types.
+  `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`, `GrantSubjectType`, `Thread`,
+  `Message`, `RunEvent`, and the `*Id` identifier aliases.
+- Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
+  `AgentRevisionDiff` result types.
 - Persona types: `PersonaOnboarding`, `PersonaInterview`, `PersonaRevision`, `SoulTemplate`,
   `PersonaResult` and their inputs.
 - `__Is…TransitionAllowed`, `__CanAppendRunEvent` — the guard functions over the transition tables.
@@ -49,8 +53,8 @@ a legal move, never invent one.
 
 ## Boundary
 
-Pure and I/O-free: it defines and decides, but callers do the reading and writing. It does not know
-about Kubernetes, HTTP, or Prisma.
+Persistence- and network-free: it defines, decides, and deterministically hashes canonical domain
+values, but callers do the reading and writing. It does not know about Kubernetes, HTTP, or Prisma.
 
 ## Dependency direction
 

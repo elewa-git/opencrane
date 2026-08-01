@@ -6,23 +6,17 @@
 #
 # This file deliberately keeps a GKE deploy identical to a plain Kubernetes
 # cluster: standard PVC storage (GKE default StorageClass), in-cluster
-# PostgreSQL, k8s Secrets, and standard ingress. NONE of the GCP-only features
-# (GCS-backed tenant storage, Workload Identity, External Secrets / Secret
-# Manager, Cloud DNS) are enabled here.
+# PostgreSQL, k8s Secrets, and standard ingress. GCP-specific External Secrets
+# and Cloud DNS integration remain opt-in.
 #
 # To opt in to the GCP-native extras, layer the optional overlay ON TOP:
 #   helm install opencrane apps/fleet-platform \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
 #     -f apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml \
-#     --set hosting.gcp.projectId=YOUR_PROJECT_ID
+#     --set externalSecrets.gcp.projectId=YOUR_PROJECT_ID
 
 global:
   environment: prod
-
-# Hosting stays on-prem semantics by default: tenant storage uses standard PVCs,
-# no GCS/Workload-Identity coupling. The gcp-extras overlay flips this to `gcp`.
-hosting:
-  provider: onprem
 
 clustertenantManager:
   database:

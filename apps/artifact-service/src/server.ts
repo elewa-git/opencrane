@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 
 import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesystem";
-import { __SignArtifactPromotionReceipt, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
+import { __SignArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
 import { __PromoteArtifactUpload } from "@opencrane/backend/artifacts/store";
 import type { ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "@opencrane/backend/artifacts/store";
 import { ___DoWithTrace } from "@opencrane/observability";
@@ -21,7 +21,7 @@ export async function _PrepareArtifactStore(config: ArtifactServiceProcessConfig
 	});
 }
 
-/** Create the private server, which accepts only OpenCrane-signed, bounded write leases. */
+/** Create the private server for bounded promotion writes and lease-pinned immutable reads. */
 export function _CreateServer(config: ArtifactServiceProcessConfig, store: ArtifactStore): Server
 {
 	return createServer(function _handle(request, response)
@@ -35,24 +35,95 @@ export function _CreateServer(config: ArtifactServiceProcessConfig, store: Artif
 				response.end();
 				return;
 			}
-			if (path !== "/v1/artifacts/promote" || request.method !== "POST")
+			if (path === "/v1/artifacts/promote" && request.method === "POST")
 			{
-				response.writeHead(404, { "content-type": "application/json" });
-				response.end(JSON.stringify({ error: "not_found" }));
+				const byteSource = _byteSource(request);
+				const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), byteSource, { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
+				_writePromotionOutcome(response, outcome);
+				if (outcome.outcome === "rejected" && outcome.reason === "artifact_body_exceeds_lease")
+				{
+					byteSource.abort(new Error("artifact body exceeds its signed lease byte limit"));
+				}
 				return;
 			}
-			const byteSource = _byteSource(request);
-			const outcome = await __PromoteArtifactUpload(store, _leaseVerifier(config.leasePublicKeyPem), byteSource, { maxUploadDurationMilliseconds: config.maxUploadDurationMilliseconds, nowEpochMilliseconds: Date.now, receiptSigner: _receiptSigner(config.receiptPrivateKeyPem) });
-			_writePromotionOutcome(response, outcome);
-			if (outcome.outcome === "rejected" && outcome.reason === "artifact_body_exceeds_lease")
+			if (path === "/v1/artifacts/read" && request.method === "GET")
 			{
-				byteSource.abort(new Error("artifact body exceeds its signed lease byte limit"));
+				await _ReadCanonicalArtifact(request, response, store, config.leasePublicKeyPem);
+				return;
 			}
+			response.writeHead(404, { "content-type": "application/json" });
+			response.end(JSON.stringify({ error: "not_found" }));
 		}).catch(function _onRequestFailure(err)
 		{
 			log.error({ err, method: request.method, path }, "artifact service request failed");
 			response.destroy(err instanceof Error ? err : new Error("artifact service request failed"));
 		});
+	});
+}
+
+/** Verifies one exact immutable read lease, preflights its bytes, then streams only its pinned address. */
+async function _ReadCanonicalArtifact(request: IncomingMessage, response: ServerResponse, store: ArtifactStore, leasePublicKeyPem: string): Promise<void>
+{
+	// 1. Read the dedicated header because write authority must never open the read endpoint.
+	const compactLease = request.headers["x-opencrane-artifact-read-lease"];
+	const lease = typeof compactLease === "string" ? __VerifyArtifactReadLease(compactLease, leasePublicKeyPem, Math.floor(Date.now() / 1_000)) : null;
+	if (lease === null)
+	{
+		_WriteArtifactReadDenied(response);
+		return;
+	}
+
+	// 2. Preflight the stored length before opening a stream so missing and mismatched bytes fail identically.
+	const storedByteLength = await store.byteLength(lease.contentAddress);
+	if (storedByteLength === null || storedByteLength !== lease.byteLength)
+	{
+		_WriteArtifactReadDenied(response);
+		return;
+	}
+
+	// 3. Read only the lease-pinned address after its size matches; there is no caller-selected coordinate.
+	const stream = await store.read(lease.contentAddress);
+	if (stream === null)
+	{
+		_WriteArtifactReadDenied(response);
+		return;
+	}
+
+	// 4. Send only lease-signed metadata after all preflight gates passed, preventing a partial successful response.
+	// X-Content-Type-Options: proprietary response header that asks clients not to MIME-sniff signed bytes.
+	// @see https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/X-Content-Type-Options
+	response.writeHead(200, { "content-type": lease.mediaType, "content-length": String(lease.byteLength), "cache-control": "no-store", "x-content-type-options": "nosniff" });
+	for await (const chunk of stream)
+	{
+		if (!response.write(chunk) && !await _WaitForWritableResponse(response)) return;
+	}
+	response.end();
+}
+
+/** Returns the same non-cacheable denial for an invalid lease, missing object, or size mismatch. */
+function _WriteArtifactReadDenied(response: ServerResponse): void
+{
+	response.writeHead(403, { "content-type": "application/json", "cache-control": "no-store" });
+	response.end(JSON.stringify({ error: "artifact_read_denied" }));
+}
+
+/** Wait for downstream backpressure to drain, but stop reading when the private client disconnects. */
+async function _WaitForWritableResponse(response: ServerResponse): Promise<boolean>
+{
+	return new Promise<boolean>(function _Wait(resolve)
+	{
+		function _Cleanup(): void
+		{
+			response.off("drain", _Drained);
+			response.off("close", _Closed);
+			response.off("error", _Errored);
+		}
+		function _Drained(): void { _Cleanup(); resolve(true); }
+		function _Closed(): void { _Cleanup(); resolve(false); }
+		function _Errored(): void { _Cleanup(); resolve(false); }
+		response.once("drain", _Drained);
+		response.once("close", _Closed);
+		response.once("error", _Errored);
 	});
 }
 

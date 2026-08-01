@@ -39,133 +39,24 @@ app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
 {{/*
+Resolve the exact CNPG-managed Pooler identity used by application egress rules.
+The database release normally follows `<application release>-postgres`, while
+recovery validation deliberately points an application release at a separately
+named restored database. Deploy paths must override this value in that case.
+*/}}
+{{- define "opencrane.postgresPoolerName" -}}
+{{- if .Values.networkPolicy.postgresPoolerName -}}
+{{- .Values.networkPolicy.postgresPoolerName -}}
+{{- else -}}
+{{- printf "%s-postgres-pooler" .Release.Name | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Resolve deployment environment for validation rules.
 */}}
 {{- define "opencrane.environment" -}}
 {{- default "dev" .Values.global.environment | lower -}}
-{{- end }}
-
-{{/*
-Operator RBAC rules — shared by the cluster-scoped (legacy) and namespaced
-(multi-instance) bindings so both grant identical verbs over identical resources.
-All resources here are namespaced, so the same rule list is valid in a Role.
-*/}}
-{{- define "opencrane.fleetManagerRbacRules" -}}
-# ClusterTenant CR — the fleet-manager's ONLY watch (Stage 5: it stops at ClusterTenant
-# lifecycle and touches nothing inside a silo). The ClusterTenantOperator drives each org
-# pending→ready and patches its status. Ungated: the operator always runs, independent of
-# whether the management ROUTES (fleetManager.clusterTenantApi.enabled) are mounted.
-- apiGroups: ["opencrane.io"]
-  resources: ["clustertenants", "clustertenants/status"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Org isolation boundary: the reconciler creates the bound namespace `opencrane-<org>` with
-# Pod Security Admission labels (and the ResourceQuota/LimitRange boundary). `namespaces` is
-# CLUSTER-scoped, so this is only effective via the legacy ClusterRole; namespaced
-# multi-instance mode cannot grant it and cluster-tenant provisioning requires the
-# cluster-scoped operator. Without this the reconcile 403s on createNamespace.
-- apiGroups: [""]
-  resources: ["namespaces"]
-  verbs: ["get", "list", "watch", "create", "update", "patch"]
-- apiGroups: [""]
-  resources: ["resourcequotas", "limitranges"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- if .Values.certManager.enabled }}
-# Per-org wildcard TLS Certificates the ClusterTenant reconciler applies into each org's
-# bound namespace (fixed-wildcard topology). Granted only when cert-manager is enabled;
-# without it the reconciler skips the cert side effect at runtime anyway.
-- apiGroups: ["cert-manager.io"]
-  resources: ["certificates"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- end }}
-{{- if .Values.externalDns.enabled }}
-# Per-org DNSEndpoint CRs the ClusterTenant reconciler declares for external-dns. Granted
-# only when external-dns is enabled; without it the reconciler skips the DNS side.
-- apiGroups: ["externaldns.k8s.io"]
-  resources: ["dnsendpoints"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- end }}
-# Events for audit trail
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-{{- end }}
-
-{{/*
-Control-plane RBAC rules that target NAMESPACED resources only — shared by the
-cluster-scoped (legacy) ClusterRole and the namespaced (multi-instance) Role so
-both grant identical verbs over identical resources. The cluster-scoped
-`clusterissuers` grant is deliberately NOT here: it cannot live in a namespaced
-Role, so it stays in a minimal residual ClusterRole (see opencrane-ui-rbac.yaml)
-and is folded into the per-namespace Role by MI.4's namespaced cert Issuer.
-*/}}
-{{- define "opencrane.clustertenantManagerRbacRules" -}}
-# Tenant + AccessPolicy CRDs — the opencrane-ui API dual-writes them (alongside PostgreSQL)
-# AND the in-silo TenantOperator/PolicyOperator (Stage 5) watch + reconcile them in this
-# silo's own namespace.
-- apiGroups: ["opencrane.io"]
-  resources: ["tenants", "tenants/status", "accesspolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Per-tenant workloads the TenantOperator stamps into this namespace.
-- apiGroups: ["apps"]
-  resources: ["deployments"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-- apiGroups: [""]
-  resources: ["services", "configmaps", "persistentvolumeclaims"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Per-tenant ResourceQuota + LimitRange the TenantOperator stamps for its workloads.
-- apiGroups: [""]
-  resources: ["resourcequotas", "limitranges"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# ServiceAccounts for Workload Identity.
-- apiGroups: [""]
-  resources: ["serviceaccounts"]
-  verbs: ["get", "list", "create", "update", "patch"]
-# Secrets for tenant encryption keys + per-tenant LiteLLM keys.
-- apiGroups: [""]
-  resources: ["secrets"]
-  verbs: ["get", "list", "create", "update", "patch"]
-# Pods: the idle-checker reads them, and the connection kill-switch (CONN.5) force-deletes by
-# the `opencrane.io/tenant=<name>` label to sever live OpenClaw sockets (CNI-independent).
-# No create/update — Deployments own pod creation.
-- apiGroups: [""]
-  resources: ["pods"]
-  verbs: ["get", "list", "watch", "delete", "deletecollection"]
-# Per-tenant Ingress (serving) + NetworkPolicy (the S2 default-deny silo baseline + gateway).
-- apiGroups: ["networking.k8s.io"]
-  resources: ["ingresses", "networkpolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-# Cilium policies (optional, if Cilium is installed).
-- apiGroups: ["cilium.io"]
-  resources: ["ciliumnetworkpolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- if .Values.fleetManager.linkerdMeshEnabled }}
-# Linkerd identity-layer policy CRs the silo reconcile applies per namespace (S5): a
-# deny-by-default Server + MeshTLSAuthentication allow-list + the binding AuthorizationPolicy.
-# Granted only when the mesh gate is on; an absent Linkerd CRD makes the apply skip.
-- apiGroups: ["policy.linkerd.io"]
-  resources: ["servers", "meshtlsauthentications", "authorizationpolicies"]
-  verbs: ["get", "list", "watch", "create", "update", "patch", "delete"]
-{{- end }}
-# Events for audit trail.
-- apiGroups: [""]
-  resources: ["events"]
-  verbs: ["create", "patch"]
-{{- end }}
-
-{{/*
-Cognee endpoint the opencrane-ui permission-sync routes call.
-
-With the bundled Cognee on (`controlPlane.cognee.install`), Cognee is a release-local plane:
-the Service is release-prefixed (`<fullname>-cognee`, B5) so two installs never collide on the
-legacy unprefixed `cognee` singleton, and this helper points the opencrane-ui at it. Otherwise
-(BYO Cognee) the configured `controlPlane.cognee.endpoint` is used verbatim.
-*/}}
-{{- define "opencrane.cogneeEndpoint" -}}
-{{- if .Values.clustertenantManager.cognee.install -}}
-{{- printf "http://%s-cognee:%v" (include "opencrane.fullname" .) .Values.clustertenantManager.cognee.service.port -}}
-{{- else -}}
-{{- .Values.clustertenantManager.cognee.endpoint -}}
-{{- end -}}
 {{- end }}
 
 {{/*
@@ -184,28 +75,6 @@ real deploy always supplies one.
 */}}
 {{- define "opencrane.clustertenantManagerDatabaseEnv" -}}
 {{- $db := .Values.clustertenantManager.database | default dict -}}
-{{- if $db.existingSecret -}}
-- name: DATABASE_URL
-  valueFrom:
-    secretKeyRef:
-      name: {{ $db.existingSecret }}
-      key: {{ $db.secretKey }}
-{{- else if $db.url -}}
-- name: DATABASE_URL
-  value: {{ $db.url | quote }}
-{{- end -}}
-{{- end }}
-
-{{/*
-DATABASE_URL env entry for the fleet-manager (the cluster-wide singleton's registry DB).
-
-The fleet-manager owns the global registry (ClusterTenant catalogue, billing, memberships) in its
-OWN Postgres — distinct from each silo's per-CT DB. The installer points it at that DB via
-`fleetManager.database.existingSecret` (or `.url`). With no explicit DB this renders no DATABASE_URL
-(the registry is unreachable → /healthz reports degraded); a real fleet install always supplies one.
-*/}}
-{{- define "opencrane.fleetManagerDatabaseEnv" -}}
-{{- $db := .Values.fleetManager.database | default dict -}}
 {{- if $db.existingSecret -}}
 - name: DATABASE_URL
   valueFrom:
@@ -238,16 +107,6 @@ cluster-wide Secret read path: artifact-service keeps its receipt signer in a si
 */}}
 {{- define "opencrane.namespacedRbac" -}}
 true
-{{- end }}
-
-{{/*
-Whether a namespaced (per-instance) cert Issuer should be rendered instead of a
-cluster-singleton ClusterIssuer (brief B4). Only true when multi-instance is on
-AND `multiInstance.certIssuer` is `namespaced`; legacy installs stay ClusterIssuer.
-*/}}
-{{- define "opencrane.namespacedCertIssuer" -}}
-{{- $mi := .Values.multiInstance | default dict -}}
-{{- and $mi.enabled (eq (default "cluster" $mi.certIssuer) "namespaced") -}}
 {{- end }}
 
 {{/*
@@ -296,16 +155,6 @@ acme:
         ingress:
           ingressClassName: {{ $ingress.className | default "nginx" | quote }}
 {{- end }}
-{{- end }}
-
-{{/*
-Whether a namespaced (per-instance) SecretStore should be rendered instead of a
-cluster-singleton ClusterSecretStore (brief B4). Only true when multi-instance is
-on AND `multiInstance.secretStore` is `namespaced`; legacy stays ClusterSecretStore.
-*/}}
-{{- define "opencrane.namespacedSecretStore" -}}
-{{- $mi := .Values.multiInstance | default dict -}}
-{{- and $mi.enabled (eq (default "cluster" $mi.secretStore) "namespaced") -}}
 {{- end }}
 
 {{/*
@@ -386,9 +235,10 @@ Call with a dict carrying the root context + the logical service name, e.g.:
 
 NODE_ENV + LOG_LEVEL are always emitted so logs are consistent JSON. The OTEL_*
 vars are emitted only when observability.otel.enabled, pointing apps at the
-release-local collector Service; omitting them leaves @opencrane/observability's
+operator-supplied release-local collector Service; omitting them leaves @opencrane/observability's
 startTelemetry a no-op (it keys off OTEL_EXPORTER_OTLP_ENDPOINT). The service name
-is also set in code, so this stays correct even if the env var is dropped.
+is also set in code, so this stays correct even if the env var is dropped. This chart
+does not deploy the operator-supplied collector.
 */}}
 {{- define "opencrane.observabilityEnv" -}}
 {{- $ctx := .ctx -}}

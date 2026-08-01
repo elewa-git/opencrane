@@ -1,7 +1,7 @@
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-job.js";
+import { __AgentRuntimeAttemptResourceName, __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-job.js";
 import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "../agent-runtime-job.types.js";
 
 /** Create one valid immutable run-attempt assignment. */
@@ -39,6 +39,12 @@ function _Profile(): AgentRuntimeJobProfile
 
 describe("personal-runtime attempt Job", function _Suite()
 {
+	it("derives the same deterministic Job name without exposing a runtime profile", function _DerivesName()
+	{
+		const assignment = _Assignment();
+		expect(__AgentRuntimeAttemptResourceName(assignment.siloId, assignment.runId, assignment.attempt)).toBe(__BuildSuspendedAgentRuntimeJob(assignment, _Profile()).metadata?.name);
+	});
+
 	it("derives one stable resource identity per run attempt", function _DeterministicIdentity()
 	{
 		const first = __BuildSuspendedAgentRuntimeJob(_Assignment(), _Profile());
@@ -88,6 +94,8 @@ describe("personal-runtime attempt Job", function _Suite()
 		expect(runtime?.env).toContainEqual({ name: "OPENCRANE_RUNTIME_LITELLM_KEY_PATH", value: "/var/run/opencrane/litellm/key" });
 		expect(runtime?.env).toContainEqual({ name: "OPENCRANE_RUNTIME_LITELLM_BASE_URL", value: "http://litellm.opencrane-silo-1.svc.cluster.local:4000" });
 		expect(runtime?.env).not.toContainEqual(expect.objectContaining({ name: expect.stringMatching(/KEY$/), value: expect.stringMatching(/^sk-/) }));
+		expect(serialized).not.toContain("envFrom");
+		expect(serialized).not.toMatch(/(?:OPENAI|ANTHROPIC|GEMINI|MISTRAL|DEEPSEEK)_API_KEY/);
 		expect(serialized).not.toContain("persistentVolumeClaim");
 		expect(serialized).not.toContain("secretKeyRef");
 		expect(serialized).not.toContain("secretName");
@@ -103,7 +111,7 @@ describe("personal-runtime attempt Job", function _Suite()
 		expect(function _InvalidAttempt() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), attempt: 0 }, _Profile()); }).toThrow(/positive safe integer/);
 		expect(function _MutableImageTag() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), image: "ghcr.io/elewa-git/opencrane-agent-runtime:latest" }); }).toThrow(/immutable image/);
 		expect(function _InvalidPullPolicy() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), imagePullPolicy: "Sometimes" as "Always" }); }).toThrow(/image pull policy/);
-		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-sielewa-git _Profile()); }).toThrow(/different namespaces/);
+		expect(function _SameNamespaceServer() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), namespace: "opencrane-silo-1" }, _Profile()); }).toThrow(/different namespaces/);
 		expect(function _UnboundedScratch() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), scratchSize: "2Gi" }); }).toThrow(/bounded scratch/);
 		expect(function _MissingResourceLimits() { __BuildSuspendedAgentRuntimeJob(_Assignment(), { ..._Profile(), resources: {} }); }).toThrow(/CPU and memory requests/);
 		expect(function _MissingBootstrapReference() { __BuildSuspendedAgentRuntimeJob({ ..._Assignment(), bootstrapReference: "" }, _Profile()); }).toThrow(/invalid authority coordinate/);

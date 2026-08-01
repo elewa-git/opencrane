@@ -21,7 +21,7 @@ export interface PersonaApprovalSnapshot
 	/** Profile owning the revision. */
 	readonly revisionProfileId: string;
 	/** Interview state supporting the revision. */
-	readonly interviewState: "in_progress" | "completed" | "retaken";
+	readonly interviewState: "in_progress" | "completed";
 	/** Number of explicit provenance-linked insights. */
 	readonly insightCount: number;
 	/** Exact reviewed template digest pinned by the revision. */

@@ -2,8 +2,8 @@
  * Default redaction paths applied by every logger created through this package.
  *
  * Pino replaces the value at each path with `[Redacted]` before serialisation,
- * so secrets and bearer tokens never reach stdout / the collector / Cloud
- * Logging even when an object is logged wholesale.
+ * so secrets and bearer tokens never reach stdout or a configured log backend
+ * even when an object is logged wholesale.
  */
 
 /**

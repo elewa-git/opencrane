@@ -6,10 +6,8 @@ import { GatewayMode } from "@opencrane/state/gateways";
  * Data gateways bind to their live (OpenCrane-backed) implementations, except
  * the per-token exceptions documented in `provideControlPlaneGateways`.
  */
-export const environment: { gatewayMode: GatewayMode; liveConversation?: boolean } =
+export const environment: { gatewayMode: GatewayMode } =
 {
 	/** Bind every swappable gateway to its live implementation where one exists. */
-	gatewayMode: "live",
-	/** Enable the live OpenClaw conversation gateway (W3a). */
-	liveConversation: true
+	gatewayMode: "live"
 };

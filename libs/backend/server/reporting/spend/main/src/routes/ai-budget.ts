@@ -1,19 +1,16 @@
-import * as k8s from "@kubernetes/client-node";
 import { Router } from "express";
 import type { PrismaClient } from "@prisma/client";
 
-import { _DeleteAccountBudget, _GetAccountBudgets, _GetGlobalBudget, _GetLiteLlmKey, _GetTenantSpend, _PutAccountBudget, _PutGlobalBudget, _RevokeLiteLlmKey } from "../core/ai-budget.logic.js";
+import { _DeleteAccountBudget, _GetAccountBudgets, _GetGlobalBudget, _PutAccountBudget, _PutGlobalBudget } from "../core/ai-budget.logic.js";
 
 /**
  * Router for AI spend control and budget management.
  */
-export function aiBudgetRouter(coreApi: k8s.CoreV1Api, prisma: PrismaClient): Router
+export function aiBudgetRouter(prisma: PrismaClient): Router
 {
   const router = Router();
   const deps = {
-    coreApi,
     prisma,
-    namespace: process.env.NAMESPACE ?? "default",
   };
 
   /** Returns global monthly spend ceiling. */
@@ -44,24 +41,6 @@ export function aiBudgetRouter(coreApi: k8s.CoreV1Api, prisma: PrismaClient): Ro
   router.delete("/accounts/:userId", async function _deleteAccountBudget(req, res)
   {
     await _DeleteAccountBudget(req, res, deps);
-  });
-
-  /** Returns a tenant spend summary sourced from LiteLLM usage APIs. */
-  router.get("/:tenantName/spend", async function _getTenantSpend(req, res)
-  {
-    await _GetTenantSpend(req, res, deps);
-  });
-
-  /** Returns persisted or syncable LiteLLM key metadata for a tenant. */
-  router.get("/:tenantName/litellm-key", async function _getLiteLlmKey(req, res)
-  {
-    await _GetLiteLlmKey(req, res, deps);
-  });
-
-  /** Revokes the active LiteLLM key for a tenant by deleting the mounted Secret and auditing the action. */
-  router.post("/:tenantName/litellm-key/revoke", async function _revokeLiteLlmKey(req, res)
-  {
-    await _RevokeLiteLlmKey(req, res, deps);
   });
 
   return router;

@@ -7,11 +7,11 @@
 
 ## Integration Seam
 
-The frontend is **just another client of the opencrane-api** ([API-first](./app-specific.md#api-first-rule)) — never a privileged path:
+The frontend is **just another client of the opencrane-server** ([API-first](./app-specific.md#api-first-rule)) — never a privileged path:
 
 - It consumes the public `/api/v1` surface through the generated typed client in `@opencrane/contracts` (`___CreateControlPlaneClient` + `paths`). Don't hand-roll request/response shapes that already exist there.
 - It authenticates as a human via an OIDC session and gets no capability the API does not grant every client.
-- Any new UI feature must be backed by an API endpoint first; the UI wires to that, it does not introduce opencrane-api behaviour of its own.
+- Any new UI feature must be backed by an API endpoint first; the UI wires to that, it does not introduce opencrane-server behaviour of its own.
 
 ## PrimeNG Standard
 

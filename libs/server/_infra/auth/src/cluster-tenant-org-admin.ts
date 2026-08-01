@@ -1,23 +1,19 @@
 import type { Request, RequestHandler } from "express";
 
-import { _IsDevAuthMode } from "./auth-mode.js";
 import type { BillingAccountReader, OrgManagerReader } from "./cluster-tenant-org-admin.types.js";
 
 export type { BillingAccountReader, OrgManagerReader } from "./cluster-tenant-org-admin.types.js";
 
 /**
- * Resolve the caller's subject from the session, fail-closed. Under the dev-mode
- * bypass (no real auth configured) a missing session yields a stable synthetic
- * subject; otherwise the empty string (caller is unauthenticated).
+ * Resolve the caller's subject from the verified session, fail-closed.
+ *
+ * @param req - Authenticated Express request.
+ * @returns The verified subject or an empty string when authentication is absent.
  */
 function _callerSubject(req: Request): string
 {
   const sub = typeof req.session?.authUser?.sub === "string" ? req.session.authUser.sub.trim() : "";
-  if (sub)
-  {
-    return sub;
-  }
-  return _IsDevAuthMode() ? "dev-local-subject" : "";
+  return sub;
 }
 
 /**
@@ -28,7 +24,7 @@ function _callerSubject(req: Request): string
  * gate that replaces it.
  *
  * Posture:
- *   1. No session — FAIL OPEN under the dev-mode bypass; FAIL CLOSED otherwise (401).
+ *   1. No session — fail closed (401).
  *   2. Platform operator — always allowed, no billing account required.
  *   3. Other established session — allow iff a billing account exists for the caller's
  *      subject; otherwise 403 with a code the SPA can use to route the user to billing.
@@ -42,14 +38,9 @@ export function _RequireBillingAccountForOrgCreate(reader: BillingAccountReader)
   {
     const authUser = req.session?.authUser;
 
-    // 1. No session — honour the auth posture (dev opens the bypass, real auth denies).
+    // 1. No session is never an authority grant.
     if (!authUser)
     {
-      if (_IsDevAuthMode())
-      {
-        next();
-        return;
-      }
       res.status(401).json({ error: "Authentication required", code: "UNAUTHORIZED" });
       return;
     }
@@ -91,7 +82,7 @@ export function _RequireBillingAccountForOrgCreate(reader: BillingAccountReader)
  * `isPlatformOperator` — never request input beyond the resource name in the path.
  *
  * Posture:
- *   1. No session — FAIL OPEN under the dev-mode bypass, FAIL CLOSED otherwise (401).
+ *   1. No session — fail closed (401).
  *   2. Platform operator — allow.
  *   3. Owner/admin membership of the named org — allow; else 403.
  *
@@ -104,14 +95,9 @@ export function _RequireOrgManager(reader: OrgManagerReader): RequestHandler
   {
     const authUser = req.session?.authUser;
 
-    // 1. No session — honour the auth posture.
+    // 1. No session is never an authority grant.
     if (!authUser)
     {
-      if (_IsDevAuthMode())
-      {
-        next();
-        return;
-      }
       res.status(401).json({ error: "Authentication required", code: "UNAUTHORIZED" });
       return;
     }

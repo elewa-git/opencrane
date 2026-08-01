@@ -1,129 +1,53 @@
 # Cluster deployment
 
-For production, run OpenCrane on a managed Kubernetes cluster. Because OpenCrane is
-**plain Kubernetes** — standard storage (PVC), standard ingress, in-cluster
-PostgreSQL, Kubernetes Secrets — **any conformant cluster works the same way**.
+Run OpenCrane on any **conformant Kubernetes cluster** with the storage, networking and
+admission features required by the silo chart.
 
-There are no required cloud-specific features. A managed cluster is just a Kubernetes
-cluster someone else runs the nodes for.
+## Cluster requirements
 
-## Provider support
+| Requirement | Why it matters |
+|---|---|
+| Kubernetes 1.30+ | Stable validating-admission policy for runtime Jobs |
+| Default StorageClass | Persistent trusted services |
+| NetworkPolicy-enforcing CNI | Deny-by-default namespace floor |
+| Reachable image registry | Immutable controller and runtime images |
+| Ingress and certificate management | Public UI and API host |
+| PostgreSQL | Canonical run, policy and audit authority |
 
-| Provider | Managed Kubernetes | Status |
-|----------|--------------------|--------|
-| **Google Cloud** | GKE | ✅ Supported |
-| **AWS** | EKS | 🚧 TODO |
-| **Azure** | AKS | 🚧 TODO |
-| **Alibaba Cloud** | ACK | 🙌 Looking for contributors |
-
-"Supported" means there's a documented, tested path below. The others are plain
-Kubernetes too, so OpenCrane should run on them today — they just don't have a
-first-class guide yet. Contributions welcome.
-
-## The shape of any cluster deploy
-
-A working cluster requires **two Helm releases** installed in order:
-
-1. **Have a cluster** — create one with your provider, or use an existing one. Make
-   sure `kubectl` points at it.
-2. **Make images reachable** — pull OpenCrane's images from a registry your cluster
-   can read (the public images, your own mirror, or your provider's registry).
-3. **Install the fleet release** (`apps/fleet-platform`, chart `opencrane-fleet`) — this
-   installs the cluster-wide bootstrap (CRDs, cert-manager issuer, ingress-nginx,
-   external-dns, CNPG operator) plus the fleet-manager.
-4. **Install one silo release per org** (`apps/_infra/deploy-k8s`, chart
-   `opencrane-silo`) — the per-org control plane and runtime planes.
-5. **Point your domain** at the ingress — see [Set up your domain](/guide/dns).
-
-## Two deploy profiles
-
-Two thin profile scripts over the shared install core
-(`apps/_infra/deploy-k8s/platform/k8s-deploy.sh`) pick the posture for you so the profiles cannot
-diverge:
-
-| Profile | Script | What you get |
-|---------|--------|--------------|
-| **Single-tenant** (default) | `apps/_infra/deploy-k8s/platform/deploy-single-tenant.sh` | One organisation, seeded at install. Self-service org creation + billing are **off**; the script runs the fleet pass then the silo pass in one call. |
-| **Multi-tenant fleet** | `apps/fleet-platform/deploy.sh` + `apps/_infra/deploy-k8s/deploy.sh` | The full self-service platform — any signed-in user can create an org; fleet wildcard + the ClusterTenant manager are on; silo releases installed separately per org. |
+## Deploy one organisation silo
 
 ```bash
-# Single-tenant: one org served at <org-name>.<base-domain>
-apps/_infra/deploy-k8s/platform/deploy-single-tenant.sh \
-  --base-domain dev.opencrane.ai \
-  --org-name acme --org-owner-email owner@acme.example
+export OIDC_ISSUER_URL=https://identity.example.com
+export OIDC_CLIENT_ID=<organisation-client-id>
 
-# Multi-tenant fleet: step 1 — fleet release (cluster-wide bootstrap + fleet-manager)
-apps/fleet-platform/deploy.sh \
-  --base-domain opencrane.example.com \
-  --cert-manager --acme-email ops@example.com --dns01-provider clouddns
-
-# Multi-tenant fleet: step 2 — silo release per org (repeat for each ClusterTenant)
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example.com \
-  --cluster-tenant acme
+  --cluster-tenant acme \
+  --postgres-credentials-secret opencrane-postgres-bootstrap \
+  --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
+  --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
 ```
 
-Both forward every shared-core flag (cert-manager mode, OIDC, image tags, …) verbatim.
+The `opencrane-silo` chart composes the trusted control plane, supporting services,
+agent controller and separate restricted Job namespaces. Cluster-wide controllers remain
+external prerequisites. Create the three named PostgreSQL bootstrap Secrets in the target
+namespace before running the script; each must hold distinct credentials.
 
-## Check the cluster first (`--preflight`)
+## Validate the boundary
 
-Before installing, run a read-only environment check that fails **fast** with exact
-remediation rather than leaving a half-installed, crash-looping cluster:
+After installation:
 
-```bash
-apps/fleet-platform/deploy.sh --base-domain <your-domain> --cert-manager \
-  --acme-email you@org --dns01-provider clouddns --preflight
-```
+1. check that the trusted, personal-runtime and managed-runtime namespaces are distinct;
+2. inspect their Pod Security labels, quotas and default-deny policies;
+3. confirm the runtime image is absent from long-lived Deployments;
+4. confirm the controller and runtime images use immutable digests; and
+5. start one run and verify it receives a fresh Job assignment.
 
-It verifies a default StorageClass exists, a NetworkPolicy-enforcing CNI is present,
-the first-party images are pullable, your base domain's NS delegation resolves, and the
-DNS-write capability shared by external-dns + cert-manager DNS-01 is in place. It makes
-**no** changes; re-run without `--preflight` to install.
-
-## Google Cloud (GKE) ✅
-
-GKE is treated as a standard Kubernetes cluster — no GCP-only features required.
-
-```bash
-# 1. Create a cluster (Autopilot manages the nodes for you)
-gcloud container clusters create-auto opencrane --region <region>
-gcloud container clusters get-credentials opencrane --region <region>
-
-# 2. Install the fleet release
-apps/fleet-platform/deploy.sh --base-domain <your-domain>
-
-# 3. Install a silo release per org
-apps/_infra/deploy-k8s/deploy.sh \
-  --base-domain <your-domain> \
-  --cluster-tenant <org-name>
-```
-
-Then [point your domain](/guide/dns) at the ingress IP.
-
-::: details Optional GCP-native extras
-If you *want* deeper GCP integration — GCS-backed tenant storage with Workload
-Identity, Secret Manager via External Secrets, or Cloud DNS for automatic records —
-those are available as opt-in overlays. They aren't required, and the default GKE
-deploy stays plain Kubernetes. See [Hosting & deployment](/operators/hosting).
+::: tip
+Managed Kubernetes services are hosting choices, not different OpenCrane architectures.
+Keep provider-specific identity and storage configuration outside the runtime authority.
 :::
-
-## AWS (EKS) 🚧
-
-**TODO.** A first-class EKS guide isn't written yet. Since OpenCrane is plain
-Kubernetes, a standard EKS cluster with an ingress controller and a default
-StorageClass should work with the deploy scripts. Tried it? A write-up
-contribution would land you in the table above.
-
-## Azure (AKS) 🚧
-
-**TODO.** No first-class AKS guide yet — same story as EKS: standard cluster, run the
-deploy scripts. Contributions welcome.
-
-## Alibaba Cloud (ACK) 🙌
-
-**Looking for contributors.** We'd love a tested ACK path. If you run OpenCrane on
-Alibaba Cloud Container Service for Kubernetes, please open a PR with the steps.
 
 ## Next
 
-→ **[Set up your domain](/guide/dns)** → **[Create your first assistant](/guide/first-tenant)**
+→ [Set up your domain](/guide/dns) → [Create your first agent](/guide/first-agent)

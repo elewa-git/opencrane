@@ -34,7 +34,7 @@ function _revisionRow()
 		digest: `sha256:${"1".repeat(64)}`,
 		promptPolicyVersion: "prompt-v1",
 		personaRevisionId: "persona-1",
-		modelPolicyId: "model-v1",
+		modelDefinitionId: "model-definition-1",
 		budget: { maxTurns: 8, maxTokens: 8000, maxDurationMs: 60000 },
 		authoredBy: "user-1",
 		createdAt: new Date("2026-07-18T00:00:00.000Z"),

@@ -4,47 +4,37 @@
 
 ## What it owns
 
-This package is part of **Reporting** — the economics side of OpenCrane. It owns how much a tenant
-is spending on model calls, the budget ceilings that cap that spend, and the per-tenant **virtual
-key** metadata used to call models. Model traffic flows through **LiteLLM**, the gateway/proxy
-OpenCrane runs in front of every model provider; a virtual key is a scoped credential LiteLLM
-issues per tenant so its usage and budget can be tracked and revoked independently.
+This package is part of **Reporting** — the economics side of OpenCrane. It owns token-usage views
+and the global and per-account budget ceilings that cap model use.
 
-It sits between LiteLLM and the operator's spend views, reading live usage and exposing budget and
-key controls:
+It reads the canonical usage snapshots and exposes the operator's token-usage and budget controls:
 
 ```
- dashboard / operator                       tenant deletion (kill path)
-        │  GET spend · budgets · key                │  revoke
-        ▼                                            ▼
+ dashboard / operator
+        │  GET token usage · manage budgets
+        ▼
  ┌───────────────────────────────────────────────────────────────┐
  │  spend   ◄── HERE                                               │
- │  · normalize LiteLLM usage  · global + per-account ceilings     │
- │  · virtual-key metadata + revoke (delete mounted Secret)        │
+ │  · aggregate token usage  · global + per-account ceilings       │
  └───────────────────────────────────────────────────────────────┘
-        │  usage query                          │  key delete (by alias)
-        ▼                                        ▼
- LiteLLM proxy  (spend + key APIs, master-key auth)
+        │  persisted usage snapshots
+        ▼
+ OpenCrane product database
 ```
 
-Invariant: OpenCrane never persists a raw virtual key — only its **alias** — so upstream deletion
-is always by alias. Revocation is resilient: the mounted Kubernetes Secret delete is what actually
-stops the pod from using the key, so a flaky or absent LiteLLM never blocks a revoke (the upstream
-delete is best-effort and the outcome is recorded in the audit entry). A missing `LITELLM_MASTER_KEY`
-fails closed with a `503` rather than guessing.
+Invariant: budget and token-usage reads use the canonical product database. The package does not
+accept raw provider credentials or call a model provider directly.
 
 ## Public surface
 
-- `SpendLogic` — normalises a tenant's spend from the LiteLLM usage API (with tolerant field-picking and a local fallback).
+- `tokenUsageRouter` — exposes per-account token usage at `/api/v1/token-usage`.
 - `_GetGlobalBudget` / `_PutGlobalBudget`, `_GetAccountBudgets` / `_PutAccountBudget` / `_DeleteAccountBudget` — the global and per-account monthly ceilings.
-- `_GetTenantSpend`, `_GetLiteLlmKey`, `_RevokeLiteLlmKey`, `_deleteLiteLlmKey` — tenant spend summary and virtual-key metadata / revocation.
-- The `spend`, `token-usage`, and `ai-budget` routers (mounted at `/api/v1/spend`, `/api/v1/token-usage`, `/api/v1/ai-budget`) and the spend types.
+- `aiBudgetRouter` — exposes the global and per-account controls at `/api/v1/ai-budget`.
 
 ## Boundary
 
-Consumed by the opencrane-server HTTP layer and by the tenants domain (which calls `_deleteLiteLlmKey`
-when tearing a tenant down). It reports and controls spend; it does not route model calls itself —
-that is LiteLLM's job.
+Consumed by the opencrane-server HTTP layer. It reports token usage and controls budgets; it does
+not route model calls itself — that is LiteLLM's job.
 
 ## Dependency direction
 
@@ -53,16 +43,10 @@ sibling domains.
 
 ## Data & persistence
 
-Owns `TenantLiteLlmKey`, `TokenUsageSnapshot`, `GlobalBudgetSetting`, and `AccountBudgetSetting` in
+Owns `TokenUsageSnapshot`, `GlobalBudgetSetting`, and `AccountBudgetSetting` in
 `apps/opencrane/prisma/schema/spend.prisma`.
-
-## Runtime & config
-
-Reads `LITELLM_ENDPOINT` (default `http://litellm:4000`), `LITELLM_MASTER_KEY` (required for spend
-and key calls; absence fails closed), and `LITELLM_SPEND_PATH_TEMPLATE` (default
-`/spend/tenant/{tenant}`).
 
 ## See also
 
 - Parent index: [reporting](../../README.md)
-- Siblings: [awareness](../../awareness/main/README.md) · [metrics](../../metrics/main/README.md)
+- Related API: [OpenAPI overview](../../../../../../website/reference/api-overview.md)

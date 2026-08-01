@@ -15,8 +15,7 @@
 # the value flags and exec this core):
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
-#                            [--opencrane-server-tag TAG] [--operator-tag TAG]
-#                            [--tenant-tag TAG]
+#                            [--opencrane-server-tag TAG]
 #                            [--oidc-issuer-url URL] [--oidc-client-id ID]
 #                            [--oidc-redirect-uri URI] [--oidc-client-secret SECRET]
 #                            [--oidc-session-secret SECRET]
@@ -25,17 +24,10 @@
 #                            [--preflight] [--multi-ct]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
-#                            [--fleet-postgres-credentials-secret NAME] [--fleet-postgres-owner OWNER]
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
 #                            --litellm-postgres-credentials-secret NAME [--litellm-postgres-owner OWNER]
-#                            --langfuse-postgres-credentials-secret NAME [--langfuse-postgres-owner OWNER]
 #                            --postgres-admin-credentials-secret NAME [--postgres-admin-name NAME]
 #                            [--postgres-values FILE]
-#                            [--no-ingress-nginx]
-#                            [--no-external-dns]
-#                            [--cert-manager] [--acme-email EMAIL]
-#                            [--dns01-provider clouddns] [--dns01-credentials FILE]
-#                            [--dns01-project PROJECT_ID] [--dns-writer-gsa EMAIL]
 #                            [--values FILE] [--set k=v ...] [--helm-arg ARG ...]
 #                            [--reuse-values | --reset-values]
 #
@@ -47,7 +39,7 @@
 #
 # Image-tag float guard: after a prior release's --reset-then-reuse-values upgrade, component
 # images may be pinned to a specific tag (e.g. sha-5036a0a). If this invocation does not restate
-# those tags (no --opencrane-server-tag/--operator-tag/--tenant-tag) and does not explicitly float
+# that tag (no --opencrane-server-tag) and does not explicitly float
 # (OPENCRANE_ALLOW_TAG_FLOAT=1), the script detects the prior pin, warns loudly, and
 # automatically re-pins from the last release so pinned tags float silently (a live gotcha from
 # 2026-07-12 deploy). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to intentionally float tags to chart-default.
@@ -57,49 +49,14 @@
 # one-time fixes like --take-ownership (e.g. when a Certificate loses ownership across versions).
 # Repeatable: --helm-arg --take-ownership --helm-arg --force-fields-order.
 #
-# TLS / cert-manager (Step 2.5) has THREE modes:
-#   off (default)  — no cert-manager install; the chart renders no issuer/cert.
-#                    Use when TLS is terminated elsewhere (LB, external ingress).
-#   selfSigned     — `--cert-manager` alone. Installs cert-manager and a self-signed
-#                    ClusterIssuer. Issues instantly, no DNS challenge, NOT browser-
-#                    trusted. For dev / k3d / bare-IP clusters.
-#   acme (DNS-01)  — `--cert-manager --acme-email you@org --dns01-provider clouddns
-#                    [--dns01-credentials FILE]`. Installs cert-manager, waits on the
-#                    webhook, runs a DNS-01 preflight that FAILS FAST with the exact
-#                    remediation, then issues a browser-trusted wildcard via Let's
-#                    Encrypt. Wildcards REQUIRE DNS-01 (HTTP-01 cannot issue them).
-#                    On GKE Workload Identity pass --dns-writer-gsa EMAIL (Terraform output
-#                    dns_writer_service_account_email): the cert-manager + external-dns
-#                    controller SAs are annotated with this SHARED GSA, which must already be
-#                    bound roles/dns.admin. For an external zone pass a SA-key file via
-#                    --dns01-credentials instead (a Secret is created in the cert-manager NS).
-#
-# This step installs only the PLATFORM-WILDCARD issuer + cert. Per-org certs are a
-# runtime concern of the ClusterTenant reconciler, NOT an install concern.
-#
-# --base-domain is the platform org-wildcard BASE domain (e.g. dev.opencrane.ai). It is
+# --base-domain is the platform BASE domain (e.g. dev.opencrane.ai). It is
 # a first-class, VALIDATED install input (lowercase FQDN, ≥2 labels) that drives a single
 # source of truth: the chart's ingress.domain, the derived controlPlaneHost
-# (platform.<base-domain>), the cert-manager wildcard SANs (*.<domain>, <domain>,
-# controlPlaneHost), and the operator's per-org domain provisioning. NEVER hardcode a
-# real domain in the repo. `--domain` remains a backwards-compatible alias; acme TLS
-# REQUIRES --base-domain (a wildcard for *.<empty> is meaningless).
+# (platform.<base-domain>), and release hosts. Never hardcode a real domain in the repo.
 #
-# Bundled cluster singletons (default ON, auto-skip if already present):
-#   ingress-nginx — the ingress controller (skip with --no-ingress-nginx to BYO one).
-#   external-dns  — the DNS-record controller (skip with --no-external-dns to BYO one).
-#                   The operator emits namespaced DNSEndpoint CRs; external-dns (run with
-#                   --source=crd) reconciles them into Google Cloud DNS, scoped to
-#                   --base-domain, against the SAME managed zone as the cert-manager
-#                   DNS-01 solver. It needs zone write access → it SHARES the cert-manager
-#                   DNS-01 credentials: Workload Identity (the cert-manager SA's GSA bound
-#                   roles/dns.admin) by default, or the --dns01-credentials SA-key file for
-#                   an external zone. external-dns is only bundled in acme/clouddns mode
-#                   (that is where the shared zone + WI binding are established).
-#   Cognee        — the required graph-RAG service, installed IN-CHART via
+# In-chart services:
+#   Cognee        — the required graph-RAG service, installed via
 #                   clustertenantManager.cognee.install=true (set false to BYO an external one).
-# Each is gated by a `*.install` flag SEPARATE from the chart's `*.enabled`, so an
-# operator can bring their own while the chart still wires against it.
 #
 # The platform-operator seed email bootstraps the FIRST platform operator: the
 # caller whose VERIFIED OIDC email equals it becomes a platform operator. It is a
@@ -107,16 +64,16 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
-# --image-tag pins all three platform images (opencrane-ui, operator, tenant)
-# to the same tag. To roll a SINGLE component to a different build, pass the
-# matching per-component flag (e.g. --opencrane-server-tag sha-abc123); it overrides
-# --image-tag for that component only. ALWAYS bump component images this way —
+# --image-tag pins the OpenCrane server image. To roll it to a different build,
+# pass --opencrane-server-tag (for example, sha-abc123); it overrides --image-tag.
+# Always bump component images this way —
 # never `kubectl set image` / `kubectl patch` a managed deployment. An imperative
 # patch creates a `kubectl-*` field manager that owns the image field on the live
 # object and makes every later `helm upgrade` fail with a field-ownership conflict.
 #
-# Prereqs: kubectl (pointed at the target cluster), helm, an externally installed
-# CloudNativePG operator, and a pre-created PostgreSQL basic-auth Secret.
+# Prereqs: kubectl (pointed at the target cluster), helm, externally installed
+# CloudNativePG, ingress, and cert-manager controllers, plus pre-created PostgreSQL
+# basic-auth Secrets.
 # =============================================================================
 set -euo pipefail
 
@@ -152,14 +109,9 @@ NAMESPACE="opencrane-system"
 RELEASE="opencrane"
 IMAGE_TAG="latest"
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
-OPERATOR_TAG=""         # empty → falls back to IMAGE_TAG
-TENANT_TAG=""           # empty → falls back to IMAGE_TAG
-# --base-domain (canonical) is the platform org-wildcard BASE domain for this install
-# (e.g. dev.opencrane.ai). It drives the chart's ingress.domain + the derived
-# controlPlaneHost (platform.<base-domain>), the cert-manager wildcard SANs, and the
-# operator's per-org provisioning. NEVER hardcode a real domain in the repo — it is a
-# per-install input. `--domain` is kept as a backwards-compatible alias. Also accepts
-# OPENCRANE_BASE_DOMAIN so the wizard / CI can supply it off the command line.
+# --base-domain is the platform BASE domain for this install (e.g. dev.opencrane.ai).
+# It drives the chart's ingress.domain and derived release hosts. OPENCRANE_BASE_DOMAIN
+# lets the wizard or CI supply it off the command line.
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
 STORAGE_CLASS=""        # empty → cluster default StorageClass
 ARTIFACT_STORAGE_CLASS="" # resolved class for the durable, expandable ArtifactStore PVC
@@ -195,80 +147,23 @@ PLATFORM_OPERATOR_SEED_EMAIL="${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}"
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
 
-# cert-manager / TLS (Step 2.5). CERT_MANAGER stays off unless --cert-manager is given;
-# the mode is then selfSigned UNLESS an --acme-email + --dns01-provider promote it to
-# acme. ACME_EMAIL / DNS01_PROVIDER also accept env vars so CI/secret managers can
-# supply them off the command line. DNS01_CREDENTIALS is a path to a SA-key JSON used
-# only for an EXTERNAL DNS zone (Workload Identity needs no file — see _preflight_dns01).
-# OPENCRANE_CERT_MODE (off|selfSigned|acme) lets the wizard preset the mode without the
-# CLI flag; "off" leaves CERT_MANAGER off, anything else turns it on (acme is then driven
-# by the email/provider env below). Direct callers just use --cert-manager / --acme-email.
-case "${OPENCRANE_CERT_MODE:-off}" in
-  off) CERT_MANAGER="off" ;;
-  *)   CERT_MANAGER="on" ;;
-esac
-ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-${ACME_EMAIL:-}}"
-DNS01_PROVIDER="${OPENCRANE_DNS01_PROVIDER:-${DNS01_PROVIDER:-}}"
-DNS01_CREDENTIALS="${OPENCRANE_DNS01_CREDENTIALS:-${DNS01_CREDENTIALS:-}}"
-# GCP project that hosts the Cloud DNS zone for --base-domain. cert-manager's clouddns
-# solver requires a project (under BOTH Workload Identity and an external SA key), so it
-# is required in acme/clouddns mode. Defaults from the gcloud active project when unset.
-DNS01_PROJECT="${OPENCRANE_DNS01_PROJECT:-${DNS01_PROJECT:-}}"
-CERT_MANAGER_NAMESPACE="cert-manager"
-
-# ingress-nginx bundling (a cluster singleton like cert-manager). Installed by default
-# so a fresh cluster gets a working ingress class with no extra step; auto-skips when a
-# controller is already present. `--no-ingress-nginx` (or OPENCRANE_INSTALL_INGRESS_NGINX=0)
-# turns the bundling off to BYO a controller. This is SEPARATE from the chart's
-# ingress.enabled (whether Ingress objects render) — see values.yaml `ingressNginx`.
-INSTALL_INGRESS_NGINX="${OPENCRANE_INSTALL_INGRESS_NGINX:-1}"
-INGRESS_NGINX_NAMESPACE="ingress-nginx"
-
-# external-dns bundling (a cluster singleton like ingress-nginx / cert-manager). The
-# operator emits namespaced DNSEndpoint CRs and external-dns (--source=crd) reconciles
-# them into Google Cloud DNS, scoped to --base-domain, against the SAME managed zone as
-# the cert-manager DNS-01 solver and SHARING its zone-write credentials (WI roles/dns.admin
-# or the --dns01-credentials SA key). Installed by default, auto-skips when a controller is
-# already present. `--no-external-dns` (or OPENCRANE_INSTALL_EXTERNAL_DNS=0) turns the
-# bundling off to BYO a controller. SEPARATE from the chart's externalDns.enabled (whether
-# the operator declares DNSEndpoint CRs at all) — see values.yaml `externalDns`. Only
-# bundled in acme/clouddns mode, which is where the shared zone + WI binding are set up.
-INSTALL_EXTERNAL_DNS="${OPENCRANE_INSTALL_EXTERNAL_DNS:-1}"
-EXTERNAL_DNS_NAMESPACE="external-dns"
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
 POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_CREDENTIALS_SECRET:-}"
 POSTGRES_VALUES_FILE="${OPENCRANE_POSTGRES_VALUES:-}"
 POSTGRES_OWNER="${OPENCRANE_POSTGRES_OWNER:-opencrane}"
-FLEET_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_FLEET_POSTGRES_CREDENTIALS_SECRET:-}"
-FLEET_POSTGRES_OWNER="${OPENCRANE_FLEET_POSTGRES_OWNER:-opencrane_fleet}"
 OBOT_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_OBOT_POSTGRES_CREDENTIALS_SECRET:-}"
 OBOT_POSTGRES_OWNER="${OPENCRANE_OBOT_POSTGRES_OWNER:-obot}"
 LITELLM_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LITELLM_POSTGRES_CREDENTIALS_SECRET:-}"
 LITELLM_POSTGRES_OWNER="${OPENCRANE_LITELLM_POSTGRES_OWNER:-litellm}"
-LANGFUSE_POSTGRES_CREDENTIALS_SECRET="${OPENCRANE_LANGFUSE_POSTGRES_CREDENTIALS_SECRET:-}"
-LANGFUSE_POSTGRES_OWNER="${OPENCRANE_LANGFUSE_POSTGRES_OWNER:-langfuse}"
 POSTGRES_ADMIN_CREDENTIALS_SECRET="${OPENCRANE_POSTGRES_ADMIN_CREDENTIALS_SECRET:-}"
 POSTGRES_ADMIN_NAME="${OPENCRANE_POSTGRES_ADMIN_NAME:-opencrane_database_admin}"
-# The central fleet profile owns a separate registry database. Silo wrappers disable
-# it through fleetManager.enabled=false; an explicit environment override exists for
-# other thin profiles that do not render the fleet manager.
-INSTALL_FLEET_DATABASE="${OPENCRANE_INSTALL_FLEET_DATABASE:-1}"
-# The shared DNS-writer Google service account (Terraform `dns` module output
-# dns_writer_service_account_email) external-dns + the cert-manager DNS-01 solver impersonate
-# via Workload Identity. On GKE the controller's KSA must carry the annotation
-# `iam.gke.io/gcp-service-account=<this>` to complete the WI handshake — Terraform creates the
-# binding, but the KSA annotation is an install-time concern. Required for the WI path (no
-# --dns01-credentials) on GKE; ignored for the external-SA-key path. Also OPENCRANE_DNS_WRITER_GSA.
-DNS_WRITER_GSA="${OPENCRANE_DNS_WRITER_GSA:-${DNS_WRITER_GSA:-}}"
-
 # --preflight runs a fail-FAST environment check BEFORE any cluster mutation and exits 0/1
 # without installing. It catches the failures that otherwise surface as a half-installed,
 # crash-looping cluster: no default StorageClass (every PVC pends), a CNI that silently
 # ignores NetworkPolicy (the isolation model is a no-op), unpullable first-party images,
-# a base domain whose NS delegation does not resolve (acme orders + external-dns hang), and
-# a missing DNS-write capability shared by external-dns + cert-manager. Also via
+# a base domain whose NS delegation does not resolve. Also via
 # OPENCRANE_PREFLIGHT=1. It is advisory unless run — the install itself does not auto-run it.
 PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
 
@@ -281,12 +176,8 @@ PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
 # Also via OPENCRANE_MULTI_CT=1.
 MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 
-# --auto-ingress-ip derives ingress.externalIp from the ingress-nginx LoadBalancer after
-# it is installed (so per-org *.<domain> A records resolve without hand-copying the IP).
-# Opt-in; an explicit ingress.externalIp --set always wins. Also via OPENCRANE_AUTO_INGRESS_IP=1.
-AUTO_INGRESS_IP="${OPENCRANE_AUTO_INGRESS_IP:-0}"
-# --verify runs an advisory post-deploy check (pods Running, DNSEndpoints present, external-dns
-# error-free, opencrane-ui host resolves). Never fails the install. Also via OPENCRANE_VERIFY=1.
+# --verify runs an advisory post-deploy check (pods Running and host resolution). Never fails
+# the install. Also via OPENCRANE_VERIFY=1.
 VERIFY="${OPENCRANE_VERIFY:-0}"
 
 POSTGRES_RELEASE=""
@@ -299,14 +190,10 @@ err()  { echo -e "\033[0;31m[k8s-deploy]\033[0m $1" >&2; }
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --base-domain)   BASE_DOMAIN="$2"; shift 2 ;;
-    --domain)        BASE_DOMAIN="$2"; shift 2 ;;  # backwards-compatible alias
     --namespace)     NAMESPACE="$2"; shift 2 ;;
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
-    --opencrane-ui-tag)     CONTROL_PLANE_TAG="$2"; shift 2 ;;  # backwards-compatible alias (pins the opencrane-server image)
-    --operator-tag)     OPERATOR_TAG="$2"; shift 2 ;;
-    --tenant-tag)       TENANT_TAG="$2"; shift 2 ;;
     --storage-class) STORAGE_CLASS="$2"; shift 2 ;;
     --oidc-issuer-url)     OIDC_ISSUER_URL="$2"; shift 2 ;;
     --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
@@ -317,36 +204,20 @@ while [[ $# -gt 0 ]]; do
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
-    --auto-ingress-ip)  AUTO_INGRESS_IP="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
-    --no-ingress-nginx) INSTALL_INGRESS_NGINX="0"; shift ;;
-    --no-external-dns)  INSTALL_EXTERNAL_DNS="0"; shift ;;
     --postgres-credentials-secret) POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-owner) POSTGRES_OWNER="$2"; shift 2 ;;
-    --fleet-postgres-credentials-secret) FLEET_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
-    --fleet-postgres-owner) FLEET_POSTGRES_OWNER="$2"; shift 2 ;;
     --obot-postgres-credentials-secret) OBOT_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --obot-postgres-owner) OBOT_POSTGRES_OWNER="$2"; shift 2 ;;
     --litellm-postgres-credentials-secret) LITELLM_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --litellm-postgres-owner) LITELLM_POSTGRES_OWNER="$2"; shift 2 ;;
-    --langfuse-postgres-credentials-secret) LANGFUSE_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
-    --langfuse-postgres-owner) LANGFUSE_POSTGRES_OWNER="$2"; shift 2 ;;
     --postgres-admin-credentials-secret) POSTGRES_ADMIN_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-admin-name) POSTGRES_ADMIN_NAME="$2"; shift 2 ;;
     --postgres-values) POSTGRES_VALUES_FILE="$2"; shift 2 ;;
-    --dns-writer-gsa)   DNS_WRITER_GSA="$2"; shift 2 ;;
-    --cert-manager)  CERT_MANAGER="on"; shift ;;
-    --acme-email)    ACME_EMAIL="$2"; shift 2 ;;
-    --dns01-provider)    DNS01_PROVIDER="$2"; shift 2 ;;
-    --dns01-credentials) DNS01_CREDENTIALS="$2"; shift 2 ;;
-    --dns01-project)     DNS01_PROJECT="$2"; shift 2 ;;
     --values)        VALUES_FILE="$2"; shift 2 ;;
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
-    --set)
-      [[ "$2" == "fleetManager.enabled=false" ]] && INSTALL_FLEET_DATABASE="0"
-      EXTRA_SET+=(--set "$2"); shift 2
-      ;;
+    --set)           EXTRA_SET+=(--set "$2"); shift 2 ;;
     --helm-arg)      EXTRA_HELM_ARGS+=("$2"); shift 2 ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
@@ -358,7 +229,7 @@ kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Po
 
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
-# *.<domain> wildcard SANs and <org>.<domain> hosts. ACME wildcard issuance has no
+# release hosts.
 # meaning without it, so acme mode REQUIRES a base domain (fail fast, not a stuck order).
 _validate_base_domain() {
   local d="$1"
@@ -420,10 +291,8 @@ _run_preflight() {
     fi
   }
   _preflight_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-  [[ "$INSTALL_FLEET_DATABASE" == "0" ]] || _preflight_postgres_bootstrap fleet "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER"
   _preflight_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
   _preflight_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
-  _preflight_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
   _preflight_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
   # 2. NetworkPolicy-enforcing CNI — the platform's isolation model is built on
@@ -440,16 +309,6 @@ _run_preflight() {
     fi
   fi
 
-  # 2b. Tenant StorageClass encryption (ADVISORY) — tenant state lands on the cluster's
-  #     default StorageClass unless --storage-class pins one. At-rest encryption is a
-  #     StorageClass/provider concern the deploy script cannot positively verify, so this
-  #     only WARNS (never fails): flag when no explicit tenant StorageClass is set so a
-  #     multi-CT operator consciously chooses an encrypted/CMEK class (see tenant.storage
-  #     .storageClassName) rather than inheriting an unknown default.
-  if [[ "$MULTI_CT" == "1" && -z "$STORAGE_CLASS" ]]; then
-    warn "Preflight: --multi-ct with no --storage-class — tenant state PVCs will use the cluster default StorageClass, whose at-rest encryption is unverified. Pin an encrypted/CMEK class (--storage-class, or tenant.storage.storageClassName) for multi-tenant isolation."
-  fi
-
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
   #    sits in ImagePullBackOff. A best-effort manifest check (skopeo/crane/docker) that
   #    only WARNS if no inspector is available (we never block on a missing local tool).
@@ -464,57 +323,16 @@ _run_preflight() {
     warn "Preflight: no image inspector (skopeo/crane/docker) — skipping the image-pull check."
   fi
 
-  # 4. Registrar NS-delegation for --base-domain — acme orders AND external-dns both hang
-  #    if the domain's authoritative name servers are not delegated to the DNS zone. We
+  # 4. Registrar NS-delegation for --base-domain. The public host cannot resolve if the
+  #    domain's authoritative name servers are not delegated to the DNS zone. We
   #    only assert it resolves to SOME name servers (an undelegated domain returns none).
   if [[ -n "$BASE_DOMAIN" ]]; then
     if command -v dig >/dev/null 2>&1; then
-      [[ -n "$(dig +short NS "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar (see Terraform output dns_name_servers), or DNS-01 issuance + external-dns will hang.")
+      [[ -n "$(dig +short NS "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar (see Terraform output dns_name_servers).")
     elif command -v host >/dev/null 2>&1; then
-      host -t NS "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar, or DNS-01 issuance + external-dns will hang.")
+      host -t NS "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar.")
     else
       warn "Preflight: no dig/host — skipping the NS-delegation check for '$BASE_DOMAIN'."
-    fi
-  fi
-
-  # 5. DNS-write capability — covers BOTH external-dns and the cert-manager DNS-01 solver,
-  #    which SHARE one zone-write credential. Only relevant when acme/clouddns is requested
-  #    (selfSigned/off write no zone). Acceptable: an external SA-key file (--dns01-credentials)
-  #    OR a Workload-Identity GSA bound roles/dns.admin (--dns-writer-gsa, annotating the KSAs).
-  #    The check FAILS (never warn-and-pass) when it cannot positively confirm the capability —
-  #    a green preflight must mean the actual install will not fail closed on the same input.
-  local _is_acme=0
-  if [[ "$CERT_MANAGER" == "on" && -n "$ACME_EMAIL" && -n "$DNS01_PROVIDER" ]]; then _is_acme=1; fi
-  if [[ "$_is_acme" == "1" ]]; then
-    if [[ -n "$DNS01_CREDENTIALS" ]]; then
-      [[ -f "$DNS01_CREDENTIALS" ]] || PF_FAILS+=("--dns01-credentials '$DNS01_CREDENTIALS' not found. external-dns + cert-manager DNS-01 share this SA key for zone writes.")
-    else
-      # Workload-Identity path. The KSAs need the shared DNS-writer GSA to annotate them, so
-      # --dns-writer-gsa is required here too (the install fails closed without it).
-      if [[ -z "$DNS_WRITER_GSA" ]]; then
-        PF_FAILS+=("Workload-Identity DNS writes need the shared DNS-writer GSA. Pass --dns-writer-gsa <gsa>@<project>.iam.gserviceaccount.com (Terraform output dns_writer_service_account_email) so the external-dns + cert-manager KSAs can be annotated, or pass --dns01-credentials for an external zone.")
-      fi
-      # Workload Identity ENABLED on the cluster — a roles/dns.admin binding is useless if
-      # the cluster can't impersonate the GSA. GKE runs the gke-metadata-server DaemonSet in
-      # kube-system iff Workload Identity is enabled; its absence is the dead-external-dns
-      # root cause (records never written, no auth error — the pod just can't get a token).
-      if ! kubectl get ds -n kube-system gke-metadata-server -o name >/dev/null 2>&1; then
-        PF_FAILS+=("Workload Identity is NOT enabled on this cluster (no gke-metadata-server DaemonSet in kube-system), so external-dns + cert-manager DNS-01 cannot impersonate the DNS-writer GSA — records silently never get written. Enable it: gcloud container clusters update <cluster> --workload-pool=<project>.svc.id.goog (and node pools --workload-metadata=GKE_METADATA), or pass --dns01-credentials for an external zone.")
-      fi
-      local _proj="${DNS01_PROJECT:-$(gcloud config get-value project 2>/dev/null || true)}"
-      if [[ -z "$_proj" || "$_proj" == "(unset)" ]]; then
-        PF_FAILS+=("acme/clouddns DNS-01 needs the GCP project hosting the zone for '$BASE_DOMAIN'. Pass --dns01-project (or set a gcloud active project) so the shared roles/dns.admin binding can be verified.")
-      elif command -v gcloud >/dev/null 2>&1; then
-        # A roles/dns.admin binding must exist for SOME service account on the project; both
-        # external-dns and the cert-manager solver impersonate it via Workload Identity.
-        if ! gcloud projects get-iam-policy "$_proj" --flatten="bindings[].members" --format='value(bindings.role)' 2>/dev/null | grep -q "roles/dns.admin"; then
-          PF_FAILS+=("No roles/dns.admin binding found on project '$_proj'. Bind it to the shared DNS-writer GSA (external-dns + cert-manager DNS-01 impersonate it): gcloud projects add-iam-policy-binding $_proj --member='serviceAccount:GSA@$_proj.iam.gserviceaccount.com' --role='roles/dns.admin'. Or pass --dns01-credentials for an external zone.")
-        fi
-      else
-        # gcloud absent → we cannot verify the roles/dns.admin binding. FAIL (do not warn-and-pass):
-        # a green preflight that hides an unverifiable requirement is worse than a clear blocker.
-        PF_FAILS+=("Cannot verify roles/dns.admin on project '$_proj' — gcloud is not installed on this machine. Run the preflight where gcloud is available, or pass --dns01-credentials for an external zone (a file we can check directly).")
-      fi
     fi
   fi
 
@@ -566,34 +384,6 @@ if [[ -z "${LITELLM_SALT_KEY:-}" ]]; then
   LITELLM_SALT_KEY="$(_read_secret opencrane-litellm LITELLM_SALT_KEY)"
   LITELLM_SALT_KEY="${LITELLM_SALT_KEY:-sk-$(_gen_secret)}"
 fi
-# Langfuse stable credentials. SALT, ENCRYPTION_KEY, and API keys MUST remain constant
-# after the first deploy — changing them orphans stored trace data and breaks NEXTAUTH
-# sessions. Re-use existing values from the secret; only generate fresh ones on first install.
-_gen_secret_256() { openssl rand -hex 32 2>/dev/null || head -c 48 /dev/urandom | base64 | tr -dc 'a-f0-9' | head -c 64; }
-LANGFUSE_NEXTAUTH_SECRET="$(_read_secret opencrane-langfuse NEXTAUTH_SECRET)"
-LANGFUSE_NEXTAUTH_SECRET="${LANGFUSE_NEXTAUTH_SECRET:-$(_gen_secret)}"
-LANGFUSE_SALT="$(_read_secret opencrane-langfuse SALT)"
-LANGFUSE_SALT="${LANGFUSE_SALT:-$(_gen_secret)}"
-# ENCRYPTION_KEY must be 256 bits = 64 hex characters.
-LANGFUSE_ENCRYPTION_KEY="$(_read_secret opencrane-langfuse ENCRYPTION_KEY)"
-LANGFUSE_ENCRYPTION_KEY="${LANGFUSE_ENCRYPTION_KEY:-$(_gen_secret_256)}"
-LANGFUSE_PUBLIC_KEY="$(_read_secret opencrane-langfuse LANGFUSE_INIT_PROJECT_PUBLIC_KEY)"
-LANGFUSE_PUBLIC_KEY="${LANGFUSE_PUBLIC_KEY:-pk-lf-$(_gen_secret | head -c 24)}"
-LANGFUSE_SECRET_KEY="$(_read_secret opencrane-langfuse LANGFUSE_INIT_PROJECT_SECRET_KEY)"
-LANGFUSE_SECRET_KEY="${LANGFUSE_SECRET_KEY:-sk-lf-$(_gen_secret | head -c 24)}"
-LANGFUSE_ADMIN_PASSWORD="$(_read_secret opencrane-langfuse LANGFUSE_INIT_USER_PASSWORD)"
-LANGFUSE_ADMIN_PASSWORD="${LANGFUSE_ADMIN_PASSWORD:-$(_gen_secret)}"
-# ClickHouse internal password (stable: changing it after init requires manual CH user management).
-LANGFUSE_CH_PASSWORD="$(_read_secret opencrane-langfuse CLICKHOUSE_PASSWORD)"
-LANGFUSE_CH_PASSWORD="${LANGFUSE_CH_PASSWORD:-$(_gen_secret)}"
-# Bitnami sub-subchart passwords inside the Langfuse chart. Bitnami charts require the
-# existing password to be re-supplied on every upgrade; we read-or-generate so the upgrade
-# never fails regardless of whether Langfuse is enabled. The values are stable after first
-# creation because each is read back from the cluster secret before generating a new one.
-LANGFUSE_S3_ROOT_PASSWORD="$(_read_secret opencrane-s3 root-password)"
-LANGFUSE_S3_ROOT_PASSWORD="${LANGFUSE_S3_ROOT_PASSWORD:-$(_gen_secret)}"
-LANGFUSE_REDIS_PASSWORD="$(_read_secret opencrane-redis valkey-password)"
-LANGFUSE_REDIS_PASSWORD="${LANGFUSE_REDIS_PASSWORD:-$(_gen_secret)}"
 
 log "Target cluster: $(kubectl config current-context)"
 log "Namespace: $NAMESPACE   Release: $RELEASE   Image tag: $IMAGE_TAG"
@@ -644,10 +434,8 @@ _require_postgres_bootstrap() {
   fi
 }
 _require_postgres_bootstrap opencrane "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_OWNER"
-[[ "$INSTALL_FLEET_DATABASE" == "0" ]] || _require_postgres_bootstrap fleet "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_OWNER"
 _require_postgres_bootstrap obot "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_OWNER"
 _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_OWNER"
-_require_postgres_bootstrap langfuse "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_OWNER"
 _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
 POSTGRES_RELEASE="${RELEASE}-postgres"
@@ -694,12 +482,8 @@ if [[ "$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX" -eq 0 ]]; then
 fi
 
 _install_postgres_server() {
-  local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}}]'
-  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"}]"
-  if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-    pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}},{"matchLabels":{"app.kubernetes.io/name":"langfuse"}},{"matchLabels":{"app.kubernetes.io/component":"fleet-manager"}}]'
-    databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"langfuse\",\"owner\":\"$LANGFUSE_POSTGRES_OWNER\",\"credentialsSecret\":\"$LANGFUSE_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"fleet\",\"owner\":\"$FLEET_POSTGRES_OWNER\",\"credentialsSecret\":\"$FLEET_POSTGRES_CREDENTIALS_SECRET\"}]"
-  fi
+  local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
+  local databases_json="[{\"name\":\"opencrane\",\"owner\":\"$POSTGRES_OWNER\",\"credentialsSecret\":\"$POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"obot\",\"owner\":\"$OBOT_POSTGRES_OWNER\",\"credentialsSecret\":\"$OBOT_POSTGRES_CREDENTIALS_SECRET\"},{\"name\":\"litellm\",\"owner\":\"$LITELLM_POSTGRES_OWNER\",\"credentialsSecret\":\"$LITELLM_POSTGRES_CREDENTIALS_SECRET\"}]"
   local postgres_args=(upgrade --install "$POSTGRES_RELEASE" "$POSTGRES_CHART_DIR"
     --namespace "$NAMESPACE"
     --set-json "databases=$databases_json"
@@ -722,12 +506,9 @@ _install_postgres_server() {
   # CNPG Pooler resources do not publish a Kubernetes Ready condition; the managed Deployment does.
   kubectl wait --for=create "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   kubectl wait --for=condition=available "deployment/${POSTGRES_RELEASE}-pooler" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm" "${POSTGRES_RELEASE}-langfuse"; do
+  for database_resource in "${POSTGRES_RELEASE}-obot" "${POSTGRES_RELEASE}-litellm"; do
     kubectl wait --for=jsonpath='{.status.applied}'=true "database/${database_resource}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   done
-  if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-    kubectl wait --for=jsonpath='{.status.applied}'=true "database/${POSTGRES_RELEASE}-fleet" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  fi
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
 }
 
@@ -762,21 +543,15 @@ _install_postgres_server
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
-LANGFUSE_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-langfuse-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
 # The one replica of the OpenCrane server gets five Prisma connections at most.
 # This leaves 75 of the 80 physical-server connections outside Prisma's process
-# pool and keeps the 50-connection PgBouncer database budget authoritative.
+# pool and keeps the 30-connection PgBouncer database budget authoritative.
 _publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
 _publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
 _publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
-_publish_database_connection "$LANGFUSE_POSTGRES_CREDENTIALS_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" langfuse
 _publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
-if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-  FLEET_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-fleet-app"
-  _publish_database_connection "$FLEET_POSTGRES_CREDENTIALS_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" fleet
-fi
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -799,11 +574,7 @@ _assert_distinct_cnpg_app_credentials() {
     done
   done
 }
-if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-  _assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$FLEET_POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
-else
-  _assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$LANGFUSE_POSTGRES_APP_SECRET"
-fi
+_assert_distinct_cnpg_app_credentials "$POSTGRES_APP_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$LITELLM_POSTGRES_APP_SECRET"
 
 # Per-database app secrets are canonical. Adapt only the key/name required by third-party charts.
 OBOT_DSN_SECRET="${RELEASE}-obot"
@@ -859,17 +630,6 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
 
-# Langfuse secret. Contains stable credentials for the in-cluster Langfuse subchart.
-# SALT, ENCRYPTION_KEY, and API keys MUST be stable once set.
-kubectl create secret generic opencrane-langfuse -n "$NAMESPACE" \
-  --from-literal=NEXTAUTH_SECRET="$LANGFUSE_NEXTAUTH_SECRET" \
-  --from-literal=SALT="$LANGFUSE_SALT" \
-  --from-literal=ENCRYPTION_KEY="$LANGFUSE_ENCRYPTION_KEY" \
-  --from-literal=CLICKHOUSE_PASSWORD="$LANGFUSE_CH_PASSWORD" \
-  --from-literal=LANGFUSE_INIT_PROJECT_PUBLIC_KEY="$LANGFUSE_PUBLIC_KEY" \
-  --from-literal=LANGFUSE_INIT_PROJECT_SECRET_KEY="$LANGFUSE_SECRET_KEY" \
-  --from-literal=LANGFUSE_INIT_USER_PASSWORD="$LANGFUSE_ADMIN_PASSWORD" \
-  --dry-run=client -o yaml | kubectl apply -f -
 
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
@@ -890,284 +650,10 @@ if [[ -n "$OIDC_ISSUER_URL" ]]; then
     --dry-run=client -o yaml | kubectl apply -f -
 fi
 
-# 2.25. ingress-nginx (a cluster singleton). Installed by default; auto-skips when a
-# controller is already present (existing IngressClass or an ingress-nginx Deployment)
-# so bundling never clobbers a BYO controller. helm upgrade --install is itself
-# idempotent, but we check first so a BYO controller in another namespace is respected.
-_ingress_nginx_present() {
-  kubectl get ingressclass -o name 2>/dev/null | grep -q . && return 0
-  kubectl get deploy -A -l app.kubernetes.io/name=ingress-nginx -o name 2>/dev/null | grep -q . && return 0
-  return 1
-}
-
-_install_ingress_nginx() {
-  if [[ "$INSTALL_INGRESS_NGINX" != "1" ]]; then
-    log "ingress-nginx: bundling disabled (--no-ingress-nginx). Bring your own controller."
-    return
-  fi
-  if _ingress_nginx_present; then
-    log "ingress-nginx: a controller is already present — skipping the bundled install."
-    return
-  fi
-  log "Installing ingress-nginx controller…"
-  helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx --force-update >/dev/null
-  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx \
-    --namespace "$INGRESS_NGINX_NAMESPACE" --create-namespace --wait
-}
-
-_install_ingress_nginx
-
-# 2.30. Auto-derive ingress.externalIp from the ingress-nginx LoadBalancer (opt-in,
-# --auto-ingress-ip). The operator's per-org DNS side effect needs the cluster ingress IP;
-# rather than hand-copy it from `kubectl get svc`, derive it here once the controller's LB is
-# assigned and feed it into the chart as a --set. An explicit ingress.externalIp --set wins.
-_resolve_ingress_ip() {
-  [[ "$AUTO_INGRESS_IP" == "1" ]] || return 0
-  if printf '%s\n' "${EXTRA_SET[@]}" | grep -q "ingress.externalIp="; then
-    log "Auto-ingress-ip: ingress.externalIp set explicitly — skipping derivation."
-    return 0
-  fi
-  log "Auto-ingress-ip: waiting for the ingress-nginx LoadBalancer address…"
-  local sel="app.kubernetes.io/name=ingress-nginx,app.kubernetes.io/component=controller"
-  local ip="" tries=0
-  while (( tries < 60 )); do
-    ip="$(kubectl get svc -n "$INGRESS_NGINX_NAMESPACE" -l "$sel" -o jsonpath='{.items[0].status.loadBalancer.ingress[0].ip}' 2>/dev/null)"
-    [[ -z "$ip" ]] && ip="$(kubectl get svc -n "$INGRESS_NGINX_NAMESPACE" -l "$sel" -o jsonpath='{.items[0].status.loadBalancer.ingress[0].hostname}' 2>/dev/null)"
-    [[ -n "$ip" ]] && break
-    sleep 5; tries=$((tries+1))
-  done
-  if [[ -z "$ip" ]]; then
-    warn "Auto-ingress-ip: no LoadBalancer address after ~5m; leaving ingress.externalIp unset (per-org DNS records stay unwritten until it is set)."
-    return 0
-  fi
-  log "Auto-ingress-ip: derived ingress.externalIp=$ip from the ingress-nginx LB."
-  EXTRA_SET+=(--set "ingress.externalIp=$ip")
-}
-_resolve_ingress_ip
-
-# 2.35. external-dns (a cluster singleton). The operator declares per-org records as
-# namespaced DNSEndpoint CRs; the external-dns controller (run with --source=crd)
-# reconciles them into Google Cloud DNS. It needs zone-WRITE access, so it shares the
-# cert-manager DNS-01 zone + credentials exactly:
-#   - Workload Identity (no --dns01-credentials): the SAME GSA bound roles/dns.admin that
-#     the cert-manager solver impersonates. We DO NOT create a second binding — the
-#     DNS-01 preflight (Step 2.5) already fails closed unless that binding exists.
-#   - External zone (--dns01-credentials FILE): the SAME SA-key, mounted as a Secret.
-# external-dns is therefore only bundled in acme/clouddns mode (off/selfSigned have no
-# managed zone to write). Installed AFTER Step 2.5 so DNS01_PROJECT / DNS01_CREDENTIALS
-# are already resolved + validated. Gated by externalDns.install (--no-external-dns to BYO).
-_external_dns_present() {
-  kubectl get deploy -A -l app.kubernetes.io/name=external-dns -o name 2>/dev/null | grep -q . && return 0
-  return 1
-}
-
-_install_external_dns() {
-  if [[ "$INSTALL_EXTERNAL_DNS" != "1" ]]; then
-    log "external-dns: bundling disabled (--no-external-dns). Bring your own controller."
-    return
-  fi
-  if [[ "$CERT_MODE" != "acme" ]]; then
-    log "external-dns: skipped (no managed DNS zone in mode='$CERT_MODE'; bundled only in acme/clouddns mode). The operator's DNSEndpoint CRs are reconciled by a BYO controller if you run one."
-    return
-  fi
-  if _external_dns_present; then
-    log "external-dns: a controller is already present — skipping the bundled install."
-    return
-  fi
-  log "Installing external-dns controller (--source=crd → Cloud DNS, zone for '$BASE_DOMAIN')…"
-  helm repo add external-dns https://kubernetes-sigs.github.io/external-dns --force-update >/dev/null
-
-  # external-dns flags: reconcile DNSEndpoint CRs (--source=crd, with its CRD installed)
-  # into Google Cloud DNS, scoped to --base-domain so it never touches records outside the
-  # platform zone, against the same project as the cert-manager solver.
-  local ed_args=(upgrade --install external-dns external-dns/external-dns
-    --namespace "$EXTERNAL_DNS_NAMESPACE" --create-namespace --wait
-    --set "provider=google"
-    --set-string "google.project=$DNS01_PROJECT"
-    --set "sources={crd}"
-    --set "installCRDs=true"
-    --set-string "domainFilters={$BASE_DOMAIN}"
-    --set "policy=sync")
-
-  if [[ -n "$DNS01_CREDENTIALS" ]]; then
-    # External-zone path: SHARE the cert-manager solver Secret's SA key. external-dns reads
-    # GCP creds from a file, so we create the key Secret in its namespace and mount it.
-    kubectl create secret generic clouddns-external-dns \
-      -n "$EXTERNAL_DNS_NAMESPACE" \
-      --from-file=credentials.json="$DNS01_CREDENTIALS" \
-      --dry-run=client -o yaml | kubectl apply -f -
-    ed_args+=(--set-string "google.serviceAccountSecret=clouddns-external-dns"
-      --set-string "google.serviceAccountSecretKey=credentials.json")
-  else
-    # Workload Identity path: external-dns impersonates the SAME GSA the cert-manager DNS-01
-    # solver does (roles/dns.admin). Terraform creates the WI BINDING, but the controller's
-    # KSA must still carry the `iam.gke.io/gcp-service-account` annotation or the metadata-server
-    # handshake falls back to the node SA and Cloud DNS writes fail at runtime. Require the GSA
-    # here (fail closed) rather than installing a controller that silently cannot authenticate.
-    if [[ -z "$DNS_WRITER_GSA" ]]; then
-      err "external-dns Workload Identity needs the shared DNS-writer GSA to annotate its ServiceAccount."
-      err "Pass --dns-writer-gsa <gsa>@<project>.iam.gserviceaccount.com (Terraform output dns_writer_service_account_email),"
-      err "or --no-external-dns to BYO a controller, or --dns01-credentials <sa-key.json> for an external zone."
-      exit 1
-    fi
-    log "external-dns: Workload Identity via the shared DNS-writer GSA '$DNS_WRITER_GSA' (roles/dns.admin on '$DNS01_PROJECT')."
-    ed_args+=(--set-string "serviceAccount.annotations.iam\.gke\.io/gcp-service-account=$DNS_WRITER_GSA")
-  fi
-  helm "${ed_args[@]}"
-}
-
-# 2.5. cert-manager / TLS. MUST run before the chart's `helm install`: the chart
-# renders cert-manager.io/v1 Issuer + Certificate objects, so the CRDs (and, for acme,
-# a live webhook) have to exist first or the API server rejects the chart with a 400.
-# CERT_MANAGER_HELM_FLAGS is appended to the chart's helm args further down.
-CERT_MANAGER_HELM_FLAGS=()
-
-# Resolve the effective mode: off (default), selfSigned (--cert-manager only), or
-# acme (--cert-manager + --acme-email + --dns01-provider). A partial acme request is a
-# hard error here so we never fall back to selfSigned behind the operator's back.
-_resolve_cert_mode() {
-  if [[ "$CERT_MANAGER" != "on" ]]; then echo "off"; return; fi
-  if [[ -z "$ACME_EMAIL" && -z "$DNS01_PROVIDER" ]]; then echo "selfSigned"; return; fi
-  if [[ -n "$ACME_EMAIL" && -n "$DNS01_PROVIDER" ]]; then
-    # A wildcard cert (*.<domain>) is meaningless without the base domain, so require it
-    # up front rather than letting cert-manager issue against an empty/placeholder SAN.
-    if [[ -z "$BASE_DOMAIN" ]]; then
-      err "acme TLS issues a wildcard for *.<base-domain>, so --base-domain is required in acme mode."
-      exit 1
-    fi
-    echo "acme"; return
-  fi
-  err "acme TLS needs BOTH --acme-email and --dns01-provider (got only one). For dev/self-signed TLS drop both and pass --cert-manager alone."
-  exit 1
-}
-
-# Install the cert-manager controller + CRDs from its upstream chart. Idempotent:
-# helm upgrade --install no-ops when
-# cert-manager is already present, so bundling it can never clobber an existing one. In the
-# acme/Workload-Identity path the controller SA is annotated with the SHARED DNS-writer GSA
-# (same one external-dns uses) so the DNS-01 solver can write to the zone; Terraform creates
-# the WI binding, but the KSA annotation is the install-time half of the handshake.
-_install_cert_manager() {
-  log "Installing cert-manager (CRDs + controller)…"
-  helm repo add jetstack https://charts.jetstack.io --force-update >/dev/null
-  local cm_args=(upgrade --install cert-manager jetstack/cert-manager
-    --namespace "$CERT_MANAGER_NAMESPACE" --create-namespace --wait
-    --set crds.enabled=true)
-  if [[ "$CERT_MODE" == "acme" && -z "$DNS01_CREDENTIALS" && -n "$DNS_WRITER_GSA" ]]; then
-    cm_args+=(--set-string "serviceAccount.annotations.iam\.gke\.io/gcp-service-account=$DNS_WRITER_GSA")
-  fi
-  helm "${cm_args[@]}"
-}
-
-# DNS-01 preflight (acme only). FAILS FAST with the exact remediation rather than
-# letting cert-manager spin on a SOLVING order forever. Two paths:
-#   - Workload Identity (no --dns01-credentials): the cert-manager SA's bound GSA needs
-#     roles/dns.admin on the zone's project; print the exact gcloud binding command.
-#   - External zone (--dns01-credentials FILE): require the file and create the solver
-#     Secret in the cert-manager namespace (cert-manager reads ClusterIssuer solver
-#     Secrets only from its OWN namespace).
-_preflight_dns01() {
-  # 1. clouddns is the only provider this installer wires end-to-end; reject others up
-  #    front so the failure is a clear message, not a later cert-manager order error.
-  if [[ "$DNS01_PROVIDER" != "clouddns" ]]; then
-    err "Unsupported --dns01-provider '$DNS01_PROVIDER'. This installer wires 'clouddns' (Google Cloud DNS). For another provider, install cert-manager yourself and set certManager.acme.dns01.{provider,config} in a --values file."
-    exit 1
-  fi
-
-  # The clouddns solver requires the GCP project that hosts the zone for --base-domain.
-  # Default it from the gcloud active project; FAIL FAST if still empty (a solver with no
-  # project never issues, and we tie the issuer zone to the same install input as the chart).
-  if [[ -z "$DNS01_PROJECT" ]]; then
-    DNS01_PROJECT="$(gcloud config get-value project 2>/dev/null || true)"
-  fi
-  if [[ -z "$DNS01_PROJECT" || "$DNS01_PROJECT" == "(unset)" ]]; then
-    err "clouddns DNS-01 needs the GCP project that hosts the Cloud DNS zone for '$BASE_DOMAIN'. Pass --dns01-project PROJECT_ID (or set a gcloud active project)."
-    exit 1
-  fi
-
-  if [[ -n "$DNS01_CREDENTIALS" ]]; then
-    # 2a. External-zone path: the SA-key file MUST exist; create the solver Secret the
-    #     ClusterIssuer references. Failing here is preferable to a green install whose
-    #     wildcard cert never issues because the solver has no credentials.
-    if [[ ! -f "$DNS01_CREDENTIALS" ]]; then
-      err "--dns01-credentials '$DNS01_CREDENTIALS' not found. Provide the Cloud DNS service-account key JSON, or omit it to use GKE Workload Identity."
-      exit 1
-    fi
-    log "Creating Cloud DNS solver Secret in the '$CERT_MANAGER_NAMESPACE' namespace…"
-    kubectl create secret generic clouddns-dns01-solver \
-      -n "$CERT_MANAGER_NAMESPACE" \
-      --from-file=key.json="$DNS01_CREDENTIALS" \
-      --dry-run=client -o yaml | kubectl apply -f -
-  elif [[ -n "$DNS_WRITER_GSA" ]]; then
-    # 2b. Workload Identity path WITH the shared DNS-writer GSA: the cert-manager controller
-    #     SA is annotated with this GSA in _install_cert_manager, completing the handshake for
-    #     the SAME identity external-dns uses. We trust Terraform created the roles/dns.admin
-    #     binding (the `--preflight` check verifies it where gcloud is available); here we only
-    #     confirm the GSA was supplied so the solver has an identity to impersonate.
-    log "DNS-01 via Workload Identity using the shared DNS-writer GSA '$DNS_WRITER_GSA' (roles/dns.admin on '$DNS01_PROJECT')."
-  else
-    # 2c. No credential at all: FAIL CLOSED. Without either an external SA key or the shared
-    #     DNS-writer GSA the solver has no identity, so the wildcard order would spin forever.
-    err "DNS-01 needs a zone-write identity: either the shared DNS-writer GSA (Workload Identity) or an external SA key."
-    err "Pass --dns-writer-gsa <gsa>@$DNS01_PROJECT.iam.gserviceaccount.com (Terraform output dns_writer_service_account_email; it must have roles/dns.admin),"
-    err "or --dns01-credentials <sa-key.json> for an external DNS zone."
-    exit 1
-  fi
-}
-
-CERT_MODE="$(_resolve_cert_mode)"
-case "$CERT_MODE" in
-  off)
-    log "TLS: cert-manager disabled (mode=off). The chart renders no issuer/cert."
-    ;;
-  selfSigned)
-    log "TLS: cert-manager self-signed issuer (dev/k3d/IP — not browser-trusted)."
-    _install_cert_manager
-    CERT_MANAGER_HELM_FLAGS+=(--set "certManager.enabled=true" --set "certManager.mode=selfSigned")
-    ;;
-  acme)
-    log "TLS: cert-manager ACME / DNS-01 ($DNS01_PROVIDER) — browser-trusted wildcard."
-    _install_cert_manager
-    # Wait on the webhook BEFORE rendering the chart's issuer/cert: cert-manager's
-    # validating webhook rejects cert-manager.io/v1 objects with a 400 until it is live,
-    # which would fail the chart install with a confusing connection error.
-    log "Waiting for the cert-manager webhook to become ready…"
-    kubectl rollout status deploy/cert-manager-webhook -n "$CERT_MANAGER_NAMESPACE" --timeout="${TIMEOUT}s"
-    _preflight_dns01
-    # cluster-issuer.yaml fail-closes without BOTH acme.email and dns01.provider, so both
-    # are always set here. The clouddns solver config is rendered verbatim under
-    # solvers[].dns01.clouddns; an external zone references the solver Secret created above.
-    CERT_MANAGER_HELM_FLAGS+=(--set "certManager.enabled=true" --set "certManager.mode=acme")
-    CERT_MANAGER_HELM_FLAGS+=(--set-string "certManager.acme.email=$ACME_EMAIL")
-    CERT_MANAGER_HELM_FLAGS+=(--set "certManager.acme.dns01.provider=$DNS01_PROVIDER")
-    # The clouddns solver project (resolved/validated in _preflight_dns01) ties the cert
-    # issuer's DNS zone to the same install input that drives the chart + Terraform.
-    CERT_MANAGER_HELM_FLAGS+=(--set-string "certManager.acme.dns01.config.project=$DNS01_PROJECT")
-    if [[ -n "$DNS01_CREDENTIALS" ]]; then
-      CERT_MANAGER_HELM_FLAGS+=(--set "certManager.acme.dns01.config.serviceAccountSecretRef.name=clouddns-dns01-solver")
-      CERT_MANAGER_HELM_FLAGS+=(--set-string "certManager.acme.dns01.config.serviceAccountSecretRef.key=key.json")
-    fi
-    ;;
-esac
-
-# external-dns is bundled here — after Step 2.5 resolved CERT_MODE + the shared DNS-01
-# project/credentials it reuses. When it (or a BYO controller) is in place, tell the chart
-# to switch the operator's DNSEndpoint declaration ON so per-org records are reconciled.
-_install_external_dns
-EXTERNAL_DNS_HELM_FLAGS=()
-if [[ "$CERT_MODE" == "acme" ]] && { [[ "$INSTALL_EXTERNAL_DNS" == "1" ]] || _external_dns_present; }; then
-  EXTERNAL_DNS_HELM_FLAGS+=(--set "externalDns.enabled=true")
-fi
-
 # 3. The OpenCrane chart.
-# Fetch subchart dependencies (Langfuse, and any others declared in Chart.yaml) — from Chart.lock,
-# NOT by re-resolving the version constraints. `helm dep build` rebuilds charts/ to exactly the
-# versions the committed Chart.lock pins, so a deploy ships the SAME subcharts CI validated and never
-# silently drifts to a newer langfuse (the dependency is pinned to an exact version in Chart.yaml).
-# It also won't rewrite the vendored Chart.lock/.tgz on every run the way `dep update` does. Bumping a
-# dependency is a deliberate edit (change Chart.yaml + run `helm dep update` once + commit the lock).
-log "Adding Langfuse Helm repository…"
-helm repo add langfuse https://langfuse.github.io/langfuse-k8s --force-update >/dev/null
+# Rebuild local chart dependencies from the committed lock without re-resolving
+# versions. This does not rewrite Chart.lock, so deploys use the same app-owned
+# chart versions that CI validated.
 log "Fetching chart dependencies (from Chart.lock)…"
 helm dep build "$CHART_DIR"
 
@@ -1183,6 +669,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 # are untouched). Without it a single stray imperative patch wedges every future upgrade.
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
+  --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"
@@ -1192,14 +679,8 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm")
-if [[ "$INSTALL_FLEET_DATABASE" == "1" ]]; then
-  helm_args+=(
-    --set-string "fleetManager.database.existingSecret=$FLEET_POSTGRES_APP_SECRET"
-    --set-string "fleetManager.database.secretKey=uri")
-fi
-
 # Pinned-tag float guard: detect if the prior release pinned component images to a specific
-# tag. If this invocation does not restate them (no --opencrane-server-tag/--operator-tag/--tenant-tag),
+# tag. If this invocation does not restate it (no --opencrane-server-tag),
 # re-pin from the prior release so they don't silently float to chart-default (a 2026-07-12 live gotcha).
 # Escape: OPENCRANE_ALLOW_TAG_FLOAT=1 to intentionally float tags.
 _enforce_tag_pins() {
@@ -1212,19 +693,15 @@ _enforce_tag_pins() {
     return 0
   fi
   # Check what tags are pinned in the PRIOR release, and what THIS run explicitly sets.
-  local prior_cp prior_op prior_tn prior_vals
+  local prior_cp prior_vals
   prior_vals="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
 
   # Extract tags using jq if available, otherwise fall back to grep.
   if command -v jq >/dev/null 2>&1; then
     prior_cp="$(echo "$prior_vals" | jq -r '.clustertenantManager.image.tag // empty')"
-    prior_op="$(echo "$prior_vals" | jq -r '.fleetManager.image.tag // empty')"
-    prior_tn="$(echo "$prior_vals" | jq -r '.tenant.image.tag // empty')"
   else
     # Grep fallback for when jq is not available (simple pattern, may miss nested structures).
     prior_cp="$(echo "$prior_vals" | grep -o '"clustertenantManager":[^}]*"tag":"[^"]*' | grep -o '"tag":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
-    prior_op="$(echo "$prior_vals" | grep -o '"fleetManager":[^}]*"tag":"[^"]*' | grep -o '"tag":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
-    prior_tn="$(echo "$prior_vals" | grep -o '"tenant":[^}]*"tag":"[^"]*' | grep -o '"tag":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
   fi
 
   local need_warn=0
@@ -1232,16 +709,6 @@ _enforce_tag_pins() {
   if [[ -n "$prior_cp" && -z "$CONTROL_PLANE_TAG" ]]; then
     warn "Prior release had clustertenantManager.image.tag='$prior_cp' — re-pinning (to avoid silent float to chart-default). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to float intentionally."
     CONTROL_PLANE_TAG="$prior_cp"
-    need_warn=1
-  fi
-  if [[ -n "$prior_op" && -z "$OPERATOR_TAG" ]]; then
-    warn "Prior release had fleetManager.image.tag='$prior_op' — re-pinning (to avoid silent float to chart-default). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to float intentionally."
-    OPERATOR_TAG="$prior_op"
-    need_warn=1
-  fi
-  if [[ -n "$prior_tn" && -z "$TENANT_TAG" ]]; then
-    warn "Prior release had tenant.image.tag='$prior_tn' — re-pinning (to avoid silent float to chart-default). Pass OPENCRANE_ALLOW_TAG_FLOAT=1 to float intentionally."
-    TENANT_TAG="$prior_tn"
     need_warn=1
   fi
   if [[ "$need_warn" == "1" ]]; then
@@ -1254,35 +721,13 @@ _enforce_tag_pins
 # rolled through Helm (which keeps Helm the sole owner of the image field). Each
 # falls back to IMAGE_TAG when its flag is unset, preserving the all-same default.
 CP_TAG="${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
-OP_TAG="${OPERATOR_TAG:-$IMAGE_TAG}"
-TN_TAG="${TENANT_TAG:-$IMAGE_TAG}"
 # --set-string: a tag like "1.2.3" or a numeric-looking sha must never be YAML-coerced
 # (same guideline as the OIDC string values below; see the deploy ledger).
 [[ -n "$CP_TAG" ]] && helm_args+=(--set-string "clustertenantManager.image.tag=$CP_TAG")
-[[ -n "$OP_TAG" ]] && helm_args+=(--set-string "fleetManager.image.tag=$OP_TAG")
-[[ -n "$TN_TAG" ]] && helm_args+=(--set-string "tenant.image.tag=$TN_TAG")
 # --base-domain drives ingress.domain; controlPlaneHost defaults to platform.<domain>
-# in the chart, and the cert-manager wildcard SANs (*.<domain>, <domain>,
-# controlPlaneHost) are derived from it. Setting it explicitly here keeps a single
-# source of truth across the chart, the issuer, and the operator's per-org provisioning.
+# in the chart. Setting it explicitly here keeps one source of truth for release hosts.
 [[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set "ingress.domain=$BASE_DOMAIN")
-# Langfuse has its own database and role on this ClusterTenant's shared PostgreSQL server.
-# It never receives the OpenCrane, Obot, or LiteLLM credential.
-helm_args+=(--set-string "langfuse.postgresql.host=${POSTGRES_POOLER_HOST}.${NAMESPACE}.svc.cluster.local")
-helm_args+=(--set-string "langfuse.postgresql.auth.username=$LANGFUSE_POSTGRES_OWNER")
-helm_args+=(--set-string "langfuse.postgresql.auth.existingSecret=$LANGFUSE_POSTGRES_APP_SECRET")
-helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.userPasswordKey=password")
-helm_args+=(--set-string "langfuse.postgresql.auth.secretKeys.adminPasswordKey=password")
-helm_args+=(--set-string "langfuse.postgresql.auth.database=langfuse")
-helm_args+=(--set "langfuse.s3.auth.rootPassword=$LANGFUSE_S3_ROOT_PASSWORD")
-helm_args+=(--set "global.valkey.password=$LANGFUSE_REDIS_PASSWORD")
-helm_args+=(--set "langfuse.clickhouse.auth.password=$LANGFUSE_CH_PASSWORD")
-# Bitnami sub-subchart conditions default to deploy:true in the Langfuse chart even
-# when langfuse.inCluster.enabled=false; pass passwords unconditionally so Bitnami's
-# upgrade password-validation templates are satisfied regardless of Langfuse state.
-[[ -n "$BASE_DOMAIN" ]] && helm_args+=(--set-string "langfuse.langfuse.nextauth.url=https://langfuse.${BASE_DOMAIN}")
-# OIDC human-login (opencrane-ui silo). Rendered iff an issuer URL is given; otherwise
-# the chart emits no OIDC env and the opencrane-ui stays in token/development mode.
+# OIDC human login is required by the deploy profile and rendered when an issuer URL is supplied.
 # --set-string (NOT --set): a large numeric Zitadel clientId passed via --set is YAML-parsed
 # as a float and rendered in scientific notation (e.g. 3.78…e+17) → Zitadel App.NotFound and
 # all login breaks. Strings stay strings (issue #100).
@@ -1292,33 +737,22 @@ helm_args+=(--set "langfuse.clickhouse.auth.password=$LANGFUSE_CH_PASSWORD")
 # Point the chart at the Secret created above (client + session secret) instead of leaving
 # its inline values empty — keeps secrets out of Helm values + the rendered manifest.
 [[ -n "$OIDC_ISSUER_URL" ]]   && helm_args+=(--set-string "clustertenantManager.oidc.existingSecret=$OIDC_SECRET_NAME")
-# Platform-operator bootstrap (seed email AND/OR IdP group mapping). The operator identity
-# is PLANE-AGNOSTIC, so forward it to BOTH the fleet plane and the opencrane-ui silo —
-# previously only the silo received it, so the fleet (super-admin) UI was inaccessible to
-# everyone even with a seed set (issue #100). Set ONLY when non-empty; empty → fail-closed.
+# Platform-operator bootstrap (seed email and/or IdP group mapping). Set only when non-empty.
 if [[ -n "$PLATFORM_OPERATOR_SEED_EMAIL" ]]; then
-  helm_args+=(--set-string "fleetManager.oidc.platformOperatorSeedEmail=$PLATFORM_OPERATOR_SEED_EMAIL")
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorSeedEmail=$PLATFORM_OPERATOR_SEED_EMAIL")
   warn "Seeding platform operator for the cluster (verified OIDC email match). Remove the seed once a group mapping is in place."
 fi
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
-  helm_args+=(--set-string "fleetManager.oidc.platformOperatorGroups=$PLATFORM_OPERATOR_GROUPS")
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorGroups=$PLATFORM_OPERATOR_GROUPS")
 fi
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
-# cert-manager flags resolved in Step 2.5 (empty in mode=off). Placed before --set
-# overrides so an operator can still override individual issuer fields on the CLI.
-[ ${#CERT_MANAGER_HELM_FLAGS[@]} -gt 0 ] && helm_args+=("${CERT_MANAGER_HELM_FLAGS[@]}")
-# external-dns wiring resolved above (empty unless a controller is in place). Placed before
-# --set overrides so an operator can still override externalDns.* on the CLI.
-[ ${#EXTERNAL_DNS_HELM_FLAGS[@]} -gt 0 ] && helm_args+=("${EXTERNAL_DNS_HELM_FLAGS[@]}")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
 [[ ${#EXTRA_HELM_ARGS[@]} -gt 0 ]] && helm_args+=("${EXTRA_HELM_ARGS[@]}")
 # Value-preservation mode. Helm's DEFAULT on upgrade drops any value a prior release set
 # via --set/-f that this invocation does not restate, silently reverting it to the chart
 # default — a footgun that broke a live silo once (a pure `--opencrane-server-tag` bump reverted
-# ingress.sameOrigin/tls.secretName/gatewayProxy/tenant.gateway.trustedProxies/resource limits;
+# ingress/TLS/resource limits;
 # see the field-manager warning above). So for an UPGRADE (the release already exists) we
 # default to `--reset-then-reuse-values`: reset to the chart's built-in values (picking up any
 # new chart defaults), re-apply the last release's values, then merge this run's --set/-f on top.
@@ -1365,8 +799,7 @@ _control_plane_hosts() {
 }
 
 # 5. Post-deploy verify (opt-in, --verify). Advisory only — surfaces the failure modes that
-# leave a "green" install unreachable (pods not Running, no DNSEndpoints, external-dns auth
-# errors, host not resolving) so they are caught here instead of in a confused browser session.
+# leave an install unreachable (pods not Running or host not resolving).
 _post_deploy_verify() {
   [[ "$VERIFY" == "1" ]] || return 0
   log "Post-deploy verify (advisory — does not fail the install):"
@@ -1380,27 +813,7 @@ _post_deploy_verify() {
     warn "  ✗ $notready pod(s) not Running in $NAMESPACE — kubectl get pods -n $NAMESPACE"
   fi
 
-  # 2. DNSEndpoint CRs — the operator's per-org record side effect (only meaningful when the
-  #    external-dns CRD source is installed). Absent CRD ⇒ per-org hosts never get A records.
-  if kubectl get crd dnsendpoints.externaldns.k8s.io >/dev/null 2>&1; then
-    local des
-    des="$(kubectl get dnsendpoint -A -o name 2>/dev/null | grep -c . || true)"
-    log "  • DNSEndpoint CRs present: $des"
-  else
-    warn "  • DNSEndpoint CRD absent (external-dns --source=crd not installed) — per-org A records won't be written."
-  fi
-
-  # 3. external-dns recent auth/permission errors — the dead-external-dns failure mode (the
-  #    controller runs but can't write the zone, so records silently never appear).
-  if kubectl get deploy -A -l app.kubernetes.io/name=external-dns -o name 2>/dev/null | grep -q .; then
-    if kubectl logs -A -l app.kubernetes.io/name=external-dns --tail=200 2>/dev/null | grep -qiE "permission|forbidden|invalid_grant|denied|failed to (apply|submit)"; then
-      warn "  ✗ external-dns logs show recent errors — kubectl logs -A -l app.kubernetes.io/name=external-dns --tail=200"
-    else
-      log "  ✓ external-dns logs show no recent auth errors"
-    fi
-  fi
-
-  # 4. Control-plane host(s) resolve to the ingress — the end of the chain a user hits first.
+  # 2. Control-plane host(s) resolve to the ingress — the end of the chain a user hits first.
   #    Read the rendered host(s) off the ingress so the apex / org host is checked, not platform.<base>.
   if command -v dig >/dev/null 2>&1; then
     local host resolved

@@ -1,9 +1,9 @@
 /**
  * OpenCrane brand palette for VitePress.
  *
- * Mirrors the OpenClaw docs structure (hero with logo + a single strong brand
- * colour) but recoloured to OpenCrane's identity: a teal/cyan crane (brand) with
- * an orange beak/underline accent. Hexes are sampled from the OpenCrane logo.
+ * A hero with the logo plus a single strong brand colour: a teal/cyan crane
+ * (brand) with an orange beak/underline accent. Hexes are sampled from the
+ * OpenCrane logo.
  */
 
 :root {

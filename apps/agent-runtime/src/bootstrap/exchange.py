@@ -1,0 +1,49 @@
+"""Bind public proof-key evidence to the admitted workload exactly once.
+
+Bootstrap runs before the command stream. A client error means the reference is unknown, consumed,
+expired, or mismatched and is therefore permanent for this process. Transport and server errors stay
+retryable in ``runtime.py`` because the control plane may not have evaluated the one-use claim.
+"""
+
+from urllib.error import HTTPError
+
+from ..observability import log
+from ..transport.http import post_json
+
+
+class BootstrapDeniedError(RuntimeError):
+    """Signal a permanent bootstrap refusal that must terminate this runtime."""
+
+
+def perform_bootstrap(
+    control_plane_url: str,
+    token: str,
+    bootstrap_reference: str,
+    proof_key: dict[str, object],
+) -> None:
+    """Post the one-use reference and public proof evidence to the control plane.
+
+    The projected workload token authenticates the Pod; the opaque reference selects the admitted
+    assignment; the public key evidence becomes bound only if both agree with server authority.
+
+    Raises:
+        BootstrapDeniedError: For any permanent 4xx refusal or unexpected non-success status.
+        HTTPError: For a retryable server-side HTTP failure.
+        OSError: For transport failures before a binding result is known.
+    """
+    body = {
+        "bootstrapReference": bootstrap_reference,
+        "proofPublicJwk": proof_key["publicJwk"],
+        "proofKeyThumbprint": proof_key["thumbprint"],
+    }
+    try:
+        status = post_json(f"{control_plane_url.rstrip('/')}/bootstrap", token, body, timeout=30)
+    except HTTPError as error:
+        # A 4xx is a decision, not an availability failure. Retrying it could turn a replayed or
+        # mismatched one-use reference into work if server state later changed.
+        if 400 <= error.code < 500:
+            raise BootstrapDeniedError(f"bootstrap refused with status {error.code}") from error
+        raise
+    if status < 200 or status >= 300:
+        raise BootstrapDeniedError(f"bootstrap returned unexpected status {status}")
+    log("bootstrap_bound", thumbprint=proof_key["thumbprint"])

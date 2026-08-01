@@ -53,7 +53,7 @@ function _ToResourceShare(row: { id: string; name: string; members: unknown })
  * Inter-user RESOURCE sharing (S4c) — distinct from `/shares` (which shares tool/skill
  * entitlements). In the unified model a direct share of a file/chat materialises a
  * **resource-scoped, Personal-tier Group** whose members are everyone the resource is shared
- * with; the recipient's openclaw Tenant then inherits read access through the derived dataset
+ * with; the recipient's user identity then receives read access through the derived dataset
  * membership → Cognee (S4c.2). The sharer must already be a member of the resource's group
  * (its owner on first share) to add others — no sharing a resource you don't hold.
  *

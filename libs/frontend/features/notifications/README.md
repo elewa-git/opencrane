@@ -18,7 +18,7 @@ does not fetch from the API and holds no long-lived state of its own.
 
 ## Boundary
 
-Consumed by `features/workspace`, which anchors it to the sidebar bell. It must not import other
+Intended for the future workspace surface, where it anchors the sidebar bell. It must not import other
 feature packages, and it deliberately does not depend on `elements/ui` — its rows are specific
 enough that it draws them itself.
 
@@ -30,5 +30,5 @@ and `scope:shared` contracts. It depends on `@opencrane/core` alone (notificatio
 ## See also
 
 - Parent index: [features](../README.md)
-- Consumer: [features/workspace](../workspace/README.md)
+- Consumer: future workspace surface
 - Models source: [core](../../core/README.md)

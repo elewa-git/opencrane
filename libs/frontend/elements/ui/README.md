@@ -26,8 +26,7 @@ The package's index file (barrel) re-exports the components directly:
 
 ## Boundary
 
-Consumed by feature packages (`features/context`, `features/conversation`, `features/settings`,
-and others). It must not import any `features/*` package — dependencies flow one way, from features
+Consumed by feature packages such as `features/context`. It must not import any `features/*` package — dependencies flow one way, from features
 into shared elements, never back. If the same markup appears in two or more places, extract it here
 before writing it a third time.
 
