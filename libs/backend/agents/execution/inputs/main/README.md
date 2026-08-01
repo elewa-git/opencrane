@@ -63,7 +63,8 @@ caller input.
 - `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
   readers, including one transaction-scoped personal-memory repository shared by the preference
   and memory-scope sources. It freezes only the verified user's active Cognee dataset identifier
-  and consented catalog fact identifiers; it never reads fact content or calls Cognee.
+  and consented catalog fact identifiers; it never reads fact content or calls Cognee. This is a
+  reusable prerequisite, not a claim that the OpenCrane app currently admits personal runs.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -86,6 +87,14 @@ port, and the only write goes through the [runs](../../runs/main/README.md) pack
 `RunAdmissionRepository`. The deterministic compiler reads only content already named by the sealed
 snapshot; it cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
+
+Today the app composes only the managed admission variant. A live personal path still requires a
+separate trusted-request slice: derive the subject and silo from the authenticated session and host,
+resolve the participant-bound thread and AgentService server-side, select the exact signed membership
+assertion and organisation scope, verify it with the mounted Ed25519 key ring, and compute the current
+capability digest in the admission transaction. Only that evidence may construct the personal factory
+and expose a `POST /api/v1/me/runs` route whose body contains `threadId` and
+`requestIdempotencyKey`—never user, silo, service, dataset, memory fact, or membership coordinates.
 
 ## Dependency direction
 

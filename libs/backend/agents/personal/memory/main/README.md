@@ -45,12 +45,17 @@ and never calls Cognee.
 
 ## Boundary
 
-Consumed by execution-input assembly. The dedicated personal-session factory composes this package's
-repository into both personal memory sources inside the existing run-admission transaction. This
-package itself must not write generic fact metadata, own a transaction, derive a dataset from a
-subject outside admission, read durable fact text, call Cognee, or compose a runtime. The app only
-chooses the signed identity and skill-eligibility authorities; this package remains the narrow
-identity-bound selection owner.
+Consumed by execution-input assembly. The dedicated personal-session factory can compose this
+package's repository into both personal memory sources inside an existing run-admission transaction.
+That factory has no production app caller yet: OpenCrane currently composes only managed admission,
+which deliberately freezes no personal-memory scope. A later trusted personal-request slice must
+derive the thread-bound service and signed user identity before invoking this factory; it must not
+accept dataset or fact coordinates from an HTTP request.
+
+This package itself must not write generic fact metadata, own a transaction, derive a dataset from a
+subject outside admission, read durable fact text, call Cognee, or compose a runtime. It remains the
+narrow identity-bound selection owner and cannot be used as a personal fallback when identity or
+dataset evidence is unavailable.
 
 ## Dependency direction
 
