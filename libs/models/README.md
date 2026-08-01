@@ -14,13 +14,12 @@ enforced identically on both sides.
 | [`agents`](./agents/main/README.md) | Agent-domain types and lifecycle rules. |
 | [`artifacts`](./artifacts/main/README.md) | Content-addressed artifact types and invariants. |
 | [`authorization`](./authorization/main/README.md) | Capabilities, proofs, and the pure allow/deny function. |
-| [`platform-policy`](./platform-policy/main/README.md) | The frozen platform policy and its predicates. |
 
 ```
                  libs/models  (pure — no I/O)
-    ┌───────────┬────────────┬───────────────┬──────────────────┐
-  agents    artifacts   authorization   platform-policy
-    └───────────┴────────────┴───────────────┴──────────────────┘
+    ┌───────────┬────────────┬───────────────┐
+  agents    artifacts   authorization
+    └───────────┴────────────┴───────────────┘
                         │ imported by
               ┌─────────┴─────────┐
           backend               frontend
