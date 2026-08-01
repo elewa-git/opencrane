@@ -40,6 +40,8 @@ and never calls Cognee.
 - `PrismaPersonalMemoryAdmissionRepository` — transaction-scoped Prisma adapter for both reads.
 - `PersonalMemoryAdmissionRepository` / `PersonalMemoryAdmissionUnitOfWork` — ports that preserve
   the caller-owned admission transaction without exposing Prisma delegates to execution inputs.
+- `PersonalMemoryDatasetResolutionOutcomes` / `PersonalMemoryDatasetResolutionDenialReasons` — the
+  stable, serialized allow/deny vocabulary for proof-bound dataset selection.
 
 ## Boundary
 

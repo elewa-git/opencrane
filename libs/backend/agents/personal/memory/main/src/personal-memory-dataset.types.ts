@@ -43,5 +43,21 @@ export enum PersonalMemoryDatasetResolutionOutcomes
 	Denied = "denied",
 }
 
+/**
+ * Stable, fail-closed reasons returned when verified identity cannot select personal memory.
+ *
+ * These values are serialized with the resolution result so run assembly, API consumers, and
+ * audit evidence retain one vocabulary without granting a caller the ability to choose a dataset.
+ */
+export enum PersonalMemoryDatasetResolutionDenialReasons
+{
+	/**
+	 * The signed personal identity was incomplete, had no active dataset, or resolved corrupt coordinates.
+	 *
+	 * This reason discloses no existence detail about a dataset in another personal-memory scope.
+	 */
+	MemoryScopeUnavailable = "memory_scope_unavailable",
+}
+
 /** Stable outcome from resolving personal memory without accepting a caller-selected dataset. */
-export type ResolvePersonalMemoryDatasetResult = { readonly outcome: PersonalMemoryDatasetResolutionOutcomes.Resolved; readonly dataset: PersonalMemoryDataset } | { readonly outcome: PersonalMemoryDatasetResolutionOutcomes.Denied; readonly reason: "memory_scope_unavailable" };
+export type ResolvePersonalMemoryDatasetResult = { readonly outcome: PersonalMemoryDatasetResolutionOutcomes.Resolved; readonly dataset: PersonalMemoryDataset } | { readonly outcome: PersonalMemoryDatasetResolutionOutcomes.Denied; readonly reason: PersonalMemoryDatasetResolutionDenialReasons.MemoryScopeUnavailable };
