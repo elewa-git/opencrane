@@ -129,7 +129,7 @@ describe("modelRegistryRouter", function _suite()
 
     const fetchSpy = vi.fn().mockResolvedValue({
       ok: true,
-      json: async function _json() { return { model_id: "deploy-abc123" }; },
+      text: async function _text() { return JSON.stringify({ model_id: "deploy-abc123" }); },
     });
     vi.stubGlobal("fetch", fetchSpy);
 
