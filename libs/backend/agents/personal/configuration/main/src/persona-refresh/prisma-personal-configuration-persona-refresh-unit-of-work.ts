@@ -16,7 +16,15 @@ export class PrismaPersonalConfigurationPersonaRefreshUnitOfWork implements Pers
 		this.prisma = prisma;
 	}
 
-	/** Runs persona work with a transaction-scoped configuration proposal repository. */
+	/**
+	 * Runs persona work with a transaction-scoped configuration proposal repository.
+	 *
+	 * PostgreSQL Serializable isolation makes the callback's accepted proposal,
+	 * persona mutations, and applied state one all-or-nothing commit. Concurrent
+	 * refresh or approval writers that invalidate this snapshot fail with a
+	 * serialization error, which the owning persona authority must translate to
+	 * its explicit conflict outcome rather than retrying or partially applying.
+	 */
 	async runPersonaRefresh<Result>(work: (transaction: unknown, refreshes: PersonalConfigurationPersonaRefreshRepository) => Promise<Result>): Promise<Result>
 	{
 		return this.prisma.$transaction(async function _runPersonaRefresh(transaction): Promise<Result>

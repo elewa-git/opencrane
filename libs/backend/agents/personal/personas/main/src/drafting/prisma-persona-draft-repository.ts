@@ -68,14 +68,15 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 	async createFromInterviewAtomically(command: Omit<CreatePersonaDraftCommand, "insights">): Promise<CreatePersonaDraftPersistenceResult>
 	{
 		const prisma = this.prisma;
+		const drafts = this;
 		try
 		{
-			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.derive", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft derivation persistence failed", async () =>
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.derive", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft derivation persistence failed", async function _derive()
 			{
 				const interview = await prisma.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: "Completed" }, select: { answers: { select: { id: true, value: true }, orderBy: { id: "asc" }, take: 5 } } });
 				if (interview === null) return { status: "interview_incomplete" };
 				if (interview.answers.length < 3) return { status: "invalid_insights" };
-				return this.createAtomically({ ...command, insights: interview.answers.map(function _insight(answer) { return { answerId: answer.id, statement: `Owner response: ${answer.value.trim()}` }; }) });
+				return drafts.createAtomically({ ...command, insights: interview.answers.map(function _insight(answer) { return { answerId: answer.id, statement: `Owner response: ${answer.value.trim()}` }; }) });
 			});
 		}
 		catch

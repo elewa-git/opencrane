@@ -2,7 +2,7 @@ import { PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient 
 
 import type { PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
 
-import type { ApprovePersonaCommand, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
+import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types.js";
 
 /** Prisma-backed authority that atomically approves and activates one personal persona revision. */
 export class PrismaPersonaAuthorityRepository implements PersonaAuthorityRepository
@@ -61,44 +61,46 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 				const client = transaction as Prisma.TransactionClient;
 				// 1. Lock the profile so two valid drafts cannot race to become the active persona.
 				const profiles = await client.$queryRaw<readonly { readonly id: string; readonly siloId: string }[]>(Prisma.sql`SELECT "id", "silo_id" AS "siloId" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
-				if (profiles.length !== 1) return { status: "not_found" } as const;
+				if (profiles.length !== 1) return { status: PersonaApprovalPersistenceStatuses.NotFound } as const;
+				const profile = profiles[0];
+				if (profile === undefined) return { status: PersonaApprovalPersistenceStatuses.NotFound } as const;
 
 				// 2. Lock the draft revision before inspecting its evidence, matching the lock used by the insight-provenance trigger.
 				const revisions = await client.$queryRaw<readonly { readonly id: string; readonly interviewId: string }[]>(Prisma.sql`SELECT "id", "interview_id" AS "interviewId" FROM "persona_revisions" WHERE "id" = ${command.personaRevisionId} AND "persona_profile_id" = ${command.personaProfileId} AND "state" = 'draft' FOR UPDATE`);
-				if (revisions.length !== 1) return { status: "conflict" } as const;
+				if (revisions.length !== 1) return { status: PersonaApprovalPersistenceStatuses.Conflict } as const;
+				const revision = revisions[0];
+				if (revision === undefined) return { status: PersonaApprovalPersistenceStatuses.Conflict } as const;
+				const interview = await client.personaInterview.findUnique({ where: { id: revision.interviewId }, select: { refreshConfigurationChangeId: true } });
+				if (interview === null) return { status: PersonaApprovalPersistenceStatuses.Conflict } as const;
 
 				// 3. Rebind the exact evidence count accepted at preflight; a valid extra insight still changes the reviewed draft.
 				const insightCount = await client.personaInsight.count({ where: { personaRevisionId: command.personaRevisionId } });
-				if (insightCount !== command.expectedInsightCount) return { status: "conflict" } as const;
+				if (insightCount !== command.expectedInsightCount) return { status: PersonaApprovalPersistenceStatuses.Conflict } as const;
 
 				// 4. The baseline trigger rechecks interview, template, and insight evidence at this mutation fence.
-				const revision = await client.personaRevision.updateMany({
+				const approvedRevision = await client.personaRevision.updateMany({
 					where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft },
 					data: { state: PersonaRevisionState.Approved, approvedBy: command.userId, approvedAt: new Date(command.approvedAt) },
 				});
-				if (revision.count !== 1) return { status: "conflict" } as const;
+				if (approvedRevision.count !== 1) return { status: PersonaApprovalPersistenceStatuses.Conflict } as const;
 
 				// 5. Point the same locked profile at the newly approved revision; its trigger rejects an invalid target.
 				const activatedProfile = await client.personaProfile.updateMany({
 					where: { id: command.personaProfileId, userId: command.userId },
 					data: { activeRevisionId: command.personaRevisionId },
 				});
-				if (activatedProfile.count !== 1) return { status: "conflict" } as const;
+				if (activatedProfile.count !== 1) throw new _PersonaApprovalConflict();
 
 				// 6. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
-				const interviewId = revisions[0]?.interviewId;
-				if (typeof interviewId !== "string") return { status: "approved" } as const;
-				const interview = await client.personaInterview.findUnique({ where: { id: interviewId }, select: { refreshConfigurationChangeId: true } });
-				if (interview?.refreshConfigurationChangeId === null || interview === null) return { status: "approved" } as const;
-				const profile = profiles[0];
-				if (profile === undefined) return { status: "conflict" } as const;
+				if (interview.refreshConfigurationChangeId === null) return { status: PersonaApprovalPersistenceStatuses.Approved } as const;
 				const applied = await refreshes.applyApprovedPersonaRefresh({ configurationChangeId: interview.refreshConfigurationChangeId, siloId: profile.siloId, userId: command.userId, personaProfileId: command.personaProfileId, personaRevisionId: command.personaRevisionId });
-				return applied ? { status: "approved" } as const : { status: "conflict" } as const;
+				if (!applied) throw new _PersonaApprovalConflict();
+				return { status: PersonaApprovalPersistenceStatuses.Approved } as const;
 			});
 		}
 		catch (error)
 		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError) return { status: "conflict" };
+			if (error instanceof _PersonaApprovalConflict || error instanceof Prisma.PrismaClientKnownRequestError) return { status: PersonaApprovalPersistenceStatuses.Conflict };
 			throw error;
 		}
 	}
@@ -134,6 +136,11 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 			) candidate ON TRUE WHERE revision."id" = ${personaRevisionId}`);
 		return rows[0]?.matches === true;
 	}
+}
+
+/** Abort a transaction after an approval mutation when a later required mutation cannot commit. */
+class _PersonaApprovalConflict extends Error
+{
 }
 
 /** Convert Prisma's closed interview enum into the domain approval vocabulary. */
