@@ -44,7 +44,7 @@ Internally, the source is grouped by responsibility:
 - `proposal/` validates patches, proves source provenance, and inserts the journal record;
 - `decision/` owns the owner's accept-or-reject transition;
 - `query/` maps bounded owner-visible proposal history;
-- `materialization/` coordinates personal configuration and agent-service repositories in one UoW;
+- `materialization/` uses lifecycle state and patch-kind strategies to coordinate personal configuration and agent-service repositories in one UoW;
 - `upgrade-session/` adapts the trusted runtime tool candidate into a proposal; and
 - `http/` translates authenticated API requests and domain results.
 

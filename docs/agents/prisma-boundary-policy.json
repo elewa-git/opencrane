@@ -8,7 +8,7 @@
       },
       {
         "contract": "AgentRevisionModelSelectionRepository",
-        "importPath": "./prisma-agent-revision-writer.types.js"
+        "importPath": "./agent-revision-model-selection.types.js"
       },
       {
         "contract": "AgentRevisionWriterRepository",

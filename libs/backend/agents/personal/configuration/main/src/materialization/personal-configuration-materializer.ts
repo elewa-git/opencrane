@@ -2,7 +2,7 @@ import { ___CreateLogger, type Logger } from "@opencrane/observability";
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
 import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
-import { ProposalResolutionOutcomes } from "./personal-configuration-materialization-repository.types.js";
+import { PersonalConfigurationMaterializationResolutionOutcomes } from "./personal-configuration-materialization-state.types.js";
 import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork } from "./personal-configuration-materialization-unit-of-work.types.js";
 
 /** Application materializer that coordinates capability repositories through one unit of work. */
@@ -36,7 +36,7 @@ export class _PersonalConfigurationMaterializer implements PersonalConfiguration
 			{
 				// 1. Resolve owner, proposal lifecycle, and persona evidence before cross-domain writes.
 				const resolution = await transaction.proposals.resolve(command);
-				if (resolution.outcome === ProposalResolutionOutcomes.Terminal) return resolution.result;
+				if (resolution.outcome === PersonalConfigurationMaterializationResolutionOutcomes.Terminal) return resolution.result;
 
 				// 2. Ask the agent-service repository to prepare the exact selected-model revision.
 				const proposal = resolution.proposal;
