@@ -53,7 +53,10 @@ failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insi
 
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
-fails closed and a crash leaves the previous active persona intact, never a half-approved one.
+fails closed and a crash leaves the previous active persona intact, never a half-approved one. When
+the interview was started by an accepted refresh proposal, the approval transaction must still find
+and apply that exact proposal; a missing or concurrently changed proposal rejects and rolls back the
+whole approval rather than activating the revision alone.
 
 ## Public surface
 

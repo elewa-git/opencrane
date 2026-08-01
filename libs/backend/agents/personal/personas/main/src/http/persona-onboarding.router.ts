@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { __ApprovePersona } from "../approval/persona-authority.js";
+import { PersonaApprovalDenialReasons } from "../approval/persona-authority.types.js";
 import { __CreatePersonaDraftFromInterview } from "../drafting/persona-draft-from-interview.js";
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../interview/persona-interview-authority.js";
 import { __EnsurePersonaOnboarding } from "../profile/persona-onboarding-authority.js";
@@ -149,7 +150,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __ApprovePersona(dependencies.approval, { personaProfileId: ready.personaProfileId, personaRevisionId, userId: caller.userId, approvedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _approvalDenialStatus(result.reason), result.reason); return; }
 			response.status(200).json({ personaRevisionId, state: PersonaOnboardingApiStates.Approved });
 		}
 		catch (err)
@@ -193,6 +194,12 @@ function _answerValue(body: unknown, questionId: unknown, questions: readonly { 
 function _interviewDenialStatus(reason: string): number
 {
 	return reason === PersonaInterviewDenialReasons.PersistenceUnavailable ? 503 : reason === PersonaInterviewDenialReasons.QuestionSetUnavailable ? 422 : reason === PersonaInterviewDenialReasons.NotFoundOrWrongOwner || reason === PersonaInterviewDenialReasons.RefreshChangeUnavailable ? 404 : reason === PersonaInterviewDenialReasons.AlreadyAnswered || reason === PersonaInterviewDenialReasons.NotInProgress || reason === PersonaInterviewDenialReasons.IncompleteAnswers || reason === PersonaInterviewDenialReasons.RefreshInterviewConflict ? 409 : 400;
+}
+
+/** Map persona-approval denials explicitly so concurrent commits cannot fall through to a bad request. */
+function _approvalDenialStatus(reason: PersonaApprovalDenialReasons): number
+{
+	return reason === PersonaApprovalDenialReasons.NotFound || reason === PersonaApprovalDenialReasons.WrongOwner ? 404 : reason === PersonaApprovalDenialReasons.InvalidCommand ? 400 : 409;
 }
 
 /** Require an empty object for a state transition with no caller-owned coordinates. */
