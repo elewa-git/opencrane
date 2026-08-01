@@ -43,8 +43,44 @@ export interface AtomicApprovePersonaCommand extends ApprovePersonaCommand
 	readonly expectedInsightCount: number;
 }
 
+/** Stable persistence outcomes from the approval transaction boundary. */
+export enum PersonaApprovalPersistenceStatuses
+{
+	/** The draft, active-pointer update, and any attached refresh proposal committed together. */
+	Approved = "approved",
+	/** A concurrent or stale precondition prevented the transaction from committing. */
+	Conflict = "conflict",
+	/** The requested owner profile was absent at the atomic authority boundary. */
+	NotFound = "not_found",
+}
+
 /** Persistence result from approving and activating one revision transactionally. */
-export type AtomicApprovePersonaResult = { readonly status: "approved" } | { readonly status: "conflict" } | { readonly status: "not_found" };
+export type AtomicApprovePersonaResult = { readonly status: PersonaApprovalPersistenceStatuses.Approved } | { readonly status: PersonaApprovalPersistenceStatuses.Conflict } | { readonly status: PersonaApprovalPersistenceStatuses.NotFound };
+
+/** Stable owner-visible approval denials mapped explicitly by the HTTP adapter. */
+export enum PersonaApprovalDenialReasons
+{
+	/** The request omitted an identifier or trustworthy approval instant. */
+	InvalidCommand = "invalid_command",
+	/** No persona revision was visible through the owner profile. */
+	NotFound = "not_found",
+	/** The revision or profile belongs to a different owner. */
+	WrongOwner = "wrong_owner",
+	/** The requested revision is not awaiting approval. */
+	NotDraft = "not_draft",
+	/** The supporting interview has not become immutable. */
+	InterviewIncomplete = "interview_incomplete",
+	/** The draft does not carry the required bounded insight evidence. */
+	InvalidInsights = "invalid_insights",
+	/** The reviewed template digest no longer matches the draft. */
+	TemplateMismatch = "template_mismatch",
+	/** The deterministic template-selection evidence no longer matches the interview. */
+	TemplateSelectionMismatch = "template_selection_mismatch",
+	/** The draft would permit forbidden mutable durable SOUL state. */
+	MutableSoulPolicy = "mutable_soul_policy",
+	/** A concurrent mutation or missing expected refresh invalidated the approval commit. */
+	Conflict = "conflict",
+}
 
 /** Persona persistence boundary keeping approval and active-pointer update atomic. */
 export interface PersonaAuthorityRepository
@@ -58,4 +94,4 @@ export interface PersonaAuthorityRepository
 /** Stable result of persona approval. */
 export type ApprovePersonaResult =
 	| { readonly outcome: "approved" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found" | "wrong_owner" | "not_draft" | "interview_incomplete" | "invalid_insights" | "template_mismatch" | "template_selection_mismatch" | "mutable_soul_policy" | "conflict" };
+	| { readonly outcome: "denied"; readonly reason: PersonaApprovalDenialReasons };

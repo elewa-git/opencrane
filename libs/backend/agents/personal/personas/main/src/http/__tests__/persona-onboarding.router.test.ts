@@ -5,6 +5,7 @@ import type { Logger } from "@opencrane/observability";
 
 import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router.js";
 import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types.js";
+import { PersonaApprovalPersistenceStatuses } from "../../approval/persona-authority.types.js";
 
 /** Builds a router with authenticated owner identity and observable authority ports. */
 function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> = {}): PersonaOnboardingRouterDependencies
@@ -103,10 +104,19 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 
 	it("approves only the exact owner-visible draft selected by its path coordinate", async function _approvesDraft()
 	{
-		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" }), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: "approved" }) } });
+		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" }), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Approved }) } });
 
 		const response = await request(_app(dependencies)).post("/api/v1/me/persona/drafts/revision-1/approve").send({});
 		expect(response.status).toBe(200);
 		expect(dependencies.approval.approveAndActivateAtomically).toHaveBeenCalledWith(expect.objectContaining({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1" }));
+	});
+
+	it("maps a concurrent approval conflict to HTTP 409", async function _approvalConflict()
+	{
+		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" }), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Conflict }) } });
+
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/drafts/revision-1/approve").send({});
+		expect(response.status).toBe(409);
+		expect(response.body).toEqual({ error: "conflict" });
 	});
 });
