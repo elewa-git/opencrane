@@ -33,6 +33,11 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline
    digest in a protected database schema. Physical recovery restores that marker with the existing
    schema, never attaches fresh setup SQL, and must pass the digest-checking Postgres hook.
+5. **Package-owned SQL authority tests live with the domain source.** Put each hand-written
+   authority suite beneath the owning package's `src/**/__tests__/` folder, then make that
+   package's `test:sql` target name the exact relative path. This keeps test discovery tied to the
+   same domain boundary as the TypeScript tests and prevents an unowned top-level `tests/` folder
+   from becoming a second package surface.
 
 ## Why this exists
 

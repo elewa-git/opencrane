@@ -55,7 +55,8 @@ and `scope:shared`. It must not import a personal specialization, a server app, 
 
 Owns the `MemoryFactCatalog` and `MemoryOutboxEvent` use-case boundary for the `memory.prisma`
 models. The app-owned clean target baseline remains the one database setup boundary; its SQL
-authority test lives in this package's `test:sql` target.
+authority test lives at `src/__tests__/memory-authority.sql` and runs through this package's
+`test:sql` target.
 
 ## See also
 

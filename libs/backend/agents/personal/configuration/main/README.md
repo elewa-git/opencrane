@@ -82,7 +82,8 @@ does not import a deployable app or another personal specialisation.
 Owns `PersonalConfigurationChange`. Proposal insertion and model materialisation use separate UoWs;
 the latter binds personal-configuration and agent-service repositories to one serialisable Prisma
 transaction. Queries and owner decisions use capability-specific repositories with no shared
-multi-purpose Prisma adapter.
+multi-purpose Prisma adapter. The package-owned Postgres authority suite is kept with the source at
+`src/__tests__/personal-configuration-authority.sql` and is run through `test:sql`.
 
 ## See also
 
