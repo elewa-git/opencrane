@@ -36,8 +36,7 @@ function _prisma(opts: {
 		mcpServer: { findUnique: vi.fn(async (a: { where: { id: string } }) => (opts.mcpServerIds ?? []).includes(a.where.id) ? { id: a.where.id } : null) },
 		group: { findUnique: vi.fn(async (a: { where: { id: string } }) => (opts.groupIds ?? []).includes(a.where.id) ? { id: a.where.id } : null) },
 		capabilityCatalogRevision: {
-			findFirst: vi.fn(async () => ({ digest: "sha256:test-digest" })),
-			create: vi.fn(async (a: { data: Record<string, unknown> }) => ({ ...a.data, id: "cat-1" })),
+			upsert: vi.fn(async (a: { create: Record<string, unknown> }) => ({ digest: a.create["digest"] })),
 		},
 		authorizationGrant: {
 			findFirst: vi.fn(async () => opts.existingGrant ?? null),
@@ -59,8 +58,13 @@ function _prisma(opts: {
 					...g,
 				};
 			})),
-			findUnique: vi.fn(async (a: { where: { id: string } }) => opts.grantById?.[a.where.id] ?? null),
-			delete: vi.fn(async (a: { where: { id: string } }) => { deleted.push(a.where.id); return {}; }),
+			deleteMany: vi.fn(async (a: { where: { id: string; createdBy: string; siloId: string } }) =>
+			{
+				const grant = opts.grantById?.[a.where.id];
+				if (!grant || grant.createdBy !== a.where.createdBy || grant.siloId !== a.where.siloId) return { count: 0 };
+				deleted.push(a.where.id);
+				return { count: 1 };
+			}),
 		},
 	} as unknown as PrismaClient;
 	return { prisma, deleted };

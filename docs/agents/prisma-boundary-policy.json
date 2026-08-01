@@ -13,12 +13,24 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "ShareAuthorizationRepository",
+        "importPath": "./share-authorization-repository.types.js"
+      },
+      {
+        "contract": "McpServerMutationRepository",
+        "importPath": "./mcp-server-mutation-repository.types.js"
       }
     ],
     "unitsOfWork": [
       {
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
         "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "McpServerMutationUnitOfWork",
+        "importPath": "./mcp-server-mutation-repository.types.js"
       }
     ],
     "compositions": [

@@ -1594,6 +1594,12 @@ CREATE INDEX "authorization_grants_catalog_id_catalog_revision_capability_idx" O
 CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority");
 
 -- CreateIndex
+-- PostgreSQL considers NULL values distinct in a regular unique index. Scope kinds without a
+-- resource dimension store NULL here, so this partial index completes the exact-authority
+-- invariant and makes duplicate share creation deterministically conflict instead of duplicating.
+CREATE UNIQUE INDEX "authorization_grant_null_scope_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority") WHERE "scope_resource_id" IS NULL;
+
+-- CreateIndex
 CREATE UNIQUE INDEX "capability_catalog_revisions_catalog_id_revision_key" ON "capability_catalog_revisions"("catalog_id", "revision");
 
 -- CreateIndex
@@ -2345,4 +2351,3 @@ ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id
 
 -- AddForeignKey
 ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-

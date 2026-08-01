@@ -1,7 +1,8 @@
 import { GrantScope, McpServerStatus, McpServerTransport, type McpServer, type McpServerCredential } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { McpServerCredentialInput, McpServerRouteScope, McpServerRouteStatus, McpServerRouteTransport, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
+import type { McpServerCredentialInput, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
+import type { McpServerCredentialWrite, McpServerMutationRepository } from "./mcp-server-mutation-repository.types.js";
 
 type _McpServerRow = Prisma.McpServerGetPayload<{ include: { credentials: true; source: true } }>;
 
@@ -128,33 +129,23 @@ export async function getMcpServer(prisma: PrismaClient, serverId: string): Prom
  * Create an MCP server and its child credential rows.
  *
  * @param prisma - Prisma client used for persistence.
+ * @param mutationRepository - MCP aggregate persistence seam.
  * @param body - Route payload provided by the caller.
  * @returns Mutation response consumed by the route.
  */
-export async function createMcpServer(prisma: PrismaClient, body: McpServerWriteRequest): Promise<McpServerMutationResponse>
+export async function createMcpServer(mutationRepository: McpServerMutationRepository, body: McpServerWriteRequest): Promise<McpServerMutationResponse>
 {
-	const createdServer = await prisma.mcpServer.create({
-		data: {
-			name: body.name,
-			description: body.description ?? "",
-			endpoint: body.endpoint,
-			scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerCreateInput["scope"],
-			transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerCreateInput["transport"],
-			status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status ?? "draft"] as Prisma.McpServerCreateInput["status"],
-			capabilities: _NormalizeStringArray(body.capabilities),
-			...(body.sourceId ? { sourceId: body.sourceId } : {}),
-			...(body.lastSyncedAt ? { lastSyncedAt: new Date(body.lastSyncedAt) } : {}),
-		},
-	});
-
-	await _WriteCredentials(prisma, createdServer.id, body);
-
-	await prisma.auditEntry.create({
-		data: {
-			action: "Created",
-			resource: `McpServer/${createdServer.id}`,
-			message: `MCP server ${createdServer.name} created`,
-		},
+	const createdServer = await mutationRepository.createServer({
+		name: body.name,
+		description: body.description ?? "",
+		endpoint: body.endpoint,
+		scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope],
+		transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport],
+		status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status ?? "draft"],
+		capabilities: _NormalizeStringArray(body.capabilities),
+		...(body.sourceId ? { sourceId: body.sourceId } : {}),
+		...(body.lastSyncedAt ? { lastSyncedAt: new Date(body.lastSyncedAt) } : {}),
+		credentials: _NormalizeCredentialWrites(body.credentials),
 	});
 
 	return { id: createdServer.id, status: "created" };
@@ -163,37 +154,25 @@ export async function createMcpServer(prisma: PrismaClient, body: McpServerWrite
 /**
  * Update an MCP server and fully replace its child credential rows.
  *
- * @param prisma - Prisma client used for persistence.
+ * @param mutationRepository - MCP aggregate persistence seam.
  * @param serverId - Server identifier from the route.
  * @param body - Partial route payload provided by the caller.
  * @returns Mutation response consumed by the route.
  */
-export async function updateMcpServer(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<McpServerMutationResponse>
+export async function updateMcpServer(mutationRepository: McpServerMutationRepository, serverId: string, body: Partial<McpServerWriteRequest>): Promise<McpServerMutationResponse>
 {
-	await prisma.mcpServer.update({
-		where: { id: serverId },
-		data: {
-			...(body.name ? { name: body.name } : {}),
-			...(body.description !== undefined ? { description: body.description ?? "" } : {}),
-			...(body.endpoint ? { endpoint: body.endpoint } : {}),
-			...(body.scope ? { scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerUpdateInput["scope"] } : {}),
-			...(body.transport ? { transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerUpdateInput["transport"] } : {}),
-			...(body.status ? { status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status] as Prisma.McpServerUpdateInput["status"] } : {}),
-			...(body.capabilities ? { capabilities: _NormalizeStringArray(body.capabilities) } : {}),
-			...(body.sourceId !== undefined ? { sourceId: body.sourceId } : {}),
-			...(body.lastSyncedAt !== undefined ? { lastSyncedAt: body.lastSyncedAt ? new Date(body.lastSyncedAt) : null } : {}),
-		},
-	});
-
-	await prisma.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });
-	await _WriteCredentials(prisma, serverId, body);
-
-	await prisma.auditEntry.create({
-		data: {
-			action: "Updated",
-			resource: `McpServer/${serverId}`,
-			message: `MCP server ${serverId} updated`,
-		},
+	await mutationRepository.updateServer({
+		id: serverId,
+		...(body.name ? { name: body.name } : {}),
+		...(body.description !== undefined ? { description: body.description ?? "" } : {}),
+		...(body.endpoint ? { endpoint: body.endpoint } : {}),
+		...(body.scope ? { scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] } : {}),
+		...(body.transport ? { transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] } : {}),
+		...(body.status ? { status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status] } : {}),
+		...(body.capabilities ? { capabilities: _NormalizeStringArray(body.capabilities) } : {}),
+		...(body.sourceId !== undefined ? { sourceId: body.sourceId } : {}),
+		...(body.lastSyncedAt !== undefined ? { lastSyncedAt: body.lastSyncedAt ? new Date(body.lastSyncedAt) : null } : {}),
+		credentials: _NormalizeCredentialWrites(body.credentials),
 	});
 
 	return { id: serverId, status: "updated" };
@@ -202,25 +181,13 @@ export async function updateMcpServer(prisma: PrismaClient, serverId: string, bo
 /**
  * Delete an MCP server and its child credential rows.
  *
- * @param prisma - Prisma client used for persistence.
+ * @param mutationRepository - MCP aggregate persistence seam.
  * @param serverId - Server identifier from the route.
  * @returns Mutation response consumed by the route.
  */
-export async function deleteMcpServer(prisma: PrismaClient, serverId: string): Promise<McpServerMutationResponse>
+export async function deleteMcpServer(mutationRepository: McpServerMutationRepository, serverId: string): Promise<McpServerMutationResponse>
 {
-	await prisma.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });
-
-	await prisma.mcpServer.delete({
-		where: { id: serverId },
-	});
-
-	await prisma.auditEntry.create({
-		data: {
-			action: "Deleted",
-			resource: `McpServer/${serverId}`,
-			message: `MCP server ${serverId} deleted`,
-		},
-	});
+	await mutationRepository.deleteServer(serverId);
 
 	return { id: serverId, status: "deleted" };
 }
@@ -321,24 +288,17 @@ export function _NormalizeCredentialInput(serverId: string, credential: McpServe
 	};
 }
 
-/**
- * Write child credentials for an MCP server.
- *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - MCP server identifier.
- * @param body - Route payload containing credentials.
- */
-async function _WriteCredentials(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<void>
+/** Validates and normalizes credential labels before any aggregate persistence begins. */
+function _NormalizeCredentialWrites(credentials: readonly McpServerCredentialInput[] | undefined): readonly McpServerCredentialWrite[]
 {
-	if (body.credentials && body.credentials.length > 0)
+	return credentials?.map(function _normalizeCredential(credential)
 	{
-		await prisma.mcpServerCredential.createMany({
-			data: body.credentials.map(function _mapCredential(credential)
-			{
-				return _NormalizeCredentialInput(serverId, credential);
-			}),
-		});
-	}
+		if (typeof credential.displayName !== "string" || credential.displayName.trim().length === 0)
+		{
+			throw new Error("MCP credential displayName must be a non-empty string");
+		}
+		return { displayName: credential.displayName.trim() };
+	}) ?? [];
 }
 
 /**

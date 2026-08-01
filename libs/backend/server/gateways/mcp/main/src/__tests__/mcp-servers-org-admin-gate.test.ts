@@ -35,6 +35,13 @@ function _mockPrisma(): { prisma: PrismaClient; spies: Record<string, ReturnType
   const prisma = new Proxy({}, {
     get(_t, model)
     {
+			if (model === "$transaction")
+			{
+				return async function _transaction(callback: (transaction: PrismaClient) => Promise<unknown>): Promise<unknown>
+				{
+					return callback(prisma as PrismaClient);
+				};
+			}
       return new Proxy({}, {
         get(_t2, method)
         {

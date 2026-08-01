@@ -59,7 +59,9 @@ apps or other server domains.
 ## Data & persistence
 
 Owns `McpServer`, `McpServerInstall`, `McpServerAccessPolicy`, `McpServerAccessUser`,
-and `McpServerCredential` in `apps/opencrane/prisma/schema/mcp.prisma`.
+and `McpServerCredential` in `apps/opencrane/prisma/schema/mcp.prisma`. The named
+`PrismaMcpServerMutationRepository` is the only server-administration seam: it commits the parent,
+credential metadata, and audit record together. It carries display names only, never credential values.
 
 ## See also
 

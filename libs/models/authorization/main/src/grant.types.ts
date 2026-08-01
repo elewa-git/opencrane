@@ -58,11 +58,20 @@ export type AuthorizationDecisionReason =
 	| "invalid_grant_priority"
 	| "invalid_grant_validity";
 
+/** Stable result vocabulary emitted by deterministic authorization evaluation. */
+export enum AuthorizationDecisionOutcomes
+{
+	/** At least one valid winning grant permits the exact request. */
+	Allow = "allow",
+	/** No valid winning grant permits the exact request, so evaluation fails closed. */
+	Deny = "deny",
+}
+
 /** Fail-closed result of deterministic grant evaluation. */
 export interface AuthorizationDecision
 {
 	/** Final authorization outcome. */
-	outcome: "allow" | "deny";
+	outcome: AuthorizationDecisionOutcomes;
 	/** Stable reason explaining the decision. */
 	reason: AuthorizationDecisionReason;
 	/** Grant identifiers at the winning priority or invalid boundary. */

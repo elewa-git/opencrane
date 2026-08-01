@@ -37,6 +37,9 @@ model AuthorizationGrant {
   subjectId       String                    @map("subject_id")
   scopeKind       AuthorizationScopeKind    @map("scope_kind")
   organizationId  String                    @map("organization_id")
+  /// Null only for scope kinds without a resource dimension. The reviewed target baseline adds a
+  /// partial unique index for those rows because PostgreSQL treats NULL values as distinct in the
+  /// ordinary exact-authority key.
   scopeResourceId String?                   @map("scope_resource_id")
   catalogId       String                    @map("catalog_id")
   catalogRevision Int                       @map("catalog_revision")

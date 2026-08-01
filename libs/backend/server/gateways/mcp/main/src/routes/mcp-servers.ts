@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic.js";
+import { PrismaMcpServerMutationRepository } from "../core/prisma-mcp-server-mutation-repository.js";
 import { _RequireOrgAdmin } from "@opencrane/server/_infra/auth";
 import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types.js";
 
@@ -19,7 +20,8 @@ import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-serv
  */
 export function mcpServersRouter(prisma: PrismaClient): Router
 {
-  const router = Router();
+	const router = Router();
+	const mutationRepository = new PrismaMcpServerMutationRepository(prisma);
 
   /** List all MCP servers with credentials. */
   router.get("/", async function _listMcpServers(req, res)
@@ -44,20 +46,20 @@ export function mcpServersRouter(prisma: PrismaClient): Router
   router.post("/", _RequireOrgAdmin(), async function _createMcpServer(req, res)
   {
     const body = req.body as McpServerWriteRequest;
-    res.status(201).json(await createMcpServer(prisma, body));
+		res.status(201).json(await createMcpServer(mutationRepository, body));
   });
 
   /** Update an MCP server and fully replace credentials. Org-admin only. */
   router.put("/:id", _RequireOrgAdmin(), async function _updateMcpServer(req: Request<{ id: string }>, res)
   {
     const body = req.body as Partial<McpServerWriteRequest>;
-    res.json(await updateMcpServer(prisma, req.params.id, body));
+		res.json(await updateMcpServer(mutationRepository, req.params.id, body));
   });
 
   /** Delete an MCP server and its credentials. Org-admin only. */
   router.delete("/:id", _RequireOrgAdmin(), async function _deleteMcpServer(req: Request<{ id: string }>, res)
   {
-    res.json(await deleteMcpServer(prisma, req.params.id));
+		res.json(await deleteMcpServer(mutationRepository, req.params.id));
   });
 
   /** List the brokered credentials of an MCP server. */

@@ -1,9 +1,10 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
 import type { AuthorizationScopeKind, PrismaClient } from "@prisma/client";
 
-import { __DecideAuthorization } from "@opencrane/models/authorization";
+import { __DecideAuthorization, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import type { AuthorizationRequest, AuthorizationScope } from "@opencrane/models/authorization";
-import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository } from "@opencrane/backend/server/iam/authorization";
+import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository, PrismaShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
+import type { ShareAuthorizationGrant, ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
 import type { JsonValue } from "@opencrane/util";
 import { _log } from "../log.js";
@@ -52,45 +53,32 @@ function _DomainScope(scope: ShareScope, organizationId: string, subjectId: stri
 let _sharesCatalogDigest: string | null = null;
 
 /**
- * Ensures the well-known `opencrane-core` CapabilityCatalogRevision exists (seeded).
- * Uses findFirst+create rather than upsert because the unique key is a composite triple.
+ * Ensures the well-known `opencrane-core` capability catalog revision exists.
  *
- * @param prisma - Prisma client for catalog reads/writes.
+ * The authorization adapter performs an idempotent composite-key upsert so concurrent first
+ * shares use the same immutable catalog revision rather than racing to create duplicates.
+ *
+ * @param repository - Authorization-owned catalog persistence seam.
  * @returns The deterministic digest of the seeded catalog revision.
  */
-async function _EnsureSharesCatalog(prisma: PrismaClient): Promise<string>
+async function _EnsureSharesCatalog(repository: ShareAuthorizationRepository): Promise<string>
 {
 	if (_sharesCatalogDigest) return _sharesCatalogDigest;
 
 	const capabilities = [{ id: _SHARES_CAPABILITY_ID, actions: ["use"] }];
 	const digest = __DigestCanonicalJson(capabilities as unknown as JsonValue);
-
-	const existing = await prisma.capabilityCatalogRevision.findFirst({
-		where: { catalogId: _SHARES_CATALOG_ID, revision: _SHARES_CATALOG_REVISION },
-		select: { digest: true },
+	_sharesCatalogDigest = await repository.ensureCatalogRevision({
+		catalogId: _SHARES_CATALOG_ID,
+		revision: _SHARES_CATALOG_REVISION,
+		digest,
+		capabilities,
+		createdBy: "system:shares-bootstrap",
 	});
-
-	if (existing)
-	{
-		_sharesCatalogDigest = existing.digest;
-		return _sharesCatalogDigest;
-	}
-
-	const created = await prisma.capabilityCatalogRevision.create({
-		data: {
-			catalogId: _SHARES_CATALOG_ID,
-			revision: _SHARES_CATALOG_REVISION,
-			digest,
-			capabilities,
-			createdBy: "system:shares-bootstrap",
-		},
-	});
-	_sharesCatalogDigest = created.digest;
 	return _sharesCatalogDigest;
 }
 
 /** Shape an AuthorizationGrant row into the API share representation. */
-function _ToShare(row: { id: string; resourceKind: string; resourceId: string; subjectId: string; scopeKind: string; createdBy: string; createdAt: Date })
+function _ToShare(row: ShareAuthorizationGrant)
 {
 	return {
 		id: row.id,
@@ -132,6 +120,7 @@ export function sharesRouter(prisma: PrismaClient): Router
 {
 	const router = Router();
 	const grantRepository = new PrismaAuthorizationGrantRepository(prisma);
+	const shareRepository = new PrismaShareAuthorizationRepository(prisma);
 
 	/** Create a share: grant a held entitlement to another user/group (least-privilege gated). */
 	router.post("/", async function _createShare(req: Request, res: Response, next: NextFunction)
@@ -185,7 +174,7 @@ export function sharesRouter(prisma: PrismaClient): Router
 			}
 
 			// 5. Ensure the well-known shares catalog revision exists for FK integrity.
-			const catalogDigest = await _EnsureSharesCatalog(prisma);
+			const catalogDigest = await _EnsureSharesCatalog(shareRepository);
 
 			// 6. LEAST-PRIVILEGE GATE: the caller may only share what they themselves hold. Evaluate
 			//    the caller's own grants and require an Allow on this payload -- a Deny or an absent
@@ -201,58 +190,39 @@ export function sharesRouter(prisma: PrismaClient): Router
 				nowEpochMs: Date.now(),
 			};
 			const decision = __DecideAuthorization(callerRequest, callerGrants);
-			if (decision.outcome !== "allow")
+			if (decision.outcome !== AuthorizationDecisionOutcomes.Allow)
 			{
 				_log.warn({ caller, siloId, payloadType, payloadId, recipientType, recipientId, reason: decision.reason }, "share denied: caller does not hold an Allow on the payload (least-privilege gate)");
 				res.status(403).json({ error: "You can only share an entitlement you currently hold.", code: "FORBIDDEN" });
 				return;
 			}
 
-			// 7. Idempotent on the AuthorizationGrant unique key: re-sharing the same payload to the
-			//    same recipient at the same scope returns the existing grant.
-			const existing = await prisma.authorizationGrant.findFirst({
-				where: {
-					siloId,
-					subjectId: recipientId,
-					scopeKind: _PRISMA_SCOPE_BY_API[scope],
-					organizationId,
-					catalogId: _SHARES_CATALOG_ID,
-					catalogRevision: _SHARES_CATALOG_REVISION,
-					capabilityId: _SHARES_CAPABILITY_ID,
-					resourceKind: _SHARES_RESOURCE_KIND,
-					resourceId: payloadId,
-					effect: "Allow",
-					createdBy: caller,
-					revokedAt: null,
-				},
+			// 7. Idempotent on the durable AuthorizationGrant authority key: re-sharing the same payload
+			//    to the same recipient at the same scope returns the one existing entitlement, regardless
+			//    of which already-authorized caller made the duplicate request.
+			const persisted = await shareRepository.createOrFindExactShare({
+				siloId,
+				subjectId: recipientId,
+				scopeKind: _PRISMA_SCOPE_BY_API[scope],
+				organizationId,
+				catalogId: _SHARES_CATALOG_ID,
+				catalogRevision: _SHARES_CATALOG_REVISION,
+				catalogDigest,
+				capabilityId: _SHARES_CAPABILITY_ID,
+				resourceKind: _SHARES_RESOURCE_KIND,
+				resourceId: payloadId,
+				priority: _SHARES_GRANT_PRIORITY,
+				createdBy: caller,
 			});
-			if (existing)
+			if (!persisted.created)
 			{
-				res.status(200).json(_ToShare(existing));
+				res.status(200).json(_ToShare(persisted.share));
 				return;
 			}
 
-			// 8. Write the share as an Allow AuthorizationGrant on the recipient.
-			const created = await prisma.authorizationGrant.create({
-				data: {
-					siloId,
-					subjectId: recipientId,
-					scopeKind: _PRISMA_SCOPE_BY_API[scope],
-					organizationId,
-					scopeResourceId: null,
-					catalogId: _SHARES_CATALOG_ID,
-					catalogRevision: _SHARES_CATALOG_REVISION,
-					catalogDigest: catalogDigest,
-					capabilityId: _SHARES_CAPABILITY_ID,
-					resourceKind: _SHARES_RESOURCE_KIND,
-					resourceId: payloadId,
-					effect: "Allow",
-					priority: _SHARES_GRANT_PRIORITY,
-					createdBy: caller,
-				},
-			});
-			_log.info({ caller, siloId, payloadType, payloadId, recipientType, recipientId, grantId: created.id }, "share created (inherited by the recipient's tenant on its next contract poll)");
-			res.status(201).json(_ToShare(created));
+			// 8. A successful insert grants the recipient only the exact capability that policy allowed.
+			_log.info({ caller, siloId, payloadType, payloadId, recipientType, recipientId, grantId: persisted.share.id }, "share created (inherited by the recipient's tenant on its next contract poll)");
+			res.status(201).json(_ToShare(persisted.share));
 		}
 		catch (err)
 		{
@@ -271,16 +241,7 @@ export function sharesRouter(prisma: PrismaClient): Router
 				res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" });
 				return;
 			}
-			const rows = await prisma.authorizationGrant.findMany({
-				where: {
-					siloId: principal.siloId,
-					createdBy: principal.subjectId,
-					capabilityId: _SHARES_CAPABILITY_ID,
-					catalogId: _SHARES_CATALOG_ID,
-					revokedAt: null,
-				},
-				orderBy: { createdAt: "desc" },
-			});
+			const rows = await shareRepository.listActiveShares(principal.siloId, principal.subjectId, _SHARES_CATALOG_ID, _SHARES_CAPABILITY_ID);
 			res.json(rows.map(_ToShare));
 		}
 		catch (err)
@@ -300,16 +261,12 @@ export function sharesRouter(prisma: PrismaClient): Router
 				res.status(401).json({ error: "Authentication required.", code: "UNAUTHORIZED" });
 				return;
 			}
-			const grant = await prisma.authorizationGrant.findUnique({
-				where: { id: req.params.id },
-				select: { id: true, createdBy: true, siloId: true },
-			});
-			if (!grant || grant.createdBy !== principal.subjectId || grant.siloId !== principal.siloId)
+			const revoked = await shareRepository.revokeOwnedShare(principal.siloId, principal.subjectId, req.params.id);
+			if (!revoked)
 			{
 				res.status(404).json({ error: "Share not found.", code: "NOT_FOUND" });
 				return;
 			}
-			await prisma.authorizationGrant.delete({ where: { id: req.params.id } });
 			_log.info({ caller: principal.subjectId, siloId: principal.siloId, grantId: req.params.id }, "share revoked");
 			res.json({ id: req.params.id, status: "revoked" });
 		}

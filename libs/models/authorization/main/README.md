@@ -34,7 +34,9 @@ A mistake here can only ever refuse a legitimate request — never grant access 
 
 ## Public surface
 
-- `__DecideAuthorization` and `AuthorizationRequest`, `AuthorizationGrant`, `AuthorizationDecision`.
+- `__DecideAuthorization` and `AuthorizationRequest`, `AuthorizationGrant`, `AuthorizationDecision`,
+  `AuthorizationDecisionOutcomes` — the stable allow/deny vocabulary used by consumers of the
+  deterministic decision.
 - Capability types: `CapabilityReference`, `CapabilityCatalogReference`, `ActionCapability`.
 - Proof types: `CapabilityProof*`, `Es256PublicJwk`, `ValidCapabilityProof`/`InvalidCapabilityProof`.
 - Scope/resource: `AuthorizationScope`, `AuthorizationResourceLocator`, `__AuthorizationScopeCovers`,
