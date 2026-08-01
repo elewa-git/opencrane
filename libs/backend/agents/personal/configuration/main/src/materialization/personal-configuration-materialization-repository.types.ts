@@ -1,4 +1,4 @@
-import type { PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
+import type { PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
 
 /** Internal outcomes from resolving a proposal and its persona evidence. */
 export enum ProposalResolutionOutcomes

@@ -2,8 +2,8 @@ import { PersonalConfigurationChangeState, type Prisma } from "@prisma/client";
 
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
-import { _IsPersonalConfigurationPatch } from "../configuration-patch.js";
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
+import { _IsPersonalConfigurationPatch } from "../proposal/personal-configuration-patch.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
 import { ProposalResolutionOutcomes, type ProposalResolutionResult } from "./personal-configuration-materialization-repository.types.js";
 import type { PersonalConfigurationMaterializationRepository } from "./personal-configuration-materialization-unit-of-work.types.js";
 

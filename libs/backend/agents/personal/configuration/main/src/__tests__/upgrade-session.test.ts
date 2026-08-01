@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
 
-import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-session.js";
+import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "../upgrade-session/upgrade-session.js";
 
 /** Build the smallest immutable snapshot needed to test personal-tool eligibility. */
 function _Snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot

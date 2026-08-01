@@ -12,7 +12,7 @@ export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
 	parametersSchema: { oneOf: [{ type: "object", properties: { kind: { const: AgentConfigPatchKinds.PersonaRefresh } }, required: ["kind"], additionalProperties: false }, { type: "object", properties: { kind: { const: AgentConfigPatchKinds.ModelAlias }, modelAlias: { type: "string", minLength: 1, maxLength: 200, pattern: "\\S" } }, required: ["kind", "modelAlias"], additionalProperties: false }] },
 };
 
-/** Return whether the immutable snapshot is eligible for the built-in personal configuration tool. */
+/** Return whether an immutable snapshot is eligible for the built-in personal configuration tool. */
 export function __IsUpgradeSessionAvailable(snapshot: RunInputSnapshot): boolean
 {
 	return snapshot.personaRevisionId !== null && snapshot.threadId !== null;

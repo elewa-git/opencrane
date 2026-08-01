@@ -1,7 +1,7 @@
 import { ___CreateLogger, type Logger } from "@opencrane/observability";
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
 import { ProposalResolutionOutcomes } from "./personal-configuration-materialization-repository.types.js";
 import type { PersonalConfigurationMaterializationTransaction, PersonalConfigurationMaterializationUnitOfWork } from "./personal-configuration-materialization-unit-of-work.types.js";
 
