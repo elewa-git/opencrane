@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { __IssueArtifactReadLease } from "../artifact-read-lease.js";
-import type { PublishedArtifactReadTarget } from "../artifact-read-lease.types.js";
+import { IssueArtifactReadLeaseOutcomes, type PublishedArtifactReadTarget } from "../artifact-read-lease.types.js";
 
 /** Build one exact active published revision returned by the server-owned repository. */
 function _Target(overrides: Partial<PublishedArtifactReadTarget> = {}): PublishedArtifactReadTarget
@@ -17,7 +17,7 @@ describe("ArtifactStore read lease issuer", function _Suite()
 		const repository = { loadPublishedReadTarget: vi.fn().mockResolvedValue(_Target({ mediaType: "text/plain; charset=utf-8" })) };
 		const result = await __IssueArtifactReadLease(repository, signer, { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" }, 1_750_000_000);
 
-		expect(result).toMatchObject({ outcome: "issued", compactLease: "compact-read-lease", claims: { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: _Target().contentAddress, byteLength: 12, mediaType: "text/plain; charset=utf-8", expiresAtEpochSeconds: 1_750_000_300 } });
+		expect(result).toMatchObject({ outcome: IssueArtifactReadLeaseOutcomes.Issued, compactLease: "compact-read-lease", claims: { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: _Target().contentAddress, byteLength: 12, mediaType: "text/plain; charset=utf-8", expiresAtEpochSeconds: 1_750_000_300 } });
 		expect(signer.sign).toHaveBeenCalledWith(expect.objectContaining({ action: "artifact.read" }));
 	});
 
@@ -26,7 +26,7 @@ describe("ArtifactStore read lease issuer", function _Suite()
 		const repository = { loadPublishedReadTarget: vi.fn() };
 		const signer = { sign: vi.fn() };
 
-		await expect(__IssueArtifactReadLease(repository, signer, { siloId: "../silo", artifactId: "artifact-1", artifactRevisionId: "revision-1" }, 1_750_000_000)).resolves.toEqual({ outcome: "denied", reason: "invalid_command" });
+		await expect(__IssueArtifactReadLease(repository, signer, { siloId: "../silo", artifactId: "artifact-1", artifactRevisionId: "revision-1" }, 1_750_000_000)).resolves.toEqual({ outcome: IssueArtifactReadLeaseOutcomes.Denied, reason: "invalid_command" });
 		expect(repository.loadPublishedReadTarget).not.toHaveBeenCalled();
 		expect(signer.sign).not.toHaveBeenCalled();
 	});
@@ -41,7 +41,7 @@ describe("ArtifactStore read lease issuer", function _Suite()
 		const signer = { sign: vi.fn() };
 		const result = await __IssueArtifactReadLease({ loadPublishedReadTarget: vi.fn().mockResolvedValue(target) }, signer, { siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1" }, 1_750_000_000);
 
-		expect(result).toEqual({ outcome: "denied", reason: "revision_not_readable" });
+		expect(result).toEqual({ outcome: IssueArtifactReadLeaseOutcomes.Denied, reason: "revision_not_readable" });
 		expect(signer.sign).not.toHaveBeenCalled();
 	});
 });

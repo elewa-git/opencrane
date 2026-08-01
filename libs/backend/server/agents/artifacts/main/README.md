@@ -93,7 +93,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   shared request principal to catalogue ownership and supplies the authority repository.
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
   the read-lease ports (`ArtifactReadLeaseRepository`, `ArtifactReadLeaseSigner`,
-  `IssueArtifactReadLeaseCommand`), and the upload ports (`ArtifactServicePromotionPort`,
+  `IssueArtifactReadLeaseCommand`) plus the stable `IssueArtifactReadLeaseOutcomes` result vocabulary,
+  and the upload ports (`ArtifactServicePromotionPort`,
   `ArtifactUploadCryptoPort`, `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`,
   `ArtifactUploadResult`).
 
