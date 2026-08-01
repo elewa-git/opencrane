@@ -2,7 +2,7 @@ import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunWork
 import { describe, expect, it } from "vitest";
 
 import { __CreateHttpAgentControllerAuthority } from "../http-agent-controller-authority.js";
-import type { AgentControllerFetch } from "../agent-controller.types.js";
+import type { AgentControllerFetch } from "../http-agent-controller-authority.types.js";
 
 /** One exact claim response returned by the OpenCrane authority. */
 function _ClaimBody()

@@ -68,6 +68,11 @@ records. It runs once at startup, then at its configured interval. A failed pass
 retried at the next interval; it can never prevent workload reconciliation or keep the controller
 alive after shutdown.
 
+Internally, the polling loop, runtime-profile policy, attempt-key projection, assignment reconcile,
+release reconcile, HTTP response validation, Kubernetes Job adoption, conditional release planning,
+Pod proof, and transport calls each have one module owner. The package barrel exposes composition
+capabilities and the profile-map type only; adapter seams and protocol details stay package-local.
+
 ## Boundary
 
 The package does not read Postgres directly, create ServiceAccounts, Pods, volumes or Deployments,

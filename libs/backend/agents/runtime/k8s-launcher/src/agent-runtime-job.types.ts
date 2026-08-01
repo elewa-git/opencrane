@@ -4,13 +4,18 @@ import type { V1ResourceRequirements } from "@kubernetes/client-node";
 export type AgentRuntimeImagePullPolicy = "Always" | "IfNotPresent" | "Never";
 
 /**
- * Selectable identity/workload class one release profile projects.
+ * Selectable identity and workload classes projected by runtime release profiles.
  *
- * The two classes reuse the same launcher and the same runtime image; they differ ONLY in the
- * ServiceAccount identity grammar accepted and the projected-token audience minted, so a personal
- * runtime and a managed (central) agent runtime can never borrow each other's connector reach.
+ * These stable values select both ServiceAccount grammar and token audience. They grant no
+ * authority by themselves; the controller still binds the selected profile to a durable claim.
  */
-export type AgentRuntimeIdentityProfile = "personal" | "managed";
+export enum AgentRuntimeIdentityProfiles
+{
+	/** Personal runtime identity without managed connector reach. */
+	Personal = "personal",
+	/** Managed runtime identity limited to its configured connector plane. */
+	Managed = "managed",
+}
 
 /** Immutable release profile applied to every runtime attempt Job of one identity class. */
 export interface AgentRuntimeJobProfile
@@ -20,7 +25,7 @@ export interface AgentRuntimeJobProfile
 	 * projected-token audience; personal and managed are mutually exclusive. Defaults to `personal`
 	 * when absent so existing personal-runtime profiles keep their exact behaviour.
 	 */
-	readonly identityProfile?: AgentRuntimeIdentityProfile;
+	readonly identityProfile?: AgentRuntimeIdentityProfiles;
 	/** Immutable runtime image reference pinned by a SHA-256 digest. */
 	readonly image: string;
 	/** Kubernetes image pull behavior. */

@@ -22,7 +22,7 @@ suspended Job in the dedicated runtime namespace
  agent-runtime process
 ```
 
-**In this flow:** [runtime authority](../main/README.md) ·
+**In this flow:** [runtime controller](../controller/README.md) ·
 [agent-runtime process](../../../../../apps/agent-runtime/README.md)
 
 Invariant: the returned Job is always suspended, has one completion and no retry, and cannot receive
@@ -42,10 +42,14 @@ after the deadline.
   name when a server-owned cleanup authority must locate a fenced attempt without receiving a profile.
 - `__DeriveAgentRuntimeReleaseDeadlineSeconds(assignmentExpiresAt, now, profileMaximum)` — converts
   absolute assignment authority into a conservative positive Kubernetes deadline.
-- `AgentRuntimeJobAssignment` — the durable run, attempt, revision, silo, namespace, and opaque
-  bootstrap-reference coordinates.
 - `AgentRuntimeJobProfile` — the bounded ServiceAccount, immutable image, internal server namespace,
   route, deadlines, resources, and scratch limits fixed by the controller profile.
+- `AgentRuntimeIdentityProfiles` — the documented personal and managed identity-profile keys used
+  by deployment composition instead of owned string literals.
+
+Profile policy, assignment/resource-name validation, release-deadline calculation, and manifest
+projection live in separate modules. Only the four capabilities above cross the package barrel;
+the assignment and Kubernetes protocol shapes remain implementation details.
 
 ## Boundary
 
@@ -73,6 +77,6 @@ mounted at `/var/run/opencrane/bootstrap/reference`, never in environment variab
 ## See also
 
 - Parent group: [runtime](../README.md)
-- Runtime authority: [main](../main/README.md)
+- Assignment authority: [controller](../controller/README.md)
 - Server transport: [agent-runtime-stream](../../../../server/_infra/agent-runtime-stream/README.md)
 - Process owner: [agent-runtime](../../../../../apps/agent-runtime/README.md)
