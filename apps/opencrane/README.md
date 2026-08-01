@@ -75,8 +75,8 @@ its resources to the lifecycle owner.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains only named per-area route lists and the trivial mount loop.
-- `src/app/runtime-composition.ts` binds workload identity review, durable dispatch, and external-I/O
-  ports without choosing transport paths.
+- `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
+  authorities by caller plane without choosing transport paths.
 - `src/app/background-workers.ts` owns schedule ticks, expired-run repair, and fenced cleanup loops.
 - `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
   Prisma, and flushes telemetry.
