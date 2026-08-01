@@ -31,6 +31,9 @@ ensures cross-silo isolation.
 Invariant: share creation, listing and revocation derive the sharer from the authenticated
 principal resolved by `_ResolveRequestPrincipal`, never from a request-body identity; missing
 identity fails with `401`. The API accepts only its explicit scope, recipient and allow semantics.
+Every sharing handler also mounts the shared per-IP limiter before identity and database work. The
+application-wide limiter remains the outer DoS backstop; the route-local mount preserves the same
+protection when this router is composed independently.
 
 ## Public surface
 

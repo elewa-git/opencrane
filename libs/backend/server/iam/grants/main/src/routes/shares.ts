@@ -6,6 +6,8 @@ import type { AuthorizationRequest, AuthorizationScope } from "@opencrane/models
 import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository, PrismaShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import type { ShareAuthorizationGrant, ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
+import { _RateLimit } from "@opencrane/server/_infra/http";
+import type { RateLimitOptions } from "@opencrane/server/_infra/http";
 import type { JsonValue } from "@opencrane/util";
 import { _log } from "../log.js";
 import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
@@ -27,6 +29,13 @@ const _SHARES_CAPABILITY_ID = "mcp-server:use";
 const _SHARES_RESOURCE_KIND = "mcp-server";
 /** Priority for share-originated grants (user-to-user delegation, lowest tier). */
 const _SHARES_GRANT_PRIORITY = 0;
+
+/** Configuration for the sharing HTTP boundary. The production default remains the shared API limit. */
+interface SharesRouterOptions
+{
+	/** Optional bounded limiter tuning for an isolated router composition, primarily test compositions. */
+	readonly rateLimit?: RateLimitOptions;
+}
 
 /** Map the API scope string to the Prisma AuthorizationScopeKind enum. */
 const _PRISMA_SCOPE_BY_API: Record<ShareScope, AuthorizationScopeKind> =
@@ -113,14 +122,21 @@ function _ApiScopeFromPrisma(kind: string): ShareScope
  * grants resolve to `Allow` -- there is no privilege escalation. The sharer is recorded
  * (`AuthorizationGrant.createdBy`) so they can list and revoke only their own shares.
  *
+ * Every handler is behind the shared per-IP limiter before it resolves identity or performs an
+ * authorization/database operation. The public app also has a global limiter; this local mount
+ * makes the sharing authority safe when composed independently and keeps the protection adjacent
+ * to the expensive handlers.
+ *
  * @param prisma - Prisma client for authorization grant + payload/recipient lookups.
+ * @param options - Optional limiter configuration for an isolated router composition.
  * @returns Configured Express router.
  */
-export function sharesRouter(prisma: PrismaClient): Router
+export function sharesRouter(prisma: PrismaClient, options?: SharesRouterOptions): Router
 {
 	const router = Router();
 	const grantRepository = new PrismaAuthorizationGrantRepository(prisma);
 	const shareRepository = new PrismaShareAuthorizationRepository(prisma);
+	router.use(_RateLimit(options?.rateLimit));
 
 	/** Create a share: grant a held entitlement to another user/group (least-privilege gated). */
 	router.post("/", async function _createShare(req: Request, res: Response, next: NextFunction)
