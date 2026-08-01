@@ -20,9 +20,27 @@ Three files track work, each with a distinct role — keep them from drifting:
   - Write entries in **functional, capability-first terms** — *what an operator/tenant/integrator can now do, or do differently, that they couldn't before* — never a restatement of commits. Name a mechanism (flag or endpoint) only when it helps the reader use the feature. Collapse many commits into the single capability they deliver.
   - Delegate this to the **`changelog` agent** (`.claude/agents/changelog.md`, runs on Sonnet), which encodes this style; or follow that file's rules if writing the entry inline.
 
+## Eager Commit Discipline
+
+After a coherent, scoped slice has passed its proportionate validation and any required independent
+review, stage only that slice and create its commit in the same work cycle. Do this before starting
+an unrelated task, switching context, handing work to another agent, or reporting the slice as
+complete. A suggested commit message is not a substitute for a safe, ready commit.
+
+- Inspect `git status`, `git diff`, and `git diff --cached` before staging. Preserve every unrelated
+  user-owned change, generated artifact, and concurrent slice.
+- Stage explicit paths only. Never use a broad stage command when the worktree contains changes
+  outside the validated slice.
+- Keep commits small and single-purpose. Put a follow-up review fix in its own commit unless it is
+  inseparable from a not-yet-committed slice.
+- Do not commit a draft, a slice with failing required validation, or work whose intended files
+  cannot be isolated safely. State the concrete blocker instead.
+- Do not push, create a pull request, or alter another branch merely because a commit is ready;
+  those actions still require their own task authority.
+
 ## Commit Messages
 
-- Always end each work cycle with a suggested commit message.
+- Every eager commit must have a message that follows this section.
 - **Every commit subject must start with an emoji** that matches the primary intent of the change.
   Use the table below — it is **derived from this repository's own commit history**, so following it
   keeps `git log` consistent with the convention already established here.

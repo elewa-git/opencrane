@@ -257,6 +257,81 @@ export function _Resolve(): ResolveResult
 }
 ```
 
+## Composition Dependencies And Configuration
+
+Do not define a dependency or configuration shape inline at the point where a constructor, factory,
+or router is applied. An inline object hides both the contract and the concrete dependencies inside
+an otherwise declarative composition map, making a reader parse implementation detail before they
+can see what is being assembled.
+
+Name the contract first with its owning type, construct it before the call, then pass that value by
+reference. Import an existing public dependency/configuration type from its owning package; do not
+invent a duplicate local type just to annotate the object.
+
+```typescript
+// WRONG — the router contract and concrete repository are hidden inside the composition map.
+return {
+	workerBootstrap: __CreateWorkerBootstrapRouter({
+		tokenReviewer,
+		repository: new PrismaWorkerBootstrapRepository(prisma),
+		logger: _log,
+	}),
+};
+
+// WRONG — policy is hidden inside the repository application.
+const repository = new PrismaRunDispatchRepository(prisma, {
+	...runtimeNamespaces,
+	claimLeaseMilliseconds: config.claimLeaseMilliseconds,
+	assignmentTtlMilliseconds: config.assignmentTtlMilliseconds,
+}, issueAttemptKey);
+
+// CORRECT — the contract is visible before it is applied.
+const workerBootstrapDependencies: WorkerBootstrapRouterDependencies = {
+	tokenReviewer,
+	repository: new PrismaWorkerBootstrapRepository(prisma),
+	logger: _log,
+};
+const workerBootstrap = __CreateWorkerBootstrapRouter(workerBootstrapDependencies);
+
+const runDispatchConfig = _CreateRunDispatchConfig(config, namespaces);
+const repository = new PrismaRunDispatchRepository(prisma, runDispatchConfig, issueAttemptKey);
+```
+
+When the shape is substantial — more than two fields, nested data, a spread, policy constants, or
+constructed adapters — create a small file-local initializer such as `_CreateRunDispatchConfig` or
+`_CreateWorkerBootstrapDependencies`. Give that initializer the owning return type and make it
+responsible only for assembling that one value. The outer composition function should then read as a
+sequence of named values and factory applications, not as a nest of anonymous objects.
+
+A self-evident one- or two-field data value is acceptable inline only when it carries no dependency,
+policy, or configuration contract. This exception does not apply to constructor/factory dependency
+objects merely because they happen to be short.
+
+Do not select a composition slice with raw member-name strings, such as
+`Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">`. Define the member names
+once as a documented string-backed enum in the paired `*.types.ts` file, then expose a named slice
+type based on that enum. Callers return the named type; they must not repeat a string-literal union.
+
+```typescript
+/** Stable names of routers assembled by this composition root. */
+export enum RuntimeCompositionKeys
+{
+	/** Workload proof-binding router. */
+	RuntimeBootstrap = "runtimeBootstrap",
+	/** Authenticated runtime command stream. */
+	RuntimeStream = "runtimeStream",
+}
+
+/** Runtime-only slice assembled by the runtime protocol factory. */
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, RuntimeCompositionKeys.RuntimeBootstrap | RuntimeCompositionKeys.RuntimeStream>;
+
+// CORRECT — callers express their responsibility, not the selected property spelling.
+function _CreateRuntimeProtocolComposition(): RuntimeProtocolComposition
+{
+	// ...
+}
+```
+
 ## Test File Location
 
 Test files live under a `__tests__` directory next to the source they cover, never co-located as
