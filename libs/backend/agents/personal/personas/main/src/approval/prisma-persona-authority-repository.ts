@@ -1,4 +1,6 @@
-import { PersonalConfigurationChangeState, PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
+import { PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient } from "@prisma/client";
+
+import type { PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
 
 import type { ApprovePersonaCommand, AtomicApprovePersonaCommand, AtomicApprovePersonaResult, PersonaApprovalSnapshot, PersonaAuthorityRepository } from "./persona-authority.types.js";
 
@@ -7,11 +9,14 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
+	/** Configuration-owned atomic boundary for a proposal-bound persona approval. */
+	private readonly refreshes: PersonalConfigurationPersonaRefreshUnitOfWork;
 
 	/** Create the authority over the canonical product database. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, refreshes: PersonalConfigurationPersonaRefreshUnitOfWork)
 	{
 		this.prisma = prisma;
+		this.refreshes = refreshes;
 	}
 
 	/** Load the exact approval evidence required before an owner may activate a persona draft. */
@@ -51,44 +56,44 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 	{
 		try
 		{
-			return await this.prisma.$transaction(async function _approve(transaction)
+			return await this.refreshes.runPersonaRefresh(async function _approve(transaction, refreshes)
 			{
+				const client = transaction as Prisma.TransactionClient;
 				// 1. Lock the profile so two valid drafts cannot race to become the active persona.
-				const profiles = await transaction.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
+				const profiles = await client.$queryRaw<readonly { readonly id: string; readonly siloId: string }[]>(Prisma.sql`SELECT "id", "silo_id" AS "siloId" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				if (profiles.length !== 1) return { status: "not_found" } as const;
 
 				// 2. Lock the draft revision before inspecting its evidence, matching the lock used by the insight-provenance trigger.
-				const revisions = await transaction.$queryRaw<readonly { readonly id: string; readonly interviewId: string }[]>(Prisma.sql`SELECT "id", "interview_id" AS "interviewId" FROM "persona_revisions" WHERE "id" = ${command.personaRevisionId} AND "persona_profile_id" = ${command.personaProfileId} AND "state" = 'draft' FOR UPDATE`);
+				const revisions = await client.$queryRaw<readonly { readonly id: string; readonly interviewId: string }[]>(Prisma.sql`SELECT "id", "interview_id" AS "interviewId" FROM "persona_revisions" WHERE "id" = ${command.personaRevisionId} AND "persona_profile_id" = ${command.personaProfileId} AND "state" = 'draft' FOR UPDATE`);
 				if (revisions.length !== 1) return { status: "conflict" } as const;
 
 				// 3. Rebind the exact evidence count accepted at preflight; a valid extra insight still changes the reviewed draft.
-				const insightCount = await transaction.personaInsight.count({ where: { personaRevisionId: command.personaRevisionId } });
+				const insightCount = await client.personaInsight.count({ where: { personaRevisionId: command.personaRevisionId } });
 				if (insightCount !== command.expectedInsightCount) return { status: "conflict" } as const;
 
 				// 4. The baseline trigger rechecks interview, template, and insight evidence at this mutation fence.
-				const revision = await transaction.personaRevision.updateMany({
+				const revision = await client.personaRevision.updateMany({
 					where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft },
 					data: { state: PersonaRevisionState.Approved, approvedBy: command.userId, approvedAt: new Date(command.approvedAt) },
 				});
 				if (revision.count !== 1) return { status: "conflict" } as const;
 
 				// 5. Point the same locked profile at the newly approved revision; its trigger rejects an invalid target.
-				const profile = await transaction.personaProfile.updateMany({
+				const activatedProfile = await client.personaProfile.updateMany({
 					where: { id: command.personaProfileId, userId: command.userId },
 					data: { activeRevisionId: command.personaRevisionId },
 				});
-				if (profile.count !== 1) return { status: "conflict" } as const;
+				if (activatedProfile.count !== 1) return { status: "conflict" } as const;
 
 				// 6. Apply only the refresh proposal that the completed interview carries; unrelated accepted proposals remain pending.
 				const interviewId = revisions[0]?.interviewId;
 				if (typeof interviewId !== "string") return { status: "approved" } as const;
-				const interview = await transaction.personaInterview.findUnique({ where: { id: interviewId }, select: { refreshConfigurationChangeId: true } });
+				const interview = await client.personaInterview.findUnique({ where: { id: interviewId }, select: { refreshConfigurationChangeId: true } });
 				if (interview?.refreshConfigurationChangeId === null || interview === null) return { status: "approved" } as const;
-				const change = await transaction.personalConfigurationChange.updateMany({
-					where: { id: interview.refreshConfigurationChangeId, userId: command.userId, personaProfileId: command.personaProfileId, state: PersonalConfigurationChangeState.Accepted, requestedPatch: { equals: { kind: "persona_refresh" } } },
-					data: { state: PersonalConfigurationChangeState.Applied, appliedPersonaRevisionId: command.personaRevisionId },
-				});
-				return change.count === 1 ? { status: "approved" } as const : { status: "conflict" } as const;
+				const profile = profiles[0];
+				if (profile === undefined) return { status: "conflict" } as const;
+				const applied = await refreshes.applyApprovedPersonaRefresh({ configurationChangeId: interview.refreshConfigurationChangeId, siloId: profile.siloId, userId: command.userId, personaProfileId: command.personaProfileId, personaRevisionId: command.personaRevisionId });
+				return applied ? { status: "approved" } as const : { status: "conflict" } as const;
 			});
 		}
 		catch (error)

@@ -45,6 +45,8 @@ Internally, the source is grouped by responsibility:
 - `decision/` owns the owner's accept-or-reject transition;
 - `query/` maps bounded owner-visible proposal history;
 - `materialization/` uses lifecycle state and patch-kind strategies to coordinate personal configuration and agent-service repositories in one UoW;
+- `persona-refresh/` provides the narrow transaction-scoped bridge that a persona authority uses to
+  claim and apply an accepted refresh;
 - `upgrade-session/` adapts the trusted runtime tool candidate into a proposal; and
 - `http/` translates authenticated API requests and domain results.
 
@@ -56,9 +58,11 @@ Internally, the source is grouped by responsibility:
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
 - `UpgradeSessionProposalRepository` is the narrow runtime-facing contract for proposing that future change.
 - `PrismaUpgradeSessionProposalRepository` maps an accepted runtime candidate to the proposal UoW.
+- `PrismaPersonalConfigurationPersonaRefreshUnitOfWork` composes the transaction-scoped bridge that
+  a persona authority uses to claim and apply an accepted refresh.
 
 All use cases, persistence contracts, transaction-scoped repositories, result vocabularies, and
-HTTP handler factories remain internal to the package.
+HTTP handler factories remain internal to the package, except the narrow persona-refresh bridge.
 
 ## Boundary
 

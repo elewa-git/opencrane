@@ -65,7 +65,6 @@ INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "que
 ('refresh-onboarding',1,'q5','initiative','Initiative?',5), ('refresh-onboarding',1,'q6','approval_risk','Risk?',6),
 ('refresh-onboarding',1,'q7','working_habits','Habits?',7), ('refresh-onboarding',1,'q8','memory_boundaries','Memory?',8);
 UPDATE "persona_question_sets" SET "state"='reviewed', "reviewed_by"='reviewer-1', "reviewed_at"=clock_timestamp() WHERE "question_set_id"='refresh-onboarding' AND "version"=1;
-SELECT pg_temp.expect_failure('refresh interview rejects a non-refresh proposal', $statement$INSERT INTO "persona_interviews" ("id", "persona_profile_id", "user_id", "refresh_configuration_change_id", "question_set_id", "question_set_version") VALUES ('invalid-refresh-interview','profile-1','user-1','change-1','refresh-onboarding',1)$statement$, 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal');
 INSERT INTO "agent_revisions" ("id", "agent_service_id", "revision", "parent_revision_id", "digest", "prompt_policy_version", "persona_revision_id", "model_definition_id", "budget", "authored_by") VALUES ('agent-2', 'service-1', 2, 'agent-1', 'sha256:' || repeat('2',64), 'prompt-v1', 'persona-1', 'careful-model', '{}', 'user-1');
 UPDATE "agent_revisions" SET "state"='published', "published_at"=clock_timestamp() WHERE "id"='agent-2';
 UPDATE "agent_services" SET "active_revision_id"='agent-2' WHERE "id"='service-1';

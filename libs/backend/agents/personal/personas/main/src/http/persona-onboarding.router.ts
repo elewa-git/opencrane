@@ -1,10 +1,11 @@
 import { Router, type Request, type Response } from "express";
 
-import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "./persona-interview-authority.js";
-import { __EnsurePersonaOnboarding } from "./persona-onboarding-authority.js";
-import { __CreatePersonaDraftFromInterview } from "./persona-draft-from-interview.js";
-import { __ApprovePersona } from "./persona-authority.js";
-import { PERSONA_ONBOARDING_TEMPLATE_ANSWERS } from "./persona-onboarding-catalogue.js";
+import { __ApprovePersona } from "../approval/persona-authority.js";
+import { __CreatePersonaDraftFromInterview } from "../drafting/persona-draft-from-interview.js";
+import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../interview/persona-interview-authority.js";
+import { __EnsurePersonaOnboarding } from "../profile/persona-onboarding-authority.js";
+import { PERSONA_ONBOARDING_TEMPLATE_ANSWERS } from "../profile/persona-onboarding-catalogue.js";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
 
 /** Create the browser-session-authenticated, self-only persona onboarding router. */
@@ -35,10 +36,10 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: null, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, startedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-			response.status(200).json({ interviewId: result.interviewId, state: "in_progress", reused: result.outcome === "already_in_progress", questions });
+			response.status(200).json({ interviewId: result.interviewId, state: PersonaOnboardingApiStates.InProgress, reused: result.outcome === PersonaLifecycleOutcomes.AlreadyInProgress, questions });
 		}
 		catch (err)
 		{
@@ -58,10 +59,10 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __StartPersonaInterview(dependencies.interviews, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, refreshConfigurationChangeId: configurationChangeId, questionSetId: ready.questionSet.id, questionSetVersion: ready.questionSet.version, startedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			const questions = await dependencies.questions.getQuestions(result.interviewId, ready.personaProfileId, caller.userId);
 			if (questions === null || questions.length === 0) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
-				response.status(200).json({ interviewId: result.interviewId, state: "in_progress", reused: result.outcome === "already_in_progress", questions });
+			response.status(200).json({ interviewId: result.interviewId, state: PersonaOnboardingApiStates.InProgress, reused: result.outcome === PersonaLifecycleOutcomes.AlreadyInProgress, questions });
 		}
 		catch (err)
 		{
@@ -85,7 +86,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const value = _answerValue(request.body, questionId, questions);
 			if (value === null) { _respond(response, 400, "invalid_persona_answer"); return; }
 			const result = await __RecordPersonaInterviewAnswer(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, questionId, value, answeredAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
 			response.status(201).json({ answerId: result.answerId });
 		}
 		catch (err)
@@ -106,8 +107,8 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __CompletePersonaInterview(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, completedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			response.status(200).json({ interviewId, state: "completed" });
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			response.status(200).json({ interviewId, state: PersonaOnboardingApiStates.Completed });
 		}
 		catch (err)
 		{
@@ -127,8 +128,8 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __CreatePersonaDraftFromInterview(dependencies.drafts, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, authoredAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			response.status(201).json({ personaRevisionId: result.personaRevisionId, state: "draft" });
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			response.status(201).json({ personaRevisionId: result.personaRevisionId, state: PersonaOnboardingApiStates.Draft });
 		}
 		catch (err)
 		{
@@ -148,8 +149,8 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __ApprovePersona(dependencies.approval, { personaProfileId: ready.personaProfileId, personaRevisionId, userId: caller.userId, approvedAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === "denied") { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			response.status(200).json({ personaRevisionId, state: "approved" });
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			response.status(200).json({ personaRevisionId, state: PersonaOnboardingApiStates.Approved });
 		}
 		catch (err)
 		{
@@ -173,7 +174,7 @@ function _requireCaller(request: Request, response: Response, dependencies: Pers
 async function _ensure(caller: PersonaOnboardingCaller, dependencies: PersonaOnboardingRouterDependencies): Promise<{ readonly personaProfileId: string; readonly questionSet: { readonly id: string; readonly version: number } } | null>
 {
 	const result = await __EnsurePersonaOnboarding(dependencies.onboarding, { siloId: caller.siloId, userId: caller.userId, provisionedAt: dependencies.clock.now().toISOString() });
-	return result.outcome === "ready" ? result : null;
+	return result.outcome === PersonaLifecycleOutcomes.Ready ? result : null;
 }
 
 /** Parse one permitted answer value without accepting arbitrary question IDs or unsupported role selection. */
@@ -191,7 +192,7 @@ function _answerValue(body: unknown, questionId: unknown, questions: readonly { 
 /** Map interview lifecycle denials to a bounded HTTP status without leaking another owner's state. */
 function _interviewDenialStatus(reason: string): number
 {
-	return reason === "persistence_unavailable" ? 503 : reason === "question_set_unavailable" ? 422 : reason === "not_found_or_wrong_owner" || reason === "refresh_change_unavailable" ? 404 : reason === "already_answered" || reason === "not_in_progress" || reason === "incomplete_answers" || reason === "refresh_interview_conflict" ? 409 : 400;
+	return reason === PersonaInterviewDenialReasons.PersistenceUnavailable ? 503 : reason === PersonaInterviewDenialReasons.QuestionSetUnavailable ? 422 : reason === PersonaInterviewDenialReasons.NotFoundOrWrongOwner || reason === PersonaInterviewDenialReasons.RefreshChangeUnavailable ? 404 : reason === PersonaInterviewDenialReasons.AlreadyAnswered || reason === PersonaInterviewDenialReasons.NotInProgress || reason === PersonaInterviewDenialReasons.IncompleteAnswers || reason === PersonaInterviewDenialReasons.RefreshInterviewConflict ? 409 : 400;
 }
 
 /** Require an empty object for a state transition with no caller-owned coordinates. */

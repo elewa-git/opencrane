@@ -29,6 +29,30 @@
       {
         "contract": "UpgradeSessionProposalRepository",
         "importPath": "./upgrade-session.types.js"
+      },
+      {
+        "contract": "PersonaAuthorityRepository",
+        "importPath": "./persona-authority.types.js"
+      },
+      {
+        "contract": "PersonaDraftFromInterviewRepository",
+        "importPath": "./persona-draft-authority.types.js"
+      },
+      {
+        "contract": "PersonaInterviewRepository",
+        "importPath": "./persona-interview-authority.types.js"
+      },
+      {
+        "contract": "PersonaOnboardingRepository",
+        "importPath": "./persona-onboarding-authority.types.js"
+      },
+      {
+        "contract": "PersonaOnboardingStatusRepository",
+        "importPath": "./persona-onboarding-status.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationPersonaRefreshRepository",
+        "importPath": "./personal-configuration-persona-refresh.types.js"
       }
     ],
     "unitsOfWork": [
@@ -39,11 +63,20 @@
       {
         "contract": "PersonalConfigurationProposalUnitOfWork",
         "importPath": "./personal-configuration-proposal-unit-of-work.types.js"
+      },
+      {
+        "contract": "PersonaPersistenceUnitOfWork",
+        "importPath": "./persona-persistence-unit-of-work.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationPersonaRefreshUnitOfWork",
+        "importPath": "./personal-configuration-persona-refresh.types.js"
       }
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
-      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
+      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
+      "libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts"
     ]
   },
   "exemptions": []
