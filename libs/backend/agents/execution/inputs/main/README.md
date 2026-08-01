@@ -60,6 +60,10 @@ caller input.
   becomes that service's execution identity.
 - `__CreatePrismaManagedSessionAssemblyAuthorities` — composes the package-private production
   readers with the caller-owned identity and final skill-eligibility authorities.
+- `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
+  readers, including one transaction-scoped personal-memory repository shared by the preference
+  and memory-scope sources. It freezes only the verified user's active Cognee dataset identifier
+  and consented catalog fact identifiers; it never reads fact content or calls Cognee.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
