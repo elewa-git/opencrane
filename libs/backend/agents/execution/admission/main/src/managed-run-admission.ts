@@ -4,8 +4,8 @@ import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowC
 
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
-/** Synthetic, non-user-visible coordinate that serializes every managed admission in one process. */
-const _GLOBAL_ADMISSION_COORDINATE = { siloId: "__opencrane_process__", agentServiceId: "__managed_run_admission__" };
+/** Synthetic, non-user-visible coordinate that serializes every personal and managed admission in one process. */
+const _GLOBAL_ADMISSION_COORDINATE = { siloId: "__opencrane_process__", agentServiceId: "__opencrane_run_admission__" };
 
 /** Build the shared global, silo, and service capacity gate for one server process. */
 export function _CreateRunAdmissionCapacityGate(policy: RunAdmissionConcurrencyPolicy): RunAdmissionCapacityGate
@@ -50,7 +50,7 @@ class _HierarchicalRunAdmissionCapacityGate implements RunAdmissionCapacityGate
 	/** Per-silo gate that prevents one tenant from exhausting process capacity. */
 	private readonly siloGate: RunAdmissionConcurrencyGate;
 
-	/** Per-service gate that prevents one managed agent from monopolizing its silo. */
+	/** Per-service gate that prevents one personal or managed AgentService from monopolizing its silo. */
 	private readonly serviceGate: RunAdmissionConcurrencyGate;
 
 	/** Create the three nested gates from one validated per-service policy. */

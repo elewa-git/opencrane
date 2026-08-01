@@ -63,8 +63,11 @@ caller input.
 - `__CreatePrismaPersonalSessionAssemblyAuthorities` — composes the corresponding personal-run
   readers, including one transaction-scoped personal-memory repository shared by the preference
   and memory-scope sources. It freezes only the verified user's active Cognee dataset identifier
-  and consented catalog fact identifiers; it never reads fact content or calls Cognee. This is a
-  reusable prerequisite, not a claim that the OpenCrane app currently admits personal runs.
+  and consented catalog fact identifiers; it never reads fact content or calls Cognee.
+- `PersonalExecutionIdentityEnvelopeSource` — selects the sole current personal-scope assertion
+  from signed fleet membership, re-reads that exact verified revision after its high-watermark is
+  advanced, and digests the user's still-valid, unrevoked personal grants in the admission
+  transaction. Browser input never selects the organisation, assertion, or capabilities.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
@@ -88,21 +91,20 @@ port, and the only write goes through the [runs](../../runs/main/README.md) pack
 snapshot; it cannot add a new tool, memory record, or policy. Fail-closed throughout: malformed coordinates, a stale membership, a
 non-canonical digest, or any single source refusal denies the run.
 
-Today the app composes only the managed admission variant. A live personal path still requires a
-separate trusted-request slice: derive the subject and silo from the authenticated session and host,
-resolve the participant-bound thread and AgentService server-side, select the exact signed membership
-assertion and organisation scope, verify it with the mounted Ed25519 key ring, and compute the current
-capability digest in the admission transaction. Only that evidence may construct the personal factory
-and expose a `POST /api/v1/me/runs` route whose body contains `threadId` and
-`requestIdempotencyKey`—never user, silo, service, dataset, memory fact, or membership coordinates.
+The OpenCrane app composes both managed and personal admission variants. The personal route derives
+the subject and silo from the authenticated session and host, resolves the participant-bound thread
+and AgentService server-side, verifies the exact signed membership assertion with the mounted
+Ed25519 key ring, and computes the capability digest in the admission transaction. Its
+`POST /api/v1/me/runs` body contains only `threadId` and `requestIdempotencyKey`—never user, silo,
+service, dataset, memory fact, or membership coordinates.
 
 ## Dependency direction
 
 Tagged `scope:execution-inputs`: it may depend only on `scope:agents`, `scope:agent-services`,
-`scope:artifacts`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
+`scope:artifacts`, `scope:authorization`, `scope:membership`, `scope:personal-memory`, `scope:execution-runs`,
 `scope:execution-inputs`, and `scope:shared` — never on apps or unrelated domains. The
 agent-services dependency is one-way: this package consumes managed-service evidence but never
-decides service publication, membership, or scope attachment policy.
+decides service publication, membership, grant, or scope attachment policy.
 
 ## See also
 

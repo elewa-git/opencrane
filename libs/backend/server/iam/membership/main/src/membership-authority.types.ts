@@ -19,19 +19,6 @@ export interface VerifyFleetMembershipCommand
 	readonly maximumStalenessMs: number;
 }
 
-/** Fixed fleet and scope policy configured before an execution subject is admitted. */
-export interface FleetMembershipAdmissionExpectation
-{
-	/** Fleet issuer trusted to sign the current membership revision. */
-	readonly trustedIssuerId: string;
-	/** Signed assertion that must authorize the execution subject. */
-	readonly assertionId: string;
-	/** Independent scope required for the admitted run. */
-	readonly scope: AuthorizationScope;
-	/** Maximum allowed age of the signed revision at the server-owned admission instant. */
-	readonly maximumStalenessMs: number;
-}
-
 /** Atomic high-watermark acceptance request after membership verification. */
 export interface FleetMembershipAcceptance
 {
