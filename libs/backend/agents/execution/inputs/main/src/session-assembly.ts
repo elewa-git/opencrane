@@ -5,7 +5,8 @@ import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { _CanonicalMemoryFacts, _IsIdentityFresh } from "./utils/canonical-inputs.js";
-import type { ApprovedPersonaInput, AssembleRunInputSnapshotResult, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, SessionAssemblyRefusalReason, ThreadContextInput, ToolPolicyInput } from "./session-assembly.types.js";
+import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
+import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ThreadContextInput, ToolPolicyInput } from "./session-assembly.types.js";
 
 /** Stable contract version emitted by the first session assembler. */
 const _SNAPSHOT_VERSION = 1;

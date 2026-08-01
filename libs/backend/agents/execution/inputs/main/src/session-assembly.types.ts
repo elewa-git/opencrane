@@ -1,14 +1,13 @@
-import type { MemoryFactReference, RunInputSnapshot, RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { MemoryFactReference, RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 
+import type { SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
+
 /** Coordinates supplied by run admission; loaders obtain every durable input themselves. */
 export type SessionAssemblyCommand = RunAdmissionCommand;
-
-/** Typed refusal that stops assembly before a partial snapshot can be persisted. */
-export type SessionAssemblyRefusalReason = "invalid_command" | "run_not_admittable" | "revision_unavailable" | "persona_unavailable" | "thread_unavailable" | "memory_scope_unavailable" | "tool_policy_unavailable" | "skill_unavailable" | "budget_unavailable" | "membership_stale" | "identity_unavailable" | "persistence_unavailable";
 
 /** One source read either resolves an exact input or declines it with a stable reason. */
 export type SessionAssemblyLoad<T> = { readonly outcome: "loaded"; readonly value: T } | { readonly outcome: "denied"; readonly reason: Exclude<SessionAssemblyRefusalReason, "invalid_command" | "persistence_unavailable"> };
@@ -163,6 +162,3 @@ export interface SessionAssemblyAuthorities
 	/** Identity and membership authority. */
 	identityEnvelope: IdentityEnvelopeSource;
 }
-
-/** Public result from attempting to assemble and persist one immutable runtime input. */
-export type AssembleRunInputSnapshotResult = { readonly outcome: "assembled"; readonly admissionOutcome: "accepted" | "idempotent"; readonly snapshot: RunInputSnapshot } | { readonly outcome: "denied"; readonly reason: SessionAssemblyRefusalReason };

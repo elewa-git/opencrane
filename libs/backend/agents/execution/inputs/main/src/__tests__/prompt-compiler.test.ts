@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 
-import type { CompiledModelRoute, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, type CompiledModelRoute, type CompiledToolDefinition, type RunInputSnapshot } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
-import { PROMPT_COMPILER_VERSION, __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
+import { __AppendCompiledTool, __CompileRunInput } from "../prompt-compiler.js";
 import type { PromptCompilerRepositories } from "../prompt-compiler.types.js";
 
 /** Build a snapshot fixture whose references the fake repositories can resolve. */

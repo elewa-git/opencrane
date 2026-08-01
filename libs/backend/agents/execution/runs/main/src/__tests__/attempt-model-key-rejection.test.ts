@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../run-dispatch.types.js";
+import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../attempt-model-key.types.js";
 
 /**
  * Attempt-scoped LiteLLM credential rejection proofs (Phase E slice 4).
