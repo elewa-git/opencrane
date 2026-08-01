@@ -1,3 +1,5 @@
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+
 /** Request to start the reviewed onboarding interview for one personal persona profile. */
 export interface StartPersonaInterviewCommand
 {
@@ -49,28 +51,28 @@ export interface CompletePersonaInterviewCommand
 
 /** Stable outcome from starting a reviewed persona interview. */
 export type StartPersonaInterviewResult =
-	| { readonly outcome: "started" | "already_in_progress"; readonly interviewId: string }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "question_set_unavailable" | "refresh_change_unavailable" | "refresh_interview_conflict" | "persistence_unavailable" };
+	| { readonly outcome: PersonaLifecycleOutcomes.Started | PersonaLifecycleOutcomes.AlreadyInProgress; readonly interviewId: string }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaInterviewDenialReasons };
 
 /** Stable outcome from recording one interview answer. */
 export type RecordPersonaInterviewAnswerResult =
-	| { readonly outcome: "recorded"; readonly answerId: string }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "not_in_progress" | "question_unavailable" | "already_answered" | "persistence_unavailable" };
+	| { readonly outcome: PersonaLifecycleOutcomes.Recorded; readonly answerId: string }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaInterviewDenialReasons };
 
 /** Stable outcome from completing one onboarding interview. */
 export type CompletePersonaInterviewResult =
-	| { readonly outcome: "completed" }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "not_in_progress" | "incomplete_answers" | "persistence_unavailable" };
+	| { readonly outcome: PersonaLifecycleOutcomes.Completed }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaInterviewDenialReasons };
 
 /** Persistence boundary for the append-only onboarding interview lifecycle. */
 export interface PersonaInterviewRepository
 {
 	/** Starts one reviewed interview or returns the owner's existing in-progress interview. */
-	startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: "started" | "already_in_progress"; readonly interviewId: string } | { readonly status: "not_found_or_wrong_owner" | "question_set_unavailable" | "refresh_change_unavailable" | "refresh_interview_conflict" | "persistence_unavailable" }>;
+	startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Started | PersonaLifecycleOutcomes.AlreadyInProgress; readonly interviewId: string } | { readonly status: PersonaInterviewDenialReasons }>;
 	/** Appends one answer only while the owner interview remains in progress. */
-	recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: "recorded"; readonly answerId: string } | { readonly status: "not_found_or_wrong_owner" | "not_in_progress" | "question_unavailable" | "already_answered" | "persistence_unavailable" }>;
+	recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Recorded; readonly answerId: string } | { readonly status: PersonaInterviewDenialReasons }>;
 	/** Completes a fully answered owner interview once and freezes its evidence. */
-	completeAtomically(command: CompletePersonaInterviewCommand): Promise<{ readonly status: "completed" } | { readonly status: "not_found_or_wrong_owner" | "not_in_progress" | "incomplete_answers" | "persistence_unavailable" }>;
+	completeAtomically(command: CompletePersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Completed } | { readonly status: PersonaInterviewDenialReasons }>;
 }
 
 /** Read boundary for the immutable question-set revision pinned to one owner interview. */

@@ -1,3 +1,16 @@
+import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
+
+/** Stable provisioning denials from the owner-profile and reviewed-catalogue authority. */
+export enum PersonaOnboardingDenialReasons
+{
+	/** The request omitted an owner coordinate or trusted provisioning instant. */
+	InvalidCommand = "invalid_command",
+	/** The required reviewed onboarding catalogue is absent or not reviewed. */
+	CatalogueUnavailable = "catalogue_unavailable",
+	/** The persistence authority could not prove a durable provisioning result. */
+	PersistenceUnavailable = "persistence_unavailable",
+}
+
 /** Authenticated owner for a personal persona onboarding flow. */
 export interface EnsurePersonaOnboardingCommand
 {
@@ -20,8 +33,8 @@ export interface PersonaOnboardingQuestionSet
 
 /** Result of provisioning the caller's profile and the server-owned onboarding catalogue. */
 export type EnsurePersonaOnboardingResult =
-	| { readonly outcome: "ready"; readonly personaProfileId: string; readonly questionSet: PersonaOnboardingQuestionSet }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "catalogue_unavailable" | "persistence_unavailable" };
+	| { readonly outcome: PersonaLifecycleOutcomes.Ready; readonly personaProfileId: string; readonly questionSet: PersonaOnboardingQuestionSet }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaOnboardingDenialReasons };
 
 /** Product-database boundary that verifies the clean-baseline source and provisions an owner profile. */
 export interface PersonaOnboardingRepository

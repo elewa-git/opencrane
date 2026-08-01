@@ -1,10 +1,10 @@
 import type { CompletePersonaInterviewCommand, CompletePersonaInterviewResult, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, RecordPersonaInterviewAnswerResult, StartPersonaInterviewCommand, StartPersonaInterviewResult } from "./persona-interview-authority.types.js";
-import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
 
 /** Start one reviewed onboarding interview without exposing question-set authority to callers. */
 export async function __StartPersonaInterview(repository: PersonaInterviewRepository, command: StartPersonaInterviewCommand): Promise<StartPersonaInterviewResult>
 {
-	if (!_validStart(command)) return { outcome: "denied", reason: "invalid_command" };
+	if (!_validStart(command)) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaInterviewDenialReasons.InvalidCommand };
 	const result = await repository.startAtomically(command);
 	return result.status === PersonaLifecycleOutcomes.Started || result.status === PersonaLifecycleOutcomes.AlreadyInProgress ? { outcome: result.status, interviewId: result.interviewId } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
 }
@@ -12,7 +12,7 @@ export async function __StartPersonaInterview(repository: PersonaInterviewReposi
 /** Record one immutable owner answer against an in-progress onboarding interview. */
 export async function __RecordPersonaInterviewAnswer(repository: PersonaInterviewRepository, command: RecordPersonaInterviewAnswerCommand): Promise<RecordPersonaInterviewAnswerResult>
 {
-	if (!_validAnswer(command)) return { outcome: "denied", reason: "invalid_command" };
+	if (!_validAnswer(command)) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaInterviewDenialReasons.InvalidCommand };
 	const result = await repository.recordAnswerAtomically(command);
 	return result.status === PersonaLifecycleOutcomes.Recorded ? { outcome: PersonaLifecycleOutcomes.Recorded, answerId: result.answerId } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
 }
@@ -20,7 +20,7 @@ export async function __RecordPersonaInterviewAnswer(repository: PersonaIntervie
 /** Complete an owner interview only after the persistence authority has rechecked every answer. */
 export async function __CompletePersonaInterview(repository: PersonaInterviewRepository, command: CompletePersonaInterviewCommand): Promise<CompletePersonaInterviewResult>
 {
-	if (!_validCompletion(command)) return { outcome: "denied", reason: "invalid_command" };
+	if (!_validCompletion(command)) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaInterviewDenialReasons.InvalidCommand };
 	const result = await repository.completeAtomically(command);
 	return result.status === PersonaLifecycleOutcomes.Completed ? { outcome: PersonaLifecycleOutcomes.Completed } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status };
 }

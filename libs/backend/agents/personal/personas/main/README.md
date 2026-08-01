@@ -51,6 +51,11 @@ match the interview answers; and the policy forbidding a mutable runtime "SOUL" 
 failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insights`,
 `template_mismatch`, …).
 
+Every lifecycle adapter returns the same serialized lifecycle outcome and denial values through
+documented string-backed enums. That keeps the API's readable response values stable while ensuring
+the profile, interview, drafting, and approval owners cannot silently drift into different control
+flow vocabularies.
+
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
 fails closed and a crash leaves the previous active persona intact, never a half-approved one. When
