@@ -70,6 +70,23 @@ export interface ChangeAgentServiceStateCommand
 /** Why a managed run was admitted: an explicit run-now, or a due schedule slot. */
 export type ManagedRunTrigger = "managed_invocation" | "schedule";
 
+/**
+ * Stable outcomes produced by the managed run-admission boundary.
+ *
+ * These values are returned to browser and scheduler callers and remain serialized as shown. They
+ * describe whether this authority created a run, resolved an existing idempotent run, or denied the
+ * command; they do not grant permission independently of the admission checks.
+ */
+export enum ManagedRunAdmissionOutcomes
+{
+	/** A new durable AgentRun was accepted through the shared admission authority. */
+	Accepted = "accepted",
+	/** The supplied idempotency key resolved to the already accepted durable AgentRun. */
+	Idempotent = "idempotent",
+	/** The admission command was refused with one stable lifecycle reason. */
+	Denied = "denied",
+}
+
 /** Command that records one managed run admission request. */
 export interface ManagedRunNowCommand
 {
@@ -173,9 +190,9 @@ export interface AgentRevisionLifecycleRepository
 
 /** Result of admitting one managed run-now request. */
 export type ManagedRunAdmissionResult =
-	| { readonly outcome: "accepted"; readonly runId: string }
-	| { readonly outcome: "idempotent"; readonly runId: string }
-	| { readonly outcome: "denied"; readonly reason: AgentRevisionLifecycleDenial };
+	| { readonly outcome: ManagedRunAdmissionOutcomes.Accepted; readonly runId: string }
+	| { readonly outcome: ManagedRunAdmissionOutcomes.Idempotent; readonly runId: string }
+	| { readonly outcome: ManagedRunAdmissionOutcomes.Denied; readonly reason: AgentRevisionLifecycleDenial };
 
 /** App-owned boundary that records a managed run admission on the shared run substrate. */
 export interface ManagedRunAdmissionPort

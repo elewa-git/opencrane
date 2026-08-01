@@ -13,12 +13,28 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "EnabledScheduleSnapshotRepository",
+        "importPath": "./schedule-ticker-unit-of-work.types.js"
+      },
+      {
+        "contract": "ActiveScheduledRunRepository",
+        "importPath": "./schedule-ticker-unit-of-work.types.js"
+      },
+      {
+        "contract": "ScheduleCursorRepository",
+        "importPath": "./schedule-ticker-unit-of-work.types.js"
       }
     ],
     "unitsOfWork": [
       {
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
         "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "ScheduleTickerUnitOfWork",
+        "importPath": "./schedule-ticker-unit-of-work.types.js"
       }
     ],
     "compositions": [
