@@ -30,7 +30,7 @@ filesystem, bounded temporary scratch space, no auto-mounted service-account tok
 code, artifact bytes, arguments, or credentials embedded in the manifest. The controller releases it
 only after it has durably committed the exact Kubernetes identity. The Job receives an audience-bound
 projected token and an opaque bootstrap reference in separate read-only files; the worker can use them
-only to acknowledge its own bootstrap endpoint. Authoring Jobs require at least
+only to acknowledge the deployment-selected cluster-local bootstrap endpoint. Authoring Jobs require at least
 64 MiB of scratch: a future validator uses that space for a bounded archive, an extracted tree, and
 fixed offline checks without borrowing persistent storage.
 
@@ -44,9 +44,10 @@ fixed offline checks without borrowing persistent storage.
 
 The agent controller consumes this builder. It does not make a tool executable, contact the
 ArtifactStore, or provide a worker transport; those require the later durable claim/result protocol.
-Malformed identity, image, lifetime, namespace, resource, or bootstrap-reference inputs fail before
-Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so durable workload
-identifiers are never copied into the Job annotation or environment.
+Malformed identity, image, lifetime, namespace, resource, bootstrap-endpoint, or bootstrap-reference
+inputs fail before Kubernetes sees a manifest. The reference must use the fixed opaque grammar, so readable durable
+workload identifiers are not repeated in the worker's bootstrap input or environment. Job annotations retain only
+bounded job and silo trace coordinates alongside that opaque reference.
 
 ## Dependency direction
 
