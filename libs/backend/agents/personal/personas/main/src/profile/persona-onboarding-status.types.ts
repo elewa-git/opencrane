@@ -1,8 +1,10 @@
+import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
+
 /** Owner-visible resumable state of the required personal persona onboarding flow. */
 export interface PersonaOnboardingStatus
 {
 	/** Whether an approved persona currently makes a personal session eligible. */
-	readonly state: "interview" | "review" | "ready";
+	readonly state: PersonaOnboardingApiStates.Interview | PersonaOnboardingApiStates.Review | PersonaOnboardingApiStates.Ready;
 	/** Current interview identifier, or null before the interview is started. */
 	readonly interviewId: string | null;
 	/** Number of answers durably captured for the current interview. */

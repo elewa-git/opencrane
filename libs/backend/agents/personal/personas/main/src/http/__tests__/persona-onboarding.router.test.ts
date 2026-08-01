@@ -6,6 +6,7 @@ import type { Logger } from "@opencrane/backend/observability";
 import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router.js";
 import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types.js";
 import { PersonaApprovalPersistenceStatuses } from "../../approval/persona-authority.types.js";
+import { PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types.js";
 
 /** Builds a router with authenticated owner identity and observable authority ports. */
 function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> = {}): PersonaOnboardingRouterDependencies
@@ -19,7 +20,7 @@ function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> =
 		approval: { getApprovalSnapshot: vi.fn(), approveAndActivateAtomically: vi.fn() },
 		clock: { now: function _now() { return new Date("2026-07-26T12:00:00.000Z"); } },
 		logger: { error: vi.fn() } as unknown as Logger,
-		status: { readStatus: vi.fn().mockResolvedValue({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null }) },
+		status: { readStatus: vi.fn().mockResolvedValue({ state: PersonaOnboardingApiStates.Interview, interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null }) },
 		...overrides,
 	};
 }
@@ -40,7 +41,7 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		const dependencies = _dependencies();
 		const response = await request(_app(dependencies)).get("/api/v1/me/persona/");
 		expect(response.status).toBe(200);
-		expect(response.body).toEqual({ state: "interview", interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null });
+		expect(response.body).toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: null, answeredQuestionCount: 0, questionCount: 8, personaRevisionId: null });
 		expect(dependencies.status.readStatus).toHaveBeenCalledWith("silo-1", "user-1");
 	});
 	it("requires session-derived caller identity before it reveals an onboarding flow", async function _requiresCaller()
