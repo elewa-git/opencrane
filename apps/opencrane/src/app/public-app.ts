@@ -7,6 +7,7 @@ import { pinoHttp } from "pino-http";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/iam/identity";
 import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
@@ -20,8 +21,17 @@ import { _RegisterRoutes } from "./routes.js";
  *
  * Authentication precedes every product route, while the OIDC router remains public so it can
  * establish the browser session that the product routes require.
+ * @param prisma - Canonical product-authority database client.
+ * @param customApi - Kubernetes custom-resource client used by the OIDC integration.
+ * @param coreApi - Kubernetes core client passed only to routes that create scoped Secrets.
+ * @param runAdmission - Managed run admission port shared with scheduler execution.
+ * @param personalRunAdmission - Browser-session personal run admission port.
+ * @param authWatchNamespace - Namespace in which OIDC authentication resources are watched.
+ * @param serverNamespace - Namespace in which provider credentials are managed.
+ * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
+ * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, authWatchNamespace: string, serverNamespace: string, obotCustody: ObotCustodyPort): Express
+export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, authWatchNamespace: string, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
 	const app = express();
 	const authService = ___CreateOidcAuthService(_log, prisma, customApi, authWatchNamespace);
@@ -42,7 +52,7 @@ export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObje
 	app.use(___AuthMiddleware());
 
 	// 4. Mount authenticated product routes, then terminate failures through one structured handler.
-	_RegisterRoutes(app, prisma, coreApi, runAdmission, serverNamespace, obotCustody);
+	_RegisterRoutes(app, prisma, coreApi, runAdmission, personalRunAdmission, serverNamespace, obotCustody);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

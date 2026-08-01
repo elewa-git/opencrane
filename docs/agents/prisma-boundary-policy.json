@@ -233,6 +233,20 @@
         "contract": "PersonalMemoryAdmissionRepository",
         "contractImportPath": "./personal-memory-dataset.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/inputs/main/src/prisma-personal-execution-identity-authority-repository.ts",
+        "adapter": "PrismaPersonalExecutionIdentityAuthorityRepository",
+        "contract": "PersonalExecutionIdentityAuthorityRepository",
+        "contractImportPath": "./personal-execution-identity-envelope-source.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/admission/main/src/prisma-personal-run-admission-repository.ts",
+        "adapter": "PrismaPersonalRunAdmissionRepository",
+        "contract": "PersonalRunAdmissionRepository",
+        "contractImportPath": "./personal-run-admission.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -373,6 +387,7 @@
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
+		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
