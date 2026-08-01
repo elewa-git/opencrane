@@ -1,7 +1,16 @@
 import type { AgentRevisionId, AgentServiceId, SiloId } from "./identifiers.types.js";
 
+/** Stable service-kind vocabulary used by agent admission and persistence projections. */
+export enum AgentServiceKinds
+{
+	/** A user-bound personal agent that may use verified personal context. */
+	Personal = "personal",
+	/** A managed agent service that never inherits an individual's personal context. */
+	Managed = "managed",
+}
+
 /** Product role performed by an agent service. */
-export type AgentServiceKind = "personal" | "managed";
+export type AgentServiceKind = AgentServiceKinds;
 
 /** Lifecycle state of a stable agent service identity. */
 export type AgentServiceState = "draft" | "active" | "paused" | "retired";

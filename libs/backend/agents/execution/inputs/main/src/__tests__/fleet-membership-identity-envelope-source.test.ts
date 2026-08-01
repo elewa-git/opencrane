@@ -2,6 +2,7 @@ import type { FleetMembershipSignatureVerifier } from "@opencrane/backend/server
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { CapabilitySetDigestSource, SessionAssemblyCommand } from "../session-assembly.types.js";
 import { describe, expect, it, vi } from "vitest";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import { FleetMembershipIdentityEnvelopeSource } from "../fleet-membership-identity-envelope-source.js";
 
@@ -14,7 +15,7 @@ function _command(): SessionAssemblyCommand
 /** Creates the immutable run authority needed only to request a capability-set digest. */
 function _run(): InitialRunAuthority
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null };
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null };
 }
 
 /** Creates a verified signed revision row returned by both membership reads in one transaction. */

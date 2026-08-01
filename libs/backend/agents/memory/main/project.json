@@ -1,0 +1,12 @@
+{
+  "name": "backend-agents-memory",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/memory/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:memory"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/memory/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/agents/memory/main" } },
+    "test:sql": { "executor": "nx:run-commands", "options": { "command": "sh ../../../../../scripts/run-postgres-authority-tests.sh tests/memory-authority.sql", "cwd": "libs/backend/agents/memory/main" } }
+  }
+}

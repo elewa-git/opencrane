@@ -12,12 +12,12 @@ authority**. A runtime can request memory actions only through the control plane
 | Component | Responsibility |
 |---|---|
 | Cognee | Durable memory content and retrieval |
-| OpenCrane memory catalogue | Dataset identity, digest, provenance, consent and sensitivity metadata |
-| Run input compiler | Selects authorised memory evidence for one run snapshot |
+| OpenCrane agent-memory catalogue | Dataset identity, digest, provenance, consent and sensitivity metadata |
+| Personal-memory selector | Selects a verified user's dataset and explicit preference-fact coordinates |
 | Runtime | Proposes a memory action; never selects another user's dataset |
 
-OpenCrane does not duplicate fact text in its product database. It records a content digest and
-exact provenance after Cognee has durably accepted the content.
+OpenCrane does not duplicate fact text in its product database. The catalogue can record a content
+digest and exact provenance only after Cognee has durably accepted the content.
 
 ## Personal dataset binding
 
@@ -41,10 +41,11 @@ Exactly one provenance source is required: an artifact revision, a conversation 
 explicit user statement. Explicit statements must identify the same authenticated author as
 the target personal dataset.
 
-::: info Current transport status
-The catalogue, dataset resolver and provenance rules are implemented. The current OpenCrane
-composition injects an unavailable memory-gateway client, so runtime Cognee reads and writes
-fail closed until the authenticated transport is mounted.
+::: info Current composition status
+The catalogue/outbox and personal-dataset selection boundaries are implemented, but personal run
+admission does not compose them yet. The current external-action composition also injects an
+unavailable memory-gateway client, so runtime Cognee reads and writes fail closed until an
+authenticated transport and personal-admission composition are mounted.
 :::
 
 ::: tip
@@ -66,5 +67,6 @@ subject to the same approval, receipt and audit boundaries as other tools.
 - An unavailable memory transport does not fabricate a result.
 - Runtime-local scratch is never promoted to durable memory implicitly.
 
-Source: [`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
-and [`libs/server/_infra/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/server/_infra/memory-gateway-client/README.md).
+Source: [`libs/backend/agents/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/memory/main/README.md),
+[`libs/backend/agents/personal/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md),
+and [`libs/server/_infra/memory-gateway-client`](https://github.com/elewa-git/opencrane/blob/main/libs/server/_infra/memory-gateway-client/README.md).

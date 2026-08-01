@@ -13,12 +13,28 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "MemoryCatalogRepository",
+        "importPath": "./memory-catalog.types.js"
+      },
+      {
+        "contract": "MemoryCatalogCollisionRepository",
+        "importPath": "./memory-catalog.types.js"
+      },
+      {
+        "contract": "PersonalMemoryAdmissionRepository",
+        "importPath": "./personal-memory-dataset.types.js"
       }
     ],
     "unitsOfWork": [
       {
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
         "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "MemoryCatalogUnitOfWork",
+        "importPath": "./memory-catalog.types.js"
       }
     ],
     "compositions": [

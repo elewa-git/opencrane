@@ -1,4 +1,5 @@
 import { PersonaRevisionState } from "@prisma/client";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
@@ -7,7 +8,7 @@ import { PrismaApprovedPersonaSource } from "../prisma-approved-persona-source.j
 /** Creates personal run authority bound to its delegated owner. */
 function _PersonalRun(overrides: Partial<InitialRunAuthority> = {}): InitialRunAuthority
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null, ...overrides };
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null, ...overrides };
 }
 
 /** Creates the narrow command whose subject owns the personal profile. */
@@ -35,7 +36,7 @@ describe("PrismaApprovedPersonaSource", function _DescribePrismaApprovedPersonaS
 	{
 		const transaction = _Transaction({ id: "persona-1", state: PersonaRevisionState.Approved, personaProfileId: "profile-1" });
 		await expect(new PrismaApprovedPersonaSource().load(_Command({ executionSubjectId: "user-2" }), _PersonalRun(), transaction)).resolves.toEqual({ outcome: "denied", reason: "persona_unavailable" });
-		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun({ agentKind: "managed", delegatedUserId: null }), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null } });
+		await expect(new PrismaApprovedPersonaSource().load(_Command(), _PersonalRun({ agentKind: AgentServiceKinds.Managed, delegatedUserId: null }), transaction)).resolves.toEqual({ outcome: "loaded", value: { personaRevisionId: null } });
 	});
 
 	it("refuses a missing or non-approved active revision", async function _RejectsDraftPersona()

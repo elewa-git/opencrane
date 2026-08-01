@@ -6,19 +6,20 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 {
 	it("selects the dataset from the verified organization and subject instead of caller input", async function _selectsVerifiedDataset()
 	{
-		const datasets = { findActivePersonalDataset: vi.fn().mockResolvedValue({ datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }) };
-		const source = new PersonalMemoryScopeSource(datasets);
+		const personalMemory = { findActivePersonalDataset: vi.fn().mockResolvedValue({ datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }) };
+		const transaction = { prisma: {} };
+		const source = new PersonalMemoryScopeSource(personalMemory as never);
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, {} as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }, memoryFacts: [] } });
-		expect(datasets.findActivePersonalDataset).toHaveBeenCalledWith({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" });
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, transaction as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }, memoryFacts: [] } });
+		expect(personalMemory.findActivePersonalDataset).toHaveBeenCalledWith(transaction, { siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" });
 	});
 
 	it("refuses a managed run before personal dataset lookup", async function _deniesManagedRun()
 	{
-		const datasets = { findActivePersonalDataset: vi.fn() };
-		const source = new PersonalMemoryScopeSource(datasets);
+		const personalMemory = { findActivePersonalDataset: vi.fn() };
+		const source = new PersonalMemoryScopeSource(personalMemory as never);
 
 		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "managed" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, {} as never)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
-		expect(datasets.findActivePersonalDataset).not.toHaveBeenCalled();
+		expect(personalMemory.findActivePersonalDataset).not.toHaveBeenCalled();
 	});
 });

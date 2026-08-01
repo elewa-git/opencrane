@@ -1,4 +1,4 @@
-import type { AgentBudget, AgentRevision, AgentRevisionState, AgentRun, AgentRunState, AgentRunTerminalReason, AgentRunTrigger, AgentService, AgentServiceKind, AgentServiceState, GrantScope, GrantSubjectType } from "@opencrane/models/agents";
+import { AgentServiceKinds, type AgentBudget, type AgentRevision, type AgentRevisionState, type AgentRun, type AgentRunState, type AgentRunTerminalReason, type AgentRunTrigger, type AgentService, type AgentServiceKind, type AgentServiceState, type GrantScope, type GrantSubjectType } from "@opencrane/models/agents";
 
 import type { AgentRevisionRow, AgentRunRow, AgentServiceRow } from "./prisma-agent-mappers.types.js";
 
@@ -18,8 +18,8 @@ export function _serviceState(value: string): AgentServiceState
 /** Maps a Prisma AgentService kind identifier to the target contract value. */
 export function _serviceKind(value: string): AgentServiceKind
 {
-	if (value === "Personal") return "personal";
-	if (value === "Managed") return "managed";
+	if (value === "Personal") return AgentServiceKinds.Personal;
+	if (value === "Managed") return AgentServiceKinds.Managed;
 	throw new Error(`unknown AgentService kind: ${value}`);
 }
 

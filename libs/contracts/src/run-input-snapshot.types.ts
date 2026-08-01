@@ -3,6 +3,15 @@ import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/arti
 import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
 
+/** Tagged identity vocabulary frozen in a run input snapshot. */
+export enum RunInputSnapshotIdentityKinds
+{
+	/** A verified human user starts the interactive personal run. */
+	User = "user",
+	/** A verified managed service starts an autonomous managed run. */
+	Service = "service",
+}
+
 /** Signed membership evidence pinned into either kind of execution identity. */
 export interface RunInputSnapshotFleetMembershipEvidence
 {
@@ -26,7 +35,7 @@ export interface RunInputSnapshotFleetMembershipEvidence
 export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
 	/** Discriminant that prevents a service principal from being mistaken for a user. */
-	kind: "user";
+	kind: RunInputSnapshotIdentityKinds.User;
 	/** Human subject whose verified membership and grants authorize this exact run. */
 	executionSubjectId: string;
 }
@@ -46,7 +55,7 @@ export interface ManagedRunInputScopeAttachment
 export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
 	/** Discriminant that prevents service evidence from falling through to personal-user paths. */
-	kind: "service";
+	kind: RunInputSnapshotIdentityKinds.Service;
 	/** Canonical derived principal in `agent-service:<AgentServiceId>` form. */
 	executionSubjectId: string;
 	/** Active managed service whose revision owns this exact execution authority. */

@@ -73,6 +73,9 @@
       "@opencrane/backend/agents/personal/memory": [
         "./libs/backend/agents/personal/memory/main/src/index.ts"
       ],
+      "@opencrane/backend/agents/memory": [
+        "./libs/backend/agents/memory/main/src/index.ts"
+      ],
       "@opencrane/backend/server/gateways/model-routing": [
         "./libs/backend/server/gateways/model-routing/main/src/index.ts"
       ],

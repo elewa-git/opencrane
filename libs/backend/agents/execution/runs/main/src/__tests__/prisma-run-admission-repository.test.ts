@@ -1,5 +1,5 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { AgentServiceKinds, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/observability";
 import { describe, expect, it, vi } from "vitest";
 
@@ -9,7 +9,7 @@ import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository
 function _snapshot(): RunInputSnapshot
 {
 	return {
-		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: "message", sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
+		runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: "thread-1", messageIds: ["message-1"], personaRevisionId: "persona-1", preferenceFactIds: ["preference-1"], artifactRevisionIds: ["artifact-1"], skillRevisionIds: ["skill-1"], memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: `sha256:${"e".repeat(64)}`, provenance: [{ sourceKind: MemoryFactProvenanceSourceKinds.Message, sourceId: "message-1", capturedAt: "2026-07-20T00:00:00.000Z" }] }], memoryQueryPolicy: { scope: "personal" }, integrationAssignments: [{ integrationId: "integration-1", allowedTools: ["search"] }], modelRoute: { alias: "target" }, budgetPolicy: { maxTokens: 1000 }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" }, capabilitySetDigest: `sha256:${"a".repeat(64)}`, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", digest: `sha256:${"c".repeat(64)}`, compiledAt: "2026-07-20T00:00:00.000Z",
 	};
 }
 
@@ -22,16 +22,16 @@ function _command()
 /** Creates the immutable authority facts that are revalidated within the admission transaction. */
 function _authority()
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } as const;
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: `sha256:${"b".repeat(64)}`, promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null } as const;
 }
 
 describe("PrismaRunAdmissionRepository", function _describeAdmissionRepository()
 {
 	it("admits a scheduled managed run without accepting a user-shaped execution subject", async function _admitsManagedService()
 	{
-		const snapshot = { ..._snapshot(), threadId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: "service", executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"f".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
+		const snapshot = { ..._snapshot(), threadId: null, personaRevisionId: null, memoryQueryPolicy: { scope: "none" }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.Service, executionSubjectId: "agent-service:service-1", agentServiceId: "service-1", effectiveScopeAttachments: [], effectiveScopeAttachmentDigest: `sha256:${"f".repeat(64)}`, organizationId: "org-1", fleetMembershipRevision: 4, fleetMembershipIssuer: "opencrane-fleet", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: `sha256:${"d".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-20T01:00:00.000Z" } } as RunInputSnapshot;
 		const command = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "schedule", requestIdempotencyKey: "schedule:service-1:slot-1" } as const;
-		const authority = { ..._authority(), agentKind: "managed", trigger: "schedule", delegatedUserId: null } as const;
+		const authority = { ..._authority(), agentKind: AgentServiceKinds.Managed, trigger: "schedule", delegatedUserId: null } as const;
 		const transaction = { $queryRaw: vi.fn().mockResolvedValue([]), agentRun: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "run-1" }) }, runInputSnapshot: { create: vi.fn().mockResolvedValue({ id: "snapshot-1" }) }, outboxEvent: { createMany: vi.fn().mockResolvedValue({ count: 2 }) } };
 		const prisma = { $transaction: vi.fn(async function _transaction(callback: (client: typeof transaction) => Promise<unknown>) { return callback(transaction); }) } as unknown as PrismaClient;
 		const repository = new PrismaRunAdmissionRepository(prisma, { now: function _now() { return new Date("2026-07-20T00:00:00.000Z"); } });

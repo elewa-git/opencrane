@@ -1,6 +1,8 @@
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
 import type { FleetMembershipAdmissionExpectation, FleetMembershipSignatureVerifier } from "@opencrane/backend/server/iam/membership";
+import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 import { ___IsSha256Digest } from "@opencrane/util";
 
 import type { CapabilitySetDigestSource, IdentityEnvelopeInput, IdentityEnvelopeSource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
@@ -31,9 +33,9 @@ export class FleetMembershipIdentityEnvelopeSource implements IdentityEnvelopeSo
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<IdentityEnvelopeInput>>
 	{
 		// 1. Resolve the capability digest within the final transaction so a concurrent revocation cannot leave stale grants in the snapshot.
-		if (command.identityKind !== "user" || run.agentKind !== "personal") return { outcome: "denied", reason: "identity_unavailable" };
+		if (command.identityKind !== "user" || run.agentKind !== AgentServiceKinds.Personal) return { outcome: "denied", reason: "identity_unavailable" };
 		const capabilitySet = await this.capabilitySet.load(command, run, transaction);
-		if (capabilitySet.outcome === "denied") return capabilitySet;
+		if ("reason" in capabilitySet) return capabilitySet;
 		if (!___IsSha256Digest(capabilitySet.value)) return { outcome: "denied", reason: "identity_unavailable" };
 
 		// 2. Verify the exact membership assertion and update the issuer/silo high-watermark through this same transaction client.
@@ -46,13 +48,13 @@ export class FleetMembershipIdentityEnvelopeSource implements IdentityEnvelopeSo
 			nowEpochMs: transaction.admittedAtEpochMs,
 			maximumStalenessMs: this.expectation.maximumStalenessMs,
 		});
-		if (membership.outcome === "denied") return { outcome: "denied", reason: "membership_stale" };
+		if ("reason" in membership) return { outcome: "denied", reason: "membership_stale" };
 
 		// 3. Project only verifier-produced facts so the persisted snapshot cannot be fabricated by the admission caller.
 		return {
 			outcome: "loaded",
 			value: {
-				kind: "user",
+				kind: RunInputSnapshotIdentityKinds.User,
 				executionSubjectId: membership.evidence.subjectId,
 				organizationId: membership.evidence.organizationId,
 				fleetMembershipRevision: membership.evidence.revision,

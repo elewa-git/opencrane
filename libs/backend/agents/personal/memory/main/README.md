@@ -1,91 +1,67 @@
-# @opencrane/backend/agents/personal/memory — memory fact catalog
+# @opencrane/backend/agents/personal/memory — verified personal-memory selection
 
-> [backend](../../../../README.md) › [agents](../../../README.md) › personal › memory
+> [backend](../../../../README.md) › [agents](../../../README.md) › [personal](../../README.md) › memory
 
 ## What it owns
 
-This package is part of the **personal-agent product**. As a user's agent works, it learns durable
-**memory facts** — things worth remembering across conversations ("the user prefers UK spelling").
-The full text of those facts is not stored here: it lives in **Cognee**, a separate memory service
-that OpenCrane runs. This package owns the **catalog** — the index of *metadata and provenance* about
-each fact: which dataset it belongs to, its Cognee identifier, a digest of its content, how sensitive
-it is, whether the user consented, and exactly where it came from.
-
-The reason for the split is a newcomer's first question: *why keep only metadata?* Because Cognee is
-the durable home for content, and copying that content into OpenCrane's own database would duplicate
-it and risk the two drifting apart. So this catalog records a **content digest** — a short fingerprint
-of the fact (CAS-style: content-addressed storage, where a value is named by the hash of its bytes) —
-never the fact text itself.
+This package is the personal-agent boundary for two admission decisions: which active Cognee dataset
+belongs to one verified user in one organisation, and which consented facts that user explicitly
+supplied may personalise a frozen run input. It receives the existing run-admission transaction, so
+both reads occur at the same final identity and revocation fence as every other snapshot input.
 
 ```
- Cognee accepts durable fact content
-          │  external id · content digest · source · consent · sensitivity
+ verified user identity + RunAdmissionTransaction
+          │ silo · organisation · subject
           ▼
- ┌──────────────────────────────┐
- │    memory  ◄── HERE           │  one explainable source? valid digest? consented?
- └──────────────────────────────┘
-          │  recorded (catalog row + outbox intent) / denied (+ reason)
+ ┌──────────────────────────────────┐
+ │  personal memory  ◄── HERE        │  exact dataset + explicit preference ids
+ └──────────────────────────────────┘
+          │ catalog id + Cognee dataset id / fact coordinates
           ▼
- OpenCrane catalog  ── later explained, corrected, or superseded
+ execution input snapshot ── later recall through memory gateway
 ```
 
-**In this flow:** Cognee memory service *(durable content store, external)* ·
-[artifacts/store](../../../../artifacts/store/main/README.md) *(one allowed fact source is an artifact revision)*
+**In this flow:** [execution inputs](../../../execution/inputs/main/README.md) freezes the selected
+coordinates, [agent memory](../../../memory/main/README.md) owns generic metadata and outbox writes,
+and the [memory gateway](../../../../../server/_infra/memory-gateway-client/README.md) is the only
+fact-content boundary.
 
-The use case requires exactly **one** provenance source per fact — an artifact revision, a
-conversation message, or an explicit user statement — plus a valid SHA-256 content digest, before it
-persists anything. Invariant: a catalog row and its downstream event (the "outbox intent" that tells
-the rest of the system a fact was recorded) commit together in one transaction, so the catalog can
-never claim a fact Cognee does not have. Repeat deliveries are treated as success (idempotent) via the
-idempotency key, while a retired dataset or a conflicting correction fails closed.
-
-For an explicit statement, the command also carries the authenticated statement author's id. The
-catalog requires that id to match both `recordedBy` and the provenance's `sourceUserId`; it therefore
-cannot turn one user's statement into a preference for another user's run. A successor fact emits
-`memory.fact_corrected` rather than `memory.fact_recorded`, so consumers can distinguish a correction
-from a first learned preference.
+The invariant is identity-bound selection: neither a request nor a tool argument can choose a
+dataset by identifier. The repository reads only the exact silo, organisation, and verified subject;
+it returns only active, consented facts whose provenance names that subject. It stores no fact text
+and never calls Cognee.
 
 ## Public surface
 
-- `__RecordMemoryFact(repository, command)` — the single use case: validate provenance, then record catalog metadata atomically.
-- `RecordMemoryFactCommand` / `RecordMemoryFactResult` — the request and the stable allow/deny outcome.
-- `MemoryFactSource` — the one-of-three provenance reference (artifact revision · message · explicit statement).
-- `AtomicRecordMemoryFactResult` — the raw persistence outcome the repository returns.
-- `MemoryCatalogRepository` — the persistence port a caller may inject.
-- `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
-  metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
-- `__ResolvePersonalMemoryDataset(repository, command)` — selects the one active personal dataset
-from a signed run's silo, organization, and subject. It takes no caller-supplied dataset id.
-
-Forgetting is an explicit one-way lifecycle. Postgres records the request instant and completion
-instant as immutable evidence, and refuses a completion that predates its request. That lets later
-audit distinguish a pending erasure from a completed one without a mutable timestamp hiding history.
-- `PrismaPersonalMemoryDatasetRepository` — the production lookup adapter for that exact personal
-  dataset tuple.
+- `__ResolvePersonalMemoryDataset(repository, unitOfWork, command)` — fail-closed selection of one
+  active personal dataset from verified coordinates.
+- `__SelectPersonalPreferenceFactIds(repository, unitOfWork, command)` — selects explicit,
+  consented personal-preference metadata for the same coordinates.
+- `PrismaPersonalMemoryAdmissionRepository` — transaction-scoped Prisma adapter for both reads.
+- `PersonalMemoryAdmissionRepository` / `PersonalMemoryAdmissionUnitOfWork` — ports that preserve
+  the caller-owned admission transaction without exposing Prisma delegates to execution inputs.
 
 ## Boundary
 
-Consumed by the personal-agent memory-writing path. It never stores durable fact content — that stays
-in Cognee — and it never accepts a fact without an explainable source. Its dataset resolver binds
-personal memory to the run's verified `(silo, organization, subject)` tuple; no browser or runtime
-caller can select a different user's dataset by id. Storage is injected through small repository ports,
-keeping both use cases pure.
+Consumed by execution-input assembly. It must not write generic fact metadata, own a transaction,
+derive a dataset from a subject outside admission, read durable fact text, call Cognee, or compose a
+runtime. Personal admission remains deliberately uncomposed in the current application; this package
+is prepared for that future wiring but does not claim it is a live personal-memory feature.
 
 ## Dependency direction
 
-Tagged `scope:personal-memory`: it may depend only on `scope:artifacts` (to reference an artifact
-revision as a source), `scope:personal-memory`, and `scope:shared` — never on apps or sibling domains.
+Tagged `scope:personal-memory`, this backend package may depend only on its own scope and
+`scope:shared`. It has no dependency on generic catalog/outbox authority, a gateway transport, or an
+app composition root.
 
 ## Data & persistence
 
-Persists catalog metadata and a Cognee-outbox intent in one transaction through the injected
-repository. The shipped `PrismaMemoryCatalogRepository` is that canonical product-database adapter;
-it deliberately accepts only metadata returned after Cognee has durably accepted the content. It does
-not create a personal dataset, call Cognee, or dispatch the outbox. Those are separate boundaries so a
-network failure can never make Postgres claim content that Cognee did not accept. Postgres-level
-behaviour is exercised by the `test:sql` target (`tests/memory-authority.sql`).
+Reads `MemoryDataset` and `MemoryFactCatalog` through the repository port using the existing
+`RunAdmissionTransaction`. Generic catalog and outbox writes belong to
+[agent memory](../../../memory/main/README.md), which owns the `memory.prisma` persistence boundary.
 
 ## See also
 
-- Parent index: [agents](../../../README.md)
-- Related authorities: [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [runs](../../../execution/runs/main/README.md) · [personas](../../personas/main/README.md)
+- Parent group: [personal-agent domains](../../README.md)
+- Snapshot assembly: [execution inputs](../../../execution/inputs/main/README.md)
+- Generic catalogue: [agent memory](../../../memory/main/README.md)
