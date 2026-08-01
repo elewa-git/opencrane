@@ -1,3 +1,5 @@
+import type { RateLimitOptions } from "@opencrane/server/_infra/http";
+
 /** A valid API payload-type string for a share. */
 export type SharePayloadType = "mcp-server";
 /** A valid API recipient-kind string for a share. */
@@ -14,4 +16,11 @@ export interface CreateShareBody
   recipientId?: string;
   scope?: string;
   note?: string;
+}
+
+/** Configuration for the sharing HTTP boundary. The production default remains the shared API limit. */
+export interface SharesRouterOptions
+{
+	/** Optional bounded limiter tuning for an isolated router composition, primarily test compositions. */
+	readonly rateLimit?: RateLimitOptions;
 }

@@ -7,10 +7,9 @@ import { __DigestCanonicalJson, PrismaAuthorizationGrantRepository, PrismaShareA
 import type { ShareAuthorizationGrant, ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
 import { _RateLimit } from "@opencrane/server/_infra/http";
-import type { RateLimitOptions } from "@opencrane/server/_infra/http";
 import type { JsonValue } from "@opencrane/util";
 import { _log } from "../log.js";
-import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
+import type { CreateShareBody, SharePayloadType, ShareRecipientType, SharesRouterOptions, ShareScope } from "./shares.types.js";
 
 /** Payload families a user may share (the entitlement surfaces the runtime contract carries). */
 const _PAYLOAD_TYPES: readonly SharePayloadType[] = ["mcp-server"];
@@ -29,13 +28,6 @@ const _SHARES_CAPABILITY_ID = "mcp-server:use";
 const _SHARES_RESOURCE_KIND = "mcp-server";
 /** Priority for share-originated grants (user-to-user delegation, lowest tier). */
 const _SHARES_GRANT_PRIORITY = 0;
-
-/** Configuration for the sharing HTTP boundary. The production default remains the shared API limit. */
-interface SharesRouterOptions
-{
-	/** Optional bounded limiter tuning for an isolated router composition, primarily test compositions. */
-	readonly rateLimit?: RateLimitOptions;
-}
 
 /** Map the API scope string to the Prisma AuthorizationScopeKind enum. */
 const _PRISMA_SCOPE_BY_API: Record<ShareScope, AuthorizationScopeKind> =
