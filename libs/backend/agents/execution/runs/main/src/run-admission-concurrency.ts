@@ -1,4 +1,5 @@
 import type { RunAdmissionCommand } from "./run-admission.types.js";
+import { RunAdmissionConcurrencyDenialReasons } from "./run-admission-concurrency.types.js";
 import type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";
 
 /** Bounds admission work by silo and service before a caller can take a PostgreSQL connection. */
@@ -41,7 +42,7 @@ export class RunAdmissionConcurrencyGate
 		// 2. Bound waiting work in memory so an overloaded service cannot turn into an unbounded process queue.
 		if (queue.waiting.length >= this.policy.maxQueuedAdmissions)
 		{
-			return { outcome: "rejected", reason: "admission_concurrency_limited" };
+			return { outcome: "rejected", reason: RunAdmissionConcurrencyDenialReasons.AdmissionConcurrencyLimited };
 		}
 
 		// 3. Preserve FIFO order while waiting outside the database pool, then run exactly one released admission.

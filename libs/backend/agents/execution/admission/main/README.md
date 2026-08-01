@@ -1,21 +1,20 @@
-# @opencrane/backend/agents/execution/admission — managed run admission composition
+# @opencrane/backend/agents/execution/admission — trusted run admission composition
 
 > [backend](../../../../README.md) › [agents](../../../README.md) › [execution](../../README.md) › admission
 
 ## What it owns
 
-This package is the managed-agent entry into the shared execution flow. An authenticated agent
-service request has already been authorized before it arrives here. Admission then composes the
-current service evidence, immutable input assembly, durable run repository, and process-local
-capacity controls into the single `ManagedRunAdmissionPort` used by both run-now requests and the
-scheduler.
+This package is the entry into the shared execution flow for both a user's personal conversation
+and a managed agent. An authenticated request has already established its identity before it
+arrives here. Admission then composes current evidence, immutable input assembly, the durable run
+repository, and one app-owned process-local capacity boundary.
 
 ```
- authorised managed request ........ service coordinates + current evidence
+ authenticated request ............. browser or service identity + current evidence
                  │
                  ▼
  ┌────────────────────────────────────────┐
- │ execution/admission  ◄── HERE           │ capacity grant at process/silo/service
+ │ execution/admission  ◄── HERE           │ one shared capacity grant at process/silo/service
  │ compose inputs + runs + evidence        │ then assemble and persist one snapshot
  └────────────────────────────────────────┘
                  │  admitted run id / stable denial
@@ -27,26 +26,44 @@ scheduler.
 the authorized managed request and evidence · [inputs](../../inputs/main/README.md) assembles the
 immutable snapshot · [runs](../../runs/main/README.md) persists the durable run authority
 
-One shared port instance serves every managed admission path in the server process. That is
-load-bearing: separate run-now and scheduler gates could each consume the same database budget.
-Admission is granted only when the process, silo, and exact agent service all have capacity. A
-missing, stale, overloaded, or inconsistent input produces a denial before unbounded persistence
-work begins.
+One shared gate serves every personal and managed admission path in the server process. That is
+load-bearing: separate entrypoint gates could each consume the same database budget. Admission is
+granted only when the process, silo, and exact agent service all have capacity. A missing, stale,
+overloaded, or inconsistent input produces a denial before unbounded persistence work begins.
+
+Personal admission has two bounded stages. A synthetic per-silo preflight lane first limits its
+duplicate-key and participant-thread reads, before a browser request can touch PostgreSQL. Once
+that lane has derived the real personal AgentService, the normal process/silo/service gate limits
+the final transaction that rechecks all mutable authority and persists the snapshot. The first lane
+does not grant product authority; it is overload protection for the read path.
 
 ## Public surface
 
-- `__CreateManagedRunAdmissionPort(prisma, policy, evidenceAuthority)` composes the production
-  managed admission port from the durable repository and current evidence sources.
+- `__CreateManagedRunAdmissionPort(prisma, capacityGate, evidenceAuthority)` composes the managed
+  port from the durable repository, a mounted-key-backed evidence authority, and the app-owned
+  shared gate.
+- `__CreatePersonalRunAdmissionPort(prisma, capacityGate, membershipEvidence)` composes the
+  personal port from neutral mounted-key fleet-membership trust. It derives an AgentService from a
+  participant-owned thread and verifies exactly one signed personal membership assertion in the
+  final admission transaction.
+- `_CreateRunAdmissionCapacityGate(policy)` creates the one hierarchical process/silo/service gate
+  injected into both personal and managed ports.
+- `__CreatePersonalRunAdmissionRouter(dependencies)` adapts the exact two-field browser request to
+  the personal port; session principal and host-derived silo are the only identity coordinates.
+- `_PersonalRunAdmissionOpenapiPaths` contributes the `POST /api/v1/me/runs` request and response
+  contract to the server-owned API specification.
+- `PersonalRunAdmissionPort` and `RunAdmissionCapacityGate` are the only cross-package port types;
+  repository, router-dependency, and preflight types remain internal implementation detail.
 - `__ReadRunAdmissionConcurrencyPolicy(environment?)` reads and validates the two bounded capacity
   settings. The optional map exists for deterministic configuration tests; production uses
   `process.env`.
 
 ## Boundary
 
-Consumed by the OpenCrane server composition root, which creates exactly one port and passes it to
-the run-now router and scheduler. This package does not authenticate HTTP requests, authorize agent
-service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It accepts a
-service-owned evidence authority and delegates durable snapshot and run rules to their owning
+Consumed by the OpenCrane server composition root, which creates one shared gate and passes it to
+the personal API, run-now router, and scheduler. This package does not authenticate HTTP requests,
+authorize agent service publication, schedule work, dispatch Kubernetes Jobs, or execute a run. It
+accepts server-owned identity evidence and delegates durable snapshot and run rules to their owning
 packages.
 
 The in-memory gates are overload protection, not product authority. Silo identity and admission

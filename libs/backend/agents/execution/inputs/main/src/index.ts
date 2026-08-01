@@ -1,4 +1,5 @@
 export * from "./managed-execution-identity-envelope-source.js";
+export { PersonalExecutionIdentityEnvelopeSource } from "./personal-execution-identity-envelope-source.js";
 export { __CreatePrismaManagedSessionAssemblyAuthorities, __CreatePrismaPersonalSessionAssemblyAuthorities } from "./prisma-session-assembly-authorities.js";
 export * from "./prisma-skill-revision-eligibility-source.js";
 export * from "./prompt-compiler.js";

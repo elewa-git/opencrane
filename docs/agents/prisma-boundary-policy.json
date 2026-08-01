@@ -25,6 +25,14 @@
       {
         "contract": "PersonalMemoryAdmissionRepository",
         "importPath": "./personal-memory-dataset.types.js"
+      },
+      {
+        "contract": "PersonalExecutionIdentityAuthorityRepository",
+        "importPath": "./personal-execution-identity-envelope-source.types.js"
+      },
+      {
+        "contract": "PersonalRunAdmissionRepository",
+        "importPath": "./personal-run-admission.types.js"
       }
     ],
     "unitsOfWork": [
@@ -38,7 +46,8 @@
       }
     ],
     "compositions": [
-      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
+      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
+      "libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts"
     ]
   },
   "exemptions": []

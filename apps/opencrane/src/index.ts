@@ -2,8 +2,9 @@
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
 import "./app/instrument.js";
 
-import { __CreateManagedRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/admission";
-import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
+import { PrismaManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
@@ -31,11 +32,14 @@ function _Main(): void
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 
-	// 3. Compose the single managed-run capacity authority shared by HTTP and scheduled admissions.
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, __ReadRunAdmissionConcurrencyPolicy(), _CreateManagedExecutionEvidenceAuthority());
+	// 3. Compose one shared capacity gate and one mounted membership verifier for every run entrypoint.
+	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
+	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, new PrismaManagedExecutionEvidenceAuthority(membershipEvidence));
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence);
 
 	// 4. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime);
 

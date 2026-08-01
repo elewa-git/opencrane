@@ -44,7 +44,8 @@ snapshot field except its own digest. The persisted snapshot stores revision-sel
 tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
 is rechecked only when an action is actually attempted.
 
-`RunAdmissionConcurrencyGate` is the upstream overload boundary for a live admission entrypoint.
+`RunAdmissionConcurrencyGate` is the upstream overload boundary used by the shared admission
+capacity boundary for live personal and managed entrypoints.
 It partitions capacity by `(siloId, AgentServiceId)`, starts only the configured number of admissions,
 and holds a bounded FIFO queue **before** its work can open a PostgreSQL transaction. A full queue is
 rejected with `admission_concurrency_limited`; it does not turn a hot service row lock into an

@@ -10,27 +10,7 @@
  * The generated openapi.json is a dist artifact, not source.
  */
 
-// ---------------------------------------------------------------------------
-// Domain path imports
-// ---------------------------------------------------------------------------
-
-import { _McpOpenapiPaths } from "@opencrane/backend/server/gateways/mcp";
-import { _GrantsOpenapiPaths } from "@opencrane/backend/server/iam/grants";
-import { _GroupsOpenapiPaths } from "@opencrane/backend/server/iam/groups";
-import { _RetrievalOpenapiPaths } from "@opencrane/backend/server/knowledge/retrieval";
-import { _ProvidersOpenapiPaths } from "@opencrane/backend/server/gateways/providers";
-import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/model-routing";
-import { _SpendOpenapiPaths } from "@opencrane/backend/server/reporting/spend";
-import { _AuditOpenapiPaths } from "@opencrane/backend/server/iam/audit";
-import { _AuthorizationOpenapiPaths } from "@opencrane/backend/server/iam/authorization";
-import { _RuntimeSteeringOpenapiPaths } from "@opencrane/backend/agents/execution/protocol";
-import { _SelfRunStatusOpenapiPaths } from "@opencrane/backend/agents/execution/runs";
-import { _PersonaOnboardingOpenapiPaths } from "@opencrane/backend/agents/personal/personas";
-import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
-import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/agent-services";
-import { _PersonalConfigurationOpenapiPaths } from "@opencrane/backend/agents/personal/configuration";
-import { _SkillCatalogueOpenapiPaths } from "@opencrane/backend/server/agents/skills";
-import { _PersonalArtifactsOpenapiPaths } from "@opencrane/backend/server/agents/artifacts";
+import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -736,24 +716,8 @@ export const spec = {
     },
   },
   paths: {
-    // Compose domain paths in order — order matters for JSON serialization byte-identity
-    ..._McpOpenapiPaths,
-    ..._GrantsOpenapiPaths,
-    ..._GroupsOpenapiPaths,
-    ..._RetrievalOpenapiPaths,
-    ..._ProvidersOpenapiPaths,
-    ..._ModelRoutingOpenapiPaths,
-    ..._SpendOpenapiPaths,
-    ..._AuditOpenapiPaths,
-    ..._AuthorizationOpenapiPaths,
-    ..._RuntimeSteeringOpenapiPaths,
-    ..._SelfRunStatusOpenapiPaths,
-    ..._PersonaOnboardingOpenapiPaths,
-    ..._SelfConversationReplayOpenapiPaths,
-    ..._AgentServicesOpenapiPaths,
-    ..._PersonalConfigurationOpenapiPaths,
-    ..._SkillCatalogueOpenapiPaths,
-    ..._PersonalArtifactsOpenapiPaths,
+    // Compose domain paths in their deliberate JSON-serialization order.
+    ..._DomainOpenapiPaths,
 
     // ------------------------------------------------------------------
     // Auth — OIDC browser flow and session introspection

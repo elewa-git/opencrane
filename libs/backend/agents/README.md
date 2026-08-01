@@ -26,6 +26,7 @@ agent principles rather than becoming personal-only by proximity.
 | [`personal/personas`](./personal/personas/main/README.md) | Personal specialization: persona approval process. |
 | [`memory`](./memory/main/README.md) | Shared: durable fact metadata and outbox intent, not fact content. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
+| [`execution/admission`](./execution/admission/main/README.md) | Shared: trusted personal and managed entrypoints into immutable run admission. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
 | [`runtime`](./runtime/README.md) | Shared: Kubernetes Job projection and controller. |
@@ -33,6 +34,8 @@ agent principles rather than becoming personal-only by proximity.
 ```
  personal specialization                shared agent execution
  configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► runtime Job
+                                                     ▲
+                                             admission (trusted entry)
                    │                           frozen input  attempt   bounded executor boundary
                    └── verified catalog coordinates ──► memory metadata/outbox
 ```

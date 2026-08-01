@@ -87,9 +87,6 @@ same database update, so no retired service can still look runnable.
   `agent-service:<id>` principal, verifies its current signed fleet membership, intersects the
   active revision's non-personal scope attachments with effective grants, and digests the complete
   capability-bearing revision inside the run-admission transaction.
-- `_CreateManagedExecutionEvidenceAuthority` — owns the fail-closed environment policy for fleet
-  issuer, key identifier, mounted public-key source, and maximum membership staleness. The public key
-  is reloaded for every decision so a projected Secret rotation takes effect immediately.
 - Types: the lifecycle commands/results (`CreateManagedAgentServiceCommand`,
   `ReviseAgentRevisionCommand`, `RestoreAgentRevisionCommand`, `ChangeAgentServiceStateCommand`,
   `ManagedRunNowCommand`, `AgentRevisionLifecycleRepository`, `AgentServiceHistory`, …), the publish

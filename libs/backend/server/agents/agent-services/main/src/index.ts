@@ -18,5 +18,4 @@ export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.j
 export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 export { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
 export { __ManagedAgentServicePrincipal, PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.js";
-export { _CreateManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.factory.js";
 export type { ManagedExecutionEvidence, ManagedExecutionEvidenceAuthority, ManagedExecutionEvidenceCommand, ManagedExecutionEvidenceConfig, ManagedExecutionEvidenceResult, ManagedExecutionEvidenceTransaction } from "./managed-execution-evidence.types.js";
