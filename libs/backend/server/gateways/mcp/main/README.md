@@ -59,7 +59,7 @@ apps or other server domains.
 ## Data & persistence
 
 Owns `McpServer`, `McpServerInstall`, `McpServerAccessPolicy`, `McpServerAccessUser`,
-`McpServerGrant`, and `McpServerCredential` in `apps/opencrane/prisma/schema/mcp.prisma`.
+and `McpServerCredential` in `apps/opencrane/prisma/schema/mcp.prisma`.
 
 ## See also
 

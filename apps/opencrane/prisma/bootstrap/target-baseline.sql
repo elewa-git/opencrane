@@ -1,6 +1,3 @@
--- OpenCrane target database baseline.
--- Applied once by CloudNativePG while creating an empty application database.
-
 -- CreateSchema
 CREATE SCHEMA IF NOT EXISTS "public";
 
@@ -83,12 +80,6 @@ CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'perso
 CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'user');
 
 -- CreateEnum
-CREATE TYPE "GrantAccess" AS ENUM ('allow', 'deny');
-
--- CreateEnum
-CREATE TYPE "GrantPayloadType" AS ENUM ('mcp-server');
-
--- CreateEnum
 CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
@@ -125,6 +116,9 @@ CREATE TYPE "MemoryConsentState" AS ENUM ('explicit', 'confirmed');
 CREATE TYPE "MemoryOutboxEventKind" AS ENUM ('memory.fact_recorded', 'memory.fact_corrected', 'memory.forget_requested');
 
 -- CreateEnum
+CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
+
+-- CreateEnum
 CREATE TYPE "PersonaInterviewCategory" AS ENUM ('relationship_role', 'tone_language', 'answer_structure', 'challenge_support', 'initiative', 'approval_risk', 'working_habits', 'memory_boundaries');
 
 -- CreateEnum
@@ -135,9 +129,6 @@ CREATE TYPE "PersonaInterviewState" AS ENUM ('in_progress', 'completed');
 
 -- CreateEnum
 CREATE TYPE "PersonaRevisionState" AS ENUM ('draft', 'approved');
-
--- CreateEnum
-CREATE TYPE "PersonalConfigurationChangeState" AS ENUM ('proposed', 'accepted', 'applied', 'rejected', 'superseded');
 
 -- CreateEnum
 CREATE TYPE "ModelRoutingScope" AS ENUM ('global', 'clusterTenant');
@@ -243,23 +234,6 @@ CREATE TABLE "agent_revision_scope_attachments" (
 );
 
 -- CreateTable
-CREATE TABLE "agent_service_schedules" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "cron" TEXT NOT NULL,
-    "timezone" TEXT NOT NULL,
-    "overlap_policy" "AgentScheduleOverlapPolicy" NOT NULL DEFAULT 'skip',
-    "enabled" BOOLEAN NOT NULL DEFAULT true,
-    "catchup_window_seconds" INTEGER NOT NULL DEFAULT 3600,
-    "last_scheduled_at" TIMESTAMP(3),
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "agent_service_schedules_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "agent_revision_skill_assignments" (
     "agent_revision_id" TEXT NOT NULL,
     "skill_id" TEXT NOT NULL,
@@ -277,6 +251,23 @@ CREATE TABLE "agent_revision_integration_assignments" (
     "allowed_tools" TEXT[],
 
     CONSTRAINT "agent_revision_integration_assignments_pkey" PRIMARY KEY ("agent_revision_id","integration_id")
+);
+
+-- CreateTable
+CREATE TABLE "agent_service_schedules" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "cron" TEXT NOT NULL,
+    "timezone" TEXT NOT NULL,
+    "overlap_policy" "AgentScheduleOverlapPolicy" NOT NULL DEFAULT 'skip',
+    "enabled" BOOLEAN NOT NULL DEFAULT true,
+    "catchup_window_seconds" INTEGER NOT NULL DEFAULT 3600,
+    "last_scheduled_at" TIMESTAMP(3),
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "agent_service_schedules_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -451,6 +442,7 @@ CREATE TABLE "authorization_grants" (
     "valid_from" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
+    "require_approval" BOOLEAN NOT NULL DEFAULT false,
     "created_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -684,26 +676,6 @@ CREATE TABLE "conversation_context_revisions" (
 );
 
 -- CreateTable
-CREATE TABLE "grants" (
-    "id" TEXT NOT NULL,
-    "payload_type" "GrantPayloadType" NOT NULL,
-    "payload_id" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
-    "subject_type" "GrantSubjectType" NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "access" "GrantAccess" NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 0,
-    "note" TEXT,
-    "shared_by" TEXT,
-    "group_id" TEXT,
-    "mcp_server_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "grants_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "groups" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -803,24 +775,6 @@ CREATE TABLE "mcp_server_access_users" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "mcp_server_access_users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "mcp_server_grants" (
-    "id" TEXT NOT NULL,
-    "mcp_server_id" TEXT NOT NULL,
-    "grant_id" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
-    "subject_type" "GrantSubjectType" NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "access" "GrantAccess" NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 0,
-    "note" TEXT,
-    "group_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "mcp_server_grants_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -944,6 +898,31 @@ CREATE TABLE "model_routing_defaults" (
 );
 
 -- CreateTable
+CREATE TABLE "personal_configuration_changes" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "user_id" TEXT NOT NULL,
+    "persona_profile_id" TEXT NOT NULL,
+    "agent_service_id" TEXT NOT NULL,
+    "source_thread_id" TEXT NOT NULL,
+    "source_run_id" TEXT NOT NULL,
+    "source_message_id" TEXT,
+    "requested_patch" JSONB NOT NULL,
+    "requested_patch_digest" TEXT NOT NULL,
+    "expected_persona_revision_id" TEXT,
+    "expected_agent_revision_id" TEXT,
+    "applied_persona_revision_id" TEXT,
+    "applied_agent_revision_id" TEXT,
+    "state" "PersonalConfigurationChangeState" NOT NULL DEFAULT 'proposed',
+    "proposed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "decided_at" TIMESTAMP(3),
+    "decided_by" TEXT,
+    "rejection_reason" TEXT,
+
+    CONSTRAINT "personal_configuration_changes_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
 CREATE TABLE "persona_question_sets" (
     "question_set_id" TEXT NOT NULL,
     "version" INTEGER NOT NULL,
@@ -1060,31 +1039,6 @@ CREATE TABLE "persona_insights" (
 );
 
 -- CreateTable
-CREATE TABLE "personal_configuration_changes" (
-    "id" TEXT NOT NULL,
-    "silo_id" TEXT NOT NULL,
-    "user_id" TEXT NOT NULL,
-    "persona_profile_id" TEXT NOT NULL,
-    "agent_service_id" TEXT NOT NULL,
-    "source_thread_id" TEXT NOT NULL,
-    "source_run_id" TEXT NOT NULL,
-    "source_message_id" TEXT,
-    "requested_patch" JSONB NOT NULL,
-    "requested_patch_digest" TEXT NOT NULL,
-    "expected_persona_revision_id" TEXT,
-    "expected_agent_revision_id" TEXT,
-    "applied_persona_revision_id" TEXT,
-    "applied_agent_revision_id" TEXT,
-    "state" "PersonalConfigurationChangeState" NOT NULL DEFAULT 'proposed',
-    "proposed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "decided_at" TIMESTAMP(3),
-    "decided_by" TEXT,
-    "rejection_reason" TEXT,
-
-    CONSTRAINT "personal_configuration_changes_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "provider_credentials" (
     "id" TEXT NOT NULL,
     "scope" "ModelRoutingScope" NOT NULL DEFAULT 'global',
@@ -1175,6 +1129,30 @@ CREATE TABLE "agent_runs" (
 );
 
 -- CreateTable
+CREATE TABLE "child_run_completion_deliveries" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "parent_event_sequence" INTEGER,
+    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
+    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
+);
+
+-- CreateTable
+CREATE TABLE "child_run_reservations" (
+    "child_run_id" TEXT NOT NULL,
+    "parent_run_id" TEXT NOT NULL,
+    "root_run_id" TEXT NOT NULL,
+    "depth" INTEGER NOT NULL,
+    "max_tokens" INTEGER NOT NULL,
+    "max_cost_usd_micros" BIGINT NOT NULL,
+    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
+);
+
+-- CreateTable
 CREATE TABLE "run_input_snapshots" (
     "id" TEXT NOT NULL,
     "run_id" TEXT NOT NULL,
@@ -1201,30 +1179,6 @@ CREATE TABLE "run_input_snapshots" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "run_input_snapshots_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "child_run_reservations" (
-    "child_run_id" TEXT NOT NULL,
-    "parent_run_id" TEXT NOT NULL,
-    "root_run_id" TEXT NOT NULL,
-    "depth" INTEGER NOT NULL,
-    "max_tokens" INTEGER NOT NULL,
-    "max_cost_usd_micros" BIGINT NOT NULL,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "child_run_reservations_pkey" PRIMARY KEY ("child_run_id")
-);
-
--- CreateTable
-CREATE TABLE "child_run_completion_deliveries" (
-    "child_run_id" TEXT NOT NULL,
-    "parent_run_id" TEXT NOT NULL,
-    "parent_event_sequence" INTEGER,
-    "outcome" "ChildRunCompletionDeliveryOutcome" NOT NULL,
-    "delivered_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-
-    CONSTRAINT "child_run_completion_deliveries_pkey" PRIMARY KEY ("child_run_id")
 );
 
 -- CreateTable
@@ -1325,7 +1279,7 @@ CREATE TABLE "runtime_command_streams" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id", "attempt")
+    CONSTRAINT "runtime_command_streams_pkey" PRIMARY KEY ("run_id","attempt")
 );
 
 -- CreateTable
@@ -1338,7 +1292,7 @@ CREATE TABLE "runtime_external_action_retries" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "runtime_external_action_retries_pkey" PRIMARY KEY ("run_id", "attempt", "candidate_id")
+    CONSTRAINT "runtime_external_action_retries_pkey" PRIMARY KEY ("run_id","attempt","candidate_id")
 );
 
 -- CreateTable
@@ -1353,7 +1307,7 @@ CREATE TABLE "runtime_steering_boundaries" (
     "claimed_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "acked_at" TIMESTAMP(3),
 
-    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id", "attempt", "boundary_id")
+    CONSTRAINT "runtime_steering_boundaries_pkey" PRIMARY KEY ("run_id","attempt","boundary_id")
 );
 
 -- CreateTable
@@ -1505,39 +1459,6 @@ CREATE TABLE "account_budget_settings" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
-
--- CreateIndex
-CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
-
--- CreateIndex
-CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
-
--- CreateIndex
-CREATE INDEX "runtime_external_action_retries_run_id_attempt_retry_deadline_at_idx" ON "runtime_external_action_retries"("run_id", "attempt", "retry_deadline_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
-
--- CreateIndex
-CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
-
--- CreateIndex
-CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
-
--- CreateIndex
-CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
-
--- CreateIndex
 CREATE INDEX "agent_services_silo_id_kind_state_idx" ON "agent_services"("silo_id", "kind", "state");
 
 -- CreateIndex
@@ -1568,16 +1489,16 @@ CREATE UNIQUE INDEX "agent_revisions_agent_service_id_digest_key" ON "agent_revi
 CREATE INDEX "agent_revision_scope_attachments_scope_subject_type_subject_idx" ON "agent_revision_scope_attachments"("scope", "subject_type", "subject_id");
 
 -- CreateIndex
-CREATE INDEX "agent_service_schedules_silo_id_agent_service_id_idx" ON "agent_service_schedules"("silo_id", "agent_service_id");
-
--- CreateIndex
-CREATE INDEX "agent_service_schedules_enabled_idx" ON "agent_service_schedules"("enabled");
-
--- CreateIndex
 CREATE UNIQUE INDEX "agent_revision_skill_assignments_agent_revision_id_skill_re_key" ON "agent_revision_skill_assignments"("agent_revision_id", "skill_revision_id");
 
 -- CreateIndex
 CREATE INDEX "agent_revision_integration_assignments_integration_id_silo__idx" ON "agent_revision_integration_assignments"("integration_id", "silo_id");
+
+-- CreateIndex
+CREATE INDEX "agent_service_schedules_silo_id_agent_service_id_idx" ON "agent_service_schedules"("silo_id", "agent_service_id");
+
+-- CreateIndex
+CREATE INDEX "agent_service_schedules_enabled_idx" ON "agent_service_schedules"("enabled");
 
 -- CreateIndex
 CREATE INDEX "artifacts_silo_id_owner_principal_id_state_idx" ON "artifacts"("silo_id", "owner_principal_id", "state");
@@ -1619,19 +1540,19 @@ CREATE UNIQUE INDEX "artifact_revisions_artifact_id_id_key" ON "artifact_revisio
 CREATE UNIQUE INDEX "artifact_revisions_id_content_address_key" ON "artifact_revisions"("id", "content_address");
 
 -- CreateIndex
-CREATE INDEX "artifact_preprocess_jobs_state_next_attempt_at_claim_expires_at_idx" ON "artifact_preprocess_jobs"("state", "next_attempt_at", "claim_expires_at");
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_output_lease_id_key" ON "artifact_preprocess_jobs"("output_lease_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "artifact_preprocess_jobs_source_revision_id_pipeline_version_key" ON "artifact_preprocess_jobs"("source_revision_id", "pipeline_version");
+CREATE INDEX "artifact_preprocess_jobs_state_next_attempt_at_claim_expire_idx" ON "artifact_preprocess_jobs"("state", "next_attempt_at", "claim_expires_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "artifact_preprocess_jobs_source_revision_id_pipeline_versio_key" ON "artifact_preprocess_jobs"("source_revision_id", "pipeline_version");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_artifact_id_key" ON "artifact_preprocess_jobs"("derived_artifact_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "artifact_preprocess_jobs_derived_revision_id_key" ON "artifact_preprocess_jobs"("derived_revision_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "artifact_preprocess_jobs_output_lease_id_key" ON "artifact_preprocess_jobs"("output_lease_id");
 
 -- CreateIndex
 CREATE INDEX "artifact_revision_parents_parent_revision_id_idx" ON "artifact_revision_parents"("parent_revision_id");
@@ -1670,7 +1591,7 @@ CREATE INDEX "authorization_grants_silo_id_resource_kind_resource_id_prio_idx" O
 CREATE INDEX "authorization_grants_catalog_id_catalog_revision_capability_idx" ON "authorization_grants"("catalog_id", "catalog_revision", "capability_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority") NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "capability_catalog_revisions_catalog_id_revision_key" ON "capability_catalog_revisions"("catalog_id", "revision");
@@ -1692,6 +1613,15 @@ CREATE INDEX "approval_requests_subject_id_idx" ON "approval_requests"("subject_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "approval_requests_run_id_attempt_action_digest_key" ON "approval_requests"("run_id", "attempt", "action_digest");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_request_fingerprint_key" ON "tool_invocations"("request_fingerprint");
+
+-- CreateIndex
+CREATE INDEX "tool_invocations_run_id_attempt_state_idx" ON "tool_invocations"("run_id", "attempt", "state");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "tool_invocations_run_id_attempt_tool_invocation_id_key" ON "tool_invocations"("run_id", "attempt", "tool_invocation_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "action_execution_receipts_jti_key" ON "action_execution_receipts"("jti");
@@ -1766,15 +1696,6 @@ CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_revision_key" ON "
 CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_id_key" ON "conversation_context_revisions"("thread_id", "id");
 
 -- CreateIndex
-CREATE INDEX "grants_payload_type_payload_id_idx" ON "grants"("payload_type", "payload_id");
-
--- CreateIndex
-CREATE INDEX "grants_subject_type_subject_id_idx" ON "grants"("subject_type", "subject_id");
-
--- CreateIndex
-CREATE INDEX "grants_shared_by_idx" ON "grants"("shared_by");
-
--- CreateIndex
 CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
 
 -- CreateIndex
@@ -1821,12 +1742,6 @@ CREATE INDEX "mcp_server_access_users_user_id_idx" ON "mcp_server_access_users"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_access_users_access_policy_id_user_id_key" ON "mcp_server_access_users"("access_policy_id", "user_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "mcp_server_grants_grant_id_key" ON "mcp_server_grants"("grant_id");
-
--- CreateIndex
-CREATE INDEX "mcp_server_grants_mcp_server_id_idx" ON "mcp_server_grants"("mcp_server_id");
 
 -- CreateIndex
 CREATE INDEX "mcp_server_credentials_mcp_server_id_idx" ON "mcp_server_credentials"("mcp_server_id");
@@ -1892,6 +1807,15 @@ CREATE INDEX "memory_outbox_events_published_at_available_at_idx" ON "memory_out
 CREATE UNIQUE INDEX "model_routing_defaults_scope_cluster_tenant_key" ON "model_routing_defaults"("scope", "cluster_tenant");
 
 -- CreateIndex
+CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
+
+-- CreateIndex
+CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
+
+-- CreateIndex
 CREATE INDEX "persona_questions_question_set_id_question_set_version_cate_idx" ON "persona_questions"("question_set_id", "question_set_version", "category");
 
 -- CreateIndex
@@ -1910,6 +1834,9 @@ CREATE UNIQUE INDEX "persona_profiles_id_user_id_key" ON "persona_profiles"("id"
 CREATE UNIQUE INDEX "persona_profiles_id_active_revision_id_key" ON "persona_profiles"("id", "active_revision_id");
 
 -- CreateIndex
+CREATE UNIQUE INDEX "persona_interviews_refresh_configuration_change_id_key" ON "persona_interviews"("refresh_configuration_change_id");
+
+-- CreateIndex
 CREATE INDEX "persona_interviews_persona_profile_id_state_idx" ON "persona_interviews"("persona_profile_id", "state");
 
 -- CreateIndex
@@ -1917,9 +1844,6 @@ CREATE UNIQUE INDEX "persona_interviews_id_persona_profile_id_user_id_question_s
 
 -- CreateIndex
 CREATE INDEX "persona_interview_answers_question_set_id_question_set_vers_idx" ON "persona_interview_answers"("question_set_id", "question_set_version", "question_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "persona_interviews_refresh_configuration_change_id_key" ON "persona_interviews"("refresh_configuration_change_id");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "persona_interview_answers_interview_id_question_id_key" ON "persona_interview_answers"("interview_id", "question_id");
@@ -1938,15 +1862,6 @@ CREATE UNIQUE INDEX "persona_revisions_persona_profile_id_id_key" ON "persona_re
 
 -- CreateIndex
 CREATE INDEX "persona_insights_answer_id_interview_id_question_set_id_que_idx" ON "persona_insights"("answer_id", "interview_id", "question_set_id", "question_set_version", "question_id");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_silo_id_user_id_proposed_at_idx" ON "personal_configuration_changes"("silo_id", "user_id", "proposed_at");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_source_run_id_idx" ON "personal_configuration_changes"("source_run_id");
-
--- CreateIndex
-CREATE INDEX "personal_configuration_changes_persona_profile_id_state_pro_idx" ON "personal_configuration_changes"("persona_profile_id", "state", "proposed_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "persona_insights_persona_revision_id_id_key" ON "persona_insights"("persona_revision_id", "id");
@@ -2006,6 +1921,15 @@ CREATE UNIQUE INDEX "agent_runs_id_input_snapshot_digest_key" ON "agent_runs"("i
 CREATE UNIQUE INDEX "agent_run_snapshot_identity_key" ON "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
 
 -- CreateIndex
+CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
+
+-- CreateIndex
+CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
+
+-- CreateIndex
+CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "run_input_snapshots_run_id_key" ON "run_input_snapshots"("run_id");
 
 -- CreateIndex
@@ -2019,15 +1943,6 @@ CREATE UNIQUE INDEX "run_input_snapshots_run_id_input_digest_key" ON "run_input_
 
 -- CreateIndex
 CREATE UNIQUE INDEX "run_input_snapshot_run_identity_key" ON "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest");
-
--- CreateIndex
-CREATE INDEX "child_run_reservations_parent_run_id_idx" ON "child_run_reservations"("parent_run_id");
-
--- CreateIndex
-CREATE INDEX "child_run_reservations_root_run_id_idx" ON "child_run_reservations"("root_run_id");
-
--- CreateIndex
-CREATE INDEX "child_run_completion_deliveries_parent_run_id_idx" ON "child_run_completion_deliveries"("parent_run_id");
 
 -- CreateIndex
 CREATE INDEX "workload_assignments_silo_id_subject_id_idx" ON "workload_assignments"("silo_id", "subject_id");
@@ -2108,6 +2023,30 @@ CREATE INDEX "run_outbox_events_published_at_available_at_idx" ON "run_outbox_ev
 CREATE UNIQUE INDEX "run_outbox_events_run_id_sequence_key" ON "run_outbox_events"("run_id", "sequence");
 
 -- CreateIndex
+CREATE INDEX "runtime_external_action_retries_run_id_attempt_retry_deadli_idx" ON "runtime_external_action_retries"("run_id", "attempt", "retry_deadline_at");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_boundaries_run_id_attempt_idx" ON "runtime_steering_boundaries"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_steering_boundaries_run_id_attempt_to_input_generat_key" ON "runtime_steering_boundaries"("run_id", "attempt", "to_input_generation");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_run_id_attempt_state_submitted_at_idx" ON "runtime_steering_requests"("run_id", "attempt", "state", "submitted_at");
+
+-- CreateIndex
+CREATE INDEX "runtime_steering_requests_silo_id_subject_id_submitted_at_idx" ON "runtime_steering_requests"("silo_id", "subject_id", "submitted_at");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_command_id_key" ON "runtime_dispatched_commands"("command_id");
+
+-- CreateIndex
+CREATE INDEX "runtime_dispatched_commands_run_id_attempt_idx" ON "runtime_dispatched_commands"("run_id", "attempt");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "runtime_dispatched_commands_run_id_attempt_sequence_key" ON "runtime_dispatched_commands"("run_id", "attempt", "sequence");
+
+-- CreateIndex
 CREATE INDEX "skills_silo_id_state_idx" ON "skills"("silo_id", "state");
 
 -- CreateIndex
@@ -2141,13 +2080,10 @@ CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("wor
 CREATE UNIQUE INDEX "skill_workloads_worker_pod_uid_key" ON "skill_workloads"("worker_pod_uid");
 
 -- CreateIndex
-CREATE INDEX "skill_workloads_state_release_claimed_at_idx" ON "skill_workloads"("state", "release_claimed_at");
-
--- CreateIndex
-CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
-
--- CreateIndex
 CREATE INDEX "skill_workloads_silo_id_state_created_at_idx" ON "skill_workloads"("silo_id", "state", "created_at");
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_state_release_claimed_at_idx" ON "skill_workloads"("state", "release_claimed_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workload_bootstraps_skill_workload_id_key" ON "skill_workload_bootstraps"("skill_workload_id");
@@ -2171,6 +2107,9 @@ ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_id_active_revision_i
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_agent_service_id_fkey" FOREIGN KEY ("agent_service_id") REFERENCES "agent_services"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_parent_revision_id_fkey" FOREIGN KEY ("parent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2178,9 +2117,6 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_source_revision_id
 
 -- AddForeignKey
 ALTER TABLE "agent_revision_scope_attachments" ADD CONSTRAINT "agent_revision_scope_attachments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "agent_revision_skill_assignments" ADD CONSTRAINT "agent_revision_skill_assignments_agent_revision_id_fkey" FOREIGN KEY ("agent_revision_id") REFERENCES "agent_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2193,6 +2129,9 @@ ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revis
 
 -- AddForeignKey
 ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_custody_reference_i_fkey" FOREIGN KEY ("custody_reference_id", "integration_id", "silo_id") REFERENCES "integration_custody_references"("id", "integration_id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "agent_service_schedules" ADD CONSTRAINT "agent_service_schedules_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "artifact_revisions"("artifact_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2231,6 +2170,9 @@ ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_catalog_
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_agent_service_id_agent_revision_i_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocation_row_id_fkey" FOREIGN KEY ("tool_invocation_row_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_proof_key_id_run_id_attempt_workload_kin_fkey" FOREIGN KEY ("proof_key_id", "run_id", "attempt", "workload_kind", "workload_uid", "proof_key_thumbprint", "pod_uid") REFERENCES "run_proof_keys"("id", "run_id", "attempt", "workload_kind", "workload_uid", "key_thumbprint", "pod_uid") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2240,19 +2182,7 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_run_id_attempt
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_catalog_id_catalog_revision_catalog_dige_fkey" FOREIGN KEY ("catalog_id", "catalog_revision", "catalog_digest") REFERENCES "capability_catalog_revisions"("catalog_id", "revision", "digest") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_tool_invocation_row_id_fkey" FOREIGN KEY ("tool_invocation_row_id") REFERENCES "tool_invocations"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "tool_invocations" ADD CONSTRAINT "tool_invocations_run_id_agent_service_id_agent_revision_id_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_external_action_retries" ADD CONSTRAINT "runtime_external_action_retries_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_run_id_agent_service_id_agent_re_fkey" FOREIGN KEY ("run_id", "agent_service_id", "agent_revision_id") REFERENCES "agent_runs"("id", "agent_service_id", "agent_revision_id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2282,12 +2212,6 @@ ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_thread
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "conversation_threads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "grants" ADD CONSTRAINT "grants_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "grants" ADD CONSTRAINT "grants_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_integration_id_silo_id_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2301,15 +2225,6 @@ ALTER TABLE "mcp_server_access_policies" ADD CONSTRAINT "mcp_server_access_polic
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_access_users" ADD CONSTRAINT "mcp_server_access_users_access_policy_id_fkey" FOREIGN KEY ("access_policy_id") REFERENCES "mcp_server_access_policies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_grant_id_fkey" FOREIGN KEY ("grant_id") REFERENCES "grants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_credentials" ADD CONSTRAINT "mcp_server_credentials_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -2366,9 +2281,6 @@ ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_persona_revision
 ALTER TABLE "model_definitions" ADD CONSTRAINT "model_definitions_provider_credential_id_fkey" FOREIGN KEY ("provider_credential_id") REFERENCES "provider_credentials"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_model_definition_id_fkey" FOREIGN KEY ("model_definition_id") REFERENCES "model_definitions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "third_party_source_items" ADD CONSTRAINT "third_party_source_items_source_id_fkey" FOREIGN KEY ("source_id") REFERENCES "third_party_sources"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2378,16 +2290,16 @@ ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_agent_revis
 ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_agent_service_id_silo_id_fkey" FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "child_run_completion_deliveries" ADD CONSTRAINT "child_run_completion_deliveries_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_parent_run_id_fkey" FOREIGN KEY ("parent_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_child_run_id_fkey" FOREIGN KEY ("child_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_id_input_digest_thread_id_silo_id__fkey" FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -2411,6 +2323,15 @@ ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_bootstrap_id_fkey" F
 ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
+ALTER TABLE "runtime_external_action_retries" ADD CONSTRAINT "runtime_external_action_retries_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_run_id_fkey" FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "runtime_dispatched_commands" ADD CONSTRAINT "runtime_dispatched_commands_run_id_attempt_fkey" FOREIGN KEY ("run_id", "attempt") REFERENCES "runtime_command_streams"("run_id", "attempt") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
 ALTER TABLE "skills" ADD CONSTRAINT "skills_id_current_revision_id_fkey" FOREIGN KEY ("id", "current_revision_id") REFERENCES "skill_revisions"("skill_id", "id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2425,2501 +2346,3 @@ ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_tool_invocation_id
 -- AddForeignKey
 ALTER TABLE "skill_workload_bootstraps" ADD CONSTRAINT "skill_workload_bootstraps_skill_workload_id_fkey" FOREIGN KEY ("skill_workload_id") REFERENCES "skill_workloads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
-
--- Null-safe immutable run/snapshot binding. SQL composite FKs alone skip checks when thread_id is NULL.
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_digest_fkey"
-    FOREIGN KEY ("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "agent_runs"("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_input_snapshot_fkey"
-    FOREIGN KEY ("id", "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    REFERENCES "run_input_snapshots"("run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest")
-    ON DELETE RESTRICT ON UPDATE CASCADE DEFERRABLE INITIALLY DEFERRED;
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_run_input_check" CHECK (
-    ("thread_id" IS NULL OR btrim("thread_id") <> '')
-    AND btrim("capability_set_digest") <> ''
-    AND "capability_set_digest" ~ '^sha256:[0-9a-f]{64}$'
-    AND jsonb_typeof("memory_facts") = 'array'
-);
-
--- Channel-target constraints cannot be represented by Prisma relations/indexes alone.
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_endpoint_nonempty" CHECK (length(btrim("endpoint")) > 0);
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_expiry_after_registration" CHECK ("expires_at" > "registered_at");
-ALTER TABLE "channel_runtime_routes" ADD CONSTRAINT "channel_runtime_routes_service_fkey"
-    FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-CREATE UNIQUE INDEX "channel_runtime_routes_one_current_target"
-    ON "channel_runtime_routes"("silo_id", "agent_service_id", "action") WHERE "is_current" = TRUE AND "revoked_at" IS NULL;
-CREATE UNIQUE INDEX "agent_runs_channel_context_identity_key"
-    ON "agent_runs"("id", "thread_id", "silo_id", "agent_service_id", "delegated_user_id");
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_digest_format" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_membership_revision_positive" CHECK ("membership_revision" > 0);
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_expiry_after_creation" CHECK ("expires_at" > "created_at");
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_action_run_binding" CHECK (("action" = 'command.forward' AND "run_id" IS NOT NULL) OR ("action" = 'events.read' AND "run_id" IS NULL));
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_thread_fkey"
-    FOREIGN KEY ("thread_id", "silo_id", "agent_service_id") REFERENCES "conversation_threads"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_participant_fkey"
-    FOREIGN KEY ("thread_id", "subject_id") REFERENCES "conversation_participants"("thread_id", "user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "channel_invocation_contexts" ADD CONSTRAINT "channel_invocation_contexts_run_fkey"
-    FOREIGN KEY ("run_id", "thread_id", "silo_id", "agent_service_id", "subject_id") REFERENCES "agent_runs"("id", "thread_id", "silo_id", "agent_service_id", "delegated_user_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- Cross-domain transcript and persona provenance constraints are deliberately database-enforced.
-ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_agent_service_id_silo_id_fkey"
-    FOREIGN KEY ("agent_service_id", "silo_id") REFERENCES "agent_services"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_conversation_thread_fkey"
-    FOREIGN KEY ("thread_id", "silo_id", "agent_service_id") REFERENCES "conversation_threads"("id", "silo_id", "agent_service_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_run_id_fkey"
-    FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_run_id_fkey"
-    FOREIGN KEY ("run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_through_message_id_fkey"
-    FOREIGN KEY ("through_message_id") REFERENCES "conversation_messages"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_created_by_run_id_fkey"
-    FOREIGN KEY ("created_by_run_id") REFERENCES "agent_runs"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_question_fkey"
-    FOREIGN KEY ("question_set_id", "question_set_version", "question_id") REFERENCES "persona_questions"("question_set_id", "question_set_version", "question_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_answer_provenance_fkey"
-    FOREIGN KEY ("answer_id", "interview_id", "question_set_id", "question_set_version", "question_id") REFERENCES "persona_interview_answers"("id", "interview_id", "question_set_id", "question_set_version", "question_id") ON DELETE RESTRICT ON UPDATE CASCADE;
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_id_fkey"
-    FOREIGN KEY ("persona_revision_id") REFERENCES "persona_revisions"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
-
--- PostgreSQL treats NULLs as distinct in ordinary unique indexes; organization-scoped memory needs one canonical null scope.
-CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"
-    ON "memory_datasets"("silo_id", "scope_kind", "organization_id", COALESCE("scope_resource_id", ''));
-
-CREATE UNIQUE INDEX "model_routing_defaults_global_key"
-    ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
-CREATE UNIQUE INDEX "org_memberships_one_owner_per_org"
-    ON "org_memberships"("cluster_tenant") WHERE "role" = 'owner';
-
--- Database-native authority guards omitted by Prisma schema diff.
-
--- Functions
-CREATE FUNCTION "enforce_agent_revision_immutability"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."id" IS DISTINCT FROM OLD."id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."revision" IS DISTINCT FROM OLD."revision"
-        OR NEW."parent_revision_id" IS DISTINCT FROM OLD."parent_revision_id"
-        OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id"
-        OR NEW."change_message" IS DISTINCT FROM OLD."change_message"
-        OR NEW."digest" IS DISTINCT FROM OLD."digest"
-        OR NEW."prompt_policy_version" IS DISTINCT FROM OLD."prompt_policy_version"
-        OR NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
-        OR NEW."model_definition_id" IS DISTINCT FROM OLD."model_definition_id"
-        OR NEW."budget" IS DISTINCT FROM OLD."budget"
-        OR NEW."authored_by" IS DISTINCT FROM OLD."authored_by"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'AgentRevision executable fields are immutable';
-    END IF;
-    IF OLD."state" IN ('rejected', 'retired')
-        OR (OLD."state" = 'published' AND NEW."state" NOT IN ('published', 'retired'))
-        OR (OLD."state" = 'draft' AND NEW."state" NOT IN ('draft', 'published', 'rejected')) THEN
-        RAISE EXCEPTION 'invalid AgentRevision lifecycle transition';
-    END IF;
-    IF NEW."published_at" IS DISTINCT FROM OLD."published_at"
-        AND NOT (
-            OLD."state" = 'draft' AND NEW."state" = 'published'
-            AND OLD."published_at" IS NULL AND NEW."published_at" IS NOT NULL
-        ) THEN
-        RAISE EXCEPTION 'AgentRevision publication evidence is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_agent_revision_delete"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'AgentRevision rows cannot be deleted';
-END;
-$$;
-CREATE FUNCTION "enforce_referenced_model_definition_immutability"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF EXISTS (
-        SELECT 1
-        FROM "agent_revisions"
-        WHERE "model_definition_id" = OLD."id"
-    ) AND (
-        NEW."scope" IS DISTINCT FROM OLD."scope"
-        OR NEW."cluster_tenant" IS DISTINCT FROM OLD."cluster_tenant"
-        OR NEW."public_model_name" IS DISTINCT FROM OLD."public_model_name"
-        OR NEW."litellm_model_id" IS DISTINCT FROM OLD."litellm_model_id"
-        OR NEW."upstream_model" IS DISTINCT FROM OLD."upstream_model"
-        OR NEW."api_base" IS DISTINCT FROM OLD."api_base"
-        OR NEW."provider_credential_id" IS DISTINCT FROM OLD."provider_credential_id"
-    ) THEN
-        RAISE EXCEPTION 'A ModelDefinition referenced by an AgentRevision is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_revision_model_definition_availability"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE
-    service_silo_id TEXT;
-    definition_scope "ModelRoutingScope";
-    definition_cluster_tenant TEXT;
-BEGIN
-    SELECT "silo_id"
-    INTO service_silo_id
-    FROM "agent_services"
-    WHERE "id" = NEW."agent_service_id"
-    FOR UPDATE;
-
-    SELECT "scope", "cluster_tenant"
-    INTO definition_scope, definition_cluster_tenant
-    FROM "model_definitions"
-    WHERE "id" = NEW."model_definition_id"
-    FOR UPDATE;
-
-    IF definition_scope IS DISTINCT FROM 'global'::"ModelRoutingScope"
-        AND (definition_scope IS DISTINCT FROM 'clusterTenant'::"ModelRoutingScope"
-            OR definition_cluster_tenant IS DISTINCT FROM service_silo_id) THEN
-        RAISE EXCEPTION 'AgentRevision model definition is unavailable to its service tenant';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_service_lifecycle"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'draft' OR NEW."active_revision_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new AgentService must begin Draft without an active revision';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'AgentService rows cannot be deleted';
-    END IF;
-    IF OLD."state" = 'retired' THEN
-        RAISE EXCEPTION 'a Retired AgentService is closed and cannot be changed';
-    END IF;
-    IF NEW."silo_id" IS DISTINCT FROM OLD."silo_id" THEN
-        RAISE EXCEPTION 'AgentService silo identity is immutable';
-    END IF;
-    IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
-        (OLD."state" = 'draft' AND NEW."state" IN ('active', 'retired')) OR
-        (OLD."state" = 'active' AND NEW."state" IN ('paused', 'retired')) OR
-        (OLD."state" = 'paused' AND NEW."state" IN ('active', 'retired'))
-    ) THEN
-        RAISE EXCEPTION 'invalid AgentService lifecycle transition';
-    END IF;
-    IF NEW."state" = 'retired' AND NEW."active_revision_id" IS NOT NULL THEN
-        RAISE EXCEPTION 'a Retired AgentService cannot retain an active revision';
-    END IF;
-    IF NEW."active_revision_id" IS DISTINCT FROM OLD."active_revision_id"
-        AND NEW."state" NOT IN ('active', 'retired') THEN
-        RAISE EXCEPTION 'the active revision pointer changes only on activation, rollover, or retirement';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_service_published_active_revision"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE
-    revision_state "AgentRevisionState";
-BEGIN
-    IF NEW."active_revision_id" IS NOT NULL THEN
-        SELECT "state" INTO revision_state
-        FROM "agent_revisions"
-        WHERE "id" = NEW."active_revision_id"
-          AND "agent_service_id" = NEW."id"
-        FOR UPDATE;
-        IF revision_state IS DISTINCT FROM 'published'::"AgentRevisionState" THEN
-            RAISE EXCEPTION 'AgentService active revision must be a Published revision of the same service';
-        END IF;
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "protect_active_agent_revision_publication"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (
-        SELECT 1
-        FROM "agent_services"
-        WHERE "id" = NEW."agent_service_id"
-          AND "active_revision_id" = NEW."id"
-    ) THEN
-        RAISE EXCEPTION 'an active AgentService revision must remain Published';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_revision_assignment_immutability"() RETURNS trigger
-LANGUAGE plpgsql AS $$
-DECLARE
-    revision_state "AgentRevisionState";
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        SELECT "state" INTO revision_state
-        FROM "agent_revisions"
-        WHERE "id" = NEW."agent_revision_id"
-        FOR UPDATE;
-        IF revision_state IS DISTINCT FROM 'draft'::"AgentRevisionState" THEN
-            RAISE EXCEPTION 'assignments may be added only to a draft AgentRevision';
-        END IF;
-        RETURN NEW;
-    END IF;
-    RAISE EXCEPTION 'AgentRevision assignments are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_current_workload_assignment_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'queued'::"AgentRunState" THEN
-        RAISE EXCEPTION 'workload assignment must target the current Queued attempt';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_accepted_outbox_attempt"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NOT EXISTS (SELECT 1 FROM "agent_runs" WHERE "id" = NEW."run_id" AND "attempt" >= NEW."attempt") THEN
-        RAISE EXCEPTION 'outbox event attempt has not been accepted';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_run_input_snapshot_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'RunInputSnapshot rows are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_reservation"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child "agent_runs"%ROWTYPE;
-    parent "agent_runs"%ROWTYPE;
-    root "agent_runs"%ROWTYPE;
-    parent_depth INTEGER;
-BEGIN
-    SELECT * INTO child FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR KEY SHARE;
-    SELECT * INTO parent FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
-    SELECT * INTO root FROM "agent_runs" WHERE "id" = NEW."root_run_id" FOR KEY SHARE;
-
-    IF child."id" IS NULL OR parent."id" IS NULL OR root."id" IS NULL
-        OR child."state" IS DISTINCT FROM 'accepted'::"AgentRunState"
-        OR child."attempt" <> 1
-        OR child."trigger" IS DISTINCT FROM 'managed_invocation'::"AgentRunTrigger"
-        OR child."parent_run_id" IS DISTINCT FROM NEW."parent_run_id"
-        OR child."root_run_id" IS DISTINCT FROM NEW."root_run_id"
-        OR parent."root_run_id" IS DISTINCT FROM NEW."root_run_id"
-        OR root."id" IS DISTINCT FROM root."root_run_id"
-        OR root."parent_run_id" IS NOT NULL
-        OR child."silo_id" IS DISTINCT FROM parent."silo_id"
-        OR parent."silo_id" IS DISTINCT FROM root."silo_id"
-        OR NEW."child_run_id" = NEW."parent_run_id" THEN
-        RAISE EXCEPTION 'ChildRunReservation must bind one same-silo child to its exact parent and root';
-    END IF;
-
-    IF parent."parent_run_id" IS NULL THEN
-        IF parent."id" IS DISTINCT FROM NEW."root_run_id" OR NEW."depth" <> 1 THEN
-            RAISE EXCEPTION 'a direct child reservation must have the canonical root parent and depth 1';
-        END IF;
-    ELSE
-        SELECT "depth" INTO parent_depth FROM "child_run_reservations" WHERE "child_run_id" = parent."id" FOR KEY SHARE;
-        IF parent_depth IS NULL OR NEW."depth" <> parent_depth + 1 THEN
-            RAISE EXCEPTION 'a nested child reservation must continue its parent reservation depth';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_child_run_reservation_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'ChildRunReservation rows are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_initial_agent_run_state"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."attempt" <> 1 OR NEW."state" <> 'accepted'
-        OR NEW."started_at" IS NOT NULL OR NEW."finished_at" IS NOT NULL
-        OR NEW."terminal_reason" IS NOT NULL OR NEW."cost_amount" IS NOT NULL
-        OR NEW."cost_currency" IS NOT NULL THEN
-        RAISE EXCEPTION 'a new AgentRun must begin as accepted attempt 1';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_current_agent_run_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    service_state "AgentServiceState";
-    service_silo_id TEXT;
-    current_revision_id TEXT;
-    revision_state "AgentRevisionState";
-BEGIN
-    SELECT "state", "silo_id", "active_revision_id"
-    INTO service_state, service_silo_id, current_revision_id
-    FROM "agent_services"
-    WHERE "id" = NEW."agent_service_id"
-    FOR UPDATE;
-
-    IF service_state IS DISTINCT FROM 'active'::"AgentServiceState"
-        OR service_silo_id IS DISTINCT FROM NEW."silo_id"
-        OR current_revision_id IS DISTINCT FROM NEW."agent_revision_id" THEN
-        RAISE EXCEPTION 'AgentRun requires the exact silo and active revision of an Active AgentService';
-    END IF;
-
-    SELECT "state"
-    INTO revision_state
-    FROM "agent_revisions"
-    WHERE "id" = NEW."agent_revision_id"
-      AND "agent_service_id" = NEW."agent_service_id"
-    FOR UPDATE;
-
-    IF revision_state IS DISTINCT FROM 'published'::"AgentRevisionState" THEN
-        RAISE EXCEPTION 'AgentRun requires the exact active revision to remain Published';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_run_authority_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assignment_exists BOOLEAN;
-    attempt_event_claimed_at TIMESTAMP(3);
-BEGIN
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."thread_id" IS DISTINCT FROM OLD."thread_id"
-        OR NEW."trigger" IS DISTINCT FROM OLD."trigger"
-        OR NEW."delegated_user_id" IS DISTINCT FROM OLD."delegated_user_id"
-        OR NEW."request_idempotency_key" IS DISTINCT FROM OLD."request_idempotency_key"
-        OR NEW."root_run_id" IS DISTINCT FROM OLD."root_run_id"
-        OR NEW."parent_run_id" IS DISTINCT FROM OLD."parent_run_id"
-        OR NEW."effective_contract_digest" IS DISTINCT FROM OLD."effective_contract_digest"
-        OR NEW."input_snapshot_digest" IS DISTINCT FROM OLD."input_snapshot_digest" THEN
-        RAISE EXCEPTION 'AgentRun identity and accepted inputs are immutable';
-    END IF;
-    IF NEW."attempt" <> OLD."attempt" THEN
-        IF NEW."attempt" <> OLD."attempt" + 1 OR OLD."state" NOT IN ('failed', 'cancelled')
-            OR NEW."state" <> 'accepted' OR NEW."accepted_at" <= OLD."accepted_at"
-            OR NEW."started_at" IS NOT NULL OR NEW."finished_at" IS NOT NULL
-            OR NEW."terminal_reason" IS NOT NULL OR NEW."cost_amount" IS NOT NULL
-            OR NEW."cost_currency" IS NOT NULL THEN
-            RAISE EXCEPTION 'invalid AgentRun attempt transition';
-        END IF;
-    ELSE
-        IF NEW."accepted_at" IS DISTINCT FROM OLD."accepted_at" THEN
-            RAISE EXCEPTION 'accepted_at changes only with a new accepted attempt';
-        END IF;
-        IF OLD."state" IN ('completed', 'failed', 'cancelled') THEN
-            RAISE EXCEPTION 'terminal AgentRun attempt coordinates are immutable';
-        END IF;
-        IF NEW."state" IS DISTINCT FROM OLD."state" AND NOT (
-            (OLD."state" = 'accepted' AND NEW."state" IN ('queued', 'failed', 'cancelling')) OR
-            (OLD."state" = 'queued' AND NEW."state" IN ('assigned', 'failed', 'cancelling')) OR
-            (OLD."state" = 'assigned' AND NEW."state" IN ('running', 'failed', 'cancelling')) OR
-            (OLD."state" = 'running' AND NEW."state" IN ('waiting_for_approval', 'completed', 'failed', 'cancelling')) OR
-            (OLD."state" = 'waiting_for_approval' AND NEW."state" IN ('running', 'completed', 'failed', 'cancelling')) OR
-            (OLD."state" = 'cancelling' AND NEW."state" = 'cancelled')
-        ) THEN
-            RAISE EXCEPTION 'invalid AgentRun state transition';
-        END IF;
-        IF OLD."state" = 'cancelling' AND NEW."state" = 'cancelled' THEN
-            PERFORM 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            PERFORM 1 FROM "run_outbox_events" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" FOR UPDATE;
-            IF EXISTS (
-                SELECT 1 FROM "workload_assignments"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND "state" IN ('pending_pod'::"WorkloadAssignmentState", 'registered'::"WorkloadAssignmentState")
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires no current PendingPod or Registered WorkloadAssignment';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "run_proof_keys" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "revoked_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires every RunProofKey revoked';
-            END IF;
-            IF NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.cancellation_requested'::"RunOutboxEventKind"
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires its RunCancellationRequested event';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt"
-                  AND "kind" IN ('run.attempt_requested'::"RunOutboxEventKind", 'run.workload_release_requested'::"RunOutboxEventKind")
-                  AND "published_at" IS NULL AND "failed_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun requires its attempt and release commands resolved';
-            END IF;
-            SELECT EXISTS (SELECT 1 FROM "workload_assignments" WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt") INTO assignment_exists;
-            SELECT "claimed_at" INTO attempt_event_claimed_at
-            FROM "run_outbox_events"
-            WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.attempt_requested'::"RunOutboxEventKind";
-            IF (assignment_exists OR attempt_event_claimed_at IS NOT NULL) AND NOT EXISTS (
-                SELECT 1 FROM "run_outbox_events"
-                WHERE "run_id" = NEW."id" AND "attempt" = NEW."attempt" AND "kind" = 'run.workload_cleanup_requested'::"RunOutboxEventKind"
-                  AND "published_at" IS NOT NULL AND "failed_at" IS NULL
-            ) THEN
-                RAISE EXCEPTION 'a Cancelled AgentRun with possible physical work requires a confirmed WorkloadCleanup';
-            END IF;
-        END IF;
-        IF OLD."started_at" IS NOT NULL AND NEW."started_at" IS DISTINCT FROM OLD."started_at" THEN
-            RAISE EXCEPTION 'AgentRun started_at is immutable once recorded';
-        END IF;
-        IF OLD."started_at" IS NULL AND NEW."started_at" IS NOT NULL AND NEW."state" <> 'running' THEN
-            RAISE EXCEPTION 'AgentRun started_at may be recorded only when entering running';
-        END IF;
-        IF NEW."state" = 'running' AND NEW."started_at" IS NULL THEN
-            RAISE EXCEPTION 'a running AgentRun requires started_at';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_bootstrap_consumption"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assignment_pod_uid TEXT;
-    assignment_state "WorkloadAssignmentState";
-    run_state "AgentRunState";
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL OR NEW."receipt_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap must begin unconsumed';
-        END IF;
-        SELECT "state" INTO run_state
-        FROM "agent_runs"
-        WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        FOR UPDATE;
-        IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires the current Assigned attempt';
-        END IF;
-        SELECT "state" INTO assignment_state
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id"
-          AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."audience"
-          AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid"
-        FOR UPDATE;
-        IF assignment_state IS DISTINCT FROM 'pending_pod'::"WorkloadAssignmentState" THEN
-            RAISE EXCEPTION 'a new WorkloadBootstrap requires its PendingPod assignment';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadBootstrap rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."claim_digest" IS DISTINCT FROM OLD."claim_digest"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap identity is immutable';
-    END IF;
-    IF OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL
-        OR NEW."consumed_by_pod_uid" IS NULL OR NEW."receipt_id" IS NULL THEN
-        RAISE EXCEPTION 'WorkloadBootstrap may be consumed exactly once';
-    END IF;
-    IF NEW."consumed_at" < OLD."created_at" OR NEW."consumed_at" > transition_time
-        OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap must be consumed at a current time before expiry';
-    END IF;
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'WorkloadBootstrap consumption requires the current Assigned attempt';
-    END IF;
-    SELECT "state", "pod_uid" INTO assignment_state, assignment_pod_uid
-    FROM "workload_assignments"
-    WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-        OR assignment_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN
-        RAISE EXCEPTION 'bootstrap consumer Pod is not the registered assignment Pod';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_state "AgentRunState";
-BEGIN
-    SELECT "state" INTO run_state
-    FROM "agent_runs"
-    WHERE "id" = NEW."run_id" AND "attempt" = NEW."attempt"
-    FOR UPDATE;
-    IF run_state IS DISTINCT FROM 'assigned'::"AgentRunState" THEN
-        RAISE EXCEPTION 'RunProofKey requires the current Assigned attempt';
-    END IF;
-    IF NOT EXISTS (
-        SELECT 1 FROM "workload_bootstraps" WHERE "id" = NEW."bootstrap_id"
-        AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-        AND "consumed_at" IS NOT NULL AND "consumed_by_pod_uid" = NEW."pod_uid"
-    ) THEN
-        RAISE EXCEPTION 'RunProofKey requires the consumed bootstrap for the exact run, attempt, and Pod';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_workload_assignment_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending_pod' OR NEW."pod_uid" IS NOT NULL
-            OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new WorkloadAssignment must begin pending_pod';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'WorkloadAssignment rows cannot be deleted'; END IF;
-    IF NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name"
-        OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."workload_profile" IS DISTINCT FROM OLD."workload_profile"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'WorkloadAssignment identity is immutable';
-    END IF;
-    IF OLD."state" = 'revoked' OR NEW."state" = OLD."state"
-        OR (OLD."state" = 'registered' AND NEW."state" <> 'revoked')
-        OR (OLD."state" = 'pending_pod' AND NEW."state" NOT IN ('registered', 'revoked')) THEN
-        RAISE EXCEPTION 'invalid WorkloadAssignment state transition';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'registered' AND (
-        NEW."pod_uid" IS NULL OR NEW."registered_at" IS NULL OR NEW."revoked_at" IS NOT NULL
-        OR NEW."registered_at" < OLD."created_at" OR NEW."registered_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registration must bind the current Pod and registration time';
-    END IF;
-    IF OLD."state" = 'pending_pod' AND NEW."state" = 'revoked' AND (
-        NEW."pod_uid" IS NOT NULL OR NEW."registered_at" IS NOT NULL OR NEW."revoked_at" IS NULL
-        OR NEW."revoked_at" < OLD."created_at" OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'an unregistered WorkloadAssignment must revoke without Pod registration';
-    END IF;
-    IF OLD."state" = 'registered' AND (
-        NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."registered_at" IS DISTINCT FROM OLD."registered_at"
-        OR NEW."revoked_at" IS NULL OR NEW."revoked_at" < OLD."registered_at"
-        OR NEW."revoked_at" > transition_time
-    ) THEN
-        RAISE EXCEPTION 'registered WorkloadAssignment Pod UID is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_proof_key_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'RunProofKey rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."bootstrap_id" IS DISTINCT FROM OLD."bootstrap_id"
-        OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind"
-        OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid"
-        OR NEW."public_key_jwk" IS DISTINCT FROM OLD."public_key_jwk"
-        OR NEW."key_thumbprint" IS DISTINCT FROM OLD."key_thumbprint"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'RunProofKey binding is immutable';
-    END IF;
-    IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
-        RAISE EXCEPTION 'RunProofKey may be revoked exactly once';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_run_outbox_event_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        IF current_setting('opencrane.run_outbox_prune', true) IS DISTINCT FROM 'true'
-            OR OLD."published_at" IS NULL OR OLD."failed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'OutboxEvent rows cannot be deleted outside successful-delivery retention';
-        END IF;
-        RETURN OLD;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."sequence" IS DISTINCT FROM OLD."sequence"
-        OR NEW."kind" IS DISTINCT FROM OLD."kind"
-        OR NEW."idempotency_key" IS DISTINCT FROM OLD."idempotency_key"
-        OR NEW."payload" IS DISTINCT FROM OLD."payload"
-        OR NEW."available_at" IS DISTINCT FROM OLD."available_at"
-        OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'OutboxEvent identity, order, and payload are immutable';
-    END IF;
-    IF OLD."published_at" IS NOT NULL OR OLD."failed_at" IS NOT NULL THEN
-        RAISE EXCEPTION 'delivered OutboxEvent status is terminal';
-    END IF;
-    IF OLD."claimed_at" IS NOT NULL AND (
-        NEW."claimed_at" IS NULL OR NEW."claimed_at" < OLD."claimed_at"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent claim time cannot move backward or be erased';
-    END IF;
-    IF NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" THEN
-        IF NEW."claimed_at" IS NULL OR NEW."delivery_count" <> OLD."delivery_count" + 1 THEN
-            RAISE EXCEPTION 'each OutboxEvent claim must advance delivery_count exactly once';
-        END IF;
-    ELSIF NEW."delivery_count" <> OLD."delivery_count" THEN
-        RAISE EXCEPTION 'OutboxEvent delivery_count advances only with a new claim';
-    END IF;
-    IF OLD."published_at" IS NOT NULL AND NEW."published_at" IS DISTINCT FROM OLD."published_at" THEN
-        RAISE EXCEPTION 'OutboxEvent publication evidence is immutable';
-    END IF;
-    IF OLD."failed_at" IS NOT NULL AND (
-        NEW."failed_at" IS DISTINCT FROM OLD."failed_at"
-        OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code"
-    ) THEN
-        RAISE EXCEPTION 'OutboxEvent failure evidence is immutable';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_capability_catalog_revision_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'CapabilityCatalogRevision rows are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_authorization_grant_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'AuthorizationGrant rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind"
-        OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id"
-        OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id" OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision"
-        OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest" OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id"
-        OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
-        OR NEW."effect" IS DISTINCT FROM OLD."effect" OR NEW."priority" IS DISTINCT FROM OLD."priority"
-        OR NEW."valid_from" IS DISTINCT FROM OLD."valid_from" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at"
-        OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'AuthorizationGrant authority fields are immutable';
-    END IF;
-    IF OLD."revoked_at" IS NOT NULL OR NEW."revoked_at" IS NULL THEN
-        RAISE EXCEPTION 'AuthorizationGrant may be revoked exactly once';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    decision_time TIMESTAMP(3) := clock_timestamp();
-    current_attempt INTEGER;
-    current_run_state "AgentRunState";
-    assignment_state "WorkloadAssignmentState";
-    assignment_expires_at TIMESTAMP(3);
-    proof_expires_at TIMESTAMP(3);
-    proof_revoked_at TIMESTAMP(3);
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL
-            OR NEW."decided_by" IS NOT NULL OR NEW."resume_token_hash" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
-        END IF;
-        IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
-            RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
-        END IF;
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
-          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
-          AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys"
-        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
-          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM NEW."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForApproval run, assignment, and proof authority';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
-        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id"
-        OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision" OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest"
-        OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
-        OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id" OR NEW."action" IS DISTINCT FROM OLD."action"
-        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
-        OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
-        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
-    END IF;
-    -- A dispatched resume consumes its opaque token without changing the already-authorised decision.
-    -- No other terminal-row mutation is allowed, so retry redelivery still relies on the durable command.
-    IF OLD."state" = 'approved' THEN
-        IF NEW."state" = 'approved'
-            AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
-            AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
-            AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
-            AND NEW."deferred_tool_result" IS NOT DISTINCT FROM OLD."deferred_tool_result" THEN
-            RETURN NEW;
-        END IF;
-        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
-    END IF;
-    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
-        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
-    END IF;
-    IF NEW."state" = 'cancelled' THEN
-        IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
-            RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
-        END IF;
-    ELSE
-        NEW."decided_at" := decision_time;
-    END IF;
-    IF NEW."state" IN ('approved', 'denied') THEN
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = OLD."run_id" FOR UPDATE;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
-          AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
-          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
-          AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
-          AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
-          AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
-        FOR UPDATE;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM OLD."attempt"
-            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
-            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
-            OR proof_expires_at <= decision_time THEN
-            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
-        END IF;
-    END IF;
-    IF NEW."state" = 'cancelled' THEN
-        NEW."decided_by" := NULL;
-        NEW."resume_token_hash" := NULL;
-    ELSIF NEW."state" = 'expired' THEN
-        IF decision_time < OLD."expires_at" THEN
-            RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
-        END IF;
-    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
-        RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_action_execution_receipt_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    reservation_time TIMESTAMP(3) := clock_timestamp();
-    current_attempt INTEGER;
-    current_run_state "AgentRunState";
-    assignment_state "WorkloadAssignmentState";
-    assignment_expires_at TIMESTAMP(3);
-    proof_expires_at TIMESTAMP(3);
-    proof_revoked_at TIMESTAMP(3);
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'reserved' OR NEW."result" IS NOT NULL
-            OR NEW."failure_code" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new ActionExecutionReceipt must begin reserved without a result, failure, or completion';
-        END IF;
-        SELECT "attempt", "state" INTO current_attempt, current_run_state
-        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        IF current_attempt IS DISTINCT FROM NEW."attempt"
-            OR current_run_state IS DISTINCT FROM 'running'::"AgentRunState" THEN
-            RAISE EXCEPTION 'ActionExecutionReceipt requires the current Running AgentRun attempt';
-        END IF;
-        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
-        FROM "workload_assignments"
-        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
-          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
-          AND "service_account_name" = NEW."service_account_name" AND "namespace" = NEW."namespace"
-          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
-          AND "pod_uid" = NEW."pod_uid" FOR UPDATE;
-        IF assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
-            OR assignment_expires_at <= reservation_time THEN
-            RAISE EXCEPTION 'ActionExecutionReceipt requires a current Registered WorkloadAssignment';
-        END IF;
-        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
-        FROM "run_proof_keys"
-        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
-          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
-          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
-        FOR UPDATE;
-        IF proof_revoked_at IS NOT NULL OR proof_expires_at <= reservation_time THEN
-            RAISE EXCEPTION 'ActionExecutionReceipt requires a current unrevoked RunProofKey';
-        END IF;
-        NEW."reserved_at" := reservation_time;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ActionExecutionReceipt rows cannot be deleted'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."audience" IS DISTINCT FROM OLD."audience"
-        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
-        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
-        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-        OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id" OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id"
-        OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint" OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id"
-        OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision" OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest"
-        OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id" OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
-        OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind" OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id"
-        OR NEW."action" IS DISTINCT FROM OLD."action" OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest"
-        OR NEW."jti" IS DISTINCT FROM OLD."jti" OR NEW."replay_mode" IS DISTINCT FROM OLD."replay_mode"
-        OR NEW."request_fingerprint" IS DISTINCT FROM OLD."request_fingerprint" OR NEW."reserved_at" IS DISTINCT FROM OLD."reserved_at" THEN
-        RAISE EXCEPTION 'ActionExecutionReceipt request bindings are immutable';
-    END IF;
-    IF OLD."state" <> 'reserved' OR NEW."state" = 'reserved' THEN
-        RAISE EXCEPTION 'ActionExecutionReceipt may complete exactly once';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_verified_membership_revision_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'VerifiedFleetMembershipRevision rows are immutable';
-END;
-$$;
-CREATE FUNCTION "reject_verified_membership_assertion_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    assertion_issuer_id TEXT;
-    assertion_revision INTEGER;
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        SELECT "issuer_id", "revision"
-        INTO assertion_issuer_id, assertion_revision
-        FROM "verified_fleet_membership_revisions"
-        WHERE "id" = NEW."revision_id" AND "silo_id" = NEW."silo_id"
-        FOR UPDATE;
-        IF assertion_issuer_id IS NULL THEN
-            RAISE EXCEPTION 'VerifiedFleetMembershipAssertion requires a verified revision';
-        END IF;
-        -- Serialize assertion insertion with the issuer/silo high-watermark update. Without this
-        -- shared fence, two transactions can both observe the same prior accepted revision.
-        PERFORM pg_advisory_xact_lock(hashtextextended(assertion_issuer_id || ':' || NEW."silo_id", 0));
-        IF EXISTS (
-            SELECT 1
-            FROM "highest_accepted_fleet_memberships"
-            WHERE "issuer_id" = assertion_issuer_id
-              AND "silo_id" = NEW."silo_id"
-              AND "revision" >= assertion_revision
-        ) THEN
-            RAISE EXCEPTION 'accepted fleet membership assertions are sealed';
-        END IF;
-        RETURN NEW;
-    END IF;
-    RAISE EXCEPTION 'VerifiedFleetMembershipAssertion rows are immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_highest_membership_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    verified_at TIMESTAMP(3);
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'HighestAcceptedFleetMembership rows cannot be deleted';
-    END IF;
-    -- Share the issuer/silo fence used by assertion insertion before reading or replacing this row.
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW."issuer_id" || ':' || NEW."silo_id", 0));
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."issuer_id" IS DISTINCT FROM OLD."issuer_id"
-            OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" THEN
-            RAISE EXCEPTION 'fleet membership high-watermark key is immutable';
-        END IF;
-        IF NEW."revision" <= OLD."revision"
-            OR NEW."revision_id" IS NOT DISTINCT FROM OLD."revision_id" THEN
-            RAISE EXCEPTION 'fleet membership replacement must be a strictly newer verified revision';
-        END IF;
-        IF NEW."accepted_at" < OLD."accepted_at" THEN
-            RAISE EXCEPTION 'fleet membership accepted_at cannot move backward';
-        END IF;
-    END IF;
-    SELECT revision_row."verified_at" INTO verified_at
-    FROM "verified_fleet_membership_revisions" AS revision_row
-    WHERE revision_row."id" = NEW."revision_id"
-      AND revision_row."issuer_id" = NEW."issuer_id"
-      AND revision_row."silo_id" = NEW."silo_id"
-      AND revision_row."revision" = NEW."revision"
-    FOR UPDATE;
-    IF verified_at IS NULL OR verified_at > NEW."accepted_at" THEN
-        RAISE EXCEPTION 'fleet membership high-watermark requires a verified revision for the same issuer and silo';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_audit_decision_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'AuditDecision rows are append-only';
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_message_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    thread_silo_id TEXT;
-    thread_agent_service_id TEXT;
-    run_silo_id TEXT;
-    run_agent_service_id TEXT;
-    run_thread_id TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'ConversationMessage rows cannot be deleted';
-    END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."thread_id" IS DISTINCT FROM OLD."thread_id"
-            OR NEW."run_id" IS DISTINCT FROM OLD."run_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
-            OR NEW."role" IS DISTINCT FROM OLD."role" OR NEW."source" IS DISTINCT FROM OLD."source"
-            OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-            RAISE EXCEPTION 'ConversationMessage identity and provenance are immutable';
-        END IF;
-        IF OLD."state" IN ('completed', 'failed', 'cancelled') OR NOT (
-            (OLD."state" = 'pending' AND NEW."state" IN ('pending', 'streaming', 'completed', 'failed', 'cancelled')) OR
-            (OLD."state" = 'streaming' AND NEW."state" IN ('streaming', 'completed', 'failed', 'cancelled'))
-        ) THEN
-            RAISE EXCEPTION 'invalid ConversationMessage lifecycle transition';
-        END IF;
-    END IF;
-    SELECT "silo_id", "agent_service_id" INTO thread_silo_id, thread_agent_service_id
-      FROM "conversation_threads" WHERE "id" = NEW."thread_id" FOR UPDATE;
-    IF NEW."source" = 'user_input' THEN
-        IF NEW."role" <> 'user' OR NEW."user_id" IS NULL OR NEW."run_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'user input requires User role and exact user provenance';
-        END IF;
-    ELSIF NEW."source" = 'model_output' THEN
-        IF NEW."role" <> 'assistant' OR NEW."run_id" IS NULL OR NEW."user_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'model output requires Assistant role and exact run provenance';
-        END IF;
-    ELSIF NEW."source" = 'tool_result' THEN
-        IF NEW."role" <> 'tool' OR NEW."run_id" IS NULL OR NEW."user_id" IS NOT NULL THEN
-            RAISE EXCEPTION 'tool result requires Tool role and exact run provenance';
-        END IF;
-    ELSIF NEW."role" <> 'system' OR NEW."user_id" IS NOT NULL THEN
-        RAISE EXCEPTION 'platform message requires System role';
-    END IF;
-    IF NEW."run_id" IS NOT NULL THEN
-        SELECT "silo_id", "agent_service_id", "thread_id" INTO run_silo_id, run_agent_service_id, run_thread_id
-          FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-        IF run_silo_id IS DISTINCT FROM thread_silo_id OR run_agent_service_id IS DISTINCT FROM thread_agent_service_id
-            OR run_thread_id IS DISTINCT FROM NEW."thread_id" THEN
-            RAISE EXCEPTION 'ConversationMessage run must belong to the exact thread and silo';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
--- Protect owner-authored steering from direct-SQL identity changes, late injection after a resume,
--- and consumption that is not backed by the exact persisted resume payload.
-CREATE FUNCTION "enforce_runtime_steering_request_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    run_attempt INTEGER;
-    run_silo_id TEXT;
-    run_subject_id TEXT;
-    run_state "AgentRunState";
-BEGIN
-    IF TG_OP = 'DELETE' THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest rows cannot be deleted';
-    END IF;
-
-    -- 1. Admit only a pending request for the locked current attempt, silo, and delegated owner.
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."consumed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'a new RuntimeSteeringRequest must begin pending without consumption evidence';
-        END IF;
-
-        SELECT "attempt", "silo_id", "delegated_user_id", "state"
-        INTO run_attempt, run_silo_id, run_subject_id, run_state
-        FROM "agent_runs"
-        WHERE "id" = NEW."run_id"
-        FOR UPDATE;
-
-        IF run_attempt IS DISTINCT FROM NEW."attempt"
-            OR run_silo_id IS DISTINCT FROM NEW."silo_id"
-            OR run_subject_id IS DISTINCT FROM NEW."subject_id"
-            OR run_state NOT IN ('assigned', 'running', 'waiting_for_approval') THEN
-            RAISE EXCEPTION 'RuntimeSteeringRequest requires the current owner-bound steerable AgentRun attempt';
-        END IF;
-
-        IF EXISTS (
-            SELECT 1
-            FROM "runtime_dispatched_commands"
-            WHERE "run_id" = NEW."run_id"
-              AND "attempt" = NEW."attempt"
-              AND "kind" = 'resume_attempt'::"RuntimeCommandKind"
-        ) THEN
-            RAISE EXCEPTION 'RuntimeSteeringRequest must be submitted before its sole resume command';
-        END IF;
-        RETURN NEW;
-    END IF;
-
-    -- 2. Preserve the evidence that was accepted by the public steering boundary.
-    IF NEW."id" IS DISTINCT FROM OLD."id"
-        OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
-        OR NEW."attempt" IS DISTINCT FROM OLD."attempt"
-        OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id"
-        OR NEW."content" IS DISTINCT FROM OLD."content"
-        OR NEW."digest" IS DISTINCT FROM OLD."digest"
-        OR NEW."submitted_at" IS DISTINCT FROM OLD."submitted_at" THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest identity and content are immutable';
-    END IF;
-
-    IF OLD."state" <> 'pending' THEN
-        RAISE EXCEPTION 'consumed RuntimeSteeringRequest is terminal';
-    END IF;
-
-    IF NEW."state" = 'pending' AND NEW."consumed_at" IS NULL THEN
-        RETURN NEW;
-    END IF;
-
-    IF NEW."state" <> 'consumed' OR NEW."consumed_at" IS NULL OR NEW."consumed_at" < OLD."submitted_at" THEN
-        RAISE EXCEPTION 'RuntimeSteeringRequest may only transition once from Pending to Consumed';
-    END IF;
-
-    -- 3. Close the lifecycle only after the server has durably embedded this content in a resume.
-    IF NOT EXISTS (
-        SELECT 1
-        FROM "runtime_dispatched_commands" command
-        WHERE command."run_id" = OLD."run_id"
-          AND command."attempt" = OLD."attempt"
-          AND command."kind" = 'resume_attempt'::"RuntimeCommandKind"
-          AND command."payload"->'steeringRequests' @> jsonb_build_array(OLD."content")
-    ) THEN
-        RAISE EXCEPTION 'consumed RuntimeSteeringRequest requires its persisted resume command payload';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_run_event_append"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    previous_sequence INTEGER;
-    terminal_exists BOOLEAN;
-    run_state "AgentRunState";
-    run_thread_id TEXT;
-BEGIN
-    PERFORM pg_advisory_xact_lock(hashtextextended(NEW."run_id", 0));
-    SELECT "state", "thread_id" INTO run_state, run_thread_id FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
-    IF run_state IS NULL THEN RAISE EXCEPTION 'RunEvent run does not exist'; END IF;
-    IF run_thread_id IS NULL THEN RAISE EXCEPTION 'RunEvent requires a conversation-bound AgentRun'; END IF;
-    SELECT COALESCE(MAX("sequence"), 0), COALESCE(bool_or("type" IN ('run.completed', 'run.failed', 'run.cancelled')), false)
-      INTO previous_sequence, terminal_exists
-      FROM "conversation_run_events" WHERE "run_id" = NEW."run_id";
-    IF terminal_exists THEN
-        RAISE EXCEPTION 'RunEvent stream is terminal';
-    END IF;
-    IF NEW."sequence" <> previous_sequence + 1 THEN
-        RAISE EXCEPTION 'RunEvent sequence must be contiguous';
-    END IF;
-    IF NEW."type" = 'run.completed' AND run_state <> 'completed' THEN
-        RAISE EXCEPTION 'run.completed event requires Completed AgentRun authority';
-    ELSIF NEW."type" = 'run.failed' AND run_state <> 'failed' THEN
-        RAISE EXCEPTION 'run.failed event requires Failed AgentRun authority';
-    ELSIF NEW."type" = 'run.cancelled' AND run_state <> 'cancelled' THEN
-        RAISE EXCEPTION 'run.cancelled event requires Cancelled AgentRun authority';
-    ELSIF NEW."type" NOT IN ('run.completed', 'run.failed', 'run.cancelled') AND run_state IN ('completed', 'failed', 'cancelled') THEN
-        RAISE EXCEPTION 'terminal AgentRun accepts only its matching terminal event';
-    END IF;
-    IF NEW."type" IN ('child.run.completed', 'child.run.failed', 'child.run.cancelled') AND NOT EXISTS (
-        SELECT 1
-        FROM "child_run_completion_deliveries" delivery
-        JOIN "agent_runs" child ON child."id" = delivery."child_run_id"
-        WHERE delivery."child_run_id" = NEW."payload"->>'childRunId'
-          AND delivery."parent_run_id" = NEW."run_id"
-          AND delivery."parent_event_sequence" = NEW."sequence"
-          AND delivery."outcome" = 'delivered'
-          AND ((NEW."type" = 'child.run.completed' AND child."state" = 'completed') OR (NEW."type" = 'child.run.failed' AND child."state" = 'failed') OR (NEW."type" = 'child.run.cancelled' AND child."state" = 'cancelled'))
-    ) THEN
-        RAISE EXCEPTION 'child RunEvent requires child completion delivery authority';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_completion_delivery"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child_parent_run_id TEXT;
-    child_root_run_id TEXT;
-    child_silo_id TEXT;
-    child_state "AgentRunState";
-    reservation_parent_run_id TEXT;
-    reservation_root_run_id TEXT;
-    parent_silo_id TEXT;
-    parent_root_run_id TEXT;
-    parent_thread_id TEXT;
-    expected_event_type TEXT;
-BEGIN
-    IF TG_OP <> 'INSERT' THEN RAISE EXCEPTION 'child completion deliveries are append-only'; END IF;
-    SELECT "parent_run_id", "root_run_id", "silo_id", "state" INTO child_parent_run_id, child_root_run_id, child_silo_id, child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id" FOR UPDATE;
-    IF child_parent_run_id IS NULL OR child_state NOT IN ('completed', 'failed', 'cancelled') THEN RAISE EXCEPTION 'child completion delivery requires terminal child authority'; END IF;
-    SELECT "parent_run_id", "root_run_id" INTO reservation_parent_run_id, reservation_root_run_id FROM "child_run_reservations" WHERE "child_run_id" = NEW."child_run_id" FOR UPDATE;
-    SELECT "silo_id", "root_run_id", "thread_id" INTO parent_silo_id, parent_root_run_id, parent_thread_id FROM "agent_runs" WHERE "id" = NEW."parent_run_id" FOR UPDATE;
-    IF reservation_parent_run_id IS NULL OR parent_silo_id IS NULL OR NEW."parent_run_id" <> child_parent_run_id OR reservation_parent_run_id <> child_parent_run_id OR reservation_root_run_id <> child_root_run_id OR parent_silo_id <> child_silo_id OR parent_root_run_id <> child_root_run_id THEN RAISE EXCEPTION 'child completion delivery lineage mismatch'; END IF;
-    IF NEW."outcome" = 'delivered' THEN
-        expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
-        IF parent_thread_id IS NULL OR NEW."parent_event_sequence" IS NULL THEN RAISE EXCEPTION 'delivered child completion requires a parent conversation stream and event sequence'; END IF;
-    ELSIF NEW."outcome" = 'no_parent_stream' THEN
-        IF parent_thread_id IS NOT NULL OR NEW."parent_event_sequence" IS NOT NULL THEN RAISE EXCEPTION 'no_parent_stream outcome requires no parent conversation stream'; END IF;
-    ELSE
-        IF NEW."parent_event_sequence" IS NOT NULL OR NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "type" IN ('run.completed', 'run.failed', 'run.cancelled')) THEN RAISE EXCEPTION 'parent_stream_terminal outcome requires terminal parent stream'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_child_run_completion_delivery_event"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    child_state "AgentRunState";
-    expected_event_type TEXT;
-BEGIN
-    IF NEW."outcome" <> 'delivered' THEN RETURN NULL; END IF;
-    SELECT "state" INTO child_state FROM "agent_runs" WHERE "id" = NEW."child_run_id";
-    expected_event_type := CASE child_state WHEN 'completed' THEN 'child.run.completed' WHEN 'failed' THEN 'child.run.failed' ELSE 'child.run.cancelled' END;
-    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."parent_run_id" AND "sequence" = NEW."parent_event_sequence" AND "type" = expected_event_type AND "payload"->>'childRunId' = NEW."child_run_id") THEN RAISE EXCEPTION 'delivered child completion requires exact parent event'; END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "reject_conversation_immutable_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    RAISE EXCEPTION 'canonical conversation history is immutable';
-END;
-$$;
-CREATE FUNCTION "enforce_conversation_context_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    message_thread_id TEXT;
-    run_thread_id TEXT;
-BEGIN
-    SELECT "thread_id" INTO message_thread_id FROM "conversation_messages" WHERE "id" = NEW."through_message_id" FOR UPDATE;
-    SELECT "thread_id" INTO run_thread_id FROM "agent_runs" WHERE "id" = NEW."created_by_run_id" FOR UPDATE;
-    IF message_thread_id IS DISTINCT FROM NEW."thread_id" OR run_thread_id IS DISTINCT FROM NEW."thread_id" THEN
-        RAISE EXCEPTION 'ConversationContextRevision provenance must belong to the exact thread';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_terminal_agent_run_event"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    expected_type TEXT;
-BEGIN
-    IF NEW."thread_id" IS NULL OR NEW."state" NOT IN ('completed', 'failed', 'cancelled') THEN RETURN NULL; END IF;
-    expected_type := CASE NEW."state" WHEN 'completed' THEN 'run.completed' WHEN 'failed' THEN 'run.failed' ELSE 'run.cancelled' END;
-    IF NOT EXISTS (SELECT 1 FROM "conversation_run_events" WHERE "run_id" = NEW."id" AND "type" = expected_type) THEN
-        RAISE EXCEPTION 'terminal conversation AgentRun requires its matching terminal RunEvent';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_question_set_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE missing_count INTEGER;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaQuestionSet rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'draft' THEN RAISE EXCEPTION 'PersonaQuestionSet must begin as Draft'; END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF OLD."state" = 'reviewed' THEN RAISE EXCEPTION 'reviewed PersonaQuestionSet is immutable'; END IF;
-        IF NEW."question_set_id" IS DISTINCT FROM OLD."question_set_id" OR NEW."version" IS DISTINCT FROM OLD."version"
-            OR NEW."created_at" IS DISTINCT FROM OLD."created_at" OR NEW."state" <> 'reviewed' THEN
-            RAISE EXCEPTION 'PersonaQuestionSet may only transition from Draft to Reviewed';
-        END IF;
-    END IF;
-    IF NEW."state" = 'reviewed' THEN
-        SELECT count(*) INTO missing_count FROM unnest(enum_range(NULL::"PersonaInterviewCategory")) category
-          WHERE NOT EXISTS (SELECT 1 FROM "persona_questions" q WHERE q."question_set_id" = NEW."question_set_id" AND q."question_set_version" = NEW."version" AND q."category" = category);
-        IF missing_count > 0 THEN RAISE EXCEPTION 'reviewed persona question set must cover every required category'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_question_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE question_set_state "PersonaQuestionSetState";
-BEGIN
-    IF TG_OP <> 'INSERT' THEN
-        SELECT "state" INTO question_set_state FROM "persona_question_sets"
-          WHERE "question_set_id" = OLD."question_set_id" AND "version" = OLD."question_set_version" FOR UPDATE;
-        IF question_set_state IS DISTINCT FROM 'draft' THEN RAISE EXCEPTION 'questions may change only while PersonaQuestionSet is Draft'; END IF;
-    END IF;
-    IF TG_OP <> 'DELETE' THEN
-        SELECT "state" INTO question_set_state FROM "persona_question_sets"
-          WHERE "question_set_id" = NEW."question_set_id" AND "version" = NEW."question_set_version" FOR UPDATE;
-        IF question_set_state IS DISTINCT FROM 'draft' THEN RAISE EXCEPTION 'questions may change only while PersonaQuestionSet is Draft'; END IF;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_interview_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE expected_answers INTEGER; actual_answers INTEGER; question_set_state "PersonaQuestionSetState";
-        refresh_state "PersonalConfigurationChangeState"; refresh_user TEXT; refresh_profile TEXT; refresh_patch JSONB;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaInterview rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'in_progress' OR NEW."completed_at" IS NOT NULL THEN
-            RAISE EXCEPTION 'PersonaInterview must begin InProgress without completion evidence';
-        END IF;
-        SELECT "state" INTO question_set_state FROM "persona_question_sets"
-          WHERE "question_set_id" = NEW."question_set_id" AND "version" = NEW."question_set_version" FOR UPDATE;
-        IF question_set_state IS DISTINCT FROM 'reviewed' THEN RAISE EXCEPTION 'PersonaInterview requires a Reviewed question set'; END IF;
-        IF NEW."refresh_configuration_change_id" IS NOT NULL THEN
-            SELECT "state", "user_id", "persona_profile_id", "requested_patch"
-              INTO refresh_state, refresh_user, refresh_profile, refresh_patch
-              FROM "personal_configuration_changes" WHERE "id" = NEW."refresh_configuration_change_id" FOR UPDATE;
-            IF refresh_state IS DISTINCT FROM 'accepted' OR refresh_user IS DISTINCT FROM NEW."user_id"
-               OR refresh_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_patch IS DISTINCT FROM '{"kind":"persona_refresh"}'::jsonb THEN
-                RAISE EXCEPTION 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal';
-            END IF;
-        END IF;
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'completed' THEN RAISE EXCEPTION 'completed PersonaInterview evidence is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND (
-        NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id"
-        OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
-        OR NEW."question_set_id" IS DISTINCT FROM OLD."question_set_id"
-        OR NEW."question_set_version" IS DISTINCT FROM OLD."question_set_version"
-        OR NEW."started_at" IS DISTINCT FROM OLD."started_at"
-    ) THEN RAISE EXCEPTION 'PersonaInterview owner, question set, and start evidence are immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."refresh_configuration_change_id" IS DISTINCT FROM OLD."refresh_configuration_change_id" THEN
-        RAISE EXCEPTION 'PersonaInterview refresh provenance is immutable';
-    END IF;
-    IF NEW."state" = 'completed' THEN
-        SELECT count(*) INTO expected_answers FROM "persona_questions" WHERE "question_set_id" = NEW."question_set_id" AND "question_set_version" = NEW."question_set_version";
-        SELECT count(*) INTO actual_answers FROM "persona_interview_answers" WHERE "interview_id" = NEW."id";
-        IF expected_answers = 0 OR actual_answers <> expected_answers THEN RAISE EXCEPTION 'completed PersonaInterview must answer every reviewed question exactly once'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_answer_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE interview_question_set TEXT; interview_question_version INTEGER; interview_state "PersonaInterviewState";
-BEGIN
-    SELECT "question_set_id", "question_set_version", "state" INTO interview_question_set, interview_question_version, interview_state
-      FROM "persona_interviews" WHERE "id" = NEW."interview_id" FOR UPDATE;
-    IF interview_state IS DISTINCT FROM 'in_progress' THEN RAISE EXCEPTION 'answers may be added only while PersonaInterview is InProgress'; END IF;
-    IF interview_question_set IS DISTINCT FROM NEW."question_set_id" OR interview_question_version IS DISTINCT FROM NEW."question_set_version" THEN
-        RAISE EXCEPTION 'PersonaInterviewAnswer must use the exact interview question-set revision';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_insight_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_interview TEXT; revision_state "PersonaRevisionState"; question_category "PersonaInterviewCategory";
-BEGIN
-    SELECT "interview_id", "state" INTO revision_interview, revision_state FROM "persona_revisions" WHERE "id" = NEW."persona_revision_id" FOR UPDATE;
-    IF revision_state IS DISTINCT FROM 'draft' THEN RAISE EXCEPTION 'insights may be added only while PersonaRevision is Draft'; END IF;
-    SELECT "category" INTO question_category FROM "persona_questions"
-      WHERE "question_set_id" = NEW."question_set_id" AND "question_set_version" = NEW."question_set_version" AND "question_id" = NEW."question_id";
-    IF revision_interview IS DISTINCT FROM NEW."interview_id" OR question_category IS DISTINCT FROM NEW."category" THEN
-        RAISE EXCEPTION 'PersonaInsight must match its revision interview and exact question category';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_revision_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE
-    insight_count INTEGER;
-    interview_state "PersonaInterviewState";
-    interview_profile TEXT;
-    template_digest TEXT;
-    previous_profile TEXT;
-    selected_template_id TEXT;
-    selected_template_version INTEGER;
-    selected_template_digest TEXT;
-    selected_rule_id TEXT;
-    expected_answer_ids TEXT[];
-BEGIN
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'draft' THEN RAISE EXCEPTION 'PersonaRevision must begin as Draft'; END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaRevision rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF OLD."state" = 'approved' THEN RAISE EXCEPTION 'approved PersonaRevision is immutable'; END IF;
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id"
-            OR NEW."revision" IS DISTINCT FROM OLD."revision" OR NEW."soul_template_id" IS DISTINCT FROM OLD."soul_template_id"
-            OR NEW."soul_template_version" IS DISTINCT FROM OLD."soul_template_version" OR NEW."soul_template_digest" IS DISTINCT FROM OLD."soul_template_digest"
-            OR NEW."interview_id" IS DISTINCT FROM OLD."interview_id" OR NEW."selection_rule_id" IS DISTINCT FROM OLD."selection_rule_id"
-            OR NEW."selection_answer_ids" IS DISTINCT FROM OLD."selection_answer_ids" OR NEW."compiled_instructions" IS DISTINCT FROM OLD."compiled_instructions"
-            OR NEW."previous_revision_id" IS DISTINCT FROM OLD."previous_revision_id" OR NEW."authored_by" IS DISTINCT FROM OLD."authored_by"
-            OR NEW."created_at" IS DISTINCT FROM OLD."created_at" OR NEW."durable_soul_mutation_policy" IS DISTINCT FROM OLD."durable_soul_mutation_policy" THEN
-            RAISE EXCEPTION 'PersonaRevision content is immutable; edits create a new revision';
-        END IF;
-    END IF;
-    IF NEW."previous_revision_id" IS NOT NULL THEN
-        SELECT "persona_profile_id" INTO previous_profile FROM "persona_revisions" WHERE "id" = NEW."previous_revision_id" FOR UPDATE;
-        IF previous_profile IS DISTINCT FROM NEW."persona_profile_id" THEN RAISE EXCEPTION 'PersonaRevision history must stay inside one profile'; END IF;
-    END IF;
-    IF NEW."state" = 'approved' THEN
-        SELECT "state", "persona_profile_id" INTO interview_state, interview_profile FROM "persona_interviews" WHERE "id" = NEW."interview_id" FOR UPDATE;
-        SELECT "digest" INTO template_digest FROM "persona_soul_templates" WHERE "template_id" = NEW."soul_template_id" AND "version" = NEW."soul_template_version";
-        SELECT count(*) INTO insight_count FROM "persona_insights" WHERE "persona_revision_id" = NEW."id";
-        IF interview_state IS DISTINCT FROM 'completed' OR interview_profile IS DISTINCT FROM NEW."persona_profile_id" OR template_digest IS DISTINCT FROM NEW."soul_template_digest" OR insight_count < 3 OR insight_count > 5 THEN
-            RAISE EXCEPTION 'PersonaRevision approval requires completed matching interview, exact template digest, and three to five insights';
-        END IF;
-        SELECT candidate."template_id", candidate."version", candidate."digest", candidate."rule_id", candidate."answer_ids"
-          INTO selected_template_id, selected_template_version, selected_template_digest, selected_rule_id, expected_answer_ids
-          FROM (
-            SELECT template."template_id", template."version", template."digest", rule ->> 'id' AS "rule_id",
-                ARRAY(
-                    SELECT answer."id" FROM jsonb_object_keys(rule -> 'answers') required_question_id
-                    JOIN "persona_interview_answers" answer ON answer."interview_id" = NEW."interview_id"
-                        AND answer."question_id" = required_question_id
-                    ORDER BY answer."id"
-                ) AS "answer_ids",
-                (rule ->> 'priority')::INTEGER AS "priority"
-            FROM "persona_soul_templates" template
-            CROSS JOIN LATERAL jsonb_array_elements(template."selection_rules") rule
-            WHERE NOT EXISTS (
-                SELECT 1 FROM jsonb_each_text(rule -> 'answers') required_answer
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM "persona_interview_answers" answer
-                    WHERE answer."interview_id" = NEW."interview_id"
-                      AND answer."question_id" = required_answer.key AND answer."value" = required_answer.value
-                )
-            )
-            ORDER BY "priority" DESC, template."template_id", template."version" DESC, "rule_id"
-            LIMIT 1
-          ) candidate;
-        IF selected_template_id IS DISTINCT FROM NEW."soul_template_id"
-            OR selected_template_version IS DISTINCT FROM NEW."soul_template_version"
-            OR selected_template_digest IS DISTINCT FROM NEW."soul_template_digest"
-            OR selected_rule_id IS DISTINCT FROM NEW."selection_rule_id"
-            OR expected_answer_ids IS DISTINCT FROM ARRAY(SELECT answer_id FROM unnest(NEW."selection_answer_ids") answer_id ORDER BY answer_id) THEN
-            RAISE EXCEPTION 'PersonaRevision must pin the deterministic answer-selected SOUL template and exact answer evidence';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_persona_soul_template_rules"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE rule_count INTEGER; rule_id_count INTEGER;
-BEGIN
-    IF jsonb_array_length(NEW."selection_rules") = 0 OR EXISTS (
-        SELECT 1 FROM jsonb_array_elements(NEW."selection_rules") rule
-        WHERE jsonb_typeof(rule) <> 'object' OR btrim(COALESCE(rule ->> 'id', '')) = ''
-          OR COALESCE(rule ->> 'priority', '') !~ '^-?[0-9]+$'
-          OR CASE WHEN jsonb_typeof(rule -> 'answers') = 'object'
-              THEN NOT EXISTS (SELECT 1 FROM jsonb_object_keys(rule -> 'answers')) ELSE true END
-    ) THEN RAISE EXCEPTION 'SOUL template selection rules require id, integer priority, and exact answer matches'; END IF;
-    SELECT count(*), count(DISTINCT rule ->> 'id') INTO rule_count, rule_id_count FROM jsonb_array_elements(NEW."selection_rules") rule;
-    IF rule_count <> rule_id_count THEN RAISE EXCEPTION 'SOUL template selection rule identifiers must be unique'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "reject_persona_source_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'reviewed persona source is immutable'; END; $$;
-CREATE FUNCTION "enforce_personal_agent_persona"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE service_kind "AgentServiceKind"; service_silo_id TEXT; persona_state "PersonaRevisionState"; persona_silo_id TEXT;
-BEGIN
-    IF NEW."state" = 'published' THEN
-        SELECT "kind", "silo_id" INTO service_kind, service_silo_id FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
-        IF service_kind = 'personal' THEN
-            SELECT revision."state", profile."silo_id" INTO persona_state, persona_silo_id
-              FROM "persona_revisions" revision JOIN "persona_profiles" profile ON profile."id" = revision."persona_profile_id"
-              WHERE revision."id" = NEW."persona_revision_id";
-            IF NEW."persona_revision_id" IS NULL OR persona_state IS DISTINCT FROM 'approved' OR persona_silo_id IS DISTINCT FROM service_silo_id THEN
-                RAISE EXCEPTION 'personal AgentRevision requires an approved PersonaRevision in the same silo';
-            END IF;
-        END IF;
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_active_persona_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_state "PersonaRevisionState";
-BEGIN
-    IF NEW."active_revision_id" IS NULL THEN RETURN NEW; END IF;
-    SELECT "state" INTO revision_state FROM "persona_revisions"
-      WHERE "id" = NEW."active_revision_id" AND "persona_profile_id" = NEW."id" FOR UPDATE;
-    IF revision_state IS DISTINCT FROM 'approved' THEN RAISE EXCEPTION 'active PersonaRevision must be Approved'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_personal_configuration_change_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE profile_silo TEXT; profile_user TEXT; active_persona TEXT; thread_silo TEXT; thread_service TEXT;
-        run_silo TEXT; run_thread TEXT; run_service TEXT; run_user TEXT; service_silo TEXT; service_kind "AgentServiceKind"; active_agent TEXT;
-        refresh_change TEXT; applied_revision_profile TEXT; applied_revision_service TEXT; applied_revision_parent TEXT; applied_model_alias TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonalConfigurationChange rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'proposed' THEN RAISE EXCEPTION 'PersonalConfigurationChange must begin as Proposed'; END IF;
-        SELECT "silo_id", "user_id", "active_revision_id" INTO profile_silo, profile_user, active_persona
-          FROM "persona_profiles" WHERE "id" = NEW."persona_profile_id" FOR UPDATE;
-        SELECT "silo_id", "agent_service_id" INTO thread_silo, thread_service
-          FROM "conversation_threads" WHERE "id" = NEW."source_thread_id" FOR UPDATE;
-        IF NOT EXISTS (SELECT 1 FROM "conversation_participants" WHERE "thread_id" = NEW."source_thread_id" AND "user_id" = NEW."user_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source thread requires the initiating participant';
-        END IF;
-        SELECT "silo_id", "thread_id", "agent_service_id", "delegated_user_id" INTO run_silo, run_thread, run_service, run_user
-          FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
-        SELECT "silo_id", "kind", "active_revision_id" INTO service_silo, service_kind, active_agent
-          FROM "agent_services" WHERE "id" = NEW."agent_service_id" FOR UPDATE;
-        IF profile_silo IS DISTINCT FROM NEW."silo_id" OR profile_user IS DISTINCT FROM NEW."user_id"
-           OR thread_silo IS DISTINCT FROM NEW."silo_id" OR thread_service IS DISTINCT FROM NEW."agent_service_id"
-           OR run_silo IS DISTINCT FROM NEW."silo_id" OR run_thread IS DISTINCT FROM NEW."source_thread_id"
-           OR run_service IS DISTINCT FROM NEW."agent_service_id" OR run_user IS DISTINCT FROM NEW."user_id"
-           OR service_silo IS DISTINCT FROM NEW."silo_id" OR service_kind IS DISTINCT FROM 'personal'
-           OR active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" OR active_agent IS DISTINCT FROM NEW."expected_agent_revision_id" THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange provenance or active-revision fence conflict';
-        END IF;
-        IF NEW."source_message_id" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "conversation_messages" WHERE "id" = NEW."source_message_id" AND "thread_id" = NEW."source_thread_id") THEN
-            RAISE EXCEPTION 'PersonalConfigurationChange source message must belong to its source thread';
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."user_id" IS DISTINCT FROM OLD."user_id"
-       OR NEW."persona_profile_id" IS DISTINCT FROM OLD."persona_profile_id" OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id"
-       OR NEW."source_thread_id" IS DISTINCT FROM OLD."source_thread_id" OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id"
-       OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."requested_patch" IS DISTINCT FROM OLD."requested_patch"
-       OR NEW."requested_patch_digest" IS DISTINCT FROM OLD."requested_patch_digest" OR NEW."expected_persona_revision_id" IS DISTINCT FROM OLD."expected_persona_revision_id"
-       OR NEW."expected_agent_revision_id" IS DISTINCT FROM OLD."expected_agent_revision_id" OR NEW."proposed_at" IS DISTINCT FROM OLD."proposed_at" THEN
-        RAISE EXCEPTION 'PersonalConfigurationChange proposal evidence is immutable';
-    END IF;
-    IF OLD."state" <> 'proposed' AND (NEW."decided_at" IS DISTINCT FROM OLD."decided_at" OR NEW."decided_by" IS DISTINCT FROM OLD."decided_by" OR NEW."rejection_reason" IS DISTINCT FROM OLD."rejection_reason") THEN
-        RAISE EXCEPTION 'PersonalConfigurationChange decision evidence is immutable';
-    END IF;
-    IF OLD."state" = 'proposed' AND NEW."state" IN ('accepted', 'rejected') THEN RETURN NEW; END IF;
-    IF OLD."state" = 'accepted' AND NEW."state" = 'applied' THEN
-        IF NEW."requested_patch" = '{"kind":"persona_refresh"}'::jsonb THEN
-            IF NEW."applied_persona_revision_id" IS NULL OR NEW."applied_agent_revision_id" IS NOT NULL THEN
-                RAISE EXCEPTION 'persona_refresh requires an approved persona revision only';
-            END IF;
-            SELECT revision."persona_profile_id", interview."refresh_configuration_change_id"
-              INTO applied_revision_profile, refresh_change
-              FROM "persona_revisions" revision JOIN "persona_interviews" interview ON interview."id" = revision."interview_id"
-              WHERE revision."id" = NEW."applied_persona_revision_id" AND revision."state" = 'approved' FOR UPDATE OF revision, interview;
-            IF applied_revision_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_change IS DISTINCT FROM NEW."id" THEN
-                RAISE EXCEPTION 'applied persona refresh must use its exact approved interview-derived revision';
-            END IF;
-        ELSIF NEW."requested_patch"->>'kind' = 'model_alias' THEN
-            IF NEW."applied_persona_revision_id" IS NOT NULL OR NEW."applied_agent_revision_id" IS NULL THEN
-                RAISE EXCEPTION 'model_alias requires a published personal AgentRevision only';
-            END IF;
-            SELECT profile."active_revision_id" INTO active_persona
-              FROM "persona_profiles" profile
-              WHERE profile."id" = NEW."persona_profile_id" AND profile."silo_id" = NEW."silo_id" AND profile."user_id" = NEW."user_id"
-              FOR UPDATE OF profile;
-            IF active_persona IS DISTINCT FROM NEW."expected_persona_revision_id" THEN
-                RAISE EXCEPTION 'applied model_alias must preserve the proposal persona revision';
-            END IF;
-            SELECT revision."agent_service_id", revision."parent_revision_id", definition."public_model_name"
-              INTO applied_revision_service, applied_revision_parent, applied_model_alias
-              FROM "agent_revisions" revision JOIN "model_definitions" definition ON definition."id" = revision."model_definition_id"
-              WHERE revision."id" = NEW."applied_agent_revision_id" AND revision."state" = 'published' FOR UPDATE OF revision, definition;
-            IF applied_revision_service IS DISTINCT FROM NEW."agent_service_id" OR applied_revision_parent IS DISTINCT FROM NEW."expected_agent_revision_id"
-               OR applied_model_alias IS DISTINCT FROM NEW."requested_patch"->>'modelAlias'
-               OR NOT EXISTS (SELECT 1 FROM "agent_services" service WHERE service."id" = NEW."agent_service_id" AND service."kind" = 'personal' AND service."state" = 'active' AND service."active_revision_id" = NEW."applied_agent_revision_id") THEN
-                RAISE EXCEPTION 'applied model_alias must activate its exact published personal AgentRevision';
-            END IF;
-            IF EXISTS (
-                SELECT 1 FROM "agent_revisions" child JOIN "agent_revisions" parent ON parent."id" = NEW."expected_agent_revision_id"
-                WHERE child."id" = NEW."applied_agent_revision_id" AND (
-                    child."prompt_policy_version" IS DISTINCT FROM parent."prompt_policy_version"
-                    OR child."persona_revision_id" IS DISTINCT FROM parent."persona_revision_id"
-                    OR child."persona_revision_id" IS DISTINCT FROM active_persona
-                    OR child."budget" IS DISTINCT FROM parent."budget"
-                )
-            ) OR EXISTS (
-                (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "skill_id", "skill_revision_id" FROM "agent_revision_skill_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
-            ) OR EXISTS (
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "integration_id", "silo_id", "custody_reference_id", "allowed_tools" FROM "agent_revision_integration_assignments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
-            ) OR EXISTS (
-                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id"
-                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id")
-                UNION ALL
-                (SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."applied_agent_revision_id"
-                 EXCEPT SELECT "scope", "subject_type", "subject_id" FROM "agent_revision_scope_attachments" WHERE "agent_revision_id" = NEW."expected_agent_revision_id")
-            ) THEN
-                RAISE EXCEPTION 'applied model_alias may change only its model definition';
-            END IF;
-        ELSE
-            RAISE EXCEPTION 'PersonalConfigurationChange has an unsupported applied patch';
-        END IF;
-        RETURN NEW;
-    END IF;
-    RAISE EXCEPTION 'PersonalConfigurationChange has an invalid lifecycle transition';
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_revision_silo_provenance"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE artifact_silo_id TEXT; source_silo_id TEXT;
-BEGIN
-    SELECT "silo_id" INTO artifact_silo_id FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
-    IF NEW."source_run_id" IS NOT NULL THEN
-        SELECT "silo_id" INTO source_silo_id FROM "agent_runs" WHERE "id" = NEW."source_run_id" FOR UPDATE;
-        IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision run provenance must stay inside its silo'; END IF;
-    END IF;
-    IF NEW."source_message_id" IS NOT NULL THEN
-        SELECT thread."silo_id" INTO source_silo_id FROM "conversation_messages" message
-          JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
-          WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, thread;
-        IF source_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'ArtifactRevision message provenance must stay inside its silo'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_revision_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'published' THEN RAISE EXCEPTION 'ArtifactRevision becomes visible only through finalization'; END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactRevision metadata cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
-            OR NEW."content_address" IS DISTINCT FROM OLD."content_address" OR NEW."byte_length" IS DISTINCT FROM OLD."byte_length"
-            OR NEW."media_type" IS DISTINCT FROM OLD."media_type" OR NEW."provenance" IS DISTINCT FROM OLD."provenance"
-            OR NEW."source_run_id" IS DISTINCT FROM OLD."source_run_id" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id"
-            OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-            RAISE EXCEPTION 'ArtifactRevision content and provenance are immutable';
-        END IF;
-        IF NOT ((OLD."state" = 'published' AND NEW."state" IN ('published', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'purged')) OR (OLD."state" = 'purged' AND NEW."state" = 'purged')) THEN
-            RAISE EXCEPTION 'invalid ArtifactRevision lifecycle transition';
-        END IF;
-        IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE ("source_revision_id" = NEW."id" OR "derived_revision_id" = NEW."id") AND "state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'ArtifactRevision required by in-flight preprocessing cannot leave Published'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_state "ArtifactRevisionState";
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Artifact rows use authorized deletion lifecycle'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."retention_policy" IS DISTINCT FROM OLD."retention_policy" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'Artifact identity and retention are immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'deletion_pending')) OR (OLD."state" = 'deletion_pending' AND NEW."state" IN ('deletion_pending', 'deleted')) OR (OLD."state" = 'deleted' AND NEW."state" = 'deleted')) THEN RAISE EXCEPTION 'invalid Artifact lifecycle transition'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" <> 'active' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" job LEFT JOIN "artifact_revisions" source ON source."id" = job."source_revision_id" WHERE (job."derived_artifact_id" = NEW."id" OR source."artifact_id" = NEW."id") AND job."state" IN ('pending', 'claimed', 'retryable_failed')) THEN RAISE EXCEPTION 'Artifact required by in-flight preprocessing cannot be deleted'; END IF;
-    IF NEW."current_revision_id" IS NOT NULL THEN
-        SELECT "state" INTO revision_state FROM "artifact_revisions" WHERE "id" = NEW."current_revision_id" AND "artifact_id" = NEW."id" FOR UPDATE;
-        IF revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'current Artifact revision must be Published'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "protect_current_artifact_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "artifacts" WHERE "id" = NEW."artifact_id" AND "current_revision_id" = NEW."id") THEN RAISE EXCEPTION 'current ArtifactRevision must remain Published'; END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "reject_artifact_parent_mutation"() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'ArtifactRevision lineage is immutable'; END; $$;
-CREATE FUNCTION "enforce_artifact_parent_silo"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE child_silo_id TEXT; parent_silo_id TEXT;
-BEGIN
-    SELECT artifact."silo_id" INTO child_silo_id FROM "artifact_revisions" revision
-      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE revision."id" = NEW."child_revision_id" FOR UPDATE OF revision, artifact;
-    SELECT artifact."silo_id" INTO parent_silo_id FROM "artifact_revisions" revision
-      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE revision."id" = NEW."parent_revision_id" FOR UPDATE OF revision, artifact;
-    IF child_silo_id IS DISTINCT FROM parent_silo_id THEN RAISE EXCEPTION 'ArtifactRevision lineage cannot cross silos'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_preprocess_job_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE source_state "ArtifactRevisionState"; source_media_type TEXT; source_silo_id TEXT; source_owner_principal_id TEXT; source_artifact_state "ArtifactState";
-        output_silo_id TEXT; output_owner_principal_id TEXT; output_kind "ArtifactKind"; output_state "ArtifactState"; output_revision_artifact_id TEXT; output_revision_media_type TEXT; output_revision_state "ArtifactRevisionState"; output_revision_address TEXT; output_revision_length BIGINT;
-        output_lease_artifact_id TEXT; output_lease_state "ArtifactUploadLeaseState"; output_lease_address TEXT; output_lease_length BIGINT; output_lease_media_type TEXT; output_lease_expires_at TIMESTAMP(3); output_lease_promoted_address TEXT; output_lease_promoted_length BIGINT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactPreprocessJob rows cannot be deleted'; END IF;
-    SELECT revision."state", revision."media_type", artifact."silo_id", artifact."owner_principal_id", artifact."state" INTO source_state, source_media_type, source_silo_id, source_owner_principal_id, source_artifact_state
-      FROM "artifact_revisions" revision JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE revision."id" = NEW."source_revision_id" FOR UPDATE OF revision, artifact;
-    IF source_state IS DISTINCT FROM 'published' OR source_artifact_state IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'ArtifactPreprocessJob source must remain active and Published'; END IF;
-    IF NEW."pipeline_version" <> 'pdf-to-text/v1' OR source_media_type <> 'application/pdf' THEN RAISE EXCEPTION 'ArtifactPreprocessJob requires the supported PDF pipeline'; END IF;
-    IF NEW."derived_artifact_id" IS NOT NULL THEN
-        SELECT "silo_id", "owner_principal_id", "kind", "state" INTO output_silo_id, output_owner_principal_id, output_kind, output_state FROM "artifacts" WHERE "id" = NEW."derived_artifact_id" FOR UPDATE;
-        IF output_silo_id IS DISTINCT FROM source_silo_id OR output_owner_principal_id IS DISTINCT FROM source_owner_principal_id OR output_kind IS DISTINCT FROM 'generated' OR output_state IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'ArtifactPreprocessJob derived Artifact must retain the active source owner and silo'; END IF;
-    END IF;
-    IF NEW."derived_revision_id" IS NOT NULL THEN
-        SELECT "artifact_id", "media_type", "state", "content_address", "byte_length" INTO output_revision_artifact_id, output_revision_media_type, output_revision_state, output_revision_address, output_revision_length FROM "artifact_revisions" WHERE "id" = NEW."derived_revision_id" FOR UPDATE;
-        IF output_revision_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_revision_media_type <> 'text/plain' OR output_revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'ArtifactPreprocessJob derived revision must be published text for its output Artifact'; END IF;
-    END IF;
-    IF NEW."output_lease_id" IS NOT NULL THEN
-        SELECT "artifact_id", "state", "expected_content_address", "expected_byte_length", "media_type", "expires_at", "promoted_content_address", "promoted_byte_length" INTO output_lease_artifact_id, output_lease_state, output_lease_address, output_lease_length, output_lease_media_type, output_lease_expires_at, output_lease_promoted_address, output_lease_promoted_length FROM "artifact_upload_leases" WHERE "id" = NEW."output_lease_id" FOR UPDATE;
-        IF output_lease_artifact_id IS DISTINCT FROM NEW."derived_artifact_id" OR output_lease_address IS NULL OR output_lease_length IS NULL OR output_lease_media_type <> 'text/plain' THEN RAISE EXCEPTION 'ArtifactPreprocessJob output lease must bind exact text output for its derived Artifact'; END IF;
-        IF NEW."state" = 'claimed' AND (output_lease_state IS DISTINCT FROM 'active' OR output_lease_expires_at > NEW."claim_expires_at") THEN RAISE EXCEPTION 'ArtifactPreprocessJob claimed output lease must remain active within its claim'; END IF;
-        IF NEW."state" = 'completed' AND (output_lease_state IS DISTINCT FROM 'finalized' OR output_lease_promoted_address IS DISTINCT FROM output_lease_address OR output_lease_promoted_length IS DISTINCT FROM output_lease_length OR output_lease_promoted_address IS DISTINCT FROM output_revision_address OR output_lease_promoted_length IS DISTINCT FROM output_revision_length) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its finalized exact output lease'; END IF;
-    END IF;
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'pending' OR NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL THEN RAISE EXCEPTION 'ArtifactPreprocessJob must begin pending without an output or claim'; END IF;
-        RETURN NEW;
-    END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."source_revision_id" IS DISTINCT FROM OLD."source_revision_id" OR NEW."pipeline_version" IS DISTINCT FROM OLD."pipeline_version" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'ArtifactPreprocessJob identity is immutable'; END IF;
-    IF OLD."derived_artifact_id" IS NOT NULL AND NEW."derived_artifact_id" IS DISTINCT FROM OLD."derived_artifact_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output Artifact is immutable once allocated'; END IF;
-    IF OLD."derived_revision_id" IS NOT NULL AND NEW."derived_revision_id" IS DISTINCT FROM OLD."derived_revision_id" THEN RAISE EXCEPTION 'ArtifactPreprocessJob output revision is immutable once completed'; END IF;
-    IF NOT ((OLD."state" = 'pending' AND NEW."state" IN ('pending', 'claimed')) OR (OLD."state" = 'retryable_failed' AND NEW."state" IN ('retryable_failed', 'claimed')) OR (OLD."state" = 'claimed' AND NEW."state" IN ('claimed', 'completed', 'retryable_failed', 'terminal_failed')) OR (OLD."state" = 'completed' AND NEW."state" = 'completed') OR (OLD."state" = 'terminal_failed' AND NEW."state" = 'terminal_failed')) THEN RAISE EXCEPTION 'invalid ArtifactPreprocessJob lifecycle transition'; END IF;
-    IF NEW."state" = 'pending' AND (NEW."attempt" <> 0 OR NEW."claim_fence" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."derived_artifact_id" IS NOT NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob pending state cannot carry claim or output facts'; END IF;
-    IF OLD."state" = NEW."state" AND (NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at" OR NEW."next_attempt_at" IS DISTINCT FROM OLD."next_attempt_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR (NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" AND NOT (OLD."state" = 'claimed' AND OLD."output_lease_id" IS NULL AND NEW."output_lease_id" IS NOT NULL))) THEN RAISE EXCEPTION 'ArtifactPreprocessJob durable state facts change only through a lifecycle transition'; END IF;
-    IF OLD."state" <> 'claimed' AND NEW."state" = 'claimed' AND (NEW."attempt" <> OLD."attempt" + 1 OR NEW."claim_fence" IS NULL OR NEW."claim_fence" IS NOT DISTINCT FROM OLD."claim_fence" OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= clock_timestamp() OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob claim must allocate one fresh fenced output attempt'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" = 'retryable_failed' AND OLD."claim_expires_at" <= clock_timestamp() THEN
-        IF NEW."failure_code" <> 'claim_expired' THEN RAISE EXCEPTION 'expired ArtifactPreprocessJob claim may recover only as claim_expired'; END IF;
-    ELSIF OLD."state" = 'claimed' AND (OLD."claim_fence" IS NULL OR OLD."claim_expires_at" IS NULL OR OLD."claim_expires_at" <= clock_timestamp() OR NEW."claim_fence" IS DISTINCT FROM OLD."claim_fence") THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its live claim fence';
-    END IF;
-    IF NEW."state" = 'completed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NULL OR NEW."output_lease_id" IS NULL OR NEW."output_lease_id" IS DISTINCT FROM OLD."output_lease_id" OR NEW."completed_at" IS NULL OR NEW."failure_code" IS NOT NULL OR NEW."next_attempt_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires its fenced derived revision'; END IF;
-    IF NEW."state" = 'completed' AND NOT EXISTS (SELECT 1 FROM "artifact_revision_parents" WHERE "child_revision_id" = NEW."derived_revision_id" AND "parent_revision_id" = NEW."source_revision_id") THEN RAISE EXCEPTION 'ArtifactPreprocessJob completion requires immutable source lineage'; END IF;
-    IF NEW."state" = 'retryable_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob retryable failure requires bounded retry evidence'; END IF;
-    IF NEW."state" = 'terminal_failed' AND (NEW."claim_fence" IS NULL OR NEW."derived_artifact_id" IS NULL OR NEW."derived_revision_id" IS NOT NULL OR NEW."output_lease_id" IS NOT NULL OR NEW."failure_code" IS NULL OR NEW."next_attempt_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL) THEN RAISE EXCEPTION 'ArtifactPreprocessJob terminal failure requires failure evidence'; END IF;
-    IF OLD."state" = 'claimed' AND NEW."state" IN ('retryable_failed', 'terminal_failed') AND OLD."output_lease_id" IS NOT NULL THEN
-        UPDATE "artifact_upload_leases" SET "state" = 'cancelled' WHERE "id" = OLD."output_lease_id" AND "state" IN ('active', 'promoted');
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" = 'finalized' AND EXISTS (SELECT 1 FROM "artifact_preprocess_jobs" WHERE "output_lease_id" = NEW."id" AND "state" <> 'completed') THEN
-        RAISE EXCEPTION 'ArtifactPreprocessJob output lease may finalize only with its completed job';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_skill_revision_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE artifact_address TEXT; artifact_state "ArtifactRevisionState"; skill_silo_id TEXT; artifact_silo_id TEXT;
-BEGIN
-    IF TG_OP = 'INSERT' AND NEW."state" <> 'draft' THEN RAISE EXCEPTION 'SkillRevision must begin as Draft'; END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillRevision rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."skill_id" IS DISTINCT FROM OLD."skill_id" OR NEW."revision" IS DISTINCT FROM OLD."revision"
-            OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."artifact_revision_id" IS DISTINCT FROM OLD."artifact_revision_id"
-            OR NEW."artifact_content_address" IS DISTINCT FROM OLD."artifact_content_address" OR NEW."manifest" IS DISTINCT FROM OLD."manifest"
-            OR NEW."requirements" IS DISTINCT FROM OLD."requirements" OR NEW."trust_class" IS DISTINCT FROM OLD."trust_class"
-            OR NEW."authored_by" IS DISTINCT FROM OLD."authored_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-            RAISE EXCEPTION 'SkillRevision content is immutable; changes create a new revision';
-        END IF;
-        IF OLD."state" IN ('published', 'revoked') AND (
-            NEW."test_report" IS DISTINCT FROM OLD."test_report" OR NEW."scan_result" IS DISTINCT FROM OLD."scan_result"
-            OR NEW."signature" IS DISTINCT FROM OLD."signature" OR NEW."signer_key_id" IS DISTINCT FROM OLD."signer_key_id"
-            OR NEW."reviewed_by" IS DISTINCT FROM OLD."reviewed_by" OR NEW."published_at" IS DISTINCT FROM OLD."published_at") THEN
-            RAISE EXCEPTION 'published SkillRevision review and signature evidence is immutable';
-        END IF;
-        IF NOT ((OLD."state" = 'draft' AND NEW."state" IN ('draft', 'review', 'rejected')) OR (OLD."state" = 'review' AND NEW."state" IN ('review', 'published', 'rejected')) OR (OLD."state" = 'published' AND NEW."state" IN ('published', 'revoked')) OR (OLD."state" IN ('rejected', 'revoked') AND NEW."state" = OLD."state")) THEN RAISE EXCEPTION 'invalid SkillRevision lifecycle transition'; END IF;
-    END IF;
-    SELECT "silo_id" INTO skill_silo_id FROM "skills" WHERE "id" = NEW."skill_id" FOR UPDATE;
-    SELECT artifact."silo_id" INTO artifact_silo_id FROM "artifact_revisions" revision
-      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
-      WHERE revision."id" = NEW."artifact_revision_id" AND revision."artifact_id" = NEW."artifact_id" FOR UPDATE OF revision, artifact;
-    IF skill_silo_id IS DISTINCT FROM artifact_silo_id THEN RAISE EXCEPTION 'SkillRevision ArtifactRevision must stay inside the Skill silo'; END IF;
-    IF NEW."state" = 'published' THEN
-        SELECT "content_address", "state" INTO artifact_address, artifact_state FROM "artifact_revisions" WHERE "id" = NEW."artifact_revision_id" AND "artifact_id" = NEW."artifact_id" FOR UPDATE;
-        IF artifact_address IS DISTINCT FROM NEW."artifact_content_address" OR artifact_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'SkillRevision must pin an exact published ArtifactRevision'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
-        RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
-    END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
-    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned workload'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned' OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR clock_timestamp() >= OLD."release_expires_at") THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration requires a current released workload'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > clock_timestamp() OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > clock_timestamp() OR clock_timestamp() >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > clock_timestamp())) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") AND (NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
-    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
-    IF TG_OP = 'INSERT' THEN
-        SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
-        IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
-        IF NEW."kind" = 'authoring' AND (NEW."tool_invocation_id" IS NOT NULL OR revision_state IS DISTINCT FROM 'draft') THEN RAISE EXCEPTION 'authoring SkillWorkload requires Draft revision and no ToolInvocation'; END IF;
-        IF NEW."kind" = 'tool_runner' THEN
-            RAISE EXCEPTION 'tool-runner SkillWorkload requires the later snapshot-bound workload admission authority';
-        END IF;
-    END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') THEN
-        IF NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" bootstrap WHERE bootstrap."skill_workload_id" = NEW."id" AND bootstrap."consumed_at" IS NOT NULL AND bootstrap."consumed_by_pod_uid" = OLD."worker_pod_uid") THEN RAISE EXCEPTION 'SkillWorkload completion requires its consumed canonical worker bootstrap'; END IF;
-        IF NEW."kind" <> 'authoring' THEN RAISE EXCEPTION 'tool runner completion has its own ToolInvocation authority'; END IF;
-        IF NEW."state" = 'succeeded' AND NOT EXISTS (SELECT 1 FROM "skill_revisions" revision WHERE revision."id" = NEW."skill_revision_id" AND revision."state" = 'draft' AND jsonb_typeof(revision."test_report") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."test_report")) = 3 AND revision."test_report" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."test_report"->'summary') = 'string' AND length(revision."test_report"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."test_report"->'checksRun') = 'number' AND (revision."test_report"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$' AND jsonb_typeof(revision."scan_result") = 'object' AND (SELECT count(*) FROM jsonb_object_keys(revision."scan_result")) = 3 AND revision."scan_result" @> '{"passed":true}'::jsonb AND jsonb_typeof(revision."scan_result"->'summary') = 'string' AND length(revision."scan_result"->>'summary') BETWEEN 1 AND 2000 AND jsonb_typeof(revision."scan_result"->'checksRun') = 'number' AND (revision."scan_result"->>'checksRun') ~ '^(0|[1-9][0-9]{0,3}|10000)$') THEN RAISE EXCEPTION 'authoring completion requires bounded passed draft test and scan reports'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_skill_workload_bootstrap"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT; transition_time TIMESTAMP(3) := clock_timestamp();
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN RAISE EXCEPTION 'a new SkillWorkloadBootstrap must begin unconsumed'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."skill_workload_id" IS DISTINCT FROM OLD."skill_workload_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash" OR NEW."audience" IS DISTINCT FROM OLD."audience" OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NOT NULL AND (NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at" OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid") THEN RAISE EXCEPTION 'consumed SkillWorkloadBootstrap is terminal'; END IF;
-    IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap may be consumed exactly once'; END IF;
-    IF NEW."reference_hash" !~ '^sha256:[a-f0-9]{64}$' OR NEW."expires_at" <= NEW."created_at" OR (NEW."consumed_at" IS NULL) <> (NEW."consumed_by_pod_uid" IS NULL) OR (NEW."consumed_at" IS NOT NULL AND (NEW."consumed_at" < NEW."created_at" OR btrim(NEW."consumed_by_pod_uid") = '')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires hashed reference, positive expiry, and paired consumption evidence'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."consumed_at" > transition_time OR NEW."consumed_at" >= OLD."expires_at" OR transition_time >= OLD."expires_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap must be consumed at a current time before expiry'; END IF;
-    SELECT "kind", "state", "workload_uid", "worker_pod_uid" INTO workload_kind, workload_state, assigned_uid, assigned_pod_uid FROM "skill_workloads" WHERE "id" = NEW."skill_workload_id" FOR UPDATE;
-    IF workload_state IS DISTINCT FROM 'assigned' OR assigned_uid IS DISTINCT FROM NEW."workload_uid" THEN RAISE EXCEPTION 'SkillWorkloadBootstrap requires its exact assigned workload UID'; END IF;
-    IF TG_OP = 'UPDATE' AND assigned_pod_uid IS DISTINCT FROM NEW."consumed_by_pod_uid" THEN RAISE EXCEPTION 'bootstrap consumer Pod is not the registered workload Pod'; END IF;
-    IF NEW."namespace" !~ '^[a-z0-9]([-a-z0-9]*[a-z0-9])?$' OR length(NEW."namespace") > 63 OR (workload_kind = 'authoring' AND (NEW."audience" <> 'opencrane-skill-authoring' OR NEW."service_account_name" <> 'skill-authoring-default')) OR (workload_kind = 'tool_runner' AND (NEW."audience" <> 'opencrane-tool-runner' OR NEW."service_account_name" <> 'tool-runner-default')) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity must match its workload class'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "cancel_ineligible_skill_workloads"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_TABLE_NAME = 'skill_revisions' AND NEW."state" <> OLD."state" THEN
-        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state" IN ('pending', 'assigned') AND "skill_revision_id"=NEW."id"
-            AND (("kind"='authoring' AND NEW."state" <> 'draft') OR ("kind"='tool_runner' AND NEW."state" <> 'published'));
-    ELSIF TG_TABLE_NAME = 'tool_invocations' AND NEW."state" <> OLD."state" AND NEW."state" <> 'reserved' THEN
-        UPDATE "skill_workloads" SET "state"='cancelled', "cancelled_at"=clock_timestamp()
-          WHERE "state" IN ('pending', 'assigned') AND "kind"='tool_runner' AND "tool_invocation_id"=NEW."id";
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_skill_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Skill rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' THEN
-        IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-            OR NEW."owner_principal_id" IS DISTINCT FROM OLD."owner_principal_id" OR NEW."name" IS DISTINCT FROM OLD."name"
-            OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN RAISE EXCEPTION 'Skill identity is immutable'; END IF;
-        IF NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'retired')) OR (OLD."state" = 'retired' AND NEW."state" = 'retired')) THEN
-            RAISE EXCEPTION 'invalid Skill lifecycle transition';
-        END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_current_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE revision_state "SkillRevisionState";
-BEGIN
-    IF NEW."current_revision_id" IS NOT NULL THEN
-        SELECT "state" INTO revision_state FROM "skill_revisions" WHERE "id" = NEW."current_revision_id" AND "skill_id" = NEW."id" FOR UPDATE;
-        IF revision_state IS DISTINCT FROM 'published' THEN RAISE EXCEPTION 'current Skill revision must be Published'; END IF;
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "protect_current_skill_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (SELECT 1 FROM "skills" WHERE "id" = NEW."skill_id" AND "current_revision_id" = NEW."id") THEN
-        RAISE EXCEPTION 'current SkillRevision must remain Published';
-    END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "protect_skill_artifact_revision"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" <> 'published' AND EXISTS (
-        SELECT 1 FROM "skill_revisions" revision
-        WHERE revision."artifact_revision_id" = NEW."id" AND revision."artifact_id" = NEW."artifact_id"
-          AND (revision."state" = 'published' OR EXISTS (
-              SELECT 1 FROM "agent_revision_skill_assignments" assignment WHERE assignment."skill_revision_id" = revision."id"
-          ))
-    ) THEN RAISE EXCEPTION 'published or assigned SkillRevision keeps its ArtifactRevision Published'; END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_skill_assignment_silo"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE agent_silo_id TEXT; skill_silo_id TEXT; skill_revision_state "SkillRevisionState";
-BEGIN
-    SELECT service."silo_id" INTO agent_silo_id FROM "agent_revisions" revision
-      JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-      WHERE revision."id" = NEW."agent_revision_id" FOR UPDATE OF revision, service;
-    SELECT skill."silo_id", revision."state" INTO skill_silo_id, skill_revision_state
-      FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id"
-      WHERE revision."id" = NEW."skill_revision_id" AND revision."skill_id" = NEW."skill_id" FOR UPDATE OF revision, skill;
-    IF agent_silo_id IS DISTINCT FROM skill_silo_id OR skill_revision_state IS DISTINCT FROM 'published' THEN
-        RAISE EXCEPTION 'AgentRevision may assign only a Published SkillRevision from the same silo';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind" OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'retired' THEN RAISE EXCEPTION 'retired MemoryDataset is closed'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_memory_fact_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE prior_dataset TEXT; prior_state "MemoryFactState"; dataset_silo_id TEXT; source_silo_id TEXT;
-BEGIN
-    IF TG_OP = 'INSERT' THEN
-        IF NEW."state" <> 'active' THEN RAISE EXCEPTION 'MemoryFact catalog entry must begin Active'; END IF;
-        SELECT "silo_id" INTO dataset_silo_id FROM "memory_datasets" WHERE "id" = NEW."dataset_id" AND "state" = 'active' FOR UPDATE;
-        IF dataset_silo_id IS NULL THEN RAISE EXCEPTION 'MemoryFact requires an active MemoryDataset'; END IF;
-        IF NEW."source_artifact_revision_id" IS NOT NULL THEN
-            SELECT artifact."silo_id" INTO source_silo_id FROM "artifact_revisions" revision
-              JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
-              WHERE revision."id" = NEW."source_artifact_revision_id" FOR UPDATE OF revision, artifact;
-        ELSIF NEW."source_message_id" IS NOT NULL THEN
-            SELECT thread."silo_id" INTO source_silo_id FROM "conversation_messages" message
-              JOIN "conversation_threads" thread ON thread."id" = message."thread_id"
-              WHERE message."id" = NEW."source_message_id" FOR UPDATE OF message, thread;
-        ELSE
-            source_silo_id := dataset_silo_id;
-        END IF;
-        IF source_silo_id IS DISTINCT FROM dataset_silo_id THEN RAISE EXCEPTION 'MemoryFact provenance must stay inside its dataset silo'; END IF;
-        IF NEW."supersedes_fact_id" IS NOT NULL THEN
-            SELECT "dataset_id", "state" INTO prior_dataset, prior_state FROM "memory_fact_catalog" WHERE "id" = NEW."supersedes_fact_id" FOR UPDATE;
-            IF prior_dataset IS DISTINCT FROM NEW."dataset_id" OR prior_state IS DISTINCT FROM 'active' THEN RAISE EXCEPTION 'memory correction must supersede an active fact in the same dataset'; END IF;
-            UPDATE "memory_fact_catalog" SET "state" = 'corrected', "corrected_at" = clock_timestamp() WHERE "id" = NEW."supersedes_fact_id";
-        END IF;
-        RETURN NEW;
-    END IF;
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryFact catalog rows use explicit forget lifecycle'; END IF;
-    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."dataset_id" IS DISTINCT FROM OLD."dataset_id" OR NEW."cognee_external_id" IS DISTINCT FROM OLD."cognee_external_id" OR NEW."content_digest" IS DISTINCT FROM OLD."content_digest" OR NEW."consent_state" IS DISTINCT FROM OLD."consent_state" OR NEW."sensitivity" IS DISTINCT FROM OLD."sensitivity" OR NEW."provenance" IS DISTINCT FROM OLD."provenance" OR NEW."source_artifact_revision_id" IS DISTINCT FROM OLD."source_artifact_revision_id" OR NEW."source_message_id" IS DISTINCT FROM OLD."source_message_id" OR NEW."supersedes_fact_id" IS DISTINCT FROM OLD."supersedes_fact_id" OR NEW."recorded_by" IS DISTINCT FROM OLD."recorded_by" OR NEW."recorded_at" IS DISTINCT FROM OLD."recorded_at" THEN RAISE EXCEPTION 'MemoryFact content and provenance are immutable'; END IF;
-    IF OLD."corrected_at" IS NOT NULL AND NEW."corrected_at" IS DISTINCT FROM OLD."corrected_at" THEN RAISE EXCEPTION 'MemoryFact correction evidence is immutable'; END IF;
-    IF OLD."forget_requested_at" IS NOT NULL AND NEW."forget_requested_at" IS DISTINCT FROM OLD."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget request evidence is immutable'; END IF;
-    IF OLD."forgotten_at" IS NOT NULL AND NEW."forgotten_at" IS DISTINCT FROM OLD."forgotten_at" THEN RAISE EXCEPTION 'MemoryFact forget completion evidence is immutable'; END IF;
-    IF NEW."forgotten_at" IS NOT NULL AND NEW."forgotten_at" < NEW."forget_requested_at" THEN RAISE EXCEPTION 'MemoryFact forget completion cannot predate its request'; END IF;
-    IF NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'corrected', 'forget_pending'))
-        OR (OLD."state" = 'corrected' AND NEW."state" IN ('corrected', 'forget_pending'))
-        OR (OLD."state" = 'forget_pending' AND NEW."state" IN ('forget_pending', 'forgotten'))
-        OR (OLD."state" = 'forgotten' AND NEW."state" = 'forgotten')) THEN RAISE EXCEPTION 'invalid MemoryFact forget lifecycle'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_corrected_memory_successor"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-    IF NEW."state" = 'corrected' AND NOT EXISTS (
-        SELECT 1 FROM "memory_fact_catalog" successor WHERE successor."supersedes_fact_id" = NEW."id"
-    ) THEN RAISE EXCEPTION 'Corrected MemoryFact requires exactly one committed successor'; END IF;
-    RETURN NULL;
-END;
-$$;
-CREATE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE artifact_silo_id TEXT;
-BEGIN
-    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ArtifactUploadLease rows cannot be deleted'; END IF;
-    SELECT "silo_id" INTO artifact_silo_id FROM "artifacts" WHERE "id" = NEW."artifact_id" FOR UPDATE;
-    IF artifact_silo_id IS DISTINCT FROM NEW."silo_id" THEN RAISE EXCEPTION 'ArtifactUploadLease must stay inside its Artifact silo'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."id" IS DISTINCT FROM OLD."id" OR NEW."artifact_id" IS DISTINCT FROM OLD."artifact_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."capability_jti" IS DISTINCT FROM OLD."capability_jti" OR NEW."expected_content_address" IS DISTINCT FROM OLD."expected_content_address" OR NEW."expected_byte_length" IS DISTINCT FROM OLD."expected_byte_length" OR NEW."media_type" IS DISTINCT FROM OLD."media_type" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'ArtifactUploadLease authority coordinates are immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" <> 'active' AND (NEW."promotion_receipt_digest" IS DISTINCT FROM OLD."promotion_receipt_digest" OR NEW."promoted_content_address" IS DISTINCT FROM OLD."promoted_content_address" OR NEW."promoted_byte_length" IS DISTINCT FROM OLD."promoted_byte_length" OR NEW."promoted_at" IS DISTINCT FROM OLD."promoted_at") THEN RAISE EXCEPTION 'ArtifactUploadLease promotion receipt is immutable'; END IF;
-    IF TG_OP = 'UPDATE' AND NOT ((OLD."state" = 'active' AND NEW."state" IN ('active', 'promoted', 'expired', 'cancelled')) OR (OLD."state" = 'promoted' AND NEW."state" IN ('promoted', 'finalized', 'expired', 'cancelled')) OR (OLD."state" = 'finalized' AND NEW."state" = 'finalized') OR (OLD."state" IN ('expired', 'cancelled') AND NEW."state" = OLD."state")) THEN RAISE EXCEPTION 'invalid ArtifactUploadLease lifecycle transition'; END IF;
-    RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "has_nonempty_distinct_tool_ids"(TEXT[]) RETURNS BOOLEAN LANGUAGE sql IMMUTABLE AS $$
-  SELECT COALESCE(
-    cardinality($1) > 0 AND NOT EXISTS (
-      SELECT 1
-      FROM unnest($1) AS tool("value")
-      GROUP BY tool."value"
-      HAVING tool."value" IS NULL OR btrim(tool."value") = '' OR position(':' in tool."value") > 0 OR count(*) > 1
-    ),
-    FALSE
-  );
-$$;
-CREATE FUNCTION "enforce_integration_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."state" <> 'active' THEN RAISE EXCEPTION 'a new Integration must begin Active'; END IF;
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Integration rows cannot be deleted'; END IF;
-  IF OLD."state" = 'retired' THEN RAISE EXCEPTION 'a Retired Integration is closed'; END IF;
-  IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
-    OR NEW."obot_catalog_entry_id" IS DISTINCT FROM OLD."obot_catalog_entry_id" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-    RAISE EXCEPTION 'Integration identity is immutable';
-  END IF;
-  IF NEW."state" NOT IN ('active', 'retired') THEN RAISE EXCEPTION 'invalid Integration lifecycle transition'; END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_integration_custody_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
-BEGIN
-  IF TG_OP = 'INSERT' THEN
-    IF NEW."state" = 'ready' AND NEW."expires_at" <= NEW."created_at" THEN
-      RAISE EXCEPTION 'a Ready custody reference must expire after creation';
-    END IF;
-    RETURN NEW;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'Integration custody references cannot be deleted'; END IF;
-  IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."integration_id" IS DISTINCT FROM OLD."integration_id"
-    OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."obot_custody_reference" IS DISTINCT FROM OLD."obot_custody_reference"
-    OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
-    RAISE EXCEPTION 'Integration custody identity is immutable';
-  END IF;
-  IF OLD."state" <> 'ready' OR NEW."state" NOT IN ('ready', 'revoked', 'expired') THEN
-    RAISE EXCEPTION 'invalid Integration custody lifecycle transition';
-  END IF;
-  IF NEW."state" = 'expired' AND NEW."expires_at" > clock_timestamp() THEN
-    RAISE EXCEPTION 'a custody reference expires only after its expiry instant';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-CREATE FUNCTION "enforce_agent_revision_integration_assignment_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE agent_silo_id TEXT; integration_state "IntegrationState"; custody_state "IntegrationCustodyState"; custody_expiry TIMESTAMP(3); custody_revoked_at TIMESTAMP(3);
-BEGIN
-  SELECT service."silo_id" INTO agent_silo_id
-    FROM "agent_revisions" revision JOIN "agent_services" service ON service."id" = revision."agent_service_id"
-    WHERE revision."id" = NEW."agent_revision_id" FOR UPDATE OF revision, service;
-  SELECT integration."state" INTO integration_state FROM "integrations" integration
-    WHERE integration."id" = NEW."integration_id" AND integration."silo_id" = NEW."silo_id" FOR UPDATE;
-  SELECT custody."state", custody."expires_at", custody."revoked_at"
-    INTO custody_state, custody_expiry, custody_revoked_at FROM "integration_custody_references" custody
-    WHERE custody."id" = NEW."custody_reference_id" AND custody."integration_id" = NEW."integration_id" AND custody."silo_id" = NEW."silo_id" FOR UPDATE;
-  IF agent_silo_id IS DISTINCT FROM NEW."silo_id" OR integration_state IS DISTINCT FROM 'active'::"IntegrationState" THEN
-    RAISE EXCEPTION 'AgentRevision may assign only an Active Integration from the same silo';
-  END IF;
-  IF custody_state IS DISTINCT FROM 'ready'::"IntegrationCustodyState" OR custody_revoked_at IS NOT NULL OR custody_expiry <= clock_timestamp() THEN
-    RAISE EXCEPTION 'AgentRevision may assign only a ready unexpired Integration custody reference';
-  END IF;
-  RETURN NEW;
-END;
-$$;
-
--- Check constraints
-ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_nonempty_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("name") <> '' AND btrim("workload_profile") <> ''
-    );
-ALTER TABLE "agent_services" ADD CONSTRAINT "agent_services_active_revision_check" CHECK (
-        "state" <> 'active' OR "active_revision_id" IS NOT NULL
-    );
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_revision_check" CHECK ("revision" > 0);
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_nonempty_check" CHECK (
-        btrim("agent_service_id") <> '' AND btrim("digest") <> '' AND
-        btrim("prompt_policy_version") <> '' AND btrim("model_definition_id") <> '' AND
-        btrim("authored_by") <> '' AND "digest" ~ '^sha256:[0-9a-f]{64}$'
-    );
-ALTER TABLE "agent_revision_scope_attachments" ADD CONSTRAINT "agent_revision_scope_attachments_nonempty_check" CHECK (
-        btrim("agent_revision_id") <> '' AND btrim("subject_id") <> ''
-    );
-ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_publication_check" CHECK (
-        ("state" = 'published' AND "published_at" IS NOT NULL) OR
-        ("state" = 'retired' AND "published_at" IS NOT NULL) OR
-        ("state" IN ('draft', 'rejected') AND "published_at" IS NULL)
-    );
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_attempt_check" CHECK ("attempt" > 0);
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_nonempty_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND
-        btrim("agent_revision_id") <> '' AND btrim("request_idempotency_key") <> '' AND
-        btrim("root_run_id") <> '' AND btrim("effective_contract_digest") <> '' AND
-        btrim("input_snapshot_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        "input_snapshot_digest" ~ '^sha256:[0-9a-f]{64}$'
-    );
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_check" CHECK (
-        ("state" IN ('completed', 'failed', 'cancelled') AND "finished_at" IS NOT NULL AND "terminal_reason" IS NOT NULL) OR
-        ("state" NOT IN ('completed', 'failed', 'cancelled') AND "finished_at" IS NULL AND "terminal_reason" IS NULL)
-    );
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_terminal_reason_check" CHECK (
-        ("state" = 'completed' AND "terminal_reason" = 'success') OR
-        ("state" = 'cancelled' AND "terminal_reason" = 'user_cancelled') OR
-        ("state" = 'failed' AND "terminal_reason" NOT IN ('success', 'user_cancelled')) OR
-        "state" NOT IN ('completed', 'failed', 'cancelled')
-    );
-ALTER TABLE "agent_runs" ADD CONSTRAINT "agent_runs_cost_check" CHECK (
-        ("cost_amount" IS NULL AND "cost_currency" IS NULL) OR
-        ("cost_amount" IS NOT NULL AND "cost_amount" >= 0 AND "cost_currency" IS NOT NULL AND btrim("cost_currency") <> '')
-    );
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_version_check" CHECK ("snapshot_version" > 0);
-ALTER TABLE "run_input_snapshots" ADD CONSTRAINT "run_input_snapshots_nonempty_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND
-        btrim("effective_contract_digest") <> '' AND btrim("prompt_compiler_version") <> '' AND btrim("input_digest") <> '' AND
-        "effective_contract_digest" ~ '^sha256:[0-9a-f]{64}$' AND "input_digest" ~ '^sha256:[0-9a-f]{64}$'
-    );
-ALTER TABLE "child_run_reservations" ADD CONSTRAINT "child_run_reservations_positive_limits" CHECK (
-    "depth" > 0
-    AND "max_tokens" > 0
-    AND "max_cost_usd_micros" > 0
-);
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_attempt_check" CHECK ("attempt" > 0);
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_nonempty_check" CHECK (
-        btrim("agent_service_id") <> '' AND btrim("agent_revision_id") <> '' AND btrim("silo_id") <> '' AND
-        btrim("subject_id") <> '' AND "audience" = 'opencrane-agent-runtime' AND btrim("service_account_name") <> '' AND
-        btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND btrim("workload_profile") <> ''
-    );
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_assignments" ADD CONSTRAINT "workload_assignments_state_check" CHECK (
-        ("state" = 'pending_pod' AND "pod_uid" IS NULL AND "registered_at" IS NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'registered' AND "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND "registered_at" IS NOT NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'revoked' AND "revoked_at" IS NOT NULL)
-    );
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_claim_digest_check" CHECK ("claim_digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_audience_check" CHECK ("audience" = 'opencrane-agent-runtime');
-ALTER TABLE "workload_bootstraps" ADD CONSTRAINT "workload_bootstraps_consumption_check" CHECK (
-        ("consumed_at" IS NULL AND "consumed_by_pod_uid" IS NULL AND "receipt_id" IS NULL) OR
-        ("consumed_at" IS NOT NULL AND "consumed_by_pod_uid" IS NOT NULL AND btrim("consumed_by_pod_uid") <> '' AND "receipt_id" IS NOT NULL AND btrim("receipt_id") <> '')
-    );
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_nonempty_check" CHECK (btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND "key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$');
-ALTER TABLE "run_proof_keys" ADD CONSTRAINT "run_proof_keys_expiry_check" CHECK ("expires_at" > "created_at");
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_coordinate_check" CHECK ("attempt" > 0 AND "sequence" > 0);
-ALTER TABLE "run_outbox_events" ADD CONSTRAINT "run_outbox_events_delivery_check" CHECK (
-        "delivery_count" >= 0 AND NOT ("published_at" IS NOT NULL AND "failed_at" IS NOT NULL) AND
-        (("claimed_at" IS NULL AND "delivery_count" = 0 AND "published_at" IS NULL AND "failed_at" IS NULL) OR
-         ("claimed_at" IS NOT NULL AND "delivery_count" > 0)) AND
-        ("published_at" IS NULL OR "published_at" >= "claimed_at") AND
-        ("failed_at" IS NULL OR "failed_at" >= "claimed_at") AND
-        (("failed_at" IS NULL AND "failure_code" IS NULL) OR
-         ("failed_at" IS NOT NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> ''))
-    );
-ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("subject_id") NOT IN ('', '*') AND
-        btrim("organization_id") <> '' AND btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND
-        btrim("catalog_digest") <> '' AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
-        btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND
-        "priority" >= 0 AND btrim("created_by") <> ''
-    );
-ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_scope_check" CHECK (
-        ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')
-    );
-ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_validity_check" CHECK ("expires_at" IS NULL OR "expires_at" > "valid_from");
-ALTER TABLE "capability_catalog_revisions" ADD CONSTRAINT "capability_catalog_revisions_exact_check" CHECK (
-        btrim("catalog_id") <> '' AND "revision" > 0 AND "digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("created_by") <> ''
-    );
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
-        "attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
-        "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
-        btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
-        btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
-        (("catalog_id" IS NULL AND "catalog_revision" IS NULL AND "catalog_digest" IS NULL AND "capability_id" IS NULL) OR
-         ("catalog_id" IS NOT NULL AND "catalog_revision" IS NOT NULL AND "catalog_digest" IS NOT NULL AND "capability_id" IS NOT NULL AND
-          btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '')) AND
-        btrim("resource_kind") NOT IN ('', '*') AND
-        btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
-        "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        "expires_at" > "created_at"
-    );
-ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
-        btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
-        btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
-        jsonb_typeof("content") = 'object' AND "digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        (("state" = 'pending' AND "consumed_at" IS NULL) OR
-         ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
-    );
-ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
-        ("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL) OR
-        ("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NOT NULL AND btrim("resume_token_hash") <> '') OR
-        ("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL) OR
-        ("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL)
-    );
-ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_exact_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND btrim("audience") <> '' AND
-        btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND btrim("workload_uid") <> '' AND
-        btrim("pod_uid") <> '' AND "attempt" > 0 AND btrim("agent_service_id") <> '' AND
-        btrim("agent_revision_id") <> '' AND "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND
-        btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '' AND
-        "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("resource_kind") NOT IN ('', '*') AND
-        btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        btrim("jti") <> '' AND "request_fingerprint" ~ '^sha256:[0-9a-f]{64}$'
-    );
-ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_state_check" CHECK (
-        ("state" = 'reserved' AND "completed_at" IS NULL AND "result" IS NULL AND "failure_code" IS NULL) OR
-        ("state" = 'succeeded' AND "completed_at" IS NOT NULL AND "result" IS NOT NULL AND "failure_code" IS NULL) OR
-        ("state" = 'failed' AND "completed_at" IS NOT NULL AND "result" IS NULL AND "failure_code" IS NOT NULL AND btrim("failure_code") <> '')
-    );
-ALTER TABLE "verified_fleet_membership_revisions" ADD CONSTRAINT "verified_fleet_membership_revisions_exact_check" CHECK (
-        "revision" > 0 AND btrim("issuer_id") <> '' AND btrim("issuer_key_id") <> '' AND
-        btrim("silo_id") <> '' AND "payload_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("signature") <> ''
-    );
-ALTER TABLE "verified_fleet_membership_revisions" ADD CONSTRAINT "verified_fleet_membership_revisions_time_check" CHECK (
-        "issued_at" < "expires_at" AND "verified_at" >= "issued_at" AND "verified_at" < "expires_at"
-    );
-ALTER TABLE "verified_fleet_membership_assertions" ADD CONSTRAINT "verified_fleet_membership_assertions_exact_check" CHECK (
-        btrim("assertion_id") <> '' AND btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND
-        btrim("organization_id") <> '' AND
-        (("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-         ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> ''))
-    );
-ALTER TABLE "highest_accepted_fleet_memberships" ADD CONSTRAINT "highest_accepted_fleet_memberships_revision_check" CHECK ("revision" > 0);
-ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_exact_check" CHECK (
-        "decision_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("silo_id") <> '' AND btrim("actor_id") <> '' AND
-        btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND
-        btrim("action") <> '' AND btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND
-        "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        "policy_revision_hash" ~ '^sha256:[0-9a-f]{64}$' AND
-        "effective_authorization_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("reason_code") <> ''
-    );
-ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_run_coordinate_check" CHECK (
-        ("run_id" IS NULL AND "attempt" IS NULL) OR
-        ("run_id" IS NOT NULL AND btrim("run_id") <> '' AND "attempt" IS NOT NULL AND "attempt" > 0)
-    );
-ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_workload_identity_check" CHECK (
-        "actor_kind" <> 'workload' OR
-        ("audience" IS NOT NULL AND btrim("audience") <> '' AND
-         "namespace" IS NOT NULL AND btrim("namespace") <> '' AND
-         "service_account_name" IS NOT NULL AND btrim("service_account_name") <> '' AND
-         "workload_kind" IS NOT NULL AND "workload_uid" IS NOT NULL AND btrim("workload_uid") <> '' AND
-         "pod_uid" IS NOT NULL AND btrim("pod_uid") <> '' AND
-         "proof_key_thumbprint" IS NOT NULL AND "proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$')
-    );
-ALTER TABLE "audit_decisions" ADD CONSTRAINT "audit_decisions_membership_revision_check" CHECK ("membership_revision" IS NULL OR "membership_revision" > 0);
-ALTER TABLE "conversation_threads" ADD CONSTRAINT "conversation_threads_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("agent_service_id") <> '');
-ALTER TABLE "conversation_participants" ADD CONSTRAINT "conversation_participants_user_check" CHECK (btrim("user_id") <> '');
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_source_check" CHECK ("source" IN ('user_input', 'model_output', 'tool_result', 'platform'));
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_blocks_check" CHECK (jsonb_typeof("blocks") = 'array');
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_provenance_check" CHECK (
-        ("source" = 'user_input' AND "user_id" IS NOT NULL AND "run_id" IS NULL) OR
-        ("source" <> 'user_input' AND "user_id" IS NULL)
-    );
-ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_completion_check" CHECK (
-        ("state" IN ('pending', 'streaming') AND "completed_at" IS NULL) OR
-        ("state" IN ('completed', 'failed', 'cancelled') AND "completed_at" IS NOT NULL)
-    );
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_sequence_check" CHECK ("sequence" > 0);
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_type_check" CHECK ("type" IN (
-        'run.accepted', 'run.started', 'message.started', 'message.delta', 'message.completed',
-        'tool.requested', 'tool.approval_required', 'tool.started', 'tool.progress', 'tool.completed',
-        'context.compaction_started', 'context.compaction_completed', 'run.usage',
-        'run.completed', 'run.failed', 'run.cancelled',
-        'child.run.completed', 'child.run.failed', 'child.run.cancelled'
-    ));
-ALTER TABLE "conversation_run_events" ADD CONSTRAINT "conversation_run_events_payload_check" CHECK (jsonb_typeof("payload") = 'object');
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_revision_check" CHECK ("revision" > 0);
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_digest_check" CHECK ("digest" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_summary_check" CHECK (jsonb_typeof("summary") = 'object');
-ALTER TABLE "persona_question_sets" ADD CONSTRAINT "persona_question_sets_valid_check" CHECK (
-        btrim("question_set_id") <> '' AND "version" > 0 AND
-        (("state" = 'draft' AND "reviewed_by" IS NULL AND "reviewed_at" IS NULL) OR
-         ("state" = 'reviewed' AND "reviewed_by" IS NOT NULL AND btrim("reviewed_by") <> '' AND "reviewed_at" IS NOT NULL))
-    );
-ALTER TABLE "persona_questions" ADD CONSTRAINT "persona_questions_valid_check" CHECK (btrim("question_id") <> '' AND btrim("prompt") <> '' AND "ordinal" > 0);
-ALTER TABLE "persona_soul_templates" ADD CONSTRAINT "persona_soul_templates_valid_check" CHECK (
-        btrim("template_id") <> '' AND "version" > 0 AND "digest" ~ '^sha256:[0-9a-f]{64}$'
-        AND btrim("content") <> '' AND jsonb_typeof("selection_rules") = 'array' AND btrim("reviewed_by") <> ''
-    );
-ALTER TABLE "persona_profiles" ADD CONSTRAINT "persona_profiles_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("user_id") <> '');
-ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_completion_check" CHECK (
-        ("state" = 'in_progress' AND "completed_at" IS NULL) OR ("state" = 'completed' AND "completed_at" IS NOT NULL)
-    );
-ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_value_check" CHECK (btrim("value") <> '');
-ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_valid_check" CHECK (
-        "revision" > 0 AND "soul_template_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("selection_rule_id") <> ''
-        AND cardinality("selection_answer_ids") > 0 AND btrim("compiled_instructions") <> ''
-        AND btrim("authored_by") <> '' AND "durable_soul_mutation_policy" = 'forbidden'
-    );
-ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_approval_check" CHECK (
-        ("state" = 'draft' AND "approved_by" IS NULL AND "approved_at" IS NULL) OR
-        ("state" = 'approved' AND "approved_by" IS NOT NULL AND "approved_at" IS NOT NULL)
-    );
-ALTER TABLE "persona_revisions" ADD CONSTRAINT "persona_revisions_history_check" CHECK ("previous_revision_id" IS NULL OR "previous_revision_id" <> "id");
-ALTER TABLE "persona_insights" ADD CONSTRAINT "persona_insights_statement_check" CHECK (btrim("statement") <> '');
-ALTER TABLE "personal_configuration_changes" ADD CONSTRAINT "personal_configuration_changes_valid_check" CHECK (
-        btrim("silo_id") <> '' AND btrim("user_id") <> '' AND btrim("persona_profile_id") <> ''
-        AND btrim("agent_service_id") <> '' AND btrim("source_thread_id") <> '' AND btrim("source_run_id") <> ''
-        AND ("requested_patch" = '{"kind":"persona_refresh"}'::jsonb
-             OR ("requested_patch"->>'kind' = 'model_alias'
-                 AND jsonb_typeof("requested_patch"->'modelAlias') = 'string'
-                 AND "requested_patch"->>'modelAlias' ~ '[^[:space:]]'
-                 AND length("requested_patch"->>'modelAlias') <= 200
-                 AND ("requested_patch" - ARRAY['kind', 'modelAlias']) = '{}'::jsonb))
-        AND "requested_patch_digest" ~ '^sha256:[0-9a-f]{64}$'
-        AND (("state" = 'proposed' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "rejection_reason" IS NULL
-              AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
-             OR ("state" = 'accepted' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
-                 AND "rejection_reason" IS NULL AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
-             OR ("state" = 'applied' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
-                 AND "rejection_reason" IS NULL AND ("applied_persona_revision_id" IS NOT NULL OR "applied_agent_revision_id" IS NOT NULL))
-             OR ("state" = 'rejected' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> '' AND btrim("rejection_reason") <> ''
-                 AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL)
-             OR ("state" = 'superseded' AND "decided_at" IS NOT NULL AND btrim("decided_by") <> ''
-                 AND "rejection_reason" IS NULL AND "applied_persona_revision_id" IS NULL AND "applied_agent_revision_id" IS NULL))
-    );
-ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("owner_principal_id") <> '');
-ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_retention_check" CHECK ("retention_policy" = 'until_authorized_deletion');
-ALTER TABLE "artifacts" ADD CONSTRAINT "artifacts_deletion_check" CHECK (("state" = 'deleted' AND "deleted_at" IS NOT NULL) OR ("state" <> 'deleted' AND "deleted_at" IS NULL));
-ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_content_check" CHECK (
-        "revision" > 0 AND "content_address" ~ '^sha256:[0-9a-f]{64}$' AND "byte_length" BETWEEN 0 AND 9007199254740991
-        AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1 AND jsonb_typeof("provenance") = 'object' AND btrim("created_by") <> ''
-    );
-ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_deletion_check" CHECK (
-        ("state" = 'published' AND "deletion_requested_at" IS NULL AND "purged_at" IS NULL) OR
-        ("state" = 'deletion_pending' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NULL) OR
-        ("state" = 'purged' AND "deletion_requested_at" IS NOT NULL AND "purged_at" IS NOT NULL)
-    );
-ALTER TABLE "artifact_revisions" ADD CONSTRAINT "artifact_revisions_index_check" CHECK (
-        ("index_state" = 'indexed' AND "cognee_external_id" IS NOT NULL) OR
-        ("index_state" <> 'indexed')
-    );
-ALTER TABLE "artifact_preprocess_jobs" ADD CONSTRAINT "artifact_preprocess_jobs_identity_check" CHECK (
-        btrim("source_revision_id") <> '' AND btrim("pipeline_version") <> '' AND "attempt" >= 0
-        AND ("claim_fence" IS NULL OR btrim("claim_fence") <> '')
-        AND ("failure_code" IS NULL OR (btrim("failure_code") <> '' AND length("failure_code") <= 200))
-    );
-ALTER TABLE "artifact_revision_parents" ADD CONSTRAINT "artifact_revision_parents_no_self_check" CHECK ("child_revision_id" <> "parent_revision_id");
-ALTER TABLE "artifact_outbox_events" ADD CONSTRAINT "artifact_outbox_events_valid_check" CHECK (btrim("idempotency_key") <> '' AND jsonb_typeof("payload") = 'object' AND "delivery_count" >= 0);
-ALTER TABLE "skills" ADD CONSTRAINT "skills_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("owner_principal_id") <> '' AND btrim("name") <> '');
-ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_content_check" CHECK (
-        "revision" > 0 AND "artifact_content_address" ~ '^sha256:[0-9a-f]{64}$'
-        AND jsonb_typeof("manifest") = 'object' AND jsonb_typeof("requirements") = 'object' AND btrim("authored_by") <> ''
-    );
-ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_publication_check" CHECK (
-        ("state" IN ('draft', 'review', 'rejected') AND "published_at" IS NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'published' AND "published_at" IS NOT NULL AND "revoked_at" IS NULL) OR
-        ("state" = 'revoked' AND "published_at" IS NOT NULL AND "revoked_at" IS NOT NULL)
-    );
-ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHECK (
-        "state" NOT IN ('published', 'revoked') OR
-        ("reviewed_by" IS NOT NULL AND btrim("reviewed_by") <> ''
-         AND "test_report" @> '{"passed":true}'::jsonb AND "scan_result" @> '{"passed":true}'::jsonb
-         AND "signature" IS NOT NULL AND btrim("signature") <> '' AND "signer_key_id" IS NOT NULL AND btrim("signer_key_id") <> '')
-    );
-ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("organization_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '');
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_scope_check" CHECK (
-        ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')
-    );
-ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK (("state" = 'retired' AND "retired_at" IS NOT NULL) OR ("state" = 'active' AND "retired_at" IS NULL));
-ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_valid_check" CHECK (
-        btrim("cognee_external_id") <> '' AND "content_digest" ~ '^sha256:[0-9a-f]{64}$'
-        AND btrim("sensitivity") <> '' AND jsonb_typeof("provenance") = 'object' AND btrim("recorded_by") <> ''
-        AND ((CASE WHEN "source_artifact_revision_id" IS NOT NULL THEN 1 ELSE 0 END)
-            + (CASE WHEN "source_message_id" IS NOT NULL THEN 1 ELSE 0 END)
-            + (CASE WHEN "provenance" @> '{"user_statement":true}'::jsonb THEN 1 ELSE 0 END)) = 1
-    );
-ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_history_check" CHECK ("supersedes_fact_id" IS NULL OR "supersedes_fact_id" <> "id");
-ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_forget_check" CHECK (
-        ("state" = 'active' AND "corrected_at" IS NULL AND "forget_requested_at" IS NULL AND "forgotten_at" IS NULL) OR
-        ("state" = 'corrected' AND "corrected_at" IS NOT NULL AND "forget_requested_at" IS NULL AND "forgotten_at" IS NULL) OR
-        ("state" = 'forget_pending' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NULL) OR
-        ("state" = 'forgotten' AND "forget_requested_at" IS NOT NULL AND "forgotten_at" IS NOT NULL)
-    );
-ALTER TABLE "memory_outbox_events" ADD CONSTRAINT "memory_outbox_events_valid_check" CHECK (btrim("idempotency_key") <> '' AND jsonb_typeof("payload") = 'object' AND "delivery_count" >= 0);
-ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("capability_jti") <> '' AND btrim("media_type") <> '' AND strpos("media_type", '/') > 1);
-ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_content_check" CHECK ("expected_content_address" IS NULL OR "expected_content_address" ~ '^sha256:[0-9a-f]{64}$');
-ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_expected_length_check" CHECK ("expected_byte_length" IS NULL OR "expected_byte_length" >= 0);
-ALTER TABLE "artifact_upload_leases" ADD CONSTRAINT "artifact_upload_leases_promotion_check" CHECK (
-      ("state" = 'active' AND "promotion_receipt_digest" IS NULL AND "promoted_content_address" IS NULL AND "promoted_byte_length" IS NULL AND "promoted_at" IS NULL AND "finalized_at" IS NULL)
-      OR ("state" = 'promoted' AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_byte_length" >= 0 AND "promoted_at" IS NOT NULL AND "finalized_at" IS NULL)
-      OR ("state" = 'finalized' AND "promotion_receipt_digest" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_content_address" ~ '^sha256:[0-9a-f]{64}$' AND "promoted_byte_length" >= 0 AND "promoted_at" IS NOT NULL AND "finalized_at" IS NOT NULL)
-      OR ("state" IN ('expired', 'cancelled') AND "finalized_at" IS NULL)
-    );
-ALTER TABLE "integrations" ADD CONSTRAINT "integrations_identity_nonempty" CHECK (
-    btrim("id") <> '' AND position(':' in "id") = 0 AND btrim("silo_id") <> '' AND btrim("obot_catalog_entry_id") <> '' AND btrim("display_name") <> ''
-  );
-ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_identity_nonempty" CHECK (
-    btrim("integration_id") <> '' AND btrim("silo_id") <> '' AND btrim("obot_custody_reference") <> ''
-  );
-ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_revocation_evidence" CHECK (
-    ("state" = 'revoked' AND "revoked_at" IS NOT NULL) OR ("state" <> 'revoked' AND "revoked_at" IS NULL)
-  );
-ALTER TABLE "agent_revision_integration_assignments" ADD CONSTRAINT "agent_revision_integration_assignments_allowed_tools_check" CHECK ("has_nonempty_distinct_tool_ids"("allowed_tools"));
-
--- Partial indexes
-CREATE UNIQUE INDEX "memory_fact_catalog_single_successor_key" ON "memory_fact_catalog"("supersedes_fact_id") WHERE "supersedes_fact_id" IS NOT NULL;
-CREATE UNIQUE INDEX "integration_custody_references_one_ready_per_integration"
-  ON "integration_custody_references"("integration_id") WHERE "state" = 'ready' AND "revoked_at" IS NULL;
-
--- Triggers
-CREATE TRIGGER "agent_revisions_immutable"
-    BEFORE UPDATE ON "agent_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_immutability"();
-CREATE TRIGGER "agent_revisions_no_delete"
-    BEFORE DELETE ON "agent_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "reject_agent_revision_delete"();
-CREATE TRIGGER "referenced_model_definitions_immutable"
-    BEFORE UPDATE ON "model_definitions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_referenced_model_definition_immutability"();
-CREATE TRIGGER "agent_revision_model_definition_available"
-    BEFORE INSERT OR UPDATE OF "model_definition_id", "agent_service_id" ON "agent_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_model_definition_availability"();
-CREATE TRIGGER "agent_services_closed_lifecycle"
-    BEFORE INSERT OR UPDATE OR DELETE ON "agent_services"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_service_lifecycle"();
-CREATE CONSTRAINT TRIGGER "agent_services_published_active_revision"
-    AFTER INSERT OR UPDATE ON "agent_services"
-    DEFERRABLE INITIALLY IMMEDIATE
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_service_published_active_revision"();
-CREATE CONSTRAINT TRIGGER "active_agent_revisions_remain_published"
-    AFTER UPDATE OF "state" ON "agent_revisions"
-    DEFERRABLE INITIALLY IMMEDIATE
-    FOR EACH ROW EXECUTE FUNCTION "protect_active_agent_revision_publication"();
-CREATE TRIGGER "agent_revision_skill_assignments_immutable"
-    BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_skill_assignments"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-CREATE TRIGGER "agent_revision_scope_attachments_immutable"
-    BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_scope_attachments"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-CREATE TRIGGER "workload_assignments_current_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_current_workload_assignment_attempt"();
-CREATE TRIGGER "run_outbox_events_accepted_attempt" BEFORE INSERT OR UPDATE OF "run_id", "attempt" ON "run_outbox_events" FOR EACH ROW EXECUTE FUNCTION "enforce_accepted_outbox_attempt"();
-CREATE TRIGGER "run_input_snapshots_immutable" BEFORE UPDATE OR DELETE ON "run_input_snapshots" FOR EACH ROW EXECUTE FUNCTION "reject_run_input_snapshot_mutation"();
-CREATE TRIGGER "child_run_reservations_authority" BEFORE INSERT ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_reservation"();
-CREATE TRIGGER "child_run_reservations_immutable" BEFORE UPDATE OR DELETE ON "child_run_reservations" FOR EACH ROW EXECUTE FUNCTION "reject_child_run_reservation_mutation"();
-CREATE TRIGGER "child_run_completion_deliveries_authority" BEFORE INSERT OR UPDATE OR DELETE ON "child_run_completion_deliveries" FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery"();
-CREATE CONSTRAINT TRIGGER "child_run_completion_deliveries_exact_parent_event" AFTER INSERT ON "child_run_completion_deliveries" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_child_run_completion_delivery_event"();
-CREATE TRIGGER "agent_runs_initial_state"
-    BEFORE INSERT ON "agent_runs"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_initial_agent_run_state"();
-CREATE TRIGGER "agent_runs_current_authority"
-    BEFORE INSERT OR UPDATE OF "attempt" ON "agent_runs"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_current_agent_run_authority"();
-CREATE TRIGGER "agent_runs_authority_update" BEFORE UPDATE ON "agent_runs" FOR EACH ROW EXECUTE FUNCTION "enforce_agent_run_authority_update"();
-CREATE TRIGGER "workload_bootstraps_single_use" BEFORE INSERT OR UPDATE OR DELETE ON "workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_bootstrap_consumption"();
-CREATE TRIGGER "run_proof_keys_consumed_bootstrap" BEFORE INSERT ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_bootstrap"();
-CREATE TRIGGER "workload_assignments_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "workload_assignments" FOR EACH ROW EXECUTE FUNCTION "enforce_workload_assignment_update"();
-CREATE TRIGGER "run_proof_keys_immutable" BEFORE UPDATE OR DELETE ON "run_proof_keys" FOR EACH ROW EXECUTE FUNCTION "enforce_run_proof_key_update"();
-CREATE TRIGGER "run_outbox_events_monotonic"
-    BEFORE UPDATE OR DELETE ON "run_outbox_events"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_run_outbox_event_update"();
-CREATE TRIGGER "runtime_steering_requests_closed_lifecycle"
-    BEFORE INSERT OR UPDATE OR DELETE ON "runtime_steering_requests"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_runtime_steering_request_lifecycle"();
-CREATE TRIGGER "capability_catalog_revisions_immutable" BEFORE UPDATE OR DELETE ON "capability_catalog_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_capability_catalog_revision_mutation"();
-CREATE TRIGGER "authorization_grants_immutable" BEFORE UPDATE OR DELETE ON "authorization_grants" FOR EACH ROW EXECUTE FUNCTION "enforce_authorization_grant_update"();
-CREATE TRIGGER "approval_requests_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "approval_requests" FOR EACH ROW EXECUTE FUNCTION "enforce_approval_request_update"();
-CREATE TRIGGER "action_execution_receipts_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "action_execution_receipts" FOR EACH ROW EXECUTE FUNCTION "enforce_action_execution_receipt_lifecycle"();
-CREATE TRIGGER "verified_fleet_membership_revisions_immutable" BEFORE UPDATE OR DELETE ON "verified_fleet_membership_revisions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_revision_mutation"();
-CREATE TRIGGER "verified_fleet_membership_assertions_immutable" BEFORE INSERT OR UPDATE OR DELETE ON "verified_fleet_membership_assertions" FOR EACH ROW EXECUTE FUNCTION "reject_verified_membership_assertion_mutation"();
-CREATE TRIGGER "highest_accepted_fleet_memberships_monotonic" BEFORE INSERT OR UPDATE OR DELETE ON "highest_accepted_fleet_memberships" FOR EACH ROW EXECUTE FUNCTION "enforce_highest_membership_revision"();
-CREATE TRIGGER "audit_decisions_append_only" BEFORE UPDATE OR DELETE ON "audit_decisions" FOR EACH ROW EXECUTE FUNCTION "reject_audit_decision_mutation"();
-CREATE TRIGGER "conversation_messages_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "conversation_messages"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_message_lifecycle"();
-CREATE TRIGGER "conversation_run_events_contiguous" BEFORE INSERT ON "conversation_run_events"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_run_event_append"();
-CREATE TRIGGER "conversation_run_events_append_only" BEFORE UPDATE OR DELETE ON "conversation_run_events"
-    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
-CREATE TRIGGER "conversation_context_revisions_append_only" BEFORE UPDATE OR DELETE ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "reject_conversation_immutable_mutation"();
-CREATE TRIGGER "conversation_context_revisions_exact_provenance" BEFORE INSERT ON "conversation_context_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_conversation_context_provenance"();
-CREATE CONSTRAINT TRIGGER "terminal_agent_runs_require_event" AFTER INSERT OR UPDATE OF "state" ON "agent_runs"
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_terminal_agent_run_event"();
-CREATE TRIGGER "persona_question_sets_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_question_sets"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_persona_question_set_lifecycle"();
-CREATE TRIGGER "persona_questions_draft_only" BEFORE INSERT OR UPDATE OR DELETE ON "persona_questions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_persona_question_mutation"();
-CREATE TRIGGER "persona_interviews_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_interviews" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_interview_lifecycle"();
-CREATE TRIGGER "persona_interview_answers_exact_question_set" BEFORE INSERT ON "persona_interview_answers" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_answer_provenance"();
-CREATE TRIGGER "persona_insights_exact_provenance" BEFORE INSERT ON "persona_insights" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_insight_provenance"();
-CREATE TRIGGER "persona_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "persona_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_persona_revision_lifecycle"();
-CREATE TRIGGER "persona_soul_templates_valid_rules" BEFORE INSERT ON "persona_soul_templates"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_persona_soul_template_rules"();
-CREATE TRIGGER "persona_soul_templates_immutable" BEFORE UPDATE OR DELETE ON "persona_soul_templates" FOR EACH ROW EXECUTE FUNCTION "reject_persona_source_mutation"();
-CREATE TRIGGER "persona_interview_answers_immutable" BEFORE UPDATE OR DELETE ON "persona_interview_answers" FOR EACH ROW EXECUTE FUNCTION "reject_persona_source_mutation"();
-CREATE TRIGGER "persona_insights_immutable" BEFORE UPDATE OR DELETE ON "persona_insights" FOR EACH ROW EXECUTE FUNCTION "reject_persona_source_mutation"();
-CREATE CONSTRAINT TRIGGER "personal_agent_revisions_require_approved_persona" AFTER INSERT OR UPDATE ON "agent_revisions"
-    DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "enforce_personal_agent_persona"();
-CREATE TRIGGER "persona_profiles_active_revision_approved" BEFORE INSERT OR UPDATE OF "active_revision_id" ON "persona_profiles"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_active_persona_revision"();
-CREATE TRIGGER "personal_configuration_changes_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "personal_configuration_changes"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_personal_configuration_change_lifecycle"();
-CREATE TRIGGER "artifact_revisions_silo_provenance" BEFORE INSERT OR UPDATE OF "artifact_id", "source_run_id", "source_message_id" ON "artifact_revisions"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_silo_provenance"();
-CREATE TRIGGER "artifact_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_revision_lifecycle"();
-CREATE TRIGGER "artifacts_closed_lifecycle" BEFORE UPDATE OR DELETE ON "artifacts" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_lifecycle"();
-CREATE CONSTRAINT TRIGGER "current_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions" DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_current_artifact_revision"();
-CREATE TRIGGER "artifact_revision_parents_immutable" BEFORE UPDATE OR DELETE ON "artifact_revision_parents" FOR EACH ROW EXECUTE FUNCTION "reject_artifact_parent_mutation"();
-CREATE TRIGGER "artifact_revision_parents_same_silo" BEFORE INSERT ON "artifact_revision_parents"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_parent_silo"();
-CREATE TRIGGER "skill_revisions_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_revision_lifecycle"();
-CREATE TRIGGER "skill_workloads_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workloads" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_authority"();
-CREATE TRIGGER "skill_workload_bootstraps_authority" BEFORE INSERT OR UPDATE OR DELETE ON "skill_workload_bootstraps" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_workload_bootstrap"();
-CREATE TRIGGER "cancel_ineligible_skill_workloads_on_revision" AFTER UPDATE OF "state" ON "skill_revisions" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
-CREATE TRIGGER "cancel_ineligible_skill_workloads_on_invocation" AFTER UPDATE OF "state" ON "tool_invocations" FOR EACH ROW EXECUTE FUNCTION "cancel_ineligible_skill_workloads"();
-CREATE TRIGGER "skills_closed_lifecycle" BEFORE UPDATE OR DELETE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_skill_lifecycle"();
-CREATE TRIGGER "skills_current_revision_published" BEFORE INSERT OR UPDATE ON "skills" FOR EACH ROW EXECUTE FUNCTION "enforce_current_skill_revision"();
-CREATE CONSTRAINT TRIGGER "current_skill_revisions_remain_published" AFTER UPDATE OF "state" ON "skill_revisions" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "protect_current_skill_revision"();
-CREATE CONSTRAINT TRIGGER "skill_artifact_revisions_remain_published" AFTER UPDATE OF "state" ON "artifact_revisions"
-    DEFERRABLE INITIALLY IMMEDIATE FOR EACH ROW EXECUTE FUNCTION "protect_skill_artifact_revision"();
-CREATE TRIGGER "agent_revision_skill_assignments_same_silo" BEFORE INSERT OR UPDATE ON "agent_revision_skill_assignments"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_agent_skill_assignment_silo"();
-CREATE TRIGGER "memory_datasets_closed_lifecycle" BEFORE UPDATE OR DELETE ON "memory_datasets" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_dataset_lifecycle"();
-CREATE TRIGGER "memory_fact_catalog_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "memory_fact_catalog" FOR EACH ROW EXECUTE FUNCTION "enforce_memory_fact_lifecycle"();
-CREATE CONSTRAINT TRIGGER "corrected_memory_facts_require_successor" AFTER INSERT OR UPDATE OF "state" ON "memory_fact_catalog"
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_corrected_memory_successor"();
-CREATE TRIGGER "artifact_upload_leases_silo_and_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_upload_leases" FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_upload_lease_silo_and_lifecycle"();
-CREATE TRIGGER "artifact_preprocess_jobs_closed_lifecycle" BEFORE INSERT OR UPDATE OR DELETE ON "artifact_preprocess_jobs"
-    FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_job_lifecycle"();
-CREATE CONSTRAINT TRIGGER "artifact_preprocess_output_lease_finalization" AFTER UPDATE OF "state" ON "artifact_upload_leases"
-    DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION "enforce_artifact_preprocess_output_lease_finalization"();
-CREATE TRIGGER "integrations_closed_lifecycle"
-  BEFORE INSERT OR UPDATE OR DELETE ON "integrations"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_integration_lifecycle"();
-CREATE TRIGGER "integration_custody_references_closed_lifecycle"
-  BEFORE INSERT OR UPDATE OR DELETE ON "integration_custody_references"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_integration_custody_lifecycle"();
-CREATE TRIGGER "agent_revision_integration_assignments_authority"
-  BEFORE INSERT OR UPDATE ON "agent_revision_integration_assignments"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_integration_assignment_authority"();
-CREATE TRIGGER "agent_revision_integration_assignments_immutable"
-  BEFORE INSERT OR UPDATE OR DELETE ON "agent_revision_integration_assignments"
-  FOR EACH ROW EXECUTE FUNCTION "enforce_agent_revision_assignment_immutability"();
-
--- Run-input snapshot guards
-CREATE FUNCTION enforce_agent_run_input_snapshot_completeness()
-RETURNS TRIGGER
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM "run_input_snapshots" snapshot
-        WHERE snapshot."run_id" = NEW."id"
-          AND snapshot."input_digest" = NEW."input_snapshot_digest"
-          AND snapshot."thread_id" IS NOT DISTINCT FROM NEW."thread_id"
-          AND snapshot."silo_id" = NEW."silo_id"
-          AND snapshot."agent_service_id" = NEW."agent_service_id"
-          AND snapshot."agent_revision_id" = NEW."agent_revision_id"
-          AND snapshot."effective_contract_digest" = NEW."effective_contract_digest"
-    ) THEN
-        RAISE EXCEPTION 'AgentRun requires its exact immutable RunInputSnapshot' USING ERRCODE = '23503';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete
-AFTER INSERT OR UPDATE OF "input_snapshot_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
-ON "agent_runs" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-EXECUTE FUNCTION enforce_agent_run_input_snapshot_completeness();
-
-CREATE FUNCTION enforce_run_input_snapshot_run_binding()
-RETURNS TRIGGER
-LANGUAGE plpgsql AS $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM "agent_runs" run
-        WHERE run."id" = NEW."run_id"
-          AND run."input_snapshot_digest" = NEW."input_digest"
-          AND run."thread_id" IS NOT DISTINCT FROM NEW."thread_id"
-          AND run."silo_id" = NEW."silo_id"
-          AND run."agent_service_id" = NEW."agent_service_id"
-          AND run."agent_revision_id" = NEW."agent_revision_id"
-          AND run."effective_contract_digest" = NEW."effective_contract_digest"
-    ) THEN
-        RAISE EXCEPTION 'RunInputSnapshot must bind the exact AgentRun thread and authority' USING ERRCODE = '23503';
-    END IF;
-    RETURN NEW;
-END;
-$$;
-
-CREATE CONSTRAINT TRIGGER run_input_snapshots_run_binding
-AFTER INSERT OR UPDATE OF "run_id", "input_digest", "thread_id", "silo_id", "agent_service_id", "agent_revision_id", "effective_contract_digest"
-ON "run_input_snapshots" DEFERRABLE INITIALLY DEFERRED FOR EACH ROW
-EXECUTE FUNCTION enforce_run_input_snapshot_run_binding();
-
--- Clean-build persona onboarding sources. They are created as Draft, populated, and reviewed in
--- this immutable baseline so no runtime path can edit questions or SOUL.md template rules.
-INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES ('personal-agent-onboarding', 1);
-INSERT INTO "persona_questions" ("question_set_id", "question_set_version", "question_id", "category", "prompt", "ordinal") VALUES
-    ('personal-agent-onboarding', 1, 'relationship-role', 'relationship_role', 'What role should your agent take? Choose: A thoughtful partner.', 1),
-    ('personal-agent-onboarding', 1, 'tone-language', 'tone_language', 'Which tone and language should it normally use?', 2),
-    ('personal-agent-onboarding', 1, 'answer-structure', 'answer_structure', 'How should it structure answers: concise first, detailed first, or another approach?', 3),
-    ('personal-agent-onboarding', 1, 'challenge-support', 'challenge_support', 'How should it challenge you? Choose: Challenge me directly, or Start supportively, then challenge me.', 4),
-    ('personal-agent-onboarding', 1, 'initiative', 'initiative', 'When may it take initiative instead of waiting for a request?', 5),
-    ('personal-agent-onboarding', 1, 'approval-risk', 'approval_risk', 'Which external actions always require your approval?', 6),
-    ('personal-agent-onboarding', 1, 'working-habits', 'working_habits', 'Which working habits should it reinforce?', 7),
-    ('personal-agent-onboarding', 1, 'memory-boundaries', 'memory_boundaries', 'What should it remember, and what must it not retain?', 8);
-UPDATE "persona_question_sets" SET "state" = 'reviewed', "reviewed_by" = 'opencrane-clean-build', "reviewed_at" = clock_timestamp()
-WHERE "question_set_id" = 'personal-agent-onboarding' AND "version" = 1;
-INSERT INTO "persona_soul_templates" ("template_id", "version", "digest", "content", "selection_rules", "reviewed_by", "reviewed_at") VALUES
-    ('direct-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"direct-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Challenge me directly"}}]', 'opencrane-clean-build', clock_timestamp()),
-    ('supportive-partner', 1, 'sha256:ffe3cf4b656e733d0eaf0a8d65d6e330c1e3bc2710f90e026ed30662022b2354', E'# SOUL.md\n\nYou are a thoughtful personal AI partner. Ground advice in the user''s stated goals, preserve their control over external actions, and be clear about uncertainty.\n\n## Working agreement\n\nUse the selected interview insights below as durable guidance. Ask before consequential external actions or sharing information outside the user''s project.\n', '[{"id":"supportive-challenge","priority":20,"answers":{"relationship-role":"A thoughtful partner","challenge-support":"Start supportively, then challenge me"}}]', 'opencrane-clean-build', clock_timestamp());
