@@ -68,18 +68,3 @@ export interface SkillWorkloadPodRegistrationCommand extends SkillWorkloadReleas
 	/** Immutable Kubernetes UID of the worker Pod selected through the Job UID. */
 	readonly podUid: string;
 }
-
-/** Persistence authority for controller-only workload claim and suspended-Job assignment. */
-export interface SkillWorkloadClaimsRepository
-{
-	/** Claims one pending workload or returns no current controller work. */
-	claimNextAtomically(): Promise<SkillWorkloadClaim | null>;
-	/** Binds one exact claim generation to the Kubernetes-issued immutable Job UID. */
-	commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">;
-	/** Claims one assigned, bootstrap-ready Job for a fenced Kubernetes unsuspend operation. */
-	claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>;
-	/** Records an exact successful unsuspend or its idempotent replay. */
-	commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
-	/** Binds the sole Job-owned worker Pod before its bootstrap can be consumed. */
-	registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
-}

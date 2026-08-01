@@ -13,7 +13,7 @@ function _App(overrides: Partial<SkillWorkloadDispatchRouterDependencies> = {})
 	const dependencies: SkillWorkloadDispatchRouterDependencies = {
 		namespace: "silo-a",
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue({ username: "system:serviceaccount:silo-a:agent-controller", namespace: "silo-a", serviceAccountName: "agent-controller", audiences: [AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE] }) },
-		repository: { claimNextAtomically: vi.fn().mockResolvedValue(null), commitAssignmentAtomically: vi.fn().mockResolvedValue("conflict"), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() },
+		authority: { claimNextAtomically: vi.fn().mockResolvedValue(null), commitAssignmentAtomically: vi.fn().mockResolvedValue("conflict"), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() },
 		logger: { error: vi.fn() },
 		...overrides,
 	};
@@ -33,7 +33,7 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 
 		expect(response.status).toBe(401);
 		expect(response.body).toEqual({ error: "controller_identity_denied" });
-		expect(dependencies.repository.claimNextAtomically).not.toHaveBeenCalled();
+		expect(dependencies.authority.claimNextAtomically).not.toHaveBeenCalled();
 	});
 
 	it("returns a bounded failure when Kubernetes TokenReview is unavailable", async function _HandlesTokenReviewFailure()
@@ -56,13 +56,13 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer projected-token").send({});
 
 		expect(response.status).toBe(204);
-		expect(dependencies.repository.claimNextAtomically).toHaveBeenCalledOnce();
+		expect(dependencies.authority.claimNextAtomically).toHaveBeenCalledOnce();
 	});
 
 	it("returns only the database-fenced workload claim to the reviewed controller", async function _ReturnsClaim()
 	{
 		const claim = { workloadId: "workload-1", siloId: "silo-a", kind: "authoring" as const, skillRevisionId: "revision-1", claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, expiresAt: "2026-07-24T00:00:30.000Z" };
-		const { app } = _App({ repository: { claimNextAtomically: vi.fn().mockResolvedValue(claim), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() } });
+		const { app } = _App({ authority: { claimNextAtomically: vi.fn().mockResolvedValue(claim), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() } });
 
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer projected-token").send({});
 
@@ -73,15 +73,15 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 	it("forwards exact assignment evidence and rejects caller-selected extensions", async function _CommitsAssignment()
 	{
 		const command = { claimedAt: "2026-07-24T00:00:00.000Z", deliveryCount: 1, workloadUid: "job-uid-1", bootstrapReference: `skill-bootstrap-v1_${"a".repeat(64)}`, namespace: "tenant-a-authoring" };
-		const repository = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() };
-		const { app } = _App({ repository });
+		const authority = { claimNextAtomically: vi.fn(), commitAssignmentAtomically: vi.fn().mockResolvedValue("assigned" as const), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() };
+		const { app } = _App({ authority });
 
 		const response = await request(app).put("/skill-workloads/workload-1/assignment").set("authorization", "Bearer projected-token").send(command);
 		const invalid = await request(app).put("/skill-workloads/workload-1/assignment").set("authorization", "Bearer projected-token").send({ ...command, callerSelectedExtension: "attacker-chosen" });
 
 		expect(response.status).toBe(200);
 		expect(response.body).toEqual({ outcome: "assigned", workloadId: "workload-1", workloadUid: "job-uid-1" });
-		expect(repository.commitAssignmentAtomically).toHaveBeenCalledWith("workload-1", command);
+		expect(authority.commitAssignmentAtomically).toHaveBeenCalledWith("workload-1", command);
 		expect(invalid.status).toBe(400);
 	});
 
@@ -89,8 +89,8 @@ describe("agent-controller skill-workload dispatch router", function _DescribeRo
 	{
 		const failure = new Error("database unavailable");
 		const logger = { error: vi.fn() };
-		const repository = { claimNextAtomically: vi.fn().mockRejectedValue(failure), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() };
-		const { app } = _App({ repository, logger });
+		const authority = { claimNextAtomically: vi.fn().mockRejectedValue(failure), commitAssignmentAtomically: vi.fn(), claimNextReleaseAtomically: vi.fn(), commitReleaseAtomically: vi.fn(), registerFirstPodAtomically: vi.fn() };
+		const { app } = _App({ authority, logger });
 
 		const response = await request(app).post("/skill-workloads:claim").set("authorization", "Bearer secret-projected-token").send({});
 

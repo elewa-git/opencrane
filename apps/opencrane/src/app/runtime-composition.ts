@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
-import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
+import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
@@ -59,6 +59,9 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimePlanes);
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { ...runtimePlanes, claimLeaseMilliseconds: config.claimLeaseMilliseconds, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds: config.publishedOutboxRetentionMilliseconds, outboxPruneBatchSize: config.outboxPruneBatchSize }, _IssueAttemptModelKey);
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, { ...runtimePlanes, commandTtlMilliseconds: config.commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _log);
+	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
+	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
+	const skillAuthoringArtifactReader = _CreateSkillAuthoringArtifactReader(prisma);
 
 	// 3. Return named routers only; `routes.ts` remains the single readable map of internal paths.
 	const replayRouteId = config.channelReplayRouteId;
@@ -70,10 +73,10 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 			? null
 			: __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }),
 		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: runDispatchRepository, logger: _log }),
-		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds), logger: _log }),
-		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }),
-		skillAuthoringInput: __CreateSkillAuthoringInputRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }),
-		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }),
+		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, authority: skillWorkloadAuthority, logger: _log }),
+		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: skillWorkloadTokenReviewer, authority: skillWorkloadAuthority, logger: _log }),
+		skillAuthoringInput: __CreateSkillAuthoringInputRouter({ tokenReviewer: skillWorkloadTokenReviewer, authority: skillWorkloadAuthority, artifactReader: skillAuthoringArtifactReader, logger: _log }),
+		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({ tokenReviewer: skillWorkloadTokenReviewer, authority: skillWorkloadAuthority, logger: _log }),
 		artifactPreprocessor: artifactPreprocessorNamespace === null
 			? null
 			: __CreateArtifactPreprocessorRouter({

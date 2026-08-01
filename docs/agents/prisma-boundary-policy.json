@@ -13,12 +13,36 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "SkillWorkloadAssignmentRepository",
+        "importPath": "./skill-workload-unit-of-work.types.js"
+      },
+      {
+        "contract": "SkillWorkloadReleaseRepository",
+        "importPath": "./skill-workload-unit-of-work.types.js"
+      },
+      {
+        "contract": "SkillWorkloadBootstrapPersistence",
+        "importPath": "./skill-workload-unit-of-work.types.js"
+      },
+      {
+        "contract": "SkillAuthoringCompletionPersistence",
+        "importPath": "./skill-workload-unit-of-work.types.js"
+      },
+      {
+        "contract": "SkillAuthoringInputPersistence",
+        "importPath": "./skill-workload-unit-of-work.types.js"
       }
     ],
     "unitsOfWork": [
       {
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
         "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "SkillWorkloadExecutionUnitOfWork",
+        "importPath": "./skill-workload-unit-of-work.types.js"
       }
     ],
     "compositions": [

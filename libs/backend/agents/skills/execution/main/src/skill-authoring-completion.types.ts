@@ -1,6 +1,7 @@
 import type { Router } from "express";
 
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapLogger, SkillWorkloadBootstrapTokenReviewer } from "./skill-workload-bootstrap.types.js";
+import type { SkillAuthoringCompletionAuthority } from "./skill-workload-authority.types.js";
 
 /** Bounded evidence from the isolated checks performed against one draft skill revision. */
 export interface SkillAuthoringCheckReport
@@ -34,20 +35,13 @@ export type SkillAuthoringCompletionCommand =
 		readonly failureCode: string;
 	};
 
-/** Postgres boundary for one authoring worker's exact terminal transition and evidence write. */
-export interface SkillAuthoringCompletionRepository
-{
-	/** Completes only the released, canonical-worker-Pod, bootstrap-consumed authoring workload. */
-	completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
-}
-
 /** Dependencies of the worker-authenticated authoring completion route. */
 export interface SkillAuthoringCompletionRouterDependencies
 {
 	/** Reviews the worker's projected token against the route-owned authoring audience. */
 	readonly tokenReviewer: SkillWorkloadBootstrapTokenReviewer;
-	/** Executes the one terminal state and evidence transition against Postgres. */
-	readonly repository: SkillAuthoringCompletionRepository;
+	/** Executes the one terminal state and evidence transition through its application authority. */
+	readonly authority: SkillAuthoringCompletionAuthority;
 	/** Emits only structured, non-sensitive authority failures. */
 	readonly logger: SkillWorkloadBootstrapLogger;
 }

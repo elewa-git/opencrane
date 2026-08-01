@@ -1,6 +1,6 @@
 import type { Router } from "express";
 
-import type { SkillWorkloadClaimsRepository } from "./skill-workload-claims.types.js";
+import type { SkillWorkloadDispatchAuthority } from "./skill-workload-authority.types.js";
 
 /** TokenReview-confirmed identity of the one controller workload allowed to project skill Jobs. */
 export interface ReviewedSkillWorkloadControllerIdentity
@@ -36,8 +36,8 @@ export interface SkillWorkloadDispatchRouterDependencies
 	readonly tokenReviewer: SkillWorkloadControllerTokenReviewer;
 	/** Namespace in which the controller ServiceAccount must exist. */
 	readonly namespace: string;
-	/** Database authority for claim generation and suspended-Job assignment. */
-	readonly repository: SkillWorkloadClaimsRepository;
+	/** Application authority for claim generation and suspended-Job assignment. */
+	readonly authority: SkillWorkloadDispatchAuthority;
 	/** Shared process logger carrying request and trace context. */
 	readonly logger: SkillWorkloadDispatchLogger;
 }

@@ -33,7 +33,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 			}
 
 			// 2. Let the database choose and fence exactly one eligible workload.
-			const claim = await dependencies.repository.claimNextAtomically();
+			const claim = await dependencies.authority.claimNextAtomically();
 			if (claim === null)
 			{
 				response.status(204).end();
@@ -67,7 +67,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 			}
 
 			// 2. Commit only the exact database claim generation and Kubernetes-issued immutable UID.
-			const outcome = await dependencies.repository.commitAssignmentAtomically(workloadId, command);
+			const outcome = await dependencies.authority.commitAssignmentAtomically(workloadId, command);
 			if (outcome === "conflict")
 			{
 				_RespondProblem(response, 409, "stale_or_conflicting_assignment");
@@ -91,7 +91,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 		}
 		try
 		{
-			const claim = await dependencies.repository.claimNextReleaseAtomically();
+			const claim = await dependencies.authority.claimNextReleaseAtomically();
 			if (claim === null)
 			{
 				response.status(204).end();
@@ -122,7 +122,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 		}
 		try
 		{
-			const outcome = await dependencies.repository.commitReleaseAtomically(workloadId, command);
+			const outcome = await dependencies.authority.commitReleaseAtomically(workloadId, command);
 			if (outcome === "conflict")
 			{
 				_RespondProblem(response, 409, "stale_or_conflicting_release");
@@ -155,7 +155,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				return;
 			}
 			// 2. Persist only the exact release-fenced, Kubernetes-discovered immutable Pod UID.
-			const outcome = await dependencies.repository.registerFirstPodAtomically(workloadId, command);
+			const outcome = await dependencies.authority.registerFirstPodAtomically(workloadId, command);
 			if (outcome === "conflict")
 			{
 				_RespondProblem(response, 409, "stale_or_conflicting_pod_registration");

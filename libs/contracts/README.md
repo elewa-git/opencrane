@@ -84,6 +84,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   locator projected through the Job's downward API, never a bearer credential. These types expose
   only immutable workload coordinates; they never expose the run-input body or let the controller
   choose a user, revision, namespace, runtime profile, or replacement Pod.
+- `__CreateSkillWorkloadBootstrapReference`, `__HashSkillWorkloadBootstrapReference`, and
+  `__IsSkillWorkloadBootstrapReference` — the browser-safe, deterministic protocol shared by the
+  governed-skill controller and the server authority. It creates the opaque Job reference, stores
+  only its SHA-256 hash, and rejects any other wire shape; it is not a user credential or a general
+  hashing API.
 - `ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE`,
   `ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME`, `ArtifactPreprocessorJobClaim`, and the
   claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs

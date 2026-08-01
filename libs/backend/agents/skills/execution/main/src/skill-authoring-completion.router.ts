@@ -42,7 +42,7 @@ export function __CreateSkillAuthoringCompletionRouter(dependencies: SkillAuthor
 			}
 
 			// 2. Atomically compare the reviewed Pod to the canonical bootstrap consumer before terminalising.
-			const outcome = await dependencies.repository.completeAtomically(command, identity);
+			const outcome = await dependencies.authority.completeAtomically(command, identity);
 			if (outcome !== "completed")
 			{
 				response.status(409).json({ error: "completion_unavailable" });
