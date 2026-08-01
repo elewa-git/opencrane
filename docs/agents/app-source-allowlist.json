@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "policy": "Implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Every retained file is exact; adding a file requires an ownership decision and this registry change.",
+  "policy": "Implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Every retained file is exact; adding a file requires an ownership decision and this registry change. Artifact broker composition is an explicit app-only class: it binds this server process's mounted credentials, private ArtifactStore service route, and durable artifact authority; it is not a reusable storage client.",
   "forbiddenPaths": [
     "apps/opencrane/src/gateways",
     "apps/opencrane/src/reconcilers",
@@ -34,6 +34,11 @@
     { "path": "apps/opencrane/src/index.ts", "owner": "apps/opencrane", "classification": "process-entrypoint" },
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-mounted-key.loader.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-read-lease-signer.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/artifact-service-read-port.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/artifacts/__tests__/artifact-preprocess-source-broker.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/infra/artifacts/__tests__/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 

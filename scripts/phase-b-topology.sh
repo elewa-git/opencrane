@@ -26,6 +26,7 @@ const workloadKinds = new Set(["Pod", "Deployment", "StatefulSet", "DaemonSet", 
 const workloadClassifications = new Set(["delete", "survivor"]);
 const appSourceClassifications = new Set([
   "app-config",
+  "artifact-broker-composition",
   "browser-composition",
   "browser-config",
   "browser-entry-guard",
@@ -516,8 +517,6 @@ for (const entry of nonProducingRuntimeMatches.values())
   if (!entry.hit) fail(`non-producing runtime match was not discovered by the guard: ${entry.path}: ${entry.anchor}`);
 }
 info.push(`${runtimeConstructs.size} runtime and installer workload constructs are exactly registered`);
-
-
 const discoveredWorkloadTemplates = new Set();
 const nonWorkloadDynamicKinds = new Map();
 for (const entry of workloadRegistry.nonWorkloadDynamicKinds ?? [])
