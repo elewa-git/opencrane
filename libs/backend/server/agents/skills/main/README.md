@@ -1,71 +1,51 @@
-# @opencrane/backend/server/agents/skills — publish a skill revision
+# @opencrane/backend/server/agents/skills — safe skill catalogue
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [agents](../../README.md) › skills
 
 ## What it owns
 
-A *skill* is a reusable capability an agent can be given — packaged code plus its metadata. Like an
-agent service, a skill has a stable identity and many immutable, versioned *revisions*. The actual
-bundle of bytes for a revision is not stored here: it lives in the artifact store and is referenced
-by an exact SHA-256 content address (a fingerprint computed from the bytes). This package is the
-authority that publishes a reviewed skill revision.
-
-It is the final step of the authoring flow. A bundle is authored, uploaded as an artifact, then
-tested, scanned, and signed by an isolated job; this package publishes the revision only when that
-server-owned review evidence and the artifact reference still line up. Its read-only catalogue API
-is composed by the OpenCrane app: an authenticated browser session and request host select the
-silo, and callers see only safe skill metadata.
+A *skill* is a reusable capability an agent can be given — packaged code plus metadata. Like an
+agent service, a skill has a stable identity and immutable, versioned revisions. The OpenCrane app
+uses this package for the live, read-only catalogue API: an authenticated browser session and
+request host select the silo, and callers receive only safe skill metadata.
 
 ```
- authored skill bundle  ──►  ArtifactRevision (exact content address)
-        │  + review evidence (test report · security/secret/licence/malware scan · signature)
+ governed Skill + current SkillRevision
         ▼
  ┌──────────────────────────────────┐
- │  skills  ◄── HERE                 │  revision in review? artifact still published?
- │                                   │  content address matches the reviewed one?
+ │  skills  ◄── HERE                 │  trusted silo? bounded, deterministic list?
+ │                                   │  browser-safe fields only?
  └──────────────────────────────────┘
-        │  publish the immutable SkillRevision + advance the current pointer  (atomically)
+        │  safe catalogue summaries
         ▼
-agent revisions assign the published skill ──► admission confirms it remains published
+ browser catalogue  ──► discovery only; never a skill bundle or execution authority
 ```
 
-**In this flow:** [artifacts](../../artifacts/main/README.md) *(holds the bundle)* · [agent-services](../../agent-services/main/README.md) *(assigns the skill)*
+**In this flow:** [artifacts](../../artifacts/main/README.md) *(holds the bundle)* · [agent-services](../../agent-services/main/README.md) *(assigns skills to managed agent revisions)*
 
-Invariant: publication is bound to an *exact* artifact revision. The skill bytes are always an exact
-`ArtifactRevision` reference — this package never stores bundle content and never speaks a package
-registry protocol. It publishes only when the revision is in the `review` state, the referenced
-artifact is still published, and the pinned content address matches, all read from one consistent
-snapshot; the publish and pointer advance happen atomically. A mismatched or unpublished artifact,
-or a revision not in review, fails closed with a stable reason. A published revision can later be
-revoked: revocation atomically changes `published → revoked`, clears the current pointer only when
-it targets that exact revision, and prevents new run admissions from freezing it. It never mutates
-or invalidates inputs already accepted for a run.
+Invariant: the catalogue is limited to 200 skill summaries from the exact trusted silo, in stable
+newest-first order. It exposes no artifact addresses, bundle bytes, manifests, requirements, review
+evidence, signatures, signer identities, or worker coordinates. A failure to read the catalogue
+returns unavailable rather than a partially widened result.
 
 ## Public surface
 
-- `__PublishSkillRevision` — the use case: verify evidence and artifact, then publish atomically.
-- `PrismaSkillAuthorityRepository` — locks the scoped skill, revision, and exact artifact before it
-  changes `review → published` and advances the current-revision pointer in one transaction.
-- `__RevokeSkillRevision` — the future-only withdrawal use case for an exact published revision.
-- `PrismaSkillAuthorityRepository.revokeAtomically` — shares the publication lock order, changes
-  `published → revoked`, and conditionally clears the live current-revision pointer.
 - `__CreateSkillCatalogueRouter` — serves `GET /api/v1/skills`, a bounded catalogue of skill name,
   description, lifecycle, and current-revision state in the trusted host silo.
 - `_CreateSkillCatalogueRouter` — the ready-to-mount Prisma composition that authenticates through
-  the shared request-principal seam and supplies the catalogue authority.
+  the shared request-principal seam and supplies the catalogue repository.
+- `PrismaSkillCatalogueRepository` — the traced, silo-scoped Prisma read adapter.
 - `SkillCatalogueRepository` and `SkillCatalogueEntry` — the narrow read boundary and safe summary
   shape used by the browser catalogue.
-- Types: `SkillAuthorityRepository` (the persistence boundary), `PublishSkillRevisionCommand`,
-  `PublishSkillRevisionResult`, `SkillPublicationEvidence`, `SkillPublicationSnapshot`, and the
-  atomic result `AtomicPublishSkillRevisionResult`.
+- `SkillCatalogueStates` and `SkillCatalogueRevisionStates` — the documented serialized lifecycle
+  vocabularies used by the browser response and OpenAPI specification.
 
 ## Boundary
 
-The application layer supplies the Prisma-backed `SkillAuthorityRepository` and calls the use case.
-This package does not author, test, scan, or sign bundles, and it does not store bytes — it only
-records that a reviewed revision is now published, consistently with the artifact authority.
-It is not an OCI/package registry and has no internal bundle-download route. It does not re-evaluate or cancel
-already accepted runs; their immutable snapshots remain the audit record.
+The application mounts the exported router and supplies the Prisma-backed catalogue repository. This
+package does not author, test, scan, sign, publish, revoke, download, or execute skills, and it does
+not store bytes. Those unreachable lifecycle paths were removed rather than retained beside the live
+catalogue authority.
 
 The catalogue deliberately excludes artifact content addresses, bundle bytes, manifests,
 requirements, test and scan evidence, signatures, signer keys, reviewer identities, and all
@@ -80,11 +60,9 @@ domains directly.
 
 ## Data & persistence
 
-Owns `Skill`, `SkillRevision`, and the authoring-only `SkillWorkload` request in
-`apps/opencrane/prisma/schema/skills.prisma`. A workload is durable evidence, not a Kubernetes
-queue: it begins pending only for a sandboxed draft and is cancelled when that draft becomes
-ineligible. Tool-runner admission stays fail-closed until its snapshot-bound authority exists. A
-companion SQL authority test lives in `tests/skill-authority.sql`.
+The `Skill`, `SkillRevision`, and authoring-only `SkillWorkload` tables belong to the broader skill
+capability in `apps/opencrane/prisma/schema/skills.prisma`. This read package owns none of their
+lifecycle transitions; it selects only browser-safe fields.
 
 ## See also
 

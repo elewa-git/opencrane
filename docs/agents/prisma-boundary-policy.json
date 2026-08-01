@@ -13,6 +13,10 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "SkillCatalogueRepository",
+        "importPath": "./skill-catalogue.types.js"
       }
     ],
     "unitsOfWork": [

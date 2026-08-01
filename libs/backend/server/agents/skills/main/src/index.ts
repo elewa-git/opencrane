@@ -1,8 +1,7 @@
-export { __PublishSkillRevision } from "./skill-publication.js";
-export { __RevokeSkillRevision } from "./skill-revocation.js";
-export { PrismaSkillAuthorityRepository } from "./prisma-skill-authority.js";
 export { __CreateSkillCatalogueRouter } from "./skill-catalogue.router.js";
 export { _CreateSkillCatalogueRouter } from "./prisma-skill-catalogue.router.js";
+export { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository.js";
 export { _SkillCatalogueOpenapiPaths } from "./openapi.js";
-export type { AtomicPublishSkillRevisionResult, AtomicRevokeSkillRevisionResult, PublishSkillRevisionCommand, PublishSkillRevisionResult, RevokeSkillRevisionCommand, RevokeSkillRevisionResult, SkillAuthorityRepository, SkillCatalogueEntry, SkillCatalogueRepository, SkillPublicationEvidence, SkillPublicationSnapshot, SkillRevocationRepository } from "./skill-publication.types.js";
+export { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types.js";
+export type { SkillCatalogueEntry, SkillCatalogueRepository } from "./skill-catalogue.types.js";
 export type { SkillCatalogueCaller, SkillCatalogueRouterDependencies } from "./skill-catalogue.router.types.js";

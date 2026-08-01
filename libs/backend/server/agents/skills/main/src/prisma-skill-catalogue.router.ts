@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
 
-import { PrismaSkillAuthorityRepository } from "./prisma-skill-authority.js";
+import { PrismaSkillCatalogueRepository } from "./prisma-skill-catalogue-repository.js";
 import { __CreateSkillCatalogueRouter } from "./skill-catalogue.router.js";
 import type { SkillCatalogueCaller } from "./skill-catalogue.router.types.js";
 
@@ -25,7 +25,7 @@ export function _CreateSkillCatalogueRouter(prisma: PrismaClient, logger: Logger
 {
 	return __CreateSkillCatalogueRouter({
 		resolveCaller: _resolveCaller,
-		catalogue: new PrismaSkillAuthorityRepository(prisma),
+		catalogue: new PrismaSkillCatalogueRepository(prisma),
 		logger,
 	});
 }

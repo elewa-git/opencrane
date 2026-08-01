@@ -1,3 +1,5 @@
+import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types.js";
+
 /** OpenAPI path fragment for the browser-safe silo-scoped skill catalogue. */
 export const _SkillCatalogueOpenapiPaths = {
 	"/skills": {
@@ -24,9 +26,9 @@ export const _SkillCatalogueOpenapiPaths = {
 												id: { type: "string" },
 												name: { type: "string" },
 												description: { type: "string" },
-												state: { type: "string", enum: ["active", "retired"] },
+												state: { type: "string", enum: [SkillCatalogueStates.Active, SkillCatalogueStates.Retired] },
 												currentRevisionId: { type: ["string", "null"] },
-												currentRevisionState: { type: ["string", "null"], enum: ["draft", "review", "published", "rejected", "revoked", null] },
+												currentRevisionState: { type: ["string", "null"], enum: [SkillCatalogueRevisionStates.Draft, SkillCatalogueRevisionStates.Review, SkillCatalogueRevisionStates.Published, SkillCatalogueRevisionStates.Rejected, SkillCatalogueRevisionStates.Revoked, null] },
 												createdAt: { type: "string", format: "date-time" },
 												updatedAt: { type: "string", format: "date-time" },
 											},
