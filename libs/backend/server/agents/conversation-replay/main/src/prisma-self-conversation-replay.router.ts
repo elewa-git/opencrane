@@ -4,7 +4,7 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
 
-import { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
+import { _CreateConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
 import { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
 import type { SelfConversationReplayCaller } from "./self-conversation-replay.router.types.js";
 
@@ -25,7 +25,7 @@ export function _CreateSelfConversationReplayRouter(prisma: PrismaClient, logger
 {
 	return __CreateSelfConversationReplayRouter({
 		resolveCaller: _resolveCaller,
-		repository: new PrismaConversationReplayRepository(prisma),
+		repository: _CreateConversationReplayRepository(prisma),
 		logger,
 	});
 }

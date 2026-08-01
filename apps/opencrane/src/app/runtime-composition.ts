@@ -7,7 +7,7 @@ import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, 
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
-import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
+import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
@@ -68,7 +68,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	return {
 		conversationReplay: replayRouteId === null
 			? null
-			: __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }),
+			: __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: _CreateConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }),
 		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: runDispatchRepository, logger: _log }),
 		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds), logger: _log }),
 		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }),

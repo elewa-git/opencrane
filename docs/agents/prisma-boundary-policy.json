@@ -13,6 +13,10 @@
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "ConversationReplayRepository",
+        "importPath": "./replay-reader.types.js"
       }
     ],
     "unitsOfWork": [
