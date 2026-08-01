@@ -5,6 +5,7 @@ import type { Logger } from "@opencrane/observability";
 
 import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability.js";
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+import { PrismaPersonaAggregateLockRepository } from "../profile/prisma-persona-aggregate-lock-repository.js";
 import type { PersonaPersistenceUnitOfWork } from "../profile/persona-persistence-unit-of-work.types.js";
 import type { CompletePersonaInterviewCommand, PersonaInterviewQuestionReader, PersonaInterviewRepository, RecordPersonaInterviewAnswerCommand, StartPersonaInterviewCommand } from "./persona-interview-authority.types.js";
 
@@ -17,15 +18,18 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	private readonly refreshes: PersonalConfigurationPersonaRefreshUnitOfWork;
 	/** Persona-owned transaction boundary for answer and completion operations. */
 	private readonly transactions: PersonaPersistenceUnitOfWork;
+	/** Aggregate-owned locks shared with draft and approval mutation fences. */
+	private readonly locks: PrismaPersonaAggregateLockRepository;
 	/** App-owned structured logger for handled persistence failures. */
 	private readonly logger: Logger;
 
 	/** Create the interview authority over the canonical product database. */
-	constructor(prisma: PrismaClient, refreshes: PersonalConfigurationPersonaRefreshUnitOfWork, transactions: PersonaPersistenceUnitOfWork, logger: Logger)
+	constructor(prisma: PrismaClient, refreshes: PersonalConfigurationPersonaRefreshUnitOfWork, transactions: PersonaPersistenceUnitOfWork, locks: PrismaPersonaAggregateLockRepository, logger: Logger)
 	{
 		this.prisma = prisma;
 		this.refreshes = refreshes;
 		this.transactions = transactions;
+		this.locks = locks;
 		this.logger = logger;
 	}
 	/** Read only the exact question-set revision frozen into one owner interview. */
@@ -39,6 +43,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	async startAtomically(command: StartPersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Started | PersonaLifecycleOutcomes.AlreadyInProgress; readonly interviewId: string } | { readonly status: PersonaInterviewDenialReasons }>
 	{
 		const refreshes = this.refreshes;
+		const locks = this.locks;
 		try
 		{
 			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.start", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId }, "Persona interview start persistence failed", async function _traceStart()
@@ -47,8 +52,8 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				{
 					const client = transaction as Prisma.TransactionClient;
 					// 1. Lock the owner profile so two browser requests cannot create competing active interviews.
-					const profiles = await client.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
-					if (profiles.length !== 1) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
+					const profile = await locks.lockProfile(client, command);
+					if (profile === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
 					// 2. Claim only an accepted owner-bound persona-refresh proposal before any interview exists.
 					if (command.refreshConfigurationChangeId !== null)
 					{
@@ -81,6 +86,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	async recordAnswerAtomically(command: RecordPersonaInterviewAnswerCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Recorded; readonly answerId: string } | { readonly status: PersonaInterviewDenialReasons }>
 	{
 		const transactions = this.transactions;
+		const locks = this.locks;
 		try
 		{
 			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.answer", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview answer persistence failed", async function _traceAnswer()
@@ -89,9 +95,8 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				{
 					const client = transaction as Prisma.TransactionClient;
 				// 1. Lock the interview, proving its owner and keeping completion from racing an answer append.
-				const interviews = await client.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
-				if (interviews.length !== 1) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
-				const interview = interviews[0];
+				const interview = await locks.lockInterview(client, command);
+				if (interview === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
 				if (interview.state !== "in_progress") return { status: PersonaInterviewDenialReasons.NotInProgress } as const;
 
 				// 2. Check the question belongs to the exact reviewed set that was frozen when this interview began.
@@ -116,6 +121,7 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 	async completeAtomically(command: CompletePersonaInterviewCommand): Promise<{ readonly status: PersonaLifecycleOutcomes.Completed } | { readonly status: PersonaInterviewDenialReasons }>
 	{
 		const transactions = this.transactions;
+		const locks = this.locks;
 		try
 		{
 			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.interview.complete", { userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona interview completion persistence failed", async function _traceComplete()
@@ -124,9 +130,8 @@ export class PrismaPersonaInterviewRepository implements PersonaInterviewReposit
 				{
 					const client = transaction as Prisma.TransactionClient;
 				// 1. Lock the interview before counting evidence, sharing the same fence as answer append.
-				const interviews = await client.$queryRaw<readonly { readonly questionSetId: string; readonly questionSetVersion: number; readonly state: "in_progress" | "completed" }[]>(Prisma.sql`SELECT "question_set_id" AS "questionSetId", "question_set_version" AS "questionSetVersion", "state" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} FOR UPDATE`);
-				if (interviews.length !== 1) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
-				const interview = interviews[0];
+				const interview = await locks.lockInterview(client, command);
+				if (interview === null) return { status: PersonaInterviewDenialReasons.NotFoundOrWrongOwner } as const;
 				if (interview.state !== "in_progress") return { status: PersonaInterviewDenialReasons.NotInProgress } as const;
 
 				// 2. Compare the exact reviewed question count with the immutable answers before completion.

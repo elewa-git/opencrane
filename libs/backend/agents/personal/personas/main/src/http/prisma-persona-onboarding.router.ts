@@ -9,7 +9,9 @@ import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js"
 import type { PersonaOnboardingCaller } from "./persona-onboarding.router.types.js";
 import { PrismaPersonaAuthorityRepository } from "../approval/prisma-persona-authority-repository.js";
 import { PrismaPersonaDraftRepository } from "../drafting/prisma-persona-draft-repository.js";
+import { PrismaPersonaDraftTemplateSelector } from "../drafting/prisma-persona-draft-template-selector.js";
 import { PrismaPersonaInterviewRepository } from "../interview/prisma-persona-interview-repository.js";
+import { PrismaPersonaAggregateLockRepository } from "../profile/prisma-persona-aggregate-lock-repository.js";
 import { PrismaPersonaOnboardingRepository } from "../profile/prisma-persona-onboarding-repository.js";
 import { PrismaPersonaOnboardingStatusRepository } from "../profile/prisma-persona-onboarding-status-repository.js";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";
@@ -31,14 +33,16 @@ export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Log
 {
 	const refreshes = new PrismaPersonalConfigurationPersonaRefreshUnitOfWork(prisma);
 	const transactions = new PrismaPersonaPersistenceUnitOfWork(prisma);
-	const interviews = new PrismaPersonaInterviewRepository(prisma, refreshes, transactions, logger);
+	const locks = new PrismaPersonaAggregateLockRepository();
+	const templates = new PrismaPersonaDraftTemplateSelector();
+	const interviews = new PrismaPersonaInterviewRepository(prisma, refreshes, transactions, locks, logger);
 	return __CreatePersonaOnboardingRouter({
 		resolveCaller: _resolveCaller,
 		onboarding: new PrismaPersonaOnboardingRepository(logger, transactions),
 		interviews,
 		questions: interviews,
-		drafts: new PrismaPersonaDraftRepository(prisma, transactions, logger),
-		approval: new PrismaPersonaAuthorityRepository(prisma, refreshes),
+		drafts: new PrismaPersonaDraftRepository(transactions, locks, templates, logger),
+		approval: new PrismaPersonaAuthorityRepository(prisma, refreshes, locks, templates),
 		clock: { now(): Date { return new Date(); } },
 		logger,
 		status: new PrismaPersonaOnboardingStatusRepository(prisma),

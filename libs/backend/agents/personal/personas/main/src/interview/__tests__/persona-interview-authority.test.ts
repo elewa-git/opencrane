@@ -6,6 +6,7 @@ import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../../p
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
+import { PrismaPersonaAggregateLockRepository } from "../../profile/prisma-persona-aggregate-lock-repository.js";
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../persona-interview-authority.js";
 import type { PersonaInterviewRepository } from "../persona-interview-authority.types.js";
 import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-repository.js";
@@ -95,7 +96,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 			personaInterview: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "interview-created" }) },
 			personaQuestionSet: { findUnique: vi.fn().mockResolvedValue({ state: "Reviewed" }) },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateLockRepository(), _logger());
 
 		await expect(repository.startAtomically(_startCommand())).resolves.toEqual({ status: "started", interviewId: "interview-created" });
 		expect(transaction.personaQuestionSet.findUnique).toHaveBeenCalledWith({ where: { id_version: { id: "onboarding", version: 1 } }, select: { state: true } });
@@ -109,7 +110,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 			personaInterview: { findFirst: vi.fn().mockResolvedValue({ id: "interview-existing", refreshConfigurationChangeId: "change-1" }), create: vi.fn() },
 			personaQuestionSet: { findUnique: vi.fn() },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateLockRepository(), _logger());
 
 		await expect(repository.startAtomically({ ..._startCommand(), refreshConfigurationChangeId: "change-1" })).resolves.toEqual({ status: "already_in_progress", interviewId: "interview-existing" });
 		expect(transaction.personaInterview.create).not.toHaveBeenCalled();
@@ -123,7 +124,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 			personaQuestion: { findUnique: vi.fn().mockResolvedValue({ id: "q1" }) },
 			personaInterviewAnswer: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "answer-created" }) },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateLockRepository(), _logger());
 
 		await expect(repository.recordAnswerAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: "A considered answer", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
 		expect(transaction.personaInterviewAnswer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ interviewId: "interview-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "q1" }), select: { id: true } });
@@ -134,7 +135,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const refreshes = { runPersonaRefresh: vi.fn().mockRejectedValue(err) } as unknown as PersonalConfigurationPersonaRefreshUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), refreshes, _transactions({}), logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), refreshes, _transactions({}), new PrismaPersonaAggregateLockRepository(), logger);
 
 		await expect(__StartPersonaInterview(repository, _startCommand())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -146,7 +147,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, new PrismaPersonaAggregateLockRepository(), logger);
 
 		await expect(__RecordPersonaInterviewAnswer(repository, { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: "answer", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -158,7 +159,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, new PrismaPersonaAggregateLockRepository(), logger);
 
 		await expect(__CompletePersonaInterview(repository, { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();

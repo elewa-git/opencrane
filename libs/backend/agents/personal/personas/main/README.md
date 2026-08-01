@@ -86,6 +86,11 @@ The capability stays one aggregate lifecycle, but its implementation is grouped 
 derives reviewable evidence, `approval/` activates the revision, and `http/` adapts the owner-only
 API. The route module composes these owners; it contains no persistence policy.
 
+The aggregate lock repository in `profile/` is the sole audited owner of `SELECT … FOR UPDATE` and
+next-revision reads. Drafting owns the separate deterministic template selector and pure instruction
+compiler, so a reader can verify template priority and instruction content without tracing lifecycle
+transactions. Every selected template stores its source identity, digest, rule, and sorted answer IDs.
+
 The lifecycle functions, their command/result types, repository ports, Prisma repositories, local
 catalogue, persistence unit of work, and status adapter are internal cohesive owners. `profile/`
 owns profile provisioning and status, `interview/` owns append-only evidence, `drafting/` owns draft

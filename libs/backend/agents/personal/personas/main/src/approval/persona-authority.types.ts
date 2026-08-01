@@ -55,10 +55,6 @@ export interface PersonaApprovalSnapshot
 /** Atomic approval command carrying every accepted precondition. */
 export interface AtomicApprovePersonaCommand extends ApprovePersonaCommand
 {
-	/** Draft state that must still hold when the update commits. */
-	readonly expectedRevisionState: PersonaApprovalRevisionStates.Draft;
-	/** Completed interview state that must still hold when the update commits. */
-	readonly expectedInterviewState: PersonaApprovalInterviewStates.Completed;
 	/** Exact accepted insight count from three through five. */
 	readonly expectedInsightCount: number;
 }
