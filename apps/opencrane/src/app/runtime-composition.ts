@@ -66,6 +66,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
 		: null;
+	const artifactPreprocessRepository = new PrismaArtifactPreprocessRepository(prisma);
 	return {
 		conversationReplay: replayRouteId === null
 			? null
@@ -80,8 +81,8 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 			: __CreateArtifactPreprocessorRouter({
 				tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
 				namespace: artifactPreprocessorNamespace,
-				repository: new PrismaArtifactPreprocessRepository(prisma),
-				sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
+				repository: artifactPreprocessRepository,
+				sourceBroker: _CreateArtifactPreprocessSourceBroker(artifactPreprocessRepository),
 				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
 				logger: _log,
 			}),

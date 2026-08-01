@@ -1,6 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
-
-import { PrismaArtifactPreprocessRepository, type ArtifactPreprocessSourceBroker } from "@opencrane/backend/server/agents/artifacts";
+import type { ArtifactPreprocessSourceBroker, ArtifactPreprocessSourceLeaseIssuer } from "@opencrane/backend/server/agents/artifacts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { _CreateArtifactReadLeaseSigner } from "./artifact-read-lease-signer.factory.js";
@@ -13,17 +11,16 @@ import { _CreateArtifactServiceReadPort, _InternalArtifactServiceUrl } from "./a
  * The returned broker exposes source bytes only after the durable claim fence
  * creates exact, expiring read claims. Neither the worker nor the router sees
  * the storage coordinate or signed read lease.
- * @param prisma - Canonical product-authority database client.
+ * @param sourceLeaseIssuer - Narrow durable port guarded by the current claim fence.
  * @param environment - Server configuration containing service and key paths.
  * @returns Source broker for the workload-authenticated preprocessor router.
  */
-export function _CreateArtifactPreprocessSourceBroker(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessSourceBroker
+export function _CreateArtifactPreprocessSourceBroker(sourceLeaseIssuer: ArtifactPreprocessSourceLeaseIssuer, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessSourceBroker
 {
-	const jobs = new PrismaArtifactPreprocessRepository(prisma);
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const signLease = _CreateArtifactReadLeaseSigner(environment);
 	const readPort = _CreateArtifactServiceReadPort(serviceUrl);
-	return _CreateArtifactPreprocessSourceReader(jobs, signLease, readPort);
+	return _CreateArtifactPreprocessSourceReader(sourceLeaseIssuer, signLease, readPort);
 }
 
 /**
@@ -32,12 +29,12 @@ export function _CreateArtifactPreprocessSourceBroker(prisma: PrismaClient, envi
  *
  * It owns the post-transaction expiry check and metadata cross-check. It does
  * not choose a revision, extend a claim, or expose a lease outside this server.
- * @param jobs - Durable source-lease issuer guarded by the current claim fence.
+ * @param sourceLeaseIssuer - Durable source-lease issuer guarded by the current claim fence.
  * @param signLease - Server-only signer for the exact issued read claims.
  * @param readPort - Private artifact-service byte transport.
  * @returns Fence-aware source byte reader.
  */
-function _CreateArtifactPreprocessSourceReader(jobs: PrismaArtifactPreprocessRepository, signLease: ReturnType<typeof _CreateArtifactReadLeaseSigner>, readPort: ReturnType<typeof _CreateArtifactServiceReadPort>): ArtifactPreprocessSourceBroker
+function _CreateArtifactPreprocessSourceReader(sourceLeaseIssuer: ArtifactPreprocessSourceLeaseIssuer, signLease: ReturnType<typeof _CreateArtifactReadLeaseSigner>, readPort: ReturnType<typeof _CreateArtifactServiceReadPort>): ArtifactPreprocessSourceBroker
 {
 	return {
 		async read(command)
@@ -45,7 +42,7 @@ function _CreateArtifactPreprocessSourceReader(jobs: PrismaArtifactPreprocessRep
 			return ___DoWithTrace("artifact-preprocessor.source.broker", { jobId: command.jobId, attempt: command.attempt }, async function _ReadSource()
 			{
 				// 1. Allocate exact read claims under the current database-owned fence and its old deadline.
-				const source = await jobs.issueSourceLeaseAtomically(command);
+				const source = await sourceLeaseIssuer.issueSourceLeaseAtomically(command);
 				if (source === null) return null;
 
 				// 2. Refuse a claim that expired after the transaction, then sign without extending its authority.

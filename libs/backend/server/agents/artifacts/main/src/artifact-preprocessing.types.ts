@@ -80,13 +80,18 @@ export type CompleteArtifactPreprocessJobResult = { readonly status: "completed"
 /** Result of applying the server-owned retry ceiling to one current failed attempt. */
 export type FailArtifactPreprocessJobResult = { readonly status: "retryable" | "terminal" } | { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" };
 
+/** Narrow issuer that freezes one current preprocessing source lease. */
+export interface ArtifactPreprocessSourceLeaseIssuer
+{
+	/** Allocates exact source-read facts only while the supplied attempt and fence remain current. */
+	issueSourceLeaseAtomically(command: ArtifactPreprocessorClaimCommand): Promise<ArtifactPreprocessSourceLeaseProjection | null>;
+}
+
 /** Catalogue persistence authority for the dedicated PDF preprocessing worker. */
-export interface ArtifactPreprocessRepository
+export interface ArtifactPreprocessRepository extends ArtifactPreprocessSourceLeaseIssuer
 {
 	/** Claims one eligible PDF job, allocating a fresh fence and generated Artifact. */
 	claimNextAtomically(): Promise<ClaimNextArtifactPreprocessJobResult>;
-	/** Allocates exact source-read facts only while the supplied attempt and fence remain current. */
-	issueSourceLeaseAtomically(command: ArtifactPreprocessorClaimCommand): Promise<ArtifactPreprocessSourceLeaseProjection | null>;
 	/** Attaches one exact, short-lived artifact write lease to the live claim. */
 	issueOutputLeaseAtomically(request: ArtifactPreprocessOutputLeaseRequest): Promise<IssueArtifactPreprocessOutputLeaseResult>;
 	/** Finalizes the verified receipt, immutable derived revision, source lineage, and job together. */
