@@ -3,6 +3,7 @@ export type { AgentServicePublicationRepository, AtomicAgentRevisionPublication,
 export { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication.js";
 export type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
 export { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
+export { ManagedRunAdmissionOutcomes } from "./agent-revision-lifecycle.types.js";
 export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagedRunTrigger, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 export { PrismaAgentRevisionModelSelectionRepository } from "./prisma-agent-revision-model-selection.js";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types.js";

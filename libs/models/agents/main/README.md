@@ -41,8 +41,8 @@ a legal move, never invent one.
 ## Public surface
 
 - Lifecycle types: `AgentService`/`…State`, `AgentRevision`/`…State`, `AgentRun`/`…State`,
-  `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`, `GrantSubjectType`, `Thread`,
-  `Message`, `RunEvent`, and the `*Id` identifier aliases.
+  `AgentServiceKinds`, `AgentServiceStates`, `AgentRevisionContent`, `RevisionScopeAttachment`, `GrantScope`,
+  `GrantSubjectType`, `Thread`, `Message`, `RunEvent`, and the `*Id` identifier aliases.
 - Revision invariants: `__DigestAgentRevisionContent`, `__DiffAgentRevisions`, and the
   `AgentRevisionDiff` result types.
 - Persona types: `PersonaOnboarding`, `PersonaInterview`, `PersonaRevision`, `SoulTemplate`,

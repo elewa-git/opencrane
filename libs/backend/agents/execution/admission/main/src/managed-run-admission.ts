@@ -1,5 +1,6 @@
 import { RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
 import type { RunAdmissionCommand, RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
+import { ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
@@ -32,11 +33,11 @@ export function _CreateManagedRunAdmissionPortWithGate(assemble: ManagedSnapshot
 				async function _admitAfterCapacityGrant()
 				{
 					const result = await assemble(command);
-					if (result.outcome === "denied") return { outcome: "denied", reason: result.reason } as const;
-					return { outcome: result.admissionOutcome, runId: result.snapshot.runId } as const;
+					if ("reason" in result) return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: result.reason } as const;
+					return { outcome: result.admissionOutcome === "accepted" ? ManagedRunAdmissionOutcomes.Accepted : ManagedRunAdmissionOutcomes.Idempotent, runId: result.snapshot.runId } as const;
 				},
 			);
-			return bounded.outcome === "rejected" ? { outcome: "denied", reason: bounded.reason } : bounded.value;
+			return "reason" in bounded ? { outcome: ManagedRunAdmissionOutcomes.Denied, reason: bounded.reason } : bounded.value;
 		},
 	};
 }
@@ -76,8 +77,8 @@ class _HierarchicalRunAdmissionCapacityGate implements RunAdmissionCapacityGate
 				},
 			);
 		});
-		if (global.outcome === "rejected") return global;
-		if (global.value.outcome === "rejected") return global.value;
+		if ("reason" in global) return global;
+		if ("reason" in global.value) return global.value;
 		return global.value.value;
 	}
 }

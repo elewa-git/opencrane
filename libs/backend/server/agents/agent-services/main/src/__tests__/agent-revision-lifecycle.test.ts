@@ -2,6 +2,7 @@ import type { AgentRevision, AgentRevisionContent, AgentService } from "@opencra
 import { describe, expect, it } from "vitest";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
+import { ManagedRunAdmissionOutcomes } from "../agent-revision-lifecycle.types.js";
 import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
 
 /** Builds valid executable content for a managed revision. */
@@ -113,7 +114,7 @@ class _AdmissionPort implements ManagedRunAdmissionPort
 	async admitManagedRun(command: ManagedRunNowCommand): Promise<ManagedRunAdmissionResult>
 	{
 		this.lastCommand = command;
-		return { outcome: "accepted", runId: "run-1" };
+		return { outcome: ManagedRunAdmissionOutcomes.Accepted, runId: "run-1" };
 	}
 }
 

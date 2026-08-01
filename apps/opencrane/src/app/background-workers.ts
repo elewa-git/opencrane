@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import { __CreateRuntimeWorkloadCleanupUseCase, PrismaRunCancellationRepository } from "@opencrane/backend/agents/execution/runs";
 import { __CreateKubernetesRuntimeWorkloadCleanupStore } from "@opencrane/backend/agents/runtime/cleanup";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateScheduleTicker } from "@opencrane/backend/server/agents/scheduling";
+import { _CreateScheduleTicker, PrismaScheduleTickerUnitOfWork } from "@opencrane/backend/server/agents/scheduling";
 
 import type { OpenCraneBackgroundWorkers } from "./background-workers.types.js";
 import type { OpenCraneProcessConfig } from "./config.types.js";
@@ -34,7 +34,7 @@ const _RUNTIME_ORPHAN_OBSERVATION_MARGIN_MILLISECONDS = 10_000;
 export function _StartBackgroundWorkers(prisma: PrismaClient, batchApi: k8s.BatchV1Api, managedRunAdmission: ManagedRunAdmissionPort, config: OpenCraneProcessConfig): OpenCraneBackgroundWorkers
 {
 	// 1. Start optional schedule admission through the same capacity port used by run-now requests.
-	const scheduleTicker = _CreateScheduleTicker(prisma, managedRunAdmission, _log);
+	const scheduleTicker = _CreateScheduleTicker(new PrismaScheduleTickerUnitOfWork(prisma), managedRunAdmission, _log);
 	const schedulerHandle = config.schedulerEnabled
 		? setInterval(function _tick() { void scheduleTicker.runOnce(new Date()).catch(function _onError(error: unknown) { _log.error({ err: error }, "managed-agent schedule tick failed"); }); }, config.schedulerIntervalMilliseconds)
 		: null;
