@@ -74,8 +74,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
 
 Pure protocol decisions, Prisma adapters, executor construction, and their supporting types remain
-inside this package. They are implementation pieces of the production composition, not alternate
-entrypoints for sibling domains.
+inside this package. Some support current production composition while others preserve domain-owned
+authority seams for later execution flows; none is an alternate entrypoint for sibling domains.
 
 ## Boundary
 
