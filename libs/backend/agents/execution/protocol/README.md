@@ -57,10 +57,12 @@ invocation receipt retains that bounded authority reason and the action boundary
 credential-free structured event; it never collapses a policy revocation into a transport failure.
 
 It intentionally owns no HTTP listener, Kubernetes resource, model driver, or provider credential.
-Its production composition factory binds external actions to integration custody, sandbox, and
-memory ports, the authorization-owned deferred approval transaction, and the canonical run terminal
-reporter. The app supplies only process persistence, fixed policy values, and logging, then hands
-the resulting authority to the stream transport. An integration action has the fixed
+Its production factory composes the external-action runner from the durable invocation, personal
+configuration, integration, approval, clock, and fail-closed transport adapters. The runner selects
+the user-only personal upgrade tool before reserving it; every other action is reserved before its
+transport can run, and a deferred approval is bound to that exact reservation. The app supplies only
+process persistence, fixed policy values, and logging, then hands the resulting authority to the
+stream transport. An integration action has the fixed
 `integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
 are rechecked at execution, so the runtime never sees either credential or mutable permission state.
 
@@ -74,8 +76,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 - `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
 
 Pure protocol decisions, Prisma adapters, executor construction, and their supporting types remain
-inside this package. Some support current production composition while others preserve domain-owned
-authority seams for later execution flows; none is an alternate entrypoint for sibling domains.
+inside this package. The production external-action runner and its composition helpers are
+package-private seams for the factory, not alternate entrypoints for sibling domains.
 
 ## Boundary
 
