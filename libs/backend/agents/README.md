@@ -8,8 +8,10 @@ context, and the execution boundary that turns an authorised attempt into work. 
 general: a personal assistant and a future managed agent both need an identity, an attempt, and a
 safe execution boundary.
 
-`personal/` is the current specialization. It owns the employee-specific persistence and policy — a
-person's configuration-change provenance, memory facts, and approved persona. Conversation replay remains
+`personal/` is the current specialization. It owns employee-specific policy — a person's
+configuration-change provenance, verified memory selection, and approved persona. Generic durable
+fact metadata and its outbox intent live in `memory/`, so a future managed scope does not need to
+depend on personal policy. Conversation replay remains
 part of the shared server run authority. This tier is deliberately distinct from
 [`libs/backend/server`](../server/README.md), the **control plane** that governs identity,
 organisation scope, gateways, and managed services. The execution and runtime packages below remain shared
@@ -20,8 +22,9 @@ agent principles rather than becoming personal-only by proximity.
 | Package | What it owns |
 | --- | --- |
 | [`personal/configuration`](./personal/configuration/main/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
-| [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: memory-fact catalogue and policy. |
+| [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: verified dataset and preference-fact selection. |
 | [`personal/personas`](./personal/personas/main/README.md) | Personal specialization: persona approval process. |
+| [`memory`](./memory/main/README.md) | Shared: durable fact metadata and outbox intent, not fact content. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |
 | [`execution/runs`](./execution/runs/main/README.md) | Shared: run and attempt authority. |
 | [`execution/protocol`](./execution/protocol/README.md) | Shared: language-neutral command and candidate authority. |
@@ -29,8 +32,9 @@ agent principles rather than becoming personal-only by proximity.
 
 ```
  personal specialization                shared agent execution
- configuration · memory · personas  ──► inputs ──► runs ──► protocol ──► runtime Job
- employee-specific state               frozen input  attempt   bounded executor boundary
+ configuration · personal memory · personas ──► inputs ──► runs ──► protocol ──► runtime Job
+                   │                           frozen input  attempt   bounded executor boundary
+                   └── verified catalog coordinates ──► memory metadata/outbox
 ```
 
 The diagram intentionally leaves room for future managed specializations without inventing packages
@@ -40,9 +44,9 @@ owns the model loop or a second run/event store.
 ## Dependency rule for this tier
 
 Each domain carries `layer:backend` and its own scope (`scope:execution-runs`,
-`scope:personal-configuration`, `scope:personal-memory`, `scope:personal-personas`). A domain may
-import the shared models it needs — the agent model (`scope:agents`), and for runs the authorization
-model, for memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
+`scope:personal-configuration`, `scope:personal-memory`, `scope:personal-personas`, `scope:memory`).
+A domain may import the shared models it needs — the agent model (`scope:agents`), and for generic
+memory the artifacts model — plus shared contracts (`scope:shared`) and its own scope.
 It may **not** import an unrelated specialization or a control-plane (`libs/backend/server`) domain.
 Cross-domain contact happens above, in the app that composes them. Never import an app.
 

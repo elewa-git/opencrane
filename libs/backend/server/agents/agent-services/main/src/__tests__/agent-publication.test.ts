@@ -1,4 +1,4 @@
-import type { AgentRevision, AgentRevisionId, AgentService, AgentServiceId } from "@opencrane/models/agents";
+import { AgentServiceKinds, type AgentRevision, type AgentRevisionId, type AgentService, type AgentServiceId } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __PublishAgentRevision } from "../agent-publication.js";
@@ -10,7 +10,7 @@ function _service(): AgentService
 	return {
 		id: "service-1",
 		siloId: "silo-1",
-		kind: "personal",
+		kind: AgentServiceKinds.Personal,
 		name: "Personal agent",
 		state: "draft",
 		activeRevisionId: null,

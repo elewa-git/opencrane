@@ -2,6 +2,17 @@ import type { SiloId, UserId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId } from "@opencrane/models/artifacts";
 import type { AuthorizationScope } from "@opencrane/models/authorization";
 
+/** Provenance source vocabulary shared by memory catalogues and snapshot readers. */
+export enum MemoryFactProvenanceSourceKinds
+{
+  /** A conversation message supplied the fact evidence. */
+  Message = "message",
+  /** An immutable artifact revision supplied the fact evidence. */
+  Artifact = "artifact",
+  /** An explicitly authenticated user statement supplied the fact evidence. */
+  ExplicitUserFact = "explicit-user-fact",
+}
+
 /** Durable memory mutation requested through the memory gateway. */
 export enum MemoryMutationKind
 {
@@ -27,8 +38,8 @@ export interface MemoryDatasetIdentity
 /** Source provenance attached to a durable memory fact. */
 export interface MemoryProvenance
 {
-  /** Stable source family, such as message, artifact, or explicit-user-fact. */
-  sourceKind: string;
+  /** Stable source family selected from the platform-owned provenance vocabulary. */
+  sourceKind: MemoryFactProvenanceSourceKinds;
   /** Stable source identifier. */
   sourceId: string;
   /** Exact artifact revision containing canonical source bytes, when applicable. */

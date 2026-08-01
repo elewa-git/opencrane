@@ -2,7 +2,6 @@ import type { RunAdmissionRepository } from "@opencrane/backend/agents/execution
 
 import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
-import { PrismaPreferenceFactSource } from "./prisma-preference-fact-source.js";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source.js";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
 import { PrismaThreadContextSource } from "./prisma-thread-context-source.js";
@@ -16,7 +15,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		runAuthority: new PrismaRunAuthoritySource(),
 		approvedPersona: new PrismaApprovedPersonaSource(),
 		threadContext: new PrismaThreadContextSource(),
-		preferenceFacts: new PrismaPreferenceFactSource(),
+		preferenceFacts: { load: async function _LoadManagedEmptyPreferences() { return { outcome: "loaded", value: [] }; } },
 		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
 		toolPolicy: new PrismaRevisionToolPolicySource(),
 		skillEligibility,

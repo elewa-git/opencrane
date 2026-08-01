@@ -1,6 +1,6 @@
 import type { Prisma } from "@prisma/client";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { AgentRevisionId, AgentRunId, AgentServiceId, SiloId, ThreadId } from "@opencrane/models/agents";
+import type { AgentRevisionId, AgentRunId, AgentServiceId, AgentServiceKind, SiloId, ThreadId } from "@opencrane/models/agents";
 
 /** Immutable run, service, and revision facts accepted at the initial admission boundary. */
 export interface InitialRunAuthority
@@ -10,7 +10,7 @@ export interface InitialRunAuthority
 	/** Published revision locked for the complete logical run. */
 	readonly agentRevisionId: AgentRevisionId;
 	/** Product boundary deciding whether an approved persona is required. */
-	readonly agentKind: "personal" | "managed";
+	readonly agentKind: AgentServiceKind;
 	/** Effective contract digest accepted before the runtime is eligible for dispatch. */
 	readonly effectiveContractDigest: string;
 	/** Version of the prompt compiler selected by the published revision. */

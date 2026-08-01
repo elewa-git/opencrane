@@ -53,6 +53,18 @@
       {
         "contract": "PersonalConfigurationPersonaRefreshRepository",
         "importPath": "./personal-configuration-persona-refresh.types.js"
+      },
+      {
+        "contract": "MemoryCatalogRepository",
+        "importPath": "./memory-catalog.types.js"
+      },
+      {
+        "contract": "MemoryCatalogCollisionRepository",
+        "importPath": "./memory-catalog.types.js"
+      },
+      {
+        "contract": "PersonalMemoryAdmissionRepository",
+        "importPath": "./personal-memory-dataset.types.js"
       }
     ],
     "unitsOfWork": [
@@ -71,6 +83,10 @@
       {
         "contract": "PersonalConfigurationPersonaRefreshUnitOfWork",
         "importPath": "./personal-configuration-persona-refresh.types.js"
+      },
+      {
+        "contract": "MemoryCatalogUnitOfWork",
+        "importPath": "./memory-catalog.types.js"
       }
     ],
     "compositions": [
