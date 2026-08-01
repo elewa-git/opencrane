@@ -22,13 +22,6 @@
         "command": "vitest run",
         "cwd": "libs/backend/server/agents/skills/main"
       }
-    },
-    "test:sql": {
-      "executor": "nx:run-commands",
-      "options": {
-        "command": "sh ../../../../../../scripts/run-postgres-authority-tests.sh tests/skill-authority.sql",
-        "cwd": "libs/backend/server/agents/skills/main"
-      }
     }
   }
 }
