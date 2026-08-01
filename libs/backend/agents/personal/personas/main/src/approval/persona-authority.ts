@@ -22,6 +22,6 @@ export async function __ApprovePersona(repository: PersonaAuthorityRepository, c
 	if (snapshot.durableSoulMutationPolicy !== "forbidden") return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaApprovalDenialReasons.MutableSoulPolicy };
 
 	// 3. Rebind all mutable preconditions at commit so concurrent edits fail closed.
-	const result = await repository.approveAndActivateAtomically({ ...command, expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: snapshot.insightCount });
+	const result = await repository.approveAndActivateAtomically({ ...command, expectedInsightCount: snapshot.insightCount });
 	return result.status === PersonaApprovalPersistenceStatuses.Approved ? { outcome: PersonaLifecycleOutcomes.Approved } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status === PersonaApprovalPersistenceStatuses.NotFound ? PersonaApprovalDenialReasons.NotFound : PersonaApprovalDenialReasons.Conflict };
 }

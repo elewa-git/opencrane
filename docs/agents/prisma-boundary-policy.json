@@ -39,6 +39,14 @@
         "importPath": "./persona-draft-authority.types.js"
       },
       {
+        "contract": "PersonaDraftTemplateSelectorRepository",
+        "importPath": "./persona-draft-template-selector.types.js"
+      },
+      {
+        "contract": "PersonaAggregateLockRepository",
+        "importPath": "./persona-aggregate-lock-repository.types.js"
+      },
+      {
         "contract": "PersonaInterviewRepository",
         "importPath": "./persona-interview-authority.types.js"
       },

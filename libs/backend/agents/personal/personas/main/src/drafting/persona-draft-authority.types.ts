@@ -45,6 +45,21 @@ export interface CreatePersonaDraftCommand
 	readonly authoredAt: string;
 }
 
+/** Server-only request that derives bounded insights from the completed interview inside the draft transaction. */
+export interface CreatePersonaDraftFromInterviewCommand
+{
+	/** Silo that owns the profile and completed interview evidence. */
+	readonly siloId: string;
+	/** Profile owner and only allowed draft author. */
+	readonly userId: string;
+	/** Personal persona profile receiving the next draft revision. */
+	readonly personaProfileId: string;
+	/** Completed interview from which the server derives answer-bound insights. */
+	readonly interviewId: string;
+	/** Trusted instant at which this reviewable draft is authored. */
+	readonly authoredAt: string;
+}
+
 /** Stable outcome from creating a reviewable interview-backed persona draft. */
 export type CreatePersonaDraftResult =
 	| { readonly outcome: PersonaLifecycleOutcomes.Created; readonly personaRevisionId: string }
@@ -66,5 +81,5 @@ export interface PersonaDraftRepository
 export interface PersonaDraftFromInterviewRepository
 {
 	/** Creates a draft using a bounded server-derived insight set from one completed owner interview. */
-	createFromInterviewAtomically(command: Omit<CreatePersonaDraftCommand, "insights">): Promise<CreatePersonaDraftPersistenceResult>;
+	createFromInterviewAtomically(command: CreatePersonaDraftFromInterviewCommand): Promise<CreatePersonaDraftPersistenceResult>;
 }

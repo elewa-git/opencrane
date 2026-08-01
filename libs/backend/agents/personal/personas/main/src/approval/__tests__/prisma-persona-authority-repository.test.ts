@@ -3,7 +3,9 @@ import type { PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/b
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaPersonaAuthorityRepository } from "../prisma-persona-authority-repository.js";
-import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates } from "../persona-authority.types.js";
+import { PersonaApprovalPersistenceStatuses } from "../persona-authority.types.js";
+import { PrismaPersonaAggregateLockRepository } from "../../profile/prisma-persona-aggregate-lock-repository.js";
+import type { PersonaDraftTemplateSelectorRepository } from "../../drafting/persona-draft-template-selector.types.js";
 
 /** Build a narrow fake Prisma client for one persona approval authority test. */
 function _Prisma(overrides: Record<string, unknown> = {}): PrismaClient
@@ -34,14 +36,26 @@ function _Refreshes(transaction: unknown, apply = vi.fn(async function _apply() 
 	};
 }
 
+/** Returns a matching deterministic reviewed template without coupling approval tests to selector parsing. */
+function _Templates(): PersonaDraftTemplateSelectorRepository
+{
+	return { select: vi.fn().mockResolvedValue({ templateId: "template", templateVersion: 1, templateDigest: "sha256:template", content: "# Template", selectionRuleId: "rule-1", selectionAnswerIds: [] }) };
+}
+
+/** Construct the authority with the real aggregate lock adapter over the narrow fake transaction. */
+function _Repository(prisma: PrismaClient, refreshes: PersonalConfigurationPersonaRefreshUnitOfWork): PrismaPersonaAuthorityRepository
+{
+	return new PrismaPersonaAuthorityRepository(prisma, refreshes, new PrismaPersonaAggregateLockRepository(), _Templates());
+}
+
 describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuthorityRepository()
 {
 	it("returns a complete approval snapshot with the database-selected template check", async function _returnsApprovalSnapshot()
 	{
 		const prisma = _Prisma({
-			personaRevision: { findFirst: vi.fn().mockResolvedValue({ state: "Draft", personaProfileId: "profile-1", soulTemplateDigest: "sha256:template", durableSoulMutationPolicy: "forbidden", profile: { userId: "user-1" }, interview: { state: "Completed" }, soulTemplate: { digest: "sha256:template" }, _count: { insights: 3 } }), updateMany: vi.fn() },
+			personaRevision: { findFirst: vi.fn().mockResolvedValue({ state: "Draft", personaProfileId: "profile-1", soulTemplateId: "template", soulTemplateVersion: 1, selectionRuleId: "rule-1", selectionAnswerIds: [], soulTemplateDigest: "sha256:template", durableSoulMutationPolicy: "forbidden", profile: { userId: "user-1" }, interview: { id: "interview-1", state: "Completed" }, soulTemplate: { digest: "sha256:template" }, _count: { insights: 3 } }), updateMany: vi.fn() },
 		});
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma));
+		const repository = _Repository(prisma, _Refreshes(prisma));
 
 		await expect(repository.getApprovalSnapshot({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z" })).resolves.toEqual({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" });
 	});
@@ -52,9 +66,9 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const updateProfile = vi.fn().mockResolvedValue({ count: 1 });
 		const queryRaw = vi.fn().mockResolvedValue([{ id: "profile-1", siloId: "silo-1" }]);
 		const prisma = _Prisma({ personaRevision: { findFirst: vi.fn(), updateMany: updateRevision }, personaProfile: { updateMany: updateProfile }, $queryRaw: queryRaw });
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma));
+		const repository = _Repository(prisma, _Refreshes(prisma));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
 		expect(queryRaw).toHaveBeenCalledBefore(updateRevision);
 		expect(updateRevision).toHaveBeenCalledBefore(updateProfile);
 		expect(updateProfile).toHaveBeenCalledWith({ where: { id: "profile-1", userId: "user-1" }, data: { activeRevisionId: "revision-1" } });
@@ -64,9 +78,9 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 	{
 		const updateRevision = vi.fn();
 		const prisma = _Prisma({ personaRevision: { findFirst: vi.fn(), updateMany: updateRevision }, $queryRaw: vi.fn().mockResolvedValue([]) });
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma));
+		const repository = _Repository(prisma, _Refreshes(prisma));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.NotFound });
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.NotFound });
 		expect(updateRevision).not.toHaveBeenCalled();
 	});
 
@@ -78,9 +92,9 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 			personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: "change-1" }) },
 			$queryRaw: queryRaw,
 		});
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma, applyChange));
+		const repository = _Repository(prisma, _Refreshes(prisma, applyChange));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Approved });
 		expect(applyChange).toHaveBeenCalledWith({ configurationChangeId: "change-1", siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", personaRevisionId: "revision-1" });
 	});
 
@@ -88,9 +102,9 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 	{
 		const updateRevision = vi.fn();
 		const prisma = _Prisma({ personaRevision: { findFirst: vi.fn(), updateMany: updateRevision }, personaInsight: { count: vi.fn().mockResolvedValue(4) }, $queryRaw: vi.fn().mockResolvedValue([{ id: "profile-1", siloId: "silo-1" }]) });
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma));
+		const repository = _Repository(prisma, _Refreshes(prisma));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		expect(updateRevision).not.toHaveBeenCalled();
 	});
 
@@ -100,9 +114,9 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 		const updateProfile = vi.fn();
 		const queryRaw = vi.fn().mockResolvedValueOnce([{ id: "profile-1", siloId: "silo-1" }]).mockResolvedValueOnce([{ id: "revision-1", interviewId: "interview-missing" }]);
 		const prisma = _Prisma({ personaRevision: { findFirst: vi.fn(), updateMany: updateRevision }, personaProfile: { updateMany: updateProfile }, personaInterview: { findUnique: vi.fn().mockResolvedValue(null) }, $queryRaw: queryRaw });
-		const repository = new PrismaPersonaAuthorityRepository(prisma, _Refreshes(prisma));
+		const repository = _Repository(prisma, _Refreshes(prisma));
 
-		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
+		await expect(repository.approveAndActivateAtomically({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z", expectedInsightCount: 3 })).resolves.toEqual({ status: PersonaApprovalPersistenceStatuses.Conflict });
 		expect(updateRevision).not.toHaveBeenCalled();
 		expect(updateProfile).not.toHaveBeenCalled();
 	});
