@@ -52,10 +52,6 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
 
 - `__RunAgentController` — polls until process shutdown and retries failed claims without repairing
   or replacing Kubernetes objects.
-- `__ReconcileNextAgentRuntimeAttempt` — reconciles at most one durable claim and stops after the
-  suspended assignment is committed.
-- `__ReconcileNextRuntimeRelease` — conditionally unsuspends one exact assigned Job and registers
-  only its unique, strictly owned first Pod.
 - `__ValidateAgentControllerRuntimeProfiles` — validates deployment-supplied profiles through the
   canonical Job builder before polling starts.
 - `__CreateHttpAgentControllerAuthority` — claims and commits over the projected-token-authenticated
@@ -71,7 +67,8 @@ alive after shutdown.
 Internally, the polling loop, runtime-profile policy, attempt-key projection, assignment reconcile,
 release reconcile, HTTP response validation, Kubernetes Job adoption, conditional release planning,
 Pod proof, and transport calls each have one module owner. The package barrel exposes composition
-capabilities and the profile-map type only; adapter seams and protocol details stay package-local.
+capabilities and the profile-map type only. The one-attempt assignment and release steps remain
+package-private test seams; adapter seams and protocol details stay package-local.
 
 ## Boundary
 

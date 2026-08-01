@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 
 import type { V1Job, V1Pod } from "@kubernetes/client-node";
 
+/** Build the two-label selector that excludes Pods outside the exact owned Job attempt. */
 export function _AgentRuntimePodSelector(jobName: string, workloadUid: string): string
 {
 	return `batch.kubernetes.io/controller-uid=${workloadUid},opencrane.ai/runtime-attempt=${jobName}`;
@@ -15,6 +16,7 @@ function _ExpectedPodLabels(expectedJob: V1Job, workloadUid: string): Record<str
 	return { ...authored, "batch.kubernetes.io/controller-uid": workloadUid, "batch.kubernetes.io/job-name": name, "controller-uid": workloadUid, "job-name": name };
 }
 
+/** Reject a candidate Pod unless it is the sole exact first Pod of the fenced runtime Job. */
 export function _AssertExactFirstAgentRuntimePod(pod: V1Pod, expectedJob: V1Job, workloadUid: string, serviceAccountName: string): void
 {
 	const jobName = expectedJob.metadata?.name;

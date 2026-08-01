@@ -61,11 +61,13 @@ function _NormalizedJob(job: V1Job): Record<string, unknown>
 	return normalized;
 }
 
+/** Reject adoption unless the existing Job exactly matches our still-suspended projection. */
 export function _AssertExactSuspendedAgentRuntimeJob(current: V1Job, expected: V1Job): void
 {
 	if (current.spec?.suspend !== true || !isDeepStrictEqual(_NormalizedJob(current), _NormalizedJob(expected))) throw new Error("refusing to adopt a Job that differs from the claimed suspended runtime attempt");
 }
 
+/** Reject adoption unless the existing Job remains the durable assignment's exact projection. */
 export function _AssertExactAssignedAgentRuntimeJob(current: V1Job, expected: V1Job, workloadUid: string): void
 {
 	if (current.metadata?.uid !== workloadUid || (current.spec?.suspend !== true && current.spec?.suspend !== false)) throw new Error("refusing to adopt a Job outside the exact durable workload assignment");

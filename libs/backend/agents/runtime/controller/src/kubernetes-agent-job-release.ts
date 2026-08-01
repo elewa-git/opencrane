@@ -1,14 +1,7 @@
 import type { V1Job } from "@kubernetes/client-node";
 import { __DeriveAgentRuntimeReleaseDeadlineSeconds } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
-import type { AgentControllerJobPatchRequest } from "./kubernetes-agent-controller-store.types.js";
-
-export interface AgentControllerJobReleasePlan
-{
-	readonly patch: AgentControllerJobPatchRequest;
-	readonly activeDeadlineSeconds: number;
-	readonly canonicalAssignmentExpiresAt: string;
-}
+import type { AgentControllerJobReleasePlan } from "./kubernetes-agent-job-release.types.js";
 
 function _CanonicalUtcEpochMilliseconds(value: string): number
 {
@@ -17,6 +10,12 @@ function _CanonicalUtcEpochMilliseconds(value: string): number
 	return epochMilliseconds;
 }
 
+/**
+ * Prove that an observed released Job cannot execute beyond the durable assignment expiry.
+ *
+ * A missing start time is acceptable only immediately after our own successful release patch,
+ * where the patch's exact deadline is already known but Kubernetes has not yet scheduled a Pod.
+ */
 export function _AssertReleasedAgentRuntimeAssignmentDeadline(current: V1Job, assignmentExpiresAt: string, requiredDeadlineSeconds?: number): void
 {
 	const deadlineSeconds = current.spec?.activeDeadlineSeconds;
@@ -31,6 +30,12 @@ export function _AssertReleasedAgentRuntimeAssignmentDeadline(current: V1Job, as
 	if (!Number.isSafeInteger(startTime.getTime()) || startTime.getTime() + (deadlineSeconds! * 1_000) > assignmentExpiresAtEpochMilliseconds) throw new Error("released runtime Job can outlive its absolute assignment expiry");
 }
 
+/**
+ * Produce the UID- and resource-version-fenced patch that releases one exact suspended Job.
+ *
+ * The deadline is calculated against both the durable assignment and the controller lease, so a
+ * slow Kubernetes request cannot turn a previously valid assignment into a longer execution grant.
+ */
 export function _PlanAgentRuntimeJobRelease(current: V1Job, expected: V1Job, assignmentExpiresAt: string, releaseLeaseExpiresAt: string, requestTimeoutMilliseconds: number): AgentControllerJobReleasePlan
 {
 	const assignmentExpiresAtEpochMilliseconds = _CanonicalUtcEpochMilliseconds(assignmentExpiresAt);

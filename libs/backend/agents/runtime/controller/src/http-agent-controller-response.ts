@@ -3,6 +3,7 @@ import { ___ParseAndValidateJson } from "@opencrane/util";
 
 const _MAX_RESPONSE_BYTES = 64 * 1024;
 
+/** Validate one bounded opaque identifier returned by the internal controller authority. */
 export function _IsAgentControllerIdentifier(value: unknown): value is string
 {
 	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
@@ -25,6 +26,7 @@ function _AsObject(value: unknown): Record<string, unknown> | null
 	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
 
+/** Read a response under the fixed byte ceiling before applying its endpoint-specific validator. */
 export async function _ReadAndValidateAgentControllerJson<T, TArguments extends readonly unknown[]>(response: Response, validate: (candidate: unknown, ...arguments_: TArguments) => T, ...validatorArguments: TArguments): Promise<T>
 {
 	const text = await _ReadBoundedText(response);
@@ -68,6 +70,7 @@ function _ParseLease(value: unknown): AgentControllerRunAttemptClaimLease
 	return { eventId: lease.eventId, claimedAt: lease.claimedAt, deliveryCount: lease.deliveryCount, expiresAt: lease.expiresAt };
 }
 
+/** Parse one durable runtime-attempt claim without accepting untyped response fields. */
 export function _ParseAgentControllerClaim(value: unknown): AgentControllerRunAttemptClaim
 {
 	const root = _AsObject(value);
@@ -76,6 +79,7 @@ export function _ParseAgentControllerClaim(value: unknown): AgentControllerRunAt
 	return { lease: _ParseLease(root.lease), attempt: { runId: attempt.runId, attempt: attempt.attempt, siloId: attempt.siloId, agentServiceId: attempt.agentServiceId, agentRevisionId: attempt.agentRevisionId, inputSnapshotDigest: attempt.inputSnapshotDigest, namespace: attempt.namespace, workloadProfile: attempt.workloadProfile, bootstrapReference: attempt.bootstrapReference, litellmKey: attempt.litellmKey } };
 }
 
+/** Parse one exact workload-release claim before it can reach the Kubernetes adapter. */
 export function _ParseAgentControllerWorkloadReleaseClaim(value: unknown): AgentControllerRunWorkloadReleaseClaim
 {
 	const root = _AsObject(value);
@@ -84,6 +88,7 @@ export function _ParseAgentControllerWorkloadReleaseClaim(value: unknown): Agent
 	return { lease: _ParseLease(root.lease), workload: { runId: workload.runId, attempt: workload.attempt, siloId: workload.siloId, agentServiceId: workload.agentServiceId, agentRevisionId: workload.agentRevisionId, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadUid: workload.workloadUid, workloadProfile: workload.workloadProfile, assignmentExpiresAt: workload.assignmentExpiresAt, bootstrapReference: workload.bootstrapReference } };
 }
 
+/** Confirm the assignment endpoint echoed the command's exact run, attempt, and workload UID. */
 export function _ParseAgentControllerAssignmentResult(value: unknown, command: AgentControllerRunAttemptAssignmentCommand): AgentControllerRunAttemptAssignmentResult
 {
 	const root = _AsObject(value);
@@ -91,6 +96,7 @@ export function _ParseAgentControllerAssignmentResult(value: unknown, command: A
 	return { outcome: root.outcome, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid };
 }
 
+/** Confirm the first-Pod registration endpoint echoed the exact command and Pod UID. */
 export function _ParseAgentControllerRegistrationResult(value: unknown, command: AgentControllerRunWorkloadRegistrationCommand): AgentControllerRunWorkloadRegistrationResult
 {
 	const root = _AsObject(value);
@@ -98,6 +104,7 @@ export function _ParseAgentControllerRegistrationResult(value: unknown, command:
 	return { outcome: root.outcome, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid, podUid: command.podUid };
 }
 
+/** Parse the bounded count returned after maintenance removes delivered outbox records. */
 export function _ParseAgentControllerPrunedCount(value: unknown): number
 {
 	const root = _AsObject(value);
