@@ -2342,7 +2342,6 @@ ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_persona_prof
 ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_question_set_id_question_set_version_fkey" FOREIGN KEY ("question_set_id", "question_set_version") REFERENCES "persona_question_sets"("question_set_id", "version") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "persona_interviews" ADD CONSTRAINT "persona_interviews_refresh_configuration_change_id_fkey" FOREIGN KEY ("refresh_configuration_change_id") REFERENCES "personal_configuration_changes"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "persona_interview_answers" ADD CONSTRAINT "persona_interview_answers_interview_id_fkey" FOREIGN KEY ("interview_id") REFERENCES "persona_interviews"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -3668,7 +3667,6 @@ END;
 $$;
 CREATE FUNCTION "enforce_persona_interview_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE expected_answers INTEGER; actual_answers INTEGER; question_set_state "PersonaQuestionSetState";
-        refresh_state "PersonalConfigurationChangeState"; refresh_user TEXT; refresh_profile TEXT; refresh_patch JSONB;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaInterview rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -3678,15 +3676,6 @@ BEGIN
         SELECT "state" INTO question_set_state FROM "persona_question_sets"
           WHERE "question_set_id" = NEW."question_set_id" AND "version" = NEW."question_set_version" FOR UPDATE;
         IF question_set_state IS DISTINCT FROM 'reviewed' THEN RAISE EXCEPTION 'PersonaInterview requires a Reviewed question set'; END IF;
-        IF NEW."refresh_configuration_change_id" IS NOT NULL THEN
-            SELECT "state", "user_id", "persona_profile_id", "requested_patch"
-              INTO refresh_state, refresh_user, refresh_profile, refresh_patch
-              FROM "personal_configuration_changes" WHERE "id" = NEW."refresh_configuration_change_id" FOR UPDATE;
-            IF refresh_state IS DISTINCT FROM 'accepted' OR refresh_user IS DISTINCT FROM NEW."user_id"
-               OR refresh_profile IS DISTINCT FROM NEW."persona_profile_id" OR refresh_patch IS DISTINCT FROM '{"kind":"persona_refresh"}'::jsonb THEN
-                RAISE EXCEPTION 'PersonaInterview refresh must bind one accepted owner persona_refresh proposal';
-            END IF;
-        END IF;
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'completed' THEN RAISE EXCEPTION 'completed PersonaInterview evidence is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND (
