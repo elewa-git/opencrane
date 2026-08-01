@@ -54,6 +54,7 @@ Internally, the source is grouped by responsibility:
 - `_PersonalConfigurationOpenapiPaths` contributes the configuration endpoints to the server API.
 - `UPGRADE_SESSION_TOOL` and `UPGRADE_SESSION_TOOL_REVISION` describe the built-in future-change tool.
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
+- `UpgradeSessionProposalRepository` is the narrow runtime-facing contract for proposing that future change.
 - `PrismaUpgradeSessionProposalRepository` maps an accepted runtime candidate to the proposal UoW.
 
 All use cases, persistence contracts, transaction-scoped repositories, result vocabularies, and
