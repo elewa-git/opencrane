@@ -15,7 +15,7 @@ export enum AgentServiceKinds
 }
 
 /** Product role performed by an agent service. */
-export type AgentServiceKind = "personal" | "managed";
+export type AgentServiceKind = AgentServiceKinds;
 
 /** Lifecycle state of a stable agent service identity. */
 export enum AgentServiceStates

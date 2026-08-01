@@ -12,6 +12,17 @@ import type { AuthorizationScope } from "@opencrane/models/authorization";
  */
 export const MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE = "opencrane-memory-gateway";
 
+/** Provenance source vocabulary shared by memory catalogues and snapshot readers. */
+export enum MemoryFactProvenanceSourceKinds
+{
+	/** A conversation message supplied the fact evidence. */
+	Message = "message",
+	/** An immutable artifact revision supplied the fact evidence. */
+	Artifact = "artifact",
+	/** An explicitly authenticated user statement supplied the fact evidence. */
+	ExplicitUserFact = "explicit-user-fact",
+}
+
 /** Durable memory mutation requested through the memory gateway. */
 export enum MemoryMutationKind
 {

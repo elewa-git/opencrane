@@ -1,5 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
-import type { RunInputSnapshot } from "@opencrane/contracts";
+import { RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaChildRunReservationRepository } from "../prisma-child-run-reservation-repository.js";
@@ -8,7 +8,7 @@ import { __DigestRunInputSnapshot } from "../run-input-snapshot-digest.js";
 /** Builds a digest-sealed snapshot with the smallest valid runtime input for a reservation test. */
 function _snapshot(runId: string, serviceId: string, revisionId: string): RunInputSnapshot
 {
-	const value = { runId, siloId: "silo-1", agentServiceId: serviceId, agentRevisionId: revisionId, snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: { scope: "none" }, integrationAssignments: [], modelRoute: { alias: "test" }, budgetPolicy: { maxTokens: 1_000, maxCostUsdMicros: 5_000_000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-30T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "v1", compiledAt: "2026-07-26T00:00:00.000Z" } as const;
+	const value = { runId, siloId: "silo-1", agentServiceId: serviceId, agentRevisionId: revisionId, snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: { scope: "none" }, integrationAssignments: [], modelRoute: { alias: "test" }, budgetPolicy: { maxTokens: 1_000, maxCostUsdMicros: 5_000_000 }, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key", fleetMembershipAssertionId: "assertion", fleetMembershipPayloadDigest: `sha256:${"a".repeat(64)}`, fleetMembershipTrustedUntil: "2026-07-30T00:00:00.000Z" }, capabilitySetDigest: `sha256:${"b".repeat(64)}`, effectiveContractDigest: `sha256:${"c".repeat(64)}`, promptCompilerVersion: "v1", compiledAt: "2026-07-26T00:00:00.000Z" } as const;
 	return { ...value, digest: __DigestRunInputSnapshot(value) };
 }
 

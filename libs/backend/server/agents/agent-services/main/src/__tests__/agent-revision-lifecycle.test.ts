@@ -1,4 +1,4 @@
-import type { AgentRevision, AgentRevisionContent, AgentService } from "@opencrane/models/agents";
+import { AgentServiceKinds, type AgentRevision, type AgentRevisionContent, type AgentService } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
@@ -19,7 +19,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 
 	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
 	{
-		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === "managed").sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
+		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === AgentServiceKinds.Managed).sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
 	}
 
 	async getService(id: string, siloId: string): Promise<AgentService | null>
@@ -39,7 +39,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 	async createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
 	{
 		const serviceId = `service-${++this.counter}`;
-		const service: AgentService = { id: serviceId, siloId: command.siloId, kind: "managed", name: command.name, state: "draft", activeRevisionId: null, workloadProfile: command.workloadProfile, createdAt, updatedAt: createdAt };
+		const service: AgentService = { id: serviceId, siloId: command.siloId, kind: AgentServiceKinds.Managed, name: command.name, state: "draft", activeRevisionId: null, workloadProfile: command.workloadProfile, createdAt, updatedAt: createdAt };
 		const revision = this._append(serviceId, 1, null, null, command.content, command.authoredBy, command.changeMessage, createdAt);
 		this.services.set(serviceId, service);
 		return { outcome: "created", service, revision };

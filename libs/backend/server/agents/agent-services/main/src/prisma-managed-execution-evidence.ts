@@ -1,7 +1,7 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState, FleetMembershipScopeKind, GrantScope, GrantSubjectType } from "@prisma/client";
 import type { Prisma } from "@prisma/client";
 
-import type { ManagedRunInputScopeAttachment } from "@opencrane/contracts";
+import { RunInputSnapshotIdentityKinds, type ManagedRunInputScopeAttachment } from "@opencrane/contracts";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
 import type { AuthorizationScope } from "@opencrane/models/authorization";
@@ -70,7 +70,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			nowEpochMs: transaction.admittedAtEpochMs,
 			maximumStalenessMs: this.config.maximumStalenessMs,
 		});
-		if (membership.outcome === "denied" || membership.evidence.subjectId !== principal) return { outcome: "denied", reason: "membership_stale" };
+		if ("reason" in membership || membership.evidence.subjectId !== principal) return { outcome: "denied", reason: "membership_stale" };
 
 		const declared = revision.scopeAttachments.map(_Attachment);
 		if (declared.some(_IsPersonalAttachment)) return { outcome: "denied", reason: "memory_scope_unavailable" };
@@ -97,7 +97,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 			outcome: "loaded",
 			value: {
 				identity: {
-					kind: "service",
+					kind: RunInputSnapshotIdentityKinds.Service,
 					executionSubjectId: principal,
 					agentServiceId: command.agentServiceId,
 					organizationId: membership.evidence.organizationId,

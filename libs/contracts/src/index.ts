@@ -26,7 +26,7 @@ export {
 } from "./cluster-tenant.types.js";
 export { GrantAccess, GrantScope, GrantSubjectType, type Grant } from "./grant.types.js";
 export { type Group } from "./group.types.js";
-export { MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE, MemoryMutationKind, type MemoryDatasetIdentity, type MemoryFactReference, type MemoryMutationRequest, type MemoryProvenance } from "./memory.types.js";
+export { MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE, MemoryFactProvenanceSourceKinds, MemoryMutationKind, type MemoryDatasetIdentity, type MemoryFactReference, type MemoryMutationRequest, type MemoryProvenance } from "./memory.types.js";
 export { McpServerStatus, McpServerTransport, type McpServer, type McpServerCredential } from "./mcp-server.types.js";
 export {
   McpApprovalStatus,

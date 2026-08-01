@@ -12,12 +12,12 @@ authority**. A runtime can request memory actions only through the control plane
 | Component | Responsibility |
 |---|---|
 | Cognee | Durable memory content and retrieval |
-| OpenCrane memory catalogue | Dataset identity, digest, provenance, consent and sensitivity metadata |
-| Run input compiler | Selects authorised memory evidence for one run snapshot |
+| OpenCrane agent-memory catalogue | Dataset identity, digest, provenance, consent and sensitivity metadata |
+| Personal-memory selector | Selects a verified user's dataset and gateway-selected fact references for one run snapshot |
 | Runtime | Proposes a memory action; never selects another user's dataset |
 
-OpenCrane does not duplicate fact text in its product database. Its planned write contract records a
-content digest and exact provenance only after Cognee has durably accepted the content.
+OpenCrane does not duplicate fact text in its product database. The catalogue records a content
+digest and exact provenance only after Cognee has durably accepted the content.
 
 ## Personal dataset binding
 
@@ -71,5 +71,6 @@ governed external actions subject to the same approval, receipt and audit bounda
 - An unavailable memory transport does not fabricate a result.
 - Runtime-local scratch is never promoted to durable memory implicitly.
 
-Source: [`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
+Source: [`libs/backend/agents/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/memory/main/README.md),
+[`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md),
 and [`libs/backend/_server/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).

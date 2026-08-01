@@ -1,13 +1,14 @@
 import type { ManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import { ManagedExecutionIdentityEnvelopeSource } from "../managed-execution-identity-envelope-source.js";
 
 /** Creates one managed service authority accepted by the source adapter. */
 function _Run(): InitialRunAuthority
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "managed", effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null };
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null };
 }
 
 /** Creates the admission command with the canonical service principal. */

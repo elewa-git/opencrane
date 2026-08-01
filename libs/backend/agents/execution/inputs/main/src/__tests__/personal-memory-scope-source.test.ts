@@ -36,7 +36,7 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 				memoryFacts: [{ datasetId: "dataset-1", factId: "fact-1", contentDigest: _DIGEST_A, provenance: [] }, { datasetId: "dataset-1", factId: "fact-2", contentDigest: _DIGEST_B, provenance: [] }],
 			},
 		});
-		expect(datasets.findActivePersonalDataset).toHaveBeenCalledWith({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" });
+		expect(datasets.findActivePersonalDataset).toHaveBeenCalledWith(transaction, { siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" });
 		expect(selector.select).toHaveBeenCalledWith({ siloId: "silo-1", cogneeDatasetId: "cognee-personal-1", subjectId: "user-1", queryText: "what did we decide", maxFacts: 8 });
 	});
 

@@ -212,6 +212,27 @@
         "contract": "SkillCatalogueRepository",
         "contractImportPath": "./skill-catalogue.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-repository.ts",
+        "adapter": "PrismaMemoryCatalogRepository",
+        "contract": "MemoryCatalogRepository",
+        "contractImportPath": "./memory-catalog.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-collision-repository.ts",
+        "adapter": "PrismaMemoryCatalogCollisionRepository",
+        "contract": "MemoryCatalogCollisionRepository",
+        "contractImportPath": "./memory-catalog.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/memory/main/src/prisma-personal-memory-admission-repository.ts",
+        "adapter": "PrismaPersonalMemoryAdmissionRepository",
+        "contract": "PersonalMemoryAdmissionRepository",
+        "contractImportPath": "./personal-memory-dataset.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -328,6 +349,22 @@
           {
             "adapter": "PrismaPersonaOnboardingStatusRepository",
             "importPath": "./prisma-persona-onboarding-status-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/memory/main/src/prisma-memory-catalog-unit-of-work.ts",
+        "adapter": "PrismaMemoryCatalogUnitOfWork",
+        "contract": "MemoryCatalogUnitOfWork",
+        "contractImportPath": "./memory-catalog.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaMemoryCatalogRepository",
+            "importPath": "./prisma-memory-catalog-repository.js"
+          },
+          {
+            "adapter": "PrismaMemoryCatalogCollisionRepository",
+            "importPath": "./prisma-memory-catalog-collision-repository.js"
           }
         ]
       }

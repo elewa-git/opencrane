@@ -1,6 +1,7 @@
 import { AgentRevisionState, AgentServiceKind, AgentServiceState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import type { RunAuthoritySource, SessionAssemblyCommand, SessionAssemblyLoad } from "./session-assembly.types.js";
 
@@ -38,7 +39,7 @@ export class PrismaRunAuthoritySource implements RunAuthoritySource
 			value: {
 				agentServiceId: service.id,
 				agentRevisionId: service.activeRevision.id,
-				agentKind: service.kind === AgentServiceKind.Personal ? "personal" : "managed",
+				agentKind: service.kind === AgentServiceKind.Personal ? AgentServiceKinds.Personal : AgentServiceKinds.Managed,
 				effectiveContractDigest: service.activeRevision.digest,
 				promptCompilerVersion: service.activeRevision.promptPolicyVersion,
 				trigger: command.trigger,

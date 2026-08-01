@@ -1,6 +1,7 @@
-import { __ResolvePersonalMemoryDataset } from "@opencrane/backend/agents/personal/memory";
-import type { PersonalMemoryDatasetRepository } from "@opencrane/backend/agents/personal/memory";
+import { __ResolvePersonalMemoryDataset, PersonalMemoryDatasetResolutionOutcomes, type PersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import type { PersonalMemoryFactSelector } from "./memory-fact-selector.types.js";
 import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad, ThreadContextInput } from "./session-assembly.types.js";
@@ -15,15 +16,15 @@ const _MAX_QUERY_CHARACTERS = 2_000;
 export class PersonalMemoryScopeSource implements MemoryScopeSource
 {
 	/** Product-database authority for exact personal dataset selection. */
-	private readonly datasets: PersonalMemoryDatasetRepository;
+	private readonly personalMemory: PersonalMemoryAdmissionRepository;
 
 	/** Gateway-backed admission-time fact selector; it returns references and digests, never fact text. */
 	private readonly selector: PersonalMemoryFactSelector;
 
 	/** Creates the source over the injected personal-memory dataset authority and fact selector. */
-	constructor(datasets: PersonalMemoryDatasetRepository, selector: PersonalMemoryFactSelector)
+	constructor(personalMemory: PersonalMemoryAdmissionRepository, selector: PersonalMemoryFactSelector)
 	{
-		this.datasets = datasets;
+		this.personalMemory = personalMemory;
 		this.selector = selector;
 	}
 
@@ -31,12 +32,12 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, thread: ThreadContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
 	{
 		// 1. Personal datasets cannot enter a managed-service snapshot, even if a delegated user has signed membership.
-		if (run.agentKind !== "personal") return { outcome: "denied", reason: "memory_scope_unavailable" };
-		if (identity.kind !== "user") return { outcome: "denied", reason: "memory_scope_unavailable" };
+		if (run.agentKind !== AgentServiceKinds.Personal) return { outcome: "denied", reason: "memory_scope_unavailable" };
+		if (identity.kind !== RunInputSnapshotIdentityKinds.User) return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 2. Resolve the sole personal dataset from identity already verified at the admission fence.
-		const resolved = await __ResolvePersonalMemoryDataset(this.datasets, { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });
-		if (resolved.outcome === "denied") return resolved;
+		const resolved = await __ResolvePersonalMemoryDataset(this.personalMemory, transaction, { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });
+		if (resolved.outcome === PersonalMemoryDatasetResolutionOutcomes.Denied) return resolved;
 
 		// 3. Derive the recall query from the newest user turn frozen in the same transaction; a run
 		//    without any user message freezes only coordinates, so recall stays snapshot-bounded.
