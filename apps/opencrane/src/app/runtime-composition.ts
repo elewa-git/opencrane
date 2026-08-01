@@ -6,7 +6,7 @@ import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock
 import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/_server/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type AttemptObotKeyIssuer, type AttemptObotKeyMintRequest, type MintedAttemptModelKey, type MintedAttemptObotKey } from "@opencrane/backend/agents/execution/runs";
 import type { ObotAttemptKeyIssuer } from "@opencrane/backend/_server/obot-custody";
-import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
+import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
@@ -84,7 +84,7 @@ function _CreateAttemptObotKeyIssuer(integrations: IntegrationAuthorityRepositor
  * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root.
  * @returns Controller dispatch routers with no runtime or worker routes.
  */
-function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, integrationAuthority: IntegrationAuthorityRepository, obotAttemptKeys: ObotAttemptKeyIssuer | null): ControllerRuntimeComposition
+function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateAgentControllerTokenReviewer>, integrationAuthority: IntegrationAuthorityRepository, obotAttemptKeys: ObotAttemptKeyIssuer | null, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): ControllerRuntimeComposition
 {
 	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
@@ -104,7 +104,7 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
 			tokenReviewer,
 			namespace: namespaces.serverNamespace,
-			repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds),
+			authority: skillWorkloadAuthority,
 			logger: _log,
 		}),
 	};
@@ -120,23 +120,23 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
  * @param tokenReviewer - Reviewer that exposes only a validated skill workload identity.
  * @returns Skill bootstrap, input, and completion routers.
  */
-function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenReviewer: ReturnType<typeof _CreateSkillWorkloadTokenReviewer>): SkillWorkloadRuntimeComposition
+function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenReviewer: ReturnType<typeof _CreateSkillWorkloadTokenReviewer>, skillWorkloadAuthority: ReturnType<typeof _CreateSkillWorkloadExecutionAuthority>): SkillWorkloadRuntimeComposition
 {
 	return {
 		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({
 			tokenReviewer,
-			repository: new PrismaSkillWorkloadBootstrapRepository(prisma),
+			authority: skillWorkloadAuthority,
 			logger: _log,
 		}),
 		skillAuthoringInput: __CreateSkillAuthoringInputRouter({
 			tokenReviewer,
-			repository: new PrismaSkillAuthoringInputRepository(prisma),
+			authority: skillWorkloadAuthority,
 			artifactReader: _CreateSkillAuthoringArtifactReader(prisma),
 			logger: _log,
 		}),
 		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({
 			tokenReviewer,
-			repository: new PrismaSkillAuthoringCompletionRepository(prisma),
+			authority: skillWorkloadAuthority,
 			logger: _log,
 		}),
 	};
@@ -248,6 +248,8 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, namespaces.serverNamespace);
 	const skillWorkloadTokenReviewer = _CreateSkillWorkloadTokenReviewer(authApi);
 	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, namespaces);
+	const skillWorkloadUnitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma, config.claimLeaseMilliseconds);
+	const skillWorkloadAuthority = _CreateSkillWorkloadExecutionAuthority(skillWorkloadUnitOfWork);
 
 	// 3. One shared live custody resolver serves attempt-key scoping and compiled Obot addressing, so
 	// the two planes can never disagree about which MCP server an assignment resolves to.
@@ -255,8 +257,8 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 
 	// 4. Compose only named routers; `routes.ts` remains the single readable map of internal paths.
 	return {
-		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, integrationAuthority, obotAttemptKeys),
-		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer),
+		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer, integrationAuthority, obotAttemptKeys, skillWorkloadAuthority),
+		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer, skillWorkloadAuthority),
 		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway, integrationAuthority),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
 	};

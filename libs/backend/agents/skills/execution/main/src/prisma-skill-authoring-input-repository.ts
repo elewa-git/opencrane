@@ -1,24 +1,26 @@
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 
-import type { SkillAuthoringInputRecord, SkillAuthoringInputRepository } from "./skill-authoring-input.types.js";
+import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
+import type { SkillAuthoringInputPersistence } from "./skill-workload-unit-of-work.types.js";
 
 /** Prisma authority selecting one draft skill's immutable source only for its exact authoring Pod. */
-export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputRepository
+export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputPersistence
 {
-	/** Canonical OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient;
+	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
+	private readonly transaction: Prisma.TransactionClient;
 
 	/** Creates the authoring input authority over canonical Postgres. */
-	constructor(prisma: PrismaClient)
+	constructor(transaction: Prisma.TransactionClient)
 	{
-		this.prisma = prisma;
+		this.transaction = transaction;
 	}
 
 	/** Reads one active, published, fully-pinned artifact while sharing every relevant durable row lock. */
-	async loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
+	async load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
 	{
-		const rows = await this.prisma.$queryRaw<readonly _InputRow[]>(Prisma.sql`
+		// 1. Select every immutable coordinate under the reviewed worker identity before the broker sees it.
+		const rows = await this.transaction.$queryRaw<readonly _InputRow[]>(Prisma.sql`
 			SELECT workload."silo_id" AS "siloId", revision."artifact_id" AS "artifactId", revision."artifact_revision_id" AS "artifactRevisionId", revision."artifact_content_address" AS "contentAddress", artifact_revision."byte_length" AS "byteLength", artifact_revision."media_type" AS "mediaType"
 			FROM "skill_workloads" workload
 			JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id"
@@ -39,8 +41,8 @@ export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputR
 				AND revision."state" = 'draft'
 				AND artifact."state" = 'active'
 				AND artifact_revision."state" = 'published'
-			FOR SHARE OF workload, bootstrap, revision, artifact_revision, artifact
 		`);
+		// 2. End the read transaction before external ArtifactStore I/O; the broker verifies returned bytes anew.
 		if (rows.length !== 1 || !Number.isSafeInteger(Number(rows[0].byteLength)) || Number(rows[0].byteLength) < 0) return null;
 		return { siloId: rows[0].siloId, artifactId: rows[0].artifactId, artifactRevisionId: rows[0].artifactRevisionId, contentAddress: rows[0].contentAddress, byteLength: Number(rows[0].byteLength), mediaType: rows[0].mediaType };
 	}

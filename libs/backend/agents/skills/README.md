@@ -5,7 +5,7 @@
 | Package | What it owns |
 |---|---|
 | [controller](./controller/README.md) | The outbound reconciliation that turns a fenced workload claim into an exact still-suspended Job. |
-| [execution](./execution/main/README.md) | The controller-only Postgres claim and immutable suspended-Job assignment fence. |
+| [execution](./execution/main/README.md) | One short-lived Postgres unit of work for claim, assignment, release, bootstrap, and authoring-worker fences. |
 | [k8s-launcher](./k8s-launcher/README.md) | Pure, policy-validating Kubernetes Job shapes for isolated skill authoring and tool execution. |
 | [worker](./worker/README.md) | The fail-closed Python acknowledgement client for the governed worker-image build. |
 

@@ -35,7 +35,7 @@ export function __CreateSkillAuthoringInputRouter(dependencies: SkillAuthoringIn
 				response.status(401).json({ error: "worker_identity_denied" });
 				return;
 			}
-			const input = await dependencies.repository.loadForWorker(workloadId, identity);
+			const input = await dependencies.authority.loadForWorker(workloadId, identity);
 			if (input === null)
 			{
 				response.status(404).json({ error: "authoring_input_unavailable" });

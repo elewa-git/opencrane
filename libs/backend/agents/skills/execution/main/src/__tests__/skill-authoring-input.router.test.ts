@@ -13,7 +13,7 @@ function _App(overrides: Partial<SkillAuthoringInputRouterDependencies> = {})
 {
 	const dependencies: SkillAuthoringInputRouterDependencies = {
 		tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" }) },
-		repository: { loadForWorker: vi.fn().mockResolvedValue(_INPUT) },
+		authority: { loadForWorker: vi.fn().mockResolvedValue(_INPUT) },
 		artifactReader: { read: vi.fn().mockResolvedValue(new ReadableStream<Uint8Array>({ start(controller): void { controller.enqueue(Buffer.from("skill archive")); controller.close(); } })) },
 		logger: { error: vi.fn() },
 		...overrides,
@@ -36,13 +36,13 @@ describe("skill authoring input router", function _DescribeAuthoringInput()
 		expect(response.headers["x-opencrane-content-address"]).toBeUndefined();
 		expect(response.body.toString()).toBe("skill archive");
 		expect(dependencies.tokenReviewer.__Review).toHaveBeenCalledWith("projected-token", "opencrane-skill-authoring");
-		expect(dependencies.repository.loadForWorker).toHaveBeenCalledWith("workload-1", { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
+		expect(dependencies.authority.loadForWorker).toHaveBeenCalledWith("workload-1", { namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" });
 		expect(dependencies.artifactReader.read).toHaveBeenCalledWith(_INPUT);
 	});
 
 	it("refuses an oversized archive before the server mints a private read lease", async function _RejectsOversizedArchive()
 	{
-		const { app, dependencies } = _App({ repository: { loadForWorker: vi.fn().mockResolvedValue({ ..._INPUT, byteLength: 16 * 1024 * 1024 + 1 }) } });
+		const { app, dependencies } = _App({ authority: { loadForWorker: vi.fn().mockResolvedValue({ ..._INPUT, byteLength: 16 * 1024 * 1024 + 1 }) } });
 		const response = await request(app).get("/skill-authoring-workloads/workload-1/input").set("authorization", "Bearer projected-token");
 
 		expect(response.status).toBe(404);
@@ -54,12 +54,12 @@ describe("skill authoring input router", function _DescribeAuthoringInput()
 		const { app, dependencies } = _App({ tokenReviewer: { __Review: vi.fn().mockResolvedValue(null) } });
 		expect((await request(app).get("/skill-authoring-workloads/workload-1/input")).status).toBe(401);
 		expect((await request(app).get("/skill-authoring-workloads/workload-1/input").set("authorization", "Bearer projected-token")).status).toBe(401);
-		expect(dependencies.repository.loadForWorker).not.toHaveBeenCalled();
+		expect(dependencies.authority.loadForWorker).not.toHaveBeenCalled();
 	});
 
 	it("returns no artifact details when the exact workload and consumed bootstrap fence is unavailable", async function _RejectsStaleWorker()
 	{
-		const { app, dependencies } = _App({ repository: { loadForWorker: vi.fn().mockResolvedValue(null) } });
+		const { app, dependencies } = _App({ authority: { loadForWorker: vi.fn().mockResolvedValue(null) } });
 		const response = await request(app).get("/skill-authoring-workloads/workload-1/input").set("authorization", "Bearer projected-token");
 
 		expect(response.status).toBe(404);

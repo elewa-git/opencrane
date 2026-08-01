@@ -11,7 +11,7 @@ const _SUCCESS = { workloadId: "workload-1", outcome: "succeeded", testReport: {
 /** Builds one route with the exact authoring Pod identity reviewed. */
 function _App(overrides: Partial<SkillAuthoringCompletionRouterDependencies> = {})
 {
-	const dependencies: SkillAuthoringCompletionRouterDependencies = { tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" }) }, repository: { completeAtomically: vi.fn().mockResolvedValue("completed") }, logger: { error: vi.fn() }, ...overrides };
+	const dependencies: SkillAuthoringCompletionRouterDependencies = { tokenReviewer: { __Review: vi.fn().mockResolvedValue({ namespace: "opencrane-skill-authoring", serviceAccountName: "skill-authoring-default", podUid: "pod-uid-1" }) }, authority: { completeAtomically: vi.fn().mockResolvedValue("completed") }, logger: { error: vi.fn() }, ...overrides };
 	const app = express();
 	app.use(express.json());
 	app.use(__CreateSkillAuthoringCompletionRouter(dependencies));
@@ -31,10 +31,10 @@ describe("skill authoring completion router", function _DescribeAuthoringComplet
 
 	it("rejects unauthenticated, extended, and stale worker reports", async function _Rejects()
 	{
-		const { app, dependencies } = _App({ repository: { completeAtomically: vi.fn().mockResolvedValue("conflict") } });
+		const { app, dependencies } = _App({ authority: { completeAtomically: vi.fn().mockResolvedValue("conflict") } });
 		expect((await request(app).post("/skill-authoring-workloads:complete").send(_SUCCESS)).status).toBe(401);
 		expect((await request(app).post("/skill-authoring-workloads:complete").set("authorization", "Bearer projected-token").send({ ..._SUCCESS, output: "source" })).status).toBe(400);
 		expect((await request(app).post("/skill-authoring-workloads:complete").set("authorization", "Bearer projected-token").send({ workloadId: "workload-1", outcome: "failed", failureCode: "test_process_failed" })).status).toBe(409);
-		expect(dependencies.repository.completeAtomically).toHaveBeenCalledTimes(1);
+		expect(dependencies.authority.completeAtomically).toHaveBeenCalledTimes(1);
 	});
 });

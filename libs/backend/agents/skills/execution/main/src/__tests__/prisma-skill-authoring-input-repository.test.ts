@@ -18,20 +18,20 @@ describe("Prisma skill authoring input authority", function _DescribeAuthoringIn
 	{
 		const { repository } = _Prisma([{ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 13n, mediaType: "application/gzip" }]);
 
-		expect(await repository.loadForWorker("workload-1", _IDENTITY)).toEqual({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 13, mediaType: "application/gzip" });
+		expect(await repository.load("workload-1", _IDENTITY)).toEqual({ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: 13, mediaType: "application/gzip" });
 	});
 
 	it("fails closed when the exact authoring, consumed-bootstrap, active-artifact join finds no row", async function _RejectsForeignOrStaleWorker()
 	{
 		const { repository } = _Prisma([]);
 
-		expect(await repository.loadForWorker("workload-1", _IDENTITY)).toBeNull();
+		expect(await repository.load("workload-1", _IDENTITY)).toBeNull();
 	});
 
 	it("rejects an artifact length that cannot be represented safely in a signed read lease", async function _RejectsUnsafeLength()
 	{
 		const { repository } = _Prisma([{ siloId: "silo-1", artifactId: "artifact-1", artifactRevisionId: "revision-1", contentAddress: `sha256:${"a".repeat(64)}`, byteLength: BigInt(Number.MAX_SAFE_INTEGER) + 1n, mediaType: "application/gzip" }]);
 
-		expect(await repository.loadForWorker("workload-1", _IDENTITY)).toBeNull();
+		expect(await repository.load("workload-1", _IDENTITY)).toBeNull();
 	});
 });
