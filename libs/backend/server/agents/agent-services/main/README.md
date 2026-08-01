@@ -63,11 +63,13 @@ with a plain reason.
   `__ChangeAgentServiceState`, `__CompareAgentRevisions`, `__ReadAgentServiceHistory`, `__AdmitManagedRunNow`.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
   revisions, lineage, optimistic concurrency).
-- `__MaterializeAgentRevisionModelSelectionWithinTransaction` — the narrow transaction-scoped
-  operation used when personal configuration must combine an accepted model selection with its own
-  journal transition. Agent-services proves the frozen source, reconstructs its canonical content,
-  changes only the model definition, appends and publishes the next revision, and activates it. The
-  caller owns the surrounding transaction and final proposal compare-and-set.
+- `AgentRevisionModelSelectionRepository` and
+  `PrismaAgentRevisionModelSelectionRepository` — the port and transaction-scoped adapter used when
+  personal configuration must combine an accepted model selection with its own journal transition.
+  Agent-services proves the frozen source, reconstructs its canonical content, changes only the
+  model definition, appends and publishes the next revision, and activates it. The personal
+  configuration unit of work owns the surrounding Serializable transaction and final proposal
+  compare-and-set; agent-services never exposes its ORM delegates to the materializer.
 - `AgentRevisionModelSelectionMaterializationCodes` — the documented cross-package result vocabulary
   for that model-selection seam. It preserves its serialized outcomes while preventing personal
   configuration from inventing or drifting from agent-services' source-fence results.
@@ -100,9 +102,9 @@ same database update, so no retired service can still look runnable.
 
 The application mounts the exported Prisma composition and supplies the cross-domain run-admission
 port. This package owns its router, caller mapping, database adapters, revision persistence, and
-publication-audit wiring. Personal configuration may call the narrow transaction-scoped
-model-selection operation, but cannot reproduce its revision projection, Prisma mapping, or
-lifecycle. This package does not run agents or resolve skills/integrations itself. It fails closed:
+publication-audit wiring. A cross-domain unit of work may bind the model-selection repository to its
+transaction, but personal configuration cannot reproduce its revision projection, Prisma mapping,
+or lifecycle. This package does not run agents or resolve skills/integrations itself. It fails closed:
 any doubt is a `denied` outcome, never a silent partial publish.
 
 ## Dependency direction

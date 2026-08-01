@@ -4,8 +4,8 @@ export { PrismaAgentServicePublicationRepository } from "./prisma-agent-publicat
 export type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
 export { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
 export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagedRunTrigger, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
-export { __MaterializeAgentRevisionModelSelectionWithinTransaction } from "./prisma-agent-revision-writer.js";
-export { AgentRevisionModelSelectionMaterializationCodes } from "./prisma-agent-revision-writer.types.js";
+export { PrismaAgentRevisionModelSelectionRepository } from "./prisma-agent-revision-writer.js";
+export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./prisma-agent-revision-writer.types.js";
 export { PrismaAgentRevisionLifecycleRepository } from "./prisma-agent-revision-lifecycle.js";
 export { __CreateAgentServicesRouter } from "./agent-revision.router.js";
 export { _CreateAgentServicesRouter } from "./prisma-agent-services.router.js";

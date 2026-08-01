@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "owners": {
+    "repositories": [
+      {
+        "contract": "PersonalConfigurationMaterializationRepository",
+        "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "AgentRevisionModelSelectionRepository",
+        "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "AgentRevisionWriterRepository",
+        "importPath": "./prisma-agent-revision-writer.types.js"
+      }
+    ],
+    "unitsOfWork": [
+      {
+        "contract": "PersonalConfigurationMaterializationUnitOfWork",
+        "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      }
+    ],
+    "compositions": [
+      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
+    ]
+  },
+  "exemptions": []
+}

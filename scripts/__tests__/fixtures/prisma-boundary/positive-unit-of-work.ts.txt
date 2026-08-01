@@ -1,0 +1,17 @@
+import type { PrismaClient } from "@prisma/client";
+import type { WidgetUnitOfWork } from "./widget.types.js";
+
+export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
+{
+	private readonly prisma: PrismaClient;
+
+	constructor(prisma: PrismaClient)
+	{
+		this.prisma = prisma;
+	}
+
+	async run(): Promise<unknown>
+	{
+		return this.prisma.$transaction(async function _Run(transaction) { return transaction; });
+	}
+}

@@ -4,7 +4,8 @@ import type { Logger } from "pino";
 
 import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
 
-import { _PrismaPersonalConfigurationMaterializer } from "./materialization/prisma-personal-configuration-materializer.js";
+import { _PersonalConfigurationMaterializer } from "./materialization/personal-configuration-materializer.js";
+import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "./materialization/prisma-personal-configuration-materialization-unit-of-work.js";
 import { __CreatePersonalConfigurationRouter } from "./personal-configuration.router.js";
 import type { PersonalConfigurationCaller } from "./personal-configuration.router.types.js";
 import { PrismaPersonalConfigurationChangeRepository } from "./prisma-personal-configuration-repository.js";
@@ -25,7 +26,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 export function _CreatePersonalConfigurationRouter(prisma: PrismaClient, logger: Logger): Router
 {
 	const changes = new PrismaPersonalConfigurationChangeRepository(prisma, logger);
-	const materializer = new _PrismaPersonalConfigurationMaterializer(prisma, logger);
+	const materializer = new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma), logger);
 	return __CreatePersonalConfigurationRouter({
 		resolveCaller: _resolveCaller,
 		changes,

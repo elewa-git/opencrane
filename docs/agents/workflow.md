@@ -95,8 +95,10 @@ does **not** update that package's `README.md` in the same change is an incomple
 review gate treats a stale or missing package README as a finding. See
 [`package-docs.md`](./package-docs.md) for the standard.
 
-Run `scripts/agent-style-check.sh` and `npm run check:module-growth` before delegating. The first
-checks TypeScript mechanics; the second produces language-neutral architecture candidates.
+Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`, and
+`npm run check:module-growth` before delegating. The first checks TypeScript mechanics and invokes
+the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting
+that gate separately; the final command produces language-neutral architecture candidates.
 Mechanical errors are cheaper to fix before review, while module-growth warnings give the reviewer
 the exact files that need a responsibility inventory.
 
