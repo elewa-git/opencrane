@@ -3,7 +3,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validatePolicy } from "./prisma-boundary/core.mjs";
+import { findingDelta, inspectPrismaBoundary, isProductionTypeScript, prismaModelDelegates, resolveExemptions, validateOwnerDeclarations, validatePolicy } from "./prisma-boundary/core.mjs";
 
 /** Repository root for all path and Git operations. */
 const _ROOT = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "utf8" }).trim();
@@ -32,6 +32,32 @@ function _Main()
 	const scope = _Scope(process.argv.slice(2));
 	const files = scope.files;
 	let findings = 0;
+	const ownerPaths = [...new Set([...policy.owners.repositories, ...policy.owners.unitsOfWork].map(function _Path(entry) { return entry.path; }))];
+	for (const path of ownerPaths)
+	{
+		const absolutePath = join(_ROOT, path);
+		if (!existsSync(absolutePath))
+		{
+			console.error(`${path}:1\tERROR\tPRISMA-POLICY-OWNER\tpolicy owner path does not exist`);
+			findings += 1;
+			continue;
+		}
+		const source = readFileSync(absolutePath, "utf8");
+		for (const finding of validateOwnerDeclarations(path, source, policy.owners))
+		{
+			console.error(`${finding.path}:${finding.line}\tERROR\t${finding.rule}\t${finding.message}`);
+			findings += 1;
+		}
+	}
+	for (const path of policy.owners.compositions)
+	{
+		const absolutePath = join(_ROOT, path);
+		if (!existsSync(absolutePath) || !readFileSync(absolutePath, "utf8").includes('from "@prisma/client"'))
+		{
+			console.error(`${path}:1\tERROR\tPRISMA-POLICY-COMPOSITION\tcomposition path must exist and import @prisma/client`);
+			findings += 1;
+		}
+	}
 	for (const path of files)
 	{
 		if (!isProductionTypeScript(path) || !existsSync(join(_ROOT, path))) continue;

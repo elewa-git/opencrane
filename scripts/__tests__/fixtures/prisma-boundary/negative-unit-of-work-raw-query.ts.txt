@@ -1,6 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
 import type { WidgetUnitOfWork } from "./widget.types.js";
-import { PrismaWidgetRepository } from "./prisma-widget-repository.js";
 
 export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
 {
@@ -13,6 +12,9 @@ export class PrismaWidgetUnitOfWork implements WidgetUnitOfWork
 
 	async run(): Promise<unknown>
 	{
-		return this.prisma.$transaction(async function _Run(tx) { return new PrismaWidgetRepository(tx); });
+		return this.prisma.$transaction(async function _Run(transaction)
+		{
+			return transaction.$queryRaw`SELECT 1`;
+		});
 	}
 }

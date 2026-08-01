@@ -1,0 +1,20 @@
+import type { PrismaClient } from "@prisma/client";
+
+export class RawQueryExamples
+{
+	private readonly prisma: PrismaClient;
+
+	constructor(prisma: PrismaClient)
+	{
+		this.prisma = prisma;
+	}
+
+	execute(unrelated: { readonly $queryRaw: () => unknown }): unknown
+	{
+		// this.prisma.$queryRaw`comment only`;
+		const example = "this.prisma['$executeRaw'](string only)";
+		unrelated.$queryRaw();
+		unrelated["$queryRaw"]();
+		return example;
+	}
+}

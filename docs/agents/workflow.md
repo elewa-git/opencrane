@@ -99,6 +99,11 @@ Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <
 `npm run check:module-growth` before delegating. The first checks TypeScript mechanics and invokes
 the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting
 that gate separately; the final command produces language-neutral architecture candidates.
+The Prisma gate authorizes exact adapter class/path/contract tuples, raw-query ownership, transaction
+ownership, and transaction-scoped repository construction. A policy-only rename or stale
+construction declaration is therefore a failing change, not an implicit exemption. Construction
+also proves the target constructor and exact callback binding are transaction-scoped; a root client
+substitution fails even when the class and import still match policy.
 Mechanical errors are cheaper to fix before review, while module-growth warnings give the reviewer
 the exact files that need a responsibility inventory.
 

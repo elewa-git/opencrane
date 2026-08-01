@@ -1,5 +1,5 @@
-import { delegateMatches, transactionMatches } from "./prisma-bindings.mjs";
-import { classes, enclosingClass, importedBindings, ownerIdentity, ownsContract } from "./typescript-ownership.mjs";
+import { delegateMatches, rawQueryMatches, transactionMatches } from "./prisma-bindings.mjs";
+import { authorizedOwner, classes, enclosingClass, importedBindings, isTransactionScopedConstruction, ownerIdentity, repositoryAcceptsTransactionClient, repositoryConstructions } from "./typescript-ownership.mjs";
 
 /** Returns whether a path is hand-maintained production TypeScript. */
 export function isProductionTypeScript(path)
@@ -23,11 +23,11 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	const imports = importedBindings(source);
 	const findings = [];
 	const prismaImport = /^import[^;]+from\s+"@prisma\/client";/gmu.exec(source);
-	const authorizedOwner = classOwners.some(function _Authorized(candidate)
+	const hasAuthorizedOwner = classOwners.some(function _Authorized(candidate)
 	{
-		return ownsContract(candidate, imports, owners.repositories) || ownsContract(candidate, imports, owners.unitsOfWork);
+		return authorizedOwner(candidate, imports, owners.repositories, path) !== undefined || authorizedOwner(candidate, imports, owners.unitsOfWork, path) !== undefined;
 	});
-	if (prismaImport !== null && !authorizedOwner && !owners.compositions.includes(path))
+	if (prismaImport !== null && !hasAuthorizedOwner && !owners.compositions.includes(path))
 	{
 		findings.push(_Finding(path, source, prismaImport.index, "PRISMA-IMPORT-OWNER", "@prisma/client import outside an authoritative Repository, UnitOfWork, or exact composition owner", "module"));
 	}
@@ -35,18 +35,76 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 	{
 		if (exemption.has("transaction")) continue;
 		const owner = enclosingClass(classOwners, match.index ?? 0);
-		if (!ownsContract(owner, imports, owners.unitsOfWork))
+		if (authorizedOwner(owner, imports, owners.unitsOfWork, path) === undefined)
 		{
-			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-TRANSACTION-OWNER", "direct $transaction call outside a class implementing an imported UnitOfWork contract", ownerIdentity(source, classOwners, match.index ?? 0)));
+			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-TRANSACTION-OWNER", "direct $transaction call outside an exact policy-authorized UnitOfWork adapter", ownerIdentity(source, classOwners, match.index ?? 0)));
+		}
+	}
+	for (const match of rawQueryMatches(source, imports))
+	{
+		if (exemption.has("raw-query")) continue;
+		const owner = enclosingClass(classOwners, match.index ?? 0);
+		if (authorizedOwner(owner, imports, owners.repositories, path) === undefined)
+		{
+			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-RAW-QUERY-OWNER", `direct ${match.method} access outside an exact policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
 		}
 	}
 	for (const match of delegateMatches(source, modelDelegates, imports))
 	{
 		if (exemption.has("delegate")) continue;
 		const owner = enclosingClass(classOwners, match.index ?? 0);
-		if (!ownsContract(owner, imports, owners.repositories))
+		if (authorizedOwner(owner, imports, owners.repositories, path) === undefined)
 		{
-			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-DELEGATE-OWNER", `direct ${match.delegate}.${match.method} call outside a class implementing an authoritative Repository contract`, ownerIdentity(source, classOwners, match.index ?? 0)));
+			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-DELEGATE-OWNER", `direct ${match.delegate}.${match.method} call outside an exact policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
+		}
+	}
+	for (const construction of owners.compositions.includes(path) ? [] : repositoryConstructions(source, classOwners, imports))
+	{
+		const policyOwner = authorizedOwner(construction.owner, imports, [...owners.repositories, ...owners.unitsOfWork], path);
+		const declared = policyOwner?.constructs.some(function _Declared(candidate)
+		{
+			return candidate.adapter === construction.adapter && candidate.importPath === construction.importPath;
+		});
+		if (!declared || !isTransactionScopedConstruction(source, construction, imports))
+		{
+			findings.push(_Finding(path, source, construction.index, "PRISMA-REPOSITORY-CONSTRUCTION", `${construction.adapter} construction must be declared and receive the exact Prisma transaction binding`, ownerIdentity(source, classOwners, construction.index)));
+		}
+	}
+	return findings;
+}
+
+/** Validates that policy-declared owners and construction lists still match the live tree. */
+export function validateOwnerDeclarations(path, source, owners)
+{
+	const findings = [];
+	const classOwners = classes(source);
+	const imports = importedBindings(source);
+	const constructions = repositoryConstructions(source, classOwners, imports);
+	for (const declaration of [...owners.repositories, ...owners.unitsOfWork].filter(function _Path(entry) { return entry.path === path; }))
+	{
+		const owner = classOwners.find(function _Adapter(candidate) { return candidate.name === declaration.adapter; });
+		if (authorizedOwner(owner, imports, [declaration], path) === undefined)
+		{
+			findings.push(_Finding(path, source, 0, "PRISMA-POLICY-OWNER", `policy owner ${declaration.adapter} no longer implements its exact declared contract import`, `class:${declaration.adapter}`));
+			continue;
+		}
+		if (owners.repositories.includes(declaration) && !repositoryAcceptsTransactionClient(source, owner, imports))
+		{
+			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-OWNER", `repository owner ${declaration.adapter} constructor must accept Prisma.TransactionClient`, `class:${declaration.adapter}`));
+		}
+		const actual = constructions.filter(function _Owner(construction) { return construction.owner?.name === declaration.adapter; });
+		const actualKeys = actual.map(_ConstructionKey).sort();
+		const declaredKeys = declaration.constructs.map(_ConstructionKey).sort();
+		if (JSON.stringify(actualKeys) !== JSON.stringify(declaredKeys))
+		{
+			findings.push(_Finding(path, source, owner.start, "PRISMA-POLICY-CONSTRUCTION", `policy construction list for ${declaration.adapter} does not match its repository construction`, `class:${declaration.adapter}`));
+		}
+		for (const construction of actual)
+		{
+			if (!isTransactionScopedConstruction(source, construction, imports))
+			{
+				findings.push(_Finding(path, source, construction.index, "PRISMA-POLICY-CONSTRUCTION", `${construction.adapter} must receive the exact Prisma transaction binding`, `class:${declaration.adapter}`));
+			}
 		}
 	}
 	return findings;
@@ -89,4 +147,10 @@ export function findingDelta(baseFindings, currentFindings)
 function _Finding(path, source, offset, rule, message, owner)
 {
 	return { path, line: source.slice(0, offset).split("\n").length, rule, message, owner };
+}
+
+/** Returns the stable identity of one repository construction. */
+function _ConstructionKey(construction)
+{
+	return `${construction.adapter}\u0000${construction.importPath}`;
 }

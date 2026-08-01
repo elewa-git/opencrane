@@ -28,6 +28,34 @@ export function transactionMatches(source, imports)
 	return matches;
 }
 
+/** Finds raw-query property access rooted only in imported Prisma client symbols. */
+export function rawQueryMatches(source, imports)
+{
+	const methodNames = ["$executeRaw", "$executeRawUnsafe", "$queryRaw", "$queryRawUnsafe"];
+	const matches = [];
+	const code = _CodeOnly(source);
+	for (const expression of _PrismaClientExpressions(source, imports))
+	{
+		const root = `(?<![\\w$.])${_EscapeRegex(expression)}(?![\\w$])`;
+		for (const method of methodNames)
+		{
+			const escapedMethod = _EscapeRegex(method);
+			const dot = new RegExp(`${root}\\s*\\.\\s*${escapedMethod}\\b`, "gu");
+			for (const match of code.matchAll(dot)) matches.push({ index: match.index, method });
+
+			const computed = new RegExp(`${root}\\s*\\[\\s*([\"'])${escapedMethod}\\1\\s*\\]`, "gu");
+			for (const match of source.matchAll(computed))
+			{
+				if (_ExpressionIsCode(code, match.index ?? 0, expression)) matches.push({ index: match.index, method });
+			}
+
+			const destructured = new RegExp(`\\bconst\\s*\\{[^}]*(?<![\\w$])${escapedMethod}(?![\\w$])[^}]*\\}\\s*=\\s*${root}`, "gu");
+			for (const match of code.matchAll(destructured)) matches.push({ index: match.index, method });
+		}
+	}
+	return _UniqueRawMatches(matches);
+}
+
 /** Finds direct model calls plus delegate aliases/destructures rooted in Prisma clients. */
 export function delegateMatches(source, modelDelegates, imports)
 {
@@ -70,9 +98,10 @@ function _AliasCalls(source, alias, delegate, after, escapedMethods)
 	return calls;
 }
 
-/** Resolves identifiers and class properties explicitly typed as imported Prisma clients. */
+/** Resolves identifiers and class properties explicitly rooted in imported Prisma client types. */
 function _PrismaClientExpressions(source, imports)
 {
+	const code = _CodeOnly(source);
 	const typeNames = [];
 	for (const [local, binding] of imports.entries())
 	{
@@ -83,17 +112,74 @@ function _PrismaClientExpressions(source, imports)
 	if (typeNames.length === 0) return [];
 	const expressions = new Set();
 	const declaration = new RegExp(`\\b([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${typeNames.join("|")})\\b`, "gu");
-	for (const match of source.matchAll(declaration))
+	for (const match of code.matchAll(declaration))
 	{
 		expressions.add(match[1]);
-		const prefix = source.slice(Math.max(0, (match.index ?? 0) - 40), match.index ?? 0);
+		const prefix = code.slice(Math.max(0, (match.index ?? 0) - 40), match.index ?? 0);
 		if (/\b(?:private|protected|public)\s+(?:readonly\s+)?$/u.test(prefix)) expressions.add(`this.${match[1]}`);
 	}
-	for (const match of source.matchAll(/\bthis\.([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/gu))
+	for (const match of code.matchAll(/\bthis\.([A-Za-z_$][\w$]*)\s*=\s*([A-Za-z_$][\w$]*)\s*;/gu))
 	{
 		if (expressions.has(match[2])) expressions.add(`this.${match[1]}`);
 	}
+	for (const match of code.matchAll(/\.\$transaction\s*\(\s*async\s+(?:function\s+[A-Za-z_$][\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)/gu)) expressions.add(match[1]);
 	return [...expressions];
+}
+
+/** Returns source with comments and string contents blanked while preserving offsets. */
+function _CodeOnly(source)
+{
+	const characters = source.split("");
+	let quote = "";
+	let lineComment = false;
+	let blockComment = false;
+	for (let index = 0; index < characters.length; index += 1)
+	{
+		const character = source[index];
+		const next = source[index + 1];
+		if (lineComment)
+		{
+			if (character === "\n") lineComment = false;
+			else characters[index] = " ";
+			continue;
+		}
+		if (blockComment)
+		{
+			characters[index] = character === "\n" ? "\n" : " ";
+			if (character === "*" && next === "/") { characters[index + 1] = " "; blockComment = false; index += 1; }
+			continue;
+		}
+		if (quote)
+		{
+			characters[index] = character === "\n" ? "\n" : " ";
+			if (character === "\\") { if (index + 1 < characters.length) characters[index + 1] = " "; index += 1; continue; }
+			if (character === quote) quote = "";
+			continue;
+		}
+		if (character === "/" && next === "/") { characters[index] = " "; characters[index + 1] = " "; lineComment = true; index += 1; continue; }
+		if (character === "/" && next === "*") { characters[index] = " "; characters[index + 1] = " "; blockComment = true; index += 1; continue; }
+		if (character === "\"" || character === "'" || character === "`") { characters[index] = " "; quote = character; }
+	}
+	return characters.join("");
+}
+
+/** Returns whether a computed-access receiver is executable code at the matched offset. */
+function _ExpressionIsCode(code, index, expression)
+{
+	return code.slice(index, index + expression.length) === expression;
+}
+
+/** Removes duplicate raw-operation matches without hiding distinct source offsets. */
+function _UniqueRawMatches(matches)
+{
+	const seen = new Set();
+	return matches.filter(function _First(match)
+	{
+		const key = `${match.index ?? 0}\u0000${match.method}`;
+		if (seen.has(key)) return false;
+		seen.add(key);
+		return true;
+	});
 }
 
 /** Escapes a literal for inclusion in a regular expression. */
