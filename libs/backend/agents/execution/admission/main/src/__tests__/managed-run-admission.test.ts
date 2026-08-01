@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { RunAdmissionConcurrencyGate } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { __ReadRunAdmissionConcurrencyPolicy } from "../index.js";
+import { __ReadRunAdmissionConcurrencyPolicy } from "../managed-run-admission.composition.js";
 import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate } from "../managed-run-admission.js";
 
 /** Produce one valid managed admission command, varying only the authority coordinates under test. */

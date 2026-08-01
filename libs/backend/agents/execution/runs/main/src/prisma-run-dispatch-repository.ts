@@ -6,7 +6,8 @@ import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
-import type { AttemptModelKeyIssuer, ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, PrunePublishedRunOutboxResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
+import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
+import type { ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, PrunePublishedRunOutboxResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity
@@ -42,7 +43,6 @@ interface ClaimedAttemptWithMintInputs
 
 /** Transaction outcome: no eligible work, or a claim whose key must be minted outside the lock. */
 type ClaimTransactionResult = { readonly status: "none" } | ({ readonly status: "claimed" } & ClaimedAttemptWithMintInputs);
-
 /**
  * Prisma-backed authority for handing one accepted run to the Kubernetes controller.
  *

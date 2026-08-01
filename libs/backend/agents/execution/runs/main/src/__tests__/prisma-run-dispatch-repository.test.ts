@@ -5,7 +5,7 @@ import { ___GetContext } from "@opencrane/observability";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunDispatchRepository } from "../prisma-run-dispatch-repository.js";
-import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../run-dispatch.types.js";
+import type { AttemptModelKeyIssuer, AttemptModelKeyMintRequest, MintedAttemptModelKey } from "../attempt-model-key.types.js";
 
 /** A recording attempt-key issuer; non-claim tests never reach minting so its key is unused there. */
 function _Issuer(record?: (request: AttemptModelKeyMintRequest) => void): AttemptModelKeyIssuer

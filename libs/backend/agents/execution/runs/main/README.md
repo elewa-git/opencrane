@@ -141,17 +141,6 @@ uncertainty fails closed.
 
 ## Public surface
 
-- `__StartNextRunAttempt(repository, command)` — start the next attempt of a run via compare-and-swap.
-- `__ValidateRunWorkloadAssignment(assignment, expectation)` — confirm a workload is the one authorised for this attempt.
-- `__PrepareChildRunAdmission(parent, command, limits, targetAuthorization)` — prepare a bounded
-  child-run record after exact parent-to-target delegation has been rechecked.
-- `PrismaChildRunReservationRepository` — lock the parent, recalculate capacity from immutable
-  sibling allocations, and atomically persist the child run, snapshot, reservation, and dispatch.
-- `PrismaChildRunCompletionRepository` — append one terminal child outcome to its direct parent's
-  conversation stream, or durably record why no parent stream can receive it.
-- `__DeliverChildRunCompletionInTransaction(transaction, command)` — use the same delivery fence
-  from a terminal-state transaction, so cancellation and dispatch failures cannot leave a child
-  closed without its parent notification.
 - `__DigestRunInputSnapshot(snapshot)` — compute the canonical SHA-256 identity of all frozen run
   inputs without digesting the self-referential `digest` field.
 - `PrismaRunAdmissionRepository` — serialise duplicate requests and atomically persist the initial
@@ -161,38 +150,24 @@ uncertainty fails closed.
 - `RunAdmissionRepository`, `RunAdmissionCommand`, `RunAdmissionTransaction`,
   `RunAdmissionBuildResult` and `RunAdmissionResult` — the transaction-fenced initial-admission port
   and its input/output vocabulary.
-- `PrismaAgentRunAuthorityRepository` — the Prisma-backed adapter implementing the persistence port (atomic retry + outbox append).
 - `PrismaRunDispatchRepository` — claim an attempt, commit its suspended Job and bootstrap, then
   claim release work and register exactly one first Pod.
+- `AttemptModelKeyIssuer`, `AttemptModelKeyMintRequest`, and `MintedAttemptModelKey` — the narrow
+  app-owned model-key minting port and its transient request/result contract.
 - `PrismaRunCancellationRepository` — atomically fence one exact attempt, issue assigned or delayed
   orphan cleanup authority, lease that cleanup, and finalise cancellation only after confirmation.
 - `__CreateRuntimeWorkloadCleanupUseCase` — claim one cleanup event, apply the two-observation
   orphan-absence policy, and confirm authoritative absence through a physical store port.
-- `RuntimeWorkloadCleanupStore` — Kubernetes-free port that reports exact absence or a
-  UID-preconditioned deletion request without becoming durable authority.
-- `RequestRunCancellation*`, `RunWorkloadCleanup*`, and `ConfirmRunWorkloadCleanup*` — the typed
-  lifecycle, lease, server-derived Job projection, and physical-evidence outcomes.
 - `__CreateAgentControllerRunDispatchRouter` — projected-token-authenticated internal assignment and
   release API for the fixed `agent-controller` ServiceAccount.
-- `__CreateSelfRunStatusRouter` / `PrismaSelfRunStatusRepository` — authenticated product read of
-  one personal run or the owner's latest fifty runs, including lifecycle, attempt, immutable
-  revision, and timestamps. The router derives the subject and silo from session and host; foreign or
-  absent single runs share the same non-disclosing 404.
 - `_CreateSelfRunStatusRouter` — the ready-to-mount Prisma composition that maps the shared request
   principal into the self-run caller and supplies the status repository.
-- `RunDispatchRepository` / `AgentControllerTokenReviewer` — persistence and TokenReview ports used by that internal API.
-- `ClaimNextRunWorkloadReleaseResult` / `RegisterRunWorkloadPodResult` — release-claim and first-Pod
-  registration outcomes used across the internal adapter boundary.
-- `AgentRunAuthorityRepository` / `AgentRunAuthoritySnapshot` — the persistence port and its consistent read shape.
-- `StartNextRunAttemptCommand` / `StartNextRunAttemptResult`, `AtomicStartNextRunAttemptCommand` / `AtomicRunAttemptResult` — retry request/result and their atomic commit forms.
-- `RunWorkloadAssignment` / `RunWorkloadAssignmentExpectation` / `RunWorkloadAssignmentDecision` — the workload-identity check inputs and verdict.
-- `ChildRunParentAuthority` / `ChildRunAdmissionLimits` / `ChildRunBudget` — parent facts and
-  server limits used to control one recursive invocation.
-- `ChildRunTargetAuthorization` / `PrepareChildRunAdmissionCommand` /
-  `PrepareChildRunAdmissionResult` — the target-policy port and the prepared-or-denied child
-  admission vocabulary.
-- `ChildRunReservation` — the Prisma-owned durable allocation that binds one admitted child to its
-  parent, root, depth, token ceiling, and cost ceiling.
+- `PrismaRuntimeTerminalReporter` — commits a protocol-approved terminal result through the run
+  authority.
+- `_SelfRunStatusOpenapiPaths` — contributes the self-run status contract to the server API spec.
+
+Retry, child-run, cancellation, cleanup, status, and dispatch support types remain package-private.
+They can evolve with their owning implementations without becoming cross-package contracts.
 
 ## Boundary
 

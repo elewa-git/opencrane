@@ -54,38 +54,24 @@ caller input.
 
 - `__AssembleRunInputSnapshot(command, authorities)` — the end-to-end assembly: validate → load all
   sources inside the admission transaction → compile, digest, and persist.
-- `FleetMembershipIdentityEnvelopeSource` — the identity port implementation: accepts only a
-  cryptographically verified fleet-membership assertion (never caller-supplied claims) and a
-  same-transaction capability-set digest.
-- `PersonalMemoryScopeSource` — selects a personal memory dataset from that verified identity's
-  silo, organization, and subject. It cannot receive a dataset identifier from the runtime caller.
 - `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
   fleet-membership and effective non-personal scope evidence into a tagged `service` identity. Its
   canonical `agent-service:<id>` principal must match the admitted service; a requester never
   becomes that service's execution identity.
-- `ManagedNoPersonalMemoryScopeSource` — seals managed work with `{ scope: "none" }` and no fact
-  references. It is an explicit boundary, not a fallback to user, organization, or workspace
-  memory; future managed knowledge recall needs a separately authorized source.
-- `PrismaRunAuthoritySource`, `PrismaApprovedPersonaSource`, `PrismaThreadContextSource`,
-  `PrismaPreferenceFactSource`, `PrismaRevisionToolPolicySource`, and
-  `PrismaRevisionBudgetPolicySource` — production transaction readers for the live service,
-  persona, transcript, organization-bound consented preferences, tools, and resource ceilings.
-  `__CreatePrismaManagedSessionAssemblyAuthorities` composes them with caller-owned identity and
-  final skill-eligibility authorities.
+- `__CreatePrismaManagedSessionAssemblyAuthorities` — composes the package-private production
+  readers with the caller-owned identity and final skill-eligibility authorities.
 - `PrismaSkillRevisionEligibilitySource` — locks the AgentRevision's skill assignments
   at admission and refuses an invented, foreign, revoked, or unpublished revision with
   `skill_unavailable`.
-- `SessionAssemblyAuthorities` / `SessionAssemblyCommand` — the port bundle and the immutable run
-  coordinates a caller supplies.
-- `RunAuthoritySource`, `ApprovedPersonaSource`, `ThreadContextSource`, `PreferenceFactSource`,
-  `MemoryScopeSource`, `ToolPolicySource`, `SkillRevisionEligibilitySource`, `BudgetPolicySource`, `IdentityEnvelopeSource`,
-  `CapabilitySetDigestSource` — the per-input ports the OpenCrane app implements with real adapters.
 - `AssembleRunInputSnapshotResult` / `SessionAssemblyRefusalReason` — the all-or-nothing outcome and
   its refusal vocabulary.
 - `__CompileRunInput` / `__AppendCompiledTool` — deterministic expansion of a sealed snapshot into
   runtime-owned prompt input, with a version stamp that makes a compiler change visible in evidence.
 - `PromptCompilerRepositories` — injected read ports used only to dereference snapshot-authorized
   content while compiling.
+
+All other source adapters and assembly ports are package-private implementation details. Same-package
+tests import their owning modules directly; adding a test does not widen this barrel.
 
 ## Boundary
 

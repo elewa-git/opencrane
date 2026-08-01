@@ -1,8 +1,8 @@
 import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../index.js";
-import type { RuntimeAttemptAuthority } from "../index.js";
+import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority.js";
+import type { RuntimeAttemptAuthority } from "../runtime-protocol-authority.types.js";
 
 /** Returns one current attempt authority for protocol-boundary tests. */
 function _authority(): RuntimeAttemptAuthority

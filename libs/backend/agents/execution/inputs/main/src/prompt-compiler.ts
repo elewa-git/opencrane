@@ -9,13 +9,6 @@ import { ___DoWithTrace } from "@opencrane/observability";
 import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";
 
 /**
- * Deterministic prompt-compiler version. Bump on any change to compiled-output assembly so a
- * snapshot compiled by one version is never silently consumed by another. Every snapshot declares
- * the version its compiler must match; a mismatch fails closed.
- */
-export { PROMPT_COMPILER_VERSION };
-
-/**
  * Hydrate an immutable {@link RunInputSnapshot} into the literal {@link CompiledRunInput} the runtime
  * consumes as opaque data.
  *

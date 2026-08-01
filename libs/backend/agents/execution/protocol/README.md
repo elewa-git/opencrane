@@ -66,36 +66,16 @@ are rechecked at execution, so the runtime never sees either credential or mutab
 
 ## Public surface
 
-- `__AdmitRuntimeCommand` — validates a control-plane command before stream delivery.
-- `__AdmitRuntimeCandidate` — validates a runtime-proposed event or deferred action.
-- `PrismaRuntimeDispatchAuthority` — the durable adapter the app injects into the stream transport;
-  it loads assignment authority, mints and advances commands, admits candidates, and releases the
-  runtime-instance binding on stream loss.
-- `__CreatePrismaRunInputCompiler` — binds the deterministic prompt compiler to the control-plane
-  Prisma reads used by the dispatch transaction.
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
   including first-party personal-session tool augmentation, external-action routing, frozen memory
   dataset selection, deferred approval recovery, retry bounds, and canonical terminal reporting.
-- `__CreateExternalActionExecutor` — routes one admitted action to the injected integration
-  custody, sandbox, or memory port and fails closed for unsupported revisions. Third-party tools use
-  only `integration:<integrationId>:<toolName>` identities frozen from the AgentRevision assignment.
-  Memory recall additionally requires a `scope: personal` policy and Cognee dataset identifier frozen
-  in the admitted snapshot; neither runtime tool arguments nor a subject id can choose a dataset.
-- `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
-  — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
-- `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results
-  through the run authority without making this protocol package own run state.
-- `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
-  authority must supply at the final acceptance fence.
-- `RuntimeAdmissionRunState` — run lifecycle values understood by the admission fence, including the
-  non-terminal-but-closed `cancelling` state.
-- `RuntimeCommandAdmission*` / `RuntimeCandidateAdmission*` — typed allow, idempotent, or fail-closed
-  decisions and their input ports.
-- `__CreateSteeringIngestRouter`, `PrismaSteeringRequestRepository` — the self-only product surface
-  and durable queue for a user's instruction to a live run. It records the instruction against the
-  current owner-bound attempt but never changes input generation from the HTTP request.
 - `_CreateSteeringIngestRouter` — the ready-to-mount Prisma composition that maps the shared
   authenticated request principal into the steering caller and supplies the queue and clock.
+- `_RuntimeSteeringOpenapiPaths` — contributes the steering contract to the server-owned API spec.
+
+Pure protocol decisions, Prisma adapters, executor construction, and their supporting types remain
+inside this package. Some support current production composition while others preserve domain-owned
+authority seams for later execution flows; none is an alternate entrypoint for sibling domains.
 
 ## Boundary
 
