@@ -6,6 +6,22 @@ import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult
 /** Safe bounded reason the integration authority can return without exposing custody material. */
 export type IntegrationAssignmentUnavailableReason = Extract<ResolveIntegrationAssignmentResult, { readonly outcome: "unavailable" }>["reason"];
 
+/**
+ * Stable namespaces by which the prompt compiler selects an external-action transport.
+ *
+ * These values are serialized as the first segment of a tool revision. They select only a wired
+ * executor after candidate admission and never authorize the candidate or its arguments.
+ */
+export enum ExternalActionRevisionKinds
+{
+	/** Revision routed through live integration custody and Obot. */
+	Integration = "integration",
+	/** Revision routed through an isolated sandbox Job. */
+	Sandbox = "sandbox",
+	/** Revision routed through the snapshot-scoped memory gateway. */
+	Memory = "memory",
+}
+
 /** Concrete transport ports the composition root injects into the external-action router. */
 export interface ExternalActionExecutorDependencies
 {

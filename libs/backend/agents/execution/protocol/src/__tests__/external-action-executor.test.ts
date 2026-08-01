@@ -39,6 +39,14 @@ describe("composition-root external action executor", function _suite()
 		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
 	});
 
+	it("refuses an incomplete integration revision before resolving live custody", async function _incompleteIntegration()
+	{
+		const resolveAssignment = vi.fn();
+		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar"), { ...DEPENDENCIES, integrations: { resolveAssignment } });
+		await expect(executor.execute()).rejects.toBeInstanceOf(UnsupportedExternalActionError);
+		expect(resolveAssignment).not.toHaveBeenCalled();
+	});
+
 	it("preserves a revoked live assignment as a typed refusal without calling Obot", async function _revoked()
 	{
 		await _expectAssignmentUnavailable("revoked");
