@@ -108,7 +108,7 @@
   ],
   "nonProducingRuntimeMatches": [
     {
-      "path": "libs/backend/agents/runtime/controller/src/agent-controller.ts",
+      "path": "libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts",
       "anchor": "kind: \"Job\"",
       "reason": "This is a Secret owner reference to an already-created attempt Job; it cannot create a pod."
     }

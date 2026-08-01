@@ -137,6 +137,12 @@ else if (action === "duplicate-nonproducing-anchor")
     reason: "Mutation probe: duplicate delete selectors must not share one exemption.",
   });
 }
+else if (action === "remove-attempt-key-nonproducer")
+{
+  registry.nonProducingRuntimeMatches = registry.nonProducingRuntimeMatches.filter(function keep(entry) {
+    return entry.path !== "libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts";
+  });
+}
 else
 {
   throw new Error(`Unknown mutation: ${action}`);
@@ -222,6 +228,10 @@ expect_failure "anchor must occur exactly once, found 2" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 rm -f "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
 
+registry="$(mutate_registry remove-attempt-key-nonproducer)"
+expect_failure "unregistered runtime or installer workload construct: libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts: kind: \"Job\"" \
+  env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
+
 mkdir -p "$(dirname "$GENERATED_DIST_PROBE")" "$(dirname "$GENERATED_CACHE_PROBE")"
 printf '%s\n' 'export const generatedProbe = { apiVersion: "batch/v1", kind: "Job" };' >"$GENERATED_DIST_PROBE"
 printf '%s\n' 'export const generatedCacheProbe = { apiVersion: "v1", kind: "Pod" };' >"$GENERATED_CACHE_PROBE"
@@ -280,4 +290,4 @@ registry="$(mutate_registry empty-runtime)"
 expect_failure "workloadIds must map the construct to at least one exact owner" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 
-printf 'Phase B topology negative tests passed (17 rejection paths plus generated-output regression).\n'
+printf 'Phase B topology negative tests passed (18 rejection paths plus generated-output regression).\n'
