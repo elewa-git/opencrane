@@ -13,20 +13,29 @@ agent can reuse the machinery without inheriting personal policy.
 | [memory](./memory/README.md) | Verified dataset and explicit preference selection for one admitted run. |
 
 ```
- personal-agent change                     admitted run
-        │                                        │
-        ├── configuration ── future revision ────┤
-        ├── personas ─────── approved persona ───┼──► frozen run input
-        └── personal memory ─ selected coordinates┘
-                     │
-                     └── generic fact catalogue + outbox live in agent memory
+ POST /api/v1/me/runs  { threadId · requestIdempotencyKey }
+        │ trusted session + host
+        ▼
+ execution admission ── proves thread · membership · grants
+        │
+        ├── configuration ── active revision ─────┐
+        ├── personas ─────── approved persona ────┼──► frozen run input
+        └── personal memory ─ verified coordinates┘
 ```
 
-**In this flow:** [configuration](./configuration/README.md) records a change for a later run;
-[personas](./personas/README.md) makes the personality and instructions reviewable before activation;
-[personal memory](./memory/README.md) chooses already-consented coordinates; [execution inputs](../execution/inputs/main/README.md)
-freezes the accepted inputs; and [agent memory](../memory/main/README.md) owns durable fact metadata
-and its outbox intent.
+**In this flow:** [execution admission](../execution/admission/main/README.md) owns the trusted entry;
+[configuration](./configuration/README.md) records changes for later runs; [personas](./personas/README.md)
+makes the personality and instructions reviewable before activation; [personal memory](./memory/README.md)
+chooses already-consented coordinates; [execution inputs](../execution/inputs/main/README.md) freezes
+the accepted inputs; and [agent memory](../memory/main/README.md) owns durable fact metadata and its
+outbox intent.
+
+The browser may start a personal conversation run with only its existing `threadId` and a
+`requestIdempotencyKey` used to make retries return the same run. The server derives the person from
+the authenticated session and the silo from the trusted host, then re-resolves the participant-bound
+thread, personal agent service, signed fleet membership, effective grants, approved persona, and
+personal-memory coordinates inside the admission flow. None of those authority coordinates can be
+supplied in the request body.
 
 The boundary between the two memory packages is deliberate. Personal memory only decides *which*
 verified dataset and preference facts can enter a run. It neither stores fact text nor writes a fact
@@ -47,5 +56,6 @@ domains in the OpenCrane composition root.
 
 - Parent index: [agents](../README.md)
 - Shared execution: [execution](../execution/README.md)
+- Trusted entry: [execution admission](../execution/admission/main/README.md)
 - Generic catalogue: [agent memory](../memory/main/README.md)
 - Fact-content boundary: [memory gateway](../../../server/_infra/memory-gateway-client/README.md)

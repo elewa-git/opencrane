@@ -45,12 +45,18 @@ and never calls Cognee.
 
 ## Boundary
 
-Consumed by execution-input assembly. The dedicated personal-session factory can compose this
-package's repository into both personal memory sources inside an existing run-admission transaction.
-That factory has no production app caller yet: OpenCrane currently composes only managed admission,
-which deliberately freezes no personal-memory scope. A later trusted personal-request slice must
-derive the thread-bound service and signed user identity before invoking this factory; it must not
-accept dataset or fact coordinates from an HTTP request.
+Consumed by the production personal-run path through
+[execution admission](../../../execution/admission/main/README.md). `POST /api/v1/me/runs` accepts
+only a `threadId` and `requestIdempotencyKey`; the authenticated session supplies the subject, the
+trusted host supplies the silo, and the server re-resolves the participant-bound thread and personal
+agent service. Inside the final admission transaction, execution inputs verify the exact signed fleet
+membership and current grants, load the approved persona, and use the dedicated personal-session
+factory to select the dataset and preference coordinates owned here.
+
+The managed admission path remains separate and deliberately freezes no personal-memory scope. A
+managed service therefore cannot inherit a person's dataset merely because it has delegated access.
+Live end-to-end Cognee qualification is still pending; admitting and freezing coordinates does not
+claim that later gateway recall has been qualified in a running environment.
 
 This package itself must not write generic fact metadata, own a transaction, derive a dataset from a
 subject outside admission, read durable fact text, call Cognee, or compose a runtime. It remains the
@@ -72,5 +78,6 @@ Reads `MemoryDataset` and `MemoryFactCatalog` through the repository port using 
 ## See also
 
 - Parent group: [personal-agent domains](../../README.md)
+- Admission path: [execution admission](../../../execution/admission/main/README.md)
 - Snapshot assembly: [execution inputs](../../../execution/inputs/main/README.md)
 - Generic catalogue: [agent memory](../../../memory/main/README.md)
