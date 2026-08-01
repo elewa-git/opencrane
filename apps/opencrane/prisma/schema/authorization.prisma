@@ -49,6 +49,7 @@ model AuthorizationGrant {
   validFrom       DateTime                  @default(now()) @map("valid_from")
   expiresAt       DateTime?                 @map("expires_at")
   revokedAt       DateTime?                 @map("revoked_at")
+  requireApproval Boolean                   @default(false) @map("require_approval")
   createdBy       String                    @map("created_by")
   createdAt       DateTime                  @default(now()) @map("created_at")
   catalog         CapabilityCatalogRevision @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)

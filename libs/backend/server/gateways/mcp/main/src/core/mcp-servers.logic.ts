@@ -1,15 +1,12 @@
-import { GrantAccess, GrantScope, GrantSubjectType, McpServerStatus, McpServerTransport, type Grant, type McpServer, type McpServerCredential } from "@opencrane/contracts";
+import { GrantScope, McpServerStatus, McpServerTransport, type McpServer, type McpServerCredential } from "@opencrane/contracts";
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { McpServerCredentialInput, McpServerGrantInput, McpServerRouteAccess, McpServerRouteScope, McpServerRouteStatus, McpServerRouteSubjectType, McpServerRouteTransport, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
+import type { McpServerCredentialInput, McpServerRouteScope, McpServerRouteStatus, McpServerRouteTransport, McpServerWriteRequest } from "../routes/mcp-servers.types.js";
 
-type _McpServerRow = Prisma.McpServerGetPayload<{ include: { scopedGrants: true; credentials: true; source: true } }>;
+type _McpServerRow = Prisma.McpServerGetPayload<{ include: { credentials: true; source: true } }>;
 
 /** Shared response contract returned by the MCP server routes. */
 type McpServerResponse = McpServer;
-
-/** Shared grant contract returned for normalized MCP server grants. */
-type McpServerGrantResponse = Grant;
 
 /** Shared credential contract returned for normalized credential rows. */
 type McpServerCredentialResponse = McpServerCredential;
@@ -17,140 +14,101 @@ type McpServerCredentialResponse = McpServerCredential;
 /** Persist response shape returned after create/update/delete mutations. */
 interface McpServerMutationResponse
 {
-  /** Stable server identifier. */
-  id: string;
-  /** Mutation outcome label. */
-  status: "created" | "updated" | "deleted";
+	/** Stable server identifier. */
+	id: string;
+	/** Mutation outcome label. */
+	status: "created" | "updated" | "deleted";
 }
 
 /** Typed Prisma scope values used during runtime lookups. */
 const _PRISMA_GRANT_SCOPE = {
-  Org: "Org",
-  Department: "Department",
-  Team: "Team",
-  Project: "Project",
-  Personal: "Personal",
-} as const;
-
-/** Typed Prisma subject values used during runtime lookups. */
-const _PRISMA_GRANT_SUBJECT_TYPE = {
-  Group: "Group",
-  User: "User",
-} as const;
-
-/** Typed Prisma access values used during runtime lookups. */
-const _PRISMA_GRANT_ACCESS = {
-  Allow: "Allow",
-  Deny: "Deny",
+	Org: "Org",
+	Department: "Department",
+	Team: "Team",
+	Project: "Project",
+	Personal: "Personal",
 } as const;
 
 /** Typed Prisma transport values used during runtime lookups. */
 const _PRISMA_MCP_SERVER_TRANSPORT = {
-  StreamableHttp: "StreamableHttp",
-  ServerSentEvents: "ServerSentEvents",
-  WebSocket: "WebSocket",
+	StreamableHttp: "StreamableHttp",
+	ServerSentEvents: "ServerSentEvents",
+	WebSocket: "WebSocket",
 } as const;
 
 /** Typed Prisma status values used during runtime lookups. */
 const _PRISMA_MCP_SERVER_STATUS = {
-  Active: "Active",
-  Degraded: "Degraded",
-  Draft: "Draft",
+	Active: "Active",
+	Degraded: "Degraded",
+	Draft: "Draft",
 } as const;
-
-/** Typed Prisma payload value used for MCP grants persisted in Prisma. */
-const _PRISMA_MCP_SERVER_PAYLOAD_TYPE = "McpServer";
 
 /** Route scope lookup keyed by Prisma enum values. */
 const _ROUTE_SCOPE_BY_PRISMA_SCOPE = {
-  [_PRISMA_GRANT_SCOPE.Org]: GrantScope.Org,
-  [_PRISMA_GRANT_SCOPE.Department]: GrantScope.Department,
-  [_PRISMA_GRANT_SCOPE.Team]: GrantScope.Team,
-  [_PRISMA_GRANT_SCOPE.Project]: GrantScope.Project,
-  [_PRISMA_GRANT_SCOPE.Personal]: GrantScope.Personal,
+	[_PRISMA_GRANT_SCOPE.Org]: GrantScope.Org,
+	[_PRISMA_GRANT_SCOPE.Department]: GrantScope.Department,
+	[_PRISMA_GRANT_SCOPE.Team]: GrantScope.Team,
+	[_PRISMA_GRANT_SCOPE.Project]: GrantScope.Project,
+	[_PRISMA_GRANT_SCOPE.Personal]: GrantScope.Personal,
 };
 
 /** Prisma scope lookup keyed by route values. */
 const _PRISMA_SCOPE_BY_ROUTE_SCOPE = {
-  org: _PRISMA_GRANT_SCOPE.Org,
-  department: _PRISMA_GRANT_SCOPE.Department,
-  project: _PRISMA_GRANT_SCOPE.Project,
-  personal: _PRISMA_GRANT_SCOPE.Personal,
-};
-
-/** Route subject lookup keyed by Prisma enum values. */
-const _ROUTE_SUBJECT_BY_PRISMA_SUBJECT = {
-  [_PRISMA_GRANT_SUBJECT_TYPE.Group]: GrantSubjectType.Group,
-  [_PRISMA_GRANT_SUBJECT_TYPE.User]: GrantSubjectType.User,
-};
-
-/** Prisma subject lookup keyed by route values. */
-const _PRISMA_SUBJECT_BY_ROUTE_SUBJECT = {
-  group: _PRISMA_GRANT_SUBJECT_TYPE.Group,
-  user: _PRISMA_GRANT_SUBJECT_TYPE.User,
-};
-
-/** Route access lookup keyed by Prisma enum values. */
-const _ROUTE_ACCESS_BY_PRISMA_ACCESS = {
-  [_PRISMA_GRANT_ACCESS.Allow]: GrantAccess.Allow,
-  [_PRISMA_GRANT_ACCESS.Deny]: GrantAccess.Deny,
-};
-
-/** Prisma access lookup keyed by route values. */
-const _PRISMA_ACCESS_BY_ROUTE_ACCESS = {
-  allow: _PRISMA_GRANT_ACCESS.Allow,
-  deny: _PRISMA_GRANT_ACCESS.Deny,
+	org: _PRISMA_GRANT_SCOPE.Org,
+	department: _PRISMA_GRANT_SCOPE.Department,
+	project: _PRISMA_GRANT_SCOPE.Project,
+	personal: _PRISMA_GRANT_SCOPE.Personal,
 };
 
 /** Route transport lookup keyed by Prisma enum values. */
 const _ROUTE_TRANSPORT_BY_PRISMA_TRANSPORT = {
-  [_PRISMA_MCP_SERVER_TRANSPORT.StreamableHttp]: McpServerTransport.StreamableHttp,
-  [_PRISMA_MCP_SERVER_TRANSPORT.ServerSentEvents]: McpServerTransport.ServerSentEvents,
-  [_PRISMA_MCP_SERVER_TRANSPORT.WebSocket]: McpServerTransport.WebSocket,
+	[_PRISMA_MCP_SERVER_TRANSPORT.StreamableHttp]: McpServerTransport.StreamableHttp,
+	[_PRISMA_MCP_SERVER_TRANSPORT.ServerSentEvents]: McpServerTransport.ServerSentEvents,
+	[_PRISMA_MCP_SERVER_TRANSPORT.WebSocket]: McpServerTransport.WebSocket,
 };
 
 /** Prisma transport lookup keyed by route values. */
 const _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT = {
-  "streamable-http": _PRISMA_MCP_SERVER_TRANSPORT.StreamableHttp,
-  sse: _PRISMA_MCP_SERVER_TRANSPORT.ServerSentEvents,
-  websocket: _PRISMA_MCP_SERVER_TRANSPORT.WebSocket,
+	"streamable-http": _PRISMA_MCP_SERVER_TRANSPORT.StreamableHttp,
+	sse: _PRISMA_MCP_SERVER_TRANSPORT.ServerSentEvents,
+	websocket: _PRISMA_MCP_SERVER_TRANSPORT.WebSocket,
 };
 
 /** Route status lookup keyed by Prisma enum values. */
 const _ROUTE_STATUS_BY_PRISMA_STATUS = {
-  [_PRISMA_MCP_SERVER_STATUS.Active]: McpServerStatus.Active,
-  [_PRISMA_MCP_SERVER_STATUS.Degraded]: McpServerStatus.Degraded,
-  [_PRISMA_MCP_SERVER_STATUS.Draft]: McpServerStatus.Draft,
+	[_PRISMA_MCP_SERVER_STATUS.Active]: McpServerStatus.Active,
+	[_PRISMA_MCP_SERVER_STATUS.Degraded]: McpServerStatus.Degraded,
+	[_PRISMA_MCP_SERVER_STATUS.Draft]: McpServerStatus.Draft,
 };
 
 /** Prisma status lookup keyed by route values. */
 const _PRISMA_STATUS_BY_ROUTE_STATUS = {
-  active: _PRISMA_MCP_SERVER_STATUS.Active,
-  degraded: _PRISMA_MCP_SERVER_STATUS.Degraded,
-  draft: _PRISMA_MCP_SERVER_STATUS.Draft,
+	active: _PRISMA_MCP_SERVER_STATUS.Active,
+	degraded: _PRISMA_MCP_SERVER_STATUS.Degraded,
+	draft: _PRISMA_MCP_SERVER_STATUS.Draft,
 };
 
 /**
- * Load every persisted MCP server with grants, credentials, and source metadata.
+ * Load every persisted MCP server with credentials and source metadata.
  *
  * @param prisma - Prisma client used for persistence.
  * @returns Normalized route response rows.
  */
 export async function listMcpServers(prisma: PrismaClient): Promise<McpServerResponse[]>
 {
-  const servers = await prisma.mcpServer.findMany({
-    orderBy: { createdAt: "desc" },
-    include: { scopedGrants: true, credentials: true, source: true },
-  });
+	const servers = await prisma.mcpServer.findMany({
+		orderBy: { createdAt: "desc" },
+		include: { credentials: true, source: true },
+	});
 
-  return servers.map(function _mapServer(server)
-  {
-    return _MapMcpServerResponse(server);
-  });
+	return servers.map(function _mapServer(server)
+	{
+		return _MapMcpServerResponse(server);
+	});
 }
 
 /**
- * Load a single persisted MCP server with grants, credentials, and source metadata.
+ * Load a single persisted MCP server with credentials and source metadata.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - Server identifier from the route.
@@ -158,16 +116,16 @@ export async function listMcpServers(prisma: PrismaClient): Promise<McpServerRes
  */
 export async function getMcpServer(prisma: PrismaClient, serverId: string): Promise<McpServerResponse | null>
 {
-  const server = await prisma.mcpServer.findUnique({
-    where: { id: serverId },
-    include: { scopedGrants: true, credentials: true, source: true },
-  });
+	const server = await prisma.mcpServer.findUnique({
+		where: { id: serverId },
+		include: { credentials: true, source: true },
+	});
 
-  return server ? _MapMcpServerResponse(server) : null;
+	return server ? _MapMcpServerResponse(server) : null;
 }
 
 /**
- * Create an MCP server and its child grant and credential rows.
+ * Create an MCP server and its child credential rows.
  *
  * @param prisma - Prisma client used for persistence.
  * @param body - Route payload provided by the caller.
@@ -175,38 +133,35 @@ export async function getMcpServer(prisma: PrismaClient, serverId: string): Prom
  */
 export async function createMcpServer(prisma: PrismaClient, body: McpServerWriteRequest): Promise<McpServerMutationResponse>
 {
-  // 1. Persist the parent server first so child grants and credentials can reference the generated identifier.
-  const createdServer = await prisma.mcpServer.create({
-    data: {
-      name: body.name,
-      description: body.description ?? "",
-      endpoint: body.endpoint,
-      scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerCreateInput["scope"],
-      transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerCreateInput["transport"],
-      status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status ?? "draft"] as Prisma.McpServerCreateInput["status"],
-      capabilities: _NormalizeStringArray(body.capabilities),
-      ...(body.sourceId ? { sourceId: body.sourceId } : {}),
-      ...(body.lastSyncedAt ? { lastSyncedAt: new Date(body.lastSyncedAt) } : {}),
-    },
-  });
+	const createdServer = await prisma.mcpServer.create({
+		data: {
+			name: body.name,
+			description: body.description ?? "",
+			endpoint: body.endpoint,
+			scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerCreateInput["scope"],
+			transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerCreateInput["transport"],
+			status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status ?? "draft"] as Prisma.McpServerCreateInput["status"],
+			capabilities: _NormalizeStringArray(body.capabilities),
+			...(body.sourceId ? { sourceId: body.sourceId } : {}),
+			...(body.lastSyncedAt ? { lastSyncedAt: new Date(body.lastSyncedAt) } : {}),
+		},
+	});
 
-  // 2. Persist child credentials and grants after the parent exists so every row shares a stable server identifier.
-  await _WriteMcpServerChildren(prisma, createdServer.id, body);
+	await _WriteCredentials(prisma, createdServer.id, body);
 
-  // 3. Record an audit entry after persistence so operators can trace catalog mutations without re-reading the server table.
-  await prisma.auditEntry.create({
-    data: {
-      action: "Created",
-      resource: `McpServer/${createdServer.id}`,
-      message: `MCP server ${createdServer.name} created`,
-    },
-  });
+	await prisma.auditEntry.create({
+		data: {
+			action: "Created",
+			resource: `McpServer/${createdServer.id}`,
+			message: `MCP server ${createdServer.name} created`,
+		},
+	});
 
-  return { id: createdServer.id, status: "created" };
+	return { id: createdServer.id, status: "created" };
 }
 
 /**
- * Update an MCP server and fully replace its child grant and credential rows.
+ * Update an MCP server and fully replace its child credential rows.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - Server identifier from the route.
@@ -215,40 +170,37 @@ export async function createMcpServer(prisma: PrismaClient, body: McpServerWrite
  */
 export async function updateMcpServer(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<McpServerMutationResponse>
 {
-  // 1. Update the parent row first so the server metadata reflects the latest operator input before children are replaced.
-  await prisma.mcpServer.update({
-    where: { id: serverId },
-    data: {
-      ...(body.name ? { name: body.name } : {}),
-      ...(body.description !== undefined ? { description: body.description ?? "" } : {}),
-      ...(body.endpoint ? { endpoint: body.endpoint } : {}),
-      ...(body.scope ? { scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerUpdateInput["scope"] } : {}),
-      ...(body.transport ? { transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerUpdateInput["transport"] } : {}),
-      ...(body.status ? { status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status] as Prisma.McpServerUpdateInput["status"] } : {}),
-      ...(body.capabilities ? { capabilities: _NormalizeStringArray(body.capabilities) } : {}),
-      ...(body.sourceId !== undefined ? { sourceId: body.sourceId } : {}),
-      ...(body.lastSyncedAt !== undefined ? { lastSyncedAt: body.lastSyncedAt ? new Date(body.lastSyncedAt) : null } : {}),
-    },
-  });
+	await prisma.mcpServer.update({
+		where: { id: serverId },
+		data: {
+			...(body.name ? { name: body.name } : {}),
+			...(body.description !== undefined ? { description: body.description ?? "" } : {}),
+			...(body.endpoint ? { endpoint: body.endpoint } : {}),
+			...(body.scope ? { scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[body.scope] as Prisma.McpServerUpdateInput["scope"] } : {}),
+			...(body.transport ? { transport: _PRISMA_TRANSPORT_BY_ROUTE_TRANSPORT[body.transport] as Prisma.McpServerUpdateInput["transport"] } : {}),
+			...(body.status ? { status: _PRISMA_STATUS_BY_ROUTE_STATUS[body.status] as Prisma.McpServerUpdateInput["status"] } : {}),
+			...(body.capabilities ? { capabilities: _NormalizeStringArray(body.capabilities) } : {}),
+			...(body.sourceId !== undefined ? { sourceId: body.sourceId } : {}),
+			...(body.lastSyncedAt !== undefined ? { lastSyncedAt: body.lastSyncedAt ? new Date(body.lastSyncedAt) : null } : {}),
+		},
+	});
 
-  // 2. Replace linked credentials and grants wholesale because the submitted payload is treated as authoritative.
-  await _DeleteMcpServerChildren(prisma, serverId);
-  await _WriteMcpServerChildren(prisma, serverId, body);
+	await prisma.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });
+	await _WriteCredentials(prisma, serverId, body);
 
-  // 3. Record an audit entry after persistence so operators can trace the change without re-querying the server catalog.
-  await prisma.auditEntry.create({
-    data: {
-      action: "Updated",
-      resource: `McpServer/${serverId}`,
-      message: `MCP server ${serverId} updated`,
-    },
-  });
+	await prisma.auditEntry.create({
+		data: {
+			action: "Updated",
+			resource: `McpServer/${serverId}`,
+			message: `MCP server ${serverId} updated`,
+		},
+	});
 
-  return { id: serverId, status: "updated" };
+	return { id: serverId, status: "updated" };
 }
 
 /**
- * Delete an MCP server and its child grant and credential rows.
+ * Delete an MCP server and its child credential rows.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - Server identifier from the route.
@@ -256,24 +208,21 @@ export async function updateMcpServer(prisma: PrismaClient, serverId: string, bo
  */
 export async function deleteMcpServer(prisma: PrismaClient, serverId: string): Promise<McpServerMutationResponse>
 {
-  // 1. Remove child credentials and grants first so no linked rows remain once the parent server is gone.
-  await _DeleteMcpServerChildren(prisma, serverId);
+	await prisma.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });
 
-  // 2. Delete the parent server once the child rows have been removed.
-  await prisma.mcpServer.delete({
-    where: { id: serverId },
-  });
+	await prisma.mcpServer.delete({
+		where: { id: serverId },
+	});
 
-  // 3. Append an audit record so destructive changes remain traceable in operator history.
-  await prisma.auditEntry.create({
-    data: {
-      action: "Deleted",
-      resource: `McpServer/${serverId}`,
-      message: `MCP server ${serverId} deleted`,
-    },
-  });
+	await prisma.auditEntry.create({
+		data: {
+			action: "Deleted",
+			resource: `McpServer/${serverId}`,
+			message: `MCP server ${serverId} deleted`,
+		},
+	});
 
-  return { id: serverId, status: "deleted" };
+	return { id: serverId, status: "deleted" };
 }
 
 /**
@@ -285,27 +234,21 @@ export async function deleteMcpServer(prisma: PrismaClient, serverId: string): P
  */
 export async function listMcpServerCredentials(prisma: PrismaClient, serverId: string): Promise<McpServerCredentialResponse[] | null>
 {
-  // 1. Confirm the server exists so a missing server reads as 404, not an
-  //    empty credential list (which would mask a bad identifier).
-  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
-  if (!server)
-  {
-    return null;
-  }
+	const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
+	if (!server)
+	{
+		return null;
+	}
 
-  // 2. Load and normalise the credential rows for the server.
-  const credentials = await prisma.mcpServerCredential.findMany({ where: { mcpServerId: serverId }, orderBy: { createdAt: "asc" } });
-  return credentials.map(function _mapCredential(credential)
-  {
-    return _MapCredentialResponse(credential);
-  });
+	const credentials = await prisma.mcpServerCredential.findMany({ where: { mcpServerId: serverId }, orderBy: { createdAt: "asc" } });
+	return credentials.map(function _mapCredential(credential)
+	{
+		return _MapCredentialResponse(credential);
+	});
 }
 
 /**
- * Add a single brokered credential to an MCP server without disturbing grants.
- *
- * Unlike the full PUT path (which replaces all children), this is an additive
- * mutation so operators can author one credential at a time through the API or UI.
+ * Add a single brokered credential to an MCP server.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - Server identifier from the route.
@@ -314,28 +257,24 @@ export async function listMcpServerCredentials(prisma: PrismaClient, serverId: s
  */
 export async function addMcpServerCredential(prisma: PrismaClient, serverId: string, input: McpServerCredentialInput): Promise<McpServerCredentialResponse | null>
 {
-  // 1. Confirm the server exists before validating so a bad identifier reads
-  //    as 404 rather than a misleading custody-validation error.
-  const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
-  if (!server)
-  {
-    return null;
-  }
+	const server = await prisma.mcpServer.findUnique({ where: { id: serverId }, select: { id: true } });
+	if (!server)
+	{
+		return null;
+	}
 
-  // 2. Normalize the OBO-only credential metadata before persistence.
-  const row = _NormalizeCredentialInput(serverId, input);
-  const created = await prisma.mcpServerCredential.create({ data: row });
+	const row = _NormalizeCredentialInput(serverId, input);
+	const created = await prisma.mcpServerCredential.create({ data: row });
 
-  // 3. Record an audit entry so credential authoring stays traceable.
-  await prisma.auditEntry.create({
-    data: {
-      action: "Created",
-      resource: `McpServerCredential/${created.id}`,
-      message: `OBO MCP credential ${created.displayName} added to server ${serverId}`,
-    },
-  });
+	await prisma.auditEntry.create({
+		data: {
+			action: "Created",
+			resource: `McpServerCredential/${created.id}`,
+			message: `OBO MCP credential ${created.displayName} added to server ${serverId}`,
+		},
+	});
 
-  return _MapCredentialResponse(created);
+	return _MapCredentialResponse(created);
 }
 
 /**
@@ -348,27 +287,23 @@ export async function addMcpServerCredential(prisma: PrismaClient, serverId: str
  */
 export async function deleteMcpServerCredential(prisma: PrismaClient, serverId: string, credentialId: string): Promise<McpServerMutationResponse | null>
 {
-  // 1. Scope the lookup to the owning server so a credential id from another
-  //    server cannot be deleted via a mismatched path.
-  const credential = await prisma.mcpServerCredential.findFirst({ where: { id: credentialId, mcpServerId: serverId }, select: { id: true } });
-  if (!credential)
-  {
-    return null;
-  }
+	const credential = await prisma.mcpServerCredential.findFirst({ where: { id: credentialId, mcpServerId: serverId }, select: { id: true } });
+	if (!credential)
+	{
+		return null;
+	}
 
-  // 2. Delete the credential row.
-  await prisma.mcpServerCredential.delete({ where: { id: credentialId } });
+	await prisma.mcpServerCredential.delete({ where: { id: credentialId } });
 
-  // 3. Append an audit record so credential removal remains traceable.
-  await prisma.auditEntry.create({
-    data: {
-      action: "Deleted",
-      resource: `McpServerCredential/${credentialId}`,
-      message: `MCP credential ${credentialId} removed from server ${serverId}`,
-    },
-  });
+	await prisma.auditEntry.create({
+		data: {
+			action: "Deleted",
+			resource: `McpServerCredential/${credentialId}`,
+			message: `MCP credential ${credentialId} removed from server ${serverId}`,
+		},
+	});
 
-  return { id: credentialId, status: "deleted" };
+	return { id: credentialId, status: "deleted" };
 }
 
 /**
@@ -380,63 +315,30 @@ export async function deleteMcpServerCredential(prisma: PrismaClient, serverId: 
  */
 export function _NormalizeCredentialInput(serverId: string, credential: McpServerCredentialInput): Prisma.McpServerCredentialCreateManyInput
 {
-  // 1. Store only an operator-facing label: every credential is brokered with
-  // a short-lived user-delegated OBO token, never a static secret reference.
-  return {
-    mcpServerId: serverId,
-    displayName: credential.displayName,
-  };
+	return {
+		mcpServerId: serverId,
+		displayName: credential.displayName,
+	};
 }
 
 /**
- * Write child credentials and grant rows for an MCP server.
+ * Write child credentials for an MCP server.
  *
  * @param prisma - Prisma client used for persistence.
  * @param serverId - MCP server identifier.
- * @param body - Route payload containing grants and credentials.
+ * @param body - Route payload containing credentials.
  */
-async function _WriteMcpServerChildren(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<void>
+async function _WriteCredentials(prisma: PrismaClient, serverId: string, body: Partial<McpServerWriteRequest>): Promise<void>
 {
-  if (body.credentials && body.credentials.length > 0)
-  {
-    await prisma.mcpServerCredential.createMany({
-      data: body.credentials.map(function _mapCredential(credential)
-      {
-        return _NormalizeCredentialInput(serverId, credential);
-      }),
-    });
-  }
-
-  if (!body.grants || body.grants.length === 0)
-  {
-    return;
-  }
-
-  const scopedGrantRows: Prisma.McpServerGrantCreateManyInput[] = [];
-  for (const grant of body.grants)
-  {
-    const genericGrant = await prisma.grant.create({
-      data: _MapGenericGrantCreateInput(serverId, grant),
-    });
-    scopedGrantRows.push(_MapScopedGrantCreateInput(serverId, genericGrant.id, grant));
-  }
-
-  await prisma.mcpServerGrant.createMany({
-    data: scopedGrantRows,
-  });
-}
-
-/**
- * Delete child credentials and grant rows for an MCP server.
- *
- * @param prisma - Prisma client used for persistence.
- * @param serverId - MCP server identifier.
- */
-async function _DeleteMcpServerChildren(prisma: PrismaClient, serverId: string): Promise<void>
-{
-  await prisma.mcpServerGrant.deleteMany({ where: { mcpServerId: serverId } });
-  await prisma.mcpServerCredential.deleteMany({ where: { mcpServerId: serverId } });
-  await prisma.grant.deleteMany({ where: { mcpServerId: serverId, payloadType: _PRISMA_MCP_SERVER_PAYLOAD_TYPE } });
+	if (body.credentials && body.credentials.length > 0)
+	{
+		await prisma.mcpServerCredential.createMany({
+			data: body.credentials.map(function _mapCredential(credential)
+			{
+				return _NormalizeCredentialInput(serverId, credential);
+			}),
+		});
+	}
 }
 
 /**
@@ -447,34 +349,23 @@ async function _DeleteMcpServerChildren(prisma: PrismaClient, serverId: string):
  */
 function _MapMcpServerResponse(server: _McpServerRow): McpServerResponse
 {
-  return {
-    id: server.id,
-    name: server.name,
-    description: server.description,
-    endpoint: server.endpoint,
-    scope: _ROUTE_SCOPE_BY_PRISMA_SCOPE[server.scope],
-    transport: _ROUTE_TRANSPORT_BY_PRISMA_TRANSPORT[server.transport],
-    status: _ROUTE_STATUS_BY_PRISMA_STATUS[server.status],
-    capabilities: server.capabilities,
-    sourceName: server.source?.name ?? undefined,
-    lastSyncedAt: server.lastSyncedAt?.toISOString(),
-    grants: server.scopedGrants.map(function _mapGrant(grant)
-    {
-      return {
-        id: grant.id,
-        scope: _ROUTE_SCOPE_BY_PRISMA_SCOPE[grant.scope],
-        subjectType: _ROUTE_SUBJECT_BY_PRISMA_SUBJECT[grant.subjectType],
-        subjectId: grant.subjectId,
-        subjectName: grant.subjectId,
-        access: _ROUTE_ACCESS_BY_PRISMA_ACCESS[grant.access],
-        note: grant.note ?? undefined,
-      };
-    }),
-    credentials: server.credentials.map(function _mapCredential(credential)
-    {
-      return _MapCredentialResponse(credential);
-    }),
-  };
+	return {
+		id: server.id,
+		name: server.name,
+		description: server.description,
+		endpoint: server.endpoint,
+		scope: _ROUTE_SCOPE_BY_PRISMA_SCOPE[server.scope],
+		transport: _ROUTE_TRANSPORT_BY_PRISMA_TRANSPORT[server.transport],
+		status: _ROUTE_STATUS_BY_PRISMA_STATUS[server.status],
+		capabilities: server.capabilities,
+		sourceName: server.source?.name ?? undefined,
+		lastSyncedAt: server.lastSyncedAt?.toISOString(),
+		grants: [],
+		credentials: server.credentials.map(function _mapCredential(credential)
+		{
+			return _MapCredentialResponse(credential);
+		}),
+	};
 }
 
 /**
@@ -485,10 +376,10 @@ function _MapMcpServerResponse(server: _McpServerRow): McpServerResponse
  */
 function _MapCredentialResponse(credential: _McpServerRow["credentials"][number]): McpServerCredentialResponse
 {
-  return {
-    id: credential.id,
-    displayName: credential.displayName,
-  };
+	return {
+		id: credential.id,
+		displayName: credential.displayName,
+	};
 }
 
 /**
@@ -499,83 +390,22 @@ function _MapCredentialResponse(credential: _McpServerRow["credentials"][number]
  */
 function _NormalizeStringArray(values: string[] | undefined): string[]
 {
-  if (!values)
-  {
-    return [];
-  }
+	if (!values)
+	{
+		return [];
+	}
 
-  const uniqueValues = new Set<string>();
-  for (const value of values)
-  {
-    const normalizedValue = value.trim();
-    if (normalizedValue.length === 0)
-    {
-      continue;
-    }
+	const uniqueValues = new Set<string>();
+	for (const value of values)
+	{
+		const normalizedValue = value.trim();
+		if (normalizedValue.length === 0)
+		{
+			continue;
+		}
 
-    uniqueValues.add(normalizedValue);
-  }
+		uniqueValues.add(normalizedValue);
+	}
 
-  return Array.from(uniqueValues);
-}
-
-/**
- * Map a route grant payload into the generic Grant table input.
- *
- * @param serverId - MCP server identifier.
- * @param grant - Route payload describing the grant.
- * @returns Prisma create input for the generic Grant table.
- */
-function _MapGenericGrantCreateInput(serverId: string, grant: McpServerGrantInput): Prisma.GrantUncheckedCreateInput
-{
-  const subjectId = _ResolveGrantSubjectId(grant);
-
-  return {
-    payloadType: _PRISMA_MCP_SERVER_PAYLOAD_TYPE,
-    payloadId: serverId,
-    scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[grant.scope] as Prisma.GrantUncheckedCreateInput["scope"],
-    subjectType: _PRISMA_SUBJECT_BY_ROUTE_SUBJECT[grant.subjectType] as Prisma.GrantUncheckedCreateInput["subjectType"],
-    subjectId,
-    access: _PRISMA_ACCESS_BY_ROUTE_ACCESS[grant.access] as Prisma.GrantUncheckedCreateInput["access"],
-    priority: grant.priority ?? 0,
-    note: grant.note,
-    ...(grant.subjectType === "group" ? { groupId: subjectId } : {}),
-    mcpServerId: serverId,
-  };
-}
-
-/**
- * Map a route grant payload into the scoped MCP server grant input.
- *
- * @param serverId - MCP server identifier.
- * @param grantId - Generic grant identifier created for the same rule.
- * @param grant - Route payload describing the grant.
- * @returns Prisma createMany input for the MCP-specific grant table.
- */
-function _MapScopedGrantCreateInput(serverId: string, grantId: string, grant: McpServerGrantInput): Prisma.McpServerGrantCreateManyInput
-{
-  const subjectId = _ResolveGrantSubjectId(grant);
-
-  return {
-    mcpServerId: serverId,
-    grantId,
-    scope: _PRISMA_SCOPE_BY_ROUTE_SCOPE[grant.scope] as Prisma.McpServerGrantCreateManyInput["scope"],
-    subjectType: _PRISMA_SUBJECT_BY_ROUTE_SUBJECT[grant.subjectType] as Prisma.McpServerGrantCreateManyInput["subjectType"],
-    subjectId,
-    access: _PRISMA_ACCESS_BY_ROUTE_ACCESS[grant.access] as Prisma.McpServerGrantCreateManyInput["access"],
-    priority: grant.priority ?? 0,
-    note: grant.note,
-    ...(grant.subjectType === "group" ? { groupId: subjectId } : {}),
-  };
-}
-
-/**
- * Resolve the compiler-facing subject identifier from route input.
- *
- * @param grant - Route payload describing the grant.
- * @returns Stable subject identifier.
- */
-function _ResolveGrantSubjectId(grant: McpServerGrantInput): string
-{
-  return grant.subjectId ?? grant.subjectName;
+	return Array.from(uniqueValues);
 }

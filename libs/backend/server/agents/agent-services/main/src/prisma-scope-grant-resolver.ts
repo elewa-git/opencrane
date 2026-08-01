@@ -3,14 +3,10 @@ import type { Prisma, PrismaClient } from "@prisma/client";
 import type { EffectiveScopeGrant, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 
 /**
- * Grant-compiler-backed effective-scope resolver.
+ * Stub scope-grant resolver.
  *
- * This is the REAL grant-compiler import that justifies re-opening the `scope:grants` edge on
- * `scope:agent-services`. It compiles Awareness (knowledge-scope) grants for the given principals and
- * keeps only the ALLOW winners. A Grant's `subjectId` is the principal receiving access; its
- * `payloadId` is the knowledge target. The resolver therefore projects `payloadId` (not the
- * receiving principal) into the attachment triple and derives the target kind from the independent
- * scope dimension. Deny/absent scopes never appear, so intersection can only filter, never widen.
+ * Returns an empty effective-grant set. The grant-compiler that previously backed this resolver
+ * has been reaped; a follow-up wires RbacAuthority as the production source of scope grants.
  */
 export class PrismaScopeGrantResolver implements ScopeGrantResolver
 {
