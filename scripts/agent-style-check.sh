@@ -26,6 +26,10 @@
 #   TEST-LOCATION     *.test.ts file not placed under a __tests__ directory
 #   MISSING-README    new/changed package (project.json) with no sibling README.md
 #   README-SECTIONS   leaf package README missing a mandatory package-docs section
+#
+# The Prisma repository/unit-of-work boundary is also enforced for the same scope by
+# scripts/prisma-boundary-check.mjs. It is architectural rather than stylistic, but shares this
+# deterministic pre-review entrypoint so service-layer ORM bypasses cannot escape review.
 
 set -euo pipefail
 
@@ -113,6 +117,11 @@ for f in "${DOC_FILES[@]:-}"; do
 			;;
 	esac
 done
+
+# PRISMA-BOUNDARY — changed production TypeScript may call Prisma delegates only from a class that
+# implements an imported Repository contract, and may open transactions only from an imported
+# UnitOfWork owner. The checker owns exact exemption validation and fails closed on malformed policy.
+node scripts/prisma-boundary-check.mjs "$@"
 
 if [[ ${#CHECKABLE[@]} -eq 0 ]]; then
 	echo "agent-style-check: no checkable TypeScript files in scope."

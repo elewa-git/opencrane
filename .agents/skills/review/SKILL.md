@@ -54,8 +54,8 @@ maintainability pass.
 - Cite `file:line` for every finding so the author can jump straight to it.
 - **Verify before you assert.** Re-read the cited lines and trace the actual behaviour;
   never report a speculative, pattern-matched, or unconfirmed claim as a finding.
-- **Mechanical candidates come from scripts.** Run `scripts/agent-style-check.sh` and
-  `npm run check:module-growth`; do not substitute subjective style hunting for the
+- **Mechanical candidates come from scripts.** Run `scripts/agent-style-check.sh`,
+  `npm run check:prisma-boundaries`, and `npm run check:module-growth`; do not substitute subjective style hunting for the
   modeled maintainability review. Module-growth output triggers a responsibility
   inventory but is never a finding by itself.
 
@@ -116,6 +116,11 @@ maintainability pass.
      and in what order), not just "this looks unused." When the caller
      asks for fixes, perform the removal following that sequencing.
 8. **Maintainability and readability (a modeled design concern, not cosmetic style)**
+   - Treat `PRISMA-TRANSACTION-OWNER` and `PRISMA-DELEGATE-OWNER` as deterministic architecture
+     failures: application services/materializers/use cases consume repository and UnitOfWork ports;
+     repository adapters own model delegates and UnitOfWork implementations own `$transaction`.
+     Exact temporary exemptions live only in `docs/agents/prisma-boundary-policy.json`; malformed,
+     broad, ownerless, or expired exemptions fail closed.
    - For every language-neutral module-growth candidate, inventory configuration/identity,
      external I/O, orchestration, domain policy, protocol translation, persistence,
      retry/cancellation, and observability/lifecycle ownership. A threshold crossing is

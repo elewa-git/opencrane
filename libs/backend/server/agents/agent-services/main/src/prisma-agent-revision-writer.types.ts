@@ -24,11 +24,11 @@ export interface CreateAgentRevisionWithinTransactionCommand
 }
 
 /** Intent to clone one active personal revision with a newly selected model definition. */
-export interface MaterializeAgentRevisionModelSelectionWithinTransactionCommand
+export interface MaterializeAgentRevisionModelSelectionCommand
 {
 	/** Silo that owns both the personal service and selected model definition. */
 	readonly siloId: string;
-	/** Personal service whose locked active revision is being replaced. */
+	/** Personal service whose active revision is being replaced in the serializable transaction. */
 	readonly agentServiceId: string;
 	/** Active revision accepted when the owner reviewed the model proposal. */
 	readonly expectedSourceRevisionId: string;
@@ -61,7 +61,21 @@ export enum AgentRevisionModelSelectionMaterializationCodes
 }
 
 /** Result of the agent-service-owned model-selection materialization. */
-export type MaterializeAgentRevisionModelSelectionWithinTransactionResult =
+export type MaterializeAgentRevisionModelSelectionResult =
 	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.Materialized; readonly agentRevisionId: string }
 	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.ModelUnavailable }
 	| { readonly status: AgentRevisionModelSelectionMaterializationCodes.StaleSource };
+
+/** Agent-service persistence port used inside an owning unit-of-work transaction. */
+export interface AgentRevisionModelSelectionRepository
+{
+	/** Revalidates the accepted source and atomically prepares the selected-model revision. */
+	materialize(command: MaterializeAgentRevisionModelSelectionCommand): Promise<MaterializeAgentRevisionModelSelectionResult>;
+}
+
+/** Canonical agent-revision persistence mapping used by transaction-owning repositories. */
+export interface AgentRevisionWriterRepository<Row = unknown>
+{
+	/** Creates one draft revision and every immutable assignment inside the current transaction. */
+	createDraft(command: CreateAgentRevisionWithinTransactionCommand): Promise<Row>;
+}

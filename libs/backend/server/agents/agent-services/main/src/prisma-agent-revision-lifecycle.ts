@@ -5,7 +5,7 @@ import type { AgentService } from "@opencrane/models/agents";
 import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 
 import { _mapRevision, _mapRun, _mapService, _serviceState } from "./prisma-agent-mappers.js";
-import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, _CreateDraftAgentRevisionWithinTransaction } from "./prisma-agent-revision-writer.js";
+import { _AGENT_REVISION_INCLUDE, _AgentRevisionContentFromRow, PrismaAgentRevisionWriterRepository } from "./prisma-agent-revision-writer.js";
 
 /** Maps a lifecycle action to its target Prisma service state. */
 function _targetServiceState(action: AgentServiceLifecycleAction): AgentServiceState
@@ -73,7 +73,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 		{
 			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, command.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
 			const serviceRow = await transaction.agentService.create({ data: { siloId: command.siloId, kind: AgentServiceKind.Managed, name: command.name, state: AgentServiceState.Draft, workloadProfile: command.workloadProfile, createdAt: createdAtDate, updatedAt: createdAtDate } });
-			const revisionRow = await _CreateDraftAgentRevisionWithinTransaction(transaction, {
+			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: command.siloId,
 				agentServiceId: serviceRow.id,
 				revision: 1,
@@ -97,7 +97,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			const guard = await _lockAndReadHead(transaction, command.agentServiceId, command.siloId, command.expectedParentRevisionId);
 			if (guard.outcome !== "ok") return guard.result;
 			if (!await _isModelDefinitionAvailable(transaction, command.content.modelDefinitionId, guard.siloId)) return { outcome: "denied", reason: "model_definition_unavailable" };
-			const revisionRow = await _CreateDraftAgentRevisionWithinTransaction(transaction, {
+			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: guard.siloId,
 				agentServiceId: command.agentServiceId,
 				revision: guard.head.revision + 1,
@@ -126,7 +126,7 @@ export class PrismaAgentRevisionLifecycleRepository implements AgentRevisionLife
 			if (source === null) return { outcome: "denied", reason: "revision_not_found" };
 			if (source.agentServiceId !== command.agentServiceId) return { outcome: "denied", reason: "revision_service_mismatch" };
 			const content = _AgentRevisionContentFromRow(source);
-			const revisionRow = await _CreateDraftAgentRevisionWithinTransaction(transaction, {
+			const revisionRow = await new PrismaAgentRevisionWriterRepository(transaction).createDraft({
 				siloId: guard.siloId,
 				agentServiceId: command.agentServiceId,
 				revision: guard.head.revision + 1,

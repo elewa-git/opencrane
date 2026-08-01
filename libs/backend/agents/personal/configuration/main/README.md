@@ -45,17 +45,19 @@ means the request is already user-approved or applied.
   interview-and-approval route.
 - `__CreatePersonalConfigurationRouter` provides the owner-only configuration API.
   `PrismaPersonalConfigurationChangeRepository` owns the proposal journal, decisions, history, and
-  upgrade-session bridge; a separate internal Prisma materializer owns the profile → proposal →
-  service lock procedure and the final proposal transition. Agent-services owns source-revision
-  validation, canonical cloning, publication, and activation. `GET /api/v1/me/configuration/changes`
+  upgrade-session bridge. The application materializer coordinates only repository ports; its
+  Prisma unit of work owns Serializable isolation and bounded whole-operation retries, while
+  transaction-scoped personal-configuration and agent-service repositories own their respective
+  model reads and writes. Agent-services owns source-revision validation, canonical cloning,
+  publication, and activation. `GET /api/v1/me/configuration/changes`
   lists at most fifty proposals,
   `POST /api/v1/me/configuration/changes/:changeId/decision` records consent, and
   `POST /api/v1/me/configuration/changes/:changeId/materialize` retry-safely applies an accepted
   model selection. Browser input cannot choose a user, silo, timestamp, revision,
   model-definition ID, or lifecycle state, and no endpoint mutates the current run snapshot.
 - `_CreatePersonalConfigurationRouter` is the ready-to-mount Prisma composition. It maps the shared
-  request principal to the configuration caller and composes the journal and materializer without
-  exporting the internal transaction helpers.
+  request principal to the configuration caller and composes the journal, application materializer,
+  and Prisma unit of work without exposing an ORM client to the use case.
 - `UPGRADE_SESSION_TOOL` / `__IsUpgradeSessionAvailable` describe the built-in, non-MCP tool the app
   adds only to personal conversation inputs.
 - `PersonalConfigurationPatch` is a closed union: `persona_refresh` requests the normal interview
@@ -73,8 +75,9 @@ The package does not mutate `RunInputSnapshot`, perform persona synthesis, or in
 Its narrow self-only API records an owner's accept/reject decision. The persona authority alone can
 apply a linked `persona_refresh` proposal while approving the resulting revision; this package
 materialises only an accepted `model_alias` by copying the current personal revision. The app
-composes its Prisma adapter and `ToolInvocation` ledger, while runtime transport and UI remain
-separate owners.
+composes its Prisma adapters and unit of work; repository adapters alone call model delegates, and
+only the unit of work opens the cross-domain transaction. Runtime transport and UI remain separate
+owners.
 
 ## Dependency direction
 

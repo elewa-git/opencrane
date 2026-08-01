@@ -1,9 +1,10 @@
-import { AgentRevisionState } from "@prisma/client";
+import { AgentRevisionState, Prisma } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DigestAgentRevisionContent } from "@opencrane/models/agents";
 
-import { _PrismaPersonalConfigurationMaterializer } from "../materialization/prisma-personal-configuration-materializer.js";
+import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
+import { PrismaPersonalConfigurationMaterializationUnitOfWork } from "../materialization/prisma-personal-configuration-materialization-unit-of-work.js";
 
 /** Trusted materialization command shared by transaction-level tests. */
 function _Command()
@@ -16,7 +17,7 @@ function _Command()
 	};
 }
 
-/** Accepted proposal row returned after the profile and proposal locks are held. */
+/** Accepted proposal row returned by the serializable evidence lookup. */
 function _AcceptedProposal()
 {
 	return {
@@ -55,42 +56,32 @@ function _SourceRevision()
 	};
 }
 
-/** Build a complete transaction mock and record its explicit row-lock order. */
+/** Composes the application materializer with its Prisma unit-of-work adapter. */
+function _Materializer(prisma: never, logger?: never): _PersonalConfigurationMaterializer
+{
+	return new _PersonalConfigurationMaterializer(new PrismaPersonalConfigurationMaterializationUnitOfWork(prisma), logger);
+}
+
+/** Build a complete transaction mock for one serializable materialization attempt. */
 function _Transaction(options: { readonly proposal?: unknown; readonly activePersonaRevisionId?: string; readonly activeAgentRevisionId?: string; readonly latestRevisionId?: string; readonly appliedCount?: number } = {})
 {
-	const locks: string[] = [];
 	let revisionLookup = 0;
 	const proposal = options.proposal ?? _AcceptedProposal();
-	const findProposal = vi.fn()
-		.mockResolvedValueOnce({ personaProfileId: "profile-1" })
-		.mockResolvedValueOnce(proposal);
 	const transaction = {
-		$queryRaw: vi.fn(async function _Lock(query: { readonly sql: string })
-		{
-			if (query.sql.includes("persona_profiles"))
-			{
-				locks.push("profile");
-				return [{
-					activeRevisionId: options.activePersonaRevisionId ?? "persona-1",
-				}];
-			}
-			if (query.sql.includes("personal_configuration_changes"))
-			{
-				locks.push("proposal");
-				return [];
-			}
-			if (query.sql.includes("agent_services"))
-			{
-				locks.push("service");
-				return [];
-			}
-			throw new Error(`unexpected lock query: ${query.sql}`);
-		}),
 		personalConfigurationChange: {
-			findFirst: findProposal,
+			findFirst: vi.fn(async function _FindProposal()
+			{
+				return proposal;
+			}),
 			updateMany: vi.fn(async function _Apply()
 			{
 				return { count: options.appliedCount ?? 1 };
+			}),
+		},
+		personaProfile: {
+			findFirst: vi.fn(async function _FindProfile()
+			{
+				return { activeRevisionId: options.activePersonaRevisionId ?? "persona-1" };
 			}),
 		},
 		agentService: {
@@ -133,14 +124,14 @@ function _Transaction(options: { readonly proposal?: unknown; readonly activePer
 			}),
 		},
 	};
-	return { locks, transaction };
+	return { transaction };
 }
 
-describe("Prisma personal configuration materializer", function _MaterializerSuite()
+describe("Prisma-backed personal configuration materialization", function _MaterializationSuite()
 {
-	it("copies, publishes, activates, and applies one accepted proposal in lock order", async function _AppliesAcceptedProposal()
+	it("copies, publishes, activates, and applies one accepted proposal from a serializable snapshot", async function _AppliesAcceptedProposal()
 	{
-		const { locks, transaction } = _Transaction();
+		const { transaction } = _Transaction();
 		const expectedContent = {
 			promptPolicyVersion: "prompt-v1",
 			personaRevisionId: "persona-1",
@@ -162,7 +153,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 		{
 			return callback(transaction);
 		});
-		const materializer = new _PrismaPersonalConfigurationMaterializer({ $transaction: runTransaction } as never);
+		const materializer = _Materializer({ $transaction: runTransaction } as never);
 
 		await expect(materializer.materializeAtomically(_Command())).resolves.toEqual({
 			status: "applied",
@@ -170,7 +161,9 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 		});
 
 		expect(runTransaction).toHaveBeenCalledOnce();
-		expect(locks).toEqual(["profile", "proposal", "service"]);
+		expect(runTransaction).toHaveBeenCalledWith(expect.any(Function), {
+			isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+		});
 		expect(transaction.modelDefinition.findMany).toHaveBeenCalledWith(expect.objectContaining({
 			where: expect.objectContaining({ publicModelName: "careful-model" }),
 		}));
@@ -219,6 +212,46 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 		);
 	});
 
+	it.each(["P0001", "P2002", "P2004", "P2034"])("retries rolled-back %s conflicts into an idempotent replay", async function _RetriesConflict(code)
+	{
+		const conflict = new Prisma.PrismaClientKnownRequestError("concurrent materialization", { code, clientVersion: "test" });
+		const { transaction } = _Transaction({
+			proposal: {
+				..._AcceptedProposal(),
+				state: "Applied",
+				appliedAgentRevisionId: "agent-2",
+			},
+		});
+		const runTransaction = vi.fn()
+			.mockRejectedValueOnce(conflict)
+			.mockImplementation(async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
+			{
+				return callback(transaction);
+			});
+		const materializer = _Materializer({ $transaction: runTransaction } as never);
+
+		await expect(materializer.materializeAtomically(_Command())).resolves.toEqual({
+			status: "applied",
+			agentRevisionId: "agent-2",
+		});
+		expect(runTransaction).toHaveBeenCalledTimes(2);
+		expect(transaction.agentService.findFirst).not.toHaveBeenCalled();
+	});
+
+	it("stops after three rolled-back conflict attempts", async function _BoundsConflictRetries()
+	{
+		const conflict = new Prisma.PrismaClientKnownRequestError("concurrent materialization", { code: "P2034", clientVersion: "test" });
+		const runTransaction = vi.fn().mockRejectedValue(conflict);
+		const logger = { error: vi.fn() };
+		const materializer = _Materializer({ $transaction: runTransaction } as never, logger as never);
+
+		await expect(materializer.materializeAtomically(_Command())).resolves.toEqual({
+			status: "persistence_unavailable",
+		});
+		expect(runTransaction).toHaveBeenCalledTimes(3);
+		expect(logger.error).toHaveBeenCalledOnce();
+	});
+
 	it("returns the stored revision when retrying an already-applied proposal", async function _ReplaysAppliedProposal()
 	{
 		const { transaction } = _Transaction({
@@ -229,7 +262,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 			},
 			activePersonaRevisionId: "persona-2",
 		});
-		const materializer = new _PrismaPersonalConfigurationMaterializer({
+		const materializer = _Materializer({
 			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
 			{
 				return callback(transaction);
@@ -246,7 +279,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 	it("refuses an accepted proposal after a newer persona becomes active", async function _RejectsStalePersona()
 	{
 		const { transaction } = _Transaction({ activePersonaRevisionId: "persona-2" });
-		const materializer = new _PrismaPersonalConfigurationMaterializer({
+		const materializer = _Materializer({
 			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
 			{
 				return callback(transaction);
@@ -262,7 +295,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 	it("rejects a stale service head before resolving the selected model", async function _RejectsStaleServiceHead()
 	{
 		const { transaction } = _Transaction({ activeAgentRevisionId: "agent-2" });
-		const materializer = new _PrismaPersonalConfigurationMaterializer({
+		const materializer = _Materializer({
 			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
 			{
 				return callback(transaction);
@@ -279,7 +312,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 	it("rejects a later retained revision instead of reusing its revision number", async function _RejectsLaterRevision()
 	{
 		const { transaction } = _Transaction({ latestRevisionId: "agent-2" });
-		const materializer = new _PrismaPersonalConfigurationMaterializer({
+		const materializer = _Materializer({
 			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
 			{
 				return callback(transaction);
@@ -297,7 +330,7 @@ describe("Prisma personal configuration materializer", function _MaterializerSui
 	{
 		const { transaction } = _Transaction({ appliedCount: 0 });
 		let rolledBack = false;
-		const materializer = new _PrismaPersonalConfigurationMaterializer({
+		const materializer = _Materializer({
 			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
 			{
 				try

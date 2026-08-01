@@ -116,6 +116,8 @@ jobs:
           npm run --if-present test:phase-d-agent-namespaces
           npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:module-growth
+          npm run --if-present check:prisma-boundaries -- --diff "${{ steps.fresh.outputs.base }}"
+          npm run --if-present test:prisma-boundaries
           npm run --if-present lint:boundaries
 
       - name: Build, test, and lint every project
