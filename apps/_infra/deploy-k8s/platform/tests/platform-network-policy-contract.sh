@@ -6,9 +6,13 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 OUTPUT="$(mktemp)"
 MULTI_OUTPUT="$(mktemp)"
-trap 'rm -f "$OUTPUT" "$MULTI_OUTPUT"' EXIT
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 
-helm template opencrane-silo "$ROOT_DIR/apps/_infra/deploy-k8s" \
+prepare_current_chart_sources
+trap 'cleanup_current_chart_sources; rm -f "$OUTPUT" "$MULTI_OUTPUT"' EXIT
+CHART_DIR="$(current_chart_sources_dir)"
+
+helm template opencrane-silo "$CHART_DIR" \
   --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler >"$OUTPUT"
 
@@ -29,7 +33,7 @@ if grep -Fq 'cnpg.io/cluster' <<<"$PLATFORM_POLICY"; then
   exit 1
 fi
 
-helm template oc-acme "$ROOT_DIR/apps/_infra/deploy-k8s" \
+helm template oc-acme "$CHART_DIR" \
   --namespace oc-acme \
   --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/multi-instance/oc-acme.yaml" \
   >"$MULTI_OUTPUT"

@@ -93,8 +93,9 @@ package imports it.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
   Job quota; it contains no standing worker.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
-- `npx nx run deploy-k8s:test` renders the silo chart and verifies that the non-root server can read
-  projected ArtifactStore keys through its declared uid/gid and `fsGroup` contract.
+- `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
+  the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate
+  the release contract without rewriting the tracked `charts/*.tgz` archives.
 
 ## Sub-docs (the deep detail)
 

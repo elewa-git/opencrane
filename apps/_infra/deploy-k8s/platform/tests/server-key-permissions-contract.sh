@@ -2,7 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
-CHART_DIR="$ROOT_DIR/apps/_infra/deploy-k8s"
+source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
+
+prepare_current_chart_sources
+trap cleanup_current_chart_sources EXIT
+CHART_DIR="$(current_chart_sources_dir)"
 
 rendered="$(helm template opencrane-silo "$CHART_DIR")"
 server_manifest="$(printf '%s\n' "$rendered" | awk '
