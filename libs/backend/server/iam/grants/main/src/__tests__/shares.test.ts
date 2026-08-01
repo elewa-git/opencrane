@@ -5,7 +5,6 @@ import request from "supertest";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sharesRouter } from "../routes/shares.js";
-import type { RateLimitOptions } from "@opencrane/server/_infra/http";
 
 vi.mock("@opencrane/models/authorization", async () =>
 {
@@ -72,10 +71,9 @@ function _prisma(opts: {
 }
 
 /** Build a test app mounting the shares router. */
-function _app(prisma: PrismaClient, caller?: { subjectId: string; siloId: string }, rateLimit?: RateLimitOptions): Express
+function _app(prisma: PrismaClient, caller?: { subjectId: string; siloId: string }): Express
 {
 	const app = express();
-	app.set("trust proxy", 1);
 	app.use(express.json());
 	if (caller)
 	{
@@ -85,7 +83,7 @@ function _app(prisma: PrismaClient, caller?: { subjectId: string; siloId: string
 	{
 		vi.mocked(_ResolveRequestPrincipal).mockReturnValue(null);
 	}
-	app.use("/api/v1/shares", sharesRouter(prisma, { rateLimit }));
+	app.use("/api/v1/shares", sharesRouter(prisma));
 	return app;
 }
 
@@ -158,32 +156,6 @@ describe("sharesRouter — inter-user sharing (S4, AuthorizationGrant)", functio
 		const res = await request(_app(prisma, _CALLER)).post("/api/v1/shares").send({ payloadType: "mcp-server", payloadId: "mcp-1", recipientType: "user", recipientId: "bob" });
 		expect(res.status).toBe(200);
 		expect(res.body.id).toBe("grant-existing");
-	});
-
-	it("429s a repeated request before the sharing handlers can repeat expensive work", async function _rateLimited()
-	{
-		const { prisma } = _prisma();
-		const app = _app(prisma, _CALLER, { max: 1, windowMs: 1_000 });
-
-		expect((await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.10")).status).toBe(200);
-		const blocked = await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.10");
-
-		expect(blocked.status).toBe(429);
-		expect(blocked.headers["ratelimit-limit"]).toBe("1");
-	});
-
-	it("isolates clients and resets a client budget when its configured window expires", async function _rateLimitIsolationAndReset()
-	{
-		const { prisma } = _prisma();
-		const app = _app(prisma, _CALLER, { max: 1, windowMs: 100 });
-
-		expect((await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.11")).status).toBe(200);
-		expect((await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.11")).status).toBe(429);
-		expect((await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.12")).status).toBe(200);
-
-		await new Promise<void>(function _waitForWindow(resolve) { setTimeout(resolve, 125); });
-
-		expect((await request(app).get("/api/v1/shares").set("X-Forwarded-For", "203.0.113.11")).status).toBe(200);
 	});
 
 	it("revoke deletes only a grant the caller created; another's grant 404s and is untouched", async function _revoke()

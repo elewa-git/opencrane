@@ -158,6 +158,9 @@ jobs:
       - name: Generate the database client
         run: npm run db:generate -w @opencrane/server
 
+      - name: Verify the reviewed target authority baseline is intact
+        run: npm run test:authority-baseline -w @opencrane/server
+
       - name: Apply the fresh target database baseline
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
 

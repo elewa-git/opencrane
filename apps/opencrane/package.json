@@ -13,7 +13,8 @@
     "test": "vitest run",
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
-    "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs"
+    "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs",
+    "test:authority-baseline": "node prisma/bootstrap/verify-authority-baseline.mjs"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",

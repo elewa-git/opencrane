@@ -89,6 +89,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client ripgrep
 
+      - name: Verify the reviewed target authority baseline is intact
+        if: steps.fresh.outputs.changed == 'true'
+        run: npm run test:authority-baseline -w @opencrane/server
+
       - name: Apply the fresh target database baseline
         if: steps.fresh.outputs.changed == 'true'
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql

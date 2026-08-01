@@ -1,5 +1,7 @@
 import type { RequestHandler, Router } from "express";
 
+import type { RateLimitOptions } from "@opencrane/server/_infra/http";
+
 /** One Express mount shown in the app's route catalogue. */
 export interface RouteMount
 {
@@ -9,4 +11,11 @@ export interface RouteMount
 	readonly path: string;
 	/** Capability router or terminal request handler mounted at the path. */
 	readonly handler: Router | RequestHandler;
+}
+
+/** Optional bounded limiter tuning for the rate-limited shares composition, primarily in tests. */
+export interface SharesRouteOptions
+{
+	/** Shared HTTP limiter options applied before the shares router. */
+	readonly rateLimit?: RateLimitOptions;
 }
