@@ -65,7 +65,7 @@ Obot port), and `scope:shared` — never on apps or other server domains.
 
 Owns `Integration` and `IntegrationCustodyReference` in
 `apps/opencrane/prisma/schema/integrations.prisma`. Companion SQL and negative-path tests live in
-`tests/integrations-authority.sql` and the `test:negative` target.
+`src/__tests__/integrations-authority.sql` and the `test:negative` target.
 
 ## See also
 

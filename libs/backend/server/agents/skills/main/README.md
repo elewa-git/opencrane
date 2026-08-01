@@ -84,7 +84,7 @@ Owns `Skill`, `SkillRevision`, and the authoring-only `SkillWorkload` request in
 `apps/opencrane/prisma/schema/skills.prisma`. A workload is durable evidence, not a Kubernetes
 queue: it begins pending only for a sandboxed draft and is cancelled when that draft becomes
 ineligible. Tool-runner admission stays fail-closed until its snapshot-bound authority exists. A
-companion SQL authority test lives in `tests/skill-authority.sql`.
+companion SQL authority test lives in `src/__tests__/skill-authority.sql`.
 
 ## See also
 
