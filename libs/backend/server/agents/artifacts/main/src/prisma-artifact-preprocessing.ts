@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/client";
+import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, Prisma } from "@prisma/client";
 
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
@@ -25,23 +25,23 @@ const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
 /** System principal recorded on server-finalized derived revisions. */
 const _PREPROCESSOR_PRINCIPAL = "system:artifact-preprocessor";
 
-/** Postgres authority for selecting, fencing, and completing dedicated PDF preprocessing work. */
+/** Transaction-scoped repository for selecting, fencing, and completing dedicated PDF preprocessing work. */
 export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRepository
 {
-	/** Canonical OpenCrane catalogue database client. */
-	private readonly prisma: PrismaClient;
+	/** Private transaction client supplied only by the preprocessing unit of work. */
+	private readonly transaction: Prisma.TransactionClient;
 
-	/** Creates the preprocessing authority over the only catalogue database. */
-	constructor(prisma: PrismaClient)
+	/** Creates the repository for one already-open preprocessing transaction. */
+	constructor(transaction: Prisma.TransactionClient)
 	{
-		this.prisma = prisma;
+		this.transaction = transaction;
 	}
 
 	/** Claims one pending or eligible retried job while holding its source and output locks. */
 	async claimNextAtomically(): Promise<ClaimNextArtifactPreprocessJobResult>
 	{
-		return this.prisma.$transaction(async function _Claim(transaction): Promise<ClaimNextArtifactPreprocessJobResult>
 		{
+			const transaction = this.transaction;
 			// 1. Recover expired claims first; the lifecycle trigger cancels any stale output lease.
 			await transaction.$executeRaw(Prisma.sql`UPDATE "artifact_preprocess_jobs" SET "state" = 'retryable_failed', "output_lease_id" = NULL, "failure_code" = 'claim_expired', "next_attempt_at" = clock_timestamp(), "updated_at" = clock_timestamp() WHERE "state" = 'claimed' AND "claim_expires_at" <= clock_timestamp()`);
 
@@ -65,14 +65,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactPreprocessJob.update({ where: { id: candidate.jobId }, data: { state: ArtifactPreprocessJobState.Claimed, attempt: candidate.attempt + 1, claimFence, claimExpiresAt, nextAttemptAt: null, failureCode: null, outputLeaseId: null, derivedArtifactId } });
 
 			return { status: "claimed", claim: { jobId: candidate.jobId, attempt: candidate.attempt + 1, claimFence, claimExpiresAt, sourceRevisionId: candidate.sourceRevisionId, sourceArtifactId: candidate.sourceArtifactId, siloId: candidate.siloId, sourceByteLength: Number(candidate.sourceByteLength) } satisfies ArtifactPreprocessClaimProjection };
-		});
+		}
 	}
 
 	/** Allocates one source-read lease only while the exact claim fence remains current. */
 	async issueSourceLeaseAtomically(command: ArtifactPreprocessorClaimCommand): Promise<ArtifactPreprocessSourceLeaseProjection | null>
 	{
-		return this.prisma.$transaction(async function _IssueSourceLease(transaction): Promise<ArtifactPreprocessSourceLeaseProjection | null>
 		{
+			const transaction = this.transaction;
 			// 1. Lock the job before reading its fence so failure and reclaim cannot interleave with lease issuance.
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${command.jobId} FOR UPDATE`);
 
@@ -113,14 +113,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				byteLength: Number(job.sourceRevision.byteLength),
 				mediaType: "application/pdf",
 			};
-		});
+		}
 	}
 
 	/** Creates or reloads one exact active output lease for the current unexpired fence. */
 	async issueOutputLeaseAtomically(request: ArtifactPreprocessOutputLeaseRequest): Promise<IssueArtifactPreprocessOutputLeaseResult>
 	{
-		return this.prisma.$transaction(async function _Issue(transaction): Promise<IssueArtifactPreprocessOutputLeaseResult>
 		{
+			const transaction = this.transaction;
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${request.jobId} FOR UPDATE`);
 			const now = await _DatabaseNow(transaction);
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { derivedArtifact: true, outputLease: true } });
@@ -156,14 +156,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactUploadLease.create({ data: { id: leaseId, artifactId: job.derivedArtifact.id, siloId: job.derivedArtifact.siloId, capabilityJti: randomUUID(), expectedContentAddress: request.contentAddress, expectedByteLength: BigInt(request.byteLength), mediaType: "text/plain", expiresAt: job.claimExpiresAt } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { outputLeaseId: leaseId } });
 			return { status: "issued", lease: _OutputLeaseProjection(job.id, job.attempt, job.claimFence, job.derivedArtifact.id, leaseId, job.derivedArtifact.siloId, job.claimExpiresAt, request.contentAddress, request.byteLength) };
-		});
+		}
 	}
 
 	/** Consumes a receipt and publishes the generated text revision in the same transaction. */
 	async completeAtomically(request: ArtifactPreprocessCompletionRequest): Promise<CompleteArtifactPreprocessJobResult>
 	{
-		return this.prisma.$transaction(async function _Complete(transaction): Promise<CompleteArtifactPreprocessJobResult>
 		{
+			const transaction = this.transaction;
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${request.jobId} FOR UPDATE`);
 			const now = await _DatabaseNow(transaction);
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { outputLease: true, derivedArtifact: true } });
@@ -188,14 +188,14 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			await transaction.artifactUploadLease.update({ where: { id: job.outputLease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: now } });
 			await transaction.artifactPreprocessJob.update({ where: { id: job.id }, data: { state: ArtifactPreprocessJobState.Completed, derivedRevisionId: request.derivedRevisionId, completedAt: now } });
 			return { status: "completed" };
-		});
+		}
 	}
 
 	/** Records a current worker failure and applies bounded retry or terminal policy. */
 	async failAtomically(command: ArtifactPreprocessorFailureCommand): Promise<FailArtifactPreprocessJobResult>
 	{
-		return this.prisma.$transaction(async function _Fail(transaction): Promise<FailArtifactPreprocessJobResult>
 		{
+			const transaction = this.transaction;
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${command.jobId} FOR UPDATE`);
 			const now = await _DatabaseNow(transaction);
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId } });
@@ -208,7 +208,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				data: { state: terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt) },
 			});
 			return { status: terminal ? "terminal" : "retryable" };
-		});
+		}
 	}
 }
 

@@ -11,7 +11,7 @@ import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/a
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
-import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateArtifactPreprocessAuthority, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/_server/workload-identity";
 import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
@@ -200,7 +200,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
 		: null;
-	const artifactPreprocessRepository = new PrismaArtifactPreprocessRepository(prisma);
+	const artifactPreprocessRepository = _CreateArtifactPreprocessAuthority(prisma);
 	return {
 		conversationReplay: config.channelReplayRouteId === null
 			? null

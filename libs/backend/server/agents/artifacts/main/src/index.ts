@@ -3,8 +3,7 @@ export { __ClaimArtifactPreprocessJob, __CompleteArtifactPreprocessJob, __FailAr
 export { __CreateArtifactPreprocessorRouter } from "./artifact-preprocessing.router.js";
 export { __IssueArtifactReadLease } from "./artifact-read-lease.js";
 export { IssueArtifactReadLeaseOutcomes } from "./artifact-read-lease.types.js";
-export { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.js";
-export { PrismaArtifactPreprocessRepository } from "./prisma-artifact-preprocessing.js";
+export { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority } from "./prisma-artifact-authority.composition.js";
 export { __UploadArtifact } from "./artifact-upload.js";
 export { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router.js";
 export { _CreatePersonalArtifactCatalogueRouter } from "./prisma-personal-artifact-catalogue.router.js";
