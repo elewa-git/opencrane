@@ -1,4 +1,5 @@
 import type { ApprovePersonaCommand, ApprovePersonaResult, PersonaAuthorityRepository } from "./persona-authority.types.js";
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
 
 /** Approves and activates a reviewable persona without creating a mutable runtime SOUL file. */
 export async function __ApprovePersona(repository: PersonaAuthorityRepository, command: ApprovePersonaCommand): Promise<ApprovePersonaResult>
@@ -22,5 +23,5 @@ export async function __ApprovePersona(repository: PersonaAuthorityRepository, c
 
 	// 3. Rebind all mutable preconditions at commit so concurrent edits fail closed.
 	const result = await repository.approveAndActivateAtomically({ ...command, expectedRevisionState: "draft", expectedInterviewState: "completed", expectedInsightCount: snapshot.insightCount });
-	return result.status === "approved" ? { outcome: "approved" } : { outcome: "denied", reason: result.status === "not_found" ? "not_found" : "conflict" };
+	return result.status === PersonaLifecycleOutcomes.Approved ? { outcome: PersonaLifecycleOutcomes.Approved } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status === PersonaLifecycleOutcomes.NotFound ? PersonaLifecycleOutcomes.NotFound : "conflict" };
 }

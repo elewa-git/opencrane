@@ -1,4 +1,8 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
+import type { Logger } from "@opencrane/observability";
+
+import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability.js";
+import type { PersonaPersistenceUnitOfWork } from "../profile/persona-persistence-unit-of-work.types.js";
 
 import type { CreatePersonaDraftCommand, CreatePersonaDraftPersistenceResult, PersonaDraftFromInterviewRepository, PersonaDraftRepository } from "./persona-draft-authority.types.js";
 
@@ -7,44 +11,55 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 {
 	/** Canonical per-silo product database. */
 	private readonly prisma: PrismaClient;
+	/** Persona-owned transaction boundary for draft-only operations. */
+	private readonly transactions: PersonaPersistenceUnitOfWork;
+	/** App-owned structured logger for handled persistence failures. */
+	private readonly logger: Logger;
 
 	/** Create the draft authority over the canonical product database. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: PrismaClient, transactions: PersonaPersistenceUnitOfWork, logger: Logger)
 	{
 		this.prisma = prisma;
+		this.transactions = transactions;
+		this.logger = logger;
 	}
 
 	/** Lock source evidence, derive the winning template, and persist the next reviewable revision. */
 	async createAtomically(command: CreatePersonaDraftCommand): Promise<CreatePersonaDraftPersistenceResult>
 	{
+		const transactions = this.transactions;
 		try
 		{
-			return await this.prisma.$transaction(async function _create(transaction)
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.create", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft persistence failed", async function _traceCreate()
 			{
+				return transactions.run(async function _create(transaction)
+				{
+					const client = transaction as Prisma.TransactionClient;
 				// 1. Lock the owner profile to serialize both revision numbering and its immutable lineage.
-				const profiles = await transaction.$queryRaw<readonly { readonly activeRevisionId: string | null }[]>(Prisma.sql`SELECT "active_revision_id" AS "activeRevisionId" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
+				const profiles = await client.$queryRaw<readonly { readonly activeRevisionId: string | null }[]>(Prisma.sql`SELECT "active_revision_id" AS "activeRevisionId" FROM "persona_profiles" WHERE "id" = ${command.personaProfileId} AND "silo_id" = ${command.siloId} AND "user_id" = ${command.userId} FOR UPDATE`);
 				if (profiles.length !== 1) return { status: "not_found_or_wrong_owner" } as const;
 
 				// 2. Lock the completed interview so selected answers and the next draft share one exact evidence view.
-				const interviews = await transaction.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} AND "state" = 'completed' FOR UPDATE`);
+				const interviews = await client.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "persona_interviews" WHERE "id" = ${command.interviewId} AND "persona_profile_id" = ${command.personaProfileId} AND "user_id" = ${command.userId} AND "state" = 'completed' FOR UPDATE`);
 				if (interviews.length !== 1) return { status: "interview_incomplete" } as const;
 
 				// 3. Derive the deterministic winning reviewed SOUL template and validate every proposed insight answer.
-				const template = await _selectedTemplate(transaction, command.interviewId);
+				const template = await _selectedTemplate(client, command.interviewId);
 				if (template === null) return { status: "template_not_selected" } as const;
-				const evidence = await _insightEvidence(transaction, command);
+				const evidence = await _insightEvidence(client, command);
 				if (evidence === null) return { status: "invalid_insights" } as const;
 
 				// 4. Allocate the next profile-local revision, then store only the derived template and evidence coordinates.
-				const revisions = await transaction.$queryRaw<readonly { readonly nextRevision: number }[]>(Prisma.sql`SELECT COALESCE(MAX("revision"), 0) + 1 AS "nextRevision" FROM "persona_revisions" WHERE "persona_profile_id" = ${command.personaProfileId}`);
-				const revision = await transaction.personaRevision.create({ data: { personaProfileId: command.personaProfileId, revision: revisions[0]?.nextRevision ?? 1, soulTemplateId: template.templateId, soulTemplateVersion: template.templateVersion, soulTemplateDigest: template.templateDigest, interviewId: command.interviewId, selectionRuleId: template.selectionRuleId, selectionAnswerIds: [...template.selectionAnswerIds], compiledInstructions: _compiledInstructions(template.content, command.insights), previousRevisionId: profiles[0].activeRevisionId, authoredBy: command.userId, createdAt: new Date(command.authoredAt) }, select: { id: true } });
-				await transaction.personaInsight.createMany({ data: evidence.map(function _toInsight(item) { return { personaRevisionId: revision.id, category: item.category, statement: item.statement, interviewId: command.interviewId, questionSetId: item.questionSetId, questionSetVersion: item.questionSetVersion, questionId: item.questionId, answerId: item.answerId }; }) });
-				return { status: "created", personaRevisionId: revision.id } as const;
-			});
+				const revisions = await client.$queryRaw<readonly { readonly nextRevision: number }[]>(Prisma.sql`SELECT COALESCE(MAX("revision"), 0) + 1 AS "nextRevision" FROM "persona_revisions" WHERE "persona_profile_id" = ${command.personaProfileId}`);
+				const revision = await client.personaRevision.create({ data: { personaProfileId: command.personaProfileId, revision: revisions[0]?.nextRevision ?? 1, soulTemplateId: template.templateId, soulTemplateVersion: template.templateVersion, soulTemplateDigest: template.templateDigest, interviewId: command.interviewId, selectionRuleId: template.selectionRuleId, selectionAnswerIds: [...template.selectionAnswerIds], compiledInstructions: _compiledInstructions(template.content, command.insights), previousRevisionId: profiles[0].activeRevisionId, authoredBy: command.userId, createdAt: new Date(command.authoredAt) }, select: { id: true } });
+				await client.personaInsight.createMany({ data: evidence.map(function _toInsight(item) { return { personaRevisionId: revision.id, category: item.category, statement: item.statement, interviewId: command.interviewId, questionSetId: item.questionSetId, questionSetVersion: item.questionSetVersion, questionId: item.questionId, answerId: item.answerId }; }) });
+					return { status: "created", personaRevisionId: revision.id } as const;
+				});
+			}, _IsDraftConflict);
 		}
 		catch (error)
 		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError) return { status: "conflict" };
+			if (_IsDraftConflict(error)) return { status: "conflict" };
 			return { status: "persistence_unavailable" };
 		}
 	}
@@ -52,18 +67,28 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 	/** Derive three bounded owner-visible insights from the completed interview before using the existing atomic draft path. */
 	async createFromInterviewAtomically(command: Omit<CreatePersonaDraftCommand, "insights">): Promise<CreatePersonaDraftPersistenceResult>
 	{
+		const prisma = this.prisma;
 		try
 		{
-			const interview = await this.prisma.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: "Completed" }, select: { answers: { select: { id: true, value: true }, orderBy: { id: "asc" }, take: 5 } } });
-			if (interview === null) return { status: "interview_incomplete" };
-			if (interview.answers.length < 3) return { status: "invalid_insights" };
-			return this.createAtomically({ ...command, insights: interview.answers.map(function _insight(answer) { return { answerId: answer.id, statement: `Owner response: ${answer.value.trim()}` }; }) });
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.draft.derive", { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, interviewId: command.interviewId }, "Persona draft derivation persistence failed", async () =>
+			{
+				const interview = await prisma.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: "Completed" }, select: { answers: { select: { id: true, value: true }, orderBy: { id: "asc" }, take: 5 } } });
+				if (interview === null) return { status: "interview_incomplete" };
+				if (interview.answers.length < 3) return { status: "invalid_insights" };
+				return this.createAtomically({ ...command, insights: interview.answers.map(function _insight(answer) { return { answerId: answer.id, statement: `Owner response: ${answer.value.trim()}` }; }) });
+			});
 		}
 		catch
 		{
 			return { status: "persistence_unavailable" };
 		}
 	}
+}
+
+/** Recognise only concurrent unique-key and transaction-write races as draft conflicts. */
+function _IsDraftConflict(error: unknown): boolean
+{
+	return error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034");
 }
 
 /** Load Postgres's same deterministic selected-template candidate that the approval trigger enforces. */
