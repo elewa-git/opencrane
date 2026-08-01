@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { PrismaConversationReplayRepository } from "../prisma-conversation-replay-repository.js";
+import { _CreateConversationReplayRepository } from "../prisma-conversation-replay-repository.js";
 
 describe("Prisma conversation replay repository", function _Suite()
 {
@@ -13,7 +13,7 @@ describe("Prisma conversation replay repository", function _Suite()
 			agentRun: { findFirst: async function _cursorRun() { return { id: "run-1" }; }, findMany: agentRunFindMany },
 			conversationRunEvent: { findUnique: async function _cursorEvent() { return { runId: "run-1" }; }, findMany },
 		};
-		const repository = new PrismaConversationReplayRepository(prisma as never);
+		const repository = _CreateConversationReplayRepository(prisma as never);
 		const rows = await repository.read({ threadId: "thread-1", siloId: "silo-1", subjectId: "user-1", cursor: { acceptedAt: "2026-07-23T10:00:00.000Z", runId: "run-1", sequence: 2 }, limit: 10 });
 		expect(rows).toHaveLength(1);
 		expect(agentRunFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ OR: expect.arrayContaining([expect.objectContaining({ acceptedAt: new Date("2026-07-23T10:00:00.000Z"), id: { gte: "run-1" } })]) }) }));
@@ -27,7 +27,7 @@ describe("Prisma conversation replay repository", function _Suite()
 			agentRun: { findFirst: async function _cursorRun() { return null; }, findMany },
 			conversationRunEvent: { findUnique: async function _cursorEvent() { return null; }, findMany: async function _events() { return []; } },
 		};
-		const rows = await new PrismaConversationReplayRepository(prisma as never).read({ threadId: "thread-1", siloId: "silo-1", subjectId: "user-1", cursor: { acceptedAt: "2026-07-23T10:00:00.000Z", runId: "foreign-run", sequence: 1 }, limit: 10 });
+		const rows = await _CreateConversationReplayRepository(prisma as never).read({ threadId: "thread-1", siloId: "silo-1", subjectId: "user-1", cursor: { acceptedAt: "2026-07-23T10:00:00.000Z", runId: "foreign-run", sequence: 1 }, limit: 10 });
 		expect(rows).toEqual([]);
 		expect(findMany).not.toHaveBeenCalled();
 	});

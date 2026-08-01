@@ -5,8 +5,14 @@ import type { ConversationReplayCursor } from "./replay-cursor.types.js";
 import type { ConversationReplayRepository, ReadConversationReplayCommand } from "./replay-reader.types.js";
 import type { ConversationReplayEventRow } from "./replay-projection.types.js";
 
-/** Prisma adapter that reads only a consumed context's participant-bound canonical thread events. */
-export class PrismaConversationReplayRepository implements ConversationReplayRepository
+/** App-composed read repository that accepts a Prisma client only at this persistence edge. */
+export function _CreateConversationReplayRepository(prisma: PrismaClient): ConversationReplayRepository
+{
+	return new _PrismaConversationReplayRepository(prisma);
+}
+
+/** Private Prisma adapter that reads only a consumed context's participant-bound canonical thread events. */
+class _PrismaConversationReplayRepository implements ConversationReplayRepository
 {
 	/** Canonical product database. */
 	private readonly prisma: PrismaClient;

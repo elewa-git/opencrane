@@ -9,7 +9,7 @@ import type { ObotAttemptKeyIssuer } from "@opencrane/backend/_server/obot-custo
 import { PrismaSkillWorkloadUnitOfWork, _CreateSkillWorkloadExecutionAuthority, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
 import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "@opencrane/backend/server/iam/authorization";
-import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
+import { _CreateConversationReplayRepository, __CreateConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { _CreateArtifactPreprocessAuthority, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/_server/workload-identity";
@@ -206,7 +206,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 			? null
 			: __CreateConversationReplayRouter({
 				contexts: new PrismaChannelTargetAuthorityRepository(prisma),
-				repository: new PrismaConversationReplayRepository(prisma),
+				repository: _CreateConversationReplayRepository(prisma),
 				expectedRouteId: config.channelReplayRouteId,
 				nowEpochMs: function _nowEpochMs() { return Date.now(); },
 			}),
