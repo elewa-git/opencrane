@@ -1,10 +1,7 @@
-import { createHash } from "node:crypto";
-
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
-import { ___CanonicalizeJson } from "@opencrane/util";
-import type { JsonValue } from "@opencrane/util";
 import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";
 
@@ -119,5 +116,5 @@ function _optionalCount(value: JsonValue | undefined): number | null
 /** Seal the compiled payload with a SHA-256 digest over its canonical serialization. */
 function _digest(unsealed: Omit<CompiledRunInput, "digest">): `sha256:${string}`
 {
-	return `sha256:${createHash("sha256").update(___CanonicalizeJson(unsealed as unknown as JsonValue), "utf8").digest("hex")}`;
+	return ___DigestCanonicalJson(unsealed as unknown as JsonValue);
 }

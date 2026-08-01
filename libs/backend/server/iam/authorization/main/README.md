@@ -66,7 +66,8 @@ legitimate request — never hand out access it should not.
   authenticated request principal into the approval caller and owns the adapters and clock.
 - `__OpenDeferredToolApproval` — atomically links a reserved external action to its approval, then
   recovers an ambiguous commit or terminalises the reservation so it cannot be replayed.
-- `__DigestCanonicalJson` — a stable hash of a request used across the checks above.
+- `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
+  canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,

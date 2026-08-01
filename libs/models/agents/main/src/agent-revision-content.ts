@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-
-import { ___CanonicalizeJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
+import { ___DigestCanonicalJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
 
 import type { AgentRevisionContent } from "./agent-revision.types.js";
 
@@ -51,5 +49,5 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 		}),
 	};
 
-	return `sha256:${createHash("sha256").update(___CanonicalizeJson(canonical), "utf8").digest("hex")}`;
+	return ___DigestCanonicalJson(canonical);
 }
