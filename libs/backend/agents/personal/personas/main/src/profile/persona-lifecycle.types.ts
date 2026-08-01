@@ -21,9 +21,15 @@ export enum PersonaLifecycleOutcomes
 	NotFound = "not_found",
 }
 
-/** Stable response-state values exposed by the owner-only persona onboarding API. */
+/** Stable owner-visible resumable-state vocabulary exposed by the owner-only persona onboarding API. */
 export enum PersonaOnboardingApiStates
 {
+	/** The owner needs to start or continue their interview. */
+	Interview = "interview",
+	/** A derived draft awaits the owner's review. */
+	Review = "review",
+	/** An approved persona makes a personal session eligible. */
+	Ready = "ready",
 	/** The owner is answering the reviewed interview. */
 	InProgress = "in_progress",
 	/** The owner completed the interview. */
@@ -37,6 +43,8 @@ export enum PersonaOnboardingApiStates
 /** Persona authority denials that map to bounded HTTP statuses without leaking ownership. */
 export enum PersonaInterviewDenialReasons
 {
+	/** The request omitted a required owner, interview, question, or trusted instant. */
+	InvalidCommand = "invalid_command",
 	/** Persistence could not produce an authoritative result. */
 	PersistenceUnavailable = "persistence_unavailable",
 	/** The reviewed question set is unavailable. */
@@ -47,6 +55,8 @@ export enum PersonaInterviewDenialReasons
 	RefreshChangeUnavailable = "refresh_change_unavailable",
 	/** The exact question already has immutable answer evidence. */
 	AlreadyAnswered = "already_answered",
+	/** The requested question is absent from the reviewed revision frozen into the interview. */
+	QuestionUnavailable = "question_unavailable",
 	/** The interview has advanced beyond its mutable state. */
 	NotInProgress = "not_in_progress",
 	/** The required reviewed answers are incomplete. */

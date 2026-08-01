@@ -2,7 +2,7 @@ import { PersonaInterviewState, PersonaRevisionState, Prisma, type PrismaClient 
 
 import type { PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
 
-import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types.js";
+import { PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot, type PersonaAuthorityRepository } from "./persona-authority.types.js";
 
 /** Prisma-backed authority that atomically approves and activates one personal persona revision. */
 export class PrismaPersonaAuthorityRepository implements PersonaAuthorityRepository
@@ -41,7 +41,7 @@ export class PrismaPersonaAuthorityRepository implements PersonaAuthorityReposit
 		const templateSelectionMatches = await this._matchesSelectedTemplate(command.personaRevisionId);
 		return {
 			profileUserId: revision.profile.userId,
-			revisionState: revision.state === PersonaRevisionState.Draft ? "draft" : "approved",
+			revisionState: revision.state === PersonaRevisionState.Draft ? PersonaApprovalRevisionStates.Draft : PersonaApprovalRevisionStates.Approved,
 			revisionProfileId: revision.personaProfileId,
 			interviewState: _asInterviewState(revision.interview.state),
 			insightCount: revision._count.insights,
@@ -144,8 +144,8 @@ class _PersonaApprovalConflict extends Error
 }
 
 /** Convert Prisma's closed interview enum into the domain approval vocabulary. */
-function _asInterviewState(state: PersonaInterviewState): "in_progress" | "completed"
+function _asInterviewState(state: PersonaInterviewState): PersonaApprovalInterviewStates
 {
-	if (state === PersonaInterviewState.Completed) return "completed";
-	return "in_progress";
+	if (state === PersonaInterviewState.Completed) return PersonaApprovalInterviewStates.Completed;
+	return PersonaApprovalInterviewStates.InProgress;
 }

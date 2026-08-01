@@ -1,3 +1,24 @@
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+
+/** Stable failure reasons from draft derivation and persistence. */
+export enum PersonaDraftDenialReasons
+{
+	/** The command did not identify one owner, profile, interview, and trusted instant. */
+	InvalidCommand = "invalid_command",
+	/** The requested profile or interview is not owned by the caller. */
+	NotFoundOrWrongOwner = "not_found_or_wrong_owner",
+	/** The source interview is not completed and immutable. */
+	InterviewIncomplete = "interview_incomplete",
+	/** The derived insight evidence is missing, duplicated, or out of bounds. */
+	InvalidInsights = "invalid_insights",
+	/** No reviewed template matched the completed interview evidence. */
+	TemplateNotSelected = "template_not_selected",
+	/** A concurrent write prevented the draft transaction from committing. */
+	Conflict = "conflict",
+	/** The persistence authority could not provide a durable result. */
+	PersistenceUnavailable = "persistence_unavailable",
+}
+
 /** One user-visible insight proposed for a completed onboarding answer. */
 export interface PersonaDraftInsightCommand
 {
@@ -26,13 +47,13 @@ export interface CreatePersonaDraftCommand
 
 /** Stable outcome from creating a reviewable interview-backed persona draft. */
 export type CreatePersonaDraftResult =
-	| { readonly outcome: "created"; readonly personaRevisionId: string }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "not_found_or_wrong_owner" | "interview_incomplete" | "invalid_insights" | "template_not_selected" | "conflict" | "persistence_unavailable" };
+	| { readonly outcome: PersonaLifecycleOutcomes.Created; readonly personaRevisionId: string }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaDraftDenialReasons };
 
 /** Raw persistence result before the public use case adds local command validation. */
 export type CreatePersonaDraftPersistenceResult =
-	| { readonly status: "created"; readonly personaRevisionId: string }
-	| { readonly status: "not_found_or_wrong_owner" | "interview_incomplete" | "invalid_insights" | "template_not_selected" | "conflict" | "persistence_unavailable" };
+	| { readonly status: PersonaLifecycleOutcomes.Created; readonly personaRevisionId: string }
+	| { readonly status: Exclude<PersonaDraftDenialReasons, PersonaDraftDenialReasons.InvalidCommand> };
 
 /** Persistence boundary that creates one immutable, reviewable persona draft. */
 export interface PersonaDraftRepository

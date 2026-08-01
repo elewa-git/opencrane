@@ -1,3 +1,23 @@
+import { PersonaLifecycleOutcomes } from "../profile/persona-lifecycle.types.js";
+
+/** Stable draft-state vocabulary accepted by persona approval's immutable snapshot. */
+export enum PersonaApprovalRevisionStates
+{
+	/** The revision remains owner-reviewable and may be activated exactly once. */
+	Draft = "draft",
+	/** The revision is immutable approval evidence and cannot be approved again. */
+	Approved = "approved",
+}
+
+/** Stable interview-state vocabulary accepted by persona approval's immutable snapshot. */
+export enum PersonaApprovalInterviewStates
+{
+	/** The interview can still accept answers and cannot support a draft approval. */
+	InProgress = "in_progress",
+	/** The interview is frozen and may support a reviewable draft. */
+	Completed = "completed",
+}
+
 /** Request to approve and activate one exact persona draft. */
 export interface ApprovePersonaCommand
 {
@@ -17,18 +37,18 @@ export interface PersonaApprovalSnapshot
 	/** Current profile owner. */
 	readonly profileUserId: string;
 	/** Current persona revision state. */
-	readonly revisionState: "draft" | "approved";
+	readonly revisionState: PersonaApprovalRevisionStates;
 	/** Profile owning the revision. */
 	readonly revisionProfileId: string;
 	/** Interview state supporting the revision. */
-	readonly interviewState: "in_progress" | "completed";
+	readonly interviewState: PersonaApprovalInterviewStates;
 	/** Number of explicit provenance-linked insights. */
 	readonly insightCount: number;
 	/** Exact reviewed template digest pinned by the revision. */
 	readonly templateDigestMatches: boolean;
 	/** Deterministic winning template rule and exact answer evidence match the interview. */
 	readonly templateSelectionMatches: boolean;
-	/** Fixed policy preventing runtime mutation of durable SOUL sources. */
+	/** Persisted policy value checked without coercion so an unknown database value fails approval closed rather than gaining local enum authority. */
 	readonly durableSoulMutationPolicy: string;
 }
 
@@ -36,9 +56,9 @@ export interface PersonaApprovalSnapshot
 export interface AtomicApprovePersonaCommand extends ApprovePersonaCommand
 {
 	/** Draft state that must still hold when the update commits. */
-	readonly expectedRevisionState: "draft";
+	readonly expectedRevisionState: PersonaApprovalRevisionStates.Draft;
 	/** Completed interview state that must still hold when the update commits. */
-	readonly expectedInterviewState: "completed";
+	readonly expectedInterviewState: PersonaApprovalInterviewStates.Completed;
 	/** Exact accepted insight count from three through five. */
 	readonly expectedInsightCount: number;
 }
@@ -93,5 +113,5 @@ export interface PersonaAuthorityRepository
 
 /** Stable result of persona approval. */
 export type ApprovePersonaResult =
-	| { readonly outcome: "approved" }
-	| { readonly outcome: "denied"; readonly reason: PersonaApprovalDenialReasons };
+	| { readonly outcome: PersonaLifecycleOutcomes.Approved }
+	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaApprovalDenialReasons };

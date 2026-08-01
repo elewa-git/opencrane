@@ -1,6 +1,7 @@
 import type { PrismaClient } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
+import { PersonaOnboardingApiStates } from "../persona-lifecycle.types.js";
 import { PrismaPersonaOnboardingStatusRepository } from "../prisma-persona-onboarding-status-repository.js";
 
 /** Build a status-reader Prisma double with an old active revision and a newer retake interview. */
@@ -14,12 +15,12 @@ describe("PrismaPersonaOnboardingStatusRepository", function _suite()
 	it("prioritizes an in-progress retake over an older active approved revision", async function _retake()
 	{
 		const repository = new PrismaPersonaOnboardingStatusRepository(_prisma("InProgress"));
-		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null });
+		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null });
 	});
 
 	it("keeps a completed retake resumable until it has a new draft", async function _completedRetake()
 	{
 		const repository = new PrismaPersonaOnboardingStatusRepository(_prisma("Completed"));
-		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: "interview", interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null });
+		await expect(repository.readStatus("silo-1", "user-1")).resolves.toEqual({ state: PersonaOnboardingApiStates.Interview, interviewId: "retake-1", answeredQuestionCount: 1, questionCount: 2, personaRevisionId: null });
 	});
 });

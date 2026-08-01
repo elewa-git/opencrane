@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PrismaClient } from "@prisma/client";
 import { PersonalConfigurationPersonaRefreshClaimCodes, type PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
+
+import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../../profile/persona-lifecycle.types.js";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
@@ -12,9 +14,9 @@ import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-re
 function _repository(overrides: Partial<PersonaInterviewRepository> = {}): PersonaInterviewRepository
 {
 	return {
-		startAtomically: async function _start() { return { status: "started", interviewId: "interview-1" } as const; },
-		recordAnswerAtomically: async function _record() { return { status: "recorded", answerId: "answer-1" } as const; },
-		completeAtomically: async function _complete() { return { status: "completed" } as const; },
+		startAtomically: async function _start() { return { status: PersonaLifecycleOutcomes.Started, interviewId: "interview-1" } as const; },
+		recordAnswerAtomically: async function _record() { return { status: PersonaLifecycleOutcomes.Recorded, answerId: "answer-1" } as const; },
+		completeAtomically: async function _complete() { return { status: PersonaLifecycleOutcomes.Completed } as const; },
 		...overrides,
 	};
 }
