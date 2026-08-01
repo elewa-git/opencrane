@@ -45,10 +45,12 @@ and never calls Cognee.
 
 ## Boundary
 
-Consumed by execution-input assembly. It must not write generic fact metadata, own a transaction,
-derive a dataset from a subject outside admission, read durable fact text, call Cognee, or compose a
-runtime. Personal admission remains deliberately uncomposed in the current application; this package
-is prepared for that future wiring but does not claim it is a live personal-memory feature.
+Consumed by execution-input assembly. The dedicated personal-session factory composes this package's
+repository into both personal memory sources inside the existing run-admission transaction. This
+package itself must not write generic fact metadata, own a transaction, derive a dataset from a
+subject outside admission, read durable fact text, call Cognee, or compose a runtime. The app only
+chooses the signed identity and skill-eligibility authorities; this package remains the narrow
+identity-bound selection owner.
 
 ## Dependency direction
 
