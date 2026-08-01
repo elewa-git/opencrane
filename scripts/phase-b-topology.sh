@@ -45,7 +45,6 @@ const appSourceClassifications = new Set([
   "test-config",
 ]);
 const workloadKindPattern = /^\s*kind:\s*(Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job)\s*$/m;
-const renderedWorkloadKindPattern = /^kind:\s*(Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job)\s*$/m;
 const runtimeWorkloadLinePattern = /^(?:\s*kind:\s*["']?(?:Pod|Deployment|StatefulSet|DaemonSet|CronJob|Job|Cluster)["']?,?\s*|.*\bkubectl\s+(?:run|create\s+(?:job|cronjob|deployment))\b.*|.*\bupgrade\s+--install\b.*|.*\.createNamespaced(?:Pod|Job|Deployment|StatefulSet|DaemonSet)\b.*)$/;
 
 function fail(message)
@@ -281,74 +280,19 @@ for (const forbidden of workloadRegistry.forbiddenPaths ?? [])
   if (existsSync(workspacePath(forbidden))) fail(`retired embedded workload path returned: ${forbidden}`);
 }
 
-const renderedAcrossProfiles = new Set();
-for (const profile of workloadRegistry.renderProfiles ?? [])
+try
 {
-  const context = `render profile '${profile.id ?? "<missing>"}'`;
-  if (!profile.id) fail(`${context}: id is required`);
-  const args = [
-    "template",
-    "opencrane",
-    workspacePath("apps/_infra/deploy-k8s"),
-    "--namespace",
-    "opencrane-system",
-  ];
-  for (const value of profile.setValues ?? []) args.push("--set", value);
-  let manifest = "";
-  try
-  {
-    manifest = execFileSync("helm", args, { cwd: root, encoding: "utf8" });
-  }
-  catch (err)
-  {
-    fail(`${context}: Helm render failed: ${err.message}`);
-    continue;
-  }
-
-  const actual = new Set();
-  for (const document of manifest.split(/^---\s*$/m))
-  {
-    const kind = renderedWorkloadKindPattern.exec(document)?.[1];
-    if (!kind) continue;
-    const metadataStart = document.search(/^metadata:\s*$/m);
-    const name = metadataStart === -1
-      ? undefined
-      : /^  name:\s*([^\s]+)\s*$/m.exec(document.slice(metadataStart))?.[1];
-    if (!name)
-    {
-      fail(`${context}: rendered ${kind} has no exact metadata.name`);
-      continue;
-    }
-    const podClass = `${kind}/${name}`;
-    if (actual.has(podClass)) fail(`${context}: duplicate rendered pod class ${podClass}`);
-    actual.add(podClass);
-    renderedAcrossProfiles.add(podClass);
-    if (!renderedPodClasses.has(podClass))
-    {
-      fail(`${context}: unregistered rendered pod class ${podClass}`);
-    }
-  }
-
-  const expected = new Set(profile.expectedRenderedPodClasses ?? []);
-  if (expected.size !== (profile.expectedRenderedPodClasses ?? []).length)
-  {
-    fail(`${context}: expectedRenderedPodClasses contains a duplicate`);
-  }
-  for (const podClass of expected)
-  {
-    if (!actual.has(podClass)) fail(`${context}: expected pod class did not render: ${podClass}`);
-    if (!renderedPodClasses.has(podClass)) fail(`${context}: expected pod class has no workload owner: ${podClass}`);
-  }
-  for (const podClass of actual)
-  {
-    if (!expected.has(podClass)) fail(`${context}: render output is not pinned: ${podClass}`);
-  }
+  const renderInfo = execFileSync(
+    "bash",
+    [resolve(root, "scripts/phase-b-render-profiles.sh"), root, workloadRegistryPath],
+    { cwd: root, encoding: "utf8" },
+  ).trim();
+  info.push(renderInfo);
 }
-for (const podClass of renderedPodClasses.keys())
+catch (err)
 {
-  if (!renderedAcrossProfiles.has(podClass)) fail(`registered rendered pod class is absent from every profile: ${podClass}`);
+  fail(`Helm profile rendering failed: ${err.stderr?.trim() || err.message}`);
 }
-info.push(`${(workloadRegistry.renderProfiles ?? []).length} Helm profiles match their exact pod-class inventories`);
 
 const runtimeConstructs = new Map();
 for (const entry of workloadRegistry.runtimeConstructs ?? [])
