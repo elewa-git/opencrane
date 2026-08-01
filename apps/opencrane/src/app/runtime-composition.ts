@@ -56,8 +56,18 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 		outboxPruneBatchSize: config.outboxPruneBatchSize,
 	}, _IssueAttemptModelKey);
 	return {
-		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({ tokenReviewer, namespace: namespaces.serverNamespace, repository: runDispatchRepository, logger: _log }),
-		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer, namespace: namespaces.serverNamespace, repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds), logger: _log }),
+		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({
+			tokenReviewer,
+			namespace: namespaces.serverNamespace,
+			repository: runDispatchRepository,
+			logger: _log,
+		}),
+		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({
+			tokenReviewer,
+			namespace: namespaces.serverNamespace,
+			repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds),
+			logger: _log,
+		}),
 	};
 }
 
@@ -74,9 +84,22 @@ function _CreateControllerRuntimeComposition(prisma: PrismaClient, config: Inter
 function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenReviewer: ReturnType<typeof _CreateSkillWorkloadTokenReviewer>): SkillWorkloadRuntimeComposition
 {
 	return {
-		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer, repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }),
-		skillAuthoringInput: __CreateSkillAuthoringInputRouter({ tokenReviewer, repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }),
-		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({ tokenReviewer, repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }),
+		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({
+			tokenReviewer,
+			repository: new PrismaSkillWorkloadBootstrapRepository(prisma),
+			logger: _log,
+		}),
+		skillAuthoringInput: __CreateSkillAuthoringInputRouter({
+			tokenReviewer,
+			repository: new PrismaSkillAuthoringInputRepository(prisma),
+			artifactReader: _CreateSkillAuthoringArtifactReader(prisma),
+			logger: _log,
+		}),
+		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({
+			tokenReviewer,
+			repository: new PrismaSkillAuthoringCompletionRepository(prisma),
+			logger: _log,
+		}),
 	};
 }
 
@@ -102,8 +125,20 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 		externalActionRetryWindowMilliseconds: 30_000,
 	}, _log);
 	return {
-		runtimeBootstrap: __CreateRuntimeBootstrapRouter({ tokenReviewer, runtimeNamespaces: [namespaces.personalRuntimeNamespace, namespaces.managedRuntimeNamespace], repository: new PrismaRuntimeBootstrapExchange(prisma), clock: { nowEpochMs: function _nowEpochMs() { return Date.now(); } }, logger: _log }),
-		runtimeStream: _RegisterInternalAgentRuntimeStream({ tokenReviewer, authority: runtimeDispatchAuthority, maxBodyBytes: 64 * 1024, heartbeatMilliseconds: 15_000, commandRecoveryMilliseconds: config.commandRecoveryMilliseconds }),
+		runtimeBootstrap: __CreateRuntimeBootstrapRouter({
+			tokenReviewer,
+			runtimeNamespaces: [namespaces.personalRuntimeNamespace, namespaces.managedRuntimeNamespace],
+			repository: new PrismaRuntimeBootstrapExchange(prisma),
+			clock: { nowEpochMs: function _nowEpochMs() { return Date.now(); } },
+			logger: _log,
+		}),
+		runtimeStream: _RegisterInternalAgentRuntimeStream({
+			tokenReviewer,
+			authority: runtimeDispatchAuthority,
+			maxBodyBytes: 64 * 1024,
+			heartbeatMilliseconds: 15_000,
+			commandRecoveryMilliseconds: config.commandRecoveryMilliseconds,
+		}),
 	};
 }
 
@@ -127,10 +162,22 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	return {
 		conversationReplay: config.channelReplayRouteId === null
 			? null
-			: __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: config.channelReplayRouteId, nowEpochMs: function _nowEpochMs() { return Date.now(); } }),
+			: __CreateConversationReplayRouter({
+				contexts: new PrismaChannelTargetAuthorityRepository(prisma),
+				repository: new PrismaConversationReplayRepository(prisma),
+				expectedRouteId: config.channelReplayRouteId,
+				nowEpochMs: function _nowEpochMs() { return Date.now(); },
+			}),
 		artifactPreprocessor: artifactPreprocessorNamespace === null
 			? null
-			: __CreateArtifactPreprocessorRouter({ tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace), namespace: artifactPreprocessorNamespace, repository: new PrismaArtifactPreprocessRepository(prisma), sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma), outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes), logger: _log }),
+			: __CreateArtifactPreprocessorRouter({
+				tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
+				namespace: artifactPreprocessorNamespace,
+				repository: new PrismaArtifactPreprocessRepository(prisma),
+				sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
+				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
+				logger: _log,
+			}),
 	};
 }
 

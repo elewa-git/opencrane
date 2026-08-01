@@ -29,10 +29,16 @@ export interface InternalRuntimeComposition
 }
 
 /** Controller-only composition slice. */
-export type ControllerRuntimeComposition = Pick<InternalRuntimeComposition, "agentControllerRunDispatch" | "skillWorkloadDispatch">;
+export type ControllerRuntimeComposition = Pick<
+	InternalRuntimeComposition,
+	"agentControllerRunDispatch" | "skillWorkloadDispatch"
+>;
 
 /** Isolated skill workload composition slice. */
-export type SkillWorkloadRuntimeComposition = Pick<InternalRuntimeComposition, "skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion">;
+export type SkillWorkloadRuntimeComposition = Pick<
+	InternalRuntimeComposition,
+	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
+>;
 
 /** Runtime protocol composition slice. */
 export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
