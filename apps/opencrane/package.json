@@ -55,7 +55,13 @@
     "targets": {
       "container": {
         "executor": "nx:run-commands",
-        "options": {
+      "metadata": {
+        "release": {
+          "image": "opencrane-server",
+          "dockerfile": "apps/opencrane/deploy/Dockerfile"
+        }
+      },
+      "options": {
           "command": "docker build -f apps/opencrane/deploy/Dockerfile ."
         }
       },

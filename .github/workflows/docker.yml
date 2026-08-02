@@ -62,6 +62,9 @@ jobs:
         with:
           main-branch-name: ${{ github.base_ref || github.ref_name }}
 
+      - name: Prove app-owned deployable selection
+        run: npm run test:affected-deployables
+
       - name: Emit affected deployable matrix
         id: affected
         run: node scripts/affected-deployables.mjs
