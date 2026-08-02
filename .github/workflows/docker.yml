@@ -124,19 +124,25 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client ripgrep
 
-      - name: Enforce Phase B workload ownership and thin app roots
-        run: npm run check:phase-b-topology
+      - name: Enforce Phase A retired-reference and legacy-residue guards
+        run: ./scripts/phase-a-forbidden-references.sh
 
-      - name: Prove Phase B topology guard rejects drift
+      - name: Prove the Phase A residue guard fails closed
+        run: npm run test:phase-a-forbidden-references
+
+      - name: Enforce workload ownership and app composition
+        run: npm run check:workload-ownership-app-composition
+
+      - name: Prove workload ownership and app composition reject drift
         # Tests the guard, not the repo — re-prove only when the guard or its inputs change.
         if: needs.prepare.outputs.guard_inputs_changed == 'true' || github.event_name == 'push'
-        run: npm run test:phase-b-topology
+        run: npm run test:workload-ownership-app-composition
 
-      - name: Enforce Phase D personal-agent namespace boundary
-        run: npm run check:phase-d-agent-namespaces
+      - name: Enforce personal, execution, and operator agent domains
+        run: npm run check:agent-domain-boundary
 
-      - name: Prove the Phase D namespace boundary rejects drift
-        run: npm run test:phase-d-agent-namespaces
+      - name: Prove the agent-domain boundary rejects drift
+        run: npm run test:agent-domain-boundary
 
       - name: Enforce mechanical TypeScript agent style
         run: scripts/agent-style-check.sh --diff "$NX_BASE"

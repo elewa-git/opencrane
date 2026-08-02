@@ -108,10 +108,12 @@ jobs:
         # --if-present keeps this branch-agnostic: guard suites differ between main and the
         # program branches, and each branch runs exactly the suites it ships.
         run: |
-          npm run --if-present check:phase-b-topology
-          npm run --if-present test:phase-b-topology
-          npm run --if-present check:phase-d-agent-namespaces
-          npm run --if-present test:phase-d-agent-namespaces
+          ./scripts/phase-a-forbidden-references.sh
+          npm run --if-present test:phase-a-forbidden-references
+          npm run --if-present check:workload-ownership-app-composition
+          npm run --if-present test:workload-ownership-app-composition
+          npm run --if-present check:agent-domain-boundary
+          npm run --if-present test:agent-domain-boundary
           scripts/agent-style-check.sh --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:agent-style
           npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"

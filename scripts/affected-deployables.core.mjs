@@ -37,7 +37,7 @@ export function selectApiContractChanged(affectedProjects)
 export function selectGuardInputsChanged(changedFiles)
 {
 	return changedFiles.some(function _GuardInput(file) {
-		return file.startsWith("scripts/phase-b-topology")
+		return file.startsWith("scripts/workload-ownership-app-composition-boundary")
 			|| file === "docs/agents/workload-ownership.json"
 			|| file === "docs/agents/app-source-allowlist.json"
 			|| file.includes("/helm/")

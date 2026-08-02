@@ -114,9 +114,9 @@ npx nx affected -t build test lint --base="$WAVE_BASE"
 ```
 
 Use targeted project tasks during a slice; use the affected graph at a wave gate.
-The foundation slice must add a deterministic workload-ownership check that renders the target
-manifests and verifies every workload's owning app root. Until that check exists, the
-architecture agent's explicit deployable inventory is a blocking gate, not optional documentation.
+`npm run check:workload-ownership-app-composition` is the deterministic ownership gate: it renders
+every supported Helm profile, verifies the exact app root for every rendered workload and
+runtime-created Job, and keeps app implementation source explicitly allowlisted.
 
 ## Direct-replacement rule
 
