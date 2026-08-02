@@ -147,6 +147,12 @@ jobs:
       - name: Prove the module-growth classifier
         run: npm run test:module-growth
 
+      - name: Prove configuration documentation coverage
+        run: npm run test:config-docs-coverage
+
+      - name: Enforce operator configuration documentation
+        run: scripts/config-docs-coverage.sh --strict
+
       - name: Enforce Prisma repository and unit-of-work ownership
         run: npm run check:prisma-boundaries -- --diff "$NX_BASE"
 

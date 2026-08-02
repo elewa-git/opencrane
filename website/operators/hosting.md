@@ -3,7 +3,8 @@
 OpenCrane installs as one **organisation silo** on a conformant Kubernetes cluster. The
 umbrella chart composes the trusted services and separate, restricted Job namespaces.
 
-> See also: [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
+> See also: [Deployment configuration](/operators/deployment-configuration) (public Helm inputs),
+> [Organisation boundary](/operators/organisation-boundary) (what one silo serves),
 > [Networking and isolation](/operators/networking) (allowed traffic), and
 > [Runbook](/operators/runbook) (health and recovery).
 
