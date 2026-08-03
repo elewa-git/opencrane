@@ -119,12 +119,8 @@ export interface ScopedMemoryRecallCommand
 {
 	/** Silo that owns the scope. */
 	readonly siloId: string;
-	/** Canonical containment scope being recalled from. */
-	readonly scope: string;
-	/** Canonical principal type of the scope target. */
-	readonly subjectType: string;
-	/** Identifier of the scope target within the silo. */
-	readonly subjectId: string;
+	/** Gateway-native dataset identifier frozen by the caller's admitted scope authority. */
+	readonly cogneeDatasetId: string;
 	/** Free-text recall query. */
 	readonly query: string;
 	/** Upper bound on the number of facts to return. */
@@ -150,12 +146,8 @@ export interface ScopedMemoryInjectionCommand
 {
 	/** Silo that owns the scope. */
 	readonly siloId: string;
-	/** Canonical containment scope being written to. */
-	readonly scope: string;
-	/** Canonical principal type of the scope target. */
-	readonly subjectType: string;
-	/** Identifier of the scope target within the silo. */
-	readonly subjectId: string;
+	/** Gateway-native dataset identifier frozen by the caller's admitted scope authority. */
+	readonly cogneeDatasetId: string;
 	/** Record content to store. */
 	readonly content: string;
 	/** Mandatory provenance stamped on the injected record. */

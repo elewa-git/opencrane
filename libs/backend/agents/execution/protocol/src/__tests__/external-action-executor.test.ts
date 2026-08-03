@@ -2,6 +2,7 @@ import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencran
 import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import type { MemoryQueryCommand, MemoryQueryResult } from "@opencrane/server/_infra/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";
@@ -13,8 +14,27 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 	return { protocolVersion: "opencrane.agent-runtime/v1", runtimeInstanceId: "instance-1", commandId: "command-1", candidateId: "candidate-1", runId: "run-1", attempt: 1, fence: 1, kind: "external_action", toolRevisionId, toolInvocationId: "invocation-1", argumentsDigest: "sha256:d", arguments: { query: "a" } };
 }
 
-/** The composition root wires only fail-closed transports until a real one is verified. */
-const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+/** Default dependencies; each transport is the fail-closed stub unless a case injects a real one. */
+const DEPENDENCIES ={ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+
+/**
+ * Memory gateway double that answers recall and stays fail-closed for every other operation.
+ *
+ * Extending the unavailable client keeps the five unused methods refusing, so a case can only
+ * exercise the seam it actually injected.
+ */
+class _RecordingMemoryGateway extends __UnavailableMemoryGatewayClient
+{
+	/** Every recall command the executor issued, in order. */
+	readonly queries: MemoryQueryCommand[] = [];
+
+	/** Record the command and answer with one gateway-minted fact. */
+	override async query(command: MemoryQueryCommand): Promise<MemoryQueryResult>
+	{
+		this.queries.push(command);
+		return { facts: [{ factId: "fact-1", content: "recalled" }] };
+	}
+}
 
 /** Proves one live-custody refusal remains typed and never reaches the Obot invocation port. */
 async function _expectAssignmentUnavailable(reason: IntegrationAssignmentUnavailableReason): Promise<void>
@@ -65,6 +85,15 @@ describe("composition-root external action executor", function _suite()
 	{
 		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, cogneeDatasetId: null });
 		await expect(executor.execute()).rejects.toBeInstanceOf(MemoryScopeUnavailableError);
+	});
+
+	it("routes an injected memory gateway with the frozen dataset, never a subject-derived one", async function _injectedMemoryGateway()
+	{
+		const memoryGateway = new _RecordingMemoryGateway();
+		const executor = __CreateExternalActionExecutor(_candidate("memory:recall"), { ...DEPENDENCIES, memoryGateway });
+
+		await expect(executor.execute()).resolves.toEqual([{ factId: "fact-1", content: "recalled" }]);
+		expect(memoryGateway.queries[0]).toMatchObject({ siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", query: "a" });
 	});
 
 	it("selects personal memory only from the frozen user policy", function _selectsFrozenMemory()

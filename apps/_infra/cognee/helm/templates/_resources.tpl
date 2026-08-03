@@ -1,24 +1,9 @@
 {{- define "opencrane.cognee.resources" -}}
-{{- /* In-cluster Cognee — the graph-RAG service the opencrane-ui syncs awareness
-       grants/permissions to and that tenant pods query for org context. Cognee is a
-       REQUIRED service, so it is installed by default (controlPlane.cognee.install:
-       true). Set that false to BYO an external/shared Cognee — the opencrane-ui then
-       talks to controlPlane.cognee.endpoint and no workload is rendered here.
-
-       The Service is named `cognee` (a cluster singleton, like ingress-nginx) so it
-       matches the default endpoint `http://cognee:8000`; if you BYO, point the endpoint
-       elsewhere. This `*.install` flag is deliberately separate from
-       `*.backendAccessControl` (the runtime ACL-enforcement switch) so an operator can
-       BYO Cognee while still enforcing the backend access control.
-
-       SILO role (S6 / ADR 0002): every ClusterTenant gets its OWN dedicated Cognee, so
-       the bundled workload IS rendered here — but the Service is release-prefixed
-       (`<fullname>-cognee`, B5), so
-       two silos never collide. The opencrane-ui's COGNEE_ENDPOINT is derived from this
-       release-prefixed Service by the `opencrane.cogneeEndpoint` helper.
-
-       CENTRAL role: Cognee is a per-CT plane, not a central component (ADR 0002 decision
-       2), so the bundled workload is NOT rendered. */ -}}
+{{- /* In-cluster Cognee is the durable per-silo graph memory store. It is always paired with the
+       release-local memory gateway: Cognee deliberately has no public ingress, authentication, or
+       direct server route. The gateway TokenReviews the exact server identity and is the only caller
+       admitted by Cognee's policy. BYO/non-private Cognee is intentionally rejected by the gateway
+       chart until an authenticated transport is designed and implemented. */ -}}
 {{- if and .Values.clustertenantManager.cognee.install }}
 ---
 apiVersion: v1
@@ -186,9 +171,8 @@ spec:
 {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
-# Defence-in-depth ingress policy for the bundled Cognee. Only the opencrane-ui
-# (awareness grant / permission sync) and tenant pods (direct org-context queries via
-# the Cognee memory plugin) reach it; everything else is denied at the network layer.
+# Defence-in-depth ingress policy for private Cognee. The memory gateway is its sole caller;
+# OpenCrane policy and authentication happen before this private boundary.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -208,10 +192,7 @@ spec:
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: opencrane-server
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
+              app.kubernetes.io/component: memory-gateway
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.cognee.service.port }}

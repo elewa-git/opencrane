@@ -203,6 +203,15 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
+    # Memory calls terminate at the dedicated gateway; the server has no Cognee route.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: memory-gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.memoryGateway.service.port }}
     {{- if .Values.observability.otel.enabled }}
     # Release-local operator-supplied OTEL collector for trace export.
     - to:

@@ -218,6 +218,26 @@ instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.
 {{- end }}
 
 {{/*
+Cognee base endpoint the private memory gateway should call.
+install=true  → release-local fully qualified Service (`<fullname>-cognee.<namespace>.svc.cluster.local`).
+install=false → operator-supplied clustertenantManager.cognee.endpoint (BYO Cognee).
+
+Templates MUST route through this helper rather than reading
+`clustertenantManager.cognee.endpoint` directly: that raw value is unprefixed and does not resolve
+the installed Service.
+*/}}
+{{- define "opencrane.cogneeEndpoint" -}}
+{{- $c := .Values.clustertenantManager.cognee | default dict -}}
+{{- if $c.install -}}
+{{- printf "http://%s-cognee.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace $c.service.port -}}
+{{- else -}}
+{{- $ep := $c.endpoint | default "" -}}
+{{- if not $ep -}}{{- fail "clustertenantManager.cognee.install=false requires clustertenantManager.cognee.endpoint" -}}{{- end -}}
+{{- $ep -}}
+{{- end -}}
+{{- end }}
+
+{{/*
 Name of the Secret holding Obot's PostgreSQL DSN (key `dsn`).
 instance → release-prefixed `<fullname>-obot` (per-instance, collision-free; B5).
 shared   → the operator points at an external Obot, so no in-release Secret is used.

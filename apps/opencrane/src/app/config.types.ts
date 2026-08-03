@@ -27,6 +27,14 @@ export interface InternalRuntimeConfig
 	readonly serverNamespace: string;
 	/** Lifetime of one durable runtime assignment. */
 	readonly assignmentTtlMilliseconds: number;
+	/** Obot MCP gateway origin, or null to keep the fail-closed invocation stub. */
+	readonly obotMcpGatewayUrl: string | null;
+	/** Memory-gateway origin, or null to keep the fail-closed memory stub. */
+	readonly memoryGatewayUrl: string | null;
+	/** Hard timeout applied to every outbound external-action HTTP exchange. */
+	readonly externalActionHttpTimeoutMilliseconds: number;
+	/** Absolute path to the server's rotating memory-gateway projected token. */
+	readonly memoryGatewayTokenFile: string | null;
 }
 
 /** Process-owned settings that shape the OpenCrane server lifecycle. */

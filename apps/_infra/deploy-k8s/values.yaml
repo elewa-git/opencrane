@@ -150,6 +150,25 @@ channelProxy:
       cpu: 250m
       memory: 256Mi
 
+# -- The only pod permitted to reach the private release-local Cognee Service. It TokenReviews a
+# dedicated projected token from the OpenCrane server before forwarding a fixed operation allowlist.
+memoryGateway:
+  image:
+    repository: ghcr.io/elewa-git/opencrane-memory-gateway
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    port: 8080
+  projectedTokenTtlSeconds: 600
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 # -- Isolated capability-only candidate-skill authoring Job plane. It contains no standing worker.
 # The dependency name is intentional: Helm passes its contents to the child chart.
 opencrane-skill-authoring:
@@ -176,6 +195,15 @@ opencrane-tool-runner:
 
 # -- Canonical artifact-byte boundary. It owns only content-addressed bytes on an expandable,
 # release-local PVC; OpenCrane remains the catalog and authorization authority.
+# -- Outbound transports the server uses to execute an agent's granted tool call.
+# The gateway URLs themselves are derived from the Obot/Cognee subchart state via the
+# `opencrane.mcpGatewayUrl` and `opencrane.cogneeEndpoint` helpers, never set here: a service that is
+# not installed renders no env var, which keeps the server's fail-closed stub for that transport.
+externalActions:
+  # -- Hard timeout applied to every outbound external-action HTTP exchange (1-300s). It bounds how
+  # long a durable tool-invocation reservation can stay open on an unresponsive gateway.
+  httpTimeoutSeconds: 30
+
 artifactService:
   enabled: true
   # -- An absolute wall-clock cap, additionally bounded by each signed lease expiry. This is not
@@ -434,23 +462,13 @@ clustertenantManager:
     existingSecret: ""
     # -- Key within the Secret that holds the connection string
     secretKey: DATABASE_URL
-  # -- Cognee integration for opencrane-ui permission synchronization
+  # -- Private Cognee memory service, reachable only through the release-local memory gateway.
   cognee:
-    # -- Install an in-cluster Cognee as part of this release. Cognee is a REQUIRED
-    #    service (the opencrane-ui's permission sync + the awareness retrieval ACL
-    #    both depend on it), so this defaults true — a fresh cluster gets a working
-    #    Cognee with no extra step. Set false to bring your own (BYO): the endpoint
-    #    below then points at your external/shared Cognee and no workload is rendered.
-    #    Separate from `backendAccessControl` (the runtime enforcement switch) so an
-    #    operator can BYO Cognee while still enforcing the backend ACL.
+    # -- Keep true. TODO: implement authenticated BYO/non-private Cognee before allowing false.
     install: true
-    # -- Cognee HTTP endpoint used by opencrane-ui permission sync routes. When
-    #    `install` is true the in-chart Service is reachable at this name; point it
-    #    elsewhere only when BYO (`install: false`).
+    # -- Reserved for the future authenticated BYO design; ignored while the private service is installed.
     endpoint: "http://cognee:8000"
-    # -- Enable Cognee backend access controls (tenant isolation + RBAC enforcement).
-    #    Defaults true: the bundled Cognee makes this a real, enforced default rather
-    #    than a latent fresh-cluster gap pointing at a service nobody installed.
+    # -- Retained vendor setting; OpenCrane access remains enforced by its server and gateway.
     backendAccessControl: true
     # -- Permission sync timeout in milliseconds
     permissionsTimeoutMs: 5000

@@ -1,0 +1,18 @@
+{
+  "name": "memory-gateway",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/memory-gateway/src",
+  "tags": ["type:app", "layer:entrypoint", "scope:app"],
+  "targets": {
+    "build": {
+      "executor": "nx:run-commands",
+      "outputs": ["{workspaceRoot}/dist/apps/memory-gateway"],
+      "options": { "command": "rm -rf dist/apps/memory-gateway && esbuild apps/memory-gateway/src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outfile=dist/apps/memory-gateway/index.js" }
+    },
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/memory-gateway" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "apps/memory-gateway" } },
+    "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/memory-gateway/helm" } },
+    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/memory-gateway/deploy/Dockerfile ." } }
+  }
+}

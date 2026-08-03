@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
+import { __FromRunInputSnapshotRow } from "@opencrane/backend/agents/execution/runs";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
-import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
+import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter, RuntimeTranscriptReporter } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Fixed retry delay returned before an admitted action has a durable invocation receipt. */
 const _EXTERNAL_ACTION_DISPATCH_RETRY_AFTER_MILLISECONDS = 1_000;
@@ -98,9 +99,11 @@ export class PrismaRuntimeDispatchAuthority
 	private readonly log: Logger;
 	/** Optional composition-root bridge to the canonical terminal run authority. */
 	private readonly terminalReporter: RuntimeTerminalReporter | null;
+	/** Canonical non-terminal transcript persistence supplied by production composition. */
+	private readonly transcriptReporter: RuntimeTranscriptReporter | null;
 
 	/** Creates a dispatch adapter over canonical Postgres with a bounded command lifetime. */
-	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
+	constructor(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, compileRunInput: RunInputCompiler, externalActionRunner?: RuntimeExternalActionRunner, terminalReporter?: RuntimeTerminalReporter, transcriptReporter?: RuntimeTranscriptReporter, clock?: RuntimeProtocolClock, log: Logger = ___CreateLogger("runtime-dispatch"))
 	{
 		if (!_configIsValid(config)) throw new Error("runtime dispatch authority requires distinct bounded runtime namespaces and command lifetime");
 		this.prisma = prisma;
@@ -110,6 +113,7 @@ export class PrismaRuntimeDispatchAuthority
 		this.clock = clock ?? { nowEpochMs(): number { return Date.now(); } };
 		this.log = log;
 		this.terminalReporter = terminalReporter ?? null;
+		this.transcriptReporter = transcriptReporter ?? null;
 	}
 
 	/** Returns the next server-issued command after the supplied sequence, or null while idle. */
@@ -136,10 +140,11 @@ export class PrismaRuntimeDispatchAuthority
 		const compileRunInput = this.compileRunInput;
 		const externalActionRunner = this.externalActionRunner;
 		const terminalReporter = this.terminalReporter;
+		const transcriptReporter = this.transcriptReporter;
 		const log = this.log;
 		return ___DoWithTrace("runtime_dispatch.candidate.admit", { namespace: identity.namespace }, async function _traceAdmit(): Promise<RuntimeCandidateDispatchResult>
 		{
-			const admission = await _admitCandidate(prisma, config, clock, identity, candidate, terminalReporter);
+			const admission = await _admitCandidate(prisma, config, clock, identity, candidate, terminalReporter, transcriptReporter);
 			// After the fence-checked admission commits, dispatch accepted external actions outside the
 			// admission transaction. Only an explicit runner result that proves no ToolInvocation exists can
 			// use the server-owned retry budget; every post-reservation outcome stays terminal and fail closed.
@@ -256,11 +261,12 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 }
 
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
-async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
+async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null, transcriptReporter: RuntimeTranscriptReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
 	const terminal = _terminalRuntimeEvent(candidate);
 	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
 	if (terminal !== null && terminalReporter === null) return { accepted: false, reason: "terminal_reporter_unavailable" };
+	if (candidate.kind === "event" && terminal === null && transcriptReporter === null) return { accepted: false, reason: "transcript_reporter_unavailable" };
 	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
@@ -280,6 +286,11 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			const report = await terminalReporter.reportInTransaction(transaction, { runId: context.runId, attempt: context.attempt, eventType: terminal });
 			if (report.outcome === "denied") return { accepted: false, reason: report.reason ?? "terminal_report_denied" };
 		}
+		if (candidate.kind === "event" && terminal === null && transcriptReporter !== null)
+		{
+			const report = await transcriptReporter.reportInTransaction(transaction, candidate);
+			if (report.outcome === "denied") return { accepted: false, reason: report.reason ?? "transcript_report_denied" };
+		}
 
 		// 3. Append the accepted candidate id monotonically under the held stream lock.
 		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
@@ -294,6 +305,10 @@ function _terminalRuntimeEvent(candidate: RuntimeCandidate): "run.completed" | "
 	if (candidate.kind !== "event") return null;
 	const event = candidate as RuntimeEventCandidate;
 	if (event.eventType === "run.completed" || event.eventType === "run.failed") return event.eventType;
+	// Older runtime frames used run.error for terminal model-loop failures. Treat them as the
+	// authoritative failed terminal rather than accepting a non-terminal event that can be followed
+	// by an incorrect completion while a rollout drains.
+	if (event.eventType === "run.error") return "run.failed";
 	return null;
 }
 
@@ -401,7 +416,7 @@ async function _loadContext(transaction: Prisma.TransactionClient, config: Runti
 		terminalReason: run.terminalReason,
 		assignmentDigest,
 		inputSnapshotDigest: run.inputSnapshotDigest,
-		snapshot: _buildSnapshotFrame(snapshot),
+		snapshot: __FromRunInputSnapshotRow(snapshot),
 		personaRevisionId: snapshot.personaRevisionId,
 		identity: snapshotIdentity,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
@@ -589,35 +604,6 @@ async function _loadResume(transaction: Prisma.TransactionClient, context: Runti
 	const deferredToolResults = approvals.map(function _result(row): JsonValue { return row.deferredToolResult as JsonValue; });
 	const steeringRequests = steering.map(function _content(row): JsonValue { return row.content as JsonValue; });
 	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _id(row) { return row.id; }), steeringRequestIds: steering.map(function _id(row) { return row.id; }) };
-}
-
-/** Map the durable snapshot row into the immutable wire snapshot the runtime receives. */
-function _buildSnapshotFrame(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; threadId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
-{
-	return {
-		runId: row.runId,
-		siloId: row.siloId,
-		agentServiceId: row.agentServiceId,
-		agentRevisionId: row.agentRevisionId,
-		snapshotVersion: row.snapshotVersion,
-		threadId: row.threadId,
-		messageIds: row.messageIds,
-		personaRevisionId: row.personaRevisionId,
-		preferenceFactIds: row.preferenceFactIds,
-		artifactRevisionIds: row.artifactRevisionIds,
-		skillRevisionIds: row.skillRevisionIds,
-		memoryFacts: row.memoryFacts as unknown as RunInputSnapshot["memoryFacts"],
-		memoryQueryPolicy: row.memoryQueryPolicy as unknown as RunInputSnapshot["memoryQueryPolicy"],
-		integrationAssignments: row.integrationAssignments as unknown as RunInputSnapshot["integrationAssignments"],
-		modelRoute: row.modelRoute as unknown as RunInputSnapshot["modelRoute"],
-		budgetPolicy: row.budgetPolicy as unknown as RunInputSnapshot["budgetPolicy"],
-		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshotIdentity,
-		capabilitySetDigest: row.capabilitySetDigest,
-		effectiveContractDigest: row.effectiveContractDigest,
-		promptCompilerVersion: row.promptCompilerVersion,
-		digest: row.digest,
-		compiledAt: row.compiledAt.toISOString(),
-	};
 }
 
 /** Derive a deterministic, attempt-scoped command id so retries reuse one idempotency key. */

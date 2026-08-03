@@ -8,6 +8,9 @@ metadata:
   name: {{ include "opencrane.fullname" . }}-opencrane-server
   labels:
     {{- include "opencrane.labels" . | nindent 4 }}
+# The server TokenReviews workload callers and performs fenced Kubernetes cleanup, so it needs its
+# own API token. Memory access uses the separate projected audience in the Deployment instead.
+automountServiceAccountToken: true
 {{- range $runtimeNamespace := $runtimeNamespaces }}
 ---
 # Runtime cleanup is server-fenced in Postgres first. This Role grants only the physical

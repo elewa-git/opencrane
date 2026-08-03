@@ -1,3 +1,5 @@
+import { isAbsolute } from "node:path";
+
 import type { OpenCraneProcessConfig } from "./config.types.js";
 
 /** Smallest accepted artifact-preprocessor output body. */
@@ -40,6 +42,17 @@ function _readArtifactPreprocessorBodyLimit(): number
 	return value;
 }
 
+/** Read the explicit projected-token mount required by the private memory gateway. */
+function _readMemoryGatewayTokenFile(): string | null
+{
+	const tokenFile = process.env.MEMORY_GATEWAY_TOKEN_FILE?.trim() || null;
+	if (tokenFile !== null && !isAbsolute(tokenFile))
+	{
+		throw new Error("MEMORY_GATEWAY_TOKEN_FILE must be an absolute mounted path");
+	}
+	return tokenFile;
+}
+
 /**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
@@ -48,6 +61,7 @@ function _readArtifactPreprocessorBodyLimit(): number
  */
 export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
+	const memoryGatewayTokenFile = _readMemoryGatewayTokenFile();
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
@@ -59,9 +73,15 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			assignmentTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS", 3_600, 60, 86_400),
 			channelReplayRouteId: process.env.CHANNEL_REPLAY_ROUTE_ID?.trim() || null,
 			claimLeaseMilliseconds: _readBoundedSeconds("AGENT_CONTROLLER_CLAIM_LEASE_SECONDS", 30, 1, 300),
+			memoryGatewayTokenFile,
+			// An unset gateway URL keeps the fail-closed stub, so a deployment without Obot or Cognee
+			// refuses those tool calls instead of degrading to a fabricated result.
+			memoryGatewayUrl: process.env.MEMORY_GATEWAY_URL?.trim() || null,
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
+			externalActionHttpTimeoutMilliseconds: _readBoundedSeconds("EXTERNAL_ACTION_HTTP_TIMEOUT_SECONDS", 30, 1, 300),
 			managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+			obotMcpGatewayUrl: process.env.OBOT_MCP_GATEWAY_URL?.trim() || null,
 			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
 			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),

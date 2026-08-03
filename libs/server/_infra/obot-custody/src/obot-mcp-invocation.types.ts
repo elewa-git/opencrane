@@ -42,3 +42,20 @@ export interface ObotMcpInvocationPort
 	/** Invokes an allow-listed MCP tool, returning only the gateway-originated result. */
 	invokeTool(command: ObotMcpToolInvocationCommand): Promise<ObotMcpToolResult>;
 }
+
+/** Bounded transport failure classes reported without any remote or argument payload. */
+export type ObotMcpTransportFailureCode = "timeout" | "network" | "oversize" | `http_${number}`;
+
+/** Fetch-compatible function injected into the HTTP adapter. */
+export type ObotMcpFetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>;
+
+/** Configuration for the streamable-HTTP Obot MCP gateway adapter. */
+export interface ObotMcpInvocationHttpOptions
+{
+	/** In-cluster Obot MCP gateway origin with no path, query, or credentials. */
+	readonly baseUrl: string;
+	/** Hard timeout independently applied to every HTTP exchange of one invocation. */
+	readonly requestTimeoutMilliseconds: number;
+	/** Optional fetch seam used by focused tests. */
+	readonly fetch?: ObotMcpFetch;
+}

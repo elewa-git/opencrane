@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
-import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { context, SpanStatusCode, trace } from "@opentelemetry/api";
+import { suppressTracing } from "@opentelemetry/core";
 
 import { ___RunWithContext } from "./context.js";
 
@@ -15,6 +16,18 @@ const _tracer = trace.getTracer("@opencrane/observability");
 export function ___GetActiveSpan()
 {
   return trace.getActiveSpan();
+}
+
+/**
+ * Execute one outbound exchange without allowing automatic child instrumentation to capture a
+ * sensitive transport address, while retaining the surrounding OpenCrane operation span.
+ *
+ * @param fn - Synchronous initiation of the sensitive external I/O operation.
+ * @returns The callback result, normally the promise returned by the I/O client.
+ */
+export function ___DoWithoutTrace<T>(fn: () => T): T
+{
+  return context.with(suppressTracing(context.active()), fn);
 }
 
 /**

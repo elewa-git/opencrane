@@ -80,13 +80,13 @@ CREATE TYPE "ConversationMessageState" AS ENUM ('pending', 'streaming', 'complet
 CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'personal');
 
 -- CreateEnum
-CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'user');
+CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'service', 'user');
 
 -- CreateEnum
 CREATE TYPE "GrantAccess" AS ENUM ('allow', 'deny');
 
 -- CreateEnum
-CREATE TYPE "GrantPayloadType" AS ENUM ('mcp-server');
+CREATE TYPE "GrantPayloadType" AS ENUM ('mcp-server', 'knowledge-scope');
 
 -- CreateEnum
 CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
@@ -697,6 +697,7 @@ CREATE TABLE "grants" (
     "shared_by" TEXT,
     "group_id" TEXT,
     "mcp_server_id" TEXT,
+    "agent_service_id" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" TIMESTAMP(3) NOT NULL,
 
@@ -911,6 +912,20 @@ CREATE TABLE "memory_fact_catalog" (
     "forgotten_at" TIMESTAMP(3),
 
     CONSTRAINT "memory_fact_catalog_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "memory_delivery_ledger" (
+    "id" TEXT NOT NULL,
+    "silo_id" TEXT NOT NULL,
+    "cognee_dataset_id" TEXT NOT NULL,
+    "subject_id" TEXT NOT NULL,
+    "idempotency_key" TEXT NOT NULL,
+    "content_digest" TEXT NOT NULL,
+    "cognee_external_id" TEXT NOT NULL,
+    "recorded_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "memory_delivery_ledger_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1775,6 +1790,9 @@ CREATE INDEX "grants_subject_type_subject_id_idx" ON "grants"("subject_type", "s
 CREATE INDEX "grants_shared_by_idx" ON "grants"("shared_by");
 
 -- CreateIndex
+CREATE INDEX "grants_agent_service_id_idx" ON "grants"("agent_service_id");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
 
 -- CreateIndex
@@ -1881,6 +1899,12 @@ CREATE UNIQUE INDEX "memory_fact_catalog_dataset_id_cognee_external_id_key" ON "
 
 -- CreateIndex
 CREATE UNIQUE INDEX "memory_fact_catalog_id_dataset_id_key" ON "memory_fact_catalog"("id", "dataset_id");
+
+-- CreateIndex
+CREATE INDEX "memory_delivery_ledger_silo_id_subject_id_cognee_external_i_idx" ON "memory_delivery_ledger"("silo_id", "subject_id", "cognee_external_id");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "memory_delivery_ledger_silo_id_cognee_dataset_id_subject_id_key" ON "memory_delivery_ledger"("silo_id", "cognee_dataset_id", "subject_id", "idempotency_key");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "memory_outbox_events_idempotency_key_key" ON "memory_outbox_events"("idempotency_key");
@@ -2286,6 +2310,9 @@ ALTER TABLE "grants" ADD CONSTRAINT "grants_group_id_fkey" FOREIGN KEY ("group_i
 
 -- AddForeignKey
 ALTER TABLE "grants" ADD CONSTRAINT "grants_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "grants" ADD CONSTRAINT "grants_agent_service_id_fkey" FOREIGN KEY ("agent_service_id") REFERENCES "agent_services"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_integration_id_silo_id_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;

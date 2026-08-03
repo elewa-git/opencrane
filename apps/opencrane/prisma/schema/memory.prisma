@@ -70,6 +70,28 @@ model MemoryFactCatalog {
   @@map("memory_fact_catalog")
 }
 
+/// Durable replay evidence for personal-memory deliveries to the stateless Cognee API.
+///
+/// Cognee mints a fact id per accepted item but has no delivery-key concept, so this table is what
+/// makes `recordPersonalFact` idempotent and lets a correction or forget resolve which dataset holds
+/// a gateway-minted fact. It is deliberately NOT related to `MemoryFactCatalog`: the catalog write
+/// path is a separate authority, and coupling the two would let a transport-level replay record
+/// imply a catalogued fact.
+model MemoryDeliveryLedger {
+  id               String   @id @default(cuid())
+  siloId           String   @map("silo_id")
+  cogneeDatasetId  String   @map("cognee_dataset_id")
+  subjectId        String   @map("subject_id")
+  idempotencyKey   String   @map("idempotency_key")
+  contentDigest    String   @map("content_digest")
+  cogneeExternalId String   @map("cognee_external_id")
+  recordedAt       DateTime @default(now()) @map("recorded_at")
+
+  @@unique([siloId, cogneeDatasetId, subjectId, idempotencyKey])
+  @@index([siloId, subjectId, cogneeExternalId])
+  @@map("memory_delivery_ledger")
+}
+
 model MemoryOutboxEvent {
   id             String                @id @default(cuid())
   datasetId      String                @map("dataset_id")

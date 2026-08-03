@@ -162,7 +162,23 @@ spec:
               value: /var/run/opencrane/artifact-keys/lease-private.pem
             - name: ARTIFACT_RECEIPT_PUBLIC_KEY_PATH
               value: /var/run/opencrane/artifact-keys/receipt-public.pem
+            # Outbound external-action transports. Each URL is rendered ONLY when its backing service
+            # is present; an absent variable keeps the server's fail-closed stub, so a deployment
+            # without Obot or Cognee refuses those tool calls rather than fabricating a result.
+            {{- if or .Values.mcpGateway.enabled (eq (include "opencrane.mcpGatewayShared" .) "true") }}
+            - name: OBOT_MCP_GATEWAY_URL
+              value: {{ include "opencrane.mcpGatewayUrl" . | quote }}
+            {{- end }}
+            - name: MEMORY_GATEWAY_URL
+              value: {{ printf "http://%s-memory-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.memoryGateway.service.port | quote }}
+            - name: MEMORY_GATEWAY_TOKEN_FILE
+              value: /var/run/opencrane/memory-gateway/token
+            - name: EXTERNAL_ACTION_HTTP_TIMEOUT_SECONDS
+              value: {{ .Values.externalActions.httpTimeoutSeconds | quote }}
           volumeMounts:
+            - name: memory-gateway-token
+              mountPath: /var/run/opencrane/memory-gateway
+              readOnly: true
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
@@ -184,6 +200,14 @@ spec:
           resources:
             {{- toYaml .Values.clustertenantManager.resources | nindent 12 }}
       volumes:
+        - name: memory-gateway-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: opencrane-memory-gateway
+                  expirationSeconds: {{ .Values.memoryGateway.projectedTokenTtlSeconds }}
         - name: artifact-keys
           secret:
             secretName: {{ required "artifactService.keys.catalogExistingSecret is required" .Values.artifactService.keys.catalogExistingSecret | quote }}

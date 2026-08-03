@@ -1,7 +1,8 @@
 import type { JsonValue } from "@opencrane/util";
 import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
-import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+import { ExternalActionToolRevisionPrefixes } from "./external-action-executor.types.js";
+import type { ExternalActionExecutorDependencies, IntegrationToolReference } from "./external-action-executor.types.js";
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
 
 /** Typed failure raised for a candidate whose tool revision names no wired transport kind. */
@@ -56,11 +57,52 @@ export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | 
 }
 
 /** Parse the exact integration/tool identity minted by the target prompt compiler. */
-function _integrationTool(toolRevisionId: string): { readonly integrationId: string; readonly toolName: string } | null
+function _integrationTool(toolRevisionId: string): IntegrationToolReference | null
 {
 	const parts = toolRevisionId.split(":");
-	if (parts.length !== 3 || parts[0] !== "integration" || !parts[1] || !parts[2]) return null;
+	if (parts.length !== 3 || parts[0] !== ExternalActionToolRevisionPrefixes.Integration || !parts[1] || !parts[2]) return null;
 	return { integrationId: parts[1], toolName: parts[2] };
+}
+
+/** Execute one integration tool after rechecking the active assignment and its custody reference. */
+async function _executeIntegrationAction(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies, tool: IntegrationToolReference): Promise<JsonValue>
+{
+	const resolved = await dependencies.integrations.resolveAssignment({ siloId: dependencies.siloId, agentRevisionId: dependencies.agentRevisionId, integrationId: tool.integrationId });
+	if (resolved.outcome !== "resolved") throw new IntegrationAssignmentUnavailableError(tool.integrationId, resolved.reason);
+	const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: tool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
+	return result.content;
+}
+
+/** Execute one sandbox tool using all candidate coordinates required to fence the isolated Job. */
+async function _executeSandboxAction(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies): Promise<JsonValue>
+{
+	const result = await dependencies.sandboxExecutor.runJob({ siloId: dependencies.siloId, runId: candidate.runId, attempt: candidate.attempt, toolRevisionId: candidate.toolRevisionId, toolInvocationId: candidate.toolInvocationId, argumentsDigest: candidate.argumentsDigest, arguments: candidate.arguments });
+	return result.output;
+}
+
+/** Query only the memory dataset admitted into this user run; arguments cannot select a dataset. */
+async function _executeMemoryAction(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies): Promise<JsonValue>
+{
+	if (dependencies.cogneeDatasetId === null) throw new MemoryScopeUnavailableError();
+	const query = _stringArgument(candidate, "query") ?? "";
+	const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.cogneeDatasetId, subjectId: dependencies.subjectId, query, maxResults: 20 });
+	return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
+}
+
+/** Select the sole external transport allowed by the candidate's compiler-issued tool revision. */
+async function _executeExternalAction(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies): Promise<JsonValue>
+{
+	const integrationTool = _integrationTool(candidate.toolRevisionId);
+	if (integrationTool !== null) return _executeIntegrationAction(candidate, dependencies, integrationTool);
+	if (_hasToolRevisionPrefix(candidate.toolRevisionId, ExternalActionToolRevisionPrefixes.Sandbox)) return _executeSandboxAction(candidate, dependencies);
+	if (_hasToolRevisionPrefix(candidate.toolRevisionId, ExternalActionToolRevisionPrefixes.Memory)) return _executeMemoryAction(candidate, dependencies);
+	throw new UnsupportedExternalActionError(candidate.toolRevisionId);
+}
+
+/** Match only a complete tool-kind prefix, preventing similarly named revisions from selecting a transport. */
+function _hasToolRevisionPrefix(toolRevisionId: string, prefix: ExternalActionToolRevisionPrefixes): boolean
+{
+	return toolRevisionId.startsWith(`${prefix}:`);
 }
 
 /**
@@ -83,28 +125,7 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 	return {
 		async execute(): Promise<JsonValue>
 		{
-			const toolRevisionId = candidate.toolRevisionId;
-			const integrationTool = _integrationTool(toolRevisionId);
-			if (integrationTool !== null)
-			{
-				const resolved = await dependencies.integrations.resolveAssignment({ siloId: dependencies.siloId, agentRevisionId: dependencies.agentRevisionId, integrationId: integrationTool.integrationId });
-				if (resolved.outcome !== "resolved") throw new IntegrationAssignmentUnavailableError(integrationTool.integrationId, resolved.reason);
-				const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
-				return result.content;
-			}
-			if (toolRevisionId.startsWith("sandbox:"))
-			{
-				const result = await dependencies.sandboxExecutor.runJob({ siloId: dependencies.siloId, runId: candidate.runId, attempt: candidate.attempt, toolRevisionId, toolInvocationId: candidate.toolInvocationId, argumentsDigest: candidate.argumentsDigest, arguments: candidate.arguments });
-				return result.output;
-			}
-			if (toolRevisionId.startsWith("memory:"))
-			{
-				if (dependencies.cogneeDatasetId === null) throw new MemoryScopeUnavailableError();
-				const query = _stringArgument(candidate, "query") ?? "";
-				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.cogneeDatasetId, subjectId: dependencies.subjectId, query, maxResults: 20 });
-				return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
-			}
-			throw new UnsupportedExternalActionError(toolRevisionId);
+			return _executeExternalAction(candidate, dependencies);
 		},
 	};
 }

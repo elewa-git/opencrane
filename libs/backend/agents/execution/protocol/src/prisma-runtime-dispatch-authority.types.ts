@@ -1,6 +1,24 @@
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RuntimeEventCandidate, RuntimeExternalActionCandidate } from "@opencrane/contracts";
+import type { MemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import type { ObotMcpInvocationPort } from "@opencrane/server/_infra/obot-custody";
+
+/**
+ * Outbound transports the composition root may supply to the production dispatch authority.
+ *
+ * Each port is optional: an omitted transport keeps its fail-closed stub, so a deployment without
+ * that backing service refuses the tool call instead of degrading to a fabricated result. Sandboxed
+ * tool execution is deliberately ABSENT — it has no wired transport, and leaving it out of this type
+ * makes it impossible to override before its workload plane ships.
+ */
+export interface ProductionExternalActionPorts
+{
+	/** Configured Obot MCP invocation transport, or undefined to keep the fail-closed stub. */
+	readonly obotMcpInvocation?: ObotMcpInvocationPort;
+	/** Configured memory gateway transport, or undefined to keep the fail-closed stub. */
+	readonly memoryGateway?: MemoryGatewayClient;
+}
 
 /**
  * Injected control-plane compiler that hydrates an immutable snapshot into the literal compiled
@@ -72,6 +90,13 @@ export interface RuntimeTerminalReporter
 {
 	/** Persist an already-fenced runtime completion or failure in the current authority transaction. */
 	reportInTransaction(transaction: Prisma.TransactionClient, command: { readonly runId: string; readonly attempt: number; readonly eventType: "run.completed" | "run.failed" }): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
+}
+
+/** Non-terminal replay persistence supplied by the canonical run/transcript authority. */
+export interface RuntimeTranscriptReporter
+{
+	/** Persist one bounded runtime event inside the current assignment and stream transaction. */
+	reportInTransaction(transaction: Prisma.TransactionClient, candidate: RuntimeEventCandidate): Promise<{ readonly outcome: "reported" | "denied"; readonly reason?: string }>;
 }
 
 /** Stable result returned after a candidate reaches the authoritative run boundary. */

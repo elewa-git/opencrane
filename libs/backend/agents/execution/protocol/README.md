@@ -64,6 +64,11 @@ the resulting authority to the stream transport. An integration action has the f
 `integration:<integrationId>:<toolName>` shape: its live custody reference and revision allow-list
 are rechecked at execution, so the runtime never sees either credential or mutable permission state.
 
+The package-private production runner keeps that wiring separate from stream-authority construction.
+It selects the compiler-issued executor, reserves the invocation before external I/O, and opens an
+approval only for the exact deferred reservation. Its explicit authority and transport ports provide
+a focused test seam without exposing Prisma or provider clients to the orchestration procedure.
+
 ## Public surface
 
 - `__AdmitRuntimeCommand` — validates a control-plane command before stream delivery.
@@ -75,7 +80,10 @@ are rechecked at execution, so the runtime never sees either credential or mutab
   Prisma reads used by the dispatch transaction.
 - `__CreateProductionRuntimeDispatchAuthority` — constructs the ready production authority,
   including first-party personal-session tool augmentation, external-action routing, frozen memory
-  dataset selection, deferred approval recovery, retry bounds, and canonical terminal reporting.
+  dataset selection, deferred approval recovery, retry bounds, canonical transcript persistence,
+  and terminal reporting.
+- `ProductionExternalActionPorts` — optional process-owned Obot and memory transports supplied to
+  the production factory; omitted transports remain explicit fail-closed adapters.
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected integration
   custody, sandbox, or memory port and fails closed for unsupported revisions. Third-party tools use
   only `integration:<integrationId>:<toolName>` identities frozen from the AgentRevision assignment.
@@ -85,6 +93,8 @@ are rechecked at execution, so the runtime never sees either credential or mutab
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results
   through the run authority without making this protocol package own run state.
+- `RuntimeTranscriptReporter` — the composition-root port that persists a fenced non-terminal
+  candidate as canonical replay evidence before its candidate id is accepted.
 - `RuntimeAttemptAuthority` — exact durable facts, including current run state, that the owning run
   authority must supply at the final acceptance fence.
 - `RuntimeAdmissionRunState` — run lifecycle values understood by the admission fence, including the

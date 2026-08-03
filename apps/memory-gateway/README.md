@@ -1,0 +1,68 @@
+# memory-gateway — private Cognee trust boundary
+
+> [apps](../README.md) › memory-gateway
+
+A **deployable app** is an independently running OpenCrane process. This one is the private memory
+gateway: the only process allowed to make network calls to the silo's Cognee memory service.
+
+## What it owns
+
+OpenCrane keeps product authority in its server. The server first checks the authenticated person,
+their grants, the selected memory scope, and the frozen dataset recorded with the run. This gateway
+does not repeat those product decisions. Instead, it turns that authorised server request into a
+private Cognee request only after Kubernetes verifies the server's short-lived workload identity.
+
+```
+ OpenCrane server  ─ projected service-account token ─┐
+                                                      ▼
+                                         ┌───────────────────────┐
+                                         │ memory-gateway ◄ HERE │
+                                         │ TokenReview + allowlist│
+                                         └───────────┬───────────┘
+                                                     │ private HTTP
+                                                     ▼
+                                              Cognee (no public route)
+```
+
+**In this flow:** [opencrane server](../opencrane/README.md) · [Cognee deployment](../_infra/cognee/README.md)
+
+It accepts only the server's exact ServiceAccount identity and the `opencrane-memory-gateway`
+audience. It forwards only search, add, cognify, and fact-deletion operations, with bounded bodies.
+Anything else is refused. A failure denies the memory operation; it never falls back to a direct
+Cognee connection.
+
+## Public surface
+
+`Entrypoint: src/index.ts` (`_Main`) — validates configuration, creates the Kubernetes TokenReview
+client, opens the private listener, and drains it on shutdown.
+
+The private HTTP surface mirrors only the allowlisted Cognee operations. It is not a public API and
+must not be routed through ingress.
+
+## Boundary
+
+This app owns workload authentication and private transport, not human permissions, memory dataset
+selection, persistence, or Cognee credentials. The OpenCrane server remains the policy enforcement
+point. Cognee is intentionally unauthenticated in this one private deployment design because the
+gateway's authenticated identity and network isolation form its wall.
+
+## Dependency direction
+
+Tagged `type:app`, `layer:entrypoint`, `scope:app`. It composes Kubernetes and observability clients;
+no package may import this app.
+
+## Runtime & config
+
+The Helm template projects one API-server token into the gateway so it can TokenReview callers. It
+also projects a separate `opencrane-memory-gateway` token into the OpenCrane server. Required process
+settings are `COGNEE_URL`, `POD_NAMESPACE`, `SERVER_SERVICE_ACCOUNT_NAME`, and
+`SERVER_TOKEN_AUDIENCE`; Helm sets them all.
+
+`clustertenantManager.cognee.install` must remain `true`. **TODO:** support an authenticated BYO or
+non-private Cognee transport before allowing that mode; the chart currently fails closed instead.
+
+## See also
+
+- Parent index: [apps](../README.md)
+- Call-site client: [memory gateway client](../../libs/server/_infra/memory-gateway-client/README.md)
+- Private vendor deployment: [Cognee](../_infra/cognee/README.md)

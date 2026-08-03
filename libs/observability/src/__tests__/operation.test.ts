@@ -1,15 +1,57 @@
-import { SpanStatusCode, trace } from "@opentelemetry/api";
+import { context, ROOT_CONTEXT, SpanStatusCode, trace } from "@opentelemetry/api";
+import type { Context } from "@opentelemetry/api";
+import { isTracingSuppressed } from "@opentelemetry/core";
 import { BasicTracerProvider, InMemorySpanExporter, SimpleSpanProcessor } from "@opentelemetry/sdk-trace-base";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { ___GetContext } from "../context.js";
-import { ___DoWithTrace } from "../operation.js";
+import { ___DoWithoutTrace, ___DoWithTrace } from "../operation.js";
 
 /** Captures spans emitted by ___DoWithTrace for assertion. */
 const _exporter = new InMemorySpanExporter();
 
+/** Synchronous context manager sufficient to prove the sensitive-fetch suppression context. */
+let _activeContext = ROOT_CONTEXT;
+
+/** Register a deterministic context manager because the unit tracer provider does not install one. */
+function _RegisterContextManager(): void
+{
+	context.setGlobalContextManager({
+		active(): typeof ROOT_CONTEXT
+		{
+			return _activeContext;
+		},
+		with<A extends unknown[], F extends (...args: A) => ReturnType<F>>(next: Context, callback: F, thisArg?: ThisParameterType<F>, ...args: A): ReturnType<F>
+		{
+			const previous = _activeContext;
+			_activeContext = next;
+			try
+			{
+				return callback.apply(thisArg, args);
+			}
+			finally
+			{
+				_activeContext = previous;
+			}
+		},
+		bind<T>(_context: Context, target: T): T
+		{
+			return target;
+		},
+		enable()
+		{
+			return this;
+		},
+		disable()
+		{
+			return this;
+		},
+	});
+}
+
 beforeAll(function _registerProvider()
 {
+	_RegisterContextManager();
   // Register an in-memory tracer so trace.getTracer in operation.ts produces
   // real spans we can inspect, without a live collector.
   const provider = new BasicTracerProvider({ spanProcessors: [new SimpleSpanProcessor(_exporter)] });
@@ -66,5 +108,20 @@ describe("___DoWithTrace", function _withOperationSuite()
       return ___GetContext()?.requestId;
     });
     expect(seen).toBe("req-42");
+  });
+});
+
+describe("___DoWithoutTrace", function _withoutTraceSuite()
+{
+  it("suppresses automatic child spans without ending the surrounding operation", async function _suppressesChildSpans()
+  {
+    const suppressed = await ___DoWithTrace("obot_mcp.tool.invoke", {}, async function _operation()
+    {
+      return ___DoWithoutTrace(function _sensitiveFetch()
+      {
+        return isTracingSuppressed(context.active());
+      });
+    });
+    expect(suppressed).toBe(true);
   });
 });

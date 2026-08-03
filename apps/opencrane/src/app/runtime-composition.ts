@@ -11,11 +11,13 @@ import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } 
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
+import type { RuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
 
 import { _CreateArtifactPreprocessOutputBroker, _CreateArtifactPreprocessSourceBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
+import { _CreateExternalActionPorts } from "../infra/transports/external-action-ports.factory.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
-import type { InternalRuntimeComposition } from "./runtime-composition.types.js";
+import type { InternalRuntimeAuthorities, InternalRuntimeComposition, InternalRuntimeIdentity, InternalRuntimeClock } from "./runtime-composition.types.js";
 
 /**
  * Mint one attempt-scoped LiteLLM virtual key for a claimed run attempt.
@@ -33,6 +35,63 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
 	return { key: minted.key };
 }
 
+/** Validate startup identity coordinates before any internal router can be constructed. */
+function _ValidateInternalRuntimeIdentity(config: InternalRuntimeConfig): InternalRuntimeIdentity
+{
+	return _ValidateRuntimeIdentityNamespaces(config);
+}
+
+/** Build authorities once so every internal route shares the same identity and dispatch fences. */
+function _CreateInternalRuntimeAuthorities(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, identity: InternalRuntimeIdentity): InternalRuntimeAuthorities
+{
+	const runtimePlanes: RuntimeIdentityNamespaces = { personalRuntimeNamespace: identity.personalRuntimeNamespace, managedRuntimeNamespace: identity.managedRuntimeNamespace, serverNamespace: identity.serverNamespace };
+	return {
+		controllerTokenReviewer: _CreateAgentControllerTokenReviewer(authApi, identity.serverNamespace),
+		skillWorkloadTokenReviewer: _CreateSkillWorkloadTokenReviewer(authApi),
+		runtimeTokenReviewer: _CreateRuntimeTokenReviewer(authApi, runtimePlanes),
+		runDispatchRepository: new PrismaRunDispatchRepository(prisma, { personalRuntimeNamespace: identity.personalRuntimeNamespace, managedRuntimeNamespace: identity.managedRuntimeNamespace, claimLeaseMilliseconds: config.claimLeaseMilliseconds, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds: config.publishedOutboxRetentionMilliseconds, outboxPruneBatchSize: config.outboxPruneBatchSize }, _IssueAttemptModelKey),
+		runtimeDispatchAuthority: __CreateProductionRuntimeDispatchAuthority(prisma, { personalRuntimeNamespace: identity.personalRuntimeNamespace, managedRuntimeNamespace: identity.managedRuntimeNamespace, commandTtlMilliseconds: config.commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _log, _CreateExternalActionPorts(prisma, config)),
+	};
+}
+
+/** Build the optional conversation replay router only when startup configuration selects a route. */
+function _CreateConversationReplayRoute(prisma: PrismaClient, routeId: string | null): ReturnType<typeof __CreateConversationReplayRouter> | null
+{
+	if (routeId === null) return null;
+	return __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: routeId, nowEpochMs: function _now() { return Date.now(); } });
+}
+
+/** Build the restricted preprocessing router only after its namespace has been isolated from the server. */
+function _CreateArtifactPreprocessorRoute(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, serverNamespace: string): ReturnType<typeof __CreateArtifactPreprocessorRouter> | null
+{
+	if (!config.artifactPreprocessorEnabled) return null;
+	const namespace = _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace);
+	return __CreateArtifactPreprocessorRouter({ tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, namespace), namespace, repository: new PrismaArtifactPreprocessRepository(prisma), sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma), outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes), logger: _log });
+}
+
+/** Build the concrete routers while leaving transport path selection to `routes.ts`. */
+function _CreateInternalRuntimeRoutes(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, identity: InternalRuntimeIdentity, authorities: InternalRuntimeAuthorities): InternalRuntimeComposition
+{
+	const skillWorkloadRepository = new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds);
+	return {
+		conversationReplay: _CreateConversationReplayRoute(prisma, config.channelReplayRouteId),
+		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({ tokenReviewer: authorities.controllerTokenReviewer, namespace: identity.serverNamespace, repository: authorities.runDispatchRepository, logger: _log }),
+		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer: authorities.controllerTokenReviewer, namespace: identity.serverNamespace, repository: skillWorkloadRepository, logger: _log }),
+		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: authorities.skillWorkloadTokenReviewer, repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }),
+		skillAuthoringInput: __CreateSkillAuthoringInputRouter({ tokenReviewer: authorities.skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }),
+		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({ tokenReviewer: authorities.skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }),
+		artifactPreprocessor: _CreateArtifactPreprocessorRoute(prisma, authApi, config, identity.serverNamespace),
+		runtimeBootstrap: __CreateRuntimeBootstrapRouter({ tokenReviewer: authorities.runtimeTokenReviewer, runtimeNamespaces: [identity.personalRuntimeNamespace, identity.managedRuntimeNamespace], repository: new PrismaRuntimeBootstrapExchange(prisma), clock: _CreateRuntimeClock(), logger: _log }),
+		runtimeStream: _RegisterInternalAgentRuntimeStream({ tokenReviewer: authorities.runtimeTokenReviewer, authority: authorities.runtimeDispatchAuthority, maxBodyBytes: 64 * 1024, heartbeatMilliseconds: 15_000, commandRecoveryMilliseconds: config.commandRecoveryMilliseconds }),
+	};
+}
+
+/** Supply one process clock implementation to every router that needs database-independent time. */
+function _CreateRuntimeClock(): InternalRuntimeClock
+{
+	return { nowEpochMs: function _now() { return Date.now(); } };
+}
+
 /**
  * Compose the workload-facing routers without deciding where they are mounted.
  *
@@ -47,44 +106,10 @@ async function _IssueAttemptModelKey(request: AttemptModelKeyMintRequest): Promi
  */
 export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): InternalRuntimeComposition
 {
-	// 1. Freeze process configuration before constructing any authority so malformed trust
-	// coordinates fail startup rather than leaving a partially mounted internal API.
-	const { serverNamespace, personalRuntimeNamespace, managedRuntimeNamespace } = _ValidateRuntimeIdentityNamespaces(config);
-	const runtimePlanes = { personalRuntimeNamespace, managedRuntimeNamespace };
-
-	// 2. Share the reviewed workload identity and durable dispatch authority across bootstrap and
-	// streaming so one runtime cannot be interpreted differently by neighbouring endpoints.
-	const controllerTokenReviewer = _CreateAgentControllerTokenReviewer(authApi, serverNamespace);
-	const skillWorkloadTokenReviewer = _CreateSkillWorkloadTokenReviewer(authApi);
-	const runtimeTokenReviewer = _CreateRuntimeTokenReviewer(authApi, runtimePlanes);
-	const runDispatchRepository = new PrismaRunDispatchRepository(prisma, { ...runtimePlanes, claimLeaseMilliseconds: config.claimLeaseMilliseconds, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, publishedOutboxRetentionMilliseconds: config.publishedOutboxRetentionMilliseconds, outboxPruneBatchSize: config.outboxPruneBatchSize }, _IssueAttemptModelKey);
-	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, { ...runtimePlanes, commandTtlMilliseconds: config.commandTtlMilliseconds, externalActionRetryLimit: 3, externalActionRetryWindowMilliseconds: 30_000 }, _log);
-
-	// 3. Return named routers only; `routes.ts` remains the single readable map of internal paths.
-	const replayRouteId = config.channelReplayRouteId;
-	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
-		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
-		: null;
-	return {
-		conversationReplay: replayRouteId === null
-			? null
-			: __CreateConversationReplayRouter({ contexts: new PrismaChannelTargetAuthorityRepository(prisma), repository: new PrismaConversationReplayRepository(prisma), expectedRouteId: replayRouteId, nowEpochMs: function _now() { return Date.now(); } }),
-		agentControllerRunDispatch: __CreateAgentControllerRunDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: runDispatchRepository, logger: _log }),
-		skillWorkloadDispatch: __CreateSkillWorkloadDispatchRouter({ tokenReviewer: controllerTokenReviewer, namespace: serverNamespace, repository: new PrismaSkillWorkloadClaimsRepository(prisma, config.claimLeaseMilliseconds), logger: _log }),
-		skillWorkloadBootstrap: __CreateSkillWorkloadBootstrapRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillWorkloadBootstrapRepository(prisma), logger: _log }),
-		skillAuthoringInput: __CreateSkillAuthoringInputRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringInputRepository(prisma), artifactReader: _CreateSkillAuthoringArtifactReader(prisma), logger: _log }),
-		skillAuthoringCompletion: __CreateSkillAuthoringCompletionRouter({ tokenReviewer: skillWorkloadTokenReviewer, repository: new PrismaSkillAuthoringCompletionRepository(prisma), logger: _log }),
-		artifactPreprocessor: artifactPreprocessorNamespace === null
-			? null
-			: __CreateArtifactPreprocessorRouter({
-				tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
-				namespace: artifactPreprocessorNamespace,
-				repository: new PrismaArtifactPreprocessRepository(prisma),
-				sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
-				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
-				logger: _log,
-			}),
-		runtimeBootstrap: __CreateRuntimeBootstrapRouter({ tokenReviewer: runtimeTokenReviewer, runtimeNamespaces: [personalRuntimeNamespace, managedRuntimeNamespace], repository: new PrismaRuntimeBootstrapExchange(prisma), clock: { nowEpochMs(): number { return Date.now(); } }, logger: _log }),
-		runtimeStream: _RegisterInternalAgentRuntimeStream({ tokenReviewer: runtimeTokenReviewer, authority: runtimeDispatchAuthority, maxBodyBytes: 64 * 1024, heartbeatMilliseconds: 15_000, commandRecoveryMilliseconds: config.commandRecoveryMilliseconds }),
-	};
+	// 1. Validate identity coordinates before constructing any authority or router.
+	const identity = _ValidateInternalRuntimeIdentity(config);
+	// 2. Share reviewed identities and durable fences across all internal capabilities.
+	const authorities = _CreateInternalRuntimeAuthorities(prisma, authApi, config, identity);
+	// 3. Assemble routers; `routes.ts` remains the only module that chooses URL paths.
+	return _CreateInternalRuntimeRoutes(prisma, authApi, config, identity, authorities);
 }

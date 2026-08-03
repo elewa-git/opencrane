@@ -4,6 +4,9 @@ import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/observability";
+import { MemoryGatewayProtocolError, MemoryGatewayRemoteRefusalError, MemoryGatewayTransportError, MemoryGatewayUnavailableError, MemoryProvenanceIncompleteError } from "@opencrane/server/_infra/memory-gateway-client";
+import { ObotMcpInvocationUnavailableError, ObotMcpProtocolError, ObotMcpRemoteRefusalError, ObotMcpToolNotAllowedError, ObotMcpTransportError } from "@opencrane/server/_infra/obot-custody";
+import { SandboxExecutionUnavailableError } from "@opencrane/server/_infra/sandbox-execution";
 
 import type { ExecuteExternalActionCommand, ExecuteExternalActionResult, ExternalActionExecutor } from "./external-action-authority.types.js";
 import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
@@ -102,6 +105,12 @@ export async function __ExecuteExternalAction<TResult>(repository: ToolInvocatio
 		{
 			log.warn({ runId: candidate.runId, attempt: candidate.attempt, toolInvocationId: candidate.toolInvocationId, toolRevisionId: candidate.toolRevisionId, integrationId: error.integrationId, reason: error.reason, failureKind: "integration_assignment_unavailable" }, "runtime integration assignment became unavailable before execution");
 		}
+		else if (_isTransportFailure(error))
+		{
+			// Only the invocation coordinates, the bounded code, and the error CLASS are logged — never
+			// the remote message, which may quote tool arguments or credentials.
+			log.warn({ runId: candidate.runId, attempt: candidate.attempt, toolInvocationId: candidate.toolInvocationId, toolRevisionId: candidate.toolRevisionId, failureCode, failureKind: "external_action_transport_failure", errorType: (error as Error).constructor.name }, "runtime external action failed at its transport boundary");
+		}
 		try
 		{
 			const failure = await repository.markFailed(reservation.reservationId, failureCode);
@@ -127,8 +136,34 @@ export async function __ExecuteExternalAction<TResult>(repository: ToolInvocatio
 	}
 }
 
-/** Maps only safe typed execution failures into bounded durable evidence. */
+/**
+ * Maps only safe typed execution failures into bounded durable evidence.
+ *
+ * Every branch derives its code from a typed failure class this repository owns, so no remote
+ * message, tool argument, or credential can reach durable evidence. An unrecognised throw stays the
+ * opaque `executor_failed` rather than being described.
+ *
+ * @param error - Value thrown by the external-action executor.
+ * @returns A bounded failure code safe to persist.
+ */
 function _executionFailureCode(error: unknown): string
 {
-	return error instanceof IntegrationAssignmentUnavailableError ? `integration_assignment_${error.reason}` : "executor_failed";
+	if (error instanceof IntegrationAssignmentUnavailableError) return `integration_assignment_${error.reason}`;
+	if (error instanceof ObotMcpToolNotAllowedError) return "tool_not_allowed";
+	if (error instanceof ObotMcpTransportError || error instanceof MemoryGatewayTransportError) return `transport_${error.code}`;
+	if (error instanceof ObotMcpRemoteRefusalError || error instanceof MemoryGatewayRemoteRefusalError) return "remote_refused";
+	if (error instanceof ObotMcpProtocolError || error instanceof MemoryGatewayProtocolError || error instanceof MemoryProvenanceIncompleteError) return "remote_protocol_violation";
+	if (error instanceof ObotMcpInvocationUnavailableError || error instanceof MemoryGatewayUnavailableError || error instanceof SandboxExecutionUnavailableError) return "transport_unavailable";
+	return "executor_failed";
+}
+
+/** Return whether a failure is one of the typed transport classes worth bounded operator evidence. */
+function _isTransportFailure(error: unknown): boolean
+{
+	return error instanceof ObotMcpTransportError
+		|| error instanceof MemoryGatewayTransportError
+		|| error instanceof ObotMcpRemoteRefusalError
+		|| error instanceof MemoryGatewayRemoteRefusalError
+		|| error instanceof ObotMcpProtocolError
+		|| error instanceof MemoryGatewayProtocolError;
 }

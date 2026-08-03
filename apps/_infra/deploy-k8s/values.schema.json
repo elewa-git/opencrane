@@ -4,6 +4,13 @@
   "description": "Fail-fast guards for the clean OpenCrane target. Only selected values are constrained; Helm validates merged values on every install, template, and lint.",
   "type": "object",
   "properties": {
+    "externalActions": {
+      "type": "object",
+      "required": ["httpTimeoutSeconds"],
+      "properties": {
+        "httpTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 300 }
+      }
+    },
     "channelProxy": {
       "type": "object",
       "required": ["enabled", "image", "service", "targetHostSuffixes", "projectedTokenTtlSeconds"],
@@ -35,6 +42,28 @@
           "minItems": 1,
           "items": { "type": "string", "pattern": "^\\.[a-z0-9.-]+$" },
           "uniqueItems": true
+        },
+        "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 }
+      }
+    },
+    "memoryGateway": {
+      "type": "object",
+      "required": ["image", "replicas", "service", "projectedTokenTtlSeconds"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "service": {
+          "type": "object",
+          "required": ["port"],
+          "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
         },
         "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 }
       }

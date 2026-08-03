@@ -45,6 +45,26 @@ allow-list FIRST (`__AssertToolAllowed`), so a tool outside the assignment is re
 regardless of transport. The `__UnavailableObotMcpInvocationAdapter` default enforces the allow-list
 and then refuses; `__FakeObotMcpInvocationAdapter` is the test/offline double.
 
+### The real MCP transport
+
+`__CreateHttpObotMcpInvocationAdapter` is the production adapter. It speaks the **streamable-HTTP**
+MCP transport that Obot exposes at `/mcp-connect/{server-id}` — a hand-written JSON-RPC client, no
+MCP SDK dependency. One invocation is one session: `initialize` (capturing any `Mcp-Session-Id`) →
+`notifications/initialized` → a single `tools/call` → a best-effort session `DELETE` that never turns
+a completed call into a failure. Both JSON and SSE framings are accepted, and an SSE body is scanned
+for the envelope whose JSON-RPC id matches the request, so unrelated events are skipped rather than
+mistaken for the answer.
+
+The `obotCustodyReference` is treated as the **opaque** gateway server id: it is percent-encoded into
+the path and never parsed, split, or synthesised. Failures are typed and bounded — a
+`ObotMcpTransportError` carries only a `timeout | network | oversize | http_<status>` code, a
+`ObotMcpRemoteRefusalError` names only the tool, and a `ObotMcpProtocolError` marks an unusable
+response. **No remote payload, tool argument, or custody reference ever reaches an error message or
+a trace attribute.** Responses are read through a 256 KiB allocation ceiling.
+
+Absent an `OBOT_MCP_GATEWAY_URL`, the composition root keeps the fail-closed stub, so a deployment
+without Obot behaves exactly as before.
+
 ## Public surface
 
 - `ObotCustodyPort` — the runtime-neutral provision/revoke contract.
@@ -53,12 +73,16 @@ and then refuses; `__FakeObotMcpInvocationAdapter` is the test/offline double.
 - `ObotMcpInvocationPort`, `ObotMcpToolInvocationCommand`, `ObotMcpToolResult` — the MCP-invocation contract and I/O.
 - `__AssertToolAllowed` — the single allow-list enforcement point every adapter calls.
 - `__UnavailableObotMcpInvocationAdapter`, `__FakeObotMcpInvocationAdapter`, `ObotMcpInvocationUnavailableError`, `ObotMcpToolNotAllowedError`.
+- `__CreateHttpObotMcpInvocationAdapter`, `ObotMcpInvocationHttpOptions`, `ObotMcpFetch` — the real streamable-HTTP transport and its configuration.
+- `ObotMcpTransportError`, `ObotMcpRemoteRefusalError`, `ObotMcpProtocolError`, `ObotMcpTransportFailureCode` — the bounded failure taxonomy.
 
 ## Boundary
 
-Consumed by the `integrations` backend gateway. It defines the custody contract and a safe default;
-it does not talk to Obot itself yet — a concrete, authenticated adapter is wired when the Obot API
-contract is confirmed. It stores nothing and holds no secret beyond the single in-flight call.
+Consumed by the `integrations` backend gateway (custody) and by the external-action executor
+(MCP invocation). The MCP transport talks to Obot; **custody provisioning does not yet** — its
+concrete adapter is wired when the Obot management API contract is confirmed, so
+`__UnavailableObotCustodyAdapter` remains the only custody implementation. It stores nothing and
+holds no secret beyond the single in-flight call.
 
 ## Dependency direction
 

@@ -2,7 +2,7 @@ export { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protoc
 export type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeCandidateAdmission, RuntimeCandidateAdmissionInput, RuntimeCommandAdmission, RuntimeCommandAdmissionInput, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 export { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
 export { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
-export type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeExternalActionRunnerResult, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
+export type { ProductionExternalActionPorts, RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeExternalActionRunnerResult, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
 export { __ExecuteExternalAction } from "./external-action-authority.js";
 export type { ExecuteExternalActionCommand, ExecuteExternalActionResult, ExternalActionExecutor, ExternalActionFailureReason } from "./external-action-authority.types.js";
 export { __CreateExternalActionExecutor } from "./external-action-executor.js";

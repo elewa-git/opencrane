@@ -40,16 +40,16 @@ describe("unavailable memory gateway client", function _suite()
 	it("fails closed on scoped recall", async function _recallScoped()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.recallScoped({ siloId: "silo-1", scope: "project", subjectType: "group", subjectId: "proj-1", query: "q", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.recallScoped({ siloId: "silo-1", cogneeDatasetId: "cognee-project-1", query: "q", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("enforces complete provenance BEFORE failing closed on a scoped write", async function _injectScoped()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
 		// Missing provenance is a provenance error, not a gateway-unavailable error.
-		await expect(client.injectScoped({ siloId: "silo-1", scope: "project", subjectType: "group", subjectId: "proj-1", content: "fact", provenance: _provenance({ runId: "" }) })).rejects.toBeInstanceOf(MemoryProvenanceIncompleteError);
+		await expect(client.injectScoped({ siloId: "silo-1", cogneeDatasetId: "cognee-project-1", content: "fact", provenance: _provenance({ runId: "" }) })).rejects.toBeInstanceOf(MemoryProvenanceIncompleteError);
 		// Complete provenance still fails closed because no transport is configured.
-		await expect(client.injectScoped({ siloId: "silo-1", scope: "project", subjectType: "group", subjectId: "proj-1", content: "fact", provenance: _provenance() })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.injectScoped({ siloId: "silo-1", cogneeDatasetId: "cognee-project-1", content: "fact", provenance: _provenance() })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 });
 

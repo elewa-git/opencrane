@@ -5,6 +5,8 @@ import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/observability";
+import { MemoryGatewayProtocolError, MemoryGatewayRemoteRefusalError, MemoryGatewayTransportError, MemoryGatewayUnavailableError } from "@opencrane/server/_infra/memory-gateway-client";
+import { ObotMcpInvocationUnavailableError, ObotMcpProtocolError, ObotMcpRemoteRefusalError, ObotMcpToolNotAllowedError, ObotMcpTransportError } from "@opencrane/server/_infra/obot-custody";
 import { describe, expect, it, vi } from "vitest";
 
 import { __ExecuteExternalAction } from "../external-action-authority.js";
@@ -175,6 +177,38 @@ describe("external action authority", function _suite()
 		expect(result).toEqual({ outcome: "denied", reason: "invocation_execution_failed" });
 		expect(repository.failureCodes).toEqual(["integration_assignment_revoked"]);
 		expect(logger.warn).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, toolInvocationId: "invocation-1", toolRevisionId: "integration:search:query", integrationId: "search", reason: "revoked", failureKind: "integration_assignment_unavailable" }, "runtime integration assignment became unavailable before execution");
+	});
+
+	it("projects each typed transport failure into its bounded durable code", async function _boundedTransportCodes()
+	{
+		const cases: readonly { readonly error: Error; readonly code: string }[] = [
+			{ error: new ObotMcpToolNotAllowedError("slack.deleteChannel"), code: "tool_not_allowed" },
+			{ error: new ObotMcpTransportError("timeout"), code: "transport_timeout" },
+			{ error: new ObotMcpTransportError("http_503"), code: "transport_http_503" },
+			{ error: new MemoryGatewayTransportError("oversize"), code: "transport_oversize" },
+			{ error: new ObotMcpRemoteRefusalError("slack.listChannels"), code: "remote_refused" },
+			{ error: new MemoryGatewayRemoteRefusalError("forget"), code: "remote_refused" },
+			{ error: new ObotMcpProtocolError("malformed"), code: "remote_protocol_violation" },
+			{ error: new MemoryGatewayProtocolError("malformed"), code: "remote_protocol_violation" },
+			{ error: new ObotMcpInvocationUnavailableError(), code: "transport_unavailable" },
+			{ error: new MemoryGatewayUnavailableError(), code: "transport_unavailable" },
+		];
+		for (const testCase of cases)
+		{
+			const repository = new _Repository();
+			const result = await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, { async execute(): Promise<JsonValue> { throw testCase.error; } }, _logger());
+			expect(result).toEqual({ outcome: "denied", reason: "invocation_execution_failed" });
+			expect(repository.failureCodes).toEqual([testCase.code]);
+		}
+	});
+
+	it("logs a transport failure by class without the remote message", async function _logsTransportClassOnly()
+	{
+		const repository = new _Repository();
+		const logger = _logger();
+		await __ExecuteExternalAction(repository, { candidate: _candidate({ q: "a" }), snapshot: _snapshot(), compiledTools: [TOOL], approvalRequired: false }, { async execute(): Promise<JsonValue> { throw new ObotMcpRemoteRefusalError("slack.listChannels"); } }, logger);
+
+		expect(logger.warn).toHaveBeenCalledWith({ runId: "run-1", attempt: 1, toolInvocationId: "invocation-1", toolRevisionId: "integration:search:query", failureCode: "remote_refused", failureKind: "external_action_transport_failure", errorType: "ObotMcpRemoteRefusalError" }, "runtime external action failed at its transport boundary");
 	});
 });
 

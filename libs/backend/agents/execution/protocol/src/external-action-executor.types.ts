@@ -3,6 +3,26 @@ import type { SandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execut
 import type { MemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
 import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
 
+/** Stable tool-revision prefixes that select the server-owned external-action transport. */
+export enum ExternalActionToolRevisionPrefixes
+{
+	/** Resolves the frozen revision assignment before invoking the corresponding Obot MCP tool. */
+	Integration = "integration",
+	/** Runs an admitted operation through the isolated sandbox Job boundary. */
+	Sandbox = "sandbox",
+	/** Queries only the personal memory dataset frozen into the admitted run snapshot. */
+	Memory = "memory",
+}
+
+/** Parsed identity of an integration tool revision that must resolve live custody before invocation. */
+export interface IntegrationToolReference
+{
+	/** Integration assignment selected by the immutable agent revision. */
+	readonly integrationId: string;
+	/** Tool name constrained by the resolved integration assignment's allow-list. */
+	readonly toolName: string;
+}
+
 /** Safe bounded reason the integration authority can return without exposing custody material. */
 export type IntegrationAssignmentUnavailableReason = Extract<ResolveIntegrationAssignmentResult, { readonly outcome: "unavailable" }>["reason"];
 
