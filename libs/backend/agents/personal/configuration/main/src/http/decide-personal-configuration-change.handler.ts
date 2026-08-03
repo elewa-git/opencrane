@@ -13,7 +13,14 @@ interface PersonalConfigurationDecisionBody
 	readonly rejectionReason: string | null;
 }
 
-/** Creates the owner decision request handler. */
+/**
+ * Creates the self-only HTTP boundary for accepting or rejecting one proposed configuration change.
+ *
+ * The handler derives the silo, user, and decision time from trusted server inputs; the request body
+ * can express only the closed decision vocabulary. It delegates the compare-and-set transition to
+ * the decision authority, then translates its stable outcomes into non-enumerating HTTP responses
+ * so a caller cannot learn whether another owner has a proposal with the supplied identifier.
+ */
 export function _CreateDecidePersonalConfigurationChangeHandler(dependencies: PersonalConfigurationRouterDependencies): RequestHandler
 {
 	return async function _DecidePersonalConfigurationChange(request: Request, response: Response): Promise<void>

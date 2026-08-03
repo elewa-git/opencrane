@@ -5,7 +5,14 @@ import { __MaterializePersonalConfigurationChange } from "../materialization/per
 import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
 import { PersonalConfigurationHttpErrors, type PersonalConfigurationRouterDependencies } from "./personal-configuration.router.types.js";
 
-/** Creates the accepted-proposal materialisation request handler. */
+/**
+ * Creates the self-only HTTP boundary that materializes an already accepted configuration proposal.
+ *
+ * The caller supplies only a route identifier; authenticated ownership and the authoritative clock
+ * are bound server-side before the cross-domain Unit of Work runs. The handler maps its durable
+ * result to a small public response, preserving proposal ownership and persistence details inside
+ * the domain authority while making retry-safe outcomes explicit to the browser.
+ */
 export function _CreateMaterializePersonalConfigurationChangeHandler(dependencies: PersonalConfigurationRouterDependencies): RequestHandler
 {
 	return async function _MaterializePersonalConfigurationChange(request: Request, response: Response): Promise<void>
