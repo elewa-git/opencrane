@@ -76,6 +76,11 @@ blocker; do not hide it behind an interface.
 - Before implementing, decompose the target into a **dependency DAG + waves**. Dependencies are
   *compile-time type coupling* and *file/package contention* only — logical affinity is **not** a
   dependency. Items with no unmet dependency form a wave and run concurrently.
+- Build the matching **PR topology** at the same time. Independent lanes retain direct PRs to
+  `develop`; each dependent lane becomes the next branch in a GitHub stack. When PR delivery is
+  authorised, initialise the stack before review with `gh stack init --base develop <bottom> ...`,
+  run `gh stack rebase`, and submit it with `gh stack submit`. Do not create a single stack from
+  unrelated parallel lanes.
 - Land a small **keystone** first (shared types/contracts/interfaces) to open the widest wave.
 - **Dispatch one `general-purpose` subagent per independent lane in a single message** so lanes run
   concurrently; reserve a lane per package to avoid edit contention. Never serialise work that has
@@ -150,7 +155,9 @@ blocker; do not hide it behind an interface.
 10. **Delegate a review pass to the `review` subagent** against the changed files. Resolve
    Critical/High findings. If review fixes change replacement/deletion boundaries, rerun reaper and
    architecture, then revalidate and **commit the resolution as a separate post-gate checkpoint**.
-   Do not push or open a PR unless explicitly asked.
+   Do not push or open a PR unless explicitly asked. When delivery is authorised, rebase every
+   dependent branch onto its immediate stack parent and verify `gh stack view` before asking for
+   review or merge.
 
 At the final replacement phase, run `WHOLE-REPO-DECOMMISSION` against the entire repository; a
 diff-local clean result is insufficient.

@@ -32,6 +32,15 @@ map in `app-specific.md`; that map supplies intent, not proof that a package sti
 code/config and the NX project graph as current-state evidence. Treat an accepted plan or ADR as
 target-state authority. Call out drift between them; never silently choose one.
 
+## Delivery topology gate
+
+For a multi-slice implementation, classify each proposed branch as either independent (direct PR to
+`develop`) or dependent (the next layer of a GitHub stack). A dependency must be concrete code,
+contract, or file-contention coupling; shared theme alone is not enough. BLOCK a proposed stack that
+puts unrelated work in one chain, or a dependent PR that still targets `develop`. Require the
+orchestrator to record the immediate base branch/PR before implementation and to verify a linear
+stack with `gh stack view` before merge review.
+
 ## Non-negotiable monorepo gate
 
 For every executable or rendered cluster workload in scope, build a deployable inventory:

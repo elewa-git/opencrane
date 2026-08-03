@@ -38,6 +38,29 @@ complete. A suggested commit message is not a substitute for a safe, ready commi
 - Do not push, create a pull request, or alter another branch merely because a commit is ready;
   those actions still require their own task authority.
 
+## Pull-request topology for long-running work
+
+Before dispatching a multi-slice roadmap, classify the dependency DAG into two delivery shapes:
+
+- **Independent lane** — no code, contract, or file-contention dependency on another unmerged lane.
+  Its PR targets `develop` directly.
+- **Dependent lane** — needs a lower lane's committed implementation. It is a GitHub stacked PR and
+  targets the PR branch immediately below it, never `develop`.
+
+Use GitHub's official stack tooling once PR delivery is authorised:
+
+```bash
+gh stack init --base develop <bottom-branch> <next-branch> ...
+gh stack rebase
+gh stack submit
+```
+
+The stack must remain a small, linear chain of genuinely dependent slices. Do not stack unrelated
+work merely because it was created in the same session. Rebase before review and after a lower-layer
+change; resolve conflicts in the owning lower slice, then cascade the rebase. A dependent PR
+description names its immediate base PR and the capability it receives from that base. Before merge,
+run `gh stack view` and verify that each review diff is focused and every branch is linear.
+
 ## Commit Messages
 
 - Every eager commit must have a message that follows this section.

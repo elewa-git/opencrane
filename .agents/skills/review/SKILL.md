@@ -37,6 +37,11 @@ Determine what changed first. Prefer `git diff --stat HEAD` and `git diff HEAD` 
 scope the review to actual changes. If the caller named specific files or a PR
 scope, review those.
 
+For a long-running implementation, first establish whether the PR is an independent change or a
+dependent GitHub stack layer. A dependent PR must target its immediate lower branch and be reviewed
+only against that branch; a PR that repeats lower-layer changes or has non-linear stack history is a
+High finding. Independent PRs should continue to target `develop` directly.
+
 ## Dimension
 
 If the prompt contains `DIMENSION: <name>`, review only that modeled dimension:

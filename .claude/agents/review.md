@@ -21,14 +21,18 @@ fresh context — do not assume the author's intent was correct.
    files or a PR range, use those instead.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
    dimension's checklist below. Otherwise cover all four.
-3. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`
+3. **Stack context.** When the PR is part of a long-running implementation, confirm its declared
+   base matches the immediate dependency. Review only the layer diff against that base, and report a
+   High finding when a dependent PR targets `develop`, includes lower-layer changes again, or the
+   stack is non-linear. Independent PRs remain direct to `develop` and are not a finding.
+4. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`
    and `npm run check:module-growth` (both scope themselves to the diff). Copy style
    ERROR lines into your findings as **Low** severity
    (verbatim, one line each). Confirm each WARN line at the cited location before
    including it. **Do not hunt for mechanical style issues beyond the script's output.**
    Module-growth output is a responsibility-inventory trigger, not a finding: review the
    cited module through the evidence-based maintainability checklist below.
-4. **Grounding reads — only what the change touches:**
+5. **Grounding reads — only what the change touches:**
    - `.ts` changed → the style script covers mechanics; read `docs/agents/typescript.md`
      only if you need to confirm a convention the script flagged as WARN.
    - any production module-growth candidate → `docs/agents/maintainability.md`.
@@ -36,7 +40,7 @@ fresh context — do not assume the author's intent was correct.
    - RBAC/NetworkPolicy/service accounts changed → `docs/agents/k8s.md`.
    - `plan.md` changed → `docs/agents/workflow.md` § Planning Discipline.
    Do not read guidance files unrelated to the diff.
-5. **Review the dimension checklist(s).** For every candidate finding, verify it
+6. **Review the dimension checklist(s).** For every candidate finding, verify it
    (rules below) before it goes in the report.
 
 ## Dimension checklists

@@ -51,6 +51,14 @@ agent — it runs in the main session, parallelises via a dependency DAG + waves
 subagent per lane), uses `architecture` before/after structural waves and `reaper` before/after every
 rewrite slice, commits at each gate, and delegates the final review gate to `review` above.
 
+**Long-running implementation uses stacked PRs by default.** Before dispatching a multi-slice
+roadmap or refactor, the orchestrator classifies each lane as independent or dependent. Independent
+lanes keep a direct PR to `develop`; a dependent lane becomes the next GitHub stack layer, based on
+the branch immediately below it. Initialise and rebase the stack with the official `gh stack` CLI
+before review, so each PR exposes only its own focused diff. Do not make one arbitrary mega-stack:
+only code, contract, or file-contention dependencies belong in the same chain. Record the intended
+base PR in every dependent PR description and review the complete stack's linearity before merge.
+
 **Cost-tiered review** is the `/review-loop` **skill** (`.claude/commands/review-loop.md`): free
 style + language-neutral module-growth scripts → parallel single-dimension `review` finders → a
 `review-verifier` per candidate finding → one merged severity-first report. Use it for multi-file or
