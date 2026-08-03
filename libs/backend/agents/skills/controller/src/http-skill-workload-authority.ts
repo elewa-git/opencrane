@@ -3,7 +3,7 @@ import { isAbsolute } from "node:path";
 
 import { ___DoWithTrace } from "@opencrane/observability";
 import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim } from "@opencrane/contracts";
-import { ___ParseAndValidateJson } from "@opencrane/util";
+import { ___IsBoundedIdentifier, ___IsMillisecondInstant, ___IsPositiveInteger, ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerPodRegistrationCommand, SkillWorkloadControllerReleaseClaim, SkillWorkloadControllerReleaseCommand, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";
 
@@ -12,26 +12,6 @@ const _MAX_RESPONSE_BYTES = 16 * 1024;
 
 /** Stable internal route appended to the configured OpenCrane base URL. */
 const _CLAIM_PATH = "/api/internal/agent-controller/skill-workloads:claim";
-
-/** Return whether an untrusted JSON value is a non-empty bounded identifier. */
-function _IsIdentifier(value: unknown): value is string
-{
-	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
-}
-
-/** Return whether an untrusted JSON value is a positive safe integer. */
-function _IsPositiveInteger(value: unknown): value is number
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-/** Return whether an untrusted JSON value is one canonical ISO UTC instant. */
-function _IsTime(value: unknown): value is string
-{
-	if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
-	const epochMilliseconds = Date.parse(value);
-	return Number.isSafeInteger(epochMilliseconds) && new Date(epochMilliseconds).toISOString() === value;
-}
 
 /** Return a plain object suitable for security-boundary parsing. */
 function _AsObject(value: unknown): Record<string, unknown> | null
@@ -92,7 +72,7 @@ async function _ReadBoundedText(response: Response): Promise<string>
 function _ParseClaim(value: unknown): AgentControllerSkillWorkloadClaim
 {
 	const claim = _AsObject(value);
-	if (!claim || !_IsIdentifier(claim.workloadId) || !_IsIdentifier(claim.siloId) || (claim.kind !== "authoring" && claim.kind !== "tool-runner") || !_IsIdentifier(claim.skillRevisionId) || !_IsTime(claim.claimedAt) || !_IsPositiveInteger(claim.deliveryCount) || !_IsTime(claim.expiresAt) || Date.parse(claim.claimedAt) >= Date.parse(claim.expiresAt))
+	if (!claim || !___IsBoundedIdentifier(claim.workloadId) || !___IsBoundedIdentifier(claim.siloId) || (claim.kind !== "authoring" && claim.kind !== "tool-runner") || !___IsBoundedIdentifier(claim.skillRevisionId) || !___IsMillisecondInstant(claim.claimedAt) || !___IsPositiveInteger(claim.deliveryCount) || !___IsMillisecondInstant(claim.expiresAt) || Date.parse(claim.claimedAt) >= Date.parse(claim.expiresAt))
 	{
 		throw new Error("OpenCrane returned a malformed skill workload claim");
 	}
@@ -114,7 +94,7 @@ function _ParseAssignment(value: unknown, workloadId: string, command: AgentCont
 function _ParseReleaseClaim(value: unknown): SkillWorkloadControllerReleaseClaim
 {
 	const claim = _AsObject(value);
-	if (!claim || !_IsIdentifier(claim.workloadId) || !_IsIdentifier(claim.siloId) || (claim.kind !== "authoring" && claim.kind !== "tool-runner") || !_IsIdentifier(claim.workloadUid) || !_IsTime(claim.releaseClaimedAt) || !_IsPositiveInteger(claim.releaseDeliveryCount) || !_IsTime(claim.expiresAt) || Date.parse(claim.releaseClaimedAt) >= Date.parse(claim.expiresAt)) throw new Error("OpenCrane returned a malformed skill workload release claim");
+	if (!claim || !___IsBoundedIdentifier(claim.workloadId) || !___IsBoundedIdentifier(claim.siloId) || (claim.kind !== "authoring" && claim.kind !== "tool-runner") || !___IsBoundedIdentifier(claim.workloadUid) || !___IsMillisecondInstant(claim.releaseClaimedAt) || !___IsPositiveInteger(claim.releaseDeliveryCount) || !___IsMillisecondInstant(claim.expiresAt) || Date.parse(claim.releaseClaimedAt) >= Date.parse(claim.expiresAt)) throw new Error("OpenCrane returned a malformed skill workload release claim");
 	return { workloadId: claim.workloadId, siloId: claim.siloId, kind: claim.kind, workloadUid: claim.workloadUid, releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, expiresAt: claim.expiresAt };
 }
 
@@ -182,7 +162,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 		{
 			return ___DoWithTrace("agent_controller.skill_workload.assignment", { workloadId, workloadUid: command.workloadUid }, async function _CommitAssignment(): Promise<"assigned" | "idempotent" | "conflict">
 			{
-				if (!_IsIdentifier(workloadId)) throw new Error("skill workload assignment requires one valid workload id");
+				if (!___IsBoundedIdentifier(workloadId)) throw new Error("skill workload assignment requires one valid workload id");
 				const path = `/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/assignment`;
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
@@ -204,7 +184,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 		{
 			return ___DoWithTrace("agent_controller.skill_workload.release", { workloadId, workloadUid: command.workloadUid }, async function _CommitRelease(): Promise<"released" | "idempotent" | "conflict">
 			{
-				if (!_IsIdentifier(workloadId)) throw new Error("skill workload release requires one valid workload id");
+				if (!___IsBoundedIdentifier(workloadId)) throw new Error("skill workload release requires one valid workload id");
 				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/release`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload release failed with HTTP ${response.status}`);
@@ -217,7 +197,7 @@ export function __CreateHttpSkillWorkloadControllerAuthority(options: SkillWorkl
 		{
 			return ___DoWithTrace("agent_controller.skill_workload.pod_registration", { workloadId, workloadUid: command.workloadUid, podUid: command.podUid }, async function _RegisterFirstPod(): Promise<"registered" | "idempotent" | "conflict">
 			{
-				if (!_IsIdentifier(workloadId) || !_IsIdentifier(command.podUid)) throw new Error("skill workload Pod registration requires valid workload and Pod identifiers");
+				if (!___IsBoundedIdentifier(workloadId) || !___IsBoundedIdentifier(command.podUid)) throw new Error("skill workload Pod registration requires valid workload and Pod identifiers");
 				const response = await fetchRequest(new URL(`/api/internal/agent-controller/skill-workloads/${encodeURIComponent(workloadId)}/pod-registration`, baseUrl), { method: "PUT", headers: _Headers(await readToken()), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 409) return "conflict";
 				if (response.status !== 200) throw new Error(`OpenCrane skill workload Pod registration failed with HTTP ${response.status}`);

@@ -1,29 +1,19 @@
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunAttemptClaimLease, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
-import { ___ParseAndValidateJson } from "@opencrane/util";
+import { ___IsBoundedIdentifier, ___ParseAndValidateJson, ___ParseShape, ___RequireField, ___ShapeFields } from "@opencrane/util";
 
+/** Maximum JSON response accepted from one internal controller authority call. */
 const _MAX_RESPONSE_BYTES = 64 * 1024;
 
 /** Validate one bounded opaque identifier returned by the internal controller authority. */
 export function _IsAgentControllerIdentifier(value: unknown): value is string
 {
-	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
+	return ___IsBoundedIdentifier(value);
 }
 
-function _IsPositiveInteger(value: unknown): value is number
+/** Return whether the value is the bounded non-negative count an outbox prune may report. */
+function _IsPrunedCount(value: unknown): value is number
 {
-	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-function _IsTime(value: unknown): value is string
-{
-	if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
-	const epochMilliseconds = Date.parse(value);
-	return Number.isSafeInteger(epochMilliseconds) && new Date(epochMilliseconds).toISOString() === value;
-}
-
-function _AsObject(value: unknown): Record<string, unknown> | null
-{
-	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
+	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= 1_000;
 }
 
 /** Read a response under the fixed byte ceiling before applying its endpoint-specific validator. */
@@ -63,29 +53,36 @@ async function _ReadBoundedText(response: Response): Promise<string>
 	}
 }
 
-function _ParseLease(value: unknown): AgentControllerRunAttemptClaimLease
+/** Parse the shared claim lease, refusing a lease that expires at or before its claim instant. */
+function _ParseLease(value: unknown, path: string): AgentControllerRunAttemptClaimLease
 {
-	const lease = _AsObject(value);
-	if (!lease || !_IsAgentControllerIdentifier(lease.eventId) || !_IsTime(lease.claimedAt) || !_IsPositiveInteger(lease.deliveryCount) || !_IsTime(lease.expiresAt) || Date.parse(lease.claimedAt) >= Date.parse(lease.expiresAt)) throw new Error("OpenCrane returned a malformed controller claim lease");
-	return { eventId: lease.eventId, claimedAt: lease.claimedAt, deliveryCount: lease.deliveryCount, expiresAt: lease.expiresAt };
+	const lease = ___ParseShape(value, path, { eventId: ___ShapeFields.identifier, claimedAt: ___ShapeFields.instant, deliveryCount: ___ShapeFields.positiveInteger, expiresAt: ___ShapeFields.instant });
+	if (Date.parse(lease.claimedAt) >= Date.parse(lease.expiresAt)) throw new Error(`${path} must expire after it is claimed`);
+	return lease;
 }
 
 /** Parse one durable runtime-attempt claim without accepting untyped response fields. */
 export function _ParseAgentControllerClaim(value: unknown): AgentControllerRunAttemptClaim
 {
-	const root = _AsObject(value);
-	const attempt = _AsObject(root?.attempt);
-	if (!root || !attempt || !_IsAgentControllerIdentifier(attempt.runId) || !_IsPositiveInteger(attempt.attempt) || !_IsAgentControllerIdentifier(attempt.siloId) || !_IsAgentControllerIdentifier(attempt.agentServiceId) || !_IsAgentControllerIdentifier(attempt.agentRevisionId) || !_IsAgentControllerIdentifier(attempt.inputSnapshotDigest) || !_IsAgentControllerIdentifier(attempt.namespace) || !_IsAgentControllerIdentifier(attempt.workloadProfile) || !_IsAgentControllerIdentifier(attempt.bootstrapReference) || !_IsAgentControllerIdentifier(attempt.litellmKey)) throw new Error("OpenCrane returned a malformed controller claim");
-	return { lease: _ParseLease(root.lease), attempt: { runId: attempt.runId, attempt: attempt.attempt, siloId: attempt.siloId, agentServiceId: attempt.agentServiceId, agentRevisionId: attempt.agentRevisionId, inputSnapshotDigest: attempt.inputSnapshotDigest, namespace: attempt.namespace, workloadProfile: attempt.workloadProfile, bootstrapReference: attempt.bootstrapReference, litellmKey: attempt.litellmKey } };
+	return ___ParseShape(value, "controller claim", {
+		lease: _ParseLease,
+		attempt: function _parseAttempt(attempt: unknown, path: string)
+		{
+			return ___ParseShape(attempt, path, { runId: ___ShapeFields.identifier, attempt: ___ShapeFields.positiveInteger, siloId: ___ShapeFields.identifier, agentServiceId: ___ShapeFields.identifier, agentRevisionId: ___ShapeFields.identifier, inputSnapshotDigest: ___ShapeFields.identifier, namespace: ___ShapeFields.identifier, workloadProfile: ___ShapeFields.identifier, bootstrapReference: ___ShapeFields.identifier, litellmKey: ___ShapeFields.identifier });
+		},
+	});
 }
 
 /** Parse one exact workload-release claim before it can reach the Kubernetes adapter. */
 export function _ParseAgentControllerWorkloadReleaseClaim(value: unknown): AgentControllerRunWorkloadReleaseClaim
 {
-	const root = _AsObject(value);
-	const workload = _AsObject(root?.workload);
-	if (!root || !workload || !_IsAgentControllerIdentifier(workload.runId) || !_IsPositiveInteger(workload.attempt) || !_IsAgentControllerIdentifier(workload.siloId) || !_IsAgentControllerIdentifier(workload.agentServiceId) || !_IsAgentControllerIdentifier(workload.agentRevisionId) || !_IsAgentControllerIdentifier(workload.namespace) || !_IsAgentControllerIdentifier(workload.serviceAccountName) || !_IsAgentControllerIdentifier(workload.workloadUid) || !_IsAgentControllerIdentifier(workload.workloadProfile) || !_IsTime(workload.assignmentExpiresAt) || !_IsAgentControllerIdentifier(workload.bootstrapReference)) throw new Error("OpenCrane returned a malformed workload-release claim");
-	return { lease: _ParseLease(root.lease), workload: { runId: workload.runId, attempt: workload.attempt, siloId: workload.siloId, agentServiceId: workload.agentServiceId, agentRevisionId: workload.agentRevisionId, namespace: workload.namespace, serviceAccountName: workload.serviceAccountName, workloadUid: workload.workloadUid, workloadProfile: workload.workloadProfile, assignmentExpiresAt: workload.assignmentExpiresAt, bootstrapReference: workload.bootstrapReference } };
+	return ___ParseShape(value, "workload-release claim", {
+		lease: _ParseLease,
+		workload: function _parseWorkload(workload: unknown, path: string)
+		{
+			return ___ParseShape(workload, path, { runId: ___ShapeFields.identifier, attempt: ___ShapeFields.positiveInteger, siloId: ___ShapeFields.identifier, agentServiceId: ___ShapeFields.identifier, agentRevisionId: ___ShapeFields.identifier, namespace: ___ShapeFields.identifier, serviceAccountName: ___ShapeFields.identifier, workloadUid: ___ShapeFields.identifier, workloadProfile: ___ShapeFields.identifier, assignmentExpiresAt: ___ShapeFields.instant, bootstrapReference: ___ShapeFields.identifier });
+		},
+	});
 }
 
 /** Confirm the assignment endpoint echoed the command's exact run, attempt, and workload UID. */
@@ -107,7 +104,11 @@ export function _ParseAgentControllerRegistrationResult(value: unknown, command:
 /** Parse the bounded count returned after maintenance removes delivered outbox records. */
 export function _ParseAgentControllerPrunedCount(value: unknown): number
 {
-	const root = _AsObject(value);
-	if (!root || typeof root.deletedCount !== "number" || !Number.isSafeInteger(root.deletedCount) || root.deletedCount < 0 || root.deletedCount > 1_000) throw new Error("OpenCrane returned a malformed outbox-prune result");
-	return root.deletedCount;
+	return ___ParseShape(value, "outbox-prune result", { deletedCount: ___RequireField(_IsPrunedCount, "an integer between 0 and 1000") }).deletedCount;
+}
+
+/** Narrow one echoed result candidate to a plain JSON object. */
+function _AsObject(value: unknown): Record<string, unknown> | null
+{
+	return typeof value === "object" && value !== null && !Array.isArray(value) ? value as Record<string, unknown> : null;
 }
