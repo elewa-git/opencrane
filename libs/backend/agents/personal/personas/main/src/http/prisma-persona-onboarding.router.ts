@@ -23,6 +23,12 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 
 /**
  * Composes the Prisma-backed self-only persona onboarding router.
+ *
+ * This is the sole persistence composition seam for the persona HTTP boundary. It gives lifecycle
+ * authorities their explicitly scoped repositories and shared transaction owner while keeping the
+ * route-level router dependent only on ports. The root client remains here; individual lifecycle
+ * operations receive repository or Unit-of-Work capabilities instead of reaching into the app.
+ *
  * @param prisma - Canonical product-authority client.
  * @param logger - Process logger supplied by the app composition root.
  * @returns The configured persona onboarding router.

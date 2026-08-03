@@ -9,7 +9,16 @@ import { PERSONA_ONBOARDING_TEMPLATE_ANSWERS } from "../profile/persona-onboardi
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
 
-/** Create the browser-session-authenticated, self-only persona onboarding router. */
+/**
+ * Creates the browser-session-authenticated, self-only persona onboarding router.
+ *
+ * Each route derives the caller from the session and keeps profile and question-set coordinates
+ * server-owned. A route may carry an opaque resource identifier, but its domain authority rebinds
+ * that identifier to the authenticated owner before transition. The router orchestrates interview,
+ * draft, and approval authorities but never composes persona text itself, so the browser can
+ * progress through onboarding without selecting another user's lifecycle state or bypassing a
+ * domain transition.
+ */
 export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingRouterDependencies): Router
 {
 	const router = Router();
