@@ -30,7 +30,10 @@ This file is the canonical agent instruction file for the repository.
 
 The repository defines specialised agents in two formats. Delegate to the right one rather than
 doing everything inline; **dispatch independent agents concurrently** (multiple agent calls in one
-message) wherever the work has no dependency between them.
+message) wherever the work has no dependency between them. **Commit small, validated slices
+eagerly:** do not accumulate a whole feature, PR, or session in one worktree. Once one independently
+reviewable slice is green, stage only its paths and commit it before beginning the next slice or
+changing context.
 
 **Claude Code subagents** (`.claude/agents/*.md` — invoked via the Agent tool by `name`):
 

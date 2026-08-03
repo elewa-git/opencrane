@@ -27,6 +27,14 @@ review, stage only that slice and create its commit in the same work cycle. Do t
 an unrelated task, switching context, handing work to another agent, or reporting the slice as
 complete. A suggested commit message is not a substitute for a safe, ready commit.
 
+Treat this as a **small-slice default**, not an end-of-feature checkpoint. Commit as soon as a
+vertical, independently reviewable increment is green—for example one authority boundary, one
+schema-plus-reader change, or one deployment contract. Do not accumulate separate review fixes,
+documentation follow-ups, or later implementation steps behind an otherwise ready commit. A
+coordinator must either make that commit or state the concrete validation/isolation blocker before
+starting the next slice; a worker must report its exact commit-ready paths and validation evidence
+to its coordinator.
+
 - Inspect `git status`, `git diff`, and `git diff --cached` before staging. Preserve every unrelated
   user-owned change, generated artifact, and concurrent slice.
 - Stage explicit paths only. Never use a broad stage command when the worktree contains changes
