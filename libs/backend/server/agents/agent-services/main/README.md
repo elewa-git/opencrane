@@ -116,7 +116,7 @@ load-bearing: `PrismaScopeGrantResolver` calls the IAM grant compiler so `__Vali
 (a caller must administer every scope they attach) and `__ResolveEffectiveScopeAttachments` (the
 runtime intersection, so a stored attachment grants nothing beyond the agent's actual compiled
 grants) both ride the compiler. The resolver treats a Grant's principal as the receiver and its
-Awareness `payloadId` as the attached knowledge target, preventing a receiver identifier from being
+`knowledge-scope` `payloadId` as the attached knowledge target, preventing a receiver identifier from being
 mistaken for a project, team, department, organization, or personal dataset. The membership edge is equally narrow: managed execution freezes
 fresh signed service-principal evidence into its immutable snapshot. Scope attachments remain
 silo-bounded and org-admin-gated.

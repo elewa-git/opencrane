@@ -1,4 +1,4 @@
-import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryFactState } from "@prisma/client";
+import { AuthorizationScopeKind, GrantSubjectType, MemoryConsentState, MemoryDatasetState, MemoryFactState } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
 
@@ -21,7 +21,7 @@ describe("PrismaPreferenceFactSource", function _DescribePrismaPreferenceFactSou
 	{
 		const transaction = _Transaction({ id: "dataset-1" }, [{ id: "fact-1", provenance: { sourceKind: "explicit-user-fact", sourceUserId: "user-1" } }, { id: "fact-2", provenance: { sourceKind: "message", sourceUserId: "user-1" } }]);
 		await expect(new PrismaPreferenceFactSource().load({ siloId: "silo-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1" } as never, _Run("personal"), { kind: "user", executionSubjectId: "user-1", organizationId: "org-1" } as never, transaction)).resolves.toEqual({ outcome: "loaded", value: [{ id: "fact-1" }] });
-		expect(transaction.prisma.memoryDataset.findFirst).toHaveBeenCalledWith({ where: { siloId: "silo-1", scopeKind: AuthorizationScopeKind.Personal, organizationId: "org-1", scopeResourceId: "user-1", state: MemoryDatasetState.Active }, select: { id: true } });
+		expect(transaction.prisma.memoryDataset.findFirst).toHaveBeenCalledWith({ where: { siloId: "silo-1", scopeKind: AuthorizationScopeKind.Personal, subjectType: GrantSubjectType.User, organizationId: "org-1", scopeResourceId: "user-1", state: MemoryDatasetState.Active }, select: { id: true } });
 		expect(transaction.prisma.memoryFactCatalog.findMany).toHaveBeenCalledWith({ where: { datasetId: "dataset-1", state: MemoryFactState.Active, consentState: { in: [MemoryConsentState.Explicit, MemoryConsentState.Confirmed] } }, select: { id: true, provenance: true } });
 	});
 });

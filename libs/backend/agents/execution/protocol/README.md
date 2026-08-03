@@ -87,8 +87,8 @@ a focused test seam without exposing Prisma or provider clients to the orchestra
 - `__CreateExternalActionExecutor` — routes one admitted action to the injected integration
   custody, sandbox, or memory port and fails closed for unsupported revisions. Third-party tools use
   only `integration:<integrationId>:<toolName>` identities frozen from the AgentRevision assignment.
-  Memory recall additionally requires a `scope: personal` policy and Cognee dataset identifier frozen
-  in the admitted snapshot; neither runtime tool arguments nor a subject id can choose a dataset.
+  Memory recall additionally requires a non-empty, unique Cognee dataset set frozen in the admitted
+  snapshot; neither runtime tool arguments nor a subject id can choose or widen that set.
 - `RuntimeStreamWorkloadIdentity` / `RuntimeCandidateDispatchResult` / `RuntimeDispatchAuthorityConfig`
   — the identity handed in by the transport, the candidate result, and the fixed dispatch policy.
 - `RuntimeTerminalReporter` — the composition-root port that persists permitted terminal results

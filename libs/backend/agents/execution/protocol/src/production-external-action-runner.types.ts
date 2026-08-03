@@ -6,7 +6,7 @@ import type { Logger } from "@opencrane/observability";
 import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 
 /** External transports shared by every action while run-specific authority stays on the snapshot. */
-export type ProductionExternalActionTransports = Omit<ExternalActionExecutorDependencies, "siloId" | "subjectId" | "cogneeDatasetId" | "agentRevisionId">;
+export type ProductionExternalActionTransports = Omit<ExternalActionExecutorDependencies, "siloId" | "subjectId" | "frozenMemoryScope" | "agentRevisionId">;
 
 /** Trusted wall clock used for upgrade proposals and deferred-approval expiry. */
 export interface ProductionExternalActionClock

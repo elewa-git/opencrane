@@ -58,14 +58,17 @@ caller input.
   cryptographically verified fleet-membership assertion (never caller-supplied claims) and a
   same-transaction capability-set digest.
 - `PersonalMemoryScopeSource` — selects a personal memory dataset from that verified identity's
-  silo, organization, and subject. It cannot receive a dataset identifier from the runtime caller.
+  silo, organization, and subject, then freezes it as a one-item dataset set. It cannot receive a
+  dataset identifier from the runtime caller.
 - `ManagedExecutionIdentityEnvelopeSource` — adapts the agent-service authority's current signed
   fleet-membership and effective non-personal scope evidence into a tagged `service` identity. Its
   canonical `agent-service:<id>` principal must match the admitted service; a requester never
   becomes that service's execution identity.
-- `ManagedNoPersonalMemoryScopeSource` — seals managed work with `{ scope: "none" }` and no fact
-  references. It is an explicit boundary, not a fallback to user, organization, or workspace
-  memory; future managed knowledge recall needs a separately authorized source.
+- `ManagedMemoryScopeSource` — resolves every effective managed-service scope attachment to one
+  active, same-silo, same-organization memory-catalogue mapping and freezes the canonically ordered
+  dataset set. It independently binds the identity back to the admitted agent service. Missing,
+  retired, duplicate, or malformed mappings deny admission; the runtime can later submit a query
+  but cannot add a scope or dataset.
 - `PrismaRunAuthoritySource`, `PrismaApprovedPersonaSource`, `PrismaThreadContextSource`,
   `PrismaPreferenceFactSource`, `PrismaRevisionToolPolicySource`, and
   `PrismaRevisionBudgetPolicySource` — production transaction readers for the live service,

@@ -25,6 +25,7 @@ model MemoryDataset {
   id              String              @id @default(cuid())
   siloId          String              @map("silo_id")
   scopeKind       AuthorizationScopeKind @map("scope_kind")
+  subjectType     GrantSubjectType   @map("subject_type")
   organizationId  String              @map("organization_id")
   scopeResourceId String?             @map("scope_resource_id")
   cogneeDatasetId String              @map("cognee_dataset_id")
@@ -35,7 +36,7 @@ model MemoryDataset {
   facts           MemoryFactCatalog[]
 
   @@unique([siloId, cogneeDatasetId])
-  @@unique([siloId, scopeKind, organizationId, scopeResourceId])
+  @@unique([siloId, scopeKind, subjectType, organizationId, scopeResourceId])
   @@index([siloId, state])
   @@map("memory_datasets")
 }

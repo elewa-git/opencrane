@@ -10,8 +10,26 @@ export enum ExternalActionToolRevisionPrefixes
 	Integration = "integration",
 	/** Runs an admitted operation through the isolated sandbox Job boundary. */
 	Sandbox = "sandbox",
-	/** Queries only the personal memory dataset frozen into the admitted run snapshot. */
+	/** Queries only the server-authorised dataset set frozen into the admitted run snapshot. */
 	Memory = "memory",
+}
+
+/** Snapshot memory-policy kinds that choose the only permitted memory recall transport. */
+export enum FrozenMemoryScopeKinds
+{
+	/** A subject's own personal memory may return ordinary fact records. */
+	Personal = "personal",
+	/** Managed shared knowledge scopes must retain validated provenance. */
+	Attached = "attached",
+}
+
+/** Complete, canonical memory dataset set frozen during run admission. */
+export interface FrozenMemoryScope
+{
+	/** Policy kind that selects ordinary or provenance-validated recall. */
+	readonly kind: FrozenMemoryScopeKinds;
+	/** Gateway-native identifiers; runtime arguments cannot add or replace them. */
+	readonly cogneeDatasetIds: readonly string[];
 }
 
 /** Parsed identity of an integration tool revision that must resolve live custody before invocation. */
@@ -33,8 +51,8 @@ export interface ExternalActionExecutorDependencies
 	readonly siloId: string;
 	/** Subject on whose behalf the action runs. */
 	readonly subjectId: string;
-	/** Gateway dataset frozen in the admitted snapshot, or null when this run cannot recall personal memory. */
-	readonly cogneeDatasetId: string | null;
+	/** Complete frozen memory scope, or null when this run cannot recall memory. */
+	readonly frozenMemoryScope: FrozenMemoryScope | null;
 	/** Immutable revision whose integration assignment the action must resolve through. */
 	readonly agentRevisionId: string;
 	/** Credential-free authority resolving an active revision integration assignment. */

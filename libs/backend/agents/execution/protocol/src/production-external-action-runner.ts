@@ -4,7 +4,7 @@ import type { JsonValue } from "@opencrane/util";
 
 import { __ExecuteExternalAction } from "./external-action-authority.js";
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
-import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId } from "./external-action-executor.js";
+import { __CreateExternalActionExecutor, __FrozenMemoryScope } from "./external-action-executor.js";
 import type { RuntimeExternalActionRunner, RuntimeExternalActionRunnerResult } from "./prisma-runtime-dispatch-authority.types.js";
 import type { ProductionExternalActionRunnerDependencies } from "./production-external-action-runner.types.js";
 
@@ -63,7 +63,7 @@ function _createCandidateExecutor(candidate: RuntimeExternalActionCandidate, sna
 	return __CreateExternalActionExecutor(candidate, {
 		siloId: snapshot.siloId,
 		subjectId: snapshot.identitySnapshot.executionSubjectId,
-		cogneeDatasetId: __PersonalMemoryDatasetId(snapshot),
+		frozenMemoryScope: __FrozenMemoryScope(snapshot),
 		agentRevisionId: snapshot.agentRevisionId,
 		...dependencies.transports,
 	});

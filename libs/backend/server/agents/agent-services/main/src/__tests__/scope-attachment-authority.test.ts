@@ -44,7 +44,7 @@ describe("runtime effective-access resolution (scope isolation)", function _Reso
 	it("a project-scoped agent cannot read/write peer-project, personal, department, or org scopes", async function _Isolation()
 	{
 		const resolver = new _FakeResolver(_PROJECT_ONLY);
-		const { authorized, rejected } = await __ResolveEffectiveScopeAttachments(resolver, ["agent-service:svc-1"], _ALL_SCOPES);
+		const { authorized, rejected } = await __ResolveEffectiveScopeAttachments(resolver, [{ subjectType: "service", subjectId: "agent-service:svc-1" }], _ALL_SCOPES);
 		expect(authorized.map(a => `${a.scope}:${a.subjectId}`)).toEqual(["project:proj-1"]);
 		expect(rejected.map(a => `${a.scope}:${a.subjectId}`)).toEqual(["project:proj-2", "personal:user-9", "department:dept-1", "org:default"]);
 	});
@@ -53,7 +53,7 @@ describe("runtime effective-access resolution (scope isolation)", function _Reso
 	{
 		const resolver = new _FakeResolver([...(_PROJECT_ONLY), { scope: "team", subjectType: "group", subjectId: "team-7" }]);
 		const attachments: RevisionScopeAttachment[] = [{ scope: "team", subjectType: "group", subjectId: "team-7" }];
-		const { authorized } = await __ResolveEffectiveScopeAttachments(resolver, ["agent-service:svc-1"], attachments);
+		const { authorized } = await __ResolveEffectiveScopeAttachments(resolver, [{ subjectType: "service", subjectId: "agent-service:svc-1" }], attachments);
 		expect(authorized).toEqual(attachments);
 	});
 });
@@ -63,13 +63,13 @@ describe("attach-time authority", function _AttachSuite()
 	it("authorises only when the caller administers every attached scope", async function _CallerAdministers()
 	{
 		const resolver = new _FakeResolver(_PROJECT_ONLY);
-		expect(await __ValidateAttachAuthority(resolver, ["admin-1"], [{ scope: "project", subjectType: "group", subjectId: "proj-1" }])).toEqual({ outcome: "authorized" });
+		expect(await __ValidateAttachAuthority(resolver, [{ subjectType: "user", subjectId: "admin-1" }], [{ scope: "project", subjectType: "group", subjectId: "proj-1" }])).toEqual({ outcome: "authorized" });
 	});
 
 	it("rejects an attachment the caller does not administer, naming the offending triples", async function _CallerLacks()
 	{
 		const resolver = new _FakeResolver(_PROJECT_ONLY);
-		const result = await __ValidateAttachAuthority(resolver, ["admin-1"], _ALL_SCOPES);
+		const result = await __ValidateAttachAuthority(resolver, [{ subjectType: "user", subjectId: "admin-1" }], _ALL_SCOPES);
 		expect(result.outcome).toBe("unauthorized");
 		if (result.outcome !== "unauthorized") throw new Error("expected unauthorized");
 		expect(result.unauthorized).toHaveLength(4);
@@ -79,7 +79,7 @@ describe("attach-time authority", function _AttachSuite()
 	{
 		let consulted = false;
 		const resolver: ScopeGrantResolver = { async resolveEffectiveScopeGrants() { consulted = true; return []; } };
-		expect(await __ValidateAttachAuthority(resolver, ["admin-1"], [])).toEqual({ outcome: "authorized" });
+		expect(await __ValidateAttachAuthority(resolver, [{ subjectType: "user", subjectId: "admin-1" }], [])).toEqual({ outcome: "authorized" });
 		expect(consulted).toBe(false);
 	});
 });

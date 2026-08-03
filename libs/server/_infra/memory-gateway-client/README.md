@@ -1,13 +1,14 @@
-# @opencrane/server/_infra/memory-gateway-client — the personal-memory gateway port
+# @opencrane/server/_infra/memory-gateway-client — the memory gateway port
 
 > [server](../../README.md) › [_infra](../README.md) › memory-gateway-client
 
 ## What it owns
 
-This library owns the **boundary for a subject's personal memory** — recalling, correcting, and
-forgetting stored facts through the memory gateway instead of calling Cognee directly. A recall also
-names the gateway-native dataset that OpenCrane froze in the admitted run snapshot; a subject id is
-never enough to select a dataset. The *memory
+This library owns the **boundary for personal and attached scoped memory** — personal recall,
+retention, correction, and forgetting plus provenance-validated shared recall and injection through
+the memory gateway instead of calling Cognee directly. Attached recall names the complete
+gateway-native dataset set that OpenCrane froze in the admitted run snapshot; a subject id is never
+enough to select a dataset. The *memory
 gateway* is the green-side authority that fronts org/personal memory; routing every read and write
 through this port is what lets the platform stop reaching into Cognee from scattered call sites (see
 the org-memory wiring notes). This package is a **port** — a runtime-neutral contract (a TypeScript
@@ -64,9 +65,10 @@ fresh key writes remotely and then binds the evidence. A crash between those two
 orphan Cognee item but never fabricated idempotency evidence. Indexing (`cognify`) is best effort:
 it cannot turn a durably accepted write into a failure the caller would retry.
 
-Scoped knowledge lives in the deterministic dataset `scoped__{scope}__{subjectType}__{subjectId}`
-(the `__` separator is reserved and rejected inside any component), and each record is stored as a
-`{ v, content, provenance }` envelope so attribution survives the round trip. On recall, any record
+Scoped knowledge uses gateway dataset identifiers resolved from OpenCrane's memory catalogue, and
+each record is stored as a `{ v, content, provenance }` envelope so attribution survives the round
+trip. One scoped recall can
+search the complete frozen dataset set in a single Cognee request. On recall, any record
 whose envelope or provenance fails validation is **dropped** — an unattributable scoped fact never
 reaches a managed agent. An unrecognised search response is a `MemoryGatewayProtocolError`, never a
 silently empty recall.
@@ -108,10 +110,10 @@ Consumed by the personal-agent backend and the external-action executor. It stor
 holds no fact beyond the single in-flight call: durable state lives in Cognee (fact content) and in
 the delivery ledger the composition root implements (replay evidence). In particular, record and
 query commands use the gateway-native dataset id, while the OpenCrane
-memory catalog's internal id stays at the catalog boundary. A runtime supplies that query id only
-from its immutable personal-memory policy; no tool argument or subject id may select another
-dataset. That prevents a caller from treating an OpenCrane row as proof that the gateway accepted
-the fact content.
+memory catalog's internal id stays at the catalog boundary. A runtime supplies those query ids only
+from its immutable personal or attached-scope policy; no tool argument or subject id may select
+another dataset. That prevents a caller from treating an OpenCrane row as proof that the gateway
+accepted the fact content.
 
 ## Dependency direction
 

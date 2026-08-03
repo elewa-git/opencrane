@@ -881,6 +881,7 @@ CREATE TABLE "memory_datasets" (
     "id" TEXT NOT NULL,
     "silo_id" TEXT NOT NULL,
     "scope_kind" "AuthorizationScopeKind" NOT NULL,
+    "subject_type" "GrantSubjectType" NOT NULL,
     "organization_id" TEXT NOT NULL,
     "scope_resource_id" TEXT,
     "cognee_dataset_id" TEXT NOT NULL,
@@ -1883,7 +1884,7 @@ CREATE INDEX "memory_datasets_silo_id_state_idx" ON "memory_datasets"("silo_id",
 CREATE UNIQUE INDEX "memory_datasets_silo_id_cognee_dataset_id_key" ON "memory_datasets"("silo_id", "cognee_dataset_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "memory_datasets_silo_id_scope_kind_organization_id_scope_re_key" ON "memory_datasets"("silo_id", "scope_kind", "organization_id", "scope_resource_id");
+CREATE UNIQUE INDEX "memory_datasets_silo_id_scope_kind_subject_type_organization_id_scope_re_key" ON "memory_datasets"("silo_id", "scope_kind", "subject_type", "organization_id", "scope_resource_id");
 
 -- CreateIndex
 CREATE INDEX "memory_fact_catalog_source_artifact_revision_id_idx" ON "memory_fact_catalog"("source_artifact_revision_id");
@@ -2511,7 +2512,7 @@ ALTER TABLE "agent_revisions" ADD CONSTRAINT "agent_revisions_persona_revision_i
 
 -- PostgreSQL treats NULLs as distinct in ordinary unique indexes; organization-scoped memory needs one canonical null scope.
 CREATE UNIQUE INDEX "memory_datasets_exact_scope_key"
-    ON "memory_datasets"("silo_id", "scope_kind", "organization_id", COALESCE("scope_resource_id", ''));
+    ON "memory_datasets"("silo_id", "scope_kind", "subject_type", "organization_id", COALESCE("scope_resource_id", ''));
 
 CREATE UNIQUE INDEX "model_routing_defaults_global_key"
     ON "model_routing_defaults"("scope") WHERE "cluster_tenant" IS NULL;
@@ -4276,7 +4277,7 @@ $$;
 CREATE FUNCTION "enforce_memory_dataset_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'MemoryDataset catalog rows cannot be deleted'; END IF;
-    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind" OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
+    IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."scope_kind" IS DISTINCT FROM OLD."scope_kind" OR NEW."subject_type" IS DISTINCT FROM OLD."subject_type" OR NEW."organization_id" IS DISTINCT FROM OLD."organization_id" OR NEW."scope_resource_id" IS DISTINCT FROM OLD."scope_resource_id" OR NEW."cognee_dataset_id" IS DISTINCT FROM OLD."cognee_dataset_id" OR NEW."created_by" IS DISTINCT FROM OLD."created_by" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'MemoryDataset authority is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" = 'retired' THEN RAISE EXCEPTION 'retired MemoryDataset is closed'; END IF;
     RETURN NEW;
 END;
@@ -4703,8 +4704,10 @@ ALTER TABLE "skill_revisions" ADD CONSTRAINT "skill_revisions_review_check" CHEC
 ALTER TABLE "skill_workloads" ADD CONSTRAINT "skill_workloads_identity_check" CHECK (btrim("silo_id") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_identity_check" CHECK (btrim("silo_id") <> '' AND btrim("organization_id") <> '' AND btrim("cognee_dataset_id") <> '' AND btrim("created_by") <> '');
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_scope_check" CHECK (
-        ("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
-        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')
+        (("scope_kind" = 'organization' AND "scope_resource_id" IS NULL) OR
+        ("scope_kind" <> 'organization' AND "scope_resource_id" IS NOT NULL AND btrim("scope_resource_id") <> '')) AND
+        (("scope_kind" = 'personal' AND "subject_type" = 'user') OR
+        ("scope_kind" <> 'personal' AND "subject_type" = 'group'))
     );
 ALTER TABLE "memory_datasets" ADD CONSTRAINT "memory_datasets_retirement_check" CHECK (("state" = 'retired' AND "retired_at" IS NOT NULL) OR ("state" = 'active' AND "retired_at" IS NULL));
 ALTER TABLE "memory_fact_catalog" ADD CONSTRAINT "memory_fact_catalog_valid_check" CHECK (

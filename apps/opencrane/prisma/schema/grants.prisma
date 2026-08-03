@@ -8,6 +8,7 @@ enum GrantScope {
 
 enum GrantSubjectType {
   Group  @map("group")
+  Service @map("service")
   User   @map("user")
 }
 
@@ -18,6 +19,7 @@ enum GrantAccess {
 
 enum GrantPayloadType {
   McpServer  @map("mcp-server")
+  KnowledgeScope @map("knowledge-scope")
 }
 
 model Grant {

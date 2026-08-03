@@ -55,7 +55,8 @@ from a first learned preference.
 - `PrismaMemoryCatalogRepository` — the production adapter: checks the dataset, writes immutable
   metadata, and creates the `memory.fact_recorded` outbox intent in one transaction.
 - `__ResolvePersonalMemoryDataset(repository, command)` — selects the one active personal dataset
-from a signed run's silo, organization, and subject. It takes no caller-supplied dataset id.
+from a signed run's silo, organization, subject, and the catalogued `user` target type. It takes no
+caller-supplied dataset id.
 
 Forgetting is an explicit one-way lifecycle. Postgres records the request instant and completion
 instant as immutable evidence, and refuses a completion that predates its request. That lets later
@@ -67,7 +68,7 @@ audit distinguish a pending erasure from a completed one without a mutable times
 
 Consumed by the personal-agent memory-writing path. It never stores durable fact content — that stays
 in Cognee — and it never accepts a fact without an explainable source. Its dataset resolver binds
-personal memory to the run's verified `(silo, organization, subject)` tuple; no browser or runtime
+personal memory to the run's verified `(silo, organization, user target, subject)` tuple; no browser or runtime
 caller can select a different user's dataset by id. Storage is injected through small repository ports,
 keeping both use cases pure.
 

@@ -28,6 +28,6 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 		if (resolved.outcome === "denied") return resolved;
 
 		// 3. Freeze only catalog and gateway coordinates; retrieval itself remains a later runtime-gateway action.
-		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, memoryFacts: [] } };
+		return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasets: [{ datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }] }, memoryFacts: [] } };
 	}
 }

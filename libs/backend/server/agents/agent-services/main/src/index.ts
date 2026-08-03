@@ -12,7 +12,7 @@ export { _CreateAgentServicesRouter } from "./prisma-agent-services.router.js";
 export type { AgentServicesRouterDependencies, ManagementCaller, ManagementClock } from "./agent-revision.router.types.js";
 export { _AgentServicesOpenapiPaths } from "./openapi.js";
 export { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __ValidateAttachAuthority } from "./scope-attachment-authority.js";
-export type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
+export type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantPrincipal, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 export { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
 export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.js";
 export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";

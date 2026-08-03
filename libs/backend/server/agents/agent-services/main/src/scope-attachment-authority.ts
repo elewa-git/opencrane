@@ -1,6 +1,6 @@
 import type { RevisionScopeAttachment } from "@opencrane/models/agents";
 
-import type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
+import type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantPrincipal, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 
 /** NUL-delimited canonical key for one scope triple, safe against concatenation aliasing. */
 function _tripleKey(triple: { scope: string; subjectType: string; subjectId: string }): string
@@ -46,10 +46,10 @@ export function __IntersectScopeAttachments(attachments: readonly RevisionScopeA
  * @param attachments - Declared revision-scope attachments.
  * @returns The authorised/rejected intersection.
  */
-export async function __ResolveEffectiveScopeAttachments(resolver: ScopeGrantResolver, principalIds: readonly string[], attachments: readonly RevisionScopeAttachment[]): Promise<ScopeAttachmentIntersection>
+export async function __ResolveEffectiveScopeAttachments(resolver: ScopeGrantResolver, principals: readonly ScopeGrantPrincipal[], attachments: readonly RevisionScopeAttachment[]): Promise<ScopeAttachmentIntersection>
 {
 	if (attachments.length === 0) return { authorized: [], rejected: [] };
-	const effectiveGrants = await resolver.resolveEffectiveScopeGrants(principalIds);
+	const effectiveGrants = await resolver.resolveEffectiveScopeGrants(principals);
 	return __IntersectScopeAttachments(attachments, effectiveGrants);
 }
 
@@ -65,10 +65,10 @@ export async function __ResolveEffectiveScopeAttachments(resolver: ScopeGrantRes
  * @param attachments - Declared revision-scope attachments.
  * @returns Authorised, or unauthorised with the offending attachments.
  */
-export async function __ValidateAttachAuthority(resolver: ScopeGrantResolver, callerPrincipalIds: readonly string[], attachments: readonly RevisionScopeAttachment[]): Promise<AttachAuthorityResult>
+export async function __ValidateAttachAuthority(resolver: ScopeGrantResolver, callerPrincipals: readonly ScopeGrantPrincipal[], attachments: readonly RevisionScopeAttachment[]): Promise<AttachAuthorityResult>
 {
 	if (attachments.length === 0) return { outcome: "authorized" };
-	const intersection = await __ResolveEffectiveScopeAttachments(resolver, callerPrincipalIds, attachments);
+	const intersection = await __ResolveEffectiveScopeAttachments(resolver, callerPrincipals, attachments);
 	if (intersection.rejected.length > 0) return { outcome: "unauthorized", unauthorized: intersection.rejected };
 	return { outcome: "authorized" };
 }

@@ -163,7 +163,7 @@ export function __CreateAgentServicesRouter(dependencies: AgentServicesRouterDep
 	 */
 	async function _authoriseAttachments(caller: ManagementCaller, content: AgentRevisionContent, res: Response): Promise<boolean>
 	{
-		const authority = await __ValidateAttachAuthority(scopeGrantResolver, [caller.subjectId], content.scopeAttachments);
+		const authority = await __ValidateAttachAuthority(scopeGrantResolver, [{ subjectType: "user", subjectId: caller.subjectId }], content.scopeAttachments);
 		if (authority.outcome === "unauthorized") { res.status(403).json({ error: "Caller does not administer every attached scope.", code: "FORBIDDEN_SCOPE_ATTACHMENT", unauthorized: authority.unauthorized }); return false; }
 		return true;
 	}

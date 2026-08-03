@@ -40,7 +40,7 @@ describe("unavailable memory gateway client", function _suite()
 	it("fails closed on scoped recall", async function _recallScoped()
 	{
 		const client = new __UnavailableMemoryGatewayClient();
-		await expect(client.recallScoped({ siloId: "silo-1", cogneeDatasetId: "cognee-project-1", query: "q", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
+		await expect(client.recallScoped({ siloId: "silo-1", cogneeDatasetIds: ["cognee-project-1", "cognee-team-1"], query: "q", maxResults: 5 })).rejects.toBeInstanceOf(MemoryGatewayUnavailableError);
 	});
 
 	it("enforces complete provenance BEFORE failing closed on a scoped write", async function _injectScoped()

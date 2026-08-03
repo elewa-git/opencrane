@@ -1,8 +1,8 @@
 import type { JsonValue } from "@opencrane/util";
 import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
-import { ExternalActionToolRevisionPrefixes } from "./external-action-executor.types.js";
-import type { ExternalActionExecutorDependencies, IntegrationToolReference } from "./external-action-executor.types.js";
+import { ExternalActionToolRevisionPrefixes, FrozenMemoryScopeKinds } from "./external-action-executor.types.js";
+import type { ExternalActionExecutorDependencies, FrozenMemoryScope, IntegrationToolReference } from "./external-action-executor.types.js";
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
 
 /** Typed failure raised for a candidate whose tool revision names no wired transport kind. */
@@ -16,13 +16,13 @@ export class UnsupportedExternalActionError extends Error
 	}
 }
 
-/** Typed failure emitted when an admitted snapshot did not authorize a personal memory dataset. */
+/** Typed failure emitted when an admitted snapshot did not authorize a memory dataset set. */
 export class MemoryScopeUnavailableError extends Error
 {
 	/** Creates a failure that cannot fall back to subject-selected memory. */
 	constructor()
 	{
-		super("personal memory scope is unavailable for this run snapshot");
+		super("memory scope is unavailable for this run snapshot");
 		this.name = "MemoryScopeUnavailableError";
 	}
 }
@@ -37,23 +37,68 @@ function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string)
 }
 
 /**
- * Select the personal Cognee dataset frozen into an admitted snapshot.
+ * Select the full Cognee dataset set frozen into an admitted snapshot.
  *
  * Runtime arguments and subject identifiers are deliberately ignored: memory recall is available
- * only when admission sealed a non-empty dataset under a personal memory policy for a user identity.
+ * only when admission sealed a non-empty, unique dataset set under a memory policy.
  *
  * @param snapshot - Immutable run input snapshot admitted by the control plane.
- * @returns The frozen dataset identifier, or null for every non-personal or malformed policy.
+ * @returns The frozen dataset identifiers, or null for every malformed or empty policy.
  */
-export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
+export function __FrozenMemoryScope(snapshot: RunInputSnapshot): FrozenMemoryScope | null
 {
-	if (snapshot.identitySnapshot.kind !== "user") return null;
 	const policy = snapshot.memoryQueryPolicy;
 	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
 	const record = policy as Readonly<Record<string, unknown>>;
-	if (record["scope"] !== "personal") return null;
-	const candidate = record["cogneeDatasetId"];
-	return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : null;
+	const scope = record["scope"];
+	const kind = scope === FrozenMemoryScopeKinds.Personal ? FrozenMemoryScopeKinds.Personal : scope === FrozenMemoryScopeKinds.Attached ? FrozenMemoryScopeKinds.Attached : null;
+	if (kind === null) return null;
+	const datasets = record["datasets"];
+	if (!Array.isArray(datasets) || datasets.length === 0) return null;
+	const ids = datasets.map(function _DatasetId(value)
+	{
+		if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+		const id = (value as Readonly<Record<string, unknown>>)["cogneeDatasetId"];
+		return typeof id === "string" && id.trim().length > 0 ? id : null;
+	});
+	if (ids.some(function _Invalid(id) { return id === null; })) return null;
+	const resolved = ids as string[];
+	if (new Set(resolved).size !== resolved.length) return null;
+	if (kind === FrozenMemoryScopeKinds.Personal && resolved.length !== 1) return null;
+	if (kind === FrozenMemoryScopeKinds.Attached && !_HasCompleteAttachedDatasetCoordinates(datasets)) return null;
+	return { kind, cogneeDatasetIds: resolved };
+}
+
+/** Verifies every shared dataset retains the complete authorized coordinate sealed at admission. */
+function _HasCompleteAttachedDatasetCoordinates(datasets: readonly unknown[]): boolean
+{
+	const datasetIds = new Set<string>();
+	const coordinates = new Set<string>();
+	for (const value of datasets)
+	{
+		if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
+		const record = value as Readonly<Record<string, unknown>>;
+		const datasetId = record["datasetId"];
+		const scope = record["scope"];
+		const subjectType = record["subjectType"];
+		const subjectId = record["subjectId"];
+		if (typeof datasetId !== "string" || !datasetId.trim() || !_IsAttachedCoordinate(scope, subjectType, subjectId)) return false;
+		if (datasetIds.has(datasetId)) return false;
+		datasetIds.add(datasetId);
+		const coordinate = `${scope}\u0000${subjectType}\u0000${subjectId}`;
+		if (coordinates.has(coordinate)) return false;
+		coordinates.add(coordinate);
+	}
+	return true;
+}
+
+/** Accepts only the non-personal group coordinates managed admission can freeze. */
+function _IsAttachedCoordinate(scope: unknown, subjectType: unknown, subjectId: unknown): boolean
+{
+	return (scope === "org" || scope === "department" || scope === "team" || scope === "project")
+		&& subjectType === "group"
+		&& typeof subjectId === "string"
+		&& (scope === "org" ? subjectId === "default" : subjectId.trim().length > 0);
 }
 
 /** Parse the exact integration/tool identity minted by the target prompt compiler. */
@@ -80,12 +125,14 @@ async function _executeSandboxAction(candidate: RuntimeExternalActionCandidate, 
 	return result.output;
 }
 
-/** Query only the memory dataset admitted into this user run; arguments cannot select a dataset. */
+/** Query only the memory dataset set admitted into this run; arguments cannot select a dataset. */
 async function _executeMemoryAction(candidate: RuntimeExternalActionCandidate, dependencies: ExternalActionExecutorDependencies): Promise<JsonValue>
 {
-	if (dependencies.cogneeDatasetId === null) throw new MemoryScopeUnavailableError();
+	if (dependencies.frozenMemoryScope === null) throw new MemoryScopeUnavailableError();
 	const query = _stringArgument(candidate, "query") ?? "";
-	const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.cogneeDatasetId, subjectId: dependencies.subjectId, query, maxResults: 20 });
+	const result = dependencies.frozenMemoryScope.kind === FrozenMemoryScopeKinds.Attached
+		? await dependencies.memoryGateway.recallScoped({ siloId: dependencies.siloId, cogneeDatasetIds: dependencies.frozenMemoryScope.cogneeDatasetIds, query, maxResults: 20 })
+		: await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.frozenMemoryScope.cogneeDatasetIds[0]!, subjectId: dependencies.subjectId, query, maxResults: 20 });
 	return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
 }
 

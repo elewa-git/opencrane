@@ -157,14 +157,14 @@ function _client(recorded: _RecordedRequest[], answers: Record<string, () => Res
 
 describe("Cognee memory gateway recall", function _RecallSuite()
 {
-	it("searches the frozen dataset and bounds the projected facts", async function _Query()
+	it("searches the frozen personal dataset once and bounds the projected facts", async function _Query()
 	{
 		const recorded: _RecordedRequest[] = [];
 		const answers = { "/api/v1/search": function _search() { return _json({ results: [{ id: "f1", text: "one" }, { id: "f2", text: "two" }, { id: "f3", text: "three" }] }); } };
-		const result = await _client(recorded, answers, new _FakeLedger()).query({ siloId: "silo-1", cogneeDatasetId: "ds-1", subjectId: "user-1", query: "what", maxResults: 2 });
+		const result = await _client(recorded, answers, new _FakeLedger()).query({ siloId: "silo-1", cogneeDatasetId: "ds-personal", subjectId: "user-1", query: "what", maxResults: 2 });
 
 		expect(result.facts).toEqual([{ factId: "f1", content: "one" }, { factId: "f2", content: "two" }]);
-		expect(recorded[0].body).toMatchObject({ query: "what", search_type: "CHUNKS", datasets: ["ds-1"], top_k: 2 });
+		expect(recorded[0].body).toMatchObject({ query: "what", search_type: "CHUNKS", datasets: ["ds-personal"], top_k: 2 });
 	});
 
 	it("drops an entry without a gateway-minted id rather than synthesising one", async function _DropsMalformed()
@@ -325,6 +325,7 @@ describe("Cognee scoped knowledge", function _ScopedSuite()
 
 	it("recalls attributable records and drops unattributable ones", async function _Recall()
 	{
+		const recorded: _RecordedRequest[] = [];
 		const answers = {
 			"/api/v1/search": function _search()
 			{
@@ -335,8 +336,9 @@ describe("Cognee scoped knowledge", function _ScopedSuite()
 				] });
 			},
 		};
-		const result = await _client([], answers, new _FakeLedger()).recallScoped({ siloId: "silo-1", cogneeDatasetId: "frozen-team-dataset", query: "q", maxResults: 10 });
+		const result = await _client(recorded, answers, new _FakeLedger()).recallScoped({ siloId: "silo-1", cogneeDatasetIds: ["frozen-project-dataset", "frozen-team-dataset"], query: "q", maxResults: 10 });
 		expect(result.facts).toEqual([{ factId: "f1", content: "kept", provenance: _PROVENANCE }]);
+		expect(recorded[0].body).toMatchObject({ datasets: ["frozen-project-dataset", "frozen-team-dataset"] });
 	});
 
 });

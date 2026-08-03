@@ -12,7 +12,7 @@ export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
 	readonly siloId: string;
-	/** Gateway-native personal dataset identifier frozen in the admitted run snapshot. */
+	/** Gateway-native personal dataset identifier frozen during admission. */
 	readonly cogneeDatasetId: string;
 	/** Subject whose personal memory is being queried. */
 	readonly subjectId: string;
@@ -114,13 +114,13 @@ export interface MemoryProvenance
 	readonly sourceRef: string;
 }
 
-/** Request to recall facts from a knowledge SCOPE (not a single subject's personal memory). */
+/** Request to recall facts from the complete frozen knowledge-scope dataset set. */
 export interface ScopedMemoryRecallCommand
 {
 	/** Silo that owns the scope. */
 	readonly siloId: string;
-	/** Gateway-native dataset identifier frozen by the caller's admitted scope authority. */
-	readonly cogneeDatasetId: string;
+	/** Gateway-native dataset identifiers frozen by the caller's admitted scope authority. */
+	readonly cogneeDatasetIds: readonly string[];
 	/** Free-text recall query. */
 	readonly query: string;
 	/** Upper bound on the number of facts to return. */
@@ -165,7 +165,7 @@ export interface MemoryGatewayClient
 	correct(command: MemoryCorrectionCommand): Promise<void>;
 	/** Forgets one stored fact remotely. */
 	forget(command: MemoryForgetCommand): Promise<void>;
-	/** Recalls provenance-carrying facts from one knowledge scope. */
+	/** Recalls provenance-carrying facts from the complete frozen knowledge-scope set. */
 	recallScoped(command: ScopedMemoryRecallCommand): Promise<ScopedMemoryRecallResult>;
 	/** Injects one record into a knowledge scope; the provenance is mandatory and validated. */
 	injectScoped(command: ScopedMemoryInjectionCommand): Promise<void>;

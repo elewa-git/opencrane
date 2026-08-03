@@ -1,4 +1,4 @@
-import { AuthorizationScopeKind, MemoryDatasetState } from "@prisma/client";
+import { AuthorizationScopeKind, GrantSubjectType, MemoryDatasetState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaPersonalMemoryDatasetRepository } from "../prisma-personal-memory-dataset-repository.js";
@@ -17,7 +17,7 @@ describe("Prisma personal memory dataset repository", function _describePrismaPe
 		const repository = new PrismaPersonalMemoryDatasetRepository(prisma as never);
 
 		await expect(repository.findActivePersonalDataset({ siloId: "silo-1", organizationId: "org-1", subjectId: "user-1" })).resolves.toEqual({ datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" });
-		expect(prisma.memoryDataset.findFirst).toHaveBeenCalledWith({ where: { siloId: "silo-1", organizationId: "org-1", scopeKind: AuthorizationScopeKind.Personal, scopeResourceId: "user-1", state: MemoryDatasetState.Active }, select: { id: true, cogneeDatasetId: true } });
+		expect(prisma.memoryDataset.findFirst).toHaveBeenCalledWith({ where: { siloId: "silo-1", organizationId: "org-1", scopeKind: AuthorizationScopeKind.Personal, subjectType: GrantSubjectType.User, scopeResourceId: "user-1", state: MemoryDatasetState.Active }, select: { id: true, cogneeDatasetId: true } });
 	});
 
 	it("returns no dataset when the exact active personal scope is absent", async function _returnsMissingScope()

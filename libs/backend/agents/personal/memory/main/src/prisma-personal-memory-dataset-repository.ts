@@ -1,4 +1,4 @@
-import { AuthorizationScopeKind, MemoryDatasetState, type PrismaClient } from "@prisma/client";
+import { AuthorizationScopeKind, GrantSubjectType, MemoryDatasetState, type PrismaClient } from "@prisma/client";
 
 import type { PersonalMemoryDataset, PersonalMemoryDatasetRepository, ResolvePersonalMemoryDatasetCommand } from "./personal-memory-dataset.types.js";
 
@@ -22,6 +22,7 @@ export class PrismaPersonalMemoryDatasetRepository implements PersonalMemoryData
 				siloId: command.siloId,
 				organizationId: command.organizationId,
 				scopeKind: AuthorizationScopeKind.Personal,
+				subjectType: GrantSubjectType.User,
 				scopeResourceId: command.subjectId,
 				state: MemoryDatasetState.Active,
 			},

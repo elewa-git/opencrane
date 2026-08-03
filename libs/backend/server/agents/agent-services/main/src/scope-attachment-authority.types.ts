@@ -15,6 +15,15 @@ export interface EffectiveScopeGrant
 	readonly subjectId: string;
 }
 
+/** Typed execution principal whose recipient kind must match a grant row as well as its identifier. */
+export interface ScopeGrantPrincipal
+{
+	/** Persisted recipient family accepted by the knowledge-scope grant authority. */
+	readonly subjectType: "group" | "service" | "user";
+	/** Stable principal identifier in the selected family. */
+	readonly subjectId: string;
+}
+
 /**
  * Boundary that compiles the effective knowledge-scope grants for a principal set.
  *
@@ -25,7 +34,7 @@ export interface EffectiveScopeGrant
 export interface ScopeGrantResolver
 {
 	/** Resolves the allow-only effective knowledge-scope grants held by the principal set. */
-	resolveEffectiveScopeGrants(principalIds: readonly string[]): Promise<readonly EffectiveScopeGrant[]>;
+	resolveEffectiveScopeGrants(principals: readonly ScopeGrantPrincipal[]): Promise<readonly EffectiveScopeGrant[]>;
 }
 
 /** Result of intersecting declared attachments against a set of effective grants. */

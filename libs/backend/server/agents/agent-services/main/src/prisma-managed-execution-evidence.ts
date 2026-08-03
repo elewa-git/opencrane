@@ -74,7 +74,7 @@ export class PrismaManagedExecutionEvidenceAuthority implements ManagedExecution
 
 		const declared = revision.scopeAttachments.map(_Attachment);
 		if (declared.some(_IsPersonalAttachment)) return { outcome: "denied", reason: "memory_scope_unavailable" };
-		const effective = await __ResolveEffectiveScopeAttachments(new PrismaScopeGrantResolver(transaction.prisma), [principal], declared);
+		const effective = await __ResolveEffectiveScopeAttachments(new PrismaScopeGrantResolver(transaction.prisma), [{ subjectType: "service", subjectId: principal }], declared);
 		if (effective.rejected.length > 0) return { outcome: "denied", reason: "memory_scope_unavailable" };
 		const attachments = _CanonicalAttachments(effective.authorized);
 		const attachmentDigest = __DigestCanonicalJson(attachments as unknown as JsonValue);
@@ -159,8 +159,9 @@ function _Scope(kind: FleetMembershipScopeKind, organizationId: string, resource
 function _Attachment(value: { scope: GrantScope; subjectType: GrantSubjectType; subjectId: string }): RevisionScopeAttachment
 {
 	const scopes = { [GrantScope.Org]: "org", [GrantScope.Department]: "department", [GrantScope.Team]: "team", [GrantScope.Project]: "project", [GrantScope.Personal]: "personal" } as const;
-	const subjectTypes = { [GrantSubjectType.Group]: "group", [GrantSubjectType.User]: "user" } as const;
-	return { scope: scopes[value.scope], subjectType: subjectTypes[value.subjectType], subjectId: value.subjectId };
+	const subjectType = value.subjectType === GrantSubjectType.Group ? "group" : value.subjectType === GrantSubjectType.User ? "user" : null;
+	if (subjectType === null) throw new Error(`unsupported managed scope attachment subject type: ${value.subjectType}`);
+	return { scope: scopes[value.scope], subjectType, subjectId: value.subjectId };
 }
 
 /** Returns whether an attachment would expose personal memory to a managed service. */

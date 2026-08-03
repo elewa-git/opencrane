@@ -1,6 +1,6 @@
 export { __AssembleRunInputSnapshot } from "./session-assembly.js";
 export { FleetMembershipIdentityEnvelopeSource } from "./fleet-membership-identity-envelope-source.js";
-export { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
+export { ManagedMemoryScopeSource } from "./managed-memory-scope-source.js";
 export { ManagedExecutionIdentityEnvelopeSource } from "./managed-execution-identity-envelope-source.js";
 export { PersonalMemoryScopeSource } from "./personal-memory-scope-source.js";
 export { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";

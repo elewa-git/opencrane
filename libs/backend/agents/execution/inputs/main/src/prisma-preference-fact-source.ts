@@ -1,4 +1,4 @@
-import { AuthorizationScopeKind, MemoryConsentState, MemoryDatasetState, MemoryFactState } from "@prisma/client";
+import { AuthorizationScopeKind, GrantSubjectType, MemoryConsentState, MemoryDatasetState, MemoryFactState } from "@prisma/client";
 
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 
@@ -17,7 +17,7 @@ export class PrismaPreferenceFactSource implements PreferenceFactSource
 
 		// 2. Select only the exact organization-and-user dataset proven by the signed identity, never a cross-organization personal dataset.
 		const dataset = await transaction.prisma.memoryDataset.findFirst({
-			where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, organizationId: identity.organizationId, scopeResourceId: identity.executionSubjectId, state: MemoryDatasetState.Active },
+			where: { siloId: command.siloId, scopeKind: AuthorizationScopeKind.Personal, subjectType: GrantSubjectType.User, organizationId: identity.organizationId, scopeResourceId: identity.executionSubjectId, state: MemoryDatasetState.Active },
 			select: { id: true },
 		});
 		if (dataset === null) return { outcome: "loaded", value: [] };

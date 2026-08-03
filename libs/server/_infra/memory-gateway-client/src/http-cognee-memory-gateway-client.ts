@@ -43,10 +43,10 @@ export function __CreateHttpCogneeMemoryGatewayClient(options: CogneeMemoryGatew
 	const session = __CreateCogneeSession(options);
 	const ledger = options.ledger;
 
-	/** Search one dataset and return the raw Cognee response for the caller to project. */
-	async function _Search(dataset: string, query: string, maxResults: number): Promise<unknown>
+	/** Search one frozen dataset and return the raw Cognee response for the caller to project. */
+	async function _Search(datasets: readonly string[], query: string, maxResults: number): Promise<unknown>
 	{
-		return session.request("/api/v1/search", "POST", { query, search_type: _SEARCH_TYPE, datasets: [dataset], top_k: maxResults });
+		return session.request("/api/v1/search", "POST", { query, search_type: _SEARCH_TYPE, datasets, top_k: maxResults });
 	}
 
 	/** Add one record to a dataset and return the gateway-minted fact identifier. */
@@ -90,7 +90,7 @@ export function __CreateHttpCogneeMemoryGatewayClient(options: CogneeMemoryGatew
 		{
 			return ___DoWithTrace("memory_gateway.personal.query", { siloId: command.siloId, cogneeDatasetId: command.cogneeDatasetId }, async function _query(): Promise<MemoryQueryResult>
 			{
-				const payload = await _Search(command.cogneeDatasetId, command.query, command.maxResults);
+				const payload = await _Search([command.cogneeDatasetId], command.query, command.maxResults);
 				return { facts: __ParseSearchFacts(payload, command.maxResults) };
 			});
 		},
@@ -164,9 +164,9 @@ export function __CreateHttpCogneeMemoryGatewayClient(options: CogneeMemoryGatew
 
 		async recallScoped(command: ScopedMemoryRecallCommand): Promise<ScopedMemoryRecallResult>
 		{
-			return ___DoWithTrace("memory_gateway.scoped.recall", { siloId: command.siloId, cogneeDatasetId: command.cogneeDatasetId }, async function _recallScoped(): Promise<ScopedMemoryRecallResult>
+			return ___DoWithTrace("memory_gateway.scoped.recall", { siloId: command.siloId, datasetCount: command.cogneeDatasetIds.length }, async function _recallScoped(): Promise<ScopedMemoryRecallResult>
 			{
-				const payload = await _Search(command.cogneeDatasetId, command.query, command.maxResults);
+				const payload = await _Search(command.cogneeDatasetIds, command.query, command.maxResults);
 				return { facts: __ParseScopedFacts(payload, command.maxResults) };
 			});
 		},
