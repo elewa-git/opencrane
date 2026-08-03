@@ -5,6 +5,7 @@ import type { JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
 
+import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
 
 /** Canonical lowercase turn roles the compiled input uses. */
@@ -96,7 +97,7 @@ function _loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotI
 	{
 		for (const tool of assignment.allowedTools)
 		{
-			tools.push({ name: `integration:${assignment.integrationId}:${tool}`, toolRevisionId: `integration:${assignment.integrationId}:${tool}`, description: `Tool ${tool} from integration ${assignment.integrationId}`, requiresApproval: true, parametersSchema: { type: "object" } });
+			tools.push({ name: `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool}`, toolRevisionId: `${ExternalActionRevisionKinds.Integration}:${assignment.integrationId}:${tool}`, description: `Tool ${tool} from integration ${assignment.integrationId}`, requiresApproval: true, parametersSchema: { type: "object" } });
 		}
 	}
 	return tools;

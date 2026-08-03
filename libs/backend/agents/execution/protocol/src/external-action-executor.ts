@@ -1,39 +1,14 @@
+import { RunInputSnapshotIdentityKinds, type RunInputSnapshot, type RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
-import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";
-import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+
 import type { ExternalActionExecutor } from "./external-action-authority.types.js";
+import { ExternalActionRevisionKinds, type ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
+import { _ExecuteIntegrationExternalAction, UnsupportedExternalActionError } from "./integration-external-action-executor.js";
+import { _ExecuteMemoryExternalAction, MemoryScopeUnavailableError } from "./memory-external-action-executor.js";
+import { _ExecuteSandboxExternalAction } from "./sandbox-external-action-executor.js";
 
-/** Typed failure raised for a candidate whose tool revision names no wired transport kind. */
-export class UnsupportedExternalActionError extends Error
-{
-	/** Creates a failure that a caller cannot mistake for a successful tool result. */
-	constructor(toolRevisionId: string)
-	{
-		super(`no external-action transport is wired for tool revision ${toolRevisionId}`);
-		this.name = "UnsupportedExternalActionError";
-	}
-}
-
-/** Typed failure emitted when an admitted snapshot did not authorize a personal memory dataset. */
-export class MemoryScopeUnavailableError extends Error
-{
-	/** Creates a failure that cannot fall back to subject-selected memory. */
-	constructor()
-	{
-		super("personal memory scope is unavailable for this run snapshot");
-		this.name = "MemoryScopeUnavailableError";
-	}
-}
-
-/** Read a string field from a candidate's canonical argument object, or null when absent. */
-function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string): string | null
-{
-	const args = candidate.arguments;
-	if (!args || typeof args !== "object" || Array.isArray(args)) return null;
-	const value = (args as { readonly [field: string]: JsonValue })[key];
-	return typeof value === "string" ? value : null;
-}
+export { UnsupportedExternalActionError } from "./integration-external-action-executor.js";
+export { MemoryScopeUnavailableError } from "./memory-external-action-executor.js";
 
 /**
  * Select the personal Cognee dataset frozen into an admitted snapshot.
@@ -46,7 +21,7 @@ function _stringArgument(candidate: RuntimeExternalActionCandidate, key: string)
  */
 export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | null
 {
-	if (snapshot.identitySnapshot.kind !== "user") return null;
+	if (snapshot.identitySnapshot.kind !== RunInputSnapshotIdentityKinds.User) return null;
 	const policy = snapshot.memoryQueryPolicy;
 	if (policy === null || typeof policy !== "object" || Array.isArray(policy)) return null;
 	const record = policy as Readonly<Record<string, unknown>>;
@@ -55,24 +30,14 @@ export function __PersonalMemoryDatasetId(snapshot: RunInputSnapshot): string | 
 	return typeof candidate === "string" && candidate.trim().length > 0 ? candidate : null;
 }
 
-/** Parse the exact integration/tool identity minted by the target prompt compiler. */
-function _integrationTool(toolRevisionId: string): { readonly integrationId: string; readonly toolName: string } | null
-{
-	const parts = toolRevisionId.split(":");
-	if (parts.length !== 3 || parts[0] !== "integration" || !parts[1] || !parts[2]) return null;
-	return { integrationId: parts[1], toolName: parts[2] };
-}
-
 /**
  * Build the concrete external-action executor for one admitted candidate, in the composition root.
  *
- * This is the ONLY place the integration, sandbox, and memory transports are wired together, keeping
- * `scope:execution-protocol` and `scope:authorization` free of any transport import. The returned executor
- * routes `integration:<id>:<tool>` through the Obot invocation port, `sandbox:` through the sandbox
- * Job executor, and `memory:` through the memory gateway. Each transport currently defaults to its
- * fail-closed stub, so an action against an unavailable dependency raises rather than fabricating a
- * result, and `__ExecuteExternalAction` marks the reserved invocation failed. An unknown revision kind
- * is refused the same way.
+ * The factory owns transport selection only. Each selected executor owns its single external seam:
+ * the integration executor rechecks live custody through Obot, the sandbox executor submits the
+ * immutable invocation tuple, and the memory executor uses only the snapshot-frozen dataset. All
+ * unavailable transports and unknown revision kinds throw so `__ExecuteExternalAction` records the
+ * reserved invocation as failed instead of fabricating a successful result.
  *
  * @param candidate - Runtime external-action candidate whose tool revision selects the transport.
  * @param dependencies - Injected concrete transports and correlation identity.
@@ -84,26 +49,9 @@ export function __CreateExternalActionExecutor(candidate: RuntimeExternalActionC
 		async execute(): Promise<JsonValue>
 		{
 			const toolRevisionId = candidate.toolRevisionId;
-			const integrationTool = _integrationTool(toolRevisionId);
-			if (integrationTool !== null)
-			{
-				const resolved = await dependencies.integrations.resolveAssignment({ siloId: dependencies.siloId, agentRevisionId: dependencies.agentRevisionId, integrationId: integrationTool.integrationId });
-				if (resolved.outcome !== "resolved") throw new IntegrationAssignmentUnavailableError(integrationTool.integrationId, resolved.reason);
-				const result = await dependencies.obotMcpInvocation.invokeTool({ siloId: dependencies.siloId, integrationId: resolved.assignment.integrationId, obotCustodyReference: resolved.assignment.obotCustodyReference, toolName: integrationTool.toolName, arguments: candidate.arguments, allowedTools: resolved.assignment.allowedTools });
-				return result.content;
-			}
-			if (toolRevisionId.startsWith("sandbox:"))
-			{
-				const result = await dependencies.sandboxExecutor.runJob({ siloId: dependencies.siloId, runId: candidate.runId, attempt: candidate.attempt, toolRevisionId, toolInvocationId: candidate.toolInvocationId, argumentsDigest: candidate.argumentsDigest, arguments: candidate.arguments });
-				return result.output;
-			}
-			if (toolRevisionId.startsWith("memory:"))
-			{
-				if (dependencies.cogneeDatasetId === null) throw new MemoryScopeUnavailableError();
-				const query = _stringArgument(candidate, "query") ?? "";
-				const result = await dependencies.memoryGateway.query({ siloId: dependencies.siloId, cogneeDatasetId: dependencies.cogneeDatasetId, subjectId: dependencies.subjectId, query, maxResults: 20 });
-				return result.facts.map(function _fact(fact) { return { factId: fact.factId, content: fact.content }; });
-			}
+			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Integration}:`)) return _ExecuteIntegrationExternalAction(candidate, dependencies);
+			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Sandbox}:`)) return _ExecuteSandboxExternalAction(candidate, dependencies);
+			if (toolRevisionId.startsWith(`${ExternalActionRevisionKinds.Memory}:`)) return _ExecuteMemoryExternalAction(candidate, dependencies);
 			throw new UnsupportedExternalActionError(toolRevisionId);
 		},
 	};

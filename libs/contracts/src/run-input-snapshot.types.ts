@@ -3,6 +3,20 @@ import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/arti
 import type { JsonValue } from "@opencrane/util";
 import type { MemoryFactReference } from "./memory.types.js";
 
+/**
+ * Stable execution-identity discriminants serialized in every immutable run snapshot.
+ *
+ * These values name whether verified authority belongs to a human member or managed service. They
+ * never grant authority by themselves; admission must still bind the matching signed evidence.
+ */
+export enum RunInputSnapshotIdentityKinds
+{
+	/** Human member identity backed by verified fleet-membership evidence. */
+	User = "user",
+	/** Managed AgentService identity backed by its derived principal and admitted scopes. */
+	Service = "service",
+}
+
 /** Signed membership evidence pinned into either kind of execution identity. */
 export interface RunInputSnapshotFleetMembershipEvidence
 {

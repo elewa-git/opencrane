@@ -1,6 +1,6 @@
 import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type MaterializePersonalConfigurationChangeResult, type PersonalConfigurationChangeMaterializationRepository } from "./personal-configuration-materialization.types.js";
 
-/** Apply one accepted model-alias proposal to the next immutable personal AgentRevision. */
+/** Apply one accepted model-alias proposal to the next immutable personal agent revision. */
 export async function __MaterializePersonalConfigurationChange(repository: PersonalConfigurationChangeMaterializationRepository, command: MaterializePersonalConfigurationChangeCommand): Promise<MaterializePersonalConfigurationChangeResult>
 {
 	if (!_valid(command.siloId) || !_valid(command.userId) || !_valid(command.changeId) || Number.isNaN(Date.parse(command.materializedAt))) return { outcome: PersonalConfigurationMaterializationCodes.Denied, reason: PersonalConfigurationMaterializationCodes.InvalidCommand };

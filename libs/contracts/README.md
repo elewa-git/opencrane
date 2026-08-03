@@ -60,7 +60,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,
-  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIntegrationAssignment`,
+  `RunInputSnapshot`/`RunInputSnapshotIdentity`/`RunInputSnapshotIdentityKinds`/`RunInputSnapshotIntegrationAssignment`,
   `MemoryFactReference`, `TenantModelSet`, and
   domain-topology host builders. A memory fact reference pins an immutable content digest and its
   provenance rather than a mutable revision counter.

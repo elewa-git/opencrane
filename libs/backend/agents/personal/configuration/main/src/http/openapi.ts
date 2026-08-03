@@ -1,5 +1,5 @@
-import { PersonalConfigurationDecisionCodes } from "./personal-configuration.types.js";
-import { PersonalConfigurationMaterializationCodes } from "./personal-configuration-materialization.types.js";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
+import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
 
 /** OpenAPI path fragment for the signed-in owner's personal configuration proposal state. */
 export const _PersonalConfigurationOpenapiPaths = {

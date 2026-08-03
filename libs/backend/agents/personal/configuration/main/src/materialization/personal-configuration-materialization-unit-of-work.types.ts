@@ -1,13 +1,13 @@
 import type { AgentRevisionModelSelectionRepository } from "@opencrane/backend/server/agents/agent-services";
 
-import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
-import type { ProposalResolutionResult } from "./personal-configuration-materialization-repository.types.js";
+import type { MaterializePersonalConfigurationChangeCommand, PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
+import type { PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
 
 /** Personal proposal persistence operations that participate in materialisation. */
 export interface PersonalConfigurationMaterializationRepository
 {
 	/** Resolves owner, lifecycle, patch, and persona evidence from one transaction snapshot. */
-	resolve(command: MaterializePersonalConfigurationChangeCommand): Promise<ProposalResolutionResult>;
+	resolve(command: MaterializePersonalConfigurationChangeCommand): Promise<PersonalConfigurationMaterializationResolution>;
 	/** Applies the final proposal compare-and-set after agent-services prepared its revision. */
 	apply(command: MaterializePersonalConfigurationChangeCommand, agentRevisionId: string): Promise<PersonalConfigurationMaterializationPersistenceResult>;
 }

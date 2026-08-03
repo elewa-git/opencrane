@@ -75,8 +75,8 @@ its resources to the lifecycle owner.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains only named per-area route lists and the trivial mount loop.
-- `src/app/runtime-composition.ts` binds workload identity review, durable dispatch, and external-I/O
-  ports without choosing transport paths.
+- `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
+  authorities by caller plane without choosing transport paths.
 - `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
   mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
   source, read, upload, and output brokers; those pieces are inseparable from this process's private

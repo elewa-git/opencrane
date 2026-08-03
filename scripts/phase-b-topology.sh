@@ -22,6 +22,7 @@ const appSourceExtensions = new Set([
 const runtimeSourceExtensions = new Set([...appSourceExtensions, ".sh", ".yaml", ".yml"]);
 const typedSourceExtensions = new Set([".ts", ".tsx", ".mts", ".cts"]);
 const ignoredWalkDirectories = new Set(["node_modules", "dist", "coverage", ".nx", ".cache"]);
+const appTestDirectoryPattern = /(?:^|\/)(?:__tests__|tests)(?:\/|$)/;
 const workloadKinds = new Set(["Pod", "Deployment", "StatefulSet", "DaemonSet", "CronJob", "Job"]);
 const workloadClassifications = new Set(["delete", "survivor"]);
 const appSourceClassifications = new Set([
@@ -576,12 +577,12 @@ for (const path of coveredLocalTemplates)
   if (!discoveredWorkloadTemplates.has(path)) fail(`stale workload-template registration: ${path}`);
 }
 info.push(`${discoveredWorkloadTemplates.size} local workload templates are exactly registered`);
-
 const allowedSourceFiles = new Map();
 for (const entry of appSourceRegistry.allowedFiles ?? [])
 {
   const context = `app source '${entry.path ?? "<missing>"}'`;
   if (!entry.path || allowedSourceFiles.has(entry.path)) fail(`${context}: path is missing or duplicated`);
+  if (appTestDirectoryPattern.test(entry.path ?? "")) fail(`${context}: tests are not implementation source and must not be allowlisted`);
   allowedSourceFiles.set(entry.path, entry);
   if (!/^apps\/(?:_infra\/[^/]+|[^/_][^/]*)\//.test(entry.path ?? ""))
   {
@@ -609,6 +610,7 @@ walk(workspacePath("apps"), function inspectAppSource(path, stat) {
   const rel = relative(root, path).split(sep).join("/");
   if (stat.isSymbolicLink()) fail(`symlink under apps is forbidden: ${rel}`);
   if (!stat.isFile()) return;
+  if (appTestDirectoryPattern.test(rel)) return;
   if (appSourceExtensions.has(extname(rel))) discoveredAppSource.add(rel);
 });
 for (const path of discoveredAppSource)

@@ -10,7 +10,7 @@ export interface UpgradeSessionProposalReceipt
 	readonly changeId: string;
 }
 
-/** Dependencies needed to map a first-party tool candidate into a configuration proposal. */
+/** Persistence boundary that maps a first-party tool candidate into a configuration proposal. */
 export interface UpgradeSessionProposalRepository
 {
 	/** Resolves the canonical profile for the snapshot's personal subject. */
