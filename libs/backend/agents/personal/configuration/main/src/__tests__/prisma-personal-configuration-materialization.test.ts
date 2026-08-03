@@ -197,7 +197,7 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 						subjectId: "user-1",
 					}],
 				},
-				digest: __DigestAgentRevisionContent("service-1", 2, expectedContent),
+				digest: await __DigestAgentRevisionContent("service-1", 2, expectedContent),
 			}),
 		}));
 		expect(transaction.agentRevision.update).toHaveBeenCalledWith({

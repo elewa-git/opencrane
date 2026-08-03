@@ -85,7 +85,7 @@ export function _AgentRevisionContentFromRow(row: AgentRevisionWithAssignments):
  * in the agent-service authority prevents another package from independently reproducing revision
  * persistence rules while still allowing an existing transaction to remain atomic.
  */
-function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionCommand): Prisma.AgentRevisionCreateInput
+async function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionCommand): Promise<Prisma.AgentRevisionCreateInput>
 {
 	return {
 		agentService: { connect: { id: command.agentServiceId } },
@@ -98,7 +98,7 @@ function _RevisionCreateData(command: CreateAgentRevisionWithinTransactionComman
 			: { connect: { id: command.sourceRevisionId } },
 		changeMessage: command.changeMessage,
 		state: AgentRevisionState.Draft,
-		digest: __DigestAgentRevisionContent(
+		digest: await __DigestAgentRevisionContent(
 			command.agentServiceId,
 			command.revision,
 			command.content,
@@ -159,7 +159,7 @@ export class PrismaAgentRevisionWriterRepository implements AgentRevisionWriterR
 	async createDraft(command: CreateAgentRevisionWithinTransactionCommand)
 	{
 		return this.transaction.agentRevision.create({
-			data: _RevisionCreateData(command),
+			data: await _RevisionCreateData(command),
 			include: _AGENT_REVISION_INCLUDE,
 		});
 	}

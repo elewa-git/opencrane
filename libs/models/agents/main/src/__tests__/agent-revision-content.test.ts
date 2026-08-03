@@ -24,10 +24,10 @@ function _Content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionC
 
 describe("agent revision content digest", function _AgentRevisionContentDigestSuite()
 {
-	it("is stable for the same numbered executable content", function _StableDigest()
+	it("is stable for the same numbered executable content", async function _StableDigest()
 	{
-		const first = __DigestAgentRevisionContent("service-1", 2, _Content());
-		const second = __DigestAgentRevisionContent("service-1", 2, _Content());
+		const first = await __DigestAgentRevisionContent("service-1", 2, _Content());
+		const second = await __DigestAgentRevisionContent("service-1", 2, _Content());
 
 		expect(second).toBe(first);
 		expect(first).toBe("sha256:41510297d3c19cbfe27a9ad17480844770606934c14aa556a1eda3ae22ec5fcc");
@@ -41,10 +41,10 @@ describe("agent revision content digest", function _AgentRevisionContentDigestSu
 		["skills", { skills: [{ skillId: "skill-2", revisionId: "skill-revision-2" }] }],
 		["integrations", { integrationAssignments: [{ integrationId: "integration-2", custodyReferenceId: "custody-2", allowedTools: ["mail.read"] }] }],
 		["scope attachments", { scopeAttachments: [{ scope: "team", subjectType: "group", subjectId: "team-1" }] }],
-	] satisfies readonly (readonly [string, Partial<AgentRevisionContent>])[])("changes when %s change", function _ExecutableFieldChangesDigest(_field, overrides)
+	] satisfies readonly (readonly [string, Partial<AgentRevisionContent>])[])("changes when %s change", async function _ExecutableFieldChangesDigest(_field, overrides)
 	{
-		const original = __DigestAgentRevisionContent("service-1", 2, _Content());
-		const changed = __DigestAgentRevisionContent("service-1", 2, _Content(overrides));
+		const original = await __DigestAgentRevisionContent("service-1", 2, _Content());
+		const changed = await __DigestAgentRevisionContent("service-1", 2, _Content(overrides));
 
 		expect(changed).not.toBe(original);
 	});

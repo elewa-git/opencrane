@@ -1,8 +1,15 @@
-import { createHash } from "node:crypto";
-
 import { ___CanonicalizeJson, type CanonicalJsonSha256Digest, type JsonValue } from "@opencrane/util";
 
 import type { AgentRevisionContent } from "./agent-revision.types.js";
+
+async function _Sha256Hex(input: string): Promise<string>
+{
+	const hashBuffer = await globalThis.crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
+	return Array.from(new Uint8Array(hashBuffer), function _ToHexByte(byte)
+	{
+		return byte.toString(16).padStart(2, "0");
+	}).join("");
+}
 
 /**
  * Computes the canonical digest for one numbered agent revision.
@@ -16,7 +23,7 @@ import type { AgentRevisionContent } from "./agent-revision.types.js";
  * @param content - Complete immutable executable content persisted on the revision.
  * @returns Canonical SHA-256 digest covering the service, number, and executable content.
  */
-export function __DigestAgentRevisionContent(agentServiceId: string, revision: number, content: AgentRevisionContent): CanonicalJsonSha256Digest
+export async function __DigestAgentRevisionContent(agentServiceId: string, revision: number, content: AgentRevisionContent): Promise<CanonicalJsonSha256Digest>
 {
 	const canonical: JsonValue = {
 		agentServiceId,
@@ -51,5 +58,5 @@ export function __DigestAgentRevisionContent(agentServiceId: string, revision: n
 		}),
 	};
 
-	return `sha256:${createHash("sha256").update(___CanonicalizeJson(canonical), "utf8").digest("hex")}`;
+	return `sha256:${await _Sha256Hex(___CanonicalizeJson(canonical))}`;
 }
