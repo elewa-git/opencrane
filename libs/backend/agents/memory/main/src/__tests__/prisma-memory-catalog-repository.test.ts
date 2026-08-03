@@ -15,7 +15,6 @@ function _Command()
 function _Transaction()
 {
 	return {
-		$queryRaw: vi.fn(),
 		memoryOutboxEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({}) },
 		memoryDataset: { findUnique: vi.fn().mockResolvedValue({ state: MemoryDatasetState.Active }) },
 		memoryFactCatalog: { create: vi.fn().mockResolvedValue({ id: "fact-1" }) },

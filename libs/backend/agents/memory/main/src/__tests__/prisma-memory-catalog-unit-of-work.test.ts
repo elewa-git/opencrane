@@ -10,7 +10,6 @@ import { PrismaMemoryCatalogUnitOfWork } from "../prisma-memory-catalog-unit-of-
 function _Transaction()
 {
 	return {
-		$queryRaw: vi.fn(),
 		memoryOutboxEvent: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn() },
 		memoryDataset: { findUnique: vi.fn().mockResolvedValue({ state: "Active" }) },
 		memoryFactCatalog: { create: vi.fn().mockResolvedValue({ id: "fact-1" }) },

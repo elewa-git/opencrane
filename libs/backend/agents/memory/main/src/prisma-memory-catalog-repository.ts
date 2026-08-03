@@ -1,4 +1,4 @@
-import { MemoryDatasetState, MemoryOutboxEventKind, Prisma } from "@prisma/client";
+import { MemoryDatasetState, MemoryOutboxEventKind, type MemoryConsentState, type Prisma } from "@prisma/client";
 
 import { ___CanonicalizeJson } from "@opencrane/util";
 
@@ -27,14 +27,14 @@ export class PrismaMemoryCatalogRepository implements MemoryCatalogRepository
 		const existing = await this.transaction.memoryOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey }, include: { fact: true } });
 		if (existing !== null) return __MatchesExistingMemoryDelivery(existing, command) ? { status: MemoryCatalogAtomicStatuses.Idempotent } : { status: MemoryCatalogAtomicStatuses.Conflict };
 
-		// 2. Lock then reject unavailable catalog targets; the baseline trigger repeats this fence at commit.
-		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "memory_datasets" WHERE "id" = ${command.datasetId} FOR UPDATE`);
+		// 2. Reject unavailable catalog targets; the serializable unit of work turns a concurrent
+		// retirement into a retried conflict, and the baseline trigger repeats this fence at commit.
 		const dataset = await this.transaction.memoryDataset.findUnique({ where: { id: command.datasetId }, select: { state: true } });
 		if (dataset === null) return { status: MemoryCatalogAtomicStatuses.DatasetNotFound };
 		if (dataset.state === MemoryDatasetState.Retired) return { status: MemoryCatalogAtomicStatuses.DatasetRetired };
 
 		// 3. Commit immutable metadata and its delivery intent together, leaving durable content exclusively in Cognee.
-		const fact = await this.transaction.memoryFactCatalog.create({ data: { datasetId: command.datasetId, cogneeExternalId: command.cogneeExternalId, contentDigest: command.contentDigest, consentState: command.consentState === MemoryFactConsentStates.Explicit ? "Explicit" : "Confirmed", sensitivity: command.sensitivity, provenance: command.provenance as Prisma.InputJsonValue, sourceArtifactRevisionId: command.source.artifactRevisionId, sourceMessageId: command.source.messageId, supersedesFactId: command.supersedesFactId, recordedBy: command.recordedBy }, select: { id: true } });
+		const fact = await this.transaction.memoryFactCatalog.create({ data: { datasetId: command.datasetId, cogneeExternalId: command.cogneeExternalId, contentDigest: command.contentDigest, consentState: _PersistedConsentState(command), sensitivity: command.sensitivity, provenance: command.provenance as Prisma.InputJsonValue, sourceArtifactRevisionId: command.source.artifactRevisionId, sourceMessageId: command.source.messageId, supersedesFactId: command.supersedesFactId, recordedBy: command.recordedBy }, select: { id: true } });
 		await this.transaction.memoryOutboxEvent.create({ data: { datasetId: command.datasetId, factId: fact.id, kind: _OutboxKind(command), idempotencyKey: command.idempotencyKey, payload: _OutboxPayload(command) } });
 		return { status: MemoryCatalogAtomicStatuses.Recorded };
 	}
@@ -47,7 +47,7 @@ export function __MatchesExistingMemoryDelivery(existing: { readonly datasetId: 
 		&& existing.datasetId === command.datasetId
 		&& existing.fact.cogneeExternalId === command.cogneeExternalId
 		&& existing.fact.contentDigest === command.contentDigest
-		&& existing.fact.consentState === (command.consentState === MemoryFactConsentStates.Explicit ? "Explicit" : "Confirmed")
+		&& existing.fact.consentState === _PersistedConsentState(command)
 		&& existing.fact.sensitivity === command.sensitivity
 		&& ___CanonicalizeJson(existing.fact.provenance as never) === ___CanonicalizeJson(command.provenance)
 		&& existing.fact.sourceArtifactRevisionId === command.source.artifactRevisionId
@@ -60,6 +60,12 @@ export function __MatchesExistingMemoryDelivery(existing: { readonly datasetId: 
 function _OutboxKind(command: RecordMemoryFactCommand): MemoryOutboxEventKind
 {
 	return command.supersedesFactId === null ? MemoryOutboxEventKind.FactRecorded : MemoryOutboxEventKind.FactCorrected;
+}
+
+/** Map the command's domain consent state onto the persisted Prisma consent vocabulary. */
+function _PersistedConsentState(command: RecordMemoryFactCommand): MemoryConsentState
+{
+	return command.consentState === MemoryFactConsentStates.Explicit ? "Explicit" : "Confirmed";
 }
 
 /** Build the content-free delivery payload used by downstream catalog consumers. */
