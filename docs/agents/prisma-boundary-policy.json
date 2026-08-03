@@ -42,6 +42,7 @@
       }
     ],
     "compositions": [
+      "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
     ]
   },

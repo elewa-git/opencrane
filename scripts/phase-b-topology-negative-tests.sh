@@ -13,6 +13,7 @@ RUNTIME_COMMAND_PROBE="$ROOT/scripts/phase-b-runtime-command-guard-probe.sh"
 RUNTIME_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts"
 RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
 APP_SOURCE_PROBE="$ROOT/apps/opencrane/src/phase-b-app-guard-probe.py"
+APP_TEST_SOURCE_PROBE="$ROOT/apps/opencrane/src/app/__tests__/phase-b-app-test-guard-probe.py"
 BUILD_SOURCE_PROBE="$ROOT/apps/opencrane/src/build/phase-b-build-source-guard-probe.py"
 GENERATED_DIST_PROBE="$ROOT/apps/opencrane/dist/phase-b-generated-guard-probe.js"
 GENERATED_CACHE_PROBE="$ROOT/apps/opencrane/node_modules/.cache/phase-b-generated-guard-probe.mjs"
@@ -22,6 +23,7 @@ cleanup()
   rm -f "$RENDER_PROBE" "$COMPUTED_KIND_PROBE" "$RUNTIME_PROBE" "$RUNTIME_COMMAND_PROBE"
   rm -f "$RUNTIME_DUPLICATE_PROBE" "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
   rm -f "$APP_SOURCE_PROBE" "$BUILD_SOURCE_PROBE"
+  rm -f "$APP_TEST_SOURCE_PROBE"
   rm -f "$GENERATED_DIST_PROBE" "$GENERATED_CACHE_PROBE"
   rmdir "$(dirname "$BUILD_SOURCE_PROBE")" 2>/dev/null || true
   if [[ -n "$TMP_DIR" && -d "$TMP_DIR" ]]; then rm -rf "$TMP_DIR"; fi
@@ -229,6 +231,12 @@ rm -f "$GENERATED_DIST_PROBE" "$GENERATED_CACHE_PROBE"
 printf '%s\n' 'def phase_b_guard_probe():' '    return "substantive app logic"' >"$APP_SOURCE_PROBE"
 expect_failure "unregistered implementation source under app root" "$GUARD"
 rm -f "$APP_SOURCE_PROBE"
+
+# Tests prove the app composition but do not become part of the deployable
+# implementation allowlist. Keep this fixture in the repository-wide test root.
+printf '%s\n' 'def phase_b_test_guard_probe():' '    return "test-only logic"' >"$APP_TEST_SOURCE_PROBE"
+"$GUARD" >/dev/null
+rm -f "$APP_TEST_SOURCE_PROBE"
 
 mkdir -p "$(dirname "$BUILD_SOURCE_PROBE")"
 printf '%s\n' 'def phase_b_build_source_probe():' '    return "tracked source, not generated output"' >"$BUILD_SOURCE_PROBE"

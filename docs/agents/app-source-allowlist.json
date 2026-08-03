@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "policy": "Implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Every retained file is exact; adding a file requires an ownership decision and this registry change.",
+  "policy": "Deployable implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Named test trees are excluded because they prove the composition without becoming part of it. Every retained implementation file is exact; adding one requires an ownership decision and this registry change.",
   "forbiddenPaths": [
     "apps/opencrane/src/gateways",
     "apps/opencrane/src/reconcilers",
@@ -12,8 +12,6 @@
   "allowedFiles": [
     { "path": "apps/opencrane/prisma.config.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/scripts/emit-openapi.mts", "owner": "apps/opencrane", "classification": "build-entrypoint" },
-    { "path": "apps/opencrane/src/__tests__/index.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
-    { "path": "apps/opencrane/src/app/__tests__/config.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/src/app/background-workers.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/background-workers.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/src/app/config.ts", "owner": "apps/opencrane", "classification": "app-config" },
@@ -34,7 +32,6 @@
     { "path": "apps/opencrane/src/index.ts", "owner": "apps/opencrane", "classification": "process-entrypoint" },
     { "path": "apps/opencrane/src/infra/db/db.ts", "owner": "apps/opencrane", "classification": "prisma-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-upload.factory.ts", "owner": "apps/opencrane", "classification": "route-composition" },
-    { "path": "apps/opencrane/src/infra/artifacts/__tests__/artifact-upload.factory.test.ts", "owner": "apps/opencrane", "classification": "composition-test" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
@@ -60,10 +57,8 @@
     { "path": "apps/artifact-service/src/instrument.ts", "owner": "apps/artifact-service", "classification": "process-instrumentation" },
     { "path": "apps/artifact-service/src/log.ts", "owner": "apps/artifact-service", "classification": "process-logging" },
     { "path": "apps/artifact-service/src/server.ts", "owner": "apps/artifact-service", "classification": "route-composition" },
-    { "path": "apps/artifact-service/src/__tests__/server.test.ts", "owner": "apps/artifact-service", "classification": "composition-test" },
     { "path": "apps/artifact-service/vitest.config.ts", "owner": "apps/artifact-service", "classification": "test-config" },
 
-    { "path": "apps/artifact-preprocessor/src/__tests__/config.test.ts", "owner": "apps/artifact-preprocessor", "classification": "composition-test" },
     { "path": "apps/artifact-preprocessor/src/config.ts", "owner": "apps/artifact-preprocessor", "classification": "app-config" },
     { "path": "apps/artifact-preprocessor/src/config.types.ts", "owner": "apps/artifact-preprocessor", "classification": "app-config" },
     { "path": "apps/artifact-preprocessor/src/index.ts", "owner": "apps/artifact-preprocessor", "classification": "process-entrypoint" },
@@ -71,7 +66,6 @@
     { "path": "apps/artifact-preprocessor/src/log.ts", "owner": "apps/artifact-preprocessor", "classification": "process-logging" },
     { "path": "apps/artifact-preprocessor/vitest.config.ts", "owner": "apps/artifact-preprocessor", "classification": "test-config" },
 
-    { "path": "apps/agent-controller/src/__tests__/config.test.ts", "owner": "apps/agent-controller", "classification": "composition-test" },
     { "path": "apps/agent-controller/src/config.ts", "owner": "apps/agent-controller", "classification": "app-config" },
     { "path": "apps/agent-controller/src/config.types.ts", "owner": "apps/agent-controller", "classification": "app-config" },
     { "path": "apps/agent-controller/src/index.ts", "owner": "apps/agent-controller", "classification": "process-entrypoint" },
@@ -80,7 +74,6 @@
     { "path": "apps/agent-controller/vitest.config.ts", "owner": "apps/agent-controller", "classification": "test-config" },
 
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
-    { "path": "apps/skill-authoring/__tests__/test_authoring_worker.py", "owner": "apps/skill-authoring", "classification": "composition-test" },
 
     { "path": "apps/agent-runtime/src/attempts/execution.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/attempts/terminal.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
@@ -94,10 +87,7 @@
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/tests/test_conformance.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
-    { "path": "apps/agent-runtime/tests/test_fault_matrix.py", "owner": "apps/agent-runtime", "classification": "composition-test" },
-    { "path": "apps/agent-runtime/tests/test_runtime.py", "owner": "apps/agent-runtime", "classification": "composition-test" }
+    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",
