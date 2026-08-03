@@ -276,6 +276,28 @@ describe("Prisma-backed personal configuration materialization", function _Mater
 		expect(transaction.agentService.findFirst).not.toHaveBeenCalled();
 	});
 
+	it("leaves an accepted persona refresh with the persona approval authority", async function _LeavesPersonaRefreshToPersonaApproval()
+	{
+		const { transaction } = _Transaction({
+			proposal: {
+				..._AcceptedProposal(),
+				requestedPatch: { kind: "persona_refresh" },
+			},
+		});
+		const materializer = _Materializer({
+			$transaction: async function _RunTransaction(callback: (value: unknown) => Promise<unknown>)
+			{
+				return callback(transaction);
+			},
+		} as never);
+
+		await expect(materializer.materializeAtomically(_Command())).resolves.toEqual({
+			status: "not_applicable",
+		});
+		expect(transaction.personaProfile.findFirst).not.toHaveBeenCalled();
+		expect(transaction.agentService.findFirst).not.toHaveBeenCalled();
+	});
+
 	it("refuses an accepted proposal after a newer persona becomes active", async function _RejectsStalePersona()
 	{
 		const { transaction } = _Transaction({ activePersonaRevisionId: "persona-2" });

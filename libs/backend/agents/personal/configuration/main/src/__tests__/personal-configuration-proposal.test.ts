@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
-import { __ProposePersonalConfigurationChange } from "../personal-configuration.js";
-import { PersonalConfigurationProposalCodes } from "../personal-configuration.types.js";
+import { __ProposePersonalConfigurationChange } from "../proposal/personal-configuration-proposal.js";
+import { PersonalConfigurationProposalCodes } from "../proposal/personal-configuration-proposal.types.js";
 
 /** Build one valid proposal command with optional overrides. */
 function _Command(overrides: Partial<Parameters<typeof __ProposePersonalConfigurationChange>[1]> = {})
@@ -10,7 +10,7 @@ function _Command(overrides: Partial<Parameters<typeof __ProposePersonalConfigur
 	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }, requestedPatchDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
-describe("personal configuration proposals", function _Suite()
+describe("personal configuration proposals", function _PersonalConfigurationProposalSuite()
 {
 	it("persists a provenance-bound request without changing a current run", async function _Proposes()
 	{

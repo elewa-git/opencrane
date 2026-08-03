@@ -1,6 +1,6 @@
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 
-import type { PersonalConfigurationPatch } from "./personal-configuration.types.js";
+import type { PersonalConfigurationPatch } from "./personal-configuration-patch.types.js";
 
 /** Return whether a runtime value matches the closed personal configuration-patch union. */
 export function _IsPersonalConfigurationPatch(value: unknown): value is PersonalConfigurationPatch

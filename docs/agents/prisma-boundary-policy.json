@@ -8,17 +8,37 @@
       },
       {
         "contract": "AgentRevisionModelSelectionRepository",
-        "importPath": "./prisma-agent-revision-writer.types.js"
+        "importPath": "./agent-revision-model-selection.types.js"
       },
       {
         "contract": "AgentRevisionWriterRepository",
         "importPath": "./prisma-agent-revision-writer.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationChangeDecisionRepository",
+        "importPath": "./personal-configuration-decision.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationChangeViewRepository",
+        "importPath": "./personal-configuration-view.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationProposalRepository",
+        "importPath": "./personal-configuration-proposal-unit-of-work.types.js"
+      },
+      {
+        "contract": "UpgradeSessionProposalRepository",
+        "importPath": "./upgrade-session.types.js"
       }
     ],
     "unitsOfWork": [
       {
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
         "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+      },
+      {
+        "contract": "PersonalConfigurationProposalUnitOfWork",
+        "importPath": "./personal-configuration-proposal-unit-of-work.types.js"
       }
     ],
     "compositions": [

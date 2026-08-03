@@ -1,10 +1,9 @@
 import { PersonalConfigurationChangeState, type Prisma } from "@prisma/client";
 
-import { AgentConfigPatchKinds } from "@opencrane/contracts";
-
-import { _IsPersonalConfigurationPatch } from "../configuration-patch.js";
-import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "../personal-configuration-materialization.types.js";
-import { ProposalResolutionOutcomes, type ProposalResolutionResult } from "./personal-configuration-materialization-repository.types.js";
+import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";
+import { _ResolvePersonalConfigurationMaterializationStrategy } from "./personal-configuration-materialization-strategy.js";
+import { _TerminalProposalResolution } from "./personal-configuration-materialization-state.js";
+import { PersonalConfigurationMaterializationLifecycleStates, type PersonalConfigurationMaterializationChange, type PersonalConfigurationMaterializationResolution } from "./personal-configuration-materialization-state.types.js";
 import type { PersonalConfigurationMaterializationRepository } from "./personal-configuration-materialization-unit-of-work.types.js";
 
 /** Prisma repository for proposal evidence and the final application fence. */
@@ -20,7 +19,7 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 	}
 
 	/** Resolves owner, lifecycle, patch, and persona evidence from one serializable snapshot. */
-	async resolve(command: MaterializePersonalConfigurationChangeCommand): Promise<ProposalResolutionResult>
+	async resolve(command: MaterializePersonalConfigurationChangeCommand): Promise<PersonalConfigurationMaterializationResolution>
 	{
 		const change = await this.transaction.personalConfigurationChange.findFirst({
 			where: {
@@ -38,47 +37,12 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 				appliedAgentRevisionId: true,
 			},
 		});
-		if (change === null) return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner });
-
-		const patch = change.requestedPatch as unknown;
-		if (!_IsPersonalConfigurationPatch(patch) || patch.kind !== AgentConfigPatchKinds.ModelAlias)
-		{
-			return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotApplicable });
-		}
-		if (change.state === PersonalConfigurationChangeState.Applied && change.appliedAgentRevisionId !== null)
-		{
-			return _Terminal({
-				status: PersonalConfigurationMaterializationCodes.Applied,
-				agentRevisionId: change.appliedAgentRevisionId,
-			});
-		}
-		if (change.state !== PersonalConfigurationChangeState.Accepted)
-		{
-			return _Terminal({ status: PersonalConfigurationMaterializationCodes.NotAccepted });
-		}
-
-		const profile = await this.transaction.personaProfile.findFirst({
-			where: {
-				id: change.personaProfileId,
-				siloId: command.siloId,
-				userId: command.userId,
-			},
-			select: { activeRevisionId: true },
-		});
-		if (change.expectedAgentRevisionId === null || profile?.activeRevisionId !== change.expectedPersonaRevisionId)
-		{
-			return _Terminal({ status: PersonalConfigurationMaterializationCodes.StaleProposal });
-		}
-
-		return {
-			outcome: ProposalResolutionOutcomes.Ready,
-			proposal: {
-				agentServiceId: change.agentServiceId,
-				expectedAgentRevisionId: change.expectedAgentRevisionId,
-				expectedPersonaRevisionId: change.expectedPersonaRevisionId,
-				modelAlias: patch.modelAlias.trim(),
-			},
-		};
+		const materializationChange = change === null
+			? null
+			: { ...change, state: _MaterializationLifecycleState(change.state) } satisfies PersonalConfigurationMaterializationChange;
+		return materializationChange === null
+			? _TerminalProposalResolution({ status: PersonalConfigurationMaterializationCodes.NotFoundOrNotOwner })
+			: _ResolvePersonalConfigurationMaterializationStrategy(materializationChange, command, this._ReadActivePersonaRevision.bind(this));
 	}
 
 	/**
@@ -108,10 +72,31 @@ export class PrismaPersonalConfigurationMaterializationRepository implements Per
 		}
 		return { status: PersonalConfigurationMaterializationCodes.Applied, agentRevisionId: revisionId };
 	}
+
+	/** Reads the owner-bound persona head only when the selected strategy needs freshness evidence. */
+	private async _ReadActivePersonaRevision(personaProfileId: string, command: MaterializePersonalConfigurationChangeCommand): Promise<string | null>
+	{
+		const profile = await this.transaction.personaProfile.findFirst({
+			where: {
+				id: personaProfileId,
+				siloId: command.siloId,
+				userId: command.userId,
+			},
+			select: { activeRevisionId: true },
+		});
+		return profile?.activeRevisionId ?? null;
+	}
 }
 
-/** Wraps a terminal materialisation result for the proposal-resolution result. */
-function _Terminal(result: PersonalConfigurationMaterializationPersistenceResult): { readonly outcome: ProposalResolutionOutcomes.Terminal; readonly result: PersonalConfigurationMaterializationPersistenceResult }
+/** Maps the generated database lifecycle spelling to the personal materialisation state machine. */
+function _MaterializationLifecycleState(state: PersonalConfigurationChangeState): PersonalConfigurationMaterializationLifecycleStates
 {
-	return { outcome: ProposalResolutionOutcomes.Terminal, result };
+	switch (state)
+	{
+		case PersonalConfigurationChangeState.Proposed: return PersonalConfigurationMaterializationLifecycleStates.Proposed;
+		case PersonalConfigurationChangeState.Accepted: return PersonalConfigurationMaterializationLifecycleStates.Accepted;
+		case PersonalConfigurationChangeState.Applied: return PersonalConfigurationMaterializationLifecycleStates.Applied;
+		case PersonalConfigurationChangeState.Rejected: return PersonalConfigurationMaterializationLifecycleStates.Rejected;
+		case PersonalConfigurationChangeState.Superseded: return PersonalConfigurationMaterializationLifecycleStates.Superseded;
+	}
 }

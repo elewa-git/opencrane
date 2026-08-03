@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
-import { __MaterializePersonalConfigurationChange } from "../personal-configuration-materialization.js";
-import { PersonalConfigurationMaterializationCodes } from "../personal-configuration-materialization.types.js";
+import { __MaterializePersonalConfigurationChange } from "../materialization/personal-configuration-materialization.js";
+import { PersonalConfigurationMaterializationCodes } from "../materialization/personal-configuration-materialization.types.js";
 
 /** Exercises the narrow command guard before a materialization transaction is requested. */
 describe("__MaterializePersonalConfigurationChange", function _describeMaterialization()

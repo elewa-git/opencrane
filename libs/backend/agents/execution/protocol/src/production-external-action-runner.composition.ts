@@ -1,6 +1,6 @@
 import type { PrismaClient } from "@prisma/client";
 
-import { PrismaPersonalConfigurationChangeRepository } from "@opencrane/backend/agents/personal/configuration";
+import { PrismaUpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
 import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
 import { PrismaToolInvocationRepository, __OpenDeferredToolApproval } from "@opencrane/backend/server/iam/authorization";
 import type { OpenDeferredToolApprovalCommand } from "@opencrane/backend/server/iam/authorization";
@@ -50,7 +50,7 @@ export function _CreateProductionExternalActionRunner(prisma: PrismaClient, log:
 {
 	return _CreateProductionExternalActionRunnerWithDependencies({
 		invocations: new PrismaToolInvocationRepository(prisma),
-		personalConfiguration: new PrismaPersonalConfigurationChangeRepository(prisma),
+		personalConfiguration: new PrismaUpgradeSessionProposalRepository(prisma),
 		transports: {
 			integrations: new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock()),
 			obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(),
