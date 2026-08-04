@@ -21,7 +21,7 @@
 #                            [--oidc-session-secret SECRET]
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
-#                            [--preflight] [--multi-ct]
+#                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
 #                            --obot-postgres-credentials-secret NAME [--obot-postgres-owner OWNER]
@@ -78,6 +78,12 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+POST_DEPLOY_VERIFY="$SCRIPT_DIR/post-deploy-verify.sh"
+if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
+  echo "[k8s-deploy] Post-deploy verifier is missing at '$POST_DEPLOY_VERIFY'." >&2
+  exit 1
+fi
+source "$POST_DEPLOY_VERIFY"
 # The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
 # app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
 # = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
@@ -176,9 +182,12 @@ PREFLIGHT="${OPENCRANE_PREFLIGHT:-0}"
 # Also via OPENCRANE_MULTI_CT=1.
 MULTI_CT="${OPENCRANE_MULTI_CT:-0}"
 
-# --verify runs an advisory post-deploy check (pods Running and host resolution). Never fails
-# the install. Also via OPENCRANE_VERIFY=1.
+# --verify runs an advisory post-deploy check (pods Running, host resolution, and the public
+# /healthz endpoint). Never fails the install. Also via OPENCRANE_VERIFY=1.
 VERIFY="${OPENCRANE_VERIFY:-0}"
+# --verify-insecure permits only the advisory HTTP check to accept a self-signed certificate.
+# It has no effect unless --verify is enabled. Also via OPENCRANE_VERIFY_INSECURE=1.
+VERIFY_INSECURE="${OPENCRANE_VERIFY_INSECURE:-0}"
 
 POSTGRES_RELEASE=""
 TIMEOUT="${TIMEOUT_SECONDS:-300}"
@@ -205,6 +214,7 @@ while [[ $# -gt 0 ]]; do
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
+    --verify-insecure)  VERIFY_INSECURE="1"; shift ;;
     --postgres-credentials-secret) POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
     --postgres-owner) POSTGRES_OWNER="$2"; shift 2 ;;
     --obot-postgres-credentials-secret) OBOT_POSTGRES_CREDENTIALS_SECRET="$2"; shift 2 ;;
@@ -782,51 +792,6 @@ for _comp in fleet-manager clustertenant-manager; do
   fi
 done
 
-# Read the ACTUAL opencrane-ui host(s) off the deployed ingress(es). Never assume platform.<base>:
-# the fleet may serve the apex (controlPlaneHost=<base>), a silo serves <org>.<base>, and only the
-# unset default is platform.<base>. Ask the cluster what was rendered; fall back to platform.<base>
-# when no ingress exposes a host (e.g. ingress disabled) so callers still get a sensible hint.
-_control_plane_hosts() {
-  local hosts
-  hosts="$(kubectl get ingress -n "$NAMESPACE" \
-    -o jsonpath='{range .items[*]}{range .spec.rules[*]}{.host}{"\n"}{end}{end}' 2>/dev/null \
-    | grep -v '^$' | sort -u)"
-  if [[ -n "$hosts" ]]; then
-    echo "$hosts"
-  elif [[ -n "$BASE_DOMAIN" ]]; then
-    echo "platform.$BASE_DOMAIN"
-  fi
-}
-
-# 5. Post-deploy verify (opt-in, --verify). Advisory only — surfaces the failure modes that
-# leave an install unreachable (pods not Running or host not resolving).
-_post_deploy_verify() {
-  [[ "$VERIFY" == "1" ]] || return 0
-  log "Post-deploy verify (advisory — does not fail the install):"
-
-  # 1. Core pods Running — a CrashLoop/ImagePullBackOff that helm --wait didn't catch.
-  local notready
-  notready="$(kubectl get pods -n "$NAMESPACE" --field-selector=status.phase!=Running,status.phase!=Succeeded -o name 2>/dev/null | grep -c . || true)"
-  if [[ "$notready" == "0" ]]; then
-    log "  ✓ all pods Running/Succeeded in $NAMESPACE"
-  else
-    warn "  ✗ $notready pod(s) not Running in $NAMESPACE — kubectl get pods -n $NAMESPACE"
-  fi
-
-  # 2. Control-plane host(s) resolve to the ingress — the end of the chain a user hits first.
-  #    Read the rendered host(s) off the ingress so the apex / org host is checked, not platform.<base>.
-  if command -v dig >/dev/null 2>&1; then
-    local host resolved
-    for host in $(_control_plane_hosts); do
-      resolved="$(dig +short "$host" 2>/dev/null | tail -1)"
-      if [[ -n "$resolved" ]]; then
-        log "  ✓ $host resolves to $resolved"
-      else
-        warn "  ✗ $host does not resolve yet (DNS propagation lag or a missing record)."
-      fi
-    done
-  fi
-}
 _post_deploy_verify
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."

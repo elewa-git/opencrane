@@ -9,12 +9,12 @@ local source consumer.
 | Path | Responsibility |
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
-| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. |
+| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
 | `provision.sh` | Optional local, GKE, or VPS cluster provisioning invoked before deployment. |
 | `terraform/` | GKE, networking, DNS, Artifact Registry, Workload Identity, and optional chart installation. |
 | `values/` | Reusable environment and multi-instance deployment profiles. |
-| `tests/` | Rendered network, pooler, key-permission, and skill-workload contract checks. |
+| `tests/` | Rendered network, pooler, key-permission, post-deploy health, and skill-workload contract checks. |
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/server/_infra`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
