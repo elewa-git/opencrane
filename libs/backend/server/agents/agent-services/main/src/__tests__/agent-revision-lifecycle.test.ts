@@ -4,6 +4,13 @@ import { describe, expect, it } from "vitest";
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
 import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AppendAgentRevisionResult, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
 
+/** Exhaustive service-state result for each lifecycle action used by the repository double. */
+const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"], AgentService["state"]>> = {
+	enable: "active",
+	pause: "paused",
+	retire: "retired",
+};
+
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
 {
@@ -71,7 +78,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		if (service === null) return { outcome: "denied", reason: "service_not_found" };
 		if (service.state !== command.expectedState) return { outcome: "conflict", currentState: service.state };
 		if (command.action === "enable" && service.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
-		const state = command.action === "enable" ? "active" : command.action === "pause" ? "paused" : "retired";
+		const state = _STATE_BY_ACTION[command.action];
 		const updated: AgentService = { ...service, state, activeRevisionId: command.action === "retire" ? null : service.activeRevisionId, updatedAt: changedAt };
 		this.services.set(service.id, updated);
 		return { outcome: "changed", service: updated };
