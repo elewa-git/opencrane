@@ -7,8 +7,7 @@ import { ___DoWithTrace } from "@opencrane/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import { RunDispatchResultStatuses } from "./run-dispatch.types.js";
-import type { ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
+import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity
