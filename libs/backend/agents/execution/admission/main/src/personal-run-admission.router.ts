@@ -38,7 +38,7 @@ export function __CreatePersonalRunAdmissionRouter(dependencies: PersonalRunAdmi
 			});
 			if (result.outcome === PersonalRunAdmissionOutcomes.Denied)
 			{
-				const status = result.reason === RunAdmissionConcurrencyDenialReasons.AdmissionConcurrencyLimited ? 429 : result.reason === PersonalRunAdmissionDenialReasons.PersistenceUnavailable ? 503 : 403;
+				const status = _DenialStatus(result.reason);
 				response.status(status).json({ error: "personal_run_not_admittable" });
 				return;
 			}
@@ -56,6 +56,20 @@ export function __CreatePersonalRunAdmissionRouter(dependencies: PersonalRunAdmi
 		}
 	});
 	return router;
+}
+
+/** Maps typed admission denials to stable transport status without exposing authority detail. */
+function _DenialStatus(reason: string): number
+{
+	if (reason === RunAdmissionConcurrencyDenialReasons.AdmissionConcurrencyLimited)
+	{
+		return 429;
+	}
+	if (reason === PersonalRunAdmissionDenialReasons.PersistenceUnavailable)
+	{
+		return 503;
+	}
+	return 403;
 }
 
 /** Reads the exact two-field transport contract and rejects forged coordinate fields. */
