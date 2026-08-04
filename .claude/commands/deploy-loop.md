@@ -76,14 +76,14 @@ already answers.
 
 ## Phase 4 — docs run (script finds gaps, `website` agent closes them)
 
-1. Run `scripts/config-docs-coverage.sh` (zero-token gap list: every values key vs
-   the website docs corpus).
+1. Run `scripts/config-docs-coverage.sh --strict`. It checks the explicit contract of public
+   umbrella inputs: every top-level values key is classified as an operator input, an app-forwarded
+   value, or an internal chart value, and each operator input names its documentation.
 2. If gaps exist, delegate to the `website` agent: document the **top-level section
-   with the most undocumented keys** (one coherent batch per run, not all 500 —
-   sustainable beats heroic), in the operators section — fleet-profile keys on the
-   fleet/silo pages, single-cluster keys on the silo-deployment page, shared-core
-   keys in a configuration reference both link to. The website agent builds to
-   validate links as usual.
+   with the missing operator inputs** (one coherent batch per run, not all 500 —
+   sustainable beats heroic), in the operators section. Do not document forwarded or internal keys
+   merely to silence the check: classify them with their owning app or chart instead. The website
+   agent builds to validate links as usual.
 3. Anything the deploy run itself proved about configuration behaviour (a flag's real
    default, an ordering constraint) goes to the website agent as ground truth to
    include — deploy evidence is the best documentation source there is.

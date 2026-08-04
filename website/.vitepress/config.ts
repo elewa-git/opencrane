@@ -104,6 +104,7 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Hosting & deployment', link: '/operators/hosting' },
+          { text: 'Deployment configuration', link: '/operators/deployment-configuration' },
           { text: 'Organisation boundary', link: '/operators/organisation-boundary' },
           { text: 'DNS configuration', link: '/operators/dns-config' },
           { text: 'Networking & isolation', link: '/operators/networking' },
