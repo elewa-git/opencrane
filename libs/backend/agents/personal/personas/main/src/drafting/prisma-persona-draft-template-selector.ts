@@ -1,16 +1,25 @@
-import type { Prisma, PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import type { PersonaDraftTemplateSelection, PersonaDraftTemplateSelectorRepository } from "./persona-draft-template-selector.types.js";
 
 /** Prisma read adapter that deterministically selects reviewed SOUL source evidence without raw SQL. */
-export class PrismaPersonaDraftTemplateSelector implements PersonaDraftTemplateSelectorRepository
+export class PrismaPersonaDraftTemplateSelectorRepository implements PersonaDraftTemplateSelectorRepository
 {
+	/** Transaction-scoped ORM client supplied only by the persona unit of work. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Binds template selection and answer evidence to one transaction snapshot. */
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
 	/** Select the highest-priority match while preserving Prisma's template id/version ordering for ties. */
-	async select(client: PrismaClient | Prisma.TransactionClient, interviewId: string): Promise<PersonaDraftTemplateSelection | null>
+	async select(interviewId: string): Promise<PersonaDraftTemplateSelection | null>
 	{
 		const [templates, answers] = await Promise.all([
-			client.personaSoulTemplate.findMany({ select: { id: true, version: true, digest: true, content: true, selectionRules: true }, orderBy: [{ id: "asc" }, { version: "desc" }] }),
-			client.personaInterviewAnswer.findMany({ where: { interviewId }, select: { id: true, questionId: true, value: true }, orderBy: { id: "asc" } }),
+			this.transaction.personaSoulTemplate.findMany({ select: { id: true, version: true, digest: true, content: true, selectionRules: true }, orderBy: [{ id: "asc" }, { version: "desc" }] }),
+			this.transaction.personaInterviewAnswer.findMany({ where: { interviewId }, select: { id: true, questionId: true, value: true }, orderBy: { id: "asc" } }),
 		]);
 		const answersByQuestion = new Map(answers.map(function _toAnswerEntry(answer) { return [answer.questionId, answer]; }));
 		let selected: PersonaDraftTemplateCandidate | null = null;

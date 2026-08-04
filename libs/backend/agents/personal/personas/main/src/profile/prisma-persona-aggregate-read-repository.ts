@@ -11,42 +11,51 @@ import { PersonaAggregateInterviewStates, type PersonaAggregateReadRepository, t
  */
 export class PrismaPersonaAggregateReadRepository implements PersonaAggregateReadRepository
 {
-	/** Read one owner profile before a dependent interview, draft, or approval mutation. */
-	async readProfile(client: Prisma.TransactionClient, command: PersonaProfileReadCommand): Promise<PersonaProfileRecord | null>
+	/** Transaction-scoped ORM client supplied only by the persona unit of work. */
+	private readonly transaction: Prisma.TransactionClient;
+
+	/** Binds all aggregate evidence reads to one serializable transaction. */
+	constructor(transaction: Prisma.TransactionClient)
 	{
-		return client.personaProfile.findFirst({ where: { id: command.personaProfileId, siloId: command.siloId, userId: command.userId }, select: { siloId: true, activeRevisionId: true } });
+		this.transaction = transaction;
+	}
+
+	/** Read one owner profile before a dependent interview, draft, or approval mutation. */
+	async readProfile(command: PersonaProfileReadCommand): Promise<PersonaProfileRecord | null>
+	{
+		return this.transaction.personaProfile.findFirst({ where: { id: command.personaProfileId, siloId: command.siloId, userId: command.userId }, select: { siloId: true, activeRevisionId: true } });
 	}
 
 	/** Read one owner profile when approval must recover the silo for its bound refresh proposal. */
-	async readProfileForOwner(client: Prisma.TransactionClient, command: PersonaProfileOwnerReadCommand): Promise<PersonaProfileRecord | null>
+	async readProfileForOwner(command: PersonaProfileOwnerReadCommand): Promise<PersonaProfileRecord | null>
 	{
-		return client.personaProfile.findFirst({ where: { id: command.personaProfileId, userId: command.userId }, select: { siloId: true, activeRevisionId: true } });
+		return this.transaction.personaProfile.findFirst({ where: { id: command.personaProfileId, userId: command.userId }, select: { siloId: true, activeRevisionId: true } });
 	}
 
 	/** Read one owner interview so answer and completion transitions share the same evidence view. */
-	async readInterview(client: Prisma.TransactionClient, command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
+	async readInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
 	{
-		const interview = await client.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId }, select: { questionSetId: true, questionSetVersion: true, state: true } });
+		const interview = await this.transaction.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId }, select: { questionSetId: true, questionSetVersion: true, state: true } });
 		return interview === null ? null : { ...interview, state: _InterviewState(interview.state) };
 	}
 
 	/** Read a completed owner interview before deriving its immutable template and insight evidence. */
-	async readCompletedInterview(client: Prisma.TransactionClient, command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
+	async readCompletedInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>
 	{
-		const interview = await client.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.Completed }, select: { questionSetId: true, questionSetVersion: true, state: true } });
+		const interview = await this.transaction.personaInterview.findFirst({ where: { id: command.interviewId, personaProfileId: command.personaProfileId, userId: command.userId, state: PersonaInterviewState.Completed }, select: { questionSetId: true, questionSetVersion: true, state: true } });
 		return interview === null ? null : { ...interview, state: _InterviewState(interview.state) };
 	}
 
 	/** Read one still-draft revision before changing its state or active profile pointer. */
-	async readDraftRevision(client: Prisma.TransactionClient, command: PersonaDraftRevisionReadCommand): Promise<PersonaDraftRevisionRecord | null>
+	async readDraftRevision(command: PersonaDraftRevisionReadCommand): Promise<PersonaDraftRevisionRecord | null>
 	{
-		return client.personaRevision.findFirst({ where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft }, select: { interviewId: true } });
+		return this.transaction.personaRevision.findFirst({ where: { id: command.personaRevisionId, personaProfileId: command.personaProfileId, state: PersonaRevisionState.Draft }, select: { interviewId: true } });
 	}
 
 	/** Read the next profile-local revision; the unique profile-revision key backstops concurrent allocation. */
-	async readNextRevision(client: Prisma.TransactionClient, personaProfileId: string): Promise<number>
+	async readNextRevision(personaProfileId: string): Promise<number>
 	{
-		const latest = await client.personaRevision.findFirst({ where: { personaProfileId }, select: { revision: true }, orderBy: { revision: "desc" } });
+		const latest = await this.transaction.personaRevision.findFirst({ where: { personaProfileId }, select: { revision: true }, orderBy: { revision: "desc" } });
 		return (latest?.revision ?? 0) + 1;
 	}
 }

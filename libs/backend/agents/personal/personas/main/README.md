@@ -71,7 +71,7 @@ whole approval rather than activating the revision alone.
   proposal-bound refresh interviews, records one answer, and completes them using only
   session-and-host-derived ownership.
 - `_CreatePersonaOnboardingRouter` — the ready-to-mount Prisma composition. It maps the shared
-  request principal to the persona caller and owns every onboarding repository and the clock.
+  request principal to the persona caller and supplies one aggregate persistence unit of work and the clock.
 - `_PersonaOnboardingOpenapiPaths` — the OpenAPI paths for that owner-only router.
 - `PersonaOnboardingCaller`, `PersonaOnboardingClock`, and
   `PersonaOnboardingRouterDependencies` — the three types needed to compose the router without
@@ -88,10 +88,12 @@ The capability stays one aggregate lifecycle, but its implementation is grouped 
 derives reviewable evidence, `approval/` activates the revision, and `http/` adapts the owner-only
 API. The route module composes these owners; it contains no persistence policy.
 
-The aggregate read repository in `profile/` is the sole owner of shared lifecycle evidence reads and
-next-revision allocation. It takes no row locks: every caller runs it inside a serializable
-transaction, and a concurrent writer surfaces as an explicit conflict outcome instead of a blocked
-lock. Drafting owns the separate deterministic template selector and pure instruction
+`PrismaPersonaPersistenceUnitOfWork` is the sole owner of persona transaction creation. For each
+operation it constructs the lifecycle repositories once with the exact callback transaction; the
+repositories cannot retain or receive the root Prisma client. The aggregate read repository in
+`profile/` owns shared lifecycle evidence reads and next-revision allocation. It takes no row locks,
+so a concurrent writer surfaces as an explicit conflict outcome instead of a blocked lock. Drafting
+owns the separate deterministic template selector and pure instruction
 compiler, so a reader can verify template priority and instruction content without tracing lifecycle
 transactions. Every selected template stores its source identity, digest, rule, and sorted answer IDs.
 
@@ -106,10 +108,9 @@ Callers cannot bypass that composition through the package barrel.
 Tagged `scope:personal-personas`: it may depend on its own scope, `scope:shared`, and the narrow
 `scope:auth` request-principal seam. It also has one intentional sibling dependency on
 `scope:personal-configuration`: the configuration-owned
-`PersonalConfigurationPersonaRefreshUnitOfWork` claims the exact accepted refresh proposal and joins
-persona persistence to its transaction. This package never reads or writes
-`PersonalConfigurationChange` itself and imports no other sibling business domain. It never depends
-on an app.
+`PrismaPersonalConfigurationPersonaRefreshRepository` claims and applies the exact accepted refresh
+proposal on the persona unit of work's transaction. Configuration retains delegate ownership; this
+package imports no other sibling business domain and never depends on an app.
 
 ## Data & persistence
 
@@ -118,9 +119,9 @@ Provisions one `PersonaProfile` for each authenticated `(silo, user)` pair and t
 database. It also starts, appends answers to, and completes `PersonaInterview` and
 `PersonaInterviewAnswer` rows; reads a joined approval snapshot (profile · revision · interview ·
 template · insights); and commits approval plus the active-persona pointer in one transaction. A
-configuration-owned unit of work joins a proposal-bound refresh to that same transaction: persona
-persistence retains only the opaque change identifier and never reads or writes
-`PersonalConfigurationChange` directly.
+configuration-owned repository joins a proposal-bound refresh to that same transaction: persona
+logic retains only the opaque change identifier and never accesses `PersonalConfigurationChange`
+through a Prisma delegate.
 Postgres-level lifecycle behaviour is exercised by the `test:sql` target
 (`src/approval/__tests__/persona-authority.sql`).
 On a clean database, the target baseline supplies one reviewed eight-question onboarding set and two

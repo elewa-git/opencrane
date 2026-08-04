@@ -19,5 +19,5 @@ export interface PersonaDraftTemplateSelection
 export interface PersonaDraftTemplateSelectorRepository
 {
 	/** Selects the sole highest-priority reviewed template for one completed interview, or null fail-closed. */
-	select(client: unknown, interviewId: string): Promise<PersonaDraftTemplateSelection | null>;
+	select(interviewId: string): Promise<PersonaDraftTemplateSelection | null>;
 }

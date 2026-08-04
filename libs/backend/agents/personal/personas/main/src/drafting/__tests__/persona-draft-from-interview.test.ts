@@ -1,24 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
-import { PersonaInterviewCategory, Prisma } from "@prisma/client";
-import type { Logger } from "@opencrane/observability";
+import { PersonaInterviewCategory, type Prisma } from "@prisma/client";
 
-import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
-import { PrismaPersonaAggregateReadRepository } from "../../profile/prisma-persona-aggregate-read-repository.js";
 import { __CreatePersonaDraftFromInterview } from "../persona-draft-from-interview.js";
 import type { PersonaDraftFromInterviewRepository } from "../persona-draft-authority.types.js";
 import { PrismaPersonaDraftRepository } from "../prisma-persona-draft-repository.js";
-import { PrismaPersonaDraftTemplateSelector } from "../prisma-persona-draft-template-selector.js";
 
 /** Build a complete server-owned draft request for one completed onboarding interview. */
 function _Command()
 {
 	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", authoredAt: "2026-07-26T12:00:00.000Z" };
-}
-
-/** Creates an injected structured logger with an observable error method. */
-function _Logger(): Logger
-{
-	return { error: vi.fn() } as unknown as Logger;
 }
 
 describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFromInterview()
@@ -42,7 +32,6 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 
 	it("derives bounded insights and persists their exact question provenance in one transaction", async function _PersistsDerivedInsights()
 	{
-		const logger = _Logger();
 		const createRevision = vi.fn().mockResolvedValue({ id: "revision-2" });
 		const createInsights = vi.fn().mockResolvedValue({ count: 3 });
 		const transaction = {
@@ -54,8 +43,7 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 			personaRevision: { findFirst: vi.fn().mockResolvedValue({ revision: 1 }), create: createRevision },
 			personaInsight: { createMany: createInsights },
 		};
-		const transactions = { run: vi.fn(async function _run(work) { return work(transaction); }) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
+		const repository = new PrismaPersonaDraftRepository(transaction as unknown as Prisma.TransactionClient);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "created", personaRevisionId: "revision-2" });
 		expect(createRevision).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", revision: 2, soulTemplateId: "direct", soulTemplateVersion: 1, soulTemplateDigest: "sha256:template", selectionRuleId: "rule-1", selectionAnswerIds: ["answer-1"], compiledInstructions: "Be direct.\n\n## Interview insights\n- Owner response: one\n- Owner response: two\n- Owner response: three\n", previousRevisionId: "revision-1" }), select: { id: true } });
@@ -64,29 +52,5 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-2", questionId: "question-2", category: PersonaInterviewCategory.ToneLanguage, statement: "Owner response: two" }),
 			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-3", questionId: "question-3", category: PersonaInterviewCategory.WorkingHabits, statement: "Owner response: three" }),
 		] });
-		expect(logger.error).not.toHaveBeenCalled();
-	});
-
-	it("logs one unexpected transaction failure and returns a fail-closed denial", async function _LogsCreateFailure()
-	{
-		const err = new Prisma.PrismaClientKnownRequestError("connection pool timeout", { code: "P2024", clientVersion: "test" });
-		const logger = _Logger();
-		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
-
-		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
-		expect(logger.error).toHaveBeenCalledOnce();
-		expect(logger.error).toHaveBeenCalledWith({ err, operation: "persona.draft.create", siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1" }, "Persona draft persistence failed");
-	});
-
-	it("classifies a concurrent unique-key race as a conflict without logging an operational failure", async function _ClassifiesConflict()
-	{
-		const conflict = new Prisma.PrismaClientKnownRequestError("revision race", { code: "P2002", clientVersion: "test" });
-		const logger = _Logger();
-		const transactions = { run: vi.fn().mockRejectedValue(conflict) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
-
-		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "conflict" });
-		expect(logger.error).not.toHaveBeenCalled();
 	});
 });

@@ -10,6 +10,93 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/agents/personal/configuration/main/src/persona-refresh/prisma-personal-configuration-persona-refresh-repository.ts",
+        "adapter": "PrismaPersonalConfigurationPersonaRefreshRepository",
+        "contract": "PersonalConfigurationPersonaRefreshRepository",
+        "contractImportPath": "./personal-configuration-persona-refresh.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/approval/prisma-persona-authority-repository.ts",
+        "adapter": "PrismaPersonaAuthorityRepository",
+        "contract": "PersonaAuthorityRepository",
+        "contractImportPath": "./persona-authority.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonalConfigurationPersonaRefreshRepository",
+            "importPath": "@opencrane/backend/agents/personal/configuration"
+          },
+          {
+            "adapter": "PrismaPersonaAggregateReadRepository",
+            "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
+            "importPath": "../drafting/prisma-persona-draft-template-selector.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/drafting/prisma-persona-draft-repository.ts",
+        "adapter": "PrismaPersonaDraftRepository",
+        "contract": "PersonaDraftFromInterviewRepository",
+        "contractImportPath": "./persona-draft-authority.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonaAggregateReadRepository",
+            "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
+            "importPath": "./prisma-persona-draft-template-selector.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/drafting/prisma-persona-draft-template-selector.ts",
+        "adapter": "PrismaPersonaDraftTemplateSelectorRepository",
+        "contract": "PersonaDraftTemplateSelectorRepository",
+        "contractImportPath": "./persona-draft-template-selector.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/interview/prisma-persona-interview-repository.ts",
+        "adapter": "PrismaPersonaInterviewRepository",
+        "contract": "PersonaInterviewRepository",
+        "contractImportPath": "./persona-interview-authority.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonalConfigurationPersonaRefreshRepository",
+            "importPath": "@opencrane/backend/agents/personal/configuration"
+          },
+          {
+            "adapter": "PrismaPersonaAggregateReadRepository",
+            "importPath": "../profile/prisma-persona-aggregate-read-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-aggregate-read-repository.ts",
+        "adapter": "PrismaPersonaAggregateReadRepository",
+        "contract": "PersonaAggregateReadRepository",
+        "contractImportPath": "./persona-aggregate-read-repository.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-onboarding-repository.ts",
+        "adapter": "PrismaPersonaOnboardingRepository",
+        "contract": "PersonaOnboardingRepository",
+        "contractImportPath": "./persona-onboarding-authority.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-onboarding-status-repository.ts",
+        "adapter": "PrismaPersonaOnboardingStatusRepository",
+        "contract": "PersonaOnboardingStatusRepository",
+        "contractImportPath": "./persona-onboarding-status.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-model-selection.ts",
         "adapter": "PrismaAgentRevisionModelSelectionRepository",
         "contract": "AgentRevisionModelSelectionRepository",
@@ -215,11 +302,40 @@
             "importPath": "./prisma-schedule-tick-repositories.js"
           }
         ]
+      },
+      {
+        "path": "libs/backend/agents/personal/personas/main/src/profile/prisma-persona-persistence-unit-of-work.ts",
+        "adapter": "PrismaPersonaPersistenceUnitOfWork",
+        "contract": "PersonaPersistenceUnitOfWork",
+        "contractImportPath": "./persona-persistence-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonaAuthorityRepository",
+            "importPath": "../approval/prisma-persona-authority-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaDraftRepository",
+            "importPath": "../drafting/prisma-persona-draft-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaInterviewRepository",
+            "importPath": "../interview/prisma-persona-interview-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaOnboardingRepository",
+            "importPath": "./prisma-persona-onboarding-repository.js"
+          },
+          {
+            "adapter": "PrismaPersonaOnboardingStatusRepository",
+            "importPath": "./prisma-persona-onboarding-status-repository.js"
+          }
+        ]
       }
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
+		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",

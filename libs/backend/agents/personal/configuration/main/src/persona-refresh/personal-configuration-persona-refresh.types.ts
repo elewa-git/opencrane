@@ -28,10 +28,3 @@ export interface PersonalConfigurationPersonaRefreshRepository
 	/** Marks the exact accepted proposal applied after its interview-derived persona revision is approved. */
 	applyApprovedPersonaRefresh(command: AcceptedPersonaRefreshCommand & { readonly personaRevisionId: string }): Promise<boolean>;
 }
-
-/** Atomic configuration-owned transaction seam used by the persona authority. */
-export interface PersonalConfigurationPersonaRefreshUnitOfWork
-{
-	/** Runs persona persistence and configuration state changes in the same serializable transaction. */
-	runPersonaRefresh<Result>(work: (transaction: unknown, refreshes: PersonalConfigurationPersonaRefreshRepository) => Promise<Result>): Promise<Result>;
-}

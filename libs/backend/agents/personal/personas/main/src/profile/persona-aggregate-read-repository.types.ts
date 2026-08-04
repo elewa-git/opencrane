@@ -84,15 +84,15 @@ export interface PersonaDraftRevisionRecord
 export interface PersonaAggregateReadRepository
 {
 	/** Reads an exact profile with a silo and owner proof. */
-	readProfile(client: unknown, command: PersonaProfileReadCommand): Promise<PersonaProfileRecord | null>;
+	readProfile(command: PersonaProfileReadCommand): Promise<PersonaProfileRecord | null>;
 	/** Reads an owner profile while returning its durable silo coordinate. */
-	readProfileForOwner(client: unknown, command: PersonaProfileOwnerReadCommand): Promise<PersonaProfileRecord | null>;
+	readProfileForOwner(command: PersonaProfileOwnerReadCommand): Promise<PersonaProfileRecord | null>;
 	/** Reads one owner interview before answer or completion mutation. */
-	readInterview(client: unknown, command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
+	readInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
 	/** Reads a completed owner interview before draft derivation. */
-	readCompletedInterview(client: unknown, command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
+	readCompletedInterview(command: PersonaInterviewReadCommand): Promise<PersonaInterviewRecord | null>;
 	/** Reads one still-draft revision before approval. */
-	readDraftRevision(client: unknown, command: PersonaDraftRevisionReadCommand): Promise<PersonaDraftRevisionRecord | null>;
+	readDraftRevision(command: PersonaDraftRevisionReadCommand): Promise<PersonaDraftRevisionRecord | null>;
 	/** Reads the next profile-local revision inside the same serializable transaction as its insert. */
-	readNextRevision(client: unknown, personaProfileId: string): Promise<number>;
+	readNextRevision(personaProfileId: string): Promise<number>;
 }

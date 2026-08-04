@@ -58,8 +58,9 @@ Internally, the source is grouped by responsibility:
 - `__IsUpgradeSessionAvailable` checks whether a frozen run can receive that tool descriptor.
 - `UpgradeSessionProposalRepository` is the narrow runtime-facing contract for proposing that future change.
 - `PrismaUpgradeSessionProposalRepository` maps an accepted runtime candidate to the proposal UoW.
-- `PrismaPersonalConfigurationPersonaRefreshUnitOfWork` composes the transaction-scoped bridge that
-  a persona authority uses to claim and apply an accepted refresh.
+- `PrismaPersonalConfigurationPersonaRefreshRepository` is the transaction-scoped bridge that a
+  persona unit of work uses to claim and apply an accepted refresh without taking over the
+  configuration delegate.
 
 All use cases, persistence contracts, transaction-scoped repositories, result vocabularies, and
 HTTP handler factories remain internal to the package, except the narrow persona-refresh bridge.
@@ -81,6 +82,7 @@ does not import a deployable app or another personal specialisation.
 
 Owns `PersonalConfigurationChange`. Proposal insertion and model materialisation use separate UoWs;
 the latter binds personal-configuration and agent-service repositories to one serialisable Prisma
+transaction. Persona refresh uses a configuration-owned repository bound to the persona aggregate's
 transaction. Queries and owner decisions use capability-specific repositories with no shared
 multi-purpose Prisma adapter.
 

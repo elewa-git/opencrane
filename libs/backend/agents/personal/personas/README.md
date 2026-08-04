@@ -27,7 +27,7 @@ proposal, and [execution inputs](../../execution/inputs/main/README.md) later re
 persona into an immutable run snapshot.
 
 The child package is tagged `scope:personal-personas`. It may use shared contracts, its own scope,
-the narrow request-principal authentication seam, and the configuration-owned refresh Unit of Work.
+the narrow request-principal authentication seam, and the configuration-owned refresh repository.
 It does not import an app, make a configuration decision, or expose its Prisma repositories as a
 general data-access API.
 

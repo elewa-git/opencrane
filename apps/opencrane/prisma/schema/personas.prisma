@@ -100,6 +100,7 @@ model PersonaInterview {
   questionSet                  PersonaQuestionSet           @relation(fields: [questionSetId, questionSetVersion], references: [id, version], onDelete: Restrict)
   answers                      PersonaInterviewAnswer[]
   revisions                    PersonaRevision[]
+  refreshConfigurationChange   PersonalConfigurationChange? @relation("PersonaRefreshConfiguration", fields: [refreshConfigurationChangeId], references: [id], onDelete: Restrict)
 
   @@unique([id, personaProfileId, userId, questionSetId, questionSetVersion])
   @@index([personaProfileId, state])
