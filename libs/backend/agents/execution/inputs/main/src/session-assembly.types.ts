@@ -106,8 +106,8 @@ export interface PreferenceFactSource
 /** Reads authorised memory scope and pinned fact references. */
 export interface MemoryScopeSource
 {
-	/** Loads the exact memory scope allowed for this run from fresh verified identity. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
+	/** Loads the exact memory scope allowed for this run from fresh verified identity and the frozen thread. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, thread: ThreadContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
 }
 
 /** Reads revision assignments intersected with the caller's effective grants. */

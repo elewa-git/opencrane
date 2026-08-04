@@ -162,12 +162,23 @@ spec:
               value: /var/run/opencrane/artifact-keys/lease-private.pem
             - name: ARTIFACT_RECEIPT_PUBLIC_KEY_PATH
               value: /var/run/opencrane/artifact-keys/receipt-public.pem
+            # The private memory gateway is the server's only path to Cognee. The projected token
+            # carries the gateway-only audience so no other server credential can open that plane.
+            - name: MEMORY_GATEWAY_URL
+              value: {{ include "opencrane.memoryGatewayUrl" . | quote }}
+            - name: MEMORY_GATEWAY_TOKEN_PATH
+              value: /var/run/opencrane/memory-gateway/token
+            - name: MEMORY_GATEWAY_TIMEOUT_SECONDS
+              value: {{ .Values.clustertenantManager.memoryGateway.httpTimeoutSeconds | quote }}
           volumeMounts:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
             - name: fleet-membership-key
               mountPath: /var/run/opencrane/fleet-membership
+              readOnly: true
+            - name: memory-gateway-token
+              mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
           livenessProbe:
             httpGet:
@@ -200,4 +211,14 @@ spec:
             items:
               - key: {{ required "clustertenantManager.fleetMembership.publicKeyKey is required" .Values.clustertenantManager.fleetMembership.publicKeyKey | quote }}
                 path: public-key.pem
+        # Audience-bound caller credential for the private memory gateway; rotated by the kubelet.
+        # The audience must equal MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE in @opencrane/contracts.
+        - name: memory-gateway-token
+          projected:
+            defaultMode: 0440
+            sources:
+              - serviceAccountToken:
+                  path: token
+                  audience: opencrane-memory-gateway
+                  expirationSeconds: {{ .Values.clustertenantManager.memoryGateway.projectedTokenTtlSeconds }}
 {{- end }}

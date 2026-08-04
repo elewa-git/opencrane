@@ -224,6 +224,15 @@ instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.
 {{- end }}
 
 {{/*
+Release-local private memory-gateway origin the OpenCrane server calls with its projected
+`opencrane-memory-gateway` audience token. Always the in-release Service; the gateway is the
+only permitted Cognee caller, so the server never receives a Cognee endpoint directly.
+*/}}
+{{- define "opencrane.memoryGatewayUrl" -}}
+{{- printf "http://%s-memory-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.memoryGateway.service.port -}}
+{{- end }}
+
+{{/*
 Name of the Secret holding Obot's PostgreSQL DSN (key `dsn`).
 instance → release-prefixed `<fullname>-obot` (per-instance, collision-free; B5).
 shared   → the operator points at an external Obot, so no in-release Secret is used.

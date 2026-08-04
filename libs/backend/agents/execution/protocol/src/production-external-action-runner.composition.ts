@@ -5,7 +5,7 @@ import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock
 import { PrismaToolInvocationRepository, __OpenDeferredToolApproval } from "@opencrane/backend/server/iam/authorization";
 import type { OpenDeferredToolApprovalCommand } from "@opencrane/backend/server/iam/authorization";
 import type { Logger } from "@opencrane/backend/observability";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
 
@@ -45,8 +45,8 @@ class _PrismaDeferredApprovalOpener implements ProductionDeferredApprovalOpener
 	}
 }
 
-/** Compose the production external-action runner from durable authorities and fail-closed transports. */
-export function _CreateProductionExternalActionRunner(prisma: PrismaClient, log: Logger): RuntimeExternalActionRunner
+/** Compose the production external-action runner from durable authorities, the shared memory gateway, and fail-closed transports. */
+export function _CreateProductionExternalActionRunner(prisma: PrismaClient, log: Logger, memoryGateway: MemoryGatewayClient): RuntimeExternalActionRunner
 {
 	return _CreateProductionExternalActionRunnerWithDependencies({
 		invocations: new PrismaToolInvocationRepository(prisma),
@@ -55,7 +55,7 @@ export function _CreateProductionExternalActionRunner(prisma: PrismaClient, log:
 			integrations: new PrismaIntegrationAuthorityRepository(prisma, new __SystemIntegrationAuthorityClock()),
 			obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(),
 			sandboxExecutor: new __UnavailableSandboxJobExecutor(),
-			memoryGateway: new __UnavailableMemoryGatewayClient(),
+			memoryGateway,
 		},
 		approvals: new _PrismaDeferredApprovalOpener(prisma, log),
 		clock: new _ProductionExternalActionClock(),

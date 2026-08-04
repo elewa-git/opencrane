@@ -44,10 +44,12 @@ explicit user statement. Explicit statements must identify the same authenticate
 the target personal dataset.
 
 ::: info Current transport status
-The catalogue, dataset resolver and provenance rules are implemented. An authenticated private
-gateway and read-only Cognee client are also built, but the production external-action composition
-does not use them: runtime recall has no attempt-fenced ephemeral result channel. Reads and writes
-therefore remain fail closed, and no write transport is implemented.
+Reads are live through the authenticated private gateway: admission freezes gateway-selected fact
+references (fact id and `sha256:` content digest, never fact text) into the run snapshot, and the
+compile step re-resolves each reference and verifies it against the frozen digest before inlining —
+a mismatch or missing fact fails the compile closed rather than producing a partial prompt. Mid-run
+memory actions still have no attempt-fenced ephemeral result channel and remain fail closed, and no
+write transport is implemented.
 :::
 
 ::: tip

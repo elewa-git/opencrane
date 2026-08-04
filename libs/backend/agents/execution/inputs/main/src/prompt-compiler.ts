@@ -48,7 +48,7 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 	const personaInstructions = await repositories.loadPersonaInstructions(snapshot.personaRevisionId);
 	const messages = await repositories.loadMessages(snapshot.messageIds);
 	const tools = _orderTools(await repositories.loadToolDefinitions(snapshot.integrationAssignments));
-	const memoryStatements = await repositories.loadMemoryFactStatements(_orderedFactIds(snapshot));
+	const memoryStatements = await repositories.loadMemoryFactStatements(_orderedFacts(snapshot));
 	const artifactSummaries = await repositories.loadArtifactSummaries([...snapshot.artifactRevisionIds].sort());
 	const skillSummaries = await repositories.loadSkillSummaries([...snapshot.skillRevisionIds].sort());
 	const model = await repositories.resolveModelRoute(snapshot.modelRoute);
@@ -66,10 +66,10 @@ function _orderTools(tools: readonly CompiledToolDefinition[]): readonly Compile
 	return [...tools].sort(function _byName(left, right): number { return left.name < right.name ? -1 : left.name > right.name ? 1 : 0; });
 }
 
-/** Return the snapshot's memory-fact identifiers ordered canonically for stable statement resolution. */
-function _orderedFactIds(snapshot: RunInputSnapshot): readonly string[]
+/** Return the snapshot's memory-fact references ordered canonically for stable statement resolution. */
+function _orderedFacts(snapshot: RunInputSnapshot): RunInputSnapshot["memoryFacts"]
 {
-	return snapshot.memoryFacts.map(function _factId(reference): string { return reference.factId; }).sort();
+	return [...snapshot.memoryFacts].sort(function _byFactId(left, right): number { return left.factId < right.factId ? -1 : left.factId > right.factId ? 1 : 0; });
 }
 
 /** Derive the positive attempt the snapshot compiles for, defaulting to the first attempt. */

@@ -1,15 +1,37 @@
 import type { RunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
+import type { PersonalMemoryDatasetRepository } from "@opencrane/backend/agents/personal/memory";
 
 import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
+import { PersonalMemoryScopeSource } from "./personal-memory-scope-source.js";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
 import { PrismaPreferenceFactSource } from "./prisma-preference-fact-source.js";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source.js";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
 import { PrismaThreadContextSource } from "./prisma-thread-context-source.js";
-import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types.js";
+import type { PersonalMemoryFactSelector } from "./memory-fact-selector.types.js";
+import type { IdentityEnvelopeSource, MemoryScopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types.js";
 
 /** Composes the managed-service variant with an explicit empty personal-memory policy and injectable identity proof. */
 export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource): SessionAssemblyAuthorities
+{
+	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new ManagedNoPersonalMemoryScopeSource());
+}
+
+/**
+ * Composes the personal-run variant whose memory scope freezes gateway-selected fact references.
+ *
+ * The dataset repository resolves the sole personal dataset from verified identity, and the
+ * injected selector performs the admission-time gateway recall; the source itself never accepts a
+ * caller-provided dataset or fact reference. Only the `agentKind: personal` path may receive this
+ * composition — the personal scope source refuses managed runs by construction.
+ */
+export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, datasets: PersonalMemoryDatasetRepository, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
+{
+	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new PersonalMemoryScopeSource(datasets, memoryFactSelector));
+}
+
+/** Assemble the shared Prisma-backed source set around one variant-selected memory scope authority. */
+function _CreateAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, memoryScope: MemoryScopeSource): SessionAssemblyAuthorities
 {
 	return {
 		admission,
@@ -17,7 +39,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		approvedPersona: new PrismaApprovedPersonaSource(),
 		threadContext: new PrismaThreadContextSource(),
 		preferenceFacts: new PrismaPreferenceFactSource(),
-		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
+		memoryScope,
 		toolPolicy: new PrismaRevisionToolPolicySource(),
 		skillEligibility,
 		budgetPolicy: new PrismaRevisionBudgetPolicySource(),

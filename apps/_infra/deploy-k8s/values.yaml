@@ -462,6 +462,14 @@ clustertenantManager:
     existingSecret: ""
     # -- Key within the Secret that holds the connection string
     secretKey: DATABASE_URL
+  # -- Server-side memory-gateway CALLER settings. The gateway workload itself is configured
+  #    under the top-level `memoryGateway` block owned by apps/memory-gateway/helm.
+  memoryGateway:
+    # -- Hard timeout applied to server-to-memory-gateway HTTP exchanges (1-300s).
+    httpTimeoutSeconds: 30
+    # -- Lifetime of the projected `opencrane-memory-gateway` audience token the server presents
+    #    to the gateway; the kubelet rotates it well before expiry.
+    projectedTokenTtlSeconds: 600
   # -- Private Cognee memory service, reachable only through the release-local memory gateway.
   cognee:
     # -- Keep true. The memory gateway currently supports only the release-local private service.

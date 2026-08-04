@@ -60,8 +60,12 @@ authenticated BYO/non-private Cognee transport is not implemented. Failures are 
 `MemoryGatewayTransportError` carries only a
 `timeout | network | oversize | http_<status>` code.
 
-The client is exported and tested but not composed into the production external-action runner. No
-server token is mounted until recalled content has an attempt-fenced ephemeral return channel.
+The client IS composed in production: `apps/opencrane` builds one instance at boot (from
+`MEMORY_GATEWAY_URL`, `MEMORY_GATEWAY_TOKEN_PATH`, and `MEMORY_GATEWAY_TIMEOUT_SECONDS`) and shares
+it between admission-time fact selection, compile-time digest-verified statement loading, and the
+runtime external-action transport. The server chart mounts the audience-bound projected token the
+client presents. Mid-run recall through the action executor still waits on an attempt-fenced
+ephemeral return channel, and every write path remains fail-closed.
 
 > Cognee's search response shapes are defensively validated. Version drift against the deployed
 > image surfaces as a protocol error rather than a wrong answer.
@@ -82,8 +86,8 @@ server token is mounted until recalled content has an attempt-fenced ephemeral r
 
 ## Boundary
 
-The port is consumed by the personal-agent backend and the external-action executor; the HTTP adapter
-is not production-composed. It stores nothing itself and
+The port is consumed by the personal-agent backend, run admission, prompt compilation, and the
+external-action executor; the HTTP adapter is composed once per server process. It stores nothing itself and
 holds no fact beyond the single in-flight read. Query commands use Cognee's gateway-native dataset
 UUID,
 while the OpenCrane

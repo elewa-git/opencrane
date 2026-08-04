@@ -52,6 +52,20 @@ grep -Fq '              value: "opencrane-silo-runtime"' <<<"$server_manifest"
 grep -Fq '            - name: AGENT_RUNTIME_MANAGED_NAMESPACE' <<<"$server_manifest"
 grep -Fq '              value: "opencrane-silo-managed-runtime"' <<<"$server_manifest"
 
+# The memory-gateway caller credential must be an audience-bound projected token, group-readable
+# only (0440), mounted where MEMORY_GATEWAY_TOKEN_PATH points.
+grep -Fq '            - name: MEMORY_GATEWAY_URL' <<<"$server_manifest"
+grep -Fq '            - name: MEMORY_GATEWAY_TOKEN_PATH' <<<"$server_manifest"
+grep -Fq '              value: /var/run/opencrane/memory-gateway/token' <<<"$server_manifest"
+grep -Fq '            - name: MEMORY_GATEWAY_TIMEOUT_SECONDS' <<<"$server_manifest"
+grep -Fq '            - name: memory-gateway-token' <<<"$server_manifest"
+grep -Fq '              mountPath: /var/run/opencrane/memory-gateway' <<<"$server_manifest"
+memory_gateway_volume="$(grep -A 7 '        - name: memory-gateway-token' <<<"$server_manifest")"
+grep -Fq '          projected:' <<<"$memory_gateway_volume"
+grep -Fq '            defaultMode: 0440' <<<"$memory_gateway_volume"
+grep -Fq '                  audience: opencrane-memory-gateway' <<<"$memory_gateway_volume"
+grep -Fq '                  expirationSeconds: 600' <<<"$memory_gateway_volume"
+
 if grep -Fq '            defaultMode: 0400' <<<"$server_manifest"; then
   echo "opencrane-server artifact keys are root-only" >&2
   exit 1

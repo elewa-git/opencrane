@@ -213,6 +213,15 @@ spec:
         - protocol: TCP
           port: {{ .Values.observability.otel.collector.otlpPort }}
     {{- end }}
+    # Release-local memory recall: the private gateway is the server's only path toward Cognee.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: memory-gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.memoryGateway.service.port }}
     # The only cross-namespace server call: the app-owned artifact byte plane.
     - to:
         - namespaceSelector:

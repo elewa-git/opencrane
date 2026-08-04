@@ -7,6 +7,7 @@ import { pinoHttp } from "pino-http";
 
 import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/_server/http";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
@@ -18,7 +19,7 @@ import { _RegisterInternalRoutes } from "./routes.js";
  * This app has no browser-session middleware because it is reachable only through the internal
  * Service and NetworkPolicy. Routes that cross a workload identity boundary perform TokenReview.
  */
-export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): Express
+export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): Express
 {
 	const app = express();
 
@@ -33,7 +34,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 	app.use(pinoHttp({ logger: _log, genReqId: function _genRequestId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
-	_RegisterInternalRoutes(app, prisma, authApi, config);
+	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway);
 	app.use(_ErrorHandler(_log));
 	return app;
 }

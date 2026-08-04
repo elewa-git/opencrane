@@ -98,6 +98,8 @@ spec:
                   fieldPath: metadata.namespace
             - name: SERVER_SERVICE_ACCOUNT_NAME
               value: {{ include "opencrane.fullname" . }}-opencrane-server
+            # Must equal MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE in libs/contracts/src/memory.types.ts;
+            # the server chart projects its caller token with this exact audience.
             - name: SERVER_TOKEN_AUDIENCE
               value: opencrane-memory-gateway
             - name: REQUEST_TIMEOUT_MS

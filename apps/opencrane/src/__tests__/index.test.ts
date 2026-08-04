@@ -8,6 +8,7 @@ import request from "supertest";
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
 import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
 import { _RateLimit } from "@opencrane/backend/_server/http";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 import { _ReadProcessConfig } from "../app/config.js";
 
 /**
@@ -65,7 +66,7 @@ async function _BuildRuntimeCandidateApp(username: string, audiences: string[] =
   } as unknown as AuthenticationV1Api;
   const app = express();
   app.use(express.json());
-  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime);
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient());
   return app;
 }
 
@@ -93,6 +94,8 @@ describe("Control Plane", () =>
     vi.stubEnv("POD_NAMESPACE", "opencrane-silo");
     vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
     vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
+    vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
+    vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
   });
 
   afterEach(function _RestoreEnvironment()
@@ -153,10 +156,10 @@ describe("Control Plane", () =>
       const { _RegisterInternalRoutes } = await import("../app/routes.js");
       const app = express();
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
-      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
 
       vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
-      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime); }).toThrow(/different from POD_NAMESPACE/);
+      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
     });
 
     it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()

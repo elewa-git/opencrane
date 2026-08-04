@@ -6,6 +6,7 @@ import type { FixedServiceAccountTokenReviewer } from "@opencrane/backend/_serve
 
 import type { MemoryGatewayProcessConfig } from "./config.types.js";
 import { _log as log } from "./log.js";
+import { _ValidateSearchRequest, MemorySearchContractViolation } from "./search-contract.js";
 
 /** Largest JSON body accepted from the OpenCrane server for one memory operation. */
 const _MAX_REQUEST_BYTES = 1024 * 1024;
@@ -102,21 +103,23 @@ export function _CreateServer(config: MemoryGatewayProcessConfig, tokenReviewer:
 				const token = _BearerToken(request);
 				if (token === null || await tokenReviewer.__Review(token) === null) return _Respond(response, 401);
 
-				// 3. Preserve only the server-authorized body, bounded at the proxy boundary.
+				// 3. Read the bounded body, then enforce the gateway-owned search contract so only a
+				//    canonical re-serialization of validated fields can transit to Cognee.
 				const body = await _ReadBody(request);
+				const canonicalBody = _ValidateSearchRequest(body);
 
 				// 4. Reach the private Cognee Service on the fixed allowlisted route with no caller
 				//    credentials or arbitrary headers; nothing request-derived selects the URL or method.
 				const upstream = await ___DoWithoutTrace(function _forward()
 				{
-					return fetch(new URL(_SEARCH_PATH, config.cogneeUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: new Uint8Array(body), signal: AbortSignal.timeout(config.requestTimeoutMilliseconds), redirect: "error" });
+					return fetch(new URL(_SEARCH_PATH, config.cogneeUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: new Uint8Array(canonicalBody), signal: AbortSignal.timeout(config.requestTimeoutMilliseconds), redirect: "error" });
 				});
 				await _WriteResponse(response, upstream);
 			}
 			catch (error)
 			{
 				log.error({ err: error, path }, "memory gateway request failed");
-				_Respond(response, error instanceof RangeError ? 413 : 502);
+				_Respond(response, error instanceof MemorySearchContractViolation ? 422 : error instanceof RangeError ? 413 : 502);
 			}
 		});
 	});
@@ -126,5 +129,5 @@ export function _CreateServer(config: MemoryGatewayProcessConfig, tokenReviewer:
 function _Respond(response: ServerResponse, status: number): void
 {
 	response.writeHead(status, { "content-type": "application/json" });
-	response.end(JSON.stringify({ error: status === 401 ? "unauthorized" : status === 404 ? "not_found" : "memory_gateway_unavailable" }));
+	response.end(JSON.stringify({ error: status === 401 ? "unauthorized" : status === 404 ? "not_found" : status === 422 ? "invalid_search" : "memory_gateway_unavailable" }));
 }

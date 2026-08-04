@@ -60,5 +60,13 @@
       "libs/backend/server/iam/identity/main/src/oidc.service.ts"
     ]
   },
-  "exemptions": []
+  "exemptions": [
+    {
+      "path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",
+      "owner": "PersonalMemoryScopeSource",
+      "reason": "Admission-time recall-query derivation reads one frozen conversation message inside the existing RunAdmissionTransaction, matching every sibling session-assembly source; migrate together with those sources to a policy-owned repository.",
+      "operations": ["delegate"],
+      "expiresOn": "2027-02-28"
+    }
+  ]
 }

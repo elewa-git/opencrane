@@ -53,7 +53,7 @@ function _repositories(overrides: Partial<PromptCompilerRepositories> = {}): Pro
 		loadPersonaInstructions: async function _persona(id): Promise<string> { return id === null ? "" : "You are a careful assistant."; },
 		loadMessages: async function _messages(ids): Promise<readonly { role: "user"; content: string }[]> { return ids.map(function _turn(id): { role: "user"; content: string } { return { role: "user", content: `msg:${id}` }; }); },
 		loadToolDefinitions: async function _toolDefs(): Promise<readonly CompiledToolDefinition[]> { return _tools(); },
-		loadMemoryFactStatements: async function _memory(ids): Promise<readonly string[]> { return ids.map(function _fact(id): string { return `remembered ${id}`; }); },
+		loadMemoryFactStatements: async function _memory(facts): Promise<readonly string[]> { return facts.map(function _fact(fact): string { return `remembered ${fact.factId}`; }); },
 		loadArtifactSummaries: async function _artifacts(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `artifact ${id}`; }); },
 		loadSkillSummaries: async function _skills(ids): Promise<readonly string[]> { return ids.map(function _summary(id): string { return `skill ${id}`; }); },
 		resolveModelRoute: async function _route(): Promise<CompiledModelRoute> { return model; },

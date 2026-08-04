@@ -110,6 +110,7 @@ export type AgentRevisionLifecycleDenial =
 	| "persona_unavailable"
 	| "thread_unavailable"
 	| "memory_scope_unavailable"
+	| "memory_unavailable"
 	| "tool_policy_unavailable"
 	| "skill_unavailable"
 	| "budget_unavailable"

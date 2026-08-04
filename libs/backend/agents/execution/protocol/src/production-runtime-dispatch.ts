@@ -5,6 +5,7 @@ import { PrismaRuntimeTerminalReporter } from "@opencrane/backend/agents/executi
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import type { RunInputSnapshot } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/backend/observability";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";
@@ -12,9 +13,9 @@ import type { RunInputCompiler, RuntimeDispatchAuthorityConfig } from "./prisma-
 import { _CreateProductionExternalActionRunner } from "./production-external-action-runner.composition.js";
 
 /** Compile ordinary grants, then append the sealed first-party upgrade intent to proven personal services. */
-function _CreateProductionRunInputCompiler(): RunInputCompiler
+function _CreateProductionRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
-	const compile = __CreatePrismaRunInputCompiler();
+	const compile = __CreatePrismaRunInputCompiler(memoryGateway);
 	return async function _compileRunInput(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient)
 	{
 		// 1. Compile the immutable snapshot before considering any first-party descriptor.
@@ -39,9 +40,10 @@ function _CreateProductionRunInputCompiler(): RunInputCompiler
  * @param prisma - Canonical product-authority persistence client.
  * @param config - Deployment-fixed namespaces, command lifetime, and retry bounds.
  * @param log - Structured process logger used for bounded execution evidence.
+ * @param memoryGateway - One authenticated memory-gateway client shared by the compiler and the runner transport.
  * @returns One production dispatch authority ready for the runtime stream transport.
  */
-export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, log: Logger): PrismaRuntimeDispatchAuthority
+export function __CreateProductionRuntimeDispatchAuthority(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, log: Logger, memoryGateway: MemoryGatewayClient): PrismaRuntimeDispatchAuthority
 {
-	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(), _CreateProductionExternalActionRunner(prisma, log), new PrismaRuntimeTerminalReporter());
+	return new PrismaRuntimeDispatchAuthority(prisma, config, _CreateProductionRunInputCompiler(memoryGateway), _CreateProductionExternalActionRunner(prisma, log, memoryGateway), new PrismaRuntimeTerminalReporter());
 }

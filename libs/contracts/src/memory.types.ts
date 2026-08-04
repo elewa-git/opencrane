@@ -2,6 +2,16 @@ import type { SiloId, UserId } from "@opencrane/models/agents";
 import type { ArtifactRevisionId } from "@opencrane/models/artifacts";
 import type { AuthorizationScope } from "@opencrane/models/authorization";
 
+/**
+ * Audience bound into the ServiceAccount token the OpenCrane server presents to the memory gateway.
+ *
+ * The server chart projects a token with exactly this audience, and the gateway's TokenReview
+ * accepts no other, so a stolen general-purpose server token can never open the private Cognee
+ * plane. The chart-side string lives in `apps/memory-gateway/helm/templates/_resources.tpl`
+ * (`SERVER_TOKEN_AUDIENCE`) and must stay equal to this constant.
+ */
+export const MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE = "opencrane-memory-gateway";
+
 /** Durable memory mutation requested through the memory gateway. */
 export enum MemoryMutationKind
 {

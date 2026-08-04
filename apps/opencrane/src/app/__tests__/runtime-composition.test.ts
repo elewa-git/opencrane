@@ -2,6 +2,8 @@ import type { PrismaClient } from "@prisma/client";
 import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import { describe, expect, it, vi } from "vitest";
 
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+
 import { _CreateInternalRuntimeComposition } from "../runtime-composition.js";
 import type { InternalRuntimeConfig } from "../config.types.js";
 
@@ -37,6 +39,9 @@ function _RuntimeConfig(): InternalRuntimeConfig
 		commandRecoveryMilliseconds: 15_000,
 		commandTtlMilliseconds: 60_000,
 		managedRuntimeNamespace: "managed-runtime",
+		memoryGatewayTimeoutMilliseconds: 30_000,
+		memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
+		memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 		outboxPruneBatchSize: 100,
 		personalRuntimeNamespace: "personal-runtime",
 		publishedOutboxRetentionMilliseconds: 86_400_000,
@@ -48,7 +53,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 {
 	it("keeps disabled optional planes unmounted while composing every mandatory caller plane", function _composesRequiredPlanes()
 	{
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig());
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, _RuntimeConfig(), new __UnavailableMemoryGatewayClient());
 
 		expect(composition.agentControllerRunDispatch).toEqual(expect.any(Function));
 		expect(composition.skillWorkloadDispatch).toEqual(expect.any(Function));
@@ -65,7 +70,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: "opencrane-server" };
 
-		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from POD_NAMESPACE/);
+		expect(function _composeCrossedWorkerPlane() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
 	});
 
 	it("composes both optional planes only after their concrete boundaries are configured", function _composesOptionalPlanes()
@@ -77,7 +82,7 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 			channelReplayRouteId: "internal-channel-replay",
 		};
 
-		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config);
+		const composition = _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient());
 
 		expect(composition.artifactPreprocessor).toEqual(expect.any(Function));
 		expect(composition.conversationReplay).toEqual(expect.any(Function));
@@ -87,13 +92,13 @@ describe("_CreateInternalRuntimeComposition", function _internalRuntimeCompositi
 	{
 		const config = { ..._RuntimeConfig(), artifactPreprocessorEnabled: true, artifactPreprocessorNamespace: undefined };
 
-		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/restricted workload namespace must be valid/);
+		expect(function _composeWorkerWithoutNamespace() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/restricted workload namespace must be valid/);
 	});
 
 	it("refuses runtime planes that collapse into one identity namespace", function _rejectsCollapsedRuntimePlanes()
 	{
 		const config = { ..._RuntimeConfig(), managedRuntimeNamespace: "personal-runtime" };
 
-		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config); }).toThrow(/different from/);
+		expect(function _composeCollapsedRuntimePlanes() { _CreateInternalRuntimeComposition({} as PrismaClient, {} as AuthenticationV1Api, config, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from/);
 	});
 });

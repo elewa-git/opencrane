@@ -9,13 +9,16 @@ gateway: the only process allowed to make network calls to the silo's Cognee mem
 
 OpenCrane keeps product authority in its server. The server first checks the authenticated person,
 their grants, the selected memory scope, and the frozen dataset recorded with the run. This gateway
-does not repeat those product decisions. Instead, it turns that authorised server request into a
-private Cognee request only after Kubernetes verifies the server's short-lived workload identity.
-The gateway and client are currently a sealed foundation: production runtime composition does not
-yet mount or present that caller token.
+does not repeat those product decisions, but it does own **request-shape authorization** for the
+private Cognee plane: identity (TokenReview of the server's audience-bound projected token), route
+(only bounded search), and the payload contract (exactly one validated query, the `CHUNKS` search
+type, exactly one UUID dataset, and a bounded `top_k`). Anything outside that shape is refused with
+`422 invalid_search` before a byte reaches Cognee, and only a canonical re-serialization of the
+validated fields is forwarded. That boundary is why Cognee's own RBAC stays off in this private
+deployment: the gateway is Cognee's only network caller and its only admission decision.
 
 ```
- OpenCrane server  ─ future projected caller token ───┐
+ OpenCrane server  ─ projected caller token ──────────┐
                                                       ▼
                                          ┌───────────────────────┐
                                          │ memory-gateway ◄ HERE │
@@ -55,10 +58,10 @@ no package may import this app.
 
 ## Runtime & config
 
-The Helm template projects one API-server token into the gateway so it can TokenReview future
-callers. It deliberately does not yet project an `opencrane-memory-gateway` token into the OpenCrane
-server; that credential lands only with safe runtime result delivery. Required gateway process
-settings are `COGNEE_URL`, `POD_NAMESPACE`, `SERVER_SERVICE_ACCOUNT_NAME`, and
+The Helm template projects one API-server token into the gateway so it can TokenReview callers, and
+the server chart projects an `opencrane-memory-gateway` audience token into the OpenCrane server so
+admission-time fact selection and compile-time statement loading can present it. Required gateway
+process settings are `COGNEE_URL`, `POD_NAMESPACE`, `SERVER_SERVICE_ACCOUNT_NAME`, and
 `SERVER_TOKEN_AUDIENCE`; Helm sets them all.
 
 The gateway runs as the image's non-root UID/GID `1000`, with that group applied to the projected

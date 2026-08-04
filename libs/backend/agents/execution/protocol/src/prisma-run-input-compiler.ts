@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
+
 import type { Prisma } from "@prisma/client";
 
-import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
+import type { CompiledMessage, CompiledModelRoute, CompiledRunInput, CompiledToolDefinition, MemoryFactReference, RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { __CompileRunInput } from "@opencrane/backend/agents/execution/inputs";
 import type { PromptCompilerRepositories } from "@opencrane/backend/agents/execution/inputs";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import { ExternalActionRevisionKinds } from "./external-action-executor.types.js";
 import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types.js";
@@ -11,37 +14,88 @@ import type { RunInputCompiler } from "./prisma-runtime-dispatch-authority.types
 /** Canonical lowercase turn roles the compiled input uses. */
 const _MESSAGE_ROLE: Record<string, CompiledMessage["role"]> = { User: "user", Assistant: "assistant", Tool: "tool", System: "system" };
 
+/** Smallest gateway recall window used when re-resolving frozen fact references. */
+const _MINIMUM_STATEMENT_RECALL_RESULTS = 32;
+
 /**
  * Build the {@link RunInputCompiler} the dispatch authority calls when minting `start_attempt`.
  *
  * It binds the deterministic prompt compiler to control-plane read ports backed by the same locked
  * Prisma transaction that loaded the snapshot, so every read is of an immutable record and the
- * compiled output stays byte-identical across restarts and idempotent redeliveries.
+ * compiled output stays byte-identical across restarts and idempotent redeliveries. Memory-fact
+ * statements are the one network read: they resolve through the injected memory gateway and every
+ * statement is verified against the digest frozen in the snapshot, so a redelivered frame either
+ * carries byte-identical memory text or the compile fails closed.
  *
- * @returns A compiler bound to per-attempt transaction reads.
+ * @param memoryGateway - Authenticated read-only memory-gateway client shared with the action runner.
+ * @returns A compiler bound to per-attempt transaction reads and digest-verified gateway recall.
  */
-export function __CreatePrismaRunInputCompiler(): RunInputCompiler
+export function __CreatePrismaRunInputCompiler(memoryGateway: MemoryGatewayClient): RunInputCompiler
 {
 	return function _compile(snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): Promise<CompiledRunInput>
 	{
-		return __CompileRunInput(snapshot, _repositories(transaction));
+		return __CompileRunInput(snapshot, _repositories(memoryGateway, snapshot, transaction));
 	};
 }
 
-/** Assemble the control-plane read ports over one locked transaction client. */
-function _repositories(transaction: Prisma.TransactionClient): PromptCompilerRepositories
+/** Assemble the control-plane read ports over one locked transaction client and the snapshot's frozen policy. */
+function _repositories(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, transaction: Prisma.TransactionClient): PromptCompilerRepositories
 {
 	return {
 		loadPersonaInstructions(personaRevisionId: string | null): Promise<string> { return _loadPersonaInstructions(transaction, personaRevisionId); },
 		loadMessages(messageIds: readonly string[]): Promise<readonly CompiledMessage[]> { return _loadMessages(transaction, messageIds); },
 		loadToolDefinitions(integrationAssignments: readonly RunInputSnapshotIntegrationAssignment[]): Promise<readonly CompiledToolDefinition[]> { return Promise.resolve(_loadToolDefinitions(integrationAssignments)); },
-		// Durable fact text lives in Cognee behind the memory gateway (a network read); the immutable
-		// fact references stay on the snapshot and are not inlined by this offline compile step.
-		loadMemoryFactStatements(): Promise<readonly string[]> { return Promise.resolve([]); },
+		loadMemoryFactStatements(memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]> { return _loadMemoryFactStatements(memoryGateway, snapshot, memoryFacts); },
 		loadArtifactSummaries(artifactRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadArtifactSummaries(transaction, artifactRevisionIds); },
 		loadSkillSummaries(skillRevisionIds: readonly string[]): Promise<readonly string[]> { return _loadSkillSummaries(transaction, skillRevisionIds); },
 		resolveModelRoute(modelRoute: JsonValue): Promise<CompiledModelRoute> { return _resolveModelRoute(transaction, modelRoute); },
 	};
+}
+
+/**
+ * Resolve frozen memory-fact references to digest-verified statements through the memory gateway.
+ *
+ * Every reference must resolve to content whose `sha256:` digest equals the frozen `contentDigest`;
+ * any missing fact or drifted content throws, so a `start_attempt` frame is never minted with a
+ * partial or altered memory section. Fact text is returned only for prompt compilation and is
+ * never persisted.
+ */
+async function _loadMemoryFactStatements(memoryGateway: MemoryGatewayClient, snapshot: RunInputSnapshot, memoryFacts: readonly MemoryFactReference[]): Promise<readonly string[]>
+{
+	// 1. Compile deterministically with no network read when the snapshot froze no fact references.
+	if (memoryFacts.length === 0) return [];
+
+	// 2. Fail closed unless the frozen policy names the exact personal recall coordinates; dataset
+	//    selection only ever comes from the snapshot, never a subject id or argument.
+	const policy = _personalMemoryPolicy(snapshot.memoryQueryPolicy);
+
+	// 3. Re-run the frozen recall with a widened window so ranking drift cannot hide a frozen fact.
+	const result = await memoryGateway.query({ siloId: snapshot.siloId, cogneeDatasetId: policy.cogneeDatasetId, subjectId: snapshot.identitySnapshot.executionSubjectId, query: policy.queryText, maxResults: Math.max(memoryFacts.length * 4, _MINIMUM_STATEMENT_RECALL_RESULTS) });
+	const contentByFactId = new Map(result.facts.map(function _entry(fact) { return [fact.factId, fact.content] as const; }));
+
+	// 4. Verify every reference against its frozen digest; one mismatch fails the whole compile.
+	return memoryFacts.map(function _statement(reference): string
+	{
+		const content = contentByFactId.get(reference.factId);
+		if (content === undefined || `sha256:${createHash("sha256").update(content, "utf8").digest("hex")}` !== reference.contentDigest)
+		{
+			throw new Error("memory fact statement failed digest verification");
+		}
+		return content;
+	});
+}
+
+/** Extract the frozen personal recall coordinates from the snapshot's opaque memory policy, failing closed. */
+function _personalMemoryPolicy(memoryQueryPolicy: JsonValue): { cogneeDatasetId: string; queryText: string }
+{
+	const policy: { readonly [key: string]: JsonValue } = memoryQueryPolicy && typeof memoryQueryPolicy === "object" && !Array.isArray(memoryQueryPolicy) ? memoryQueryPolicy as { readonly [key: string]: JsonValue } : {};
+	const cogneeDatasetId = typeof policy["cogneeDatasetId"] === "string" ? policy["cogneeDatasetId"].trim() : "";
+	const queryText = typeof policy["queryText"] === "string" ? policy["queryText"].trim() : "";
+	if (policy["scope"] !== "personal" || cogneeDatasetId.length === 0 || queryText.length === 0)
+	{
+		throw new Error("snapshot memory policy cannot resolve frozen fact references");
+	}
+	return { cogneeDatasetId, queryText };
 }
 
 /** Resolve the approved persona revision's compiled instruction text, or empty when non-personal. */

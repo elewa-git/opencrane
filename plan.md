@@ -121,14 +121,18 @@ an owner may decide only their own pending tool approval or queue bounded text o
 run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
 the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
-state (no server-side checkpoint model). The MCP, memory, and sandbox execution ports remain
-fail-closed in the production composition root. The authenticated private memory-gateway workload
-and read-only HTTP client are built as transport foundations, but runtime recall is not wired:
+state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
+the production composition root. The authenticated memory transport IS composed: the server mounts
+its audience-bound projected token and shares one gateway client between admission and dispatch.
+Admission-time recall freezes gateway-selected fact references (id + content digest, never text)
+into the personal `RunInputSnapshot`, and compile-time statement loading re-resolves and
+digest-verifies every reference before inlining it — so redelivered `start_attempt` frames stay
+byte-identical or fail closed. Mid-run recall through the external-action executor remains gated:
 `AgentRuntimeProtocol v1` has no attempt-fenced ephemeral tool-result channel, and persisted
 `ToolInvocation` receipts must not duplicate Cognee fact content. Record, correction, forgetting,
 and scoped injection also remain fail-closed pending a recoverable gateway write lifecycle.
 
-**MEMORY TRANSPORT FOUNDATION BUILT; RUNTIME RECALL BLOCKED**
+**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; MID-RUN RECALL AND WRITES STILL GATED**
 
 The offline conformance harness and fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
