@@ -1,8 +1,8 @@
-import { PersonaQuestionSetState } from "@prisma/client";
+import { PersonaQuestionSetState, Prisma } from "@prisma/client";
 
-import { ___DoWithTrace } from "@opencrane/observability";
 import type { Logger } from "@opencrane/observability";
 
+import { _DoPersonaPersistenceWithTrace } from "../persona-persistence-observability.js";
 import { PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION } from "./persona-onboarding-catalogue.js";
 import { PersonaOnboardingDenialReasons, type EnsurePersonaOnboardingCommand, type EnsurePersonaOnboardingResult, type PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
 import { PersonaLifecycleOutcomes } from "./persona-lifecycle.types.js";
@@ -26,33 +26,34 @@ export class PrismaPersonaOnboardingRepository implements PersonaOnboardingRepos
 	/** Verify the reviewed baseline source and create the authenticated owner's profile exactly once. */
 	async ensureAtomically(command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>
 	{
-		const logger = this.logger;
+		const repository = this;
 		const transactions = this.transactions;
 		try
 		{
-			return await ___DoWithTrace("persona.onboarding.provision", { siloId: command.siloId }, async function _provision()
+			return await _DoPersonaPersistenceWithTrace(this.logger, "persona.onboarding.provision", { siloId: command.siloId }, "Persona onboarding provisioning is unavailable", function _provision()
 			{
-				try
+				return transactions.run(function _runEnsure(transaction)
 				{
-					return await transactions.run(async function _ensure(transaction)
-					{
-						const client = transaction as import("@prisma/client").Prisma.TransactionClient;
-						const source = await client.personaQuestionSet.findUnique({ where: { id_version: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION } }, select: { state: true } });
-						if (source?.state !== PersonaQuestionSetState.Reviewed) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaOnboardingDenialReasons.CatalogueUnavailable } as const;
-						const profile = await client.personaProfile.upsert({ where: { siloId_userId: { siloId: command.siloId, userId: command.userId } }, create: { siloId: command.siloId, userId: command.userId, createdAt: new Date(command.provisionedAt), updatedAt: new Date(command.provisionedAt) }, update: {}, select: { id: true } });
-						return { outcome: PersonaLifecycleOutcomes.Ready, personaProfileId: profile.id, questionSet: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION } } as const;
-					});
-				}
-				catch (err)
-				{
-					logger.error({ err, siloId: command.siloId }, "Persona onboarding provisioning is unavailable");
-					throw err;
-				}
+					return repository._ensureWithinTransaction(transaction as Prisma.TransactionClient, command);
+				});
 			});
 		}
 		catch
 		{
 			return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaOnboardingDenialReasons.PersistenceUnavailable };
 		}
+	}
+
+	/** Verify the reviewed catalogue before provisioning the owner profile in the same transaction. */
+	private async _ensureWithinTransaction(transaction: Prisma.TransactionClient, command: EnsurePersonaOnboardingCommand): Promise<EnsurePersonaOnboardingResult>
+	{
+		// 1. Fail closed unless the immutable product-owned questionnaire revision remains reviewed.
+		const source = await transaction.personaQuestionSet.findUnique({ where: { id_version: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION } }, select: { state: true } });
+		if (source?.state !== PersonaQuestionSetState.Reviewed) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaOnboardingDenialReasons.CatalogueUnavailable };
+
+		// 2. Provision the authenticated owner's profile exactly once after catalogue validation.
+		const provisionedAt = new Date(command.provisionedAt);
+		const profile = await transaction.personaProfile.upsert({ where: { siloId_userId: { siloId: command.siloId, userId: command.userId } }, create: { siloId: command.siloId, userId: command.userId, createdAt: provisionedAt, updatedAt: provisionedAt }, update: {}, select: { id: true } });
+		return { outcome: PersonaLifecycleOutcomes.Ready, personaProfileId: profile.id, questionSet: { id: PERSONA_ONBOARDING_QUESTION_SET_ID, version: PERSONA_ONBOARDING_QUESTION_SET_VERSION } };
 	}
 }
