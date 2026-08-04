@@ -4,6 +4,15 @@ export const AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-contro
 /** Exact Kubernetes ServiceAccount allowed to drive agent-workload reconciliation. */
 export const AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME = "agent-controller";
 
+/** Stable cleanup projections persisted with runtime-workload outbox commands. */
+export enum RunWorkloadCleanupModes
+{
+	/** Cleanup is fenced by an immutable Kubernetes Job UID from durable assignment. */
+	Assigned = "assigned",
+	/** Cleanup may adopt only the exact still-suspended Job created before assignment committed. */
+	UnassignedOrphan = "unassigned_orphan",
+}
+
 /** Database-issued claim generation fencing one controller delivery attempt. */
 export interface AgentControllerRunAttemptClaimLease
 {

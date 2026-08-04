@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from "express";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ___IsEmptyAgentControllerCommand, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunWorkloadRegistrationCommand } from "@opencrane/contracts";
 
+import { RunDispatchResultStatuses } from "./run-dispatch.types.js";
 import type { AgentControllerRunDispatchRouterDependencies, ReviewedAgentControllerIdentity } from "./run-dispatch.types.js";
 
 /**
@@ -28,7 +29,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 
 			// 2. Claim one database-fenced command; an empty queue is normal long-poll input.
 			const result = await dependencies.repository.claimNextAttemptAtomically();
-			if (result.status === "none")
+			if (result.status === RunDispatchResultStatuses.None)
 			{
 				response.status(204).end();
 				return;
@@ -62,7 +63,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 
 			// 2. Let the run authority compare the exact claim generation and persist all state atomically.
 			const result = await dependencies.repository.commitSuspendedJobAssignmentAtomically(eventId, command);
-			if (result.status === "conflict")
+			if (result.status === RunDispatchResultStatuses.Conflict)
 			{
 				_RespondProblem(response, 409, result.reason);
 				return;
@@ -89,13 +90,13 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 
 			// 2. Claim or terminalise one database-fenced release, including an expired queue head.
 			const result = await dependencies.repository.claimNextWorkloadReleaseAtomically();
-			if (result.status === "terminalized")
+			if (result.status === RunDispatchResultStatuses.Terminalized)
 			{
 				dependencies.logger.warn({ eventId: result.eventId, runId: result.runId, attempt: result.attempt, failureCode: result.failureCode }, "Poisoned workload release terminalized after durable repair");
 				response.status(204).end();
 				return;
 			}
-			if (result.status === "none")
+			if (result.status === RunDispatchResultStatuses.None)
 			{
 				response.status(204).end();
 				return;
@@ -150,7 +151,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 
 			// 2. Let the run authority register only the first Pod and publish the release atomically.
 			const result = await dependencies.repository.registerFirstPodAndPublishReleaseAtomically(eventId, command);
-			if (result.status === "conflict")
+			if (result.status === RunDispatchResultStatuses.Conflict)
 			{
 				_RespondProblem(response, 409, result.reason);
 				return;

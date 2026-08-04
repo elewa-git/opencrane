@@ -1,5 +1,7 @@
 import type { V1Job } from "@kubernetes/client-node";
 
+import { RunWorkloadCleanupModes } from "@opencrane/contracts";
+
 import type { KubernetesRuntimeWorkloadCleanupProjection } from "./runtime-workload-cleanup-store.types.js";
 
 function _HasAnnotation(annotations: Record<string, string> | undefined, name: string, value: string): boolean
@@ -37,7 +39,7 @@ function _HasExactAuthorityProjection(job: V1Job, workload: KubernetesRuntimeWor
 export function _AssertExactRuntimeWorkloadCleanupJob(job: V1Job, workload: KubernetesRuntimeWorkloadCleanupProjection, name: string): string
 {
 	if (!_HasExactAuthorityProjection(job, workload, name)) throw new Error("refusing to clean a runtime Job outside the fenced cleanup projection");
-	if (workload.mode === "unassigned_orphan" && job.spec?.suspend !== true) throw new Error("refusing to clean an unassigned runtime Job that is not suspended");
+	if (workload.mode === RunWorkloadCleanupModes.UnassignedOrphan && job.spec?.suspend !== true) throw new Error("refusing to clean an unassigned runtime Job that is not suspended");
 	const workloadUid = job.metadata?.uid;
 	if (!workloadUid) throw new Error("runtime cleanup Job is missing its Kubernetes UID");
 	if (workload.workloadUid !== null && workloadUid !== workload.workloadUid) throw new Error("refusing to clean a runtime Job whose durable UID differs from the fenced assignment");
