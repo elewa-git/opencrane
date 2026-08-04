@@ -48,7 +48,7 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			const deliveryCount = workload.deliveryCount + 1;
 			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount }, data: { claimedAt, deliveryCount } });
 			if (updated.count !== 1) throw new Error("skill workload claim lost its fence");
-			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + lease).toISOString() };
+			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + lease).toISOString() };
 		});
 	}
 
@@ -87,8 +87,8 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 				await transaction.skillWorkloadBootstrap.create({ data: {
 					skillWorkloadId: workloadId,
 					referenceHash: _ReferenceHash(command.bootstrapReference),
-					audience: workload.kind === "Authoring" ? "opencrane-skill-authoring" : "opencrane-tool-runner",
-					serviceAccountName: workload.kind === "Authoring" ? "skill-authoring-default" : "tool-runner-default",
+					audience: workload.kind === SkillWorkloadKind.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner",
+					serviceAccountName: workload.kind === SkillWorkloadKind.Authoring ? "skill-authoring-default" : "tool-runner-default",
 					namespace: command.namespace,
 					workloadUid: command.workloadUid,
 					expiresAt: new Date(now.getTime() + PrismaSkillWorkloadClaimsRepository.bootstrapLifetimeMilliseconds),
@@ -122,7 +122,7 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			const expiresAt = new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime()));
 			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount: deliveryCount, releaseExpiresAt: expiresAt } });
 			if (updated.count !== 1) throw new Error("skill workload release claim lost its fence");
-			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: expiresAt.toISOString() };
+			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: expiresAt.toISOString() };
 		});
 	}
 
