@@ -12,7 +12,8 @@ import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/serve
 import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
 
-import { _CreateArtifactPreprocessOutputBroker, _CreateArtifactPreprocessSourceBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
+import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
+import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types.js";
@@ -159,6 +160,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 	const artifactPreprocessorNamespace = config.artifactPreprocessorEnabled
 		? _ValidateIsolatedWorkloadNamespace(config.artifactPreprocessorNamespace, serverNamespace)
 		: null;
+	const artifactPreprocessRepository = new PrismaArtifactPreprocessRepository(prisma);
 	return {
 		conversationReplay: config.channelReplayRouteId === null
 			? null
@@ -173,8 +175,8 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 			: __CreateArtifactPreprocessorRouter({
 				tokenReviewer: _CreateArtifactPreprocessorTokenReviewer(authApi, artifactPreprocessorNamespace),
 				namespace: artifactPreprocessorNamespace,
-				repository: new PrismaArtifactPreprocessRepository(prisma),
-				sourceBroker: _CreateArtifactPreprocessSourceBroker(prisma),
+				repository: artifactPreprocessRepository,
+				sourceBroker: _CreateArtifactPreprocessSourceBroker(artifactPreprocessRepository),
 				outputBroker: _CreateArtifactPreprocessOutputBroker(prisma, config.artifactPreprocessorMaximumOutputBytes),
 				logger: _log,
 			}),

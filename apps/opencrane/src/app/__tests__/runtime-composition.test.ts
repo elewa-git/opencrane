@@ -13,8 +13,14 @@ vi.mock("../../infra/artifacts/artifact-upload.factory.js", function _MockArtifa
 {
 	return {
 		_CreateArtifactPreprocessOutputBroker: function _CreateArtifactPreprocessOutputBroker() { return {}; },
-		_CreateArtifactPreprocessSourceBroker: function _CreateArtifactPreprocessSourceBroker() { return {}; },
 		_CreateSkillAuthoringArtifactReader: function _CreateSkillAuthoringArtifactReader() { return {}; },
+	};
+});
+
+vi.mock("../../infra/artifacts/artifact-preprocess-source-broker.factory.js", function _MockArtifactSourceBrokerFactory()
+{
+	return {
+		_CreateArtifactPreprocessSourceBroker: function _CreateArtifactPreprocessSourceBroker() { return {}; },
 	};
 });
 

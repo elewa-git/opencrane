@@ -77,6 +77,10 @@ its resources to the lifecycle owner.
 - `src/app/routes.ts` contains only named per-area route lists and the trivial mount loop.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
   authorities by caller plane without choosing transport paths.
+- `src/infra/artifacts/*` is one app-only artifact-broker composition slice. It binds the server's
+  mounted lease keys, exact same-silo `artifact-service` route, and durable artifact authority into
+  source, read, upload, and output brokers; those pieces are inseparable from this process's private
+  configuration and do not expose a reusable ArtifactStore client.
 - `src/app/background-workers.ts` owns schedule ticks, expired-run repair, and fenced cleanup loops.
 - `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
   Prisma, and flushes telemetry.
