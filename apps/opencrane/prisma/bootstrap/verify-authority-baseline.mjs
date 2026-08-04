@@ -3,7 +3,8 @@ import { readFileSync } from "node:fs";
 const _BASELINE = new URL("./target-baseline.sql", import.meta.url);
 const _MINIMUM_FUNCTIONS = 75;
 const _MINIMUM_TRIGGERS = 80;
-const _MINIMUM_CONSTRAINTS = 204;
+// Five legacy foreign keys are intentionally removed with Grant/McpServerGrant, leaving 199.
+const _MINIMUM_CONSTRAINTS = 199;
 const _REQUIRED_AUTHORITY_MARKERS = [
 	'CREATE FUNCTION "enforce_authorization_grant_update"()',
 	'CREATE TRIGGER "authorization_grants_immutable"',

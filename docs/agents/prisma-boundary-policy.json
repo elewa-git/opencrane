@@ -261,6 +261,13 @@
         "contract": "ShareAuthorizationRepository",
         "contractImportPath": "./share-authorization-repository.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-repository.ts",
+        "adapter": "PrismaMcpServerMutationRepository",
+        "contract": "McpServerMutationRepository",
+        "contractImportPath": "./mcp-server-mutation-repository.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -421,6 +428,18 @@
           {
             "adapter": "PrismaShareAuthorizationRepository",
             "importPath": "./prisma-share-authorization-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-unit-of-work.ts",
+        "adapter": "PrismaMcpServerMutationUnitOfWork",
+        "contract": "McpServerMutationUnitOfWork",
+        "contractImportPath": "./mcp-server-mutation-repository.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaMcpServerMutationRepository",
+            "importPath": "./prisma-mcp-server-mutation-repository.js"
           }
         ]
       }
