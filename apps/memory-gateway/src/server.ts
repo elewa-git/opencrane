@@ -10,10 +10,13 @@ import { _log as log } from "./log.js";
 /** Largest JSON body accepted from the OpenCrane server for one memory operation. */
 const _MAX_REQUEST_BYTES = 1024 * 1024;
 
+/** The one read-only Cognee route this gateway mediates; the forwarded URL is built from this constant. */
+const _SEARCH_PATH = "/api/v1/search";
+
 /** Return whether a request is the one read-only Cognee operation this gateway mediates. */
 function _IsAllowedPath(path: string, method: string): boolean
 {
-	return method === "POST" && path === "/api/v1/search";
+	return method === "POST" && path === _SEARCH_PATH;
 }
 
 /** Extract one bearer token without accepting a duplicate or empty credential. */
@@ -102,10 +105,11 @@ export function _CreateServer(config: MemoryGatewayProcessConfig, tokenReviewer:
 				// 3. Preserve only the server-authorized body, bounded at the proxy boundary.
 				const body = await _ReadBody(request);
 
-				// 4. Reach the private Cognee Service with no caller credentials or arbitrary headers.
+				// 4. Reach the private Cognee Service on the fixed allowlisted route with no caller
+				//    credentials or arbitrary headers; nothing request-derived selects the URL or method.
 				const upstream = await ___DoWithoutTrace(function _forward()
 				{
-					return fetch(new URL(path, config.cogneeUrl), { method: request.method, headers: { accept: "application/json", "content-type": "application/json" }, body: new Uint8Array(body), signal: AbortSignal.timeout(config.requestTimeoutMilliseconds), redirect: "error" });
+					return fetch(new URL(_SEARCH_PATH, config.cogneeUrl), { method: "POST", headers: { accept: "application/json", "content-type": "application/json" }, body: new Uint8Array(body), signal: AbortSignal.timeout(config.requestTimeoutMilliseconds), redirect: "error" });
 				});
 				await _WriteResponse(response, upstream);
 			}
