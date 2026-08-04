@@ -3795,7 +3795,7 @@ BEGIN
 END;
 $$;
 CREATE FUNCTION "enforce_persona_soul_template_rules"() RETURNS trigger LANGUAGE plpgsql AS $$
-DECLARE rule_count INTEGER; rule_id_count INTEGER;
+DECLARE rule_count INTEGER; rule_id_count INTEGER; rule_priority_count INTEGER;
 BEGIN
     IF jsonb_array_length(NEW."selection_rules") = 0 OR EXISTS (
         SELECT 1 FROM jsonb_array_elements(NEW."selection_rules") rule
@@ -3804,8 +3804,11 @@ BEGIN
           OR CASE WHEN jsonb_typeof(rule -> 'answers') = 'object'
               THEN NOT EXISTS (SELECT 1 FROM jsonb_object_keys(rule -> 'answers')) ELSE true END
     ) THEN RAISE EXCEPTION 'SOUL template selection rules require id, integer priority, and exact answer matches'; END IF;
-    SELECT count(*), count(DISTINCT rule ->> 'id') INTO rule_count, rule_id_count FROM jsonb_array_elements(NEW."selection_rules") rule;
-    IF rule_count <> rule_id_count THEN RAISE EXCEPTION 'SOUL template selection rule identifiers must be unique'; END IF;
+    SELECT count(*), count(DISTINCT rule ->> 'id'), count(DISTINCT (rule ->> 'priority')::INTEGER)
+      INTO rule_count, rule_id_count, rule_priority_count FROM jsonb_array_elements(NEW."selection_rules") rule;
+    IF rule_count <> rule_id_count OR rule_count <> rule_priority_count THEN
+        RAISE EXCEPTION 'SOUL template selection rule identifiers and priorities must be unique';
+    END IF;
     RETURN NEW;
 END;
 $$;

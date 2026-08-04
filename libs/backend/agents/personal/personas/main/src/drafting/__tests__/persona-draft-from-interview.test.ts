@@ -44,21 +44,18 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 		const createRevision = vi.fn().mockResolvedValue({ id: "revision-2" });
 		const createInsights = vi.fn().mockResolvedValue({ count: 3 });
 		const transaction = {
-			$queryRaw: vi.fn()
-				.mockResolvedValueOnce([{ activeRevisionId: "revision-1" }])
-				.mockResolvedValueOnce([{ questionSetId: "onboarding", questionSetVersion: 1 }])
-				.mockResolvedValueOnce([{ templateId: "direct", templateVersion: 1, templateDigest: "sha256:template", content: "Be direct.", selectionRuleId: "rule-1", selectionAnswerIds: ["answer-1"] }])
-				.mockResolvedValueOnce([{ nextRevision: 2 }]),
-			personaInterviewAnswer: { findMany: vi.fn().mockResolvedValue([{ id: "answer-1", value: " one ", questionId: "question-1" }, { id: "answer-2", value: "two", questionId: "question-2" }, { id: "answer-3", value: "three", questionId: "question-3" }]) },
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ activeRevisionId: "revision-1" }) },
+			personaInterview: { findFirst: vi.fn().mockResolvedValue({ questionSetId: "onboarding", questionSetVersion: 1, answers: [{ id: "answer-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-1", value: " one " }, { id: "answer-2", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-2", value: "two" }, { id: "answer-3", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-3", value: "three" }] }) },
+			personaSoulTemplate: { findMany: vi.fn().mockResolvedValue([{ id: "direct", version: 1, digest: "sha256:template", content: "Be direct.", selectionRules: [{ id: "rule-1", priority: 20, answers: { "question-1": " one " } }] }]) },
 			personaQuestion: { findMany: vi.fn().mockResolvedValue([{ id: "question-1", category: PersonaInterviewCategory.RelationshipRole }, { id: "question-2", category: PersonaInterviewCategory.ToneLanguage }, { id: "question-3", category: PersonaInterviewCategory.WorkingHabits }]) },
-			personaRevision: { create: createRevision },
+			personaRevision: { aggregate: vi.fn().mockResolvedValue({ _max: { revision: 1 } }), create: createRevision },
 			personaInsight: { createMany: createInsights },
 		};
 		const transactions = { run: vi.fn(async function _run(work) { return work(transaction); }) } as unknown as PersonaPersistenceUnitOfWork;
 		const repository = new PrismaPersonaDraftRepository(logger, transactions);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "created", personaRevisionId: "revision-2" });
-		expect(createRevision).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", revision: 2, compiledInstructions: "Be direct.\n\n## Interview insights\n- Owner response: one\n- Owner response: two\n- Owner response: three\n", previousRevisionId: "revision-1" }), select: { id: true } });
+		expect(createRevision).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", revision: 2, soulTemplateId: "direct", soulTemplateVersion: 1, soulTemplateDigest: "sha256:template", selectionRuleId: "rule-1", selectionAnswerIds: ["answer-1"], compiledInstructions: "Be direct.\n\n## Interview insights\n- Owner response: one\n- Owner response: two\n- Owner response: three\n", previousRevisionId: "revision-1" }), select: { id: true } });
 		expect(createInsights).toHaveBeenCalledWith({ data: [
 			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-1", questionId: "question-1", category: PersonaInterviewCategory.RelationshipRole, statement: "Owner response: one" }),
 			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-2", questionId: "question-2", category: PersonaInterviewCategory.ToneLanguage, statement: "Owner response: two" }),
