@@ -4,9 +4,10 @@ import { describe, expect, it, vi } from "vitest";
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
 import type { Logger } from "@opencrane/observability";
 
-import { __CreatePersonalConfigurationRouter } from "../personal-configuration.router.js";
-import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationChangeMaterializationRepository } from "../personal-configuration-materialization.types.js";
-import { PersonalConfigurationChangeViewStates, PersonalConfigurationDecisionCodes, type PersonalConfigurationChangeView } from "../personal-configuration.types.js";
+import { __CreatePersonalConfigurationRouter } from "../http/personal-configuration.router.js";
+import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";
+import { PersonalConfigurationDecisionCodes } from "../decision/personal-configuration-decision.types.js";
+import { PersonalConfigurationChangeViewStates, type PersonalConfigurationChangeView } from "../query/personal-configuration-view.types.js";
 
 /** Builds the owner-only proposal route with a caller and observable read port. */
 function _app(caller: unknown, listOwned = vi.fn(async function _list(): Promise<readonly PersonalConfigurationChangeView[]> { return []; }), materializeAtomically: PersonalConfigurationChangeMaterializationRepository["materializeAtomically"] = vi.fn(async function _materialize() { return { status: PersonalConfigurationMaterializationCodes.NotApplicable } as const; }))

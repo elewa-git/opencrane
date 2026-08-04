@@ -60,8 +60,8 @@ risky diffs; a direct `review` delegation stays right for small ones.
 one `deploy` agent run (script-only mutations) → triage every finding into a fix PR (chart/script/
 config, defended with run evidence and conceded quickly when disputed), a GitHub issue (codebase/
 data), or a design question to the user → friction mined into configuration simplifications (2
-sightings = fix it) → a docs-coverage pass (`scripts/config-docs-coverage.sh` finds undocumented
-values keys; the `website` agent documents one batch per run) → ledger append
+sightings = fix it) → a docs-coverage pass (`scripts/config-docs-coverage.sh` checks the explicit
+operator-input contract; the `website` agent documents one missing batch per run) → ledger append
 (`docs/agents/deploy-ledger.md`, the fleet's cross-run memory).
 
 **Built-in platform agent types** (available via the Agent tool, not repo-defined): `Explore`

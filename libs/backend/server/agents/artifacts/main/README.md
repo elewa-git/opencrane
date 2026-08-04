@@ -84,6 +84,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `PrismaArtifactAuthorityRepository` — the Postgres-backed persistence adapter.
 - `PrismaArtifactPreprocessRepository` and `__CreateArtifactPreprocessorRouter` — durable job
   fencing and the TokenReview-protected broker-only worker protocol.
+- `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue
+  source-read facts without depending on the Prisma adapter.
 - `__ClaimArtifactPreprocessJob`, `__IssueArtifactPreprocessOutputLease`,
   `__CompleteArtifactPreprocessJob`, and `__FailArtifactPreprocessJob` — server-owned preprocessing
   lifecycle operations; output leases remain internal projections rather than worker DTOs.
@@ -93,7 +95,8 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
   shared request principal to catalogue ownership and supplies the authority repository.
 - Types: `ArtifactAuthorityRepository`, `ArtifactStorePromotionReceipt`, `FinalizeArtifactRevisionCommand`,
   the read-lease ports (`ArtifactReadLeaseRepository`, `ArtifactReadLeaseSigner`,
-  `IssueArtifactReadLeaseCommand`), and the upload ports (`ArtifactServicePromotionPort`,
+  `IssueArtifactReadLeaseCommand`) plus the stable `IssueArtifactReadLeaseOutcomes` result vocabulary,
+  and the upload ports (`ArtifactServicePromotionPort`,
   `ArtifactUploadCryptoPort`, `ArtifactUploadLeaseRepository`, `VerifiedArtifactUploadCommand`,
   `ArtifactUploadResult`).
 

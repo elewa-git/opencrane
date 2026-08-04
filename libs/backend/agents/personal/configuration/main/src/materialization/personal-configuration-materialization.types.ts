@@ -11,7 +11,7 @@ export interface MaterializePersonalConfigurationChangeCommand
 	readonly materializedAt: string;
 }
 
-/** Stable outcome from applying an accepted personal model selection. */
+/** Stable product outcome from applying an accepted personal model selection. */
 export type MaterializePersonalConfigurationChangeResult =
 	| { readonly outcome: PersonalConfigurationMaterializationCodes.Applied; readonly agentRevisionId: string }
 	| { readonly outcome: PersonalConfigurationMaterializationCodes.NotApplicable }

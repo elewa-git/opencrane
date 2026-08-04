@@ -64,7 +64,7 @@ with a plain reason.
 - `PrismaAgentRevisionLifecycleRepository` — Postgres-backed definition-plane adapter (immutable
   revisions, lineage, optimistic concurrency).
 - `AgentRevisionModelSelectionRepository` and
-  `PrismaAgentRevisionModelSelectionRepository` — the port and transaction-scoped adapter used when
+  `PrismaAgentRevisionModelSelectionRepository` — the port and transaction-scoped model-alias strategy used when
   personal configuration must combine an accepted model selection with its own journal transition.
   Agent-services proves the frozen source, reconstructs its canonical content, changes only the
   model definition, appends and publishes the next revision, and activates it. The personal

@@ -1,4 +1,4 @@
-import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type DecidePersonalConfigurationChangeResult, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration.types.js";
+import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type DecidePersonalConfigurationChangeResult, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types.js";
 
 /** Record an owner's explicit decision without changing any persona, service, run, or snapshot. */
 export async function __DecidePersonalConfigurationChange(repository: PersonalConfigurationChangeDecisionRepository, command: DecidePersonalConfigurationChangeCommand): Promise<DecidePersonalConfigurationChangeResult>

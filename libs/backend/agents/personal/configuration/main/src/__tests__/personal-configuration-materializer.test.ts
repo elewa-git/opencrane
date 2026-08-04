@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
-import { ProposalResolutionOutcomes } from "../materialization/personal-configuration-materialization-repository.types.js";
+import { PersonalConfigurationMaterializationResolutionOutcomes } from "../materialization/personal-configuration-materialization-state.types.js";
 import { _PersonalConfigurationMaterializer } from "../materialization/personal-configuration-materializer.js";
 
 /** Trusted owner command for repository-orchestration tests. */
@@ -26,7 +26,7 @@ describe("personal configuration materializer", function _MaterializerSuite()
 			{
 				order.push("resolve");
 				return {
-					outcome: ProposalResolutionOutcomes.Ready,
+					outcome: PersonalConfigurationMaterializationResolutionOutcomes.Ready,
 					proposal: {
 						agentServiceId: "service-1",
 						expectedAgentRevisionId: "revision-1",
@@ -81,7 +81,7 @@ describe("personal configuration materializer", function _MaterializerSuite()
 			{
 				return work({
 					proposals: {
-						resolve: async function _Resolve() { return { outcome: ProposalResolutionOutcomes.Terminal, result: { status: "stale_proposal" } } as const; },
+						resolve: async function _Resolve() { return { outcome: PersonalConfigurationMaterializationResolutionOutcomes.Terminal, result: { status: "stale_proposal" } } as const; },
 						apply: vi.fn(),
 					},
 					agentRevisions,

@@ -27,3 +27,21 @@ export interface InternalRuntimeComposition
 	/** Runtime server-sent-event stream and candidate-ingest router. */
 	readonly runtimeStream: Router;
 }
+
+/** Controller-only composition slice. */
+export type ControllerRuntimeComposition = Pick<
+	InternalRuntimeComposition,
+	"agentControllerRunDispatch" | "skillWorkloadDispatch"
+>;
+
+/** Isolated skill workload composition slice. */
+export type SkillWorkloadRuntimeComposition = Pick<
+	InternalRuntimeComposition,
+	"skillWorkloadBootstrap" | "skillAuthoringInput" | "skillAuthoringCompletion"
+>;
+
+/** Runtime protocol composition slice. */
+export type RuntimeProtocolComposition = Pick<InternalRuntimeComposition, "runtimeBootstrap" | "runtimeStream">;
+
+/** Optional workload and replay composition slice. */
+export type OptionalRuntimeComposition = Pick<InternalRuntimeComposition, "artifactPreprocessor" | "conversationReplay">;

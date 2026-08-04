@@ -1,5 +1,19 @@
 import type { ArtifactReadLeaseClaims } from "@opencrane/backend/artifacts/authorization";
 
+/**
+ * Stable serialized outcomes of the server-internal read-lease issuer.
+ *
+ * These values cross the artifacts package boundary so callers can branch on
+ * one owned vocabulary without changing the existing result wire shape.
+ */
+export enum IssueArtifactReadLeaseOutcomes
+{
+	/** Exact catalogue facts were accepted and signed into a bounded read lease. */
+	Issued = "issued",
+	/** Input or catalogue evidence failed closed without granting read authority. */
+	Denied = "denied",
+}
+
 /** Server-owned coordinates for one exact published revision that may be read internally. */
 export interface IssueArtifactReadLeaseCommand
 {
@@ -44,5 +58,5 @@ export interface ArtifactReadLeaseSigner
 
 /** Stable outcome of one server-internal read-lease issuance attempt. */
 export type IssueArtifactReadLeaseResult =
-	| { readonly outcome: "issued"; readonly compactLease: string; readonly claims: ArtifactReadLeaseClaims }
-	| { readonly outcome: "denied"; readonly reason: "invalid_command" | "revision_not_readable" };
+	| { readonly outcome: IssueArtifactReadLeaseOutcomes.Issued; readonly compactLease: string; readonly claims: ArtifactReadLeaseClaims }
+	| { readonly outcome: IssueArtifactReadLeaseOutcomes.Denied; readonly reason: "invalid_command" | "revision_not_readable" };

@@ -2,8 +2,8 @@ import { createHash } from "node:crypto";
 
 import { ___CanonicalizeJson, type JsonValue } from "@opencrane/util";
 
-import { _IsPersonalConfigurationPatch } from "./configuration-patch.js";
-import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration.types.js";
+import { _IsPersonalConfigurationPatch } from "./personal-configuration-patch.js";
+import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types.js";
 
 /** Persist a future-snapshot-only personal configuration proposal after strict coordinate validation. */
 export async function __ProposePersonalConfigurationChange(repository: PersonalConfigurationChangeRepository, command: ProposePersonalConfigurationChangeCommand): Promise<ProposePersonalConfigurationChangeResult>

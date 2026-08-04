@@ -13,8 +13,9 @@
                   (never changes a run already executing)
 ```
 
-Personal domains describe one person's agent product state. They may use shared contracts but do
-not import server control-plane domains or a deployable app.
+Personal domains describe one person's agent product state. They may use shared contracts and
+narrow capability ports owned by server-side domains, but never import a deployable app or another
+domain's Prisma implementation.
 
 ## See also
 

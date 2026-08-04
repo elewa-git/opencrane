@@ -34,6 +34,28 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    digest in a protected database schema. Physical recovery restores that marker with the existing
    schema, never attaches fresh setup SQL, and must pass the digest-checking Postgres hook.
 
+## Runtime ORM ownership
+
+Production TypeScript reaches Prisma through reviewed capability boundaries, enforced by
+`npm run check:prisma-boundaries -- --diff <base-ref>`:
+
+1. Domain services, materializers, and use cases do not import Prisma or call model delegates.
+2. Only an exact repository adapter declared in
+   [`prisma-boundary-policy.json`](./prisma-boundary-policy.json) may call model delegates or raw
+   query methods. A declaration binds the repository contract import, adapter class, and source
+   path; renaming or moving any of them requires policy review.
+3. Only an exact declared UnitOfWork adapter may call `$transaction`.
+4. Passing a transaction client into another repository is also policy-owned. Every declared
+	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must
+	receive the exact `$transaction` callback binding (or an owning repository's typed transaction
+	property), never the root `PrismaClient`. Stale declarations and substituted bindings fail.
+5. Composition roots may import `PrismaClient` only at exact listed paths. That permits dependency
+   wiring, never delegate, raw-query, or transaction ownership.
+
+The checker compares new findings with the base revision, so inherited violations remain visible
+through `--all` without blocking unrelated slices. Exact temporary exemptions require an owner,
+reason, allowed operation, and a real UTC calendar expiry; malformed or stale policy fails closed.
+
 ## Why this exists
 
 Per-domain schema files keep model ownership attributable while one reviewed target SQL describes

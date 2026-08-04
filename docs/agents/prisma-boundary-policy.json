@@ -3,25 +3,52 @@
   "owners": {
     "repositories": [
       {
+        "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization.ts",
+        "adapter": "PrismaPersonalConfigurationMaterializationRepository",
         "contract": "PersonalConfigurationMaterializationRepository",
-        "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+        "contractImportPath": "./personal-configuration-materialization-unit-of-work.types.js",
+        "constructs": []
       },
       {
+        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-model-selection.ts",
+        "adapter": "PrismaAgentRevisionModelSelectionRepository",
         "contract": "AgentRevisionModelSelectionRepository",
-        "importPath": "./prisma-agent-revision-writer.types.js"
+        "contractImportPath": "./agent-revision-model-selection.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionWriterRepository",
+            "importPath": "./prisma-agent-revision-writer.js"
+          }
+        ]
       },
       {
+        "path": "libs/backend/server/agents/agent-services/main/src/prisma-agent-revision-writer.ts",
+        "adapter": "PrismaAgentRevisionWriterRepository",
         "contract": "AgentRevisionWriterRepository",
-        "importPath": "./prisma-agent-revision-writer.types.js"
+        "contractImportPath": "./prisma-agent-revision-writer.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
       {
+        "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization-unit-of-work.ts",
+        "adapter": "PrismaPersonalConfigurationMaterializationUnitOfWork",
         "contract": "PersonalConfigurationMaterializationUnitOfWork",
-        "importPath": "./personal-configuration-materialization-unit-of-work.types.js"
+        "contractImportPath": "./personal-configuration-materialization-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaAgentRevisionModelSelectionRepository",
+            "importPath": "@opencrane/backend/server/agents/agent-services"
+          },
+          {
+            "adapter": "PrismaPersonalConfigurationMaterializationRepository",
+            "importPath": "./prisma-personal-configuration-materialization.js"
+          }
+        ]
       }
     ],
     "compositions": [
+      "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
     ]
   },

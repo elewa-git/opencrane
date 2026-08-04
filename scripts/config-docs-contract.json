@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "charts": [
+    {
+      "path": "apps/_infra/deploy-k8s",
+      "operatorInputs": [
+        { "path": "global", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "multiCt", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "crds", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "multiInstance", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "sharedPlatform", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "ingress", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "certManager", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "networkPolicy", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "externalSecrets", "documentation": "website/operators/deployment-configuration.md" },
+        { "path": "observability", "documentation": "website/operators/deployment-configuration.md" }
+      ],
+      "forwardedKeys": [
+        { "path": "channelProxy", "owner": "apps/channel-proxy/helm" },
+        { "path": "opencrane-skill-authoring", "owner": "apps/skill-authoring/helm" },
+        { "path": "opencrane-tool-runner", "owner": "apps/tool-runner/helm" },
+        { "path": "artifactService", "owner": "apps/artifact-service/helm" },
+        { "path": "artifactPreprocessor", "owner": "apps/artifact-preprocessor/helm" },
+        { "path": "managedAgentRuntimePlane", "owner": "apps/managed-agent-runtime/helm" },
+        { "path": "agentController", "owner": "apps/agent-controller/helm" },
+        { "path": "clustertenantManager", "owner": "apps/opencrane/helm" },
+        { "path": "litellm", "owner": "apps/_infra/litellm/helm" },
+        { "path": "mcpGateway", "owner": "apps/_infra/obot/helm" },
+        { "path": "controlPlaneSpa", "owner": "apps/opencrane-ui/helm" },
+        { "path": "docs", "owner": "apps/_infra/deploy-k8s/templates" }
+      ],
+      "internalKeys": [
+        { "path": "nameOverride", "reason": "Release-name helper input; it is not an operator configuration surface." }
+      ]
+    }
+  ]
+}
