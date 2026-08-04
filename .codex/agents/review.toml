@@ -16,6 +16,9 @@ fresh context — do not assume the author's intent was correct.
    ERROR lines into your findings as **Low** severity
    (verbatim, one line each). Confirm each WARN line at the cited location before
    including it. **Do not hunt for mechanical style issues beyond the script's output.**
+   `INLINE-CONDITIONAL` is unconditional: a physical source line may contain at most one
+   ternary conditional. Expand each decision onto its own line or use an exhaustive lookup,
+   `switch`, or intention-revealing helper.
    Module-growth output is a responsibility-inventory trigger, not a finding: review the
    cited module through the evidence-based maintainability checklist below.
 4. **Grounding reads — only what the change touches:**

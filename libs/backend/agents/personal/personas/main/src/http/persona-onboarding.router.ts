@@ -2,12 +2,52 @@ import { Router, type Request, type Response } from "express";
 
 import { __ApprovePersona } from "../approval/persona-authority.js";
 import { PersonaApprovalDenialReasons } from "../approval/persona-authority.types.js";
+import { PersonaDraftDenialReasons } from "../drafting/persona-draft-authority.types.js";
 import { __CreatePersonaDraftFromInterview } from "../drafting/persona-draft-from-interview.js";
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../interview/persona-interview-authority.js";
 import { __EnsurePersonaOnboarding } from "../profile/persona-onboarding-authority.js";
 import { PERSONA_ONBOARDING_TEMPLATE_ANSWERS } from "../profile/persona-onboarding-catalogue.js";
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes, PersonaOnboardingApiStates } from "../profile/persona-lifecycle.types.js";
 import type { PersonaOnboardingCaller, PersonaOnboardingRouterDependencies } from "./persona-onboarding.router.types.js";
+
+/** Exhaustive HTTP translation for interview-authority denials. */
+const _INTERVIEW_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaInterviewDenialReasons, number>> = {
+	[PersonaInterviewDenialReasons.InvalidCommand]: 400,
+	[PersonaInterviewDenialReasons.PersistenceUnavailable]: 503,
+	[PersonaInterviewDenialReasons.QuestionSetUnavailable]: 422,
+	[PersonaInterviewDenialReasons.NotFoundOrWrongOwner]: 404,
+	[PersonaInterviewDenialReasons.RefreshChangeUnavailable]: 404,
+	[PersonaInterviewDenialReasons.AlreadyAnswered]: 409,
+	[PersonaInterviewDenialReasons.QuestionUnavailable]: 400,
+	[PersonaInterviewDenialReasons.NotInProgress]: 409,
+	[PersonaInterviewDenialReasons.IncompleteAnswers]: 409,
+	[PersonaInterviewDenialReasons.RefreshInterviewConflict]: 409,
+};
+
+/** Exhaustive HTTP translation for draft-authority denials. */
+const _DRAFT_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaDraftDenialReasons, number>> = {
+	[PersonaDraftDenialReasons.InvalidCommand]: 400,
+	[PersonaDraftDenialReasons.NotFoundOrWrongOwner]: 404,
+	[PersonaDraftDenialReasons.InterviewIncomplete]: 400,
+	[PersonaDraftDenialReasons.InvalidInsights]: 400,
+	[PersonaDraftDenialReasons.TemplateNotSelected]: 400,
+	[PersonaDraftDenialReasons.Conflict]: 400,
+	[PersonaDraftDenialReasons.PersistenceUnavailable]: 503,
+};
+
+/** Exhaustive HTTP translation for persona-approval denials. */
+const _APPROVAL_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaApprovalDenialReasons, number>> = {
+	[PersonaApprovalDenialReasons.InvalidCommand]: 400,
+	[PersonaApprovalDenialReasons.NotFound]: 404,
+	[PersonaApprovalDenialReasons.WrongOwner]: 404,
+	[PersonaApprovalDenialReasons.NotDraft]: 409,
+	[PersonaApprovalDenialReasons.InterviewIncomplete]: 409,
+	[PersonaApprovalDenialReasons.InvalidInsights]: 409,
+	[PersonaApprovalDenialReasons.TemplateMismatch]: 409,
+	[PersonaApprovalDenialReasons.TemplateSelectionMismatch]: 409,
+	[PersonaApprovalDenialReasons.MutableSoulPolicy]: 409,
+	[PersonaApprovalDenialReasons.Conflict]: 409,
+};
 
 /**
  * Creates the browser-session-authenticated, self-only persona onboarding router.
@@ -138,7 +178,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			const ready = await _ensure(caller, dependencies);
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __CreatePersonaDraftFromInterview(dependencies.drafts, { siloId: caller.siloId, userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, authoredAt: dependencies.clock.now().toISOString() });
-			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
+			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _draftDenialStatus(result.reason), result.reason); return; }
 			response.status(201).json({ personaRevisionId: result.personaRevisionId, state: PersonaOnboardingApiStates.Draft });
 		}
 		catch (err)
@@ -200,15 +240,21 @@ function _answerValue(body: unknown, questionId: unknown, questions: readonly { 
 }
 
 /** Map interview lifecycle denials to a bounded HTTP status without leaking another owner's state. */
-function _interviewDenialStatus(reason: string): number
+function _interviewDenialStatus(reason: PersonaInterviewDenialReasons): number
 {
-	return reason === PersonaInterviewDenialReasons.PersistenceUnavailable ? 503 : reason === PersonaInterviewDenialReasons.QuestionSetUnavailable ? 422 : reason === PersonaInterviewDenialReasons.NotFoundOrWrongOwner || reason === PersonaInterviewDenialReasons.RefreshChangeUnavailable ? 404 : reason === PersonaInterviewDenialReasons.AlreadyAnswered || reason === PersonaInterviewDenialReasons.NotInProgress || reason === PersonaInterviewDenialReasons.IncompleteAnswers || reason === PersonaInterviewDenialReasons.RefreshInterviewConflict ? 409 : 400;
+	return _INTERVIEW_DENIAL_STATUS_BY_REASON[reason];
+}
+
+/** Map draft denials without borrowing the interview authority's vocabulary. */
+function _draftDenialStatus(reason: PersonaDraftDenialReasons): number
+{
+	return _DRAFT_DENIAL_STATUS_BY_REASON[reason];
 }
 
 /** Map persona-approval denials explicitly so concurrent commits cannot fall through to a bad request. */
 function _approvalDenialStatus(reason: PersonaApprovalDenialReasons): number
 {
-	return reason === PersonaApprovalDenialReasons.NotFound || reason === PersonaApprovalDenialReasons.WrongOwner ? 404 : reason === PersonaApprovalDenialReasons.InvalidCommand ? 400 : 409;
+	return _APPROVAL_DENIAL_STATUS_BY_REASON[reason];
 }
 
 /** Require an empty object for a state transition with no caller-owned coordinates. */

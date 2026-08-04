@@ -76,8 +76,9 @@ function _record(value: unknown): Record<string, unknown> | null
 /** Parse the PostgreSQL INTEGER priority representation accepted by the baseline trigger. */
 function _priority(value: unknown): number | null
 {
-	const parsed = typeof value === "number" ? value : typeof value === "string" && /^-?[0-9]+$/u.test(value) ? Number(value) : Number.NaN;
-	return Number.isInteger(parsed) && parsed >= -2147483648 && parsed <= 2147483647 ? parsed : null;
+	const parsed = typeof value === "string" && /^-?[0-9]+$/u.test(value) ? Number(value) : value;
+	if (typeof parsed !== "number" || !Number.isInteger(parsed) || parsed < -2147483648 || parsed > 2147483647) return null;
+	return parsed;
 }
 
 /** Return exact required answer identifiers in the database-supplied answer order. */

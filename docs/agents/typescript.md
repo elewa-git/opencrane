@@ -61,6 +61,20 @@ const names = users.map(user => user.name);
 const total = items.reduce((sum, item) => sum + item.price, 0);
 ```
 
+## Inline Conditionals
+
+A physical source line may contain at most one ternary conditional. When a line needs multiple
+choices, expand each decision onto its own line or use an exhaustive lookup, a `switch`, or an
+intention-revealing helper so every outcome remains independently reviewable.
+
+```typescript
+// WRONG — three decisions are compressed into one line.
+return reason === FailureReason.Unavailable ? 503 : reason === FailureReason.NotFound ? 404 : 400;
+
+// CORRECT — the enum-keyed table makes the mapping exhaustive and reviewable.
+return _STATUS_BY_REASON[reason];
+```
+
 ## Self-Review Before Finishing
 
 After writing or editing any TypeScript file, run `scripts/agent-style-check.sh` — it checks
@@ -69,9 +83,9 @@ line). Use its output to populate the table; do **not** rely on "it feels right"
 
 When a coding turn writes or edits `.ts` files, include a compact compliance table in the response:
 
-| File | No standalone `=>` | Imports single-line at top | All declarations JSDoc (incl. properties) | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
-|---|---|---|---|---|---|---|
-| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| File | No standalone `=>` | Max one ternary/line | Imports single-line at top | All declarations JSDoc (incl. properties) | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
+|---|---|---|---|---|---|---|---|
+| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Rules to check:
 
@@ -84,6 +98,8 @@ Rules to check:
 7. **Categorical branches use documented string-backed enums** — confirm every
    `CATEGORICAL-LITERAL` warning is either replaced with the owning enum or is an explicit external
    protocol/schema/data exemption.
+8. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
+   each decision onto its own line or use an exhaustive lookup, `switch`, or named helper.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
 

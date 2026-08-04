@@ -5,8 +5,9 @@ import type { Logger } from "@opencrane/observability";
 
 import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router.js";
 import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types.js";
-import { PersonaApprovalPersistenceStatuses } from "../../approval/persona-authority.types.js";
-import { PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types.js";
+import { PersonaApprovalDenialReasons, PersonaApprovalInterviewStates, PersonaApprovalPersistenceStatuses, PersonaApprovalRevisionStates, type PersonaApprovalSnapshot } from "../../approval/persona-authority.types.js";
+import { PersonaDraftDenialReasons } from "../../drafting/persona-draft-authority.types.js";
+import { PersonaInterviewDenialReasons, PersonaOnboardingApiStates } from "../../profile/persona-lifecycle.types.js";
 
 /** Builds a router with authenticated owner identity and observable authority ports. */
 function _dependencies(overrides: Partial<PersonaOnboardingRouterDependencies> = {}): PersonaOnboardingRouterDependencies
@@ -34,6 +35,12 @@ function _app(dependencies: PersonaOnboardingRouterDependencies)
 	return app;
 }
 
+/** Build one valid approval snapshot with focused denial overrides. */
+function _approvalSnapshot(overrides: Partial<PersonaApprovalSnapshot> = {}): PersonaApprovalSnapshot
+{
+	return { profileUserId: "user-1", revisionState: PersonaApprovalRevisionStates.Draft, revisionProfileId: "profile-1", interviewState: PersonaApprovalInterviewStates.Completed, insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden", ...overrides };
+}
+
 describe("__CreatePersonaOnboardingRouter", function _describe()
 {
 	it("returns only durable resumable onboarding metadata for the authenticated owner", async function _status()
@@ -58,6 +65,26 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(response.status).toBe(200);
 		expect(response.body.interviewId).toBe("interview-1");
 		expect(dependencies.interviews.startAtomically).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1 }));
+	});
+
+	it.each([
+		[PersonaInterviewDenialReasons.InvalidCommand, 400],
+		[PersonaInterviewDenialReasons.PersistenceUnavailable, 503],
+		[PersonaInterviewDenialReasons.QuestionSetUnavailable, 422],
+		[PersonaInterviewDenialReasons.NotFoundOrWrongOwner, 404],
+		[PersonaInterviewDenialReasons.RefreshChangeUnavailable, 404],
+		[PersonaInterviewDenialReasons.AlreadyAnswered, 409],
+		[PersonaInterviewDenialReasons.QuestionUnavailable, 400],
+		[PersonaInterviewDenialReasons.NotInProgress, 409],
+		[PersonaInterviewDenialReasons.IncompleteAnswers, 409],
+		[PersonaInterviewDenialReasons.RefreshInterviewConflict, 409],
+	] as const)("maps interview denial %s to HTTP %i", async function _mapsInterviewDenial(reason, expectedStatus)
+	{
+		const dependencies = _dependencies({ interviews: { startAtomically: vi.fn().mockResolvedValue({ status: reason }), recordAnswerAtomically: vi.fn(), completeAtomically: vi.fn() } });
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interview").send({});
+
+		expect(response.status).toBe(expectedStatus);
+		expect(response.body).toEqual({ error: reason });
 	});
 
 	it("starts a refresh interview only from the route-bound accepted proposal identity", async function _startsRefresh()
@@ -103,6 +130,23 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(dependencies.drafts.createFromInterviewAtomically).toHaveBeenCalledWith(expect.objectContaining({ interviewId: "interview-1", personaProfileId: "profile-1" }));
 	});
 
+	it.each([
+		[PersonaDraftDenialReasons.InvalidCommand, 400],
+		[PersonaDraftDenialReasons.NotFoundOrWrongOwner, 404],
+		[PersonaDraftDenialReasons.InterviewIncomplete, 400],
+		[PersonaDraftDenialReasons.InvalidInsights, 400],
+		[PersonaDraftDenialReasons.TemplateNotSelected, 400],
+		[PersonaDraftDenialReasons.Conflict, 400],
+		[PersonaDraftDenialReasons.PersistenceUnavailable, 503],
+	] as const)("maps draft denial %s to HTTP %i", async function _mapsDraftDenial(reason, expectedStatus)
+	{
+		const dependencies = _dependencies({ drafts: { createFromInterviewAtomically: vi.fn().mockResolvedValue({ status: reason }) } });
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interviews/interview-1/draft").send({});
+
+		expect(response.status).toBe(expectedStatus);
+		expect(response.body).toEqual({ error: reason });
+	});
+
 	it("approves only the exact owner-visible draft selected by its path coordinate", async function _approvesDraft()
 	{
 		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" }), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Approved }) } });
@@ -112,12 +156,30 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(dependencies.approval.approveAndActivateAtomically).toHaveBeenCalledWith(expect.objectContaining({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1" }));
 	});
 
-	it("maps a concurrent approval conflict to HTTP 409", async function _approvalConflict()
+	it("maps an invalid approval command to HTTP 400", async function _invalidApprovalCommand()
 	{
-		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" }), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: PersonaApprovalPersistenceStatuses.Conflict }) } });
+		const response = await request(_app(_dependencies())).post("/api/v1/me/persona/drafts/%20/approve").send({});
 
+		expect(response.status).toBe(400);
+		expect(response.body).toEqual({ error: PersonaApprovalDenialReasons.InvalidCommand });
+	});
+
+	it.each([
+		[PersonaApprovalDenialReasons.NotFound, null, PersonaApprovalPersistenceStatuses.Approved, 404],
+		[PersonaApprovalDenialReasons.WrongOwner, _approvalSnapshot({ profileUserId: "user-2" }), PersonaApprovalPersistenceStatuses.Approved, 404],
+		[PersonaApprovalDenialReasons.NotDraft, _approvalSnapshot({ revisionState: PersonaApprovalRevisionStates.Approved }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.InterviewIncomplete, _approvalSnapshot({ interviewState: PersonaApprovalInterviewStates.InProgress }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.InvalidInsights, _approvalSnapshot({ insightCount: 2 }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.TemplateMismatch, _approvalSnapshot({ templateDigestMatches: false }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.TemplateSelectionMismatch, _approvalSnapshot({ templateSelectionMatches: false }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.MutableSoulPolicy, _approvalSnapshot({ durableSoulMutationPolicy: "mutable" }), PersonaApprovalPersistenceStatuses.Approved, 409],
+		[PersonaApprovalDenialReasons.Conflict, _approvalSnapshot(), PersonaApprovalPersistenceStatuses.Conflict, 409],
+	] as const)("maps approval denial %s to its HTTP status", async function _mapsApprovalDenial(reason, snapshot, persistenceStatus, expectedStatus)
+	{
+		const dependencies = _dependencies({ approval: { getApprovalSnapshot: vi.fn().mockResolvedValue(snapshot), approveAndActivateAtomically: vi.fn().mockResolvedValue({ status: persistenceStatus }) } });
 		const response = await request(_app(dependencies)).post("/api/v1/me/persona/drafts/revision-1/approve").send({});
-		expect(response.status).toBe(409);
-		expect(response.body).toEqual({ error: "conflict" });
+
+		expect(response.status).toBe(expectedStatus);
+		expect(response.body).toEqual({ error: reason });
 	});
 });
