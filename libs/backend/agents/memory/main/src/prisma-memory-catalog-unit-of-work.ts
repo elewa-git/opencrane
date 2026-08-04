@@ -1,7 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { __MemoryCatalogCorrectionConflictError } from "./memory-catalog-errors.js";
-import type { AtomicRecordMemoryFactResult, MemoryCatalogCollisionRepository, MemoryCatalogTransaction, MemoryCatalogUnitOfWork, MemoryCatalogWork, RecordMemoryFactCommand } from "./memory-catalog.types.js";
+import type { AtomicRecordMemoryFactResult, MemoryCatalogTransaction, MemoryCatalogUnitOfWork, MemoryCatalogWork, RecordMemoryFactCommand } from "./memory-catalog.types.js";
 import { PrismaMemoryCatalogCollisionRepository } from "./prisma-memory-catalog-collision-repository.js";
 import { PrismaMemoryCatalogRepository } from "./prisma-memory-catalog-repository.js";
 
@@ -16,14 +16,10 @@ export class PrismaMemoryCatalogUnitOfWork implements MemoryCatalogUnitOfWork
 {
 	/** Canonical product database client from the server composition boundary. */
 	private readonly prisma: PrismaClient;
-	/** Committed-state repository used only after a uniqueness collision rolls back. */
-	private readonly collisions: MemoryCatalogCollisionRepository;
-
 	/** Creates the unit of work over the canonical product database. */
 	constructor(prisma: PrismaClient)
 	{
 		this.prisma = prisma;
-		this.collisions = new PrismaMemoryCatalogCollisionRepository(prisma);
 	}
 
 	/** Runs work at serializable isolation and retries only complete known conflict rollbacks. */
@@ -61,7 +57,10 @@ export class PrismaMemoryCatalogUnitOfWork implements MemoryCatalogUnitOfWork
 	/** Re-reads committed evidence after rollback and accepts only an exact idempotent delivery. */
 	private async _ResolveUniqueCollision(command: RecordMemoryFactCommand): Promise<AtomicRecordMemoryFactResult>
 	{
-		return this.collisions.resolveUniqueCollision(command);
+		return this.prisma.$transaction(async function _ResolveCommittedCollision(transaction)
+		{
+			return new PrismaMemoryCatalogCollisionRepository(transaction).resolveUniqueCollision(command);
+		}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	}
 }
 

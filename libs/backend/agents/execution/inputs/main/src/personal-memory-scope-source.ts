@@ -16,15 +16,15 @@ const _MAX_QUERY_CHARACTERS = 2_000;
 export class PersonalMemoryScopeSource implements MemoryScopeSource
 {
 	/** Product-database authority for exact personal dataset selection. */
-	private readonly personalMemory: PersonalMemoryAdmissionRepository;
+	private readonly createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository;
 
 	/** Gateway-backed admission-time fact selector; it returns references and digests, never fact text. */
 	private readonly selector: PersonalMemoryFactSelector;
 
 	/** Creates the source over the injected personal-memory dataset authority and fact selector. */
-	constructor(personalMemory: PersonalMemoryAdmissionRepository, selector: PersonalMemoryFactSelector)
+	constructor(createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository, selector: PersonalMemoryFactSelector)
 	{
-		this.personalMemory = personalMemory;
+		this.createPersonalMemory = createPersonalMemory;
 		this.selector = selector;
 	}
 
@@ -36,7 +36,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 		if (identity.kind !== RunInputSnapshotIdentityKinds.User) return { outcome: "denied", reason: "memory_scope_unavailable" };
 
 		// 2. Resolve the sole personal dataset from identity already verified at the admission fence.
-		const resolved = await __ResolvePersonalMemoryDataset(this.personalMemory, transaction, { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });
+		const resolved = await __ResolvePersonalMemoryDataset(this.createPersonalMemory(transaction), { siloId: command.siloId, organizationId: identity.organizationId, subjectId: identity.executionSubjectId });
 		if (resolved.outcome === PersonalMemoryDatasetResolutionOutcomes.Denied) return resolved;
 
 		// 3. Derive the recall query from the newest user turn frozen in the same transaction; a run

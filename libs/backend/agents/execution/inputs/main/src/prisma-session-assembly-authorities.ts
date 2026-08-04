@@ -1,4 +1,4 @@
-import type { RunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
+import type { RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import type { PersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
 
 import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
@@ -24,9 +24,9 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
  * caller-provided dataset or fact reference. Only the `agentKind: personal` path may receive this
  * composition — the personal scope source refuses managed runs by construction.
  */
-export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, personalMemory: PersonalMemoryAdmissionRepository, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
+export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
 {
-	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new PersonalMemoryScopeSource(personalMemory, memoryFactSelector));
+	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new PersonalMemoryScopeSource(createPersonalMemory, memoryFactSelector));
 }
 
 /** Assemble the shared Prisma-backed source set around one variant-selected memory scope authority. */

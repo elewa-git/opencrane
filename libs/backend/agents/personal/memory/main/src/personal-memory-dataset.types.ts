@@ -18,20 +18,13 @@ export interface PersonalMemoryDataset
 	readonly cogneeDatasetId: string;
 }
 
-/** Read-only transaction context supplied by the existing run-admission unit of work. */
-export interface PersonalMemoryAdmissionUnitOfWork
-{
-	/** Opaque transaction capability that keeps personal-memory reads at the final admission fence. */
-	readonly prisma: unknown;
-}
-
 /** Persistence boundary for verified personal dataset and preference-fact selection. */
 export interface PersonalMemoryAdmissionRepository
 {
 	/** Finds the active personal dataset for the exact silo, organization, and subject, or none. */
-	findActivePersonalDataset(unitOfWork: PersonalMemoryAdmissionUnitOfWork, command: ResolvePersonalMemoryDatasetCommand): Promise<PersonalMemoryDataset | null>;
+	findActivePersonalDataset(command: ResolvePersonalMemoryDatasetCommand): Promise<PersonalMemoryDataset | null>;
 	/** Selects consented explicit preference facts for the exact verified personal identity. */
-	findActivePreferenceFactIds(unitOfWork: PersonalMemoryAdmissionUnitOfWork, command: ResolvePersonalMemoryDatasetCommand): Promise<readonly string[]>;
+	findActivePreferenceFactIds(command: ResolvePersonalMemoryDatasetCommand): Promise<readonly string[]>;
 }
 
 /** Stable result vocabulary for identity-bound personal dataset selection. */

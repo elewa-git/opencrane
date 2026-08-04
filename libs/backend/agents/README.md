@@ -21,8 +21,8 @@ agent principles rather than becoming personal-only by proximity.
 
 | Package | What it owns |
 | --- | --- |
-| [`personal/configuration`](./personal/configuration/main/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
-| [`personal/memory`](./personal/memory/main/README.md) | Personal specialization: verified dataset and preference-fact selection. |
+| [`personal/configuration`](./personal/configuration/README.md) | Personal specialization: future-snapshot configuration-change provenance. |
+| [`personal/memory`](./personal/memory/README.md) | Personal specialization: verified dataset and preference-fact selection. |
 | [`personal/personas`](./personal/personas/README.md) | Personal specialization: persona approval process. |
 | [`memory`](./memory/main/README.md) | Shared: durable fact metadata and outbox intent, not fact content. |
 | [`execution/inputs`](./execution/inputs/main/README.md) | Shared: immutable run-input assembly. |

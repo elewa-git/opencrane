@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import { MemoryCatalogAtomicStatuses, type AtomicRecordMemoryFactResult, type MemoryCatalogCollisionRepository, type RecordMemoryFactCommand } from "./memory-catalog.types.js";
 import { __MatchesExistingMemoryDelivery } from "./prisma-memory-catalog-repository.js";
@@ -7,10 +7,10 @@ import { __MatchesExistingMemoryDelivery } from "./prisma-memory-catalog-reposit
 export class PrismaMemoryCatalogCollisionRepository implements MemoryCatalogCollisionRepository
 {
 	/** Canonical product database used only after the failed transaction is no longer active. */
-	private readonly prisma: PrismaClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/** Creates the post-rollback collision repository over committed catalog state. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}
