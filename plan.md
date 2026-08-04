@@ -121,9 +121,16 @@ an owner may decide only their own pending tool approval or queue bounded text o
 run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
 the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
-state (no server-side checkpoint model). The MCP, memory, and sandbox execution transports are ports
-with fail-closed stubs wired only in the composition root. The offline conformance harness and
-fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
+state (no server-side checkpoint model). The MCP, memory, and sandbox execution ports remain
+fail-closed in the production composition root. The authenticated private memory-gateway workload
+and read-only HTTP client are built as transport foundations, but runtime recall is not wired:
+`AgentRuntimeProtocol v1` has no attempt-fenced ephemeral tool-result channel, and persisted
+`ToolInvocation` receipts must not duplicate Cognee fact content. Record, correction, forgetting,
+and scoped injection also remain fail-closed pending a recoverable gateway write lifecycle.
+
+**MEMORY TRANSPORT FOUNDATION BUILT; RUNTIME RECALL BLOCKED**
+
+The offline conformance harness and fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
 evidence remain gated on [#337](https://github.com/elewa-git/opencrane/issues/337). The remaining
 E1/E2 product capabilities below are also incomplete.
@@ -155,10 +162,13 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the Obot MCP-invocation port (allow-list enforced) and
-memory-gateway scoped read/write with mandatory provenance, and the attach-authority + runtime
+plane), execution authority via the Obot MCP-invocation port (allow-list enforced), the scoped-memory
+contract freezes the gateway-native dataset selected by admitted authority while the authenticated
+read transport is built but not connected to runtime execution pending attempt-fenced ephemeral
+result delivery, and the attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested). NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
+tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
+recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
 live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337). The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 

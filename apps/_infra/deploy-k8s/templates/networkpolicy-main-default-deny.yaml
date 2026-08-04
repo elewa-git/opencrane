@@ -41,7 +41,7 @@ spec:
     matchExpressions:
       - key: app.kubernetes.io/component
         operator: NotIn
-        values: [artifact-service, agent-controller, agent-runtime]
+        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]
       - key: cnpg.io/poolerName
         operator: DoesNotExist
   policyTypes:

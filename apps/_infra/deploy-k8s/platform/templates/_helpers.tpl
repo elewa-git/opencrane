@@ -217,6 +217,12 @@ instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.
 {{- end -}}
 {{- end }}
 
+{{/* Release-local Cognee endpoint the private memory gateway should call. */}}
+{{- define "opencrane.cogneeEndpoint" -}}
+{{- $c := .Values.clustertenantManager.cognee | default dict -}}
+{{- printf "http://%s-cognee.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace $c.service.port -}}
+{{- end }}
+
 {{/*
 Name of the Secret holding Obot's PostgreSQL DSN (key `dsn`).
 instance → release-prefixed `<fullname>-obot` (per-instance, collision-free; B5).

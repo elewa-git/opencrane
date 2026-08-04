@@ -12,7 +12,7 @@ export interface MemoryQueryCommand
 {
 	/** Silo that owns the memory scope. */
 	readonly siloId: string;
-	/** Gateway-native personal dataset identifier frozen in the admitted run snapshot. */
+	/** Cognee dataset UUID frozen in the admitted run snapshot. */
 	readonly cogneeDatasetId: string;
 	/** Subject whose personal memory is being queried. */
 	readonly subjectId: string;
@@ -36,7 +36,7 @@ export interface PersonalMemoryRecordCommand
 	readonly siloId: string;
 	/** Authenticated subject whose personal memory may receive this fact. */
 	readonly subjectId: string;
-	/** Gateway-native dataset identifier; OpenCrane's catalog id never crosses this boundary. */
+	/** Cognee dataset UUID; OpenCrane's catalog id never crosses this boundary. */
 	readonly cogneeDatasetId: string;
 	/** Exact durable fact content, sent only to the remote memory gateway. */
 	readonly content: string;
@@ -119,12 +119,8 @@ export interface ScopedMemoryRecallCommand
 {
 	/** Silo that owns the scope. */
 	readonly siloId: string;
-	/** Canonical containment scope being recalled from. */
-	readonly scope: string;
-	/** Canonical principal type of the scope target. */
-	readonly subjectType: string;
-	/** Identifier of the scope target within the silo. */
-	readonly subjectId: string;
+	/** Cognee dataset UUID frozen by the caller's admitted scope authority. */
+	readonly cogneeDatasetId: string;
 	/** Free-text recall query. */
 	readonly query: string;
 	/** Upper bound on the number of facts to return. */
@@ -150,12 +146,8 @@ export interface ScopedMemoryInjectionCommand
 {
 	/** Silo that owns the scope. */
 	readonly siloId: string;
-	/** Canonical containment scope being written to. */
-	readonly scope: string;
-	/** Canonical principal type of the scope target. */
-	readonly subjectType: string;
-	/** Identifier of the scope target within the silo. */
-	readonly subjectId: string;
+	/** Cognee dataset UUID frozen by the caller's admitted scope authority. */
+	readonly cogneeDatasetId: string;
 	/** Record content to store. */
 	readonly content: string;
 	/** Mandatory provenance stamped on the injected record. */

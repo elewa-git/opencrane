@@ -3,4 +3,3 @@ export type { ObotCustodyCredential, ObotCustodyPort, ProvisionObotCustodyComman
 export { __AssertToolAllowed, ObotMcpInvocationUnavailableError, ObotMcpToolNotAllowedError } from "./obot-mcp-invocation.js";
 export type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand, ObotMcpToolResult } from "./obot-mcp-invocation.types.js";
 export { __UnavailableObotMcpInvocationAdapter } from "./unavailable-obot-mcp-invocation.js";
-export { __FakeObotMcpInvocationAdapter } from "./fake-obot-mcp-invocation.js";

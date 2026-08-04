@@ -18,7 +18,8 @@ organisation ingress
         +-> channel-proxy
         +-> opencrane server ---- PostgreSQL
                   |
-                  +---- Cognee · LiteLLM · Obot
+                  +---- memory-gateway ---- Cognee (sealed foundation)
+                  +---- LiteLLM · Obot
                   |
                   +---- agent-controller
                              |
@@ -40,6 +41,7 @@ Cluster-wide ingress, certificate, DNS, and CloudNativePG controllers are extern
 | OpenCrane API | `apps/opencrane` | PostgreSQL product records |
 | Web client | `apps/opencrane-ui` | none; authenticated API client |
 | Channel edge | `apps/channel-proxy` | none; admitted context only |
+| Memory gateway | `apps/memory-gateway` | none; authenticated read-only Cognee boundary |
 | Runtime controller | `apps/agent-controller` | database-fenced assignment claims |
 | Personal run Job | `apps/agent-runtime` | none; one attempt |
 | Managed run Job | `apps/managed-agent-runtime` | none; one scheduled or triggered attempt |
@@ -73,6 +75,12 @@ outward; they expose no public listener.
 NetworkPolicy permits only the named service path required by each workload class. Network reach is
 not authorization: every sensitive server route also verifies workload identity and current durable
 assignment.
+
+The release deploys `memory-gateway` as the only NetworkPolicy-admitted path to private Cognee. Its
+search-only route is ready to verify an audience-bound server ServiceAccount token with TokenReview,
+but the server does not receive or use that token yet. Runtime recall remains fail-closed until an
+attempt-fenced ephemeral result channel exists; memory writes also remain fail-closed until a
+recoverable write authority exists.
 
 ## Storage
 

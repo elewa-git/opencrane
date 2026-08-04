@@ -11,6 +11,9 @@ dependencies:
 - name: opencrane-channel-proxy
   repository: file://../../channel-proxy/helm
   version: 0.1.0
+- name: opencrane-memory-gateway
+  repository: file://../../memory-gateway/helm
+  version: 0.1.0
 - name: opencrane-artifact-service
   repository: file://../../artifact-service/helm
   version: 0.1.0
@@ -38,5 +41,5 @@ dependencies:
 - name: opencrane-obot
   repository: file://../obot/helm
   version: 0.1.0
-digest: sha256:916d6c4833b4d140a42309f132e0f0c2228e5d923aff32ba4a0c892e404303e0
-generated: "2026-07-29T14:32:19.105118+03:00"
+digest: sha256:2506751f3c23273fef126076c113d9daabe8d12108d5b02efc56ee3ec4ad55dc
+generated: "2026-08-03T10:26:57.139312+03:00"

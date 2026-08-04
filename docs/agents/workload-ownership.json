@@ -5,6 +5,7 @@
     "opencrane-server",
     "opencrane-ui",
     "channel-proxy",
+    "memory-gateway",
     "artifact-service",
     "artifact-preprocessor",
     "agent-controller",
@@ -22,11 +23,17 @@
   "renderProfiles": [
     {
       "id": "default",
-      "setValues": [],
+      "setValues": [
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443"
+      ],
       "expectedRenderedPodClasses": [
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-cognee",
         "Deployment/opencrane-litellm",
@@ -37,6 +44,10 @@
       "id": "all-supported-pod-profiles",
       "setValues": [
         "channelProxy.enabled=true",
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443",
         "artifactPreprocessor.enabled=true",
         "artifactPreprocessor.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
         "agentController.enabled=true",
@@ -50,6 +61,7 @@
         "Deployment/opencrane-opencrane-server",
         "Deployment/opencrane-opencrane-ui-spa",
         "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
         "Deployment/opencrane-artifact-service",
         "Deployment/opencrane-artifact-preprocessor",
         "Deployment/opencrane-agent-controller",
@@ -97,6 +109,7 @@
         "opencrane-server",
         "opencrane-ui",
         "channel-proxy",
+        "memory-gateway",
         "artifact-service",
         "artifact-preprocessor",
         "agent-controller",
@@ -163,6 +176,16 @@
       "localOwner": true,
       "source": { "type": "file", "path": "apps/channel-proxy/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.channelProxy.resources\"" }
+    },
+    {
+      "id": "memory-gateway",
+      "podClass": "Deployment/memory-gateway",
+      "renderedPodClass": "Deployment/opencrane-memory-gateway",
+      "image": "ghcr.io/elewa-git/opencrane-memory-gateway:<release-tag>",
+      "owner": "apps/memory-gateway",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/memory-gateway/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.memoryGateway.resources\"" }
     },
     {
       "id": "artifact-service",

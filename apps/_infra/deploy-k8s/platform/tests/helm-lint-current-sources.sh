@@ -8,4 +8,6 @@ prepare_current_chart_sources
 trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
 
-helm lint "$CHART_DIR"
+helm lint "$CHART_DIR" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32'

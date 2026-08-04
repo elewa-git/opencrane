@@ -41,6 +41,8 @@ render_enabled() {
     --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
     --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
     --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+    --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+    --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     --set agentController.kubernetesApiServerEndpointPort=6443 \
     "$@"
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer.js";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateMemoryGatewayServerTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces } from "../projected-token-reviewer.js";
 
 /** Build a TokenReview API stub with one controlled Kubernetes response. */
 function _ReviewApi(status: object)
@@ -44,6 +44,14 @@ describe("projected Kubernetes workload identity", function _describeProjectedId
 		const username = `system:serviceaccount:preprocess-ns:${ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME}`;
 		const reviewer = _CreateArtifactPreprocessorTokenReviewer(_ReviewApi(_ValidStatus(ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE, username)) as never, "preprocess-ns");
 		await expect(reviewer.__Review("token")).resolves.toEqual({ username, namespace: "preprocess-ns", serviceAccountName: ARTIFACT_PREPROCESSOR_SERVICE_ACCOUNT_NAME, audiences: [ARTIFACT_PREPROCESSOR_PROJECTED_TOKEN_AUDIENCE] });
+	});
+
+	it("binds memory-gateway to its deployment-fixed server identity", async function _reviewsMemoryGatewayServer()
+	{
+		const username = "system:serviceaccount:server-ns:opencrane-server";
+		const api = _ReviewApi(_ValidStatus("opencrane-memory-gateway", username));
+		const reviewer = _CreateMemoryGatewayServerTokenReviewer(api as never, { audience: "opencrane-memory-gateway", namespace: "server-ns", serviceAccountName: "opencrane-server" });
+		await expect(reviewer.__Review("token")).resolves.toEqual({ username, namespace: "server-ns", serviceAccountName: "opencrane-server", audiences: ["opencrane-memory-gateway"] });
 	});
 
 	it("parses a skill worker only with a bound Pod UID and server-selected audience", async function _reviewsSkillWorker()

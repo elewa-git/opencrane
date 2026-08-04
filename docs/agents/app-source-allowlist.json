@@ -55,6 +55,14 @@
     { "path": "apps/channel-proxy/src/log.ts", "owner": "apps/channel-proxy", "classification": "process-logging" },
     { "path": "apps/channel-proxy/src/server.ts", "owner": "apps/channel-proxy", "classification": "route-composition" },
 
+    { "path": "apps/memory-gateway/src/config.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
+    { "path": "apps/memory-gateway/src/config.types.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
+    { "path": "apps/memory-gateway/src/index.ts", "owner": "apps/memory-gateway", "classification": "process-entrypoint" },
+    { "path": "apps/memory-gateway/src/instrument.ts", "owner": "apps/memory-gateway", "classification": "process-instrumentation" },
+    { "path": "apps/memory-gateway/src/log.ts", "owner": "apps/memory-gateway", "classification": "process-logging" },
+    { "path": "apps/memory-gateway/src/server.ts", "owner": "apps/memory-gateway", "classification": "route-composition" },
+    { "path": "apps/memory-gateway/vitest.config.ts", "owner": "apps/memory-gateway", "classification": "test-config" },
+
     { "path": "apps/artifact-service/src/config.ts", "owner": "apps/artifact-service", "classification": "app-config" },
     { "path": "apps/artifact-service/src/config.types.ts", "owner": "apps/artifact-service", "classification": "app-config" },
     { "path": "apps/artifact-service/src/index.ts", "owner": "apps/artifact-service", "classification": "process-entrypoint" },
@@ -98,6 +106,7 @@
     "apps/_infra/litellm/project.json",
     "apps/_infra/obot/project.json",
     "apps/channel-proxy/project.json",
+    "apps/memory-gateway/project.json",
     "apps/artifact-service/project.json",
     "apps/artifact-preprocessor/project.json",
     "apps/agent-controller/project.json",

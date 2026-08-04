@@ -15,7 +15,7 @@ remaining grouped with the server code that composes them.
 | [`agent-runtime-stream`](./agent-runtime-stream/README.md) | Projected-token runtime HTTP/SSE framing. |
 | [`workload-identity`](./workload-identity/README.md) | Kubernetes TokenReview and bounded workload identities. |
 | [`http`](./http/README.md) | Express transport plumbing. |
-| [`memory-gateway-client`](./memory-gateway-client/README.md) | Fail-closed memory-gateway port. |
+| [`memory-gateway-client`](./memory-gateway-client/README.md) | Authenticated memory reads with fail-closed writes. |
 | [`obot-custody`](./obot-custody/README.md) | Fail-closed Obot custody and MCP invocation ports. |
 | [`sandbox-execution`](./sandbox-execution/README.md) | Fail-closed sandboxed tool-execution port. |
 

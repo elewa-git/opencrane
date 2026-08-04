@@ -81,6 +81,17 @@ export interface FixedServiceAccountTokenReviewer
 	__Review(token: string): Promise<ReviewedFixedServiceAccountIdentity | null>;
 }
 
+/** Deployment-fixed coordinates accepted at the private memory-gateway boundary. */
+export interface MemoryGatewayServerIdentityConfig
+{
+	/** Audience requested by the memory-gateway TokenReview. */
+	readonly audience: string;
+	/** Namespace containing the trusted OpenCrane server. */
+	readonly namespace: string;
+	/** Exact OpenCrane server ServiceAccount name. */
+	readonly serviceAccountName: string;
+}
+
 /** Reviewer seam for an authoring worker selected later by durable bootstrap authority. */
 export interface SkillWorkloadTokenReviewer
 {
