@@ -5,7 +5,7 @@ import type { PersonaDraftTemplateSelection, PersonaDraftTemplateSelectorReposit
 /** Prisma read adapter that deterministically selects reviewed SOUL source evidence without raw SQL. */
 export class PrismaPersonaDraftTemplateSelector implements PersonaDraftTemplateSelectorRepository
 {
-	/** Select the matching template using priority desc, then template id asc, version desc, and rule id asc. */
+	/** Select the highest-priority match while preserving Prisma's template id/version ordering for ties. */
 	async select(client: PrismaClient | Prisma.TransactionClient, interviewId: string): Promise<PersonaDraftTemplateSelection | null>
 	{
 		const [templates, answers] = await Promise.all([
@@ -13,8 +13,10 @@ export class PrismaPersonaDraftTemplateSelector implements PersonaDraftTemplateS
 			client.personaInterviewAnswer.findMany({ where: { interviewId }, select: { id: true, questionId: true, value: true }, orderBy: { id: "asc" } }),
 		]);
 		const answersByQuestion = new Map(answers.map(function _toAnswerEntry(answer) { return [answer.questionId, answer]; }));
-		const candidates: PersonaDraftTemplateCandidate[] = [];
+		let selected: PersonaDraftTemplateCandidate | null = null;
 
+		// Prisma owns the template-id/version ordering. The database rejects duplicate priorities within
+		// one template, so replacing only on a strictly higher priority preserves every reachable SQL tie.
 		for (const template of templates)
 		{
 			const rules = _SelectionRules(template.selectionRules);
@@ -23,13 +25,14 @@ export class PrismaPersonaDraftTemplateSelector implements PersonaDraftTemplateS
 			{
 				const matchedAnswers = _MatchedAnswers(rule.answers, answersByQuestion);
 				if (matchedAnswers === null) continue;
-				candidates.push({ templateId: template.id, templateVersion: template.version, templateDigest: template.digest, content: template.content, selectionRuleId: rule.id, selectionAnswerIds: matchedAnswers.map(function _toId(answer) { return answer.id; }).sort(), priority: rule.priority });
+				if (selected === null || rule.priority > selected.priority)
+				{
+					selected = { templateId: template.id, templateVersion: template.version, templateDigest: template.digest, content: template.content, selectionRuleId: rule.id, selectionAnswerIds: matchedAnswers.map(function _toId(answer) { return answer.id; }).sort(), priority: rule.priority };
+				}
 			}
 		}
 
-		candidates.sort(_CompareSelections);
-		const selected = candidates[0];
-		if (selected === undefined) return null;
+		if (selected === null) return null;
 		const { priority: _priority, ...selection } = selected;
 		return selection;
 	}
@@ -90,16 +93,4 @@ function _MatchedAnswers(ruleAnswers: Readonly<Record<string, string>>, answers:
 {
 	const matched = Object.entries(ruleAnswers).map(function _matchingAnswer(entry) { const answer = answers.get(entry[0]); return answer?.value === entry[1] ? answer : null; });
 	return matched.every(function _isMatched(answer) { return answer !== null; }) ? matched as readonly { readonly id: string; readonly value: string }[] : null;
-}
-
-/** Preserve the reviewed SQL ordering for matching template candidates. */
-function _CompareSelections(left: PersonaDraftTemplateCandidate, right: PersonaDraftTemplateCandidate): number
-{
-	return right.priority - left.priority || _CompareCodePoints(left.templateId, right.templateId) || right.templateVersion - left.templateVersion || _CompareCodePoints(left.selectionRuleId, right.selectionRuleId);
-}
-
-/** Order identifiers by code point, not locale, so the tie breakers match the trigger's collation-independent ASCII ordering. */
-function _CompareCodePoints(left: string, right: string): number
-{
-	return left < right ? -1 : left > right ? 1 : 0;
 }

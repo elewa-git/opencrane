@@ -24,56 +24,6 @@ export interface PersonaDraftCompletedInterview
 	readonly answers: readonly PersonaDraftInterviewAnswer[];
 }
 
-/** Immutable reviewed template source loaded through Prisma before deterministic selection. */
-export interface PersonaDraftTemplateSource
-{
-	/** Reviewed template identifier. */
-	readonly id: string;
-	/** Reviewed template version. */
-	readonly version: number;
-	/** Immutable digest of the reviewed template content. */
-	readonly digest: string;
-	/** Reviewed SOUL instructions used as the draft base. */
-	readonly content: string;
-	/** Database-validated rule JSON that must still be parsed fail-closed at the adapter edge. */
-	readonly selectionRules: unknown;
-}
-
-/** Parsed exact-answer rule owned by one reviewed template source. */
-export interface PersonaDraftTemplateSelectionRule
-{
-	/** Stable rule identifier persisted with the selected draft. */
-	readonly id: string;
-	/** Higher values win before the database-supplied template and version ordering. */
-	readonly priority: number;
-	/** Exact required owner answers keyed by reviewed question identifier. */
-	readonly answers: Readonly<Record<string, string>>;
-}
-
-/** Deterministic reviewed SOUL template selected from one completed interview. */
-export interface PersonaDraftSelectedTemplate
-{
-	/** Reviewed template identifier. */
-	readonly templateId: string;
-	/** Reviewed template version. */
-	readonly templateVersion: number;
-	/** Immutable digest of the reviewed template content. */
-	readonly templateDigest: string;
-	/** Reviewed SOUL instructions used as the draft base. */
-	readonly content: string;
-	/** Exact selection rule that matched the frozen answers. */
-	readonly selectionRuleId: string;
-	/** Exact answer identifiers that satisfied the selection rule. */
-	readonly selectionAnswerIds: readonly string[];
-}
-
-/** Matching template rule decorated with its priority for deterministic comparison. */
-export interface PersonaDraftTemplateCandidate extends PersonaDraftSelectedTemplate
-{
-	/** Parsed rule priority used only while choosing the deterministic winner. */
-	readonly priority: number;
-}
-
 /** One server-derived insight with the complete persisted question provenance. */
 export interface PersonaDraftInsightEvidence<Category>
 {

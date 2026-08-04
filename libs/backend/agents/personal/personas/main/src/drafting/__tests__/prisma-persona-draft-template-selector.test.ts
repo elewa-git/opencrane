@@ -31,17 +31,16 @@ describe("PrismaPersonaDraftTemplateSelector", function _DescribePrismaPersonaDr
 		await expect(selector.select(client, "interview-1")).resolves.toEqual({ templateId: "supportive", templateVersion: 1, templateDigest: "sha256:supportive", content: "# Supportive", selectionRuleId: "supportive-rule", selectionAnswerIds: ["answer-challenge", "answer-role"] });
 	});
 
-	it("preserves priority and every stable tie breaker from the reviewed SQL ordering", async function _PreservesOrdering()
+	it("preserves Prisma's template ordering when equal-priority matches cross templates", async function _PreservesOrdering()
 	{
 		const selector = new PrismaPersonaDraftTemplateSelector();
 		const client = _Client([
-			{ id: "z-template", version: 1, digest: "sha256:z", content: "# Z", selectionRules: [_Rule("later", 10, { role: "partner" }), _Rule("earlier", 10, { role: "partner" })] },
-			{ id: "a-template", version: 1, digest: "sha256:a1", content: "# A1", selectionRules: [_Rule("rule", 10, { role: "partner" })] },
 			{ id: "a-template", version: 2, digest: "sha256:a2", content: "# A2", selectionRules: [_Rule("rule", 10, { role: "partner" })] },
-			{ id: "priority", version: 1, digest: "sha256:priority", content: "# Priority", selectionRules: [_Rule("rule", 11, { role: "partner" })] },
+			{ id: "a-template", version: 1, digest: "sha256:a1", content: "# A1", selectionRules: [_Rule("rule", 10, { role: "partner" })] },
+			{ id: "z-template", version: 1, digest: "sha256:z", content: "# Z", selectionRules: [_Rule("rule", 10, { role: "partner" })] },
 		], [{ id: "answer-role", questionId: "role", value: "partner" }]);
 
-		await expect(selector.select(client, "interview-1")).resolves.toMatchObject({ templateId: "priority", templateVersion: 1 });
+		await expect(selector.select(client, "interview-1")).resolves.toMatchObject({ templateId: "a-template", templateVersion: 2 });
 	});
 
 	it("fails closed when a reviewed template contains malformed selection JSON", async function _RejectsMalformedRules()

@@ -9,8 +9,8 @@ import type { PersonaPersistenceUnitOfWork } from "../profile/persona-persistenc
 
 import { PersonaDraftDenialReasons, type CreatePersonaDraftCommand, type CreatePersonaDraftPersistenceResult, type PersonaDraftFromInterviewRepository } from "./persona-draft-authority.types.js";
 import { _CompilePersonaDraftInstructions } from "./persona-draft-instruction-compiler.js";
-import type { PersonaDraftCompletedInterview, PersonaDraftInsightEvidence, PersonaDraftSelectedTemplate } from "./persona-draft-persistence.types.js";
-import type { PersonaDraftTemplateSelectorRepository } from "./persona-draft-template-selector.types.js";
+import type { PersonaDraftCompletedInterview, PersonaDraftInsightEvidence } from "./persona-draft-persistence.types.js";
+import type { PersonaDraftTemplateSelection, PersonaDraftTemplateSelectorRepository } from "./persona-draft-template-selector.types.js";
 
 /** Prisma authority that creates a draft from one completed owner interview snapshot. */
 export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRepository
@@ -105,7 +105,7 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 	}
 
 	/** Allocate and write one draft revision plus its immutable insight evidence. */
-	private async _persistDraft(transaction: Prisma.TransactionClient, command: CreatePersonaDraftCommand, profile: PersonaProfileRecord, template: PersonaDraftSelectedTemplate, insights: readonly PersonaDraftInsightEvidence<Prisma.PersonaInsightCreateManyInput["category"]>[]): Promise<CreatePersonaDraftPersistenceResult>
+	private async _persistDraft(transaction: Prisma.TransactionClient, command: CreatePersonaDraftCommand, profile: PersonaProfileRecord, template: PersonaDraftTemplateSelection, insights: readonly PersonaDraftInsightEvidence<Prisma.PersonaInsightCreateManyInput["category"]>[]): Promise<CreatePersonaDraftPersistenceResult>
 	{
 		const revisionNumber = await this.reads.readNextRevision(transaction, command.personaProfileId);
 		const revision = await transaction.personaRevision.create({ data: _revisionData(command, profile.activeRevisionId, template, insights, revisionNumber), select: { id: true } });
@@ -115,7 +115,7 @@ export class PrismaPersonaDraftRepository implements PersonaDraftFromInterviewRe
 }
 
 /** Build the Prisma revision input from validated serializable-snapshot evidence. */
-function _revisionData(command: CreatePersonaDraftCommand, previousRevisionId: string | null, template: PersonaDraftSelectedTemplate, insights: readonly PersonaDraftInsightEvidence<Prisma.PersonaInsightCreateManyInput["category"]>[], revision: number): Prisma.PersonaRevisionUncheckedCreateInput
+function _revisionData(command: CreatePersonaDraftCommand, previousRevisionId: string | null, template: PersonaDraftTemplateSelection, insights: readonly PersonaDraftInsightEvidence<Prisma.PersonaInsightCreateManyInput["category"]>[], revision: number): Prisma.PersonaRevisionUncheckedCreateInput
 {
 	return { personaProfileId: command.personaProfileId, revision, soulTemplateId: template.templateId, soulTemplateVersion: template.templateVersion, soulTemplateDigest: template.templateDigest, interviewId: command.interviewId, selectionRuleId: template.selectionRuleId, selectionAnswerIds: [...template.selectionAnswerIds], compiledInstructions: _CompilePersonaDraftInstructions(template.content, insights), previousRevisionId, authoredBy: command.userId, createdAt: new Date(command.authoredAt) };
 }
