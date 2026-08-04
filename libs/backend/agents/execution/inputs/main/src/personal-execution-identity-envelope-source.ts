@@ -1,7 +1,7 @@
+import type { Prisma } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
-import { __VerifyCurrentFleetMembershipEvidence, PrismaFleetMembershipAuthorityRepository } from "@opencrane/backend/server/iam/membership";
-import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
+import { __VerifyCurrentFleetMembershipEvidence, FleetMembershipEvidenceOutcomes, PrismaFleetMembershipAuthorityRepository, type FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 import type { JsonValue } from "@opencrane/util";
@@ -35,6 +35,7 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 	/** Verifies one unambiguous personal assertion and freezes signer-produced identity evidence. */
 	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<IdentityEnvelopeInput>>
 	{
+		const prisma = transaction.prisma as Prisma.TransactionClient;
 		// 1. Reject a managed service before any personal membership or dataset coordinate can be read.
 		if (command.identityKind !== "user" || run.agentKind !== AgentServiceKinds.Personal || run.delegatedUserId !== command.executionSubjectId)
 		{
@@ -42,12 +43,12 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 		}
 
 		// 2. Select exactly one current signed personal scope; ambiguous entitlement is never guessed.
-		const identityAuthority = new PrismaPersonalExecutionIdentityAuthorityRepository(transaction.prisma);
+		const identityAuthority = new PrismaPersonalExecutionIdentityAuthorityRepository(prisma);
 		const assertion = await identityAuthority.loadLatestPersonalAssertion(this.config.trustedIssuerId, command.siloId, command.executionSubjectId);
 		if (assertion === null) return { outcome: "denied", reason: "membership_stale" };
 
 		// 3. Verify signature, scope, freshness, and monotonic high-watermark through this same transaction.
-		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(transaction.prisma), this.config.verifier, {
+		const membership = await __VerifyCurrentFleetMembershipEvidence(new PrismaFleetMembershipAuthorityRepository(prisma), this.config.verifier, {
 			trustedIssuerId: this.config.trustedIssuerId,
 			siloId: command.siloId,
 			subjectId: command.executionSubjectId,
@@ -56,7 +57,7 @@ export class PersonalExecutionIdentityEnvelopeSource implements IdentityEnvelope
 			nowEpochMs: transaction.admittedAtEpochMs,
 			maximumStalenessMs: this.config.maximumStalenessMs,
 		});
-		if (membership.outcome === "denied")
+		if (membership.outcome === FleetMembershipEvidenceOutcomes.Denied)
 		{
 			return { outcome: "denied", reason: "membership_stale" };
 		}

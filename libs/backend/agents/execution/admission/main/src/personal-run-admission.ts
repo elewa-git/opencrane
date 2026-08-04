@@ -1,3 +1,6 @@
+import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes } from "@opencrane/backend/agents/execution/inputs";
+import { RunAdmissionConcurrencyOutcomes } from "@opencrane/backend/agents/execution/runs";
+
 import type { PersonalRunAdmissionDependencies, PersonalRunAdmissionPort, PersonalRunAdmissionResult } from "./personal-run-admission.types.js";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
 
@@ -47,7 +50,7 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 					return authority === null ? { outcome: _PersonalRunPreflightOutcomes.ThreadUnavailable } : { outcome: _PersonalRunPreflightOutcomes.Resolved, agentServiceId: authority.agentServiceId };
 				},
 			);
-			if (preflight.outcome === "rejected") return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: preflight.reason };
+			if (preflight.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: preflight.reason };
 			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.Idempotent) return { outcome: PersonalRunAdmissionOutcomes.Idempotent, runId: preflight.value.runId };
 			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.Conflict) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.AuthorityConflict };
 			if (preflight.value.outcome === _PersonalRunPreflightOutcomes.ThreadUnavailable) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: PersonalRunAdmissionDenialReasons.ThreadUnavailable };
@@ -62,10 +65,10 @@ export function __CreatePersonalRunAdmissionPortWithGate(dependencies: PersonalR
 					return dependencies.assemble(command, { agentServiceId });
 				},
 			);
-			if (bounded.outcome === "rejected") return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
-			if (bounded.value.outcome === "denied") return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.value.reason };
+			if (bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.reason };
+			if (bounded.value.outcome === SessionAssemblyOutcomes.Denied) return { outcome: PersonalRunAdmissionOutcomes.Denied, reason: bounded.value.reason };
 			return {
-				outcome: bounded.value.admissionOutcome === "accepted" ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent,
+				outcome: bounded.value.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? PersonalRunAdmissionOutcomes.Accepted : PersonalRunAdmissionOutcomes.Idempotent,
 				runId: bounded.value.snapshot.runId,
 			};
 		},

@@ -30,6 +30,16 @@ export interface PersonalRunAdmissionRepository
 	resolveThread(command: PersonalRunAdmissionCommand): Promise<PersonalRunThreadAuthority | null>;
 }
 
+/** Transaction-scoped persistence reader constructed only inside the admission Unit of Work. */
+export interface PersonalRunAdmissionReadRepository extends PersonalRunAdmissionRepository
+{
+}
+
+/** Transaction owner for personal duplicate and participant-thread authority reads. */
+export interface PersonalRunAdmissionUnitOfWork extends PersonalRunAdmissionRepository
+{
+}
+
 /** Stable duplicate lookup outcomes before mutable thread eligibility is evaluated. */
 export enum PersonalRunIdempotencyOutcomes
 {

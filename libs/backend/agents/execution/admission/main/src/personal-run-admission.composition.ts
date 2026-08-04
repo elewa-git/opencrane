@@ -7,7 +7,7 @@ import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/executio
 import type { FleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 
 import { __CreatePersonalRunAdmissionPortWithGate } from "./personal-run-admission.js";
-import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository.js";
+import { PrismaPersonalRunAdmissionUnitOfWork } from "./prisma-personal-run-admission-unit-of-work.js";
 import type { PersonalRunAdmissionPort } from "./personal-run-admission.types.js";
 import type { RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
@@ -21,7 +21,7 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 {
 	const admission = new PrismaRunAdmissionRepository(prisma);
 	const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities(admission, new PersonalExecutionIdentityEnvelopeSource(identityEvidence), new PrismaSkillRevisionEligibilitySource());
-	const personalAdmissionRepository = new PrismaPersonalRunAdmissionRepository(prisma);
+	const personalAdmissionRepository = new PrismaPersonalRunAdmissionUnitOfWork(prisma);
 	return __CreatePersonalRunAdmissionPortWithGate({
 		repository: personalAdmissionRepository,
 		capacityGate,

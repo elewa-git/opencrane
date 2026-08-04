@@ -1,4 +1,5 @@
-import { RunAdmissionConcurrencyGate, type RunAdmissionCommand, type RunAdmissionConcurrencyPolicy, type RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
+import { RunInputSnapshotAdmissionOutcomes, SessionAssemblyOutcomes } from "@opencrane/backend/agents/execution/inputs";
+import { RunAdmissionConcurrencyGate, RunAdmissionConcurrencyOutcomes, type RunAdmissionCommand, type RunAdmissionConcurrencyPolicy, type RunAdmissionConcurrencyResult } from "@opencrane/backend/agents/execution/runs";
 import { ManagedRunAdmissionOutcomes, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
@@ -31,11 +32,11 @@ export function _CreateManagedRunAdmissionPortWithGate(assemble: ManagedSnapshot
 				async function _admitAfterCapacityGrant()
 				{
 					const result = await assemble(command);
-					if ("reason" in result) return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: result.reason } as const;
-					return { outcome: result.admissionOutcome === "accepted" ? ManagedRunAdmissionOutcomes.Accepted : ManagedRunAdmissionOutcomes.Idempotent, runId: result.snapshot.runId } as const;
+					if (result.outcome === SessionAssemblyOutcomes.Denied) return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: result.reason } as const;
+					return { outcome: result.admissionOutcome === RunInputSnapshotAdmissionOutcomes.Accepted ? ManagedRunAdmissionOutcomes.Accepted : ManagedRunAdmissionOutcomes.Idempotent, runId: result.snapshot.runId } as const;
 				},
 			);
-			return "reason" in bounded ? { outcome: ManagedRunAdmissionOutcomes.Denied, reason: bounded.reason } : bounded.value;
+			return bounded.outcome === RunAdmissionConcurrencyOutcomes.Rejected ? { outcome: ManagedRunAdmissionOutcomes.Denied, reason: bounded.reason } : bounded.value;
 		},
 	};
 }
@@ -75,8 +76,8 @@ class _HierarchicalRunAdmissionCapacityGate implements RunAdmissionCapacityGate
 				},
 			);
 		});
-		if ("reason" in global) return global;
-		if ("reason" in global.value) return global.value;
+		if (global.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return global;
+		if (global.value.outcome === RunAdmissionConcurrencyOutcomes.Rejected) return global.value;
 		return global.value.value;
 	}
 }

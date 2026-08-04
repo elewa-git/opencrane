@@ -9,12 +9,12 @@ import type { IdentityEnvelopeInput, PreferenceFactInput, PreferenceFactSource, 
 export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 {
 	/** Product-database authority for exact personal preference selection. */
-	private readonly personalMemory: PersonalMemoryAdmissionRepository;
+	private readonly createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository;
 
 	/** Creates the source over the injected personal-memory admission authority. */
-	constructor(personalMemory: PersonalMemoryAdmissionRepository)
+	constructor(createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository)
 	{
-		this.personalMemory = personalMemory;
+		this.createPersonalMemory = createPersonalMemory;
 	}
 
 	/** Loads no preference text; the run snapshot retains only catalog identifiers selected at admission. */
@@ -27,7 +27,7 @@ export class PersonalMemoryPreferenceFactSource implements PreferenceFactSource
 		}
 
 		// 2. Select only the verified subject's consented metadata through the caller-owned admission transaction.
-		const ids = await __SelectPersonalPreferenceFactIds(this.personalMemory, transaction, {
+		const ids = await __SelectPersonalPreferenceFactIds(this.createPersonalMemory(transaction), {
 			siloId: command.siloId,
 			organizationId: identity.organizationId,
 			subjectId: identity.executionSubjectId,

@@ -2,21 +2,10 @@ import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision 
 import { _CreateMountedPublicKeySource } from "@opencrane/server/_infra/auth";
 
 import { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier.js";
-import type { FleetMembershipSignatureVerifier } from "./membership-authority.types.js";
+import type { FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier } from "./membership-authority.types.js";
 
 /** Longest period a server may reuse its newest signed fleet-membership revision. */
 const _MAXIMUM_STALENESS_MILLISECONDS = 24 * 60 * 60 * 1_000;
-
-/** Mounted-key-backed fleet-membership trust values shared by every admission composition. */
-export interface FleetMembershipEvidenceConfig
-{
-	/** Only fleet issuer whose signed revisions can establish local membership. */
-	readonly trustedIssuerId: string;
-	/** Maximum permitted age of a signed revision at admission. */
-	readonly maximumStalenessMs: number;
-	/** Projected-key-backed verifier that proves an exact signed revision. */
-	readonly verifier: FleetMembershipSignatureVerifier;
-}
 
 /** Creates one reloadable mounted-key trust configuration without coupling it to an agent type. */
 export function _CreateFleetMembershipEvidenceConfig(environment: NodeJS.ProcessEnv = process.env): FleetMembershipEvidenceConfig

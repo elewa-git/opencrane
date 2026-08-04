@@ -14,5 +14,14 @@ export enum RunAdmissionConcurrencyDenialReasons
 	AdmissionConcurrencyLimited = "admission_concurrency_limited",
 }
 
+/** Stable capacity-gate outcomes shared by managed and personal admission control flow. */
+export enum RunAdmissionConcurrencyOutcomes
+{
+	/** The caller obtained capacity and its bounded work completed. */
+	Completed = "completed",
+	/** The caller was refused before persistence work began. */
+	Rejected = "rejected",
+}
+
 /** Outcome returned after a caller either receives a bounded admission slot or is rejected before persistence begins. */
 export type RunAdmissionConcurrencyResult<TResult> = { readonly outcome: "completed"; readonly value: TResult } | { readonly outcome: "rejected"; readonly reason: RunAdmissionConcurrencyDenialReasons.AdmissionConcurrencyLimited };

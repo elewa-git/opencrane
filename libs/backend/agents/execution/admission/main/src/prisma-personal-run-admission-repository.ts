@@ -1,21 +1,21 @@
-import { AgentServiceKind, ConversationThreadState, type PrismaClient } from "@prisma/client";
+import { AgentServiceKind, ConversationThreadState, type Prisma } from "@prisma/client";
 
 import { PersonalRunIdempotencyOutcomes } from "./personal-run-admission.types.js";
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionRepository, PersonalRunIdempotencyResult, PersonalRunThreadAuthority } from "./personal-run-admission.types.js";
+import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunIdempotencyResult, PersonalRunThreadAuthority } from "./personal-run-admission.types.js";
 
-/** Prisma repository for durable personal admission duplicate and participant-thread authority. */
-export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissionRepository
+/** Transaction-scoped Prisma reader for durable duplicate and participant-thread authority. */
+export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissionReadRepository
 {
-	/** OpenCrane product database client. */
-	private readonly prisma: PrismaClient;
+	/** Caller-owned serializable admission transaction. */
+	private readonly prisma: Prisma.TransactionClient;
 
-	/** Creates the repository over the server's app-owned Prisma client. */
-	constructor(prisma: PrismaClient)
+	/** Bind every read to the Unit of Work's exact transaction snapshot. */
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}
 
-	/** Returns a durable duplicate outcome before any current mutable thread eligibility is read. */
+	/** Resolve one durable duplicate from the caller-owned transaction. */
 	async resolve(command: PersonalRunAdmissionCommand): Promise<PersonalRunIdempotencyResult>
 	{
 		const existing = await this.prisma.agentRun.findUnique({
@@ -23,14 +23,11 @@ export class PrismaPersonalRunAdmissionRepository implements PersonalRunAdmissio
 			select: { id: true, threadId: true, delegatedUserId: true, trigger: true, inputSnapshot: { select: { id: true } } },
 		});
 		if (existing === null) return { outcome: PersonalRunIdempotencyOutcomes.NotFound };
-		if (existing.threadId !== command.threadId || existing.delegatedUserId !== command.executionSubjectId || existing.trigger !== "Interactive" || existing.inputSnapshot === null)
-		{
-			return { outcome: PersonalRunIdempotencyOutcomes.Conflict };
-		}
+		if (existing.threadId !== command.threadId || existing.delegatedUserId !== command.executionSubjectId || existing.trigger !== "Interactive" || existing.inputSnapshot === null) return { outcome: PersonalRunIdempotencyOutcomes.Conflict };
 		return { outcome: PersonalRunIdempotencyOutcomes.Idempotent, runId: existing.id };
 	}
 
-	/** Resolves only an active conversation whose participant and personal service match the caller's silo. */
+	/** Resolve one active participant-bound personal service from the caller-owned transaction. */
 	async resolveThread(command: PersonalRunAdmissionCommand): Promise<PersonalRunThreadAuthority | null>
 	{
 		const thread = await this.prisma.conversationThread.findFirst({

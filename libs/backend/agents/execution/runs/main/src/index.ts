@@ -7,7 +7,7 @@ export * from "./prisma-run-dispatch-repository.js";
 export * from "./prisma-runtime-terminal-reporter.js";
 export * from "./prisma-self-run-status.router.js";
 export * from "./run-admission-concurrency.js";
-export { RunAdmissionConcurrencyDenialReasons } from "./run-admission-concurrency.types.js";
+export { RunAdmissionConcurrencyDenialReasons, RunAdmissionConcurrencyOutcomes } from "./run-admission-concurrency.types.js";
 export type { RunAdmissionConcurrencyPolicy, RunAdmissionConcurrencyResult } from "./run-admission-concurrency.types.js";
 export * from "./run-admission.types.js";
 export * from "./run-dispatch.router.js";

@@ -55,6 +55,26 @@ export interface FleetMembershipSignatureVerifier
 	verify(revision: SignedFleetMembershipRevision): Promise<FleetSignatureVerificationEvidence>;
 }
 
+/** Mounted-key-backed fleet-membership trust values shared by every admission composition. */
+export interface FleetMembershipEvidenceConfig
+{
+	/** Only fleet issuer whose signed revisions can establish local membership. */
+	readonly trustedIssuerId: string;
+	/** Maximum permitted age of a signed revision at admission. */
+	readonly maximumStalenessMs: number;
+	/** Projected-key-backed verifier that proves an exact signed revision. */
+	readonly verifier: FleetMembershipSignatureVerifier;
+}
+
+/** Stable outcomes from verifying and accepting signed fleet-membership evidence. */
+export enum FleetMembershipEvidenceOutcomes
+{
+	/** The exact signed assertion is current and accepted for admission. */
+	Trusted = "trusted",
+	/** Membership evidence failed closed and grants no admission authority. */
+	Denied = "denied",
+}
+
 /** Complete signed membership evidence pinned by one transaction-fenced run admission. */
 export interface TrustedFleetMembershipEvidence
 {

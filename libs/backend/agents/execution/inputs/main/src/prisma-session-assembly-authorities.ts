@@ -33,13 +33,16 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 /**
  * Composes the personal-run variant with transaction-scoped memory readers and gateway recall.
  *
- * The dataset repository resolves the sole personal dataset from verified identity, and the
- * injected selector performs the admission-time gateway recall; the source itself never accepts a
- * caller-provided dataset or fact reference. Only the `agentKind: personal` path may receive this
- * composition — the personal scope source refuses managed runs by construction.
+ * The caller supplies the user identity and skill-eligibility authorities because their signed
+ * membership and grant policies remain owned elsewhere. This factory owns only the otherwise easy
+ * to miss link between personal session assembly and identity-bound memory selection: both the
+ * frozen Cognee dataset coordinate and content-free preference identifiers are read through
+ * adapters bound to the same admission transaction, while the injected selector freezes only
+ * gateway-authorized fact references from that exact dataset.
  */
 export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
 {
+	// Keep all common session inputs identical to managed admission; only personal identity-scoped inputs differ.
 	return {
 		admission,
 		runAuthority: new PrismaRunAuthoritySource(),
