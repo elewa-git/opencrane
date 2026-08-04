@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { Prisma, type PrismaClient } from "@prisma/client";
+import { PersonaInterviewCategory, Prisma } from "@prisma/client";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
@@ -38,26 +38,41 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 		expect(createFromInterviewAtomically).toHaveBeenCalledWith(_Command());
 	});
 
-	it("logs one unexpected interview read failure and returns a fail-closed denial", async function _LogsReadFailure()
+	it("derives bounded insights and persists their exact question provenance in one transaction", async function _PersistsDerivedInsights()
 	{
-		const err = new Error("database unavailable");
 		const logger = _Logger();
-		const prisma = { personaInterview: { findFirst: vi.fn().mockRejectedValue(err) } } as unknown as PrismaClient;
-		const transactions = { run: vi.fn() } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(prisma, transactions, logger);
+		const createRevision = vi.fn().mockResolvedValue({ id: "revision-2" });
+		const createInsights = vi.fn().mockResolvedValue({ count: 3 });
+		const transaction = {
+			$queryRaw: vi.fn()
+				.mockResolvedValueOnce([{ activeRevisionId: "revision-1" }])
+				.mockResolvedValueOnce([{ questionSetId: "onboarding", questionSetVersion: 1 }])
+				.mockResolvedValueOnce([{ templateId: "direct", templateVersion: 1, templateDigest: "sha256:template", content: "Be direct.", selectionRuleId: "rule-1", selectionAnswerIds: ["answer-1"] }])
+				.mockResolvedValueOnce([{ nextRevision: 2 }]),
+			personaInterviewAnswer: { findMany: vi.fn().mockResolvedValue([{ id: "answer-1", value: " one ", questionId: "question-1" }, { id: "answer-2", value: "two", questionId: "question-2" }, { id: "answer-3", value: "three", questionId: "question-3" }]) },
+			personaQuestion: { findMany: vi.fn().mockResolvedValue([{ id: "question-1", category: PersonaInterviewCategory.RelationshipRole }, { id: "question-2", category: PersonaInterviewCategory.ToneLanguage }, { id: "question-3", category: PersonaInterviewCategory.WorkingHabits }]) },
+			personaRevision: { create: createRevision },
+			personaInsight: { createMany: createInsights },
+		};
+		const transactions = { run: vi.fn(async function _run(work) { return work(transaction); }) } as unknown as PersonaPersistenceUnitOfWork;
+		const repository = new PrismaPersonaDraftRepository(logger, transactions);
 
-		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
-		expect(logger.error).toHaveBeenCalledOnce();
-		expect(logger.error).toHaveBeenCalledWith({ err, operation: "persona.draft.derive", siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1" }, "Persona draft derivation persistence failed");
+		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "created", personaRevisionId: "revision-2" });
+		expect(createRevision).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", revision: 2, compiledInstructions: "Be direct.\n\n## Interview insights\n- Owner response: one\n- Owner response: two\n- Owner response: three\n", previousRevisionId: "revision-1" }), select: { id: true } });
+		expect(createInsights).toHaveBeenCalledWith({ data: [
+			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-1", questionId: "question-1", category: PersonaInterviewCategory.RelationshipRole, statement: "Owner response: one" }),
+			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-2", questionId: "question-2", category: PersonaInterviewCategory.ToneLanguage, statement: "Owner response: two" }),
+			expect.objectContaining({ personaRevisionId: "revision-2", answerId: "answer-3", questionId: "question-3", category: PersonaInterviewCategory.WorkingHabits, statement: "Owner response: three" }),
+		] });
+		expect(logger.error).not.toHaveBeenCalled();
 	});
 
-	it("logs one P2024 draft transaction failure and returns a fail-closed denial", async function _LogsCreateFailure()
+	it("logs one unexpected transaction failure and returns a fail-closed denial", async function _LogsCreateFailure()
 	{
 		const err = new Prisma.PrismaClientKnownRequestError("connection pool timeout", { code: "P2024", clientVersion: "test" });
 		const logger = _Logger();
-		const prisma = { personaInterview: { findFirst: vi.fn().mockResolvedValue({ answers: [{ id: "answer-1", value: "one" }, { id: "answer-2", value: "two" }, { id: "answer-3", value: "three" }] }) } } as unknown as PrismaClient;
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(prisma, transactions, logger);
+		const repository = new PrismaPersonaDraftRepository(logger, transactions);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -68,9 +83,8 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("revision race", { code: "P2002", clientVersion: "test" });
 		const logger = _Logger();
-		const prisma = { personaInterview: { findFirst: vi.fn().mockResolvedValue({ answers: [{ id: "answer-1", value: "one" }, { id: "answer-2", value: "two" }, { id: "answer-3", value: "three" }] }) } } as unknown as PrismaClient;
 		const transactions = { run: vi.fn().mockRejectedValue(conflict) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(prisma, transactions, logger);
+		const repository = new PrismaPersonaDraftRepository(logger, transactions);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "conflict" });
 		expect(logger.error).not.toHaveBeenCalled();
