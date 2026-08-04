@@ -3,9 +3,11 @@ import { PersonaInterviewCategory, Prisma } from "@prisma/client";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
+import { PrismaPersonaAggregateReadRepository } from "../../profile/prisma-persona-aggregate-read-repository.js";
 import { __CreatePersonaDraftFromInterview } from "../persona-draft-from-interview.js";
 import type { PersonaDraftFromInterviewRepository } from "../persona-draft-authority.types.js";
 import { PrismaPersonaDraftRepository } from "../prisma-persona-draft-repository.js";
+import { PrismaPersonaDraftTemplateSelector } from "../prisma-persona-draft-template-selector.js";
 
 /** Build a complete server-owned draft request for one completed onboarding interview. */
 function _Command()
@@ -44,15 +46,16 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 		const createRevision = vi.fn().mockResolvedValue({ id: "revision-2" });
 		const createInsights = vi.fn().mockResolvedValue({ count: 3 });
 		const transaction = {
-			personaProfile: { findFirst: vi.fn().mockResolvedValue({ activeRevisionId: "revision-1" }) },
-			personaInterview: { findFirst: vi.fn().mockResolvedValue({ questionSetId: "onboarding", questionSetVersion: 1, answers: [{ id: "answer-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-1", value: " one " }, { id: "answer-2", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-2", value: "two" }, { id: "answer-3", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-3", value: "three" }] }) },
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: "revision-1" }) },
+			personaInterview: { findFirst: vi.fn().mockResolvedValue({ questionSetId: "onboarding", questionSetVersion: 1, state: "completed" }) },
+			personaInterviewAnswer: { findMany: vi.fn().mockResolvedValue([{ id: "answer-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-1", value: " one " }, { id: "answer-2", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-2", value: "two" }, { id: "answer-3", questionSetId: "onboarding", questionSetVersion: 1, questionId: "question-3", value: "three" }]) },
 			personaSoulTemplate: { findMany: vi.fn().mockResolvedValue([{ id: "direct", version: 1, digest: "sha256:template", content: "Be direct.", selectionRules: [{ id: "rule-1", priority: 20, answers: { "question-1": " one " } }] }]) },
 			personaQuestion: { findMany: vi.fn().mockResolvedValue([{ id: "question-1", category: PersonaInterviewCategory.RelationshipRole }, { id: "question-2", category: PersonaInterviewCategory.ToneLanguage }, { id: "question-3", category: PersonaInterviewCategory.WorkingHabits }]) },
-			personaRevision: { aggregate: vi.fn().mockResolvedValue({ _max: { revision: 1 } }), create: createRevision },
+			personaRevision: { findFirst: vi.fn().mockResolvedValue({ revision: 1 }), create: createRevision },
 			personaInsight: { createMany: createInsights },
 		};
 		const transactions = { run: vi.fn(async function _run(work) { return work(transaction); }) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(logger, transactions);
+		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "created", personaRevisionId: "revision-2" });
 		expect(createRevision).toHaveBeenCalledWith({ data: expect.objectContaining({ personaProfileId: "profile-1", revision: 2, soulTemplateId: "direct", soulTemplateVersion: 1, soulTemplateDigest: "sha256:template", selectionRuleId: "rule-1", selectionAnswerIds: ["answer-1"], compiledInstructions: "Be direct.\n\n## Interview insights\n- Owner response: one\n- Owner response: two\n- Owner response: three\n", previousRevisionId: "revision-1" }), select: { id: true } });
@@ -69,7 +72,7 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 		const err = new Prisma.PrismaClientKnownRequestError("connection pool timeout", { code: "P2024", clientVersion: "test" });
 		const logger = _Logger();
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(logger, transactions);
+		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -81,7 +84,7 @@ describe("__CreatePersonaDraftFromInterview", function _DescribePersonaDraftFrom
 		const conflict = new Prisma.PrismaClientKnownRequestError("revision race", { code: "P2002", clientVersion: "test" });
 		const logger = _Logger();
 		const transactions = { run: vi.fn().mockRejectedValue(conflict) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaDraftRepository(logger, transactions);
+		const repository = new PrismaPersonaDraftRepository(transactions, new PrismaPersonaAggregateReadRepository(), new PrismaPersonaDraftTemplateSelector(), logger);
 
 		await expect(__CreatePersonaDraftFromInterview(repository, _Command())).resolves.toEqual({ outcome: "denied", reason: "conflict" });
 		expect(logger.error).not.toHaveBeenCalled();

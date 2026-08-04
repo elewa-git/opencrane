@@ -22,6 +22,7 @@ const _INTERVIEW_DENIAL_STATUS_BY_REASON: Readonly<Record<PersonaInterviewDenial
 	[PersonaInterviewDenialReasons.NotInProgress]: 409,
 	[PersonaInterviewDenialReasons.IncompleteAnswers]: 409,
 	[PersonaInterviewDenialReasons.RefreshInterviewConflict]: 409,
+	[PersonaInterviewDenialReasons.Conflict]: 409,
 };
 
 /** Exhaustive HTTP translation for draft-authority denials. */

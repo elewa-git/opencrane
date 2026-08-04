@@ -63,4 +63,6 @@ export enum PersonaInterviewDenialReasons
 	IncompleteAnswers = "incomplete_answers",
 	/** Another refresh already owns the active interview. */
 	RefreshInterviewConflict = "refresh_interview_conflict",
+	/** A concurrent write prevented the interview transaction from committing. */
+	Conflict = "conflict",
 }

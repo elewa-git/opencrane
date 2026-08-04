@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 import { PersonalConfigurationPersonaRefreshClaimCodes, type PersonalConfigurationPersonaRefreshUnitOfWork } from "@opencrane/backend/agents/personal/configuration";
 
 import { PersonaInterviewDenialReasons, PersonaLifecycleOutcomes } from "../../profile/persona-lifecycle.types.js";
 import type { Logger } from "@opencrane/observability";
 
 import type { PersonaPersistenceUnitOfWork } from "../../profile/persona-persistence-unit-of-work.types.js";
+import { PrismaPersonaAggregateReadRepository } from "../../profile/prisma-persona-aggregate-read-repository.js";
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../persona-interview-authority.js";
 import type { PersonaInterviewRepository } from "../persona-interview-authority.types.js";
 import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-repository.js";
@@ -91,11 +92,11 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	it("starts only after the profile and exact reviewed question-set revision are fenced", async function _startsExactReviewedSet()
 	{
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([{ id: "profile-1" }]),
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: null }) },
 			personaInterview: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "interview-created" }) },
 			personaQuestionSet: { findUnique: vi.fn().mockResolvedValue({ state: "Reviewed" }) },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateReadRepository(), _logger());
 
 		await expect(repository.startAtomically(_startCommand())).resolves.toEqual({ status: "started", interviewId: "interview-created" });
 		expect(transaction.personaQuestionSet.findUnique).toHaveBeenCalledWith({ where: { id_version: { id: "onboarding", version: 1 } }, select: { state: true } });
@@ -105,28 +106,39 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	it("replays the same proposal-bound refresh interview after a lost start response", async function _ReplaysRefreshStart()
 	{
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([{ id: "profile-1" }]),
+			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: null }) },
 			personaInterview: { findFirst: vi.fn().mockResolvedValue({ id: "interview-existing", refreshConfigurationChangeId: "change-1" }), create: vi.fn() },
 			personaQuestionSet: { findUnique: vi.fn() },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateReadRepository(), _logger());
 
 		await expect(repository.startAtomically({ ..._startCommand(), refreshConfigurationChangeId: "change-1" })).resolves.toEqual({ status: "already_in_progress", interviewId: "interview-existing" });
 		expect(transaction.personaInterview.create).not.toHaveBeenCalled();
 		expect(transaction.personaQuestionSet.findUnique).not.toHaveBeenCalled();
 	});
 
-	it("accepts PostgreSQL's in_progress label while appending an answer", async function _acceptsDatabaseLifecycleLabel()
+	it("appends an answer only while the owner interview is still in progress", async function _appendsWhileInProgress()
 	{
 		const transaction = {
-			$queryRaw: vi.fn().mockResolvedValue([{ questionSetId: "onboarding", questionSetVersion: 1, state: "in_progress" }]),
+			personaInterview: { findFirst: vi.fn().mockResolvedValue({ questionSetId: "onboarding", questionSetVersion: 1, state: "InProgress" }) },
 			personaQuestion: { findUnique: vi.fn().mockResolvedValue({ id: "q1" }) },
 			personaInterviewAnswer: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "answer-created" }) },
 		};
-		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), _logger());
+		const repository = new PrismaPersonaInterviewRepository(_prisma(transaction), _refreshes(transaction), _transactions(transaction), new PrismaPersonaAggregateReadRepository(), _logger());
 
 		await expect(repository.recordAnswerAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: "A considered answer", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
 		expect(transaction.personaInterviewAnswer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ interviewId: "interview-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "q1" }), select: { id: true } });
+	});
+
+	it("classifies a serializable write race as a conflict without logging an operational failure", async function _classifiesSerializableConflict()
+	{
+		const conflict = new Prisma.PrismaClientKnownRequestError("could not serialize access", { code: "P2034", clientVersion: "test" });
+		const logger = _logger();
+		const transactions = { run: vi.fn().mockRejectedValue(conflict) } as unknown as PersonaPersistenceUnitOfWork;
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, new PrismaPersonaAggregateReadRepository(), logger);
+
+		await expect(repository.completeAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" })).resolves.toEqual({ status: PersonaInterviewDenialReasons.Conflict });
+		expect(logger.error).not.toHaveBeenCalled();
 	});
 
 	it("logs one unexpected start failure and returns a fail-closed denial", async function _logsStartFailure()
@@ -134,7 +146,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const refreshes = { runPersonaRefresh: vi.fn().mockRejectedValue(err) } as unknown as PersonalConfigurationPersonaRefreshUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), refreshes, _transactions({}), logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), refreshes, _transactions({}), new PrismaPersonaAggregateReadRepository(), logger);
 
 		await expect(__StartPersonaInterview(repository, _startCommand())).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -146,7 +158,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, new PrismaPersonaAggregateReadRepository(), logger);
 
 		await expect(__RecordPersonaInterviewAnswer(repository, { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: "answer", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();
@@ -158,7 +170,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 		const err = new Error("database unavailable");
 		const logger = _logger();
 		const transactions = { run: vi.fn().mockRejectedValue(err) } as unknown as PersonaPersistenceUnitOfWork;
-		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, logger);
+		const repository = new PrismaPersonaInterviewRepository(_prisma({}), _refreshes({}), transactions, new PrismaPersonaAggregateReadRepository(), logger);
 
 		await expect(__CompletePersonaInterview(repository, { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", completedAt: "2026-07-23T09:02:00.000Z" })).resolves.toEqual({ outcome: "denied", reason: "persistence_unavailable" });
 		expect(logger.error).toHaveBeenCalledOnce();

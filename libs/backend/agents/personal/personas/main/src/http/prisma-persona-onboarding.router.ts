@@ -9,7 +9,9 @@ import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js"
 import type { PersonaOnboardingCaller } from "./persona-onboarding.router.types.js";
 import { PrismaPersonaAuthorityRepository } from "../approval/prisma-persona-authority-repository.js";
 import { PrismaPersonaDraftRepository } from "../drafting/prisma-persona-draft-repository.js";
+import { PrismaPersonaDraftTemplateSelector } from "../drafting/prisma-persona-draft-template-selector.js";
 import { PrismaPersonaInterviewRepository } from "../interview/prisma-persona-interview-repository.js";
+import { PrismaPersonaAggregateReadRepository } from "../profile/prisma-persona-aggregate-read-repository.js";
 import { PrismaPersonaOnboardingRepository } from "../profile/prisma-persona-onboarding-repository.js";
 import { PrismaPersonaOnboardingStatusRepository } from "../profile/prisma-persona-onboarding-status-repository.js";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";
@@ -23,7 +25,6 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
 
 /**
  * Composes the Prisma-backed self-only persona onboarding router.
- *
  * This is the sole persistence composition seam for the persona HTTP boundary. It gives lifecycle
  * authorities their explicitly scoped repositories and shared transaction owner while keeping the
  * route-level router dependent only on ports. The root client remains here; individual lifecycle
@@ -37,14 +38,16 @@ export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Log
 {
 	const refreshes = new PrismaPersonalConfigurationPersonaRefreshUnitOfWork(prisma);
 	const transactions = new PrismaPersonaPersistenceUnitOfWork(prisma);
-	const interviews = new PrismaPersonaInterviewRepository(prisma, refreshes, transactions, logger);
+	const reads = new PrismaPersonaAggregateReadRepository();
+	const templates = new PrismaPersonaDraftTemplateSelector();
+	const interviews = new PrismaPersonaInterviewRepository(prisma, refreshes, transactions, reads, logger);
 	return __CreatePersonaOnboardingRouter({
 		resolveCaller: _resolveCaller,
 		onboarding: new PrismaPersonaOnboardingRepository(logger, transactions),
 		interviews,
 		questions: interviews,
-		drafts: new PrismaPersonaDraftRepository(logger, transactions),
-		approval: new PrismaPersonaAuthorityRepository(prisma, refreshes),
+		drafts: new PrismaPersonaDraftRepository(transactions, reads, templates, logger),
+		approval: new PrismaPersonaAuthorityRepository(prisma, refreshes, reads, templates),
 		clock: { now(): Date { return new Date(); } },
 		logger,
 		status: new PrismaPersonaOnboardingStatusRepository(prisma),

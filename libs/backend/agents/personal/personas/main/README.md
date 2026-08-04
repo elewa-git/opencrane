@@ -32,11 +32,12 @@ server-owned reviewed question set
 
 **In this flow:** [runs](../../../execution/runs/main/README.md) *(runs execute against the persona this activates)*
 
-The interview half locks the profile while it starts, so duplicate browser requests reuse the one
-in-progress interview instead of discarding answers. A retry of the same proposal-bound refresh
+The interview half runs every start inside one serializable transaction, so duplicate browser
+requests reuse the one in-progress interview instead of discarding answers, and two racing starts
+resolve as one interview plus one retriable conflict. A retry of the same proposal-bound refresh
 returns that interview and its frozen questions again; a different refresh proposal receives a
-conflict instead of hijacking it. The authority locks the interview again for each answer and for
-completion, ensuring a late answer cannot race a completed record. Answers name the exact question-set
+conflict instead of hijacking it. Each answer and the completion re-read the interview inside the
+same serializable boundary, so a late answer cannot race a completed record. Answers name the exact question-set
 revision and question they answered; completion is refused until every question in that reviewed
 revision has exactly one answer.
 
@@ -86,6 +87,13 @@ The capability stays one aggregate lifecycle, but its implementation is grouped 
 `profile/` provisions and reports owner state, `interview/` records immutable answers, `drafting/`
 derives reviewable evidence, `approval/` activates the revision, and `http/` adapts the owner-only
 API. The route module composes these owners; it contains no persistence policy.
+
+The aggregate read repository in `profile/` is the sole owner of shared lifecycle evidence reads and
+next-revision allocation. It takes no row locks: every caller runs it inside a serializable
+transaction, and a concurrent writer surfaces as an explicit conflict outcome instead of a blocked
+lock. Drafting owns the separate deterministic template selector and pure instruction
+compiler, so a reader can verify template priority and instruction content without tracing lifecycle
+transactions. Every selected template stores its source identity, digest, rule, and sorted answer IDs.
 
 The lifecycle functions, their command/result types, repository ports, Prisma repositories, local
 catalogue, persistence unit of work, and status adapter are internal cohesive owners. `profile/`

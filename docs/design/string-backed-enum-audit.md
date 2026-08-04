@@ -36,9 +36,9 @@ The personal persona package now owns its local workflow vocabulary in
 without reviving the deleted generic persona model contract. Prisma-generated persona states remain
 adapter-edge values and are mapped explicitly.
 
-The remaining persona-package `CATEGORICAL-LITERAL` warnings compare the `state` field returned by
-locked raw-SQL interview rows with the persisted `in_progress` value. They are deliberate adapter-edge
-checks of database data, not a second OpenCrane-owned workflow vocabulary.
+Interview lifecycle reads now flow through Prisma model queries, so the persona package compares the
+generated `PersonaInterviewState` enum directly and no longer carries adapter-edge string literals for
+persisted interview states.
 
 ## Priority 0: authority and durable-contract risk
 

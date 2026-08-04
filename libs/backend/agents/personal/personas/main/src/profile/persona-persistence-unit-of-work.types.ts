@@ -1,4 +1,4 @@
-/** Atomic persona-owned transaction seam for lifecycle steps that do not change configuration state. */
+/** Atomic persona-owned Serializable transaction seam for lifecycle steps that do not change configuration state. */
 export interface PersonaPersistenceUnitOfWork
 {
 	/** Runs one persona lifecycle operation against one transaction-scoped Prisma client. */
