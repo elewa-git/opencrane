@@ -48,38 +48,31 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 	{
 		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
 		if (!await _IsAssignmentCommandValid(workloadId, command)) return "conflict";
-		try
-		{
-			// 1. Lock revision before workload, matching lifecycle trigger lock ordering.
-			const sources = await this.transaction.$queryRaw<Array<{ skillRevisionId: string }>>(Prisma.sql`SELECT "skill_revision_id" AS "skillRevisionId" FROM "skill_workloads" WHERE "id" = ${workloadId}`);
-			const source = sources[0];
-			if (source === undefined) return "conflict";
-			const revisions = await this.transaction.$queryRaw<Array<{ state: SkillRevisionState }>>(Prisma.sql`SELECT "state" FROM "skill_revisions" WHERE "id" = ${source.skillRevisionId} FOR UPDATE`);
-			await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
-			const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId } });
-			const revision = revisions[0];
-			if (workload === null || revision === undefined || !_IsEligibleRevisionForKind(workload.kind, revision.state)) return "conflict";
-			if (workload.state === SkillWorkloadState.Assigned)
-			{
-				const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
-				return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && bootstrap?.referenceHash === await __HashSkillWorkloadBootstrapReference(command.bootstrapReference) ? "idempotent" : "conflict";
-			}
 
-			// 2. Re-check the exact lease under the locks before the irreversible assignment transition.
-			const now = await this._databaseTime();
-			if (now === null || workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.deliveryCount !== command.deliveryCount || now.getTime() >= workload.claimedAt.getTime() + claimLeaseMilliseconds) return "conflict";
-
-			// 3. CAS assignment and bootstrap creation together so neither durable record can exist alone.
-			const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
-			if (updated.count !== 1) return "conflict";
-			await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience: workload.kind === SkillWorkloadKind.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner", serviceAccountName: workload.kind === SkillWorkloadKind.Authoring ? "skill-authoring-default" : "tool-runner-default", namespace: command.namespace, workloadUid: command.workloadUid, expiresAt: new Date(now.getTime() + _BOOTSTRAP_LIFETIME_MILLISECONDS) } });
-			return "assigned";
-		}
-		catch (error)
+		// 1. Lock revision before workload, matching lifecycle trigger lock ordering.
+		const sources = await this.transaction.$queryRaw<Array<{ skillRevisionId: string }>>(Prisma.sql`SELECT "skill_revision_id" AS "skillRevisionId" FROM "skill_workloads" WHERE "id" = ${workloadId}`);
+		const source = sources[0];
+		if (source === undefined) return "conflict";
+		const revisions = await this.transaction.$queryRaw<Array<{ state: SkillRevisionState }>>(Prisma.sql`SELECT "state" FROM "skill_revisions" WHERE "id" = ${source.skillRevisionId} FOR UPDATE`);
+		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
+		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId } });
+		const revision = revisions[0];
+		if (workload === null || revision === undefined || !_IsEligibleRevisionForKind(workload.kind, revision.state)) return "conflict";
+		if (workload.state === SkillWorkloadState.Assigned)
 		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return "conflict";
-			throw error;
+			const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
+			return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && bootstrap?.referenceHash === await __HashSkillWorkloadBootstrapReference(command.bootstrapReference) ? "idempotent" : "conflict";
 		}
+
+		// 2. Re-check the exact lease under the locks before the irreversible assignment transition.
+		const now = await this._databaseTime();
+		if (now === null || workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.deliveryCount !== command.deliveryCount || now.getTime() >= workload.claimedAt.getTime() + claimLeaseMilliseconds) return "conflict";
+
+		// 3. CAS assignment and bootstrap creation together so neither durable record can exist alone.
+		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
+		if (updated.count !== 1) return "conflict";
+		await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience: workload.kind === SkillWorkloadKind.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner", serviceAccountName: workload.kind === SkillWorkloadKind.Authoring ? "skill-authoring-default" : "tool-runner-default", namespace: command.namespace, workloadUid: command.workloadUid, expiresAt: new Date(now.getTime() + _BOOTSTRAP_LIFETIME_MILLISECONDS) } });
+		return "assigned";
 	}
 
 	/** Reads database time so a controller clock cannot extend a lease. */

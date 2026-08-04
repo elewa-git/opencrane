@@ -3,7 +3,7 @@ import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types.js";
-import type { SkillWorkloadExecutionUnitOfWork } from "./skill-workload-unit-of-work.types.js";
+import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork } from "./skill-workload-unit-of-work.types.js";
 
 /** Application authority coordinating each governed skill-execution transition through one unit of work. */
 export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionAuthority
@@ -24,9 +24,17 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 	}
 
 	/** Commits the exact controller claim and immutable Job UID in one durable transaction. */
-	commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
+	async commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
-		return this.unitOfWork.run(function _Assign(transaction): Promise<"assigned" | "idempotent" | "conflict"> { return transaction.assignments.commitAssignment(workloadId, command); });
+		try
+		{
+			return await this.unitOfWork.run(function _Assign(transaction): Promise<"assigned" | "idempotent" | "conflict"> { return transaction.assignments.commitAssignment(workloadId, command); });
+		}
+		catch (error)
+		{
+			if (error instanceof _SkillWorkloadPersistenceConflictError) return "conflict";
+			throw error;
+		}
 	}
 
 	/** Claims one previously assigned Job for the controller's unsuspend operation. */

@@ -1,11 +1,11 @@
-import { type PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaSkillAuthoringCompletionRepository } from "./prisma-skill-authoring-completion-repository.js";
 import { PrismaSkillAuthoringInputRepository } from "./prisma-skill-authoring-input-repository.js";
 import { PrismaSkillWorkloadBootstrapRepository } from "./prisma-skill-workload-bootstrap-repository.js";
 import { PrismaSkillWorkloadAssignmentRepository } from "./prisma-skill-workload-assignment-repository.js";
 import { PrismaSkillWorkloadReleaseRepository } from "./prisma-skill-workload-release-repository.js";
-import type { SkillWorkloadExecutionTransaction, SkillWorkloadExecutionUnitOfWork, SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
+import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionTransaction, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
 
 /** Sole root PrismaClient and transaction owner for governed skill-execution durability. */
 export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnitOfWork
@@ -27,19 +27,27 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 	async run<Result>(work: SkillWorkloadExecutionWork<Result>): Promise<Result>
 	{
 		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
-		return this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
+		try
 		{
-			// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
-			const repositories: SkillWorkloadExecutionTransaction = {
-				assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
-				releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
-				bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
-				authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
-				authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
-			};
+			return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
+			{
+				// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
+				const repositories: SkillWorkloadExecutionTransaction = {
+					assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
+					releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
+					bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
+					authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
+					authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
+				};
 
-			// 2. Keep the transaction lifetime limited to durable authority work; callers perform external I/O afterwards.
-			return work(repositories);
-		});
+				// 2. Keep the transaction lifetime limited to durable authority work; callers perform external I/O afterwards.
+				return work(repositories);
+			});
+		}
+		catch (error)
+		{
+			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) throw new _SkillWorkloadPersistenceConflictError("skill workload persistence conflict", { cause: error });
+			throw error;
+		}
 	}
 }

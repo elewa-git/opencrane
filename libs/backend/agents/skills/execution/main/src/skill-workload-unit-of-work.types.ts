@@ -3,6 +3,11 @@ import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
+/** Neutral signal emitted only after a known persistence conflict has rolled back. */
+export class _SkillWorkloadPersistenceConflictError extends Error
+{
+}
+
 /** Transaction-scoped persistence capability for controller claim and Job-assignment transitions. */
 export interface SkillWorkloadAssignmentRepository
 {
