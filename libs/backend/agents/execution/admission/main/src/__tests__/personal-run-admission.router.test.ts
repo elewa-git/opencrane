@@ -3,7 +3,7 @@ import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 
 import { RunAdmissionConcurrencyDenialReasons } from "@opencrane/backend/agents/execution/runs";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreatePersonalRunAdmissionRouter } from "../personal-run-admission.router.js";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes, type PersonalRunAdmissionPort } from "../personal-run-admission.types.js";
@@ -38,6 +38,16 @@ describe("personal run admission router", function _describePersonalRunAdmission
 		const fixture = _Admission({ outcome: PersonalRunAdmissionOutcomes.Accepted, runId: "run-1" });
 		const response = await request(_App({ siloId: "silo-1", subjectId: "user-1" }, fixture.admission)).post("/").send({ threadId: "thread-1", requestIdempotencyKey: "request-1", siloId: "silo-forged", datasetId: "dataset-forged" });
 		expect(response.status).toBe(400);
+		expect(fixture.admitPersonalRun).not.toHaveBeenCalled();
+	});
+
+	it("rejects blank or oversized transport identifiers at the model-adjacent validator", async function _rejectsUnboundedFields()
+	{
+		const fixture = _Admission({ outcome: PersonalRunAdmissionOutcomes.Accepted, runId: "run-1" });
+		const app = _App({ siloId: "silo-1", subjectId: "user-1" }, fixture.admission);
+
+		await expect(request(app).post("/").send({ threadId: "   ", requestIdempotencyKey: "request-1" })).resolves.toMatchObject({ status: 400 });
+		await expect(request(app).post("/").send({ threadId: "thread-1", requestIdempotencyKey: "x".repeat(201) })).resolves.toMatchObject({ status: 400 });
 		expect(fixture.admitPersonalRun).not.toHaveBeenCalled();
 	});
 

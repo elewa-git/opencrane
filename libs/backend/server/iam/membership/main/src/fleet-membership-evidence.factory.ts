@@ -1,5 +1,5 @@
 import type { FleetSignatureVerificationEvidence, SignedFleetMembershipRevision } from "@opencrane/models/authorization";
-import { _CreateMountedPublicKeySource } from "@opencrane/server/_infra/auth";
+import { _CreateMountedPublicKeySource } from "@opencrane/backend/_server/auth";
 
 import { Ed25519FleetMembershipSignatureVerifier } from "./ed25519-fleet-membership-signature-verifier.js";
 import type { FleetMembershipEvidenceConfig, FleetMembershipSignatureVerifier } from "./membership-authority.types.js";

@@ -3,6 +3,7 @@
 import "./app/instrument.js";
 
 import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
+import { GatewayMemoryFactSelector } from "@opencrane/backend/agents/execution/protocol";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
@@ -39,7 +40,7 @@ function _Main(): void
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
-	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence);
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, new GatewayMemoryFactSelector(memoryGateway));
 
 	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
 	//    route and the runtime dispatch plane always target the same Obot with one credential.

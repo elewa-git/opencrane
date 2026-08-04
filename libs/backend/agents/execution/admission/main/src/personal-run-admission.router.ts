@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from "express";
 
 import { RunAdmissionConcurrencyDenialReasons } from "@opencrane/backend/agents/execution/runs";
+import { _ParsePersonalRunAdmissionRequestBody } from "./personal-run-admission.router.validator.js";
 import { PersonalRunAdmissionDenialReasons, PersonalRunAdmissionOutcomes } from "./personal-run-admission.types.js";
 import type { PersonalRunAdmissionRouterDependencies } from "./personal-run-admission.router.types.js";
 
@@ -22,7 +23,7 @@ export function __CreatePersonalRunAdmissionRouter(dependencies: PersonalRunAdmi
 			response.status(401).json({ error: "run_authentication_required" });
 			return;
 		}
-		const body = _ReadBody(request.body);
+		const body = _ParsePersonalRunAdmissionRequestBody(request.body);
 		if (body === null)
 		{
 			response.status(400).json({ error: "invalid_personal_run_request" });
@@ -70,16 +71,4 @@ function _DenialStatus(reason: string): number
 		return 503;
 	}
 	return 403;
-}
-
-/** Reads the exact two-field transport contract and rejects forged coordinate fields. */
-function _ReadBody(value: unknown): { readonly threadId: string; readonly requestIdempotencyKey: string } | null
-{
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Readonly<Record<string, unknown>>;
-	if (Object.keys(body).length !== 2 || typeof body["threadId"] !== "string" || typeof body["requestIdempotencyKey"] !== "string") return null;
-	const threadId = body["threadId"].trim();
-	const requestIdempotencyKey = body["requestIdempotencyKey"].trim();
-	if (threadId.length === 0 || threadId.length > 200 || requestIdempotencyKey.length === 0 || requestIdempotencyKey.length > 200) return null;
-	return { threadId, requestIdempotencyKey };
 }
