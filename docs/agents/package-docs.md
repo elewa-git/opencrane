@@ -172,13 +172,13 @@ to; a backend authority with a diagram lands near the top of its range and that 
 | Type | Where | Emphasise | Realistic total |
 |------|-------|-----------|-----------------|
 | Backend domain authority | `libs/backend/server/*`, `libs/backend/agents/personal/*`, `libs/backend/artifacts/*` | the invariant it enforces, its persistence boundary, fail-closed reasons | 55–85 lines |
-| Pure model / util | `libs/models/*`, `libs/util`, `libs/observability` | "pure, no I/O", the types/helpers it defines, who depends on it | 15–35 lines |
+| Cross-cutting backend support | `libs/backend/observability` | structured logging and tracing, its server-side consumers, and its no-domain-authority boundary | 25–45 lines |
 | Frontend feature / element | `libs/frontend/features/*`, `libs/frontend/elements/*` | the route/UI slice it owns, its store dependencies, `scope:web` rule, consumer | 30–55 lines |
 | Frontend state (port/adapter) | `libs/frontend/state/*` | the gateway port it defines/implements, the HTTP surface it adapts, write-only invariants, consumer | 30–50 lines |
 | Frontend core / platform | `libs/frontend/{core,platform}` | the cross-cutting primitives it holds, FORK-shared status | 30–55 lines |
 | Deployable app | `apps/opencrane`, `apps/opencrane-ui`, `apps/channel-proxy`, `apps/artifact-service` | what it composes, trust/runtime posture, entrypoint, deploy unit | 45–100 lines |
 | Vendored infra app | `apps/_infra/{cognee,litellm,obot}`, `apps/postgres` | upstream link, **why we run it**, pinned image/version, config knobs, what OpenCrane owns vs the vendor | 30–55 lines |
-| Server infra lib | `libs/server/_infra/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
+| Server infra lib | `libs/backend/_server/*` | the runtime seam it owns, its sole consumer, what it must not import | 30–50 lines |
 | Group / area index | grouping dirs | the child map table + the tier dependency rule + a child diagram | 25–45 lines |
 
 If a README runs well past the top of its range, the fix is tighter prose per section (and dropping

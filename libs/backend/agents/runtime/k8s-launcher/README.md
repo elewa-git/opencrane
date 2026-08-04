@@ -78,5 +78,5 @@ mounted at `/var/run/opencrane/bootstrap/reference`, never in environment variab
 
 - Parent group: [runtime](../README.md)
 - Assignment authority: [controller](../controller/README.md)
-- Server transport: [agent-runtime-stream](../../../../server/_infra/agent-runtime-stream/README.md)
+- Server transport: [agent-runtime-stream](../../../_server/agent-runtime-stream/README.md)
 - Process owner: [agent-runtime](../../../../../apps/agent-runtime/README.md)

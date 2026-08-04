@@ -1,6 +1,6 @@
 import type { UpgradeSessionProposalRepository } from "@opencrane/backend/agents/personal/configuration";
 import type { OpenDeferredToolApprovalCommand, ToolInvocationRepository } from "@opencrane/backend/server/iam/authorization";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { ExternalActionExecutorDependencies } from "./external-action-executor.types.js";
 

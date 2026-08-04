@@ -1,4 +1,4 @@
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _log } from "../log.js";

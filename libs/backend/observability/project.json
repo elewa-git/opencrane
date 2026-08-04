@@ -1,0 +1,27 @@
+{
+  "name": "backend-observability",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/observability/src",
+  "tags": [
+    "type:lib",
+    "layer:infra",
+    "scope:shared"
+  ],
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc -p tsconfig.json --noEmit",
+        "cwd": "libs/backend/observability"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "vitest run --passWithNoTests",
+        "cwd": "libs/backend/observability"
+      }
+    }
+  }
+}

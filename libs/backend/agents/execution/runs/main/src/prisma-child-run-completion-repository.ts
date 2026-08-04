@@ -1,6 +1,6 @@
 import { AgentRunState, ChildRunCompletionDeliveryOutcome, Prisma, type PrismaClient } from "@prisma/client";
 
-import { ___CreateLogger, type Logger } from "@opencrane/observability";
+import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
 import type { ChildRunCompletionCommand, ChildRunCompletionRepository, ChildRunCompletionResult } from "./child-run-completion.types.js";
 

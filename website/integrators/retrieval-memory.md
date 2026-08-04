@@ -67,4 +67,4 @@ subject to the same approval, receipt and audit boundaries as other tools.
 - Runtime-local scratch is never promoted to durable memory implicitly.
 
 Source: [`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
-and [`libs/server/_infra/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/server/_infra/memory-gateway-client/README.md).
+and [`libs/backend/_server/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).

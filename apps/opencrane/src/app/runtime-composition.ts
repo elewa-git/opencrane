@@ -2,7 +2,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
-import { _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
+import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/_server/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
@@ -10,7 +10,7 @@ import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/_server/workload-identity";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";

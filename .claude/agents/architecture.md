@@ -60,7 +60,7 @@ under the functional-first library tree:
 - `libs/util/*`: dependency-light helpers without domain authority;
 - `libs/backend/*`: server-side capabilities/use cases/ports/adapters;
 - `libs/frontend/*`: UI, state, features, and client gateways;
-- `libs/server/_infra/*`: OpenCrane-server runtime and external-I/O adapters.
+- `libs/backend/_server/*`: OpenCrane-server runtime and external-I/O adapters.
 
 Within that first functional pass, group by bounded capability and then technical role. Do not create
 new `shared`, `common`, or `core` dumping grounds. Libraries never import apps; frontend never imports

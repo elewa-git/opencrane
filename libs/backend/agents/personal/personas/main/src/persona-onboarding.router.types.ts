@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { PersonaInterviewQuestionReader, PersonaInterviewRepository } from "./persona-interview-authority.types.js";
 import type { PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";

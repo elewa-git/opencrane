@@ -1,6 +1,6 @@
 import { Prisma, SkillRevisionState, SkillState, type PrismaClient } from "@prisma/client";
 
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { AtomicPublishSkillRevisionResult, AtomicRevokeSkillRevisionResult, PublishSkillRevisionCommand, RevokeSkillRevisionCommand, SkillAuthorityRepository, SkillCatalogueEntry, SkillCatalogueRepository, SkillPublicationSnapshot, SkillRevocationRepository } from "./skill-publication.types.js";
 

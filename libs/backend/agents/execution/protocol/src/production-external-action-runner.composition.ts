@@ -4,10 +4,10 @@ import { PrismaUpgradeSessionProposalRepository } from "@opencrane/backend/agent
 import { PrismaIntegrationAuthorityRepository, __SystemIntegrationAuthorityClock } from "@opencrane/backend/server/gateways/integrations";
 import { PrismaToolInvocationRepository, __OpenDeferredToolApproval } from "@opencrane/backend/server/iam/authorization";
 import type { OpenDeferredToolApprovalCommand } from "@opencrane/backend/server/iam/authorization";
-import type { Logger } from "@opencrane/observability";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
-import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
-import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
+import type { Logger } from "@opencrane/backend/observability";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
+import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
 
 import type { RuntimeExternalActionRunner } from "./prisma-runtime-dispatch-authority.types.js";
 import { _CreateProductionExternalActionRunnerWithDependencies } from "./production-external-action-runner.js";

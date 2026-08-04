@@ -4,7 +4,7 @@ import { __AppendCompiledTool } from "@opencrane/backend/agents/execution/inputs
 import { PrismaRuntimeTerminalReporter } from "@opencrane/backend/agents/execution/runs";
 import { __IsUpgradeSessionAvailable, UPGRADE_SESSION_TOOL } from "@opencrane/backend/agents/personal/configuration";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreatePrismaRunInputCompiler } from "./prisma-run-input-compiler.js";
 import { PrismaRuntimeDispatchAuthority } from "./prisma-runtime-dispatch-authority.js";

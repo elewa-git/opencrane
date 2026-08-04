@@ -2,7 +2,7 @@ import type { ConfigurationOptions, V1Job, V1Pod, V1PodList } from "@kubernetes/
 
 import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 /** Immutable profile map keyed by the one permitted governed skill workload class. */
 export type SkillWorkloadControllerProfiles = Readonly<Record<AgentControllerSkillWorkloadClaim["kind"], SkillWorkloadJobProfile>>;

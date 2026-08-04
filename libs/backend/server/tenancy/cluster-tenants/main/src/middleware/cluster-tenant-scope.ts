@@ -4,7 +4,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { ClusterTenantScopedResource } from "./cluster-tenant-scope.types.js";
 import { _ResolveCallerClusterTenant } from "./resolve-caller-cluster-tenant.js";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
-import "@opencrane/server/_infra/auth";
+import "@opencrane/backend/_server/auth";
 
 /**
  * Reusable authorization guard for mutations (POST/PUT/DELETE) on ClusterTenant-scoped

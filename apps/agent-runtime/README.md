@@ -35,7 +35,7 @@ version-tagged, replaceable local checkpoint subordinate to canonical server sta
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
 [runtime resource builder](../../libs/backend/agents/runtime/k8s-launcher/README.md) ·
-[runtime stream](../../libs/server/_infra/agent-runtime-stream/README.md)
+[runtime stream](../../libs/backend/_server/agent-runtime-stream/README.md)
 
 Invariant: this process cannot choose its user, agent revision, run, tools, permissions, or durable
 state. A failed or retried attempt receives a different Job identity, and runtime-local files
@@ -97,7 +97,7 @@ runtime.
 
 Tagged `type:app`, `layer:entrypoint`, and `scope:agent-runtime`. It is a deployable process at the top
 of the dependency graph; libraries do not import it. The wire contract is owned by
-`@opencrane/contracts`, and the server-side transport is owned by `libs/server/_infra`.
+`@opencrane/contracts`, and the server-side transport is owned by `libs/backend/_server`.
 
 ## Runtime & config
 
@@ -146,7 +146,7 @@ same conformance contract is used for live LiteLLM qualification.
 
 - Parent index: [apps](../README.md)
 - Source architecture: [agent runtime source](src/README.md)
-- Server transport: [agent-runtime-stream](../../libs/server/_infra/agent-runtime-stream/README.md)
+- Server transport: [agent-runtime-stream](../../libs/backend/_server/agent-runtime-stream/README.md)
 - Per-attempt resources: [runtime/k8s-launcher](../../libs/backend/agents/runtime/k8s-launcher/README.md)
 - Runtime protocol: [contracts](../../libs/contracts/README.md)
 - Deployment composer: [deploy-k8s](../_infra/deploy-k8s/README.md)

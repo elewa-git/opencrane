@@ -55,7 +55,7 @@ under the hood.
 ### One shared library
 
 Every service builds its logger and tracing from a single library
-(`@opencrane/observability`), so the whole fleet behaves the same way:
+(`@opencrane/backend/observability`), so the whole fleet behaves the same way:
 
 - **Structured logs** — pino writes JSON straight to stdout (never through `console`), ready for
   ingestion without parsing.

@@ -27,6 +27,13 @@
         "contract": "AgentRevisionWriterRepository",
         "contractImportPath": "./prisma-agent-revision-writer.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/_server/auth/src/prisma-org-membership-repository.ts",
+        "adapter": "PrismaOrgMembershipRepository",
+        "contract": "OrgMembershipRepository",
+        "contractImportPath": "./org-membership.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -49,7 +56,8 @@
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
-      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
+      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
+      "libs/backend/server/iam/identity/main/src/oidc.service.ts"
     ]
   },
   "exemptions": []

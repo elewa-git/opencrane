@@ -7,7 +7,7 @@ Read it together with [`architecture.md`](../architecture.md) before changing se
 
 `apps/opencrane` owns process bootstrap, public and workload-facing listeners, Prisma schema
 composition, and the server Helm unit. Product behaviour belongs in `libs/backend/*`; server-specific
-transport and external-service seams belong in `libs/server/_infra/*`.
+transport and external-service seams belong in `libs/backend/_server/*`.
 
 The public API is mounted only on the public listener. Workload routes are mounted only on the
 internal listener and must verify the expected workload identity and durable assignment.

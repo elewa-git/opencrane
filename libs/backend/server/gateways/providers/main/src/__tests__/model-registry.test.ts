@@ -5,8 +5,8 @@ import request from "supertest";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
-import "@opencrane/server/_infra/auth";
-import type { AuthUser } from "@opencrane/server/_infra/auth";
+import "@opencrane/backend/_server/auth";
+import type { AuthUser } from "@opencrane/backend/_server/auth";
 import { modelRegistryRouter } from "../routes/model-registry.js";
 
 /** In-memory model_definitions store backing the mock Prisma client. */

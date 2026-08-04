@@ -64,11 +64,11 @@ add a new one only when its dependency policy is meaningfully different.
 | `libs/utils/` or `libs/util/` | Small dependency-light helpers with no domain authority | Models/other dependency-light shared code only |
 | `libs/backend/` | Server-side domain capabilities, use cases, ports, and adapters | Models, utils, infra abstractions, and explicit backend peers allowed by tags |
 | `libs/frontend/` | UI elements, features, state, and gateways | Models/contracts, utils, and frontend peers; never backend implementations |
-| `libs/server/_infra/` | Runtime, transport, auth, and external-I/O adapters owned by the OpenCrane server | Infra/runtime peers, models/contracts, and utils; no backend-domain or app imports |
+| `libs/backend/_server/` | Runtime, transport, auth, and external-I/O adapters owned by the OpenCrane server | Infra/runtime peers, models/contracts, and utils; no backend-domain or app imports |
 
 Within the functional root, group by bounded capability and then by technical role only when needed,
 for example `libs/backend/agents/main`, `libs/frontend/features/agents`, or
-`libs/server/_infra/http`. Do not create a broad `shared`, `common`, or `core` dumping ground.
+`libs/backend/_server/http`. Do not create a broad `shared`, `common`, or `core` dumping ground.
 Promote code to a wider library only when at least two consumers need the same contract or the code
 is independently coherent and testable.
 

@@ -1,4 +1,4 @@
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __FinalizeArtifactRevision } from "./artifact-finalization.js";
 import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.js";

@@ -4,7 +4,7 @@ import "./app/instrument.js";
 
 import { __CreateManagedRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/admission";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
-import { ___BindConsole } from "@opencrane/observability";
+import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
 import { _CreateInternalApp } from "./app/internal-app.js";

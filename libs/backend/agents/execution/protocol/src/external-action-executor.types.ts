@@ -1,6 +1,6 @@
-import type { ObotMcpInvocationPort } from "@opencrane/server/_infra/obot-custody";
-import type { SandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
-import type { MemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import type { ObotMcpInvocationPort } from "@opencrane/backend/_server/obot-custody";
+import type { SandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 import type { IntegrationAuthorityRepository, ResolveIntegrationAssignmentResult } from "@opencrane/backend/server/gateways/integrations";
 
 /** Safe bounded reason the integration authority can return without exposing custody material. */

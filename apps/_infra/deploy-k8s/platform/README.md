@@ -16,6 +16,6 @@ local source consumer.
 | `values/` | Reusable environment and multi-instance deployment profiles. |
 | `tests/` | Rendered network, pooler, key-permission, post-deploy health, and skill-workload contract checks. |
 
-Business logic does not belong here. Server-process infrastructure belongs in `libs/server/_infra`;
+Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/_server`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.

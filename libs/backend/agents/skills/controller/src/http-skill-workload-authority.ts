@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 import { ___IsAgentControllerIdentifier, ___ParseAgentControllerSkillWorkloadAssignmentResult, ___ParseAgentControllerSkillWorkloadClaim, ___ParseAgentControllerSkillWorkloadPodRegistrationResult, ___ParseAgentControllerSkillWorkloadReleaseClaim, ___ParseAgentControllerSkillWorkloadReleaseResult, type AgentControllerSkillWorkloadAssignmentCommand, type AgentControllerSkillWorkloadClaim, type AgentControllerSkillWorkloadPodRegistrationCommand, type AgentControllerSkillWorkloadReleaseClaim, type AgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import type { SkillWorkloadControllerAuthority, SkillWorkloadControllerFetch, SkillWorkloadControllerHttpAuthorityOptions, SkillWorkloadControllerTokenReader } from "./skill-workload-controller.types.js";

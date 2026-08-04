@@ -4,7 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 
 import { __CreateHttpAgentControllerAuthority, __CreateKubernetesAgentControllerStore, __RunAgentController } from "@opencrane/backend/agents/runtime/controller";
 import { __CreateHttpSkillWorkloadControllerAuthority, __CreateKubernetesSkillWorkloadControllerStore, __RunSkillWorkloadController } from "@opencrane/backend/agents/skills/controller";
-import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/observability";
+import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _ReadConfig } from "./config.js";
 import { _log as log } from "./log.js";

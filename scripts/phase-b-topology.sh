@@ -396,7 +396,7 @@ for (const scanRoot of ["apps", "libs", "scripts"])
       const line = rawLine.trim();
       if (line.startsWith("#") || line.startsWith("//")) continue;
       const dynamicManifestKind = /^(?:kind:)\s*(?:[$][{]|{{)/.test(line);
-      const genericKubernetesCreate = rel === "libs/server/_infra/api/src/k8s-apply.ts" && /\.create\s*\(/.test(line);
+      const genericKubernetesCreate = rel === "libs/backend/_server/api/src/k8s-apply.ts" && /\.create\s*\(/.test(line);
       if (!runtimeWorkloadLinePattern.test(rawLine) && !dynamicManifestKind && !genericKubernetesCreate) continue;
       if (!typedSourceExtensions.has(extname(rel))) classifyRuntimeConstruct(rel, line, line);
     }

@@ -2,10 +2,10 @@ import { UPGRADE_SESSION_TOOL, UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "@opencrane/backend/server/iam/authorization";
 import type { CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/observability";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
-import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
-import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
+import type { Logger } from "@opencrane/backend/observability";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
+import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
 import type { JsonValue } from "@opencrane/util";
 import { describe, expect, it, vi } from "vitest";
 

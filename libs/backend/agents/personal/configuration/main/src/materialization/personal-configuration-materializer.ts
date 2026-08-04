@@ -1,4 +1,4 @@
-import { ___CreateLogger, type Logger } from "@opencrane/observability";
+import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { AgentRevisionModelSelectionMaterializationCodes } from "@opencrane/backend/server/agents/agent-services";
 
 import { PersonalConfigurationMaterializationCodes, type MaterializePersonalConfigurationChangeCommand, type PersonalConfigurationChangeMaterializationRepository, type PersonalConfigurationMaterializationPersistenceResult } from "./personal-configuration-materialization.types.js";

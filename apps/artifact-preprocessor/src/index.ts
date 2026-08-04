@@ -2,7 +2,7 @@ import "./instrument.js";
 
 import { mkdir } from "node:fs/promises";
 
-import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/observability";
+import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 import { _CreateArtifactPreprocessorRemote, _CreatePdfTextExtractor, __RunArtifactPreprocessor } from "@opencrane/backend/artifacts/preprocessor";
 
 import { _ReadConfig } from "./config.js";

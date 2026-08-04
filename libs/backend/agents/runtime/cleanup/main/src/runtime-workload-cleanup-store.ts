@@ -1,7 +1,7 @@
 import { Observable, type ConfigurationOptions, type ObservableMiddleware, type RequestContext, type ResponseContext, type V1Job } from "@kubernetes/client-node";
 
 import { __AgentRuntimeAttemptResourceName } from "@opencrane/backend/agents/runtime/k8s-launcher";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _AssertExactRuntimeWorkloadCleanupJob } from "./runtime-workload-cleanup-projection.js";
 import type { KubernetesRuntimeWorkloadCleanupProjection, KubernetesRuntimeWorkloadCleanupStore, KubernetesRuntimeWorkloadCleanupStoreOptions } from "./runtime-workload-cleanup-store.types.js";

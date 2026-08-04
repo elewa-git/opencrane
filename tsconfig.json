@@ -124,20 +124,20 @@
       "@opencrane/models/platform-policy": [
         "./libs/models/platform-policy/main/src/index.ts"
       ],
-      "@opencrane/observability": [
-        "./libs/observability/src/index.ts"
+      "@opencrane/backend/observability": [
+        "./libs/backend/observability/src/index.ts"
       ],
-      "@opencrane/server/_infra/api": [
-        "./libs/server/_infra/api/src/index.ts"
+      "@opencrane/backend/_server/api": [
+        "./libs/backend/_server/api/src/index.ts"
       ],
-      "@opencrane/server/_infra/auth": [
-        "./libs/server/_infra/auth/src/index.ts"
+      "@opencrane/backend/_server/auth": [
+        "./libs/backend/_server/auth/src/index.ts"
       ],
-      "@opencrane/server/_infra/agent-runtime-stream": [
-        "./libs/server/_infra/agent-runtime-stream/src/index.ts"
+      "@opencrane/backend/_server/agent-runtime-stream": [
+        "./libs/backend/_server/agent-runtime-stream/src/index.ts"
       ],
-      "@opencrane/server/_infra/workload-identity": [
-        "./libs/server/_infra/workload-identity/src/index.ts"
+      "@opencrane/backend/_server/workload-identity": [
+        "./libs/backend/_server/workload-identity/src/index.ts"
       ],
       "@opencrane/backend/agents/runtime/k8s-launcher": [
         "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
@@ -157,20 +157,20 @@
       "@opencrane/backend/agents/runtime/controller": [
         "./libs/backend/agents/runtime/controller/src/index.ts"
       ],
-      "@opencrane/server/_infra/http": [
-        "./libs/server/_infra/http/src/index.ts"
+      "@opencrane/backend/_server/http": [
+        "./libs/backend/_server/http/src/index.ts"
       ],
-      "@opencrane/server/_infra/obot-custody": [
-        "./libs/server/_infra/obot-custody/src/index.ts"
+      "@opencrane/backend/_server/obot-custody": [
+        "./libs/backend/_server/obot-custody/src/index.ts"
       ],
-      "@opencrane/server/_infra/sandbox-execution": [
-        "./libs/server/_infra/sandbox-execution/src/index.ts"
+      "@opencrane/backend/_server/sandbox-execution": [
+        "./libs/backend/_server/sandbox-execution/src/index.ts"
       ],
-      "@opencrane/server/_infra/memory-gateway-client": [
-        "./libs/server/_infra/memory-gateway-client/src/index.ts"
+      "@opencrane/backend/_server/memory-gateway-client": [
+        "./libs/backend/_server/memory-gateway-client/src/index.ts"
       ],
-      "@opencrane/observability/telemetry": [
-        "./libs/observability/src/telemetry.ts"
+      "@opencrane/backend/observability/telemetry": [
+        "./libs/backend/observability/src/telemetry.ts"
       ],
       "@opencrane/core": [
         "./libs/frontend/core/src/index.ts"

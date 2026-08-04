@@ -3,7 +3,7 @@ import { rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCode, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ArtifactPreprocessorDependencies } from "./preprocessor.types.js";
 

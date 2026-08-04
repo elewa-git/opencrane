@@ -1,5 +1,5 @@
 import type { V1Job, V1Pod, V1Secret } from "@kubernetes/client-node";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 import type { AgentRuntimeJobProfile } from "@opencrane/backend/agents/runtime/k8s-launcher";
 

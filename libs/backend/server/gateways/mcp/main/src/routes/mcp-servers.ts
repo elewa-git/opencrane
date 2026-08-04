@@ -2,7 +2,7 @@ import { Router, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic.js";
-import { _RequireOrgAdmin } from "@opencrane/server/_infra/auth";
+import { _RequireOrgAdmin } from "@opencrane/backend/_server/auth";
 import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types.js";
 
 /**

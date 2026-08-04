@@ -8,11 +8,11 @@ APP_SOURCE_REGISTRY="$ROOT/docs/agents/app-source-allowlist.json"
 TMP_DIR="$(mktemp -d)"
 RENDER_PROBE="$ROOT/apps/_infra/deploy-k8s/templates/phase-b-guard-probe.yaml"
 COMPUTED_KIND_PROBE="$ROOT/apps/_infra/deploy-k8s/templates/phase-b-computed-kind-probe.yaml"
-RUNTIME_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-guard-probe.ts"
+RUNTIME_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-guard-probe.ts"
 RUNTIME_COMMAND_PROBE="$ROOT/scripts/phase-b-runtime-command-guard-probe.sh"
-RUNTIME_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts"
-RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
-RUNTIME_NONPRODUCING_CONTEXT_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts"
+RUNTIME_DUPLICATE_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-duplicate-guard-probe.ts"
+RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
+RUNTIME_NONPRODUCING_CONTEXT_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts"
 APP_SOURCE_PROBE="$ROOT/apps/opencrane/src/phase-b-app-guard-probe.py"
 APP_TEST_SOURCE_PROBE="$ROOT/apps/opencrane/src/app/__tests__/phase-b-app-test-guard-probe.py"
 BUILD_SOURCE_PROBE="$ROOT/apps/opencrane/src/build/phase-b-build-source-guard-probe.py"
@@ -126,7 +126,7 @@ else if (action === "empty-runtime")
 else if (action === "duplicate-runtime-anchor")
 {
   registry.runtimeConstructs.push({
-    path: "libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts",
+    path: "libs/backend/_server/http/src/phase-b-runtime-duplicate-guard-probe.ts",
     anchor: "kind: \"Deployment\"",
     workloadIds: ["agent-runtime"],
   });
@@ -134,7 +134,7 @@ else if (action === "duplicate-runtime-anchor")
 else if (action === "duplicate-nonproducing-anchor")
 {
   registry.nonProducingRuntimeMatches.push({
-    path: "libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts",
+    path: "libs/backend/_server/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts",
     anchor: "kind: \"Job\"",
     context: "secret-owner-reference",
     reason: "Mutation probe: duplicate delete selectors must not share one exemption.",
@@ -148,7 +148,7 @@ else if (action === "remove-attempt-key-nonproducer")
 }
 else if (action === "nonproducer-context-bypass")
 {
-  registry.nonProducingRuntimeMatches[0].path = "libs/server/_infra/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts";
+  registry.nonProducingRuntimeMatches[0].path = "libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts";
 }
 else
 {
@@ -241,11 +241,11 @@ expect_failure "unregistered runtime or installer workload construct: libs/backe
 
 printf '%s\n' 'export const convertedSecret = { apiVersion: "batch/v1", kind: "Job" };' >"$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
 registry="$(mutate_registry nonproducer-context-bypass)"
-expect_failure "unregistered runtime or installer workload construct: libs/server/_infra/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
+expect_failure "unregistered runtime or installer workload construct: libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 
 printf '%s\n' 'export const convertedSecret = { apiVersion: "v1", kind: "Secret", metadata: { ownerReferences: [{ apiVersion: "batch/v1", kind: "Job" }] }, ...{ kind: "Job" } };' >"$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
-expect_failure "unregistered runtime or installer workload construct: libs/server/_infra/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
+expect_failure "unregistered runtime or installer workload construct: libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 rm -f "$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
 

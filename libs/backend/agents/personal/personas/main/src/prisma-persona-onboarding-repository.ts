@@ -1,7 +1,7 @@
 import { PersonaQuestionSetState, type PrismaClient } from "@prisma/client";
 
-import { ___DoWithTrace } from "@opencrane/observability";
-import type { Logger } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { PERSONA_ONBOARDING_QUESTION_SET_ID, PERSONA_ONBOARDING_QUESTION_SET_VERSION } from "./persona-onboarding-catalogue.js";
 import type { EnsurePersonaOnboardingCommand, EnsurePersonaOnboardingResult, PersonaOnboardingRepository } from "./persona-onboarding-authority.types.js";
