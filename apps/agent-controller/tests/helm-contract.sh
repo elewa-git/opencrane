@@ -68,7 +68,7 @@ grep -Fq 'opencrane.ai/runtime-release:' "$RUNTIME_NAMESPACE"
 grep -Fq 'pod-security.kubernetes.io/enforce: restricted' "$RUNTIME_NAMESPACE"
 grep -Fq 'pod-security.kubernetes.io/enforce-version: latest' "$RUNTIME_NAMESPACE"
 grep -Fq 'name: agent-runtime-default' "$MANIFEST"
-grep -A4 -F 'name: agent-runtime-default' "$MANIFEST" | grep -Fq 'namespace: oc-opencrane-runtime'
+grep -A4 -F 'name: agent-runtime-default' "$MANIFEST" | grep -F 'namespace: oc-opencrane-runtime' >/dev/null
 test -s "$RUNTIME_QUOTA"
 grep -Fq 'pods: "20"' "$RUNTIME_QUOTA"
 grep -Fq 'count/jobs.batch: "20"' "$RUNTIME_QUOTA"
@@ -87,11 +87,11 @@ grep -Fq 'verbs: ["list"]' "$ROLE"
 # Attempt-key Secrets are create-only in the runtime namespace: the exact resource+verb must appear,
 # and the secrets rule must grant nothing beyond create.
 grep -Fq 'resources: ["secrets"]' "$ROLE"
-if ! grep -A1 'resources: \["secrets"\]' "$ROLE" | grep -Fq 'verbs: ["create"]'; then
+if ! grep -A1 'resources: \["secrets"\]' "$ROLE" | grep -F 'verbs: ["create"]' >/dev/null; then
   echo "agent-controller secrets rule must be create-only" >&2
   exit 1
 fi
-if grep -A1 'resources: \["secrets"\]' "$ROLE" | grep -Eq '"(get|list|patch|delete|update|watch)"'; then
+if grep -A1 'resources: \["secrets"\]' "$ROLE" | grep -E '"(get|list|patch|delete|update|watch)"' >/dev/null; then
   echo "agent-controller secrets rule exceeds create-only" >&2
   exit 1
 fi
@@ -101,14 +101,14 @@ if grep -Eq 'networkpolicies|serviceaccounts|deployments|configmaps|"(delete|upd
 fi
 test -s "$BINDING"
 grep -Fq 'namespace: oc-opencrane-runtime' "$BINDING"
-grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -Fq 'namespace: server-ns'
+grep -A4 -F 'kind: ServiceAccount' "$BINDING" | grep -F 'namespace: server-ns' >/dev/null
 # The same controller KSA has an independently namespaced least-privilege RoleBinding for managed
 # runtime attempts; it receives no cluster role and no permission outside the two exact namespaces.
-grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'name: agent-controller'
-grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["jobs"]'
-grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
-grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'resources: ["secrets"]'
-grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -Fq 'namespace: server-ns'
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -F 'name: agent-controller' >/dev/null
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -F 'resources: ["jobs"]' >/dev/null
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -F 'resources: ["secrets"]' >/dev/null
+grep -A28 -F 'namespace: oc-opencrane-managed-runtime' "$MANIFEST" | grep -F 'namespace: server-ns' >/dev/null
 
 # Only the OpenCrane server receives runtime Job deletion, through a separately named Role.
 test -s "$CLEANUP_ROLE"
@@ -120,28 +120,28 @@ if grep -Eq '"(create|list|patch|update|watch)"|resources: \["(pods|secrets)"\]'
   exit 1
 fi
 test -s "$CLEANUP_BINDING"
-grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'name: oc-opencrane-opencrane-server'
-grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -Fq 'namespace: server-ns'
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -F 'name: oc-opencrane-opencrane-server' >/dev/null
+grep -A4 -F 'kind: ServiceAccount' "$CLEANUP_BINDING" | grep -F 'namespace: server-ns' >/dev/null
 
 # Governed skill namespaces are derived from their owning charts. Their controller Roles can create,
 # exact-adopt, and conditionally release Jobs, plus list the exact Job-owned Pod for registration.
-grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
-grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -Fq 'name: agent-controller-skill-workloads'
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["get", "create", "patch"]'
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'resources: ["pods"]'
-grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Fq 'verbs: ["list"]'
-if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -Eq '"(delete|update|watch)"'; then
+grep -A16 -F 'namespace: opencrane-skill-authoring' "$MANIFEST" | grep -F 'name: agent-controller-skill-workloads' >/dev/null
+grep -A16 -F 'namespace: opencrane-tools' "$MANIFEST" | grep -F 'name: agent-controller-skill-workloads' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["get", "create", "patch"]' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'resources: ["pods"]' >/dev/null
+grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -F 'verbs: ["list"]' >/dev/null
+if grep -A16 -F 'name: agent-controller-skill-workloads' "$MANIFEST" | grep -E '"(delete|update|watch)"' >/dev/null; then
   echo "skill workload Roles exceed fenced Job release and Pod discovery authority" >&2
   exit 1
 fi
 
 # The controller receives both profile-owned namespaces in one immutable map; it never gets a
 # process-wide runtime namespace that could let one profile borrow another's RoleBinding.
-grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"namespace\":\"oc-opencrane-runtime\"'
-grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"namespace\":\"oc-opencrane-managed-runtime\"'
-grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"identityProfile\":\"managed\"'
-grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq '\"serviceAccountName\":\"managed-agent-runtime-default\"'
-grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -Fq 'namespace: server-ns'
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-runtime\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"namespace\":\"oc-opencrane-managed-runtime\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"identityProfile\":\"managed\"' >/dev/null
+grep -A1 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -F '\"serviceAccountName\":\"managed-agent-runtime-default\"' >/dev/null
+grep -B8 -A8 -F 'name: oc-opencrane-agent-controller' "$MANIFEST" | grep -F 'namespace: server-ns' >/dev/null
 
 # Helm, not the controller, owns the namespace-wide network boundary.
 test -s "$CONTROLLER_POLICY"
@@ -157,7 +157,7 @@ if grep -Fq 'ingress:' "$RUNTIME_EGRESS"; then
   echo "runtime egress policy redundantly owns ingress" >&2
   exit 1
 fi
-grep -A20 -F 'name: oc-opencrane-agent-runtime-egress' "$MANIFEST" | grep -Fq 'namespace: oc-opencrane-runtime'
+grep -A20 -F 'name: oc-opencrane-agent-runtime-egress' "$MANIFEST" | grep -F 'namespace: oc-opencrane-runtime' >/dev/null
 grep -Fq 'opencrane.ai/runtime-release:' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: server-ns' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: kube-system' "$MANIFEST"
@@ -165,16 +165,16 @@ grep -Fq 'app.kubernetes.io/component: litellm' "$RUNTIME_EGRESS"
 grep -Fq 'port: 4000' "$RUNTIME_EGRESS"
 test -s "$SERVER_POLICY"
 grep -Fq 'cidr: "10.43.0.1/32"' "$SERVER_POLICY"
-grep -A3 -F 'cidr: "10.43.0.1/32"' "$SERVER_POLICY" | grep -Fq 'port: 443'
+grep -A3 -F 'cidr: "10.43.0.1/32"' "$SERVER_POLICY" | grep -F 'port: 443' >/dev/null
 grep -Fq 'cidr: "172.18.0.2/32"' "$SERVER_POLICY"
-grep -A3 -F 'cidr: "172.18.0.2/32"' "$SERVER_POLICY" | grep -Fq 'port: 6443'
+grep -A3 -F 'cidr: "172.18.0.2/32"' "$SERVER_POLICY" | grep -F 'port: 6443' >/dev/null
 grep -Fq 'cidr: "172.18.0.2/32"' "$CONTROLLER_POLICY"
-grep -A3 -F 'cidr: "172.18.0.2/32"' "$CONTROLLER_POLICY" | grep -Fq 'port: 6443'
+grep -A3 -F 'cidr: "172.18.0.2/32"' "$CONTROLLER_POLICY" | grep -F 'port: 6443' >/dev/null
 
 # Admission is fail closed, scoped by the release-unique namespace label, and grants no rights.
 test -s "$ADMISSION"
 grep -Fq 'failurePolicy: Fail' "$ADMISSION"
-grep -A2 -F '  matchConstraints:' "$ADMISSION" | grep -Fq '    matchPolicy: Exact'
+grep -A2 -F '  matchConstraints:' "$ADMISSION" | grep -F '    matchPolicy: Exact' >/dev/null
 grep -Fq 'operations: ["CREATE", "UPDATE"]' "$ADMISSION"
 grep -Fq 'resources: ["jobs"]' "$ADMISSION"
 grep -Fq 'request.userInfo.username == "system:serviceaccount:server-ns:agent-controller"' "$ADMISSION"
@@ -205,8 +205,8 @@ grep -Fq "object.spec.template.spec.containers[0].env[2].name == 'OPENCRANE_SKIL
 grep -Fq "object.spec.template.spec.volumes[1].name == 'bootstrap-reference'" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[1].downwardAPI.items[0].fieldRef.fieldPath == \"metadata.annotations['opencrane.ai/capability-reference']\"" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'scratch'" "$ADMISSION"
-grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime'
-if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -Fq 'http://override.example:8081'; then
+grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://oc-opencrane-opencrane-server.server-ns.svc.cluster.local:8081/api/internal/agent-runtime' >/dev/null
+if grep -A1 -F 'name: AGENT_CONTROLLER_SKILL_WORKLOAD_PROFILES_JSON' "$SKILL_URL_OVERRIDE" | grep -F 'http://override.example:8081' >/dev/null; then
   echo "governed worker bootstrap must not inherit the mutable runtime endpoint override" >&2
   exit 1
 fi
@@ -272,9 +272,9 @@ grep -Fq 'validationActions: [Deny]' "$MANIFEST"
 # Disabled renders no controller-owned namespace, RBAC, network policy, profile map, or
 # cluster-scoped admission residue.
 grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
-grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -Fq 'port: 443'
+grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -F 'port: 443' >/dev/null
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
-grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
+grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -F 'port: 6443' >/dev/null
 if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime|name: oc-opencrane-managed-runtime|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_PROFILES_JSON' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
