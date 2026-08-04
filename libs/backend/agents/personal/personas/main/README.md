@@ -54,7 +54,8 @@ failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insi
 Every lifecycle adapter returns the same serialized lifecycle outcome and denial values through
 documented string-backed enums. That keeps the API's readable response values stable while ensuring
 the profile, interview, drafting, and approval owners cannot silently drift into different control
-flow vocabularies.
+flow vocabularies. Reviewed templates require unique rule priorities within each template, so
+delegate-backed drafting never substitutes application collation for a database rule-ID tie-break.
 
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
@@ -79,7 +80,7 @@ whole approval rather than activating the revision alone.
 
 Consumed by the persona-onboarding path. It owns the interview lifecycle and approval, but does not
 execute the agent. Its drafting authority derives bounded owner-visible insight statements, template
-selection, and every durable draft coordinate from the locked completed-interview answers. It never
+selection, and every durable draft coordinate from one serializable completed-interview snapshot. It never
 activates a draft that is not fully evidenced, and it never mints an editable runtime persona file.
 The capability stays one aggregate lifecycle, but its implementation is grouped by responsibility:
 `profile/` provisions and reports owner state, `interview/` records immutable answers, `drafting/`
