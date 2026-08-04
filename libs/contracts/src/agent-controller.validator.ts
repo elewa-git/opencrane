@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunAttemptClaimLease, AgentControllerRunAttemptProjection, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim, AgentControllerRunWorkloadReleaseProjection } from "./agent-controller.types.js";
+import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _AgentControllerPositiveIntegerSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "./agent-controller-wire.validator.js";
 
 /**
  * Runtime validators live beside the agent-controller wire models so their accepted payloads cannot
@@ -11,46 +12,11 @@ import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAtte
 /** Maximum number of rows one outbox-prune response may report. */
 const _MAXIMUM_PRUNED_ROWS = 1_000;
 
-/** Return whether one value is a bounded, non-empty identifier without ASCII control characters. */
-function _IsBoundedIdentifier(value: unknown): value is string
-{
-	return typeof value === "string" && value.length > 0 && value.length <= 256 && !/[\u0000-\u001f\u007f]/.test(value);
-}
-
-/** Return whether one value is a positive JavaScript-safe integer. */
-function _IsPositiveInteger(value: unknown): value is number
-{
-	return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
-}
-
-/** Return whether one value is a canonical UTC millisecond instant. */
-function _IsMillisecondInstant(value: unknown): value is string
-{
-	if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(value)) return false;
-	const epochMilliseconds = Date.parse(value);
-	return Number.isSafeInteger(epochMilliseconds) && new Date(epochMilliseconds).toISOString() === value;
-}
-
 /** Return whether one value is the bounded non-negative count an outbox prune may report. */
 function _IsPrunedCount(value: unknown): value is number
 {
 	return typeof value === "number" && Number.isSafeInteger(value) && value >= 0 && value <= _MAXIMUM_PRUNED_ROWS;
 }
-
-/** Return whether one value is a valid opaque identifier for an agent-controller command. */
-export function ___IsAgentControllerIdentifier(value: unknown): value is string
-{
-	return _IsBoundedIdentifier(value);
-}
-
-/** Shared schema for identifiers crossing the private agent-controller API. */
-export const _AgentControllerBoundedIdentifierSchema = z.custom<string>(_IsBoundedIdentifier, { message: "must be a bounded identifier" });
-
-/** Shared schema for positive counters crossing the private agent-controller API. */
-export const _AgentControllerPositiveIntegerSchema = z.custom<number>(_IsPositiveInteger, { message: "must be a positive integer" });
-
-/** Shared schema for canonical database instants crossing the private agent-controller API. */
-export const _AgentControllerMillisecondInstantSchema = z.custom<string>(_IsMillisecondInstant, { message: "must be a UTC millisecond instant" });
 
 /** Shared lease model plus its chronology invariant. */
 const _RunAttemptClaimLeaseSchema: z.ZodType<AgentControllerRunAttemptClaimLease> = z.object({
@@ -150,33 +116,6 @@ const _RunWorkloadRegistrationResultSchema: z.ZodType<AgentControllerRunWorkload
 
 /** Outbox-prune response model kept private because callers consume only the bounded count. */
 const _OutboxPruneResultSchema: z.ZodType<AgentControllerRunOutboxPruneResult> = z.object({ deletedCount: z.custom<number>(_IsPrunedCount, { message: "must be an integer between 0 and 1000" }) }).strip();
-
-/** Empty server-owned claim command; strictness rejects caller-selected extensions. */
-const _EmptyCommandSchema = z.object({}).strict();
-
-/** Parse one Zod model and retain the stable field-path diagnostics used by authority adapters. */
-export function _ParseAgentControllerModel<T>(schema: z.ZodType<T>, value: unknown, sourceName: string): T
-{
-	const parsed = schema.safeParse(value);
-	if (parsed.success) return parsed.data;
-	const issue = parsed.error.issues[0];
-	if (!issue) throw new Error(`${sourceName} failed validation`);
-	const path = issue.path.length === 0 ? sourceName : `${sourceName}.${issue.path.join(".")}`;
-	throw new Error(`${path} ${issue.message}`);
-}
-
-/** Safely parse one strict command model for an HTTP 400 boundary. */
-export function _ParseAgentControllerCommand<T>(schema: z.ZodType<T>, value: unknown): T | null
-{
-	const parsed = schema.safeParse(value);
-	return parsed.success ? parsed.data : null;
-}
-
-/** Return whether a server-owned claim command contains no caller-selected fields. */
-export function ___IsEmptyAgentControllerCommand(value: unknown): boolean
-{
-	return _EmptyCommandSchema.safeParse(value).success;
-}
 
 /** Parse one exact runtime assignment command or return null for HTTP rejection. */
 export function ___ParseAgentControllerRunAttemptAssignmentCommand(value: unknown): AgentControllerRunAttemptAssignmentCommand | null

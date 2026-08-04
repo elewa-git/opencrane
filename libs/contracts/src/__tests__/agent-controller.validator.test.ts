@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentControllerSkillWorkloadAssignmentResult, ___ParseAgentControllerSkillWorkloadClaim, ___ParseAgentControllerSkillWorkloadPodRegistrationCommand, ___ParseAgentControllerSkillWorkloadPodRegistrationResult, ___ParseAgentControllerSkillWorkloadReleaseClaim, ___ParseAgentControllerSkillWorkloadReleaseCommand, ___ParseAgentControllerSkillWorkloadReleaseResult } from "../agent-controller-skill-workload.validator.js";
-import { ___IsEmptyAgentControllerCommand, ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationCommand, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim } from "../agent-controller.validator.js";
+import { ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationCommand, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim } from "../agent-controller.validator.js";
 
 /** Return one valid runtime attempt claim with optional untrusted response extensions. */
 function _RunClaim()
@@ -58,8 +58,6 @@ describe("agent-controller contract validators", function _DescribeValidators()
 	{
 		const assignment = _RunAssignmentCommand();
 		const registration = _RunRegistrationCommand();
-		expect(___IsEmptyAgentControllerCommand({})).toBe(true);
-		expect(___IsEmptyAgentControllerCommand({ policy: "self-asserted" })).toBe(false);
 		expect(___ParseAgentControllerRunAttemptAssignmentCommand(assignment)).toEqual(assignment);
 		expect(___ParseAgentControllerRunAttemptAssignmentCommand({ ...assignment, policy: "self-asserted" })).toBeNull();
 		expect(___ParseAgentControllerRunWorkloadRegistrationCommand(registration)).toEqual(registration);
