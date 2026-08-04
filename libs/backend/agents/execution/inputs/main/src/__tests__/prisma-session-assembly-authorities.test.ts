@@ -16,7 +16,7 @@ describe("Prisma session assembly authority factories", function _DescribePrisma
 
 	it("selects the gateway-backed personal memory scope for personal composition", function _ComposesPersonalAuthorities()
 	{
-		const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never, new PrismaSkillRevisionEligibilitySource(), function _CreatePersonalMemory() { return { findActivePersonalDataset: async function _FindActivePersonalDataset() { return null; } }; }, { select: async function _Select() { return []; } });
+		const authorities = __CreatePrismaPersonalSessionAssemblyAuthorities({ admit: async function _Admit() { throw new Error("not invoked"); } } as never, { load: async function _Load() { return { outcome: "denied", reason: "identity_unavailable" } as const; } } as never, new PrismaSkillRevisionEligibilitySource(), function _CreatePersonalMemory() { return { findActivePersonalDataset: async function _FindActivePersonalDataset() { return null; }, findActivePreferenceFactIds: async function _FindActivePreferenceFactIds() { return []; } }; }, { select: async function _Select() { return []; } });
 		expect(authorities.memoryScope).toBeInstanceOf(PersonalMemoryScopeSource);
 	});
 });
