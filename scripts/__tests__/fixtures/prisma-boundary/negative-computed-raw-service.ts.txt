@@ -1,0 +1,18 @@
+import type { PrismaClient } from "@prisma/client";
+
+export class ComputedRawService
+{
+	private readonly prisma: PrismaClient;
+
+	constructor(prisma: PrismaClient)
+	{
+		this.prisma = prisma;
+	}
+
+	async execute(): Promise<unknown>
+	{
+		const { $executeRaw: executeRaw } = this.prisma;
+		void executeRaw;
+		return this.prisma["$queryRaw"]`SELECT 1`;
+	}
+}

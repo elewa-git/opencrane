@@ -33,17 +33,67 @@ export function importedBindings(source)
 	return imports;
 }
 
-/** Returns whether the enclosing class implements an imported ownership contract. */
-export function ownsContract(owner, imports, allowedContracts)
+/** Returns the exact policy owner entry for one class, or undefined when it is unauthorized. */
+export function authorizedOwner(owner, imports, allowedContracts, path)
 {
-	return owner !== undefined && owner.contracts.some(function _Owns(contract)
+	if (owner === undefined) return undefined;
+	return allowedContracts.find(function _Allowed(allowed)
 	{
-		const binding = imports.get(contract);
-		return binding !== undefined && allowedContracts.some(function _Allowed(allowed)
+		if (allowed.path !== path || allowed.adapter !== owner.name) return false;
+		return owner.contracts.some(function _Owns(contract)
 		{
-			return allowed.contract === binding.imported && allowed.importPath === binding.importPath;
+			const binding = imports.get(contract);
+			return binding !== undefined && allowed.contract === binding.imported && allowed.contractImportPath === binding.importPath;
 		});
 	});
+}
+
+/** Finds repository constructions and resolves their exact import source. */
+export function repositoryConstructions(source, classCandidates, imports)
+{
+	const constructions = [];
+	const pattern = /\bnew\s+([A-Za-z_$][\w$]*Repository)\s*\(([^)]*)\)/gu;
+	for (const match of source.matchAll(pattern))
+	{
+		const owner = enclosingClass(classCandidates, match.index ?? 0);
+		const binding = imports.get(match[1]);
+		const sameFile = classCandidates.some(function _SameFile(candidate) { return candidate.name === match[1]; });
+		constructions.push({
+			adapter: match[1],
+			argument: match[2].trim(),
+			importPath: binding?.importPath ?? (sameFile ? "<same-file>" : "<unbound>"),
+			index: match.index ?? 0,
+			owner,
+		});
+	}
+	return constructions;
+}
+
+/** Returns whether a repository receives the exact transaction binding in scope. */
+export function isTransactionScopedConstruction(source, construction, imports)
+{
+	if (!/^(?:this\.)?[A-Za-z_$][\w$]*$/u.test(construction.argument)) return false;
+	if (construction.argument.startsWith("this."))
+	{
+		if (construction.owner === undefined) return false;
+		const property = construction.argument.slice("this.".length);
+		return _TransactionClientProperties(source, construction.owner, imports).has(property);
+	}
+	return _TransactionCallbackBindings(source).some(function _OwnsBinding(binding)
+	{
+		return binding.name === construction.argument && binding.start <= construction.index && construction.index <= binding.end;
+	});
+}
+
+/** Returns whether a repository constructor accepts an imported Prisma TransactionClient. */
+export function repositoryAcceptsTransactionClient(source, owner, imports)
+{
+	if (owner === undefined) return false;
+	const types = _TransactionClientTypes(imports);
+	if (types.length === 0) return false;
+	const body = source.slice(owner.start, owner.end + 1);
+	const pattern = new RegExp(`\\bconstructor\\s*\\(\\s*[A-Za-z_$][\\w$]*\\s*:\\s*(?:${types.join("|")})\\b`, "u");
+	return pattern.test(body);
 }
 
 /** Finds the smallest class body containing one source offset. */
@@ -104,4 +154,48 @@ function _MatchingBrace(source, open)
 		}
 	}
 	return source.length;
+}
+
+/** Finds transaction-client properties declared by one class. */
+function _TransactionClientProperties(source, owner, imports)
+{
+	const properties = new Set();
+	const types = _TransactionClientTypes(imports);
+	if (types.length === 0) return properties;
+	const body = source.slice(owner.start, owner.end + 1);
+	const pattern = new RegExp(`\\b([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${types.join("|")})\\b`, "gu");
+	for (const match of body.matchAll(pattern)) properties.add(match[1]);
+	return properties;
+}
+
+/** Returns local type spellings that prove Prisma transaction-client authority. */
+function _TransactionClientTypes(imports)
+{
+	const types = [];
+	for (const [local, binding] of imports.entries())
+	{
+		if (binding.importPath !== "@prisma/client") continue;
+		if (binding.imported === "Prisma") types.push(`${_EscapeRegex(local)}\\.TransactionClient`);
+		if (binding.imported === "TransactionClient") types.push(_EscapeRegex(local));
+	}
+	return types;
+}
+
+/** Finds the exact callback parameter and body for each direct Prisma transaction. */
+function _TransactionCallbackBindings(source)
+{
+	const bindings = [];
+	const pattern = /\.\$transaction\s*\(\s*async\s+(?:function\s+[A-Za-z_$][\w$]*\s*)?\(\s*([A-Za-z_$][\w$]*)(?:\s*:[^,)]+)?\s*\)\s*(?::\s*[^={]+)?(?:=>\s*)?\{/gu;
+	for (const match of source.matchAll(pattern))
+	{
+		const open = (match.index ?? 0) + match[0].lastIndexOf("{");
+		bindings.push({ name: match[1], start: open, end: _MatchingBrace(source, open) });
+	}
+	return bindings;
+}
+
+/** Escapes a literal for inclusion in a regular expression. */
+function _EscapeRegex(value)
+{
+	return value.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 }
