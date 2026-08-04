@@ -35,6 +35,11 @@ export class GatewayMemoryFactSelector implements PersonalMemoryFactSelector
 		});
 
 		// 3. Sort by fact id so the frozen reference order is canonical regardless of recall ranking.
-		return references.sort(function _byFactId(left, right): number { return left.factId < right.factId ? -1 : left.factId > right.factId ? 1 : 0; });
+		return references.sort(function _byFactId(left, right): number
+		{
+			if (left.factId < right.factId) return -1;
+			if (left.factId > right.factId) return 1;
+			return 0;
+		});
 	}
 }

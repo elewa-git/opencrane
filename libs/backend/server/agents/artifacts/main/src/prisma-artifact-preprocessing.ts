@@ -203,9 +203,11 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now) return { status: "conflict", reason: "stale_claim" };
 
 			const terminal = job.attempt >= _MAX_ATTEMPTS;
+			const state = terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
+			const nextAttemptAt = terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt);
 			await transaction.artifactPreprocessJob.update({
 				where: { id: job.id },
-				data: { state: terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt) },
+				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt },
 			});
 			return { status: terminal ? "terminal" : "retryable" };
 		}

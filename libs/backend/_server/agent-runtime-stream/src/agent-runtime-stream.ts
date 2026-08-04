@@ -212,7 +212,8 @@ export function _RegisterInternalAgentRuntimeStream(options: RuntimeStreamTransp
 			// event would turn high-frequency message deltas into a fleet-wide read burst; all other
 			// lifecycle changes remain protected by the bounded durable recovery check.
 			if (result.accepted && _IsRuntimeCandidate(request.body) && request.body.kind === "external_action") wakeup.wake();
-			response.status(result.accepted ? 202 : result.retryable ? 503 : 409).json(result);
+			const responseStatus = result.accepted ? 202 : 409;
+			response.status(result.retryable ? 503 : responseStatus).json(result);
 		}
 		catch (error)
 		{

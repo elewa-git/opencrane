@@ -74,13 +74,26 @@ export async function __DeliverChildRunCompletionInTransaction(transaction: Pris
 async function _recordSuppressed(transaction: Prisma.TransactionClient, childRunId: string, parentRunId: string, outcome: ChildRunCompletionDeliveryOutcome): Promise<ChildRunCompletionResult>
 {
 	await transaction.childRunCompletionDelivery.create({ data: { childRunId, parentRunId, parentEventSequence: null, outcome } });
-	return { outcome: "suppressed", parentRunId, reason: outcome === ChildRunCompletionDeliveryOutcome.NoParentStream ? "no_parent_stream" : "parent_stream_terminal" };
+	return { outcome: "suppressed", parentRunId, reason: _suppressedReason(outcome) };
 }
 
 /** Maps a persisted delivery ledger row into the same replay outcome across all callers. */
 function _replay(parentRunId: string, delivery: { outcome: ChildRunCompletionDeliveryOutcome; parentEventSequence: number | null }): ChildRunCompletionResult
 {
-	return { outcome: "idempotent", parentRunId, parentEventSequence: delivery.parentEventSequence, delivery: delivery.outcome === ChildRunCompletionDeliveryOutcome.Delivered ? "delivered" : delivery.outcome === ChildRunCompletionDeliveryOutcome.NoParentStream ? "no_parent_stream" : "parent_stream_terminal" };
+	return { outcome: "idempotent", parentRunId, parentEventSequence: delivery.parentEventSequence, delivery: _deliveryOutcome(delivery.outcome) };
+}
+
+/** Map a suppressed ledger category to the bounded parent-facing reason. */
+function _suppressedReason(outcome: ChildRunCompletionDeliveryOutcome): "no_parent_stream" | "parent_stream_terminal"
+{
+	return outcome === ChildRunCompletionDeliveryOutcome.NoParentStream ? "no_parent_stream" : "parent_stream_terminal";
+}
+
+/** Map one ledger category to the bounded replay vocabulary. */
+function _deliveryOutcome(outcome: ChildRunCompletionDeliveryOutcome): "delivered" | "no_parent_stream" | "parent_stream_terminal"
+{
+	if (outcome === ChildRunCompletionDeliveryOutcome.Delivered) return "delivered";
+	return _suppressedReason(outcome);
 }
 
 /** Returns whether a run state has immutable terminal outcome evidence. */

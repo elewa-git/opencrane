@@ -63,13 +63,21 @@ async function _compileVerified(snapshot: RunInputSnapshot, repositories: Prompt
 /** Order tool definitions by name so the compiled set never depends on grant iteration order. */
 function _orderTools(tools: readonly CompiledToolDefinition[]): readonly CompiledToolDefinition[]
 {
-	return [...tools].sort(function _byName(left, right): number { return left.name < right.name ? -1 : left.name > right.name ? 1 : 0; });
+	return [...tools].sort(function _byName(left, right): number { return _compareText(left.name, right.name); });
 }
 
 /** Return the snapshot's memory-fact references ordered canonically for stable statement resolution. */
 function _orderedFacts(snapshot: RunInputSnapshot): RunInputSnapshot["memoryFacts"]
 {
-	return [...snapshot.memoryFacts].sort(function _byFactId(left, right): number { return left.factId < right.factId ? -1 : left.factId > right.factId ? 1 : 0; });
+	return [...snapshot.memoryFacts].sort(function _byFactId(left, right): number { return _compareText(left.factId, right.factId); });
+}
+
+/** Compare two canonical text identifiers without locale-dependent ordering. */
+function _compareText(left: string, right: string): number
+{
+	if (left < right) return -1;
+	if (left > right) return 1;
+	return 0;
 }
 
 /** Derive the positive attempt the snapshot compiles for, defaulting to the first attempt. */

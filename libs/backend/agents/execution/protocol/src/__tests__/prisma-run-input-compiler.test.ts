@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { describe, expect, it, vi } from "vitest";
 
-import { PROMPT_COMPILER_VERSION, type RunInputSnapshot } from "@opencrane/contracts";
+import { PROMPT_COMPILER_VERSION, RunInputSnapshotIdentityKinds, type RunInputSnapshot } from "@opencrane/contracts";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import { __CreatePrismaRunInputCompiler } from "../prisma-run-input-compiler.js";
@@ -33,7 +33,7 @@ function _snapshot(overrides: Partial<RunInputSnapshot> = {}): RunInputSnapshot
 		integrationAssignments: [],
 		modelRoute: { alias: "silo-default" },
 		budgetPolicy: {},
-		identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: `sha256:${"c".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-05T00:00:00.000Z" },
+		identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 3, fleetMembershipIssuer: "fleet", fleetMembershipIssuerKeyId: "k1", fleetMembershipAssertionId: "a1", fleetMembershipPayloadDigest: `sha256:${"c".repeat(64)}`, fleetMembershipTrustedUntil: "2026-08-05T00:00:00.000Z" },
 		capabilitySetDigest: `sha256:${"d".repeat(64)}`,
 		effectiveContractDigest: `sha256:${"e".repeat(64)}`,
 		promptCompilerVersion: PROMPT_COMPILER_VERSION,

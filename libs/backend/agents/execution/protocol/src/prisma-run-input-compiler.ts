@@ -197,7 +197,8 @@ async function _loadSkillSummaries(transaction: Prisma.TransactionClient, skillR
 async function _resolveModelRoute(transaction: Prisma.TransactionClient, modelRoute: JsonValue): Promise<CompiledModelRoute>
 {
 	const route: { readonly [key: string]: JsonValue } = modelRoute && typeof modelRoute === "object" && !Array.isArray(modelRoute) ? modelRoute as { readonly [key: string]: JsonValue } : {};
-	const requested = typeof route["alias"] === "string" ? route["alias"] : typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
+	const publicModelName = typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
+	const requested = typeof route["alias"] === "string" ? route["alias"] : publicModelName;
 	const maxOutputTokens = typeof route["maxOutputTokens"] === "number" && Number.isSafeInteger(route["maxOutputTokens"]) && route["maxOutputTokens"] > 0 ? route["maxOutputTokens"] : null;
 	const definition = requested.length > 0 ? await transaction.modelDefinition.findFirst({ where: { publicModelName: requested } }) : null;
 	return { modelAlias: definition?.publicModelName ?? requested, maxOutputTokens };

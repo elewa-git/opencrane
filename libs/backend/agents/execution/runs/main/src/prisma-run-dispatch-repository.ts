@@ -816,7 +816,8 @@ function _SnapshotModelAlias(modelRoute: unknown): string | null
 {
 	if (!modelRoute || typeof modelRoute !== "object" || Array.isArray(modelRoute)) return null;
 	const route = modelRoute as Record<string, unknown>;
-	const alias = typeof route["alias"] === "string" ? route["alias"] : typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
+	const publicModelName = typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
+	const alias = typeof route["alias"] === "string" ? route["alias"] : publicModelName;
 	return alias.trim().length > 0 && alias.length <= 128 ? alias : null;
 }
 
