@@ -31,6 +31,11 @@ The chart installs trusted services and distinct restricted namespaces for perso
 managed and worker Jobs. A single-node cluster does not collapse those boundaries. Create the
 three PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
 
+Add `--verify` when you want an advisory check of pod readiness, hostname resolution, and the public
+server/database health endpoint after installation. For a local self-signed certificate, use
+`--verify --verify-insecure`; omit `--verify-insecure` whenever the certificate is trusted. These
+checks report diagnostics without turning a completed installation into a failed release.
+
 ::: warning
 Single-node does not mean single namespace. OpenCrane refuses a deployment that places
 untrusted runtime Jobs beside the trusted server.
