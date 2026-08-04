@@ -1,17 +1,3 @@
-/**
- * Stable overlap choices owned by the scheduler when evaluating one service's due slots.
- *
- * The values are persisted by the agent-service schedule authority and must remain compatible with
- * its API vocabulary. They select only scheduler behaviour; they grant no run authority.
- */
-export enum ScheduleOverlapPolicies
-{
-	/** Admit at most one oldest due slot, and drop due slots while a prior scheduled run is active. */
-	Skip = "skip",
-	/** Admit every due slot, relying on the shared run-admission idempotency fence. */
-	Allow = "allow",
-}
-
 /** Stable public outcome of evaluating one schedule tick. */
 export enum ScheduleTickStatuses
 {

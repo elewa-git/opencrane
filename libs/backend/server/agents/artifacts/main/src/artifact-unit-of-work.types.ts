@@ -2,6 +2,16 @@ import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.
 import type { ArtifactPreprocessRepository } from "./artifact-preprocessing.types.js";
 import type { ArtifactUploadLeaseRepository } from "./artifact-upload.types.js";
 
+/** Domain-neutral signal that a fully rolled-back artifact publication race exhausted safe retries. */
+export class _ArtifactPublicationConflictError extends Error
+{
+	/** Marks a conflict without exposing persistence-adapter details to the application authority. */
+	constructor()
+	{
+		super("artifact publication conflict");
+	}
+}
+
 /** Capability repositories bound to one artifact-publication database transaction. */
 export interface ArtifactPublicationTransaction
 {

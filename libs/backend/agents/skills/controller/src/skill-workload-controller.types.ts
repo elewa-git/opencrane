@@ -4,6 +4,21 @@ import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkil
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
 import type { Logger } from "@opencrane/backend/observability";
 
+/** Stable controller outcomes used to coordinate idle polling and durable reconciliation progress. */
+export enum SkillWorkloadControllerReconcileOutcomes
+{
+	/** No eligible durable work is currently available. */
+	Idle = "idle",
+	/** A new suspended Job assignment was committed. */
+	Assigned = "assigned",
+	/** The exact existing assignment or registration was replayed. */
+	Idempotent = "idempotent",
+	/** The Job is released but Kubernetes has not exposed its first Pod yet. */
+	PendingPod = "pending-pod",
+	/** The exact first worker Pod was durably registered. */
+	Registered = "registered",
+}
+
 /** Immutable profile map keyed by the one permitted governed skill workload class. */
 export type SkillWorkloadControllerProfiles = Readonly<Record<AgentControllerSkillWorkloadClaim["kind"], SkillWorkloadJobProfile>>;
 
@@ -102,11 +117,11 @@ export interface SkillWorkloadControllerOptions
 
 /** Result of one controller desired-state poll. */
 export type SkillWorkloadControllerReconcileResult =
-	| { readonly outcome: "idle" }
-	| { readonly outcome: "assigned" | "idempotent"; readonly workloadId: string; readonly workloadUid: string };
+	| { readonly outcome: SkillWorkloadControllerReconcileOutcomes.Idle }
+	| { readonly outcome: SkillWorkloadControllerReconcileOutcomes.Assigned | SkillWorkloadControllerReconcileOutcomes.Idempotent; readonly workloadId: string; readonly workloadUid: string };
 
 /** Result of one governed-skill release and first-Pod registration reconciliation. */
 export type SkillWorkloadControllerReleaseReconcileResult =
-	| { readonly outcome: "idle" }
-	| { readonly outcome: "pending-pod"; readonly workloadId: string; readonly workloadUid: string }
-	| { readonly outcome: "registered" | "idempotent"; readonly workloadId: string; readonly workloadUid: string; readonly podUid: string };
+	| { readonly outcome: SkillWorkloadControllerReconcileOutcomes.Idle }
+	| { readonly outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod; readonly workloadId: string; readonly workloadUid: string }
+	| { readonly outcome: SkillWorkloadControllerReconcileOutcomes.Registered | SkillWorkloadControllerReconcileOutcomes.Idempotent; readonly workloadId: string; readonly workloadUid: string; readonly podUid: string };

@@ -1,6 +1,6 @@
-import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult } from "@opencrane/backend/server/agents/agent-services";
+import type { AgentScheduleOverlapPolicies, ManagedRunAdmissionPort, ManagedRunAdmissionResult } from "@opencrane/backend/server/agents/agent-services";
 
-import type { ScheduleInvalidReasons, ScheduleOverlapPolicies, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
+import type { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
 
 /** One recurring schedule bound to a managed AgentService's active revision. */
 export interface AgentServiceSchedule
@@ -16,7 +16,7 @@ export interface AgentServiceSchedule
 	/** IANA timezone the cron expression is evaluated in. */
 	readonly timezone: string;
 	/** Behaviour when a prior scheduled run is still active. */
-	readonly overlapPolicy: ScheduleOverlapPolicies;
+	readonly overlapPolicy: AgentScheduleOverlapPolicies;
 	/** Whether evaluation is active; `false` suspends the schedule without deleting it. */
 	readonly enabled: boolean;
 	/** Bounded catch-up horizon in seconds. */

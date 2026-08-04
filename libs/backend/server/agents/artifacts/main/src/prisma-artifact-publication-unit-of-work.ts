@@ -1,6 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.js";
+import { _ArtifactPublicationConflictError } from "./artifact-unit-of-work.types.js";
 import type { ArtifactPublicationTransaction, ArtifactPublicationUnitOfWork, ArtifactPublicationWork } from "./artifact-unit-of-work.types.js";
 
 /** Maximum complete transaction attempts for a catalogue race that PostgreSQL rolled back. */
@@ -50,14 +51,4 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 function _IsRetryablePublicationConflict(error: unknown): boolean
 {
 	return error instanceof Prisma.PrismaClientKnownRequestError && _RETRYABLE_PUBLICATION_CODES.has(error.code);
-}
-
-/** Internal signal that a fully rolled-back publication race maps to the existing public conflict result. */
-export class _ArtifactPublicationConflictError extends Error
-{
-	/** Marks the failure without exposing Prisma error details outside the unit-of-work boundary. */
-	constructor()
-	{
-		super("artifact publication conflict");
-	}
 }

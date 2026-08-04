@@ -69,8 +69,10 @@ test("requires transaction-scoped repository construction to match the owning po
 	const undeclared = { ..._OWNERS, unitsOfWork: [{ ..._OWNERS.unitsOfWork[0], constructs: [] }] };
 	const findings = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work"), ["widget"], undeclared);
 	const rootClient = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("negative-root-client-unit-of-work"), ["widget"], _OWNERS);
+	const configured = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, leaseMilliseconds)"), ["widget"], _OWNERS);
 	assert.equal(findings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(rootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+	assert.equal(configured.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), false);
 });
 
 test("fails closed when live owner declarations drift from policy", function _RejectsStaleOwnerPolicy()

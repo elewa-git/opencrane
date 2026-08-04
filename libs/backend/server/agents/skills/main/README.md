@@ -34,7 +34,6 @@ returns unavailable rather than a partially widened result.
   description, lifecycle, and current-revision state in the trusted host silo.
 - `_CreateSkillCatalogueRouter` — the ready-to-mount Prisma composition that authenticates through
   the shared request-principal seam and supplies the catalogue repository.
-- `PrismaSkillCatalogueRepository` — the traced, silo-scoped Prisma read adapter.
 - `SkillCatalogueRepository` and `SkillCatalogueEntry` — the narrow read boundary and safe summary
   shape used by the browser catalogue.
 - `SkillCatalogueStates` and `SkillCatalogueRevisionStates` — the documented serialized lifecycle

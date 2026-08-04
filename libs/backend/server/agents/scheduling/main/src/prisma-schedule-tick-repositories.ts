@@ -1,6 +1,8 @@
 import { AgentRunState, AgentRunTrigger, AgentScheduleOverlapPolicy, AgentServiceKind, AgentServiceState, type Prisma } from "@prisma/client";
 
-import { ScheduleCursorAdvanceOutcomes, ScheduleOverlapPolicies } from "./schedule-tick.enums.js";
+import { AgentScheduleOverlapPolicies } from "@opencrane/backend/server/agents/agent-services";
+
+import { ScheduleCursorAdvanceOutcomes } from "./schedule-tick.enums.js";
 import type { ActiveScheduledRunRepository, AdvanceScheduleCursorCommand, AdvanceScheduleCursorResult, EnabledScheduleSnapshot, EnabledScheduleSnapshotRepository, ScheduleCursorRepository } from "./schedule-ticker-unit-of-work.types.js";
 
 /** Non-terminal states that count as an in-flight scheduled run for overlap skipping. */
@@ -69,7 +71,7 @@ export class PrismaEnabledScheduleSnapshotRepository implements EnabledScheduleS
 					agentServiceId: scheduleRow.agentServiceId,
 					cron: scheduleRow.cron,
 					timezone: scheduleRow.timezone,
-					overlapPolicy: scheduleRow.overlapPolicy === AgentScheduleOverlapPolicy.Allow ? ScheduleOverlapPolicies.Allow : ScheduleOverlapPolicies.Skip,
+					overlapPolicy: scheduleRow.overlapPolicy === AgentScheduleOverlapPolicy.Allow ? AgentScheduleOverlapPolicies.Allow : AgentScheduleOverlapPolicies.Skip,
 					enabled: scheduleRow.enabled,
 					catchupWindowSeconds: scheduleRow.catchupWindowSeconds,
 					lastScheduledAt: scheduleRow.lastScheduledAt?.toISOString() ?? null,

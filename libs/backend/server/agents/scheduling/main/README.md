@@ -55,8 +55,9 @@ keeps a delayed scheduler from creating a burst of concurrent runs for the same 
   makes a version-fenced cursor update.
 - `PrismaScheduleTickerUnitOfWork` — the only scheduling implementation that owns the root Prisma
   client and opens transactions; callers receive capability repositories, never Prisma.
-- `ScheduleOverlapPolicies`, `ScheduleTickStatuses`, `ScheduleInvalidReasons`,
-  `ScheduledSlotOutcomes`, `ScheduleCursorAdvanceOutcomes` — stable scheduler-owned branch values.
+- `ScheduleTickStatuses`, `ScheduleInvalidReasons`, `ScheduledSlotOutcomes`,
+  `ScheduleCursorAdvanceOutcomes` — stable scheduler-owned branch values. The overlap vocabulary is
+  imported from the schedule authority as `AgentScheduleOverlapPolicies`.
 - Types: `AgentServiceSchedule`, `ScheduleTickerUnitOfWork`, `ScheduleTickerResult`,
   `ScheduleTickDependencies`, `ScheduleTickResult`, `ScheduledSlotOutcome`,
   `ActiveScheduledRunLookup`, `RetryBackoffPolicy`, `ScheduleClock`, `CronExpression`,

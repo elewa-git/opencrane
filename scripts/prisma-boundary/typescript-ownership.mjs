@@ -60,7 +60,7 @@ export function repositoryConstructions(source, classCandidates, imports)
 		const sameFile = classCandidates.some(function _SameFile(candidate) { return candidate.name === match[1]; });
 		constructions.push({
 			adapter: match[1],
-			argument: match[2].trim(),
+			argument: match[2].split(",", 1)[0].trim(),
 			importPath: binding?.importPath ?? (sameFile ? "<same-file>" : "<unbound>"),
 			index: match.index ?? 0,
 			owner,

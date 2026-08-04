@@ -1,5 +1,6 @@
 import { AgentScheduleOverlapPolicy as PrismaOverlapPolicy, AgentServiceKind, type PrismaClient } from "@prisma/client";
 
+import { AgentScheduleOverlapPolicies } from "./agent-schedule.types.js";
 import type { AgentScheduleDeletionResult, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 
 /** Row shape read back from Postgres for one schedule. */
@@ -10,7 +11,7 @@ interface _ScheduleRow
 	agentServiceId: string;
 	cron: string;
 	timezone: string;
-	overlapPolicy: string;
+	overlapPolicy: PrismaOverlapPolicy;
 	enabled: boolean;
 	catchupWindowSeconds: number;
 	lastScheduledAt: Date | null;
@@ -21,13 +22,13 @@ interface _ScheduleRow
 /** Maps the domain overlap policy to the Prisma enum. */
 function _toPrismaOverlap(value: AgentScheduleOverlapPolicy): PrismaOverlapPolicy
 {
-	return value === "allow" ? PrismaOverlapPolicy.Allow : PrismaOverlapPolicy.Skip;
+	return value === AgentScheduleOverlapPolicies.Allow ? PrismaOverlapPolicy.Allow : PrismaOverlapPolicy.Skip;
 }
 
 /** Maps the Prisma overlap enum to the domain value. */
-function _fromPrismaOverlap(value: string): AgentScheduleOverlapPolicy
+function _fromPrismaOverlap(value: PrismaOverlapPolicy): AgentScheduleOverlapPolicy
 {
-	return value === "Allow" ? "allow" : "skip";
+	return value === PrismaOverlapPolicy.Allow ? AgentScheduleOverlapPolicies.Allow : AgentScheduleOverlapPolicies.Skip;
 }
 
 /** Maps one Prisma schedule row to the dependency-light record. */

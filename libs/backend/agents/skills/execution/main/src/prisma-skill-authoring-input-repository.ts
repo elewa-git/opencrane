@@ -16,7 +16,7 @@ export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputR
 		this.transaction = transaction;
 	}
 
-	/** Reads one active, published, fully-pinned artifact while sharing every relevant durable row lock. */
+	/** Reads one active, published, fully-pinned artifact before the later broker revalidates its lease. */
 	async load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
 	{
 		// 1. Select every immutable coordinate under the reviewed worker identity before the broker sees it.
@@ -31,7 +31,7 @@ export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputR
 				AND workload."kind" = 'authoring'
 				AND workload."state" = 'assigned'
 				AND workload."released_at" IS NOT NULL
-				AND workload."registered_pod_uid" = ${identity.podUid}
+				AND workload."worker_pod_uid" = ${identity.podUid}
 				AND bootstrap."consumed_at" IS NOT NULL
 				AND bootstrap."consumed_by_pod_uid" = ${identity.podUid}
 				AND bootstrap."namespace" = ${identity.namespace}

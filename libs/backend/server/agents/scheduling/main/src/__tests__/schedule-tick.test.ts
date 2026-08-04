@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import type { AgentRevisionLifecycleDenial, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { ScheduleOverlapPolicies, ScheduledSlotOutcomes, ScheduleTickStatuses } from "../schedule-tick.enums.js";
+import { AgentScheduleOverlapPolicies } from "@opencrane/backend/server/agents/agent-services";
+
+import { ScheduledSlotOutcomes, ScheduleTickStatuses } from "../schedule-tick.enums.js";
 import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick.js";
 import type { AgentServiceSchedule, ScheduleTickDependencies } from "../schedule-tick.types.js";
 
@@ -58,7 +60,7 @@ function _deps(admission: { admitManagedRun(command: ManagedRunNowCommand): Prom
 /** Builds an hourly UTC schedule fixture. */
 function _schedule(overrides: Partial<AgentServiceSchedule> = {}): AgentServiceSchedule
 {
-	return { id: "sched-1", siloId: "silo-1", agentServiceId: "svc-1", cron: "0 * * * *", timezone: "UTC", overlapPolicy: ScheduleOverlapPolicies.Allow, enabled: true, catchupWindowSeconds: 86_400, lastScheduledAt: "2026-07-01T00:00:00.000Z", ...overrides };
+	return { id: "sched-1", siloId: "silo-1", agentServiceId: "svc-1", cron: "0 * * * *", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: true, catchupWindowSeconds: 86_400, lastScheduledAt: "2026-07-01T00:00:00.000Z", ...overrides };
 }
 
 describe("scheduled-run idempotency key", function _KeySuite()
@@ -119,7 +121,7 @@ describe("schedule tick", function _TickSuite()
 	it("skips overlapping slots when a prior scheduled run is active", async function _OverlapSkip()
 	{
 		const admission = new _DedupingAdmission();
-		const result = await __RunScheduleTick(_schedule({ overlapPolicy: ScheduleOverlapPolicies.Skip }), "rev-1", _deps(admission, "2026-07-01T03:30:00.000Z", true));
+		const result = await __RunScheduleTick(_schedule({ overlapPolicy: AgentScheduleOverlapPolicies.Skip }), "rev-1", _deps(admission, "2026-07-01T03:30:00.000Z", true));
 		if (result.status !== ScheduleTickStatuses.Ticked) throw new Error("expected ticked");
 		expect(result.outcomes.every(o => o.outcome === ScheduledSlotOutcomes.SkippedOverlap)).toBe(true);
 		expect(admission.commands).toHaveLength(0);
@@ -130,7 +132,7 @@ describe("schedule tick", function _TickSuite()
 	it("admits only the oldest catch-up slot under skip when no run is active yet", async function _SkipCapsCatchUp()
 	{
 		const admission = new _DedupingAdmission();
-		const result = await __RunScheduleTick(_schedule({ overlapPolicy: ScheduleOverlapPolicies.Skip }), "rev-1", _deps(admission, "2026-07-01T03:30:00.000Z", false));
+		const result = await __RunScheduleTick(_schedule({ overlapPolicy: AgentScheduleOverlapPolicies.Skip }), "rev-1", _deps(admission, "2026-07-01T03:30:00.000Z", false));
 		if (result.status !== ScheduleTickStatuses.Ticked) throw new Error("expected ticked");
 		expect(result.outcomes.map(o => o.slot)).toEqual(["2026-07-01T01:00:00.000Z"]);
 		expect(result.outcomes[0]?.outcome).toBe(ScheduledSlotOutcomes.Accepted);
@@ -141,7 +143,7 @@ describe("schedule tick", function _TickSuite()
 	it("admits overlapping slots under the allow policy", async function _OverlapAllow()
 	{
 		const admission = new _DedupingAdmission();
-		const result = await __RunScheduleTick(_schedule({ overlapPolicy: ScheduleOverlapPolicies.Allow }), "rev-1", _deps(admission, "2026-07-01T02:30:00.000Z", true));
+		const result = await __RunScheduleTick(_schedule({ overlapPolicy: AgentScheduleOverlapPolicies.Allow }), "rev-1", _deps(admission, "2026-07-01T02:30:00.000Z", true));
 		if (result.status !== ScheduleTickStatuses.Ticked) throw new Error("expected ticked");
 		expect(admission.commands).toHaveLength(2);
 	});

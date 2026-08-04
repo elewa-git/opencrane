@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest";
 import { ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
-import { ScheduleCursorAdvanceOutcomes, ScheduleOverlapPolicies } from "../schedule-tick.enums.js";
+import { AgentScheduleOverlapPolicies } from "@opencrane/backend/server/agents/agent-services";
+
+import { ScheduleCursorAdvanceOutcomes } from "../schedule-tick.enums.js";
 import { ScheduleTicker } from "../schedule-ticker.js";
 import type { AdvanceScheduleCursorCommand, EnabledScheduleSnapshot, ScheduleTickerTransaction, ScheduleTickerUnitOfWork, ScheduleTickerWork } from "../schedule-ticker-unit-of-work.types.js";
 
@@ -15,7 +17,7 @@ const _SNAPSHOT: EnabledScheduleSnapshot = {
 		agentServiceId: "service-1",
 		cron: "0 * * * *",
 		timezone: "UTC",
-		overlapPolicy: ScheduleOverlapPolicies.Allow,
+		overlapPolicy: AgentScheduleOverlapPolicies.Allow,
 		enabled: true,
 		catchupWindowSeconds: 86_400,
 		lastScheduledAt: "2026-07-01T00:00:00.000Z",

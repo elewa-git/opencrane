@@ -16,7 +16,7 @@ export { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __Vali
 export type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 export { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
 export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.js";
-export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
+export { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleDenial, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 export { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
 export { __ManagedAgentServicePrincipal, PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.js";
 export { _CreateManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.factory.js";

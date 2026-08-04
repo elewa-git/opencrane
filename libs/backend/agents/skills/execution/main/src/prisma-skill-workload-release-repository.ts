@@ -1,22 +1,27 @@
 import { Prisma, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
 
 import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
-import type { SkillWorkloadReleasePersistenceRepository } from "./skill-workload-unit-of-work.types.js";
+import type { SkillWorkloadReleaseRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Transaction-scoped Postgres authority for Job release and first-Pod registration. */
-export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleasePersistenceRepository
+export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleaseRepository
 {
 	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
+	/** Database-owned release-claim lifetime applied consistently to every claim. */
+	private readonly claimLeaseMilliseconds: number;
 	/** Creates the release persistence capability within an existing transaction. */
-	constructor(transaction: Prisma.TransactionClient)
+	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
 	{
+		if (!Number.isSafeInteger(claimLeaseMilliseconds) || claimLeaseMilliseconds < 1 || claimLeaseMilliseconds > 300_000) throw new Error("skill workload claim lease must be bounded");
 		this.transaction = transaction;
+		this.claimLeaseMilliseconds = claimLeaseMilliseconds;
 	}
 
 	/** Claims one assigned bootstrap-ready Job for a later Kubernetes unsuspend operation. */
-	async claimNextRelease(claimLeaseMilliseconds: number): Promise<SkillWorkloadReleaseClaim | null>
+	async claimNextRelease(): Promise<SkillWorkloadReleaseClaim | null>
 	{
+		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
 		const rows = await this.transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT workload."id" FROM "skill_workloads" workload JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id" WHERE workload."state" = 'assigned'::"SkillWorkloadState" AND workload."released_at" IS NULL AND bootstrap."consumed_at" IS NULL AND bootstrap."expires_at" > clock_timestamp() AND (workload."release_claimed_at" IS NULL OR workload."release_claimed_at" <= clock_timestamp() - (${claimLeaseMilliseconds} * interval '1 millisecond')) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF workload, bootstrap SKIP LOCKED`);
 		const id = rows[0]?.id;
 		if (id === undefined) return null;

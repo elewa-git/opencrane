@@ -8,8 +8,8 @@ const _IDENTITY = { namespace: "opencrane-skill-authoring", serviceAccountName: 
 /** Builds a narrow Prisma raw-query double for the immutable input selection fence. */
 function _Prisma(rows: readonly unknown[])
 {
-	const prisma = { $queryRaw: vi.fn().mockResolvedValue(rows) } as never;
-	return { repository: new PrismaSkillAuthoringInputRepository(prisma), prisma };
+	const queryRaw = vi.fn().mockResolvedValue(rows);
+	return { repository: new PrismaSkillAuthoringInputRepository({ $queryRaw: queryRaw } as never), queryRaw };
 }
 
 describe("Prisma skill authoring input authority", function _DescribeAuthoringInput()
@@ -26,6 +26,16 @@ describe("Prisma skill authoring input authority", function _DescribeAuthoringIn
 		const { repository } = _Prisma([]);
 
 		expect(await repository.load("workload-1", _IDENTITY)).toBeNull();
+	});
+
+	it("queries the canonical worker Pod fence rather than a legacy registration column", async function _UsesCanonicalWorkerPodColumn()
+	{
+		const { repository, queryRaw } = _Prisma([]);
+
+		await repository.load("workload-1", _IDENTITY);
+		const query = queryRaw.mock.calls[0]?.[0] as { readonly sql?: string } | undefined;
+		expect(query?.sql).toContain('workload."worker_pod_uid"');
+		expect(query?.sql).not.toContain("registered_pod_uid");
 	});
 
 	it("rejects an artifact length that cannot be represented safely in a signed read lease", async function _RejectsUnsafeLength()

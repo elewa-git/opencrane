@@ -30,18 +30,9 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 		return this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
 		{
 			// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
-			const assignmentPersistence = new PrismaSkillWorkloadAssignmentRepository(transaction);
-			const releasePersistence = new PrismaSkillWorkloadReleaseRepository(transaction);
 			const repositories: SkillWorkloadExecutionTransaction = {
-				assignments: {
-					claimNext(): ReturnType<typeof assignmentPersistence.claimNext> { return assignmentPersistence.claimNext(claimLeaseMilliseconds); },
-					commitAssignment(workloadId, command): ReturnType<typeof assignmentPersistence.commitAssignment> { return assignmentPersistence.commitAssignment(workloadId, command, claimLeaseMilliseconds); },
-				},
-				releases: {
-					claimNextRelease(): ReturnType<typeof releasePersistence.claimNextRelease> { return releasePersistence.claimNextRelease(claimLeaseMilliseconds); },
-					commitRelease(workloadId, command): ReturnType<typeof releasePersistence.commitRelease> { return releasePersistence.commitRelease(workloadId, command); },
-					registerFirstPod(workloadId, command): ReturnType<typeof releasePersistence.registerFirstPod> { return releasePersistence.registerFirstPod(workloadId, command); },
-				},
+				assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
+				releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
 				bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
 				authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
 				authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),

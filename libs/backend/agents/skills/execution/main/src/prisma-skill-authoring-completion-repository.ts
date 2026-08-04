@@ -1,5 +1,6 @@
 import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
 
+import { SkillAuthoringCompletionOutcomes } from "./skill-authoring-completion.types.js";
 import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
 import type { SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
@@ -28,14 +29,14 @@ export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringC
 		if (workload === null || workload.skillRevision.state !== SkillRevisionState.Draft) return "conflict";
 
 		// 3. Store passed reports before terminalising the locked row; a failure records only a stable code.
-		if (command.outcome === "succeeded")
+		if (command.outcome === SkillAuthoringCompletionOutcomes.Succeeded)
 		{
 			if (!command.testReport.passed || !command.scanResult.passed) return "conflict";
 			const revision = await this.transaction.skillRevision.updateMany({ where: { id: workload.skillRevisionId, state: SkillRevisionState.Draft, testReport: { equals: Prisma.DbNull }, scanResult: { equals: Prisma.DbNull } }, data: { testReport: command.testReport as unknown as Prisma.InputJsonValue, scanResult: command.scanResult as unknown as Prisma.InputJsonValue } });
 			if (revision.count !== 1) return "conflict";
 		}
 
-		const completed = await this.transaction.skillWorkload.updateMany({ where: { id: workload.id, state: SkillWorkloadState.Assigned }, data: command.outcome === "succeeded" ? { state: SkillWorkloadState.Succeeded, completedAt: new Date(), failureCode: null } : { state: SkillWorkloadState.Failed, completedAt: new Date(), failureCode: command.failureCode } });
+		const completed = await this.transaction.skillWorkload.updateMany({ where: { id: workload.id, state: SkillWorkloadState.Assigned }, data: command.outcome === SkillAuthoringCompletionOutcomes.Succeeded ? { state: SkillWorkloadState.Succeeded, completedAt: new Date(), failureCode: null } : { state: SkillWorkloadState.Failed, completedAt: new Date(), failureCode: command.failureCode } });
 		return completed.count === 1 ? "completed" : "conflict";
 	}
 }

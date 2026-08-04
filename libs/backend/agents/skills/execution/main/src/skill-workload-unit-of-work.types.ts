@@ -23,26 +23,6 @@ export interface SkillWorkloadReleaseRepository
 	registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
 }
 
-/** Transaction-bound assignment persistence before the unit of work applies process configuration. */
-export interface SkillWorkloadAssignmentPersistenceRepository
-{
-	/** Claims one workload using the validated process-owned claim lease. */
-	claimNext(claimLeaseMilliseconds: number): Promise<SkillWorkloadClaim | null>;
-	/** Commits one assignment while enforcing the same process-owned claim lease. */
-	commitAssignment(workloadId: string, command: SkillWorkloadAssignmentCommand, claimLeaseMilliseconds: number): Promise<"assigned" | "idempotent" | "conflict">;
-}
-
-/** Transaction-bound release persistence before the unit of work applies process configuration. */
-export interface SkillWorkloadReleasePersistenceRepository
-{
-	/** Claims one release using the validated process-owned claim lease. */
-	claimNextRelease(claimLeaseMilliseconds: number): Promise<SkillWorkloadReleaseClaim | null>;
-	/** Commits the exact successful unsuspend operation or its immutable replay. */
-	commitRelease(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
-	/** Records the sole Job-owned Pod before a bootstrap can be consumed. */
-	registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
-}
-
 /** Transaction-scoped persistence capability for one hash-addressed worker bootstrap. */
 export interface SkillWorkloadBootstrapRepository
 {

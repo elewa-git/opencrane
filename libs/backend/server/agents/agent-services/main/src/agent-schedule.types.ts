@@ -1,7 +1,16 @@
 import type { AgentServiceId, SiloId } from "@opencrane/models/agents";
 
-/** Behaviour when a prior scheduled run of the same service is still active. */
-export type AgentScheduleOverlapPolicy = "skip" | "allow";
+/** Stable overlap policies shared by schedule APIs, persistence, and tick evaluation. */
+export enum AgentScheduleOverlapPolicies
+{
+	/** Admit at most one due slot when no earlier scheduled run remains active. */
+	Skip = "skip",
+	/** Admit every due slot through the shared idempotent run-admission authority. */
+	Allow = "allow",
+}
+
+/** Serialized overlap-policy values derived from the canonical schedule vocabulary. */
+export type AgentScheduleOverlapPolicy = `${AgentScheduleOverlapPolicies}`;
 
 /** A stored recurring schedule for one managed AgentService. */
 export interface AgentServiceScheduleRecord

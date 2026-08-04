@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto";
 
-import { ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
+import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
 import type { AgentRevisionLifecycleDenial } from "@opencrane/backend/server/agents/agent-services";
 
 import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from "./cron-schedule.js";
-import { ScheduleInvalidReasons, ScheduleOverlapPolicies, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
+import { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
 import type { AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickDependencies, ScheduleTickResult, ScheduledSlotOutcome } from "./schedule-tick.types.js";
 
 /** Admission denial reasons that are transient and warrant a backed-off retry rather than a drop. */
@@ -72,13 +72,13 @@ export async function __RunScheduleTick(schedule: AgentServiceSchedule, activeRe
 
 	// The `skip` policy consults the in-flight lookup once; when a prior scheduled run is still
 	// active every due slot is dropped and the cursor jumps to the newest so they never re-fire.
-	if (schedule.overlapPolicy === ScheduleOverlapPolicies.Skip && await deps.activeRuns.hasActiveScheduledRun(schedule.agentServiceId, schedule.siloId))
+	if (schedule.overlapPolicy === AgentScheduleOverlapPolicies.Skip && await deps.activeRuns.hasActiveScheduledRun(schedule.agentServiceId, schedule.siloId))
 	{
 		const skipped = dueSlots.map(function _skip(slot): ScheduledSlotOutcome { return { slot, outcome: ScheduledSlotOutcomes.SkippedOverlap, idempotencyKey: __ScheduledRunIdempotencyKey(schedule.agentServiceId, activeRevisionId, slot) }; });
 		return { status: ScheduleTickStatuses.Ticked, outcomes: skipped, nextLastScheduledAt: dueSlots[dueSlots.length - 1] };
 	}
 
-	const slotsToAdmit = schedule.overlapPolicy === ScheduleOverlapPolicies.Skip ? [dueSlots[0]] : dueSlots;
+	const slotsToAdmit = schedule.overlapPolicy === AgentScheduleOverlapPolicies.Skip ? [dueSlots[0]] : dueSlots;
 	const outcomes: ScheduledSlotOutcome[] = [];
 	let cursor = schedule.lastScheduledAt;
 	for (const slot of slotsToAdmit)

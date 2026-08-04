@@ -1,7 +1,7 @@
 import type { ArtifactAuthorityRepository } from "./artifact-finalization.types.js";
+import { _ArtifactPublicationConflictError } from "./artifact-unit-of-work.types.js";
 import type { ArtifactPublicationUnitOfWork } from "./artifact-unit-of-work.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
-import { _ArtifactPublicationConflictError } from "./prisma-artifact-publication-unit-of-work.js";
 
 /** Coordinates short, independent durable transactions around an external byte-store promotion. */
 export class _ArtifactUploadAuthority implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
