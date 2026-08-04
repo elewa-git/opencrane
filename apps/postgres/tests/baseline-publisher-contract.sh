@@ -17,34 +17,55 @@ set -euo pipefail
 
 case "$1" in
   get)
-    if [[ "${FAKE_EXISTING_MODE:-absent}" == "absent" ]]; then
-      exit 1
-    fi
-    case "$*" in
-      *baseline-sha256*)
-        printf '%s' "$FAKE_BASELINE_DIGEST"
-        ;;
-      *"{.immutable}"*)
-        if [[ "$FAKE_EXISTING_MODE" == "mutable" ]]; then
-          printf 'false'
-        else
+    if [[ "${FAKE_CREATE_RACE:-0}" == "1" && -f "$FAKE_RACE_MARKER" ]]; then
+      case "$*" in
+        *baseline-sha256*)
+          "$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.metadata.annotations.opencrane\.ai/baseline-sha256}'
+          ;;
+        *"{.immutable}"*)
           printf 'true'
-        fi
-        ;;
-      *target-baseline*)
-        if [[ "$FAKE_EXISTING_MODE" == "tampered" ]]; then
-          printf 'SELECT 1; -- substituted content'
-        else
-          cat "$FAKE_EXISTING_SQL_FILE"
-        fi
-        ;;
-    esac
+          ;;
+        *target-baseline*)
+          "$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.data.target-baseline\.sql}'
+          ;;
+      esac
+    elif [[ "${FAKE_EXISTING_MODE:-absent}" == "absent" ]]; then
+      exit 1
+    else
+      case "$*" in
+        *baseline-sha256*)
+          printf '%s' "$FAKE_BASELINE_DIGEST"
+          ;;
+        *"{.immutable}"*)
+          if [[ "$FAKE_EXISTING_MODE" == "mutable" ]]; then
+            printf 'false'
+          else
+            printf 'true'
+          fi
+          ;;
+        *target-baseline*)
+          if [[ "$FAKE_EXISTING_MODE" == "tampered" ]]; then
+            printf 'SELECT 1; -- substituted content'
+          else
+            cat "$FAKE_EXISTING_SQL_FILE"
+          fi
+          ;;
+      esac
+    fi
     ;;
-  create|patch)
+  create)
+    if [[ "${2:-}" == "-f" && "${3:-}" != "-" ]]; then
+      cp "$3" "$CAPTURE_FILE"
+      if [[ "${FAKE_CREATE_RACE:-0}" == "1" ]]; then
+        touch "$FAKE_RACE_MARKER"
+        exit 1
+      fi
+    else
+      exec "$REAL_KUBECTL" "$@"
+    fi
+    ;;
+  patch)
     exec "$REAL_KUBECTL" "$@"
-    ;;
-  apply)
-    cat >"$CAPTURE_FILE"
     ;;
   *)
     echo "unexpected kubectl command: $*" >&2
@@ -65,12 +86,21 @@ grep -q 'GRANT SELECT ON TABLE "opencrane_bootstrap"."target_baseline" TO "owner
 grep -Eq 'VALUES \(TRUE, '\''[0-9a-f]{64}'\''\);' "$CAPTURE_FILE"
 grep -q 'SET ROLE "owner""quoted";' "$CAPTURE_FILE"
 grep -q 'OpenCrane target database baseline' "$CAPTURE_FILE"
+if grep -q 'kubectl.kubernetes.io/last-applied-configuration' "$CAPTURE_FILE"; then
+  echo "publisher added the client-side apply annotation to the baseline ConfigMap" >&2
+  exit 1
+fi
 
 expected_sql="$TEST_DIR/expected-target-baseline.sql"
 "$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.data.target-baseline\.sql}' >"$expected_sql"
 baseline_digest="$("$REAL_KUBECTL" patch --local -f "$CAPTURE_FILE" --type=merge -p '{}' -o jsonpath='{.metadata.annotations.opencrane\.ai/baseline-sha256}')"
 export FAKE_BASELINE_DIGEST="$baseline_digest"
 export FAKE_EXISTING_SQL_FILE="$expected_sql"
+
+export FAKE_RACE_MARKER="$TEST_DIR/race-created"
+FAKE_CREATE_RACE=1 PATH="$TEST_DIR/bin:$PATH" \
+  bash "$PUBLISHER" opencrane 'owner"quoted' "$BASELINE" >"$TEST_DIR/race.out"
+grep -Eq '^opencrane-database-baseline-[a-f0-9]{16}$' "$TEST_DIR/race.out"
 
 for existing_mode in tampered mutable; do
   if FAKE_EXISTING_MODE="$existing_mode" PATH="$TEST_DIR/bin:$PATH" \

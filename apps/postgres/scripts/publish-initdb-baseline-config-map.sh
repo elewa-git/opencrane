@@ -20,6 +20,7 @@ work_dir="$(mktemp -d)"
 trap 'rm -rf "$work_dir"' EXIT
 baseline_identity_input="$work_dir/baseline-identity.sql"
 rendered_baseline="$work_dir/target-baseline.sql"
+rendered_config_map="$work_dir/baseline-config-map.yaml"
 quoted_owner="$(printf '%s' "$database_owner" | sed 's/"/""/g')"
 
 function _sha256_file()
@@ -85,7 +86,12 @@ kubectl create configmap "$config_map_name" \
   -o json \
   | kubectl patch --local -f - --type=merge \
       -p "{\"immutable\":true,\"metadata\":{\"annotations\":{\"opencrane.ai/baseline-sha256\":\"$baseline_digest\"}}}" \
-      -o yaml \
-  | kubectl apply -f - >/dev/null
+      -o yaml >"$rendered_config_map"
+
+# Another deployment may publish the same content-addressed object after the initial lookup.
+# Accept that race only when the winner's immutable bytes pass the verification above.
+if ! kubectl create -f "$rendered_config_map" >/dev/null; then
+  bash "$0" "$namespace" "$database_owner" "$baseline_file" --verify-only >/dev/null
+fi
 
 printf '%s\n' "$config_map_name"
