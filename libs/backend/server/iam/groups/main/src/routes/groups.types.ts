@@ -1,32 +1,5 @@
-/** Supported organizational scopes for groups and grants. */
+/** Supported organizational scopes for groups. */
 export type GroupRouteScope = "org" | "department" | "project" | "personal";
-
-/** Supported subject types when writing grants. */
-export type GroupRouteSubjectType = "group" | "user";
-
-/** Supported access outcomes for group-linked grants. */
-export type GroupRouteAccess = "allow" | "deny";
-
-/** Request body used to create or update a group-linked awareness grant. */
-export interface GroupGrantInput
-{
-  /** Optional explicit payload identifier for awareness contract rules. */
-  payloadId?: string;
-  /** Organizational scope carried by the grant. */
-  scope: GroupRouteScope;
-  /** Subject family receiving the grant. */
-  subjectType: GroupRouteSubjectType;
-  /** Subject identifier used by the compiler. */
-  subjectId?: string;
-  /** Human-friendly subject label accepted for group lookups. */
-  subjectName: string;
-  /** Allow or deny outcome. */
-  access: GroupRouteAccess;
-  /** Higher values override lower-priority grants. */
-  priority?: number;
-  /** Optional operator note. */
-  note?: string;
-}
 
 /** Request body used to create or update a group. */
 export interface GroupWriteRequest
@@ -39,6 +12,4 @@ export interface GroupWriteRequest
   description?: string;
   /** JSON membership list stored on the group record. */
   members?: unknown[];
-  /** Optional default awareness grants linked to the group. */
-  grants?: GroupGrantInput[];
 }

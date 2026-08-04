@@ -85,12 +85,8 @@ export default [
               ],
             },
             {
-              // `scope:grants` is re-opened for slice 6 (#332) WITH a real import: the
-              // PrismaScopeGrantResolver calls the grant compiler so an attach-authority check and
-              // the runtime effective-access intersection grant nothing beyond the agent's actual
-              // compiled grants. See scope-attachment-authority.ts + prisma-scope-grant-resolver.ts.
               sourceTag: "scope:agent-services",
-              onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:audit", "scope:auth", "scope:authorization", "scope:grants", "scope:membership", "scope:shared"],
+              onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:audit", "scope:auth", "scope:authorization", "scope:membership", "scope:shared"],
             },
             {
               sourceTag: "scope:api-spec",
@@ -133,7 +129,7 @@ export default [
             { sourceTag: "scope:cluster-tenants", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:k8s-api", "scope:shared"] },
 			{ sourceTag: "scope:conversation-replay", onlyDependOnLibsWithTags: ["scope:auth", "scope:channel-targets", "scope:conversation-replay", "scope:shared"] },
 			{ sourceTag: "scope:personal-configuration", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:auth", "scope:personal-configuration", "scope:shared"] },
-            { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:auth", "scope:grants", "scope:retrieval", "scope:shared"] },
+            { sourceTag: "scope:grants", onlyDependOnLibsWithTags: ["scope:auth", "scope:authorization", "scope:grants", "scope:shared"] },
             { sourceTag: "scope:groups", onlyDependOnLibsWithTags: ["scope:groups", "scope:shared"] },
             { sourceTag: "scope:http", onlyDependOnLibsWithTags: ["scope:http", "scope:shared"] },
             { sourceTag: "scope:integrations", onlyDependOnLibsWithTags: ["scope:integrations", "scope:obot-custody", "scope:shared"] },

@@ -247,6 +247,20 @@
         "contract": "PersonalExecutionIdentityAuthorityRepository",
         "contractImportPath": "./personal-execution-identity-envelope-source.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-authorization-grants.ts",
+        "adapter": "PrismaAuthorizationGrantRepository",
+        "contract": "AuthorizationGrantRepository",
+        "contractImportPath": "./effective-access.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
+        "adapter": "PrismaShareAuthorizationRepository",
+        "contract": "ShareAuthorizationRepository",
+        "contractImportPath": "./share-authorization-repository.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -391,6 +405,22 @@
           {
             "adapter": "PrismaPersonalRunAdmissionRepository",
             "importPath": "./prisma-personal-run-admission-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-unit-of-work.ts",
+        "adapter": "PrismaShareAuthorizationUnitOfWork",
+        "contract": "ShareAuthorizationUnitOfWork",
+        "contractImportPath": "./share-authorization-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaAuthorizationGrantRepository",
+            "importPath": "./prisma-authorization-grants.js"
+          },
+          {
+            "adapter": "PrismaShareAuthorizationRepository",
+            "importPath": "./prisma-share-authorization-repository.js"
           }
         ]
       }

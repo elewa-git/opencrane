@@ -1,5 +1,5 @@
 import type { CapabilityReference } from "./capability.types.js";
-import type { AuthorizationDecision, AuthorizationGrant, AuthorizationRequest } from "./grant.types.js";
+import { AuthorizationDecisionOutcomes, type AuthorizationDecision, type AuthorizationGrant, type AuthorizationRequest } from "./grant.types.js";
 import { __AuthorizationResourcesEqual } from "./resource-locator.js";
 import { __AuthorizationScopeCovers } from "./scope-matching.js";
 
@@ -70,7 +70,7 @@ export function __DecideAuthorization(
 	// 1. Trusted time must be an exact non-negative integer before any grant can authorize.
 	if (!Number.isSafeInteger(request.nowEpochMs) || request.nowEpochMs < 0)
 	{
-		return { outcome: "deny", reason: "invalid_request_time", grantIds: [] };
+		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "invalid_request_time", grantIds: [] };
 	}
 
 	// 2. Structural matching excludes grants from other trust and scope boundaries.
@@ -79,7 +79,7 @@ export function __DecideAuthorization(
 	// 3. An absent grant always denies because authorization is fail closed.
 	if (matchingGrants.length === 0)
 	{
-		return { outcome: "deny", reason: "no_matching_grant", grantIds: [] };
+		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] };
 	}
 
 	// 4. Invalid validity metadata makes the matching authority set untrustworthy.
@@ -87,7 +87,7 @@ export function __DecideAuthorization(
 	if (invalidValidityGrants.length > 0)
 	{
 		return {
-			outcome: "deny",
+			outcome: AuthorizationDecisionOutcomes.Deny,
 			reason: "invalid_grant_validity",
 			grantIds: invalidValidityGrants.map(grant => grant.grantId),
 		};
@@ -98,7 +98,7 @@ export function __DecideAuthorization(
 	if (invalidPriorityGrants.length > 0)
 	{
 		return {
-			outcome: "deny",
+			outcome: AuthorizationDecisionOutcomes.Deny,
 			reason: "invalid_grant_priority",
 			grantIds: invalidPriorityGrants.map(grant => grant.grantId),
 		};
@@ -108,7 +108,7 @@ export function __DecideAuthorization(
 	const activeGrants = matchingGrants.filter(grant => _grantIsActive(grant, request.nowEpochMs));
 	if (activeGrants.length === 0)
 	{
-		return { outcome: "deny", reason: "no_matching_grant", grantIds: [] };
+		return { outcome: AuthorizationDecisionOutcomes.Deny, reason: "no_matching_grant", grantIds: [] };
 	}
 
 	// 7. Only active grants at the highest priority may determine the final effect.
@@ -117,7 +117,7 @@ export function __DecideAuthorization(
 	const denyWins = winningGrants.some(grant => grant.effect === "deny");
 
 	return {
-		outcome: denyWins ? "deny" : "allow",
+		outcome: denyWins ? AuthorizationDecisionOutcomes.Deny : AuthorizationDecisionOutcomes.Allow,
 		reason: denyWins ? "winning_deny" : "winning_allow",
 		grantIds: winningGrants.map(grant => grant.grantId),
 		winningPriority,

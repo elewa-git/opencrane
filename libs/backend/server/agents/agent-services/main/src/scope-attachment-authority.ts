@@ -41,7 +41,7 @@ export function __IntersectScopeAttachments(attachments: readonly RevisionScopeA
  * — a project-scoped agent gets its project attachment and nothing for a peer project, personal,
  * department, or org scope it was never granted.
  *
- * @param resolver - Effective-grant resolver (grant-compiler backed in production).
+ * @param resolver - Effective-grant resolver.
  * @param principalIds - The agent's execution principals.
  * @param attachments - Declared revision-scope attachments.
  * @returns The authorised/rejected intersection.
@@ -60,7 +60,7 @@ export async function __ResolveEffectiveScopeAttachments(resolver: ScopeGrantRes
  * one, so an administrator cannot attach a scope they do not themselves hold. Any unbacked
  * attachment fails closed with the exact offending triples, which the router maps to a 403.
  *
- * @param resolver - Effective-grant resolver (grant-compiler backed in production).
+ * @param resolver - Effective-grant resolver.
  * @param callerPrincipalIds - The attaching caller's principals.
  * @param attachments - Declared revision-scope attachments.
  * @returns Authorised, or unauthorised with the offending attachments.
