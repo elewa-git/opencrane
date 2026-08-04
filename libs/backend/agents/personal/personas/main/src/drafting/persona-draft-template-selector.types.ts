@@ -15,6 +15,28 @@ export interface PersonaDraftTemplateSelection
 	readonly selectionAnswerIds: readonly string[];
 }
 
+/** Parsed reviewed rule that the deterministic selector may interpret from persisted JSON. */
+export interface PersonaDraftTemplateRule
+{
+	/** Stable rule identifier retained as durable selection evidence. */
+	readonly id: string;
+	/** Integer priority whose larger values outrank smaller values. */
+	readonly priority: number;
+	/** Exact question-to-answer values that every matching interview must contain. */
+	readonly answers: Readonly<Record<string, string>>;
+}
+
+/** Persisted JSON representation accepted before rule validation and numeric normalization. */
+export interface PersonaDraftTemplateRuleJson
+{
+	/** Candidate rule identifier read from the reviewed catalogue. */
+	readonly id: string;
+	/** JSON number or canonical integer string accepted by the database contract. */
+	readonly priority: number | string;
+	/** Candidate exact-answer predicates read from the reviewed catalogue. */
+	readonly answers: Readonly<Record<string, string>>;
+}
+
 /** Typed read port used by deterministic template selection inside an existing persona transaction. */
 export interface PersonaDraftTemplateSelectorRepository
 {

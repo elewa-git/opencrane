@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { PersonaApprovalTransactionConflict, PrismaPersonaAuthorityRepository } from "../approval/prisma-persona-authority-repository.js";
 import { PersonaApprovalPersistenceStatuses, type ApprovePersonaCommand, type AtomicApprovePersonaCommand, type AtomicApprovePersonaResult, type PersonaApprovalSnapshot } from "../approval/persona-authority.types.js";

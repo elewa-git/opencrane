@@ -51,6 +51,22 @@ describe("PrismaPersonaDraftTemplateSelector", function _DescribePrismaPersonaDr
 		await expect(selector.select("interview-1")).resolves.toBeNull();
 	});
 
+	it("fails closed when a persisted rule carries unowned fields or an unsafe priority", async function _RejectsDriftedRules()
+	{
+		const extraField = [{ id: "extra", version: 1, digest: "sha256:extra", content: "# Extra", selectionRules: [{ id: "rule", priority: 1, answers: {}, effect: "unreviewed" }] }];
+		const unsafePriority = [{ id: "unsafe", version: 1, digest: "sha256:unsafe", content: "# Unsafe", selectionRules: [{ id: "rule", priority: "999999999999999999999", answers: {} }] }];
+
+		await expect(new PrismaPersonaDraftTemplateSelectorRepository(_Client(extraField, [])).select("interview-1")).resolves.toBeNull();
+		await expect(new PrismaPersonaDraftTemplateSelectorRepository(_Client(unsafePriority, [])).select("interview-1")).resolves.toBeNull();
+	});
+
+	it("normalizes the numeric string form accepted by the reviewed database contract", async function _AcceptsNumericStringPriority()
+	{
+		const client = _Client([{ id: "numeric", version: 1, digest: "sha256:numeric", content: "# Numeric", selectionRules: [{ id: "rule", priority: "10", answers: {} }] }], []);
+
+		await expect(new PrismaPersonaDraftTemplateSelectorRepository(client).select("interview-1")).resolves.toMatchObject({ templateId: "numeric", selectionRuleId: "rule" });
+	});
+
 	it("compiles the reviewed source and insight statements into one exact immutable instruction document", function _CompilesInstructions()
 	{
 		expect(_CompilePersonaDraftInstructions("# SOUL\n", [{ statement: "  Be concise. " }, { statement: "Ask before acting." }])).toBe("# SOUL\n\n## Interview insights\n- Be concise.\n- Ask before acting.\n");
