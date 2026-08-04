@@ -72,11 +72,15 @@ test("requires transaction-scoped repository construction to match the owning po
 	const configured = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, leaseMilliseconds)"), ["widget"], _OWNERS);
 	const configuredRootClient = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, this.prisma)"), ["widget"], _OWNERS);
 	const nestedRootClient = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, { client: this.prisma })"), ["widget"], _OWNERS);
+	const aliasedRootClient = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("return this.prisma.$transaction", "const root = this.prisma; return this.prisma.$transaction").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, { client: root })"), ["widget"], _OWNERS);
+	const namedRootConfig = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("positive-unit-of-work").replace("return this.prisma.$transaction", "const config = { client: this.prisma }; return this.prisma.$transaction").replace("new PrismaWidgetRepository(tx)", "new PrismaWidgetRepository(tx, config)"), ["widget"], _OWNERS);
 	assert.equal(findings.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(rootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(configured.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), false);
 	assert.equal(configuredRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 	assert.equal(nestedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+	assert.equal(aliasedRootClient.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
+	assert.equal(namedRootConfig.some(function _Construction(finding) { return finding.rule === "PRISMA-REPOSITORY-CONSTRUCTION"; }), true);
 });
 
 test("fails closed when live owner declarations drift from policy", function _RejectsStaleOwnerPolicy()
@@ -89,14 +93,24 @@ test("fails closed when live owner declarations drift from policy", function _Re
 	const secondaryRootClientConstructor = _Fixture("positive-repository")
 		.replace("import type { Prisma }", "import type { Prisma, PrismaClient }")
 		.replace("constructor(transaction: Prisma.TransactionClient)", "constructor(transaction: Prisma.TransactionClient, prisma: PrismaClient)");
+	const optionalRootClientConstructor = _Fixture("positive-repository")
+		.replace("import type { Prisma }", "import type { Prisma, PrismaClient }")
+		.replace("constructor(transaction: Prisma.TransactionClient)", "constructor(transaction: Prisma.TransactionClient, prisma?: PrismaClient)");
+	const wrappedRootClientConstructor = _Fixture("positive-repository")
+		.replace("import type { Prisma }", "import type { Prisma, PrismaClient }")
+		.replace("constructor(transaction: Prisma.TransactionClient)", "constructor(transaction: Prisma.TransactionClient, prisma: Readonly<PrismaClient>)");
 	const ownerFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-repository.ts", renamed, _OWNERS);
 	const constructionFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-unit-of-work.ts", missingConstruction, _OWNERS);
 	const constructorFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-repository.ts", rootClientConstructor, _OWNERS);
 	const secondaryConstructorFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-repository.ts", secondaryRootClientConstructor, _OWNERS);
+	const optionalConstructorFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-repository.ts", optionalRootClientConstructor, _OWNERS);
+	const wrappedConstructorFindings = validateOwnerDeclarations("libs/widgets/prisma-widget-repository.ts", wrappedRootClientConstructor, _OWNERS);
 	assert.equal(ownerFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
 	assert.equal(constructionFindings.some(function _Construction(finding) { return finding.rule === "PRISMA-POLICY-CONSTRUCTION"; }), true);
 	assert.equal(constructorFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
 	assert.equal(secondaryConstructorFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
+	assert.equal(optionalConstructorFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
+	assert.equal(wrappedConstructorFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
 });
 
 test("detects computed raw-query access without matching prose or unrelated receivers", function _ScopesRawQueries()

@@ -109,8 +109,12 @@ export function repositoryAcceptsTransactionClient(source, owner, imports)
 	if (!transactionPattern.test(parameters[0] ?? "")) return false;
 	const prismaClientTypes = _PrismaClientTypes(imports);
 	if (prismaClientTypes.length === 0) return true;
-	const rootPattern = new RegExp(`\\b[A-Za-z_$][\\w$]*\\s*:\\s*(?:${prismaClientTypes.join("|")})\\b`, "u");
-	return !parameters.slice(1).some(function _RootParameter(parameter) { return rootPattern.test(parameter); });
+	const rootPattern = new RegExp(`\\b(?:${prismaClientTypes.join("|")})\\b`, "u");
+	return !parameters.slice(1).some(function _RootParameter(parameter)
+	{
+		const colon = parameter.indexOf(":");
+		return colon >= 0 && rootPattern.test(parameter.slice(colon + 1));
+	});
 }
 
 /** Finds the smallest class body containing one source offset. */
@@ -255,15 +259,35 @@ function _SplitTopLevel(source)
 /** Returns whether an additional constructor argument exposes a root PrismaClient binding. */
 function _ContainsRootPrismaClient(source, owner, argument, imports)
 {
-	if (/\bthis\.prisma\b/u.test(argument)) return true;
 	if (owner === undefined) return false;
 	const types = _PrismaClientTypes(imports);
 	if (types.length === 0) return false;
 	const body = source.slice(owner.start, owner.end + 1);
 	const bindingPattern = new RegExp(`\\b([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${types.join("|")})\\b`, "gu");
-	for (const match of body.matchAll(bindingPattern))
+	const rootBindings = new Set();
+	for (const match of body.matchAll(bindingPattern)) rootBindings.add(match[1]);
+	if (/\bthis\.prisma\b/u.test(body)) rootBindings.add("prisma");
+	const aliasPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/gu;
+	let added = true;
+	while (added)
 	{
-		if (new RegExp(`(?:\\b|this\\.)${_EscapeRegex(match[1])}\\b`, "u").test(argument)) return true;
+		added = false;
+		for (const match of body.matchAll(aliasPattern))
+		{
+			if (rootBindings.has(match[1]) || !_ContainsBinding(match[2], rootBindings)) continue;
+			rootBindings.add(match[1]);
+			added = true;
+		}
+	}
+	return _ContainsBinding(argument, rootBindings);
+}
+
+/** Returns whether an expression references one of the named root-client bindings. */
+function _ContainsBinding(expression, bindings)
+{
+	for (const binding of bindings)
+	{
+		if (new RegExp(`(?:\\bthis\\.|\\b)${_EscapeRegex(binding)}\\b`, "u").test(expression)) return true;
 	}
 	return false;
 }
