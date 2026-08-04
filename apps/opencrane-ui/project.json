@@ -12,6 +12,12 @@
 	"targets": {
 		"container": {
 			"executor": "nx:run-commands",
+			"metadata": {
+				"release": {
+					"image": "opencrane-ui",
+					"dockerfile": "apps/opencrane-ui/deploy/Dockerfile"
+				}
+			},
 			"options": {
 				"command": "docker build -f apps/opencrane-ui/deploy/Dockerfile ."
 			}

@@ -43,6 +43,14 @@ service map.
 Apps carry `type:app` / `scope:app`. An app may compose any library, but it must **not** import
 another app — deployables never depend on each other's source.
 
+## Container publishing
+
+An app that publishes a container owns its complete release descriptor on its NX `container`
+target: `metadata.release.image` is the registry suffix and `metadata.release.dockerfile` is the
+build definition. The Docker workflow selects affected `container` targets from NX, reads those
+descriptors from their app projects, and fails closed if either field is absent. A `container`
+target therefore runs the actual image build; an image smoke check is a distinct app target.
+
 ## See also
 
 - Parent front door: [OpenCrane](../README.md)

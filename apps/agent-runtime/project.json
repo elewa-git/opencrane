@@ -8,6 +8,15 @@
     "build": { "executor": "nx:run-commands", "options": { "command": "python3 -B -c 'import ast, pathlib; [ast.parse(path.read_text()) for path in pathlib.Path(\"src\").rglob(\"*.py\")]'", "cwd": "apps/agent-runtime" } },
     "lint": { "executor": "nx:run-commands", "options": { "command": "python3 -B -c 'import ast, pathlib; [ast.parse(path.read_text()) for path in pathlib.Path(\"src\").rglob(\"*.py\")]'", "cwd": "apps/agent-runtime" } },
     "test": { "executor": "nx:run-commands", "options": { "command": "python3 -B -m unittest discover -s tests", "cwd": "apps/agent-runtime" } },
-    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/agent-runtime/deploy/Dockerfile ." } }
+    "container": {
+      "executor": "nx:run-commands",
+      "metadata": {
+        "release": {
+          "image": "opencrane-agent-runtime",
+          "dockerfile": "apps/agent-runtime/deploy/Dockerfile"
+        }
+      },
+      "options": { "command": "docker build -f apps/agent-runtime/deploy/Dockerfile ." }
+    }
   }
 }

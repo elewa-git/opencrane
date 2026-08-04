@@ -96,10 +96,12 @@ create `libs/utils/` beside it just to satisfy this document.
 - Register build, test, lint, and deploy-relevant targets per project so `nx affected` can validate
   only the impacted graph without losing isolation.
 - CI selects affected `container` targets from the NX graph and publishes immutable SHA artifacts.
-  Each independently deployable target app must have an app-owned semantic version and a promotion
-  step that selects an explicit version from that immutable artifact. Helm values must resolve a
-  digest or immutable version tag, never a moving `latest` tag. Do not retrofit release machinery
-  into apps being deleted; establish it on their direct replacements.
+  Every publishable target owns `targets.container.metadata.release.image` and `.dockerfile`; the
+  selector reads those fields directly and fails closed when one is absent. Each independently
+  deployable target app must have an app-owned semantic version and a promotion step that selects
+  an explicit version from that immutable artifact. Helm values must resolve a digest or immutable
+  version tag, never a moving `latest` tag. Do not retrofit release machinery into apps being
+  deleted; establish it on their direct replacements.
 - Delete replaced projects with their exports, tags, path aliases, targets, chart values, tests, and
   docs. Git history is the compatibility archive.
 

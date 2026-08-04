@@ -14,6 +14,9 @@ grep -Fq 'chmod -R a-w /opt/opencrane/clamav-db' "$dockerfile"
 grep -Fxq 'ENTRYPOINT []' "$dockerfile"
 grep -Fxq 'CMD ["python", "-B", "/app/authoring_worker.py"]' "$dockerfile"
 grep -Fq 'upstream image starts freshclam/clamd' "$dockerfile"
+grep -Fq '"container"' apps/skill-authoring/project.json
+grep -Fq '"command": "docker build -f apps/skill-authoring/deploy/Dockerfile ."' apps/skill-authoring/project.json
+grep -Fq '"image-smoke"' apps/skill-authoring/project.json
 grep -Fq 'bash apps/skill-authoring/tests/image-smoke.sh' apps/skill-authoring/project.json
 if ! grep -Fq -- '--hash=sha256:' apps/skill-authoring/deploy/validator.requirements.txt; then
   echo 'validator lock must contain artifact hashes' >&2

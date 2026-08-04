@@ -16,6 +16,7 @@
     "lint:boundaries": "eslint .",
     "check:prisma-boundaries": "node scripts/prisma-boundary-check.mjs",
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
+    "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",
     "test:config-docs-coverage": "node --test scripts/__tests__/config-docs-coverage.test.mjs",
     "check:module-growth": "node scripts/module-growth-check.mjs",
     "test:module-growth": "node --test scripts/__tests__/module-growth-check.test.mjs",

@@ -12,6 +12,15 @@
     },
     "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "apps/channel-proxy" } },
     "helm-lint": { "executor": "nx:run-commands", "options": { "command": "helm lint apps/channel-proxy/helm" } },
-    "container": { "executor": "nx:run-commands", "options": { "command": "docker build -f apps/channel-proxy/deploy/Dockerfile ." } }
+    "container": {
+      "executor": "nx:run-commands",
+      "metadata": {
+        "release": {
+          "image": "opencrane-channel-proxy",
+          "dockerfile": "apps/channel-proxy/deploy/Dockerfile"
+        }
+      },
+      "options": { "command": "docker build -f apps/channel-proxy/deploy/Dockerfile ." }
+    }
   }
 }

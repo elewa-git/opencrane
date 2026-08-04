@@ -3,21 +3,25 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-const _deployables = [
-  { project: "opencrane", image: "opencrane-server", dockerfile: "apps/opencrane/deploy/Dockerfile" },
-  { project: "channel-proxy", image: "opencrane-channel-proxy", dockerfile: "apps/channel-proxy/deploy/Dockerfile" },
-  { project: "artifact-service", image: "opencrane-artifact-service", dockerfile: "apps/artifact-service/deploy/Dockerfile" },
-  { project: "artifact-preprocessor", image: "opencrane-artifact-preprocessor", dockerfile: "apps/artifact-preprocessor/deploy/Dockerfile" },
-  { project: "agent-runtime", image: "opencrane-agent-runtime", dockerfile: "apps/agent-runtime/deploy/Dockerfile" },
-  { project: "agent-controller", image: "opencrane-agent-controller", dockerfile: "apps/agent-controller/deploy/Dockerfile" },
-  { project: "skill-authoring", image: "opencrane-skill-authoring", dockerfile: "apps/skill-authoring/deploy/Dockerfile" },
-  { project: "opencrane-ui", image: "opencrane-ui", dockerfile: "apps/opencrane-ui/deploy/Dockerfile" },
-];
+import { selectAffectedDeployables, selectApiContractChanged, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
 
 /** Run a command and return trimmed stdout. */
 function _run(command, args)
 {
   return execFileSync(command, args, { encoding: "utf8" }).trim();
+}
+
+/** Lists affected NX project names, optionally limited to a target. */
+function _AffectedProjects(target)
+{
+  const targetArguments = target ? [`--withTarget=${target}`] : [];
+  return JSON.parse(_run("npx", ["nx", "show", "projects", "--affected", ...targetArguments, "--json"]));
+}
+
+/** Reads the complete app-owned project configuration from the NX graph. */
+function _Project(project)
+{
+  return JSON.parse(_run("npx", ["nx", "show", "project", project, "--json"]));
 }
 
 /** Write one GitHub Actions output when running in CI. */
@@ -41,31 +45,13 @@ if (!base || !head)
   throw new Error("NX_BASE and NX_HEAD must be set before selecting affected deployables.");
 }
 
-const affected = new Set(JSON.parse(_run("npx", ["nx", "show", "projects", "--affected", "--withTarget=container", "--json"])));
-const knownProjects = new Set(_deployables.map(function _project(entry) { return entry.project; }));
-
-for (const project of affected)
-{
-  if (!knownProjects.has(project))
-  {
-    throw new Error(`Affected container project '${project}' has no publish descriptor in scripts/affected-deployables.mjs.`);
-  }
-}
-
-const deployables = _deployables.filter(function _affected(entry) { return affected.has(entry.project); });
+const affectedProjects = _AffectedProjects();
+const affectedContainerProjects = _AffectedProjects("container");
+const deployables = selectAffectedDeployables(affectedContainerProjects.map(function _Config(project) { return _Project(project); }));
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
-const apiContractChanged = affected.has("opencrane") || affected.has("contracts");
-
-// The topology negative tests exercise the guard, not the repo: re-prove the guard only when the
-// guard, its registries, a chart, or the pipeline change.
-const guardInputsChanged = changedFiles.some(function _guard(file) {
-  return file.startsWith("scripts/phase-b-topology")
-    || file === "docs/agents/workload-ownership.json"
-    || file === "docs/agents/app-source-allowlist.json"
-    || file.includes("/helm/")
-    || file === ".github/workflows/docker.yml";
-});
+const apiContractChanged = selectApiContractChanged(affectedProjects);
+const guardInputsChanged = selectGuardInputsChanged(changedFiles);
 
 _output("nx_base", base);
 _output("nx_head", head);
