@@ -23,5 +23,7 @@ export async function __ApprovePersona(repository: PersonaAuthorityRepository, c
 
 	// 3. Rebind all mutable preconditions at commit so concurrent edits fail closed.
 	const result = await repository.approveAndActivateAtomically({ ...command, expectedRevisionState: PersonaApprovalRevisionStates.Draft, expectedInterviewState: PersonaApprovalInterviewStates.Completed, expectedInsightCount: snapshot.insightCount });
-	return result.status === PersonaApprovalPersistenceStatuses.Approved ? { outcome: PersonaLifecycleOutcomes.Approved } : { outcome: PersonaLifecycleOutcomes.Denied, reason: result.status === PersonaApprovalPersistenceStatuses.NotFound ? PersonaApprovalDenialReasons.NotFound : PersonaApprovalDenialReasons.Conflict };
+	if (result.status === PersonaApprovalPersistenceStatuses.Approved) return { outcome: PersonaLifecycleOutcomes.Approved };
+	if (result.status === PersonaApprovalPersistenceStatuses.NotFound) return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaApprovalDenialReasons.NotFound };
+	return { outcome: PersonaLifecycleOutcomes.Denied, reason: PersonaApprovalDenialReasons.Conflict };
 }

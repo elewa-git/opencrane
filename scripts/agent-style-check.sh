@@ -19,6 +19,7 @@
 #   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
 #   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
+#   INLINE-CONDITIONAL more than one ternary conditional on one physical source line
 #   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
@@ -50,10 +51,15 @@ fi
 # 2. Exclusions — tests, declarations, generated output, vendored code. Test
 #    files follow looser rules; generated files are not hand-maintained.
 CHECKABLE=()
+INLINE_CHECKABLE=()
 for f in "${FILES[@]:-}"; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
-		*.d.ts|*.spec.ts|*.test.ts|*__tests__*|*node_modules*|*dist/*|*generated*) continue ;;
+		*.d.ts|*node_modules*|*dist/*|*generated*) continue ;;
+	esac
+	INLINE_CHECKABLE+=("$f")
+	case "$f" in
+		*.spec.ts|*.test.ts|*__tests__*) continue ;;
 	esac
 	CHECKABLE+=("$f")
 done
@@ -81,6 +87,14 @@ for f in "${FILES[@]:-}"; do
 			esac
 			;;
 	esac
+done
+
+# INLINE-CONDITIONAL — unlike the looser declaration/style rules below, conditional density applies
+# to production and test TypeScript alike. One physical line may contain at most one ternary.
+for f in "${INLINE_CHECKABLE[@]:-}"; do
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" ERROR INLINE-CONDITIONAL "more than one ternary conditional on one line — use an exhaustive lookup, switch, or helper"
+	done < <(node scripts/inline-conditional-check.mjs "$f")
 done
 
 # MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).

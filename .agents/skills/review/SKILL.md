@@ -79,6 +79,9 @@ maintainability pass.
    - Copy style-script ERROR lines into Low findings verbatim.
    - Confirm each WARN line at its cited location before including it.
    - Do not add eyeballed mechanical-style findings that the script did not report.
+   - `INLINE-CONDITIONAL` is an unconditional finding: a physical source line may contain at most
+     one ternary conditional. Expand each decision onto its own line or use an exhaustive lookup,
+     `switch`, or intention-revealing helper.
    - OpenCrane-owned categorical discriminants use elaborately documented string-backed enums in
      their unions and branches. Confirm every `CATEGORICAL-LITERAL` warning before reporting it:
      flag direct strings such as `patch.kind === "persona_refresh"` and point to the owning enum;

@@ -138,6 +138,12 @@ jobs:
       - name: Prove the Phase D namespace boundary rejects drift
         run: npm run test:phase-d-agent-namespaces
 
+      - name: Enforce mechanical TypeScript agent style
+        run: scripts/agent-style-check.sh --diff "$NX_BASE"
+
+      - name: Prove the inline-conditional classifier
+        run: npm run test:agent-style
+
       - name: Enforce language-neutral production module growth
         run: npm run check:module-growth -- --diff "$NX_BASE"
 
