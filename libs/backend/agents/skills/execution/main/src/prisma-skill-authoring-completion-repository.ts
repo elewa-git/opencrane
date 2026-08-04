@@ -1,7 +1,6 @@
 import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
 
-import { SkillAuthoringCompletionOutcomes } from "./skill-authoring-completion.types.js";
-import type { SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
+import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
 import type { SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
 

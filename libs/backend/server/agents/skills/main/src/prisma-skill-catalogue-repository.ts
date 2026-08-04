@@ -2,8 +2,7 @@ import { Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/observability";
 
-import { SkillCatalogueRevisionStates, SkillCatalogueStates } from "./skill-catalogue.types.js";
-import type { SkillCatalogueEntry, SkillCatalogueRepository } from "./skill-catalogue.types.js";
+import { SkillCatalogueRevisionStates, SkillCatalogueStates, type SkillCatalogueEntry, type SkillCatalogueRepository } from "./skill-catalogue.types.js";
 
 /** Maximum browser-safe skill summaries one silo can receive in one catalogue response. */
 const _CATALOGUE_ENTRY_LIMIT = 200;

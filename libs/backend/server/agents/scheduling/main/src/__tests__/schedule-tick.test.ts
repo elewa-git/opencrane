@@ -1,9 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
-import type { AgentRevisionLifecycleDenial, ManagedRunAdmissionResult, ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
-
-import { AgentScheduleOverlapPolicies } from "@opencrane/backend/server/agents/agent-services";
+import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleDenial, type ManagedRunAdmissionResult, type ManagedRunNowCommand } from "@opencrane/backend/server/agents/agent-services";
 
 import { ScheduledSlotOutcomes, ScheduleTickStatuses } from "../schedule-tick.enums.js";
 import { __NextBackoffDelayMs, __RunScheduleTick, __ScheduledRunIdempotencyKey } from "../schedule-tick.js";

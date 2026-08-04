@@ -1,8 +1,7 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.js";
-import { _ArtifactPublicationConflictError } from "./artifact-unit-of-work.types.js";
-import type { ArtifactPublicationTransaction, ArtifactPublicationUnitOfWork, ArtifactPublicationWork } from "./artifact-unit-of-work.types.js";
+import { _ArtifactPublicationConflictError, type ArtifactPublicationTransaction, type ArtifactPublicationUnitOfWork, type ArtifactPublicationWork } from "./artifact-unit-of-work.types.js";
 
 /** Maximum complete transaction attempts for a catalogue race that PostgreSQL rolled back. */
 const _PUBLICATION_ATTEMPT_LIMIT = 3;

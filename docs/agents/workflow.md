@@ -20,6 +20,27 @@ Three files track work, each with a distinct role — keep them from drifting:
   - Write entries in **functional, capability-first terms** — *what an operator/tenant/integrator can now do, or do differently, that they couldn't before* — never a restatement of commits. Name a mechanism (flag or endpoint) only when it helps the reader use the feature. Collapse many commits into the single capability they deliver.
   - Delegate this to the **`changelog` agent** (`.claude/agents/changelog.md`, runs on Sonnet), which encodes this style; or follow that file's rules if writing the entry inline.
 
+## PR Ancestry And Single-Review Gate
+
+Before creating, refreshing, rebasing, or reporting a pull request, inspect the **live** PR list and
+the candidate's actual commit/diff ancestry. Identify every earlier PR whose branch, commits, or
+functional diff the candidate builds on. Resolve each predecessor in exactly one of these ways:
+
+- **Stack it:** set the candidate PR's base to the predecessor's head branch. The candidate diff must
+  then contain only its incremental change. Name the review order in the PR body and status report.
+- **Absorb it:** include the predecessor completely in the candidate, close the superseded PR, and
+  retarget any dependants. The surviving PR becomes the only place where that combined diff is
+  reviewed.
+
+Never leave a PR based on the integration branch while its diff repeats an open predecessor. Never
+ask for review until `base...head` has been checked against the chosen live base and contains no
+already-reviewed predecessor material except an explicitly documented, inseparable absorption.
+When neither stacking nor absorption is safe, stop and resolve the ancestry before publishing.
+
+The hand-off must state the resulting stack order, absorbed/closed PRs, and intentionally independent
+PRs. A passing check, remembered branch relationship, or similar title is not evidence of ancestry;
+re-read the current PR bases, heads, commits, and changed files.
+
 ## Commit Messages
 
 - Always end each work cycle with a suggested commit message.

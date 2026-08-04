@@ -1,7 +1,6 @@
 import { createHash } from "node:crypto";
 
-import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes } from "@opencrane/backend/server/agents/agent-services";
-import type { AgentRevisionLifecycleDenial } from "@opencrane/backend/server/agents/agent-services";
+import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleDenial } from "@opencrane/backend/server/agents/agent-services";
 
 import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from "./cron-schedule.js";
 import { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";

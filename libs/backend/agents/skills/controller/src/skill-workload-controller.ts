@@ -2,8 +2,7 @@ import { __BuildGovernedSkillWorkloadJob, type SkillWorkloadJobProfile } from "@
 import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import { SkillWorkloadControllerReconcileOutcomes } from "./skill-workload-controller.types.js";
-import type { SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult, SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
+import { SkillWorkloadControllerReconcileOutcomes, type SkillWorkloadControllerOptions, type SkillWorkloadControllerProfiles, type SkillWorkloadControllerReconcileResult, type SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
 
 /** Require the immutable Kubernetes UID returned by the API rather than a derived identifier. */
 function _RequireWorkloadUid(uid: string | undefined): string
