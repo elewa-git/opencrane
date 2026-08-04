@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunWorkloadRegistrationCommand } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ___IsEmptyAgentControllerCommand, ___ParseAgentControllerRunAttemptAssignmentCommand, ___ParseAgentControllerRunWorkloadRegistrationCommand } from "@opencrane/contracts";
 
 import type { AgentControllerRunDispatchRouterDependencies, ReviewedAgentControllerIdentity } from "./run-dispatch.types.js";
 
@@ -20,7 +20,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 		try
 		{
 			// 1. TokenReview the dedicated controller credential and reject caller-supplied policy or time.
-			if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+			if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
@@ -52,7 +52,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
 			}
-			const command = _ParseAssignmentCommand(request.body);
+			const command = ___ParseAgentControllerRunAttemptAssignmentCommand(request.body);
 			const eventId = request.params["eventId"];
 			if (!command || typeof eventId !== "string" || !eventId)
 			{
@@ -81,7 +81,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 		try
 		{
 			// 1. Authenticate the sole controller before revealing any pending workload coordinates.
-			if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+			if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
@@ -114,7 +114,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 		try
 		{
 			// 1. Restrict operational retention to the same TokenReview-confirmed controller identity.
-			if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+			if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
@@ -140,7 +140,7 @@ export function __CreateAgentControllerRunDispatchRouter(dependencies: AgentCont
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
 			}
-			const command = _ParseRegistrationCommand(request.body);
+			const command = ___ParseAgentControllerRunWorkloadRegistrationCommand(request.body);
 			const eventId = request.params["eventId"];
 			if (!command || typeof eventId !== "string" || !eventId)
 			{
@@ -190,34 +190,6 @@ function _BearerValue(value: string | undefined): string | null
 {
 	if (!value) return null;
 	return /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null;
-}
-
-/** Accept only an empty object for a server-owned claim request. */
-function _IsEmptyObject(value: unknown): boolean
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
-}
-
-/** Parse the exact bounded assignment shape without accepting extra self-asserted fields. */
-function _ParseAssignmentCommand(value: unknown): AgentControllerRunAttemptAssignmentCommand | null
-{
-	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Record<string, unknown>;
-	const expectedKeys = ["attempt", "bootstrapReference", "claimedAt", "deliveryCount", "expectedWorkloadProfile", "namespace", "runId", "serviceAccountName", "workloadUid"];
-	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(key => key in body)) return null;
-	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["runId"] !== "string" || typeof body["attempt"] !== "number" || typeof body["expectedWorkloadProfile"] !== "string" || typeof body["bootstrapReference"] !== "string" || typeof body["namespace"] !== "string" || typeof body["serviceAccountName"] !== "string" || typeof body["workloadUid"] !== "string") return null;
-	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], runId: body["runId"], attempt: body["attempt"], expectedWorkloadProfile: body["expectedWorkloadProfile"], bootstrapReference: body["bootstrapReference"], namespace: body["namespace"], serviceAccountName: body["serviceAccountName"], workloadUid: body["workloadUid"] };
-}
-
-/** Parse exact first-Pod registration evidence without accepting self-asserted extensions. */
-function _ParseRegistrationCommand(value: unknown): AgentControllerRunWorkloadRegistrationCommand | null
-{
-	if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Record<string, unknown>;
-	const expectedKeys = ["agentRevisionId", "agentServiceId", "attempt", "bootstrapReference", "claimedAt", "deliveryCount", "namespace", "podUid", "runId", "serviceAccountName", "siloId", "workloadProfile", "workloadUid"];
-	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(key => key in body)) return null;
-	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["runId"] !== "string" || typeof body["attempt"] !== "number" || typeof body["siloId"] !== "string" || typeof body["agentServiceId"] !== "string" || typeof body["agentRevisionId"] !== "string" || typeof body["namespace"] !== "string" || typeof body["serviceAccountName"] !== "string" || typeof body["workloadUid"] !== "string" || typeof body["workloadProfile"] !== "string" || typeof body["bootstrapReference"] !== "string" || typeof body["podUid"] !== "string") return null;
-	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], runId: body["runId"], attempt: body["attempt"], siloId: body["siloId"], agentServiceId: body["agentServiceId"], agentRevisionId: body["agentRevisionId"], namespace: body["namespace"], serviceAccountName: body["serviceAccountName"], workloadUid: body["workloadUid"], workloadProfile: body["workloadProfile"], bootstrapReference: body["bootstrapReference"], podUid: body["podUid"] };
 }
 
 /** Write one bounded, non-sensitive internal problem response. */

@@ -1,4 +1,4 @@
-import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
+import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
 
@@ -40,13 +40,6 @@ export type RegisterRunWorkloadPodResult =
 	| { readonly status: "registered"; readonly result: AgentControllerRunWorkloadRegistrationResult }
 	| { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "pod_conflict" | "invalid_registration" };
 
-/** Bounded result of removing delivered, non-failed operational outbox records. */
-export interface PrunePublishedRunOutboxResult
-{
-	/** Number of records removed in this maintenance transaction. */
-	readonly deletedCount: number;
-}
-
 /** Run-owned persistence port used by the controller-only internal API. */
 export interface RunDispatchRepository
 {
@@ -59,7 +52,7 @@ export interface RunDispatchRepository
 	/** Registers only the first Pod for the exact current release claim and publishes that command. */
 	registerFirstPodAndPublishReleaseAtomically(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand): Promise<RegisterRunWorkloadPodResult>;
 	/** Removes a bounded batch of retention-expired successfully delivered operational records. */
-	prunePublishedOutboxEventsAtomically(): Promise<PrunePublishedRunOutboxResult>;
+	prunePublishedOutboxEventsAtomically(): Promise<AgentControllerRunOutboxPruneResult>;
 }
 
 /** TokenReview-confirmed identity of an in-cluster workload. */

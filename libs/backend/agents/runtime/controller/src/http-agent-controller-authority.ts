@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
 import { ___DoWithTrace } from "@opencrane/observability";
-import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
+import { ___IsAgentControllerIdentifier, ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptAssignmentResult, type AgentControllerRunAttemptClaim, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadRegistrationResult, type AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
 import type { AgentControllerAuthority } from "./agent-controller.types.js";
 import type { AgentControllerFetch, AgentControllerHttpAuthorityOptions, AgentControllerTokenReader } from "./http-agent-controller-authority.types.js";
-import { _IsAgentControllerIdentifier, _ParseAgentControllerAssignmentResult, _ParseAgentControllerClaim, _ParseAgentControllerPrunedCount, _ParseAgentControllerRegistrationResult, _ParseAgentControllerWorkloadReleaseClaim, _ReadAndValidateAgentControllerJson } from "./http-agent-controller-response.js";
+import { _ReadAndValidateAgentControllerJson } from "./http-agent-controller-response.js";
 
 const _CLAIM_PATH = "/api/internal/agent-controller/run-attempts:claim";
 const _RELEASE_CLAIM_PATH = "/api/internal/agent-controller/workload-releases:claim";
@@ -59,19 +59,19 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const response = await fetchRequest(new URL(_CLAIM_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane controller claim failed with HTTP ${response.status}`);
-				return _ReadAndValidateAgentControllerJson(response, _ParseAgentControllerClaim);
+				return _ReadAndValidateAgentControllerJson(response, ___ParseAgentControllerRunAttemptClaim);
 			});
 		},
 		async __CommitAssignment(eventId: string, command: AgentControllerRunAttemptAssignmentCommand, signal: AbortSignal): Promise<AgentControllerRunAttemptAssignmentResult>
 		{
 			return ___DoWithTrace("agent_controller.assignment.commit", { eventId, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }, async function _commit()
 			{
-				if (!_IsAgentControllerIdentifier(eventId)) throw new Error("agent controller assignment requires one valid event id");
+				if (!___IsAgentControllerIdentifier(eventId)) throw new Error("agent controller assignment requires one valid event id");
 				const token = await readToken();
 				const path = `/api/internal/agent-controller/run-attempts/${encodeURIComponent(eventId)}/assignment`;
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(token), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane controller assignment failed with HTTP ${response.status}`);
-				return _ReadAndValidateAgentControllerJson(response, _ParseAgentControllerAssignmentResult, command);
+				return _ReadAndValidateAgentControllerJson(response, ___ParseAgentControllerRunAttemptAssignmentResult, command);
 			});
 		},
 		async __ClaimWorkloadRelease(signal: AbortSignal): Promise<AgentControllerRunWorkloadReleaseClaim | null>
@@ -82,19 +82,19 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const response = await fetchRequest(new URL(_RELEASE_CLAIM_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status === 204) return null;
 				if (response.status !== 200) throw new Error(`OpenCrane workload-release claim failed with HTTP ${response.status}`);
-				return _ReadAndValidateAgentControllerJson(response, _ParseAgentControllerWorkloadReleaseClaim);
+				return _ReadAndValidateAgentControllerJson(response, ___ParseAgentControllerRunWorkloadReleaseClaim);
 			});
 		},
 		async __RegisterFirstPod(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand, signal: AbortSignal): Promise<AgentControllerRunWorkloadRegistrationResult>
 		{
 			return ___DoWithTrace("agent_controller.workload_release.register", { eventId, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid, podUid: command.podUid }, async function _registerFirstPod()
 			{
-				if (!_IsAgentControllerIdentifier(eventId)) throw new Error("agent controller registration requires one valid event id");
+				if (!___IsAgentControllerIdentifier(eventId)) throw new Error("agent controller registration requires one valid event id");
 				const token = await readToken();
 				const path = `/api/internal/agent-controller/workload-releases/${encodeURIComponent(eventId)}/registration`;
 				const response = await fetchRequest(new URL(path, baseUrl), { method: "PUT", headers: _Headers(token), body: JSON.stringify(command), signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane first-Pod registration failed with HTTP ${response.status}`);
-				return _ReadAndValidateAgentControllerJson(response, _ParseAgentControllerRegistrationResult, command);
+				return _ReadAndValidateAgentControllerJson(response, ___ParseAgentControllerRunWorkloadRegistrationResult, command);
 			});
 		},
 		async __PrunePublishedOutbox(signal: AbortSignal): Promise<number>
@@ -104,7 +104,7 @@ export function __CreateHttpAgentControllerAuthority(options: AgentControllerHtt
 				const token = await readToken();
 				const response = await fetchRequest(new URL(_OUTBOX_PRUNE_PATH, baseUrl), { method: "POST", headers: _Headers(token), body: "{}", signal: _RequestSignal(signal, options.requestTimeoutMilliseconds) });
 				if (response.status !== 200) throw new Error(`OpenCrane outbox prune failed with HTTP ${response.status}`);
-				return _ReadAndValidateAgentControllerJson(response, _ParseAgentControllerPrunedCount);
+				return _ReadAndValidateAgentControllerJson(response, ___ParseAgentControllerOutboxPrunedCount);
 			});
 		},
 	};

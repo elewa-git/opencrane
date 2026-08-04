@@ -9,7 +9,7 @@ across domain packages. "Pure" means every function returns a value computed onl
 arguments — no database, no network, no clock, no global state — so the results are identical every
 time and safe to call anywhere.
 
-It owns five things:
+It owns four things:
 
 - **Collection helpers** — `___SortBy` (stable sort by an optional key), `___SomeArray` and
   `___SomeRecord` (typed "does any element/value match?" checks). Small, but shared so the same
@@ -33,13 +33,6 @@ It owns five things:
   confused with an arbitrary string.
 - **Digest grammar** — `___IsSha256Digest` accepts only `sha256:` plus 64 lowercase hexadecimal
   characters, keeping digests exchanged between authorities in one fail-closed spelling.
-- **Declarative shape validation** — `___ParseShape` validates an untrusted candidate against a
-  declared field-parser map, returns only the declared fields, and names the exact `source.field`
-  path in every failure diagnostic. `___RequireField` builds a field parser from any type predicate,
-  and `___ShapeFields` ships the identifier, positive-integer, and UTC-millisecond-instant parsers
-  (backed by `___IsBoundedIdentifier`, `___IsPositiveInteger`, and `___IsMillisecondInstant`) that
-  internal HTTP adapters share instead of re-declaring per-package predicates and one opaque
-  malformed-response error.
 
 Widely used where a **deterministic** result matters — most importantly the authorization model,
 which digests capability catalogues and request arguments so a signature can bind to exact bytes.
@@ -54,9 +47,6 @@ platform-wide API. Invariant: purity and determinism — no hidden inputs, same 
 - `___DigestCanonicalJson` — browser- and Node-safe SHA-256 digest of canonical JSON.
 - `___CloneCanonicalJson` — detached deep copy through the canonical JSON representation.
 - `___IsSha256Digest` — strict validator for the platform's lowercase SHA-256 digest grammar.
-- `___ParseShape`, `___RequireField`, `___ShapeFields` — declarative untrusted-object validation.
-- `___IsBoundedIdentifier`, `___IsPositiveInteger`, `___IsMillisecondInstant` — boundary predicates.
-- `___Shape`, `___ShapeFieldParser`, `___ParsedShape` — shape validation types.
 - `JsonValue`, `JsonPrimitive`, `CanonicalJsonSha256Digest` — JSON and digest types.
 
 ## Boundary

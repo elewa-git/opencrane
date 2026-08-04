@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunOutboxPruneResult, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import type { ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, PrunePublishedRunOutboxResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
+import type { ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity
@@ -175,12 +175,12 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	}
 
 	/** Remove one bounded batch of delivered operational records while preserving failed evidence. */
-	async prunePublishedOutboxEventsAtomically(): Promise<PrunePublishedRunOutboxResult>
+	async prunePublishedOutboxEventsAtomically(): Promise<AgentControllerRunOutboxPruneResult>
 	{
 		const config = this.config;
 		const publishedOutboxRetentionMilliseconds = config.publishedOutboxRetentionMilliseconds ?? 604_800_000;
 		const outboxPruneBatchSize = config.outboxPruneBatchSize ?? 100;
-		return this.prisma.$transaction(async function _prune(transaction: Prisma.TransactionClient): Promise<PrunePublishedRunOutboxResult>
+		return this.prisma.$transaction(async function _prune(transaction: Prisma.TransactionClient): Promise<AgentControllerRunOutboxPruneResult>
 		{
 			// 1. Take database time so the retention boundary is consistent across controller replicas.
 			const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);

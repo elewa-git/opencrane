@@ -65,10 +65,11 @@ retried at the next interval; it can never prevent workload reconciliation or ke
 alive after shutdown.
 
 Internally, the polling loop, runtime-profile policy, attempt-key projection, assignment reconcile,
-release reconcile, HTTP response validation, Kubernetes Job adoption, conditional release planning,
+release reconcile, bounded HTTP decoding, Kubernetes Job adoption, conditional release planning,
 Pod proof, and transport calls each have one module owner. The package barrel exposes composition
 capabilities and the profile-map type only. The one-attempt assignment and release steps remain
-package-private test seams; adapter seams and protocol details stay package-local.
+package-private test seams. Zod validation of controller wire models is owned beside those models in
+`@opencrane/contracts`; this package does not redeclare their accepted fields.
 
 ## Boundary
 
