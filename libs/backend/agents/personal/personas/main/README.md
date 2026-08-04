@@ -78,8 +78,8 @@ whole approval rather than activating the revision alone.
 ## Boundary
 
 Consumed by the persona-onboarding path. It owns the interview lifecycle and approval, but does not
-generate insights or execute the agent. It accepts only reviewable insight statements and derives
-template selection plus every other durable draft coordinate from the completed interview. It never
+execute the agent. Its drafting authority derives bounded owner-visible insight statements, template
+selection, and every durable draft coordinate from the locked completed-interview answers. It never
 activates a draft that is not fully evidenced, and it never mints an editable runtime persona file.
 The capability stays one aggregate lifecycle, but its implementation is grouped by responsibility:
 `profile/` provisions and reports owner state, `interview/` records immutable answers, `drafting/`

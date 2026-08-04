@@ -43,7 +43,7 @@ export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Log
 		onboarding: new PrismaPersonaOnboardingRepository(logger, transactions),
 		interviews,
 		questions: interviews,
-		drafts: new PrismaPersonaDraftRepository(prisma, transactions, logger),
+		drafts: new PrismaPersonaDraftRepository(logger, transactions),
 		approval: new PrismaPersonaAuthorityRepository(prisma, refreshes),
 		clock: { now(): Date { return new Date(); } },
 		logger,
