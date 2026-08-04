@@ -1,4 +1,4 @@
-import { ArtifactIndexState, ArtifactKind, ArtifactRevisionState, ArtifactState, type PrismaClient } from "@prisma/client";
+import { ArtifactIndexState, ArtifactKind, ArtifactRevisionState, ArtifactState, Prisma } from "@prisma/client";
 
 import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
 import type { PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
@@ -7,10 +7,10 @@ import type { PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from 
 export class PrismaArtifactCatalogueRepository implements ArtifactReadLeaseRepository, PersonalArtifactCatalogueRepository
 {
 	/** Canonical product database client used only for read projections. */
-	private readonly prisma: PrismaClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/** Creates the catalogue read repository. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}

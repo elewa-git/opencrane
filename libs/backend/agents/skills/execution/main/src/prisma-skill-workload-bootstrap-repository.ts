@@ -1,10 +1,10 @@
 import { Prisma } from "@prisma/client";
 
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
-import type { SkillWorkloadBootstrapPersistence } from "./skill-workload-unit-of-work.types.js";
+import type { SkillWorkloadBootstrapRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Prisma authority for one exact released-and-registered governed-skill bootstrap consumption. */
-export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBootstrapPersistence
+export class PrismaSkillWorkloadBootstrapRepository implements SkillWorkloadBootstrapRepository
 {
 	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
 	private readonly transaction: Prisma.TransactionClient;

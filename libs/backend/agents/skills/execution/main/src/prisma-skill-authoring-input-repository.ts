@@ -2,10 +2,10 @@ import { Prisma } from "@prisma/client";
 
 import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
-import type { SkillAuthoringInputPersistence } from "./skill-workload-unit-of-work.types.js";
+import type { SkillAuthoringInputRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Prisma authority selecting one draft skill's immutable source only for its exact authoring Pod. */
-export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputPersistence
+export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputRepository
 {
 	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
 	private readonly transaction: Prisma.TransactionClient;

@@ -1,4 +1,4 @@
-import { SkillRevisionState, SkillState, type PrismaClient } from "@prisma/client";
+import { Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
 import { ___DoWithTrace } from "@opencrane/observability";
 
@@ -12,10 +12,10 @@ const _CATALOGUE_ENTRY_LIMIT = 200;
 export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 {
 	/** Canonical OpenCrane catalog database client. */
-	private readonly prisma: PrismaClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/** Creates the silo-scoped catalogue repository over the product database. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}

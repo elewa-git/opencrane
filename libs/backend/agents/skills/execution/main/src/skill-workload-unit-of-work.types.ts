@@ -23,8 +23,28 @@ export interface SkillWorkloadReleaseRepository
 	registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
 }
 
+/** Transaction-bound assignment persistence before the unit of work applies process configuration. */
+export interface SkillWorkloadAssignmentPersistenceRepository
+{
+	/** Claims one workload using the validated process-owned claim lease. */
+	claimNext(claimLeaseMilliseconds: number): Promise<SkillWorkloadClaim | null>;
+	/** Commits one assignment while enforcing the same process-owned claim lease. */
+	commitAssignment(workloadId: string, command: SkillWorkloadAssignmentCommand, claimLeaseMilliseconds: number): Promise<"assigned" | "idempotent" | "conflict">;
+}
+
+/** Transaction-bound release persistence before the unit of work applies process configuration. */
+export interface SkillWorkloadReleasePersistenceRepository
+{
+	/** Claims one release using the validated process-owned claim lease. */
+	claimNextRelease(claimLeaseMilliseconds: number): Promise<SkillWorkloadReleaseClaim | null>;
+	/** Commits the exact successful unsuspend operation or its immutable replay. */
+	commitRelease(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">;
+	/** Records the sole Job-owned Pod before a bootstrap can be consumed. */
+	registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">;
+}
+
 /** Transaction-scoped persistence capability for one hash-addressed worker bootstrap. */
-export interface SkillWorkloadBootstrapPersistence
+export interface SkillWorkloadBootstrapRepository
 {
 	/** Selects one unconsumed bootstrap without admitting a caller-selected identity. */
 	loadUnconsumed(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>;
@@ -33,14 +53,14 @@ export interface SkillWorkloadBootstrapPersistence
 }
 
 /** Transaction-scoped persistence capability for a terminal authoring evidence report. */
-export interface SkillAuthoringCompletionPersistence
+export interface SkillAuthoringCompletionRepository
 {
 	/** Stores bounded successful evidence and terminalises exactly one reviewed workload. */
 	complete(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">;
 }
 
 /** Transaction-scoped read capability selecting a source artifact for one reviewed authoring Pod. */
-export interface SkillAuthoringInputPersistence
+export interface SkillAuthoringInputRepository
 {
 	/** Returns the fully pinned active artifact or no record when any authority fence differs. */
 	load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>;
@@ -54,11 +74,11 @@ export interface SkillWorkloadExecutionTransaction
 	/** Controller unsuspend and first-Pod registration authority. */
 	readonly releases: SkillWorkloadReleaseRepository;
 	/** One-use bootstrap lookup and consumption authority. */
-	readonly bootstraps: SkillWorkloadBootstrapPersistence;
+	readonly bootstraps: SkillWorkloadBootstrapRepository;
 	/** Authoring terminal-evidence authority. */
-	readonly authoringCompletions: SkillAuthoringCompletionPersistence;
+	readonly authoringCompletions: SkillAuthoringCompletionRepository;
 	/** Authoring source-artifact selection authority. */
-	readonly authoringInputs: SkillAuthoringInputPersistence;
+	readonly authoringInputs: SkillAuthoringInputRepository;
 }
 
 /** Work that must run with all skill-execution repositories on one transaction snapshot. */

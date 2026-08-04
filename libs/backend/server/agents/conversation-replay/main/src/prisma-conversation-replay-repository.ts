@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import { Prisma, type PrismaClient } from "@prisma/client";
 
 import { __EncodeConversationReplayCursor } from "./replay-cursor.js";
 import type { ConversationReplayCursor } from "./replay-cursor.types.js";
@@ -15,10 +15,10 @@ export function _CreateConversationReplayRepository(prisma: PrismaClient): Conve
 class _PrismaConversationReplayRepository implements ConversationReplayRepository
 {
 	/** Canonical product database. */
-	private readonly prisma: PrismaClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/** Creates the read-only replay adapter. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}

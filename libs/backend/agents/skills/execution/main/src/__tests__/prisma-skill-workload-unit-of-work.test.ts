@@ -5,8 +5,8 @@ import { PrismaSkillWorkloadUnitOfWork } from "../prisma-skill-workload-unit-of-
 /** Builds one root-client double that exposes a fresh transaction to each unit-of-work call. */
 function _Prisma()
 {
-	const firstTransaction = {};
-	const secondTransaction = {};
+	const firstTransaction = { $queryRaw: vi.fn().mockResolvedValue([]) };
+	const secondTransaction = { $queryRaw: vi.fn().mockResolvedValue([]) };
 	const transactions = [firstTransaction, secondTransaction];
 	const prisma = { $transaction: vi.fn(async function _Transaction(work: (transaction: unknown) => Promise<unknown>): Promise<unknown> { const transaction = transactions.shift(); return work(transaction); }) };
 	return { prisma, firstTransaction, secondTransaction };
@@ -18,12 +18,12 @@ describe("Prisma skill workload unit of work", function _DescribeUnitOfWork()
 	{
 		const { prisma, firstTransaction, secondTransaction } = _Prisma();
 		const unitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma as never, 30_000);
-		const firstAssignments = await unitOfWork.run(async function _First(transaction): Promise<object> { return transaction.assignments as object; });
-		const secondAssignments = await unitOfWork.run(async function _Second(transaction): Promise<object> { return transaction.assignments as object; });
+		const firstAssignments = await unitOfWork.run(async function _First(transaction): Promise<object> { await transaction.assignments.claimNext(); return transaction.assignments as object; });
+		const secondAssignments = await unitOfWork.run(async function _Second(transaction): Promise<object> { await transaction.assignments.claimNext(); return transaction.assignments as object; });
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
 		expect(firstAssignments).not.toBe(secondAssignments);
-		expect(firstAssignments).toMatchObject({ transaction: firstTransaction });
-		expect(secondAssignments).toMatchObject({ transaction: secondTransaction });
+		expect(firstTransaction.$queryRaw).toHaveBeenCalledOnce();
+		expect(secondTransaction.$queryRaw).toHaveBeenCalledOnce();
 	});
 });
