@@ -43,8 +43,12 @@ after any API change so the two never silently diverge. `RunInputSnapshot` is th
 record of one run's frozen persona, transcript, memory references, tools, budgets, model route and
 verified identity provenance; it carries only immutable coordinates and canonical JSON, never
 provider credentials or mutable source objects. Its integration assignments record only an
-integration identifier and the revision-approved tool names; a custody reference stays behind the
-server boundary and is rechecked when a tool is invoked. Identity is explicitly tagged: a user run
+integration identifier and the revision-approved tool names; the custody reference never enters
+the snapshot. It reappears only as the server-compiled `CompiledToolDefinition.obotMcpServerId` —
+non-secret ADDRESSING, because the custody reference doubles as Obot's MCP server id. The runtime
+receives that id plus an attempt-scoped, server-scoped Obot key so it can execute an approved call
+directly against Obot; the underlying integration credential never leaves Obot, and the allow-list
+plus key scoping remain the authority. Identity is explicitly tagged: a user run
 pins a human's signed fleet membership, while a managed run pins the derived service principal, its
 signed membership, and the exact approved non-personal scopes. A service record cannot be read as a
 user record by accident.

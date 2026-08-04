@@ -45,6 +45,9 @@ export function __CreateDeferredToolApprovalRouter(dependencies: DeferredToolApp
 				decidedBy: caller.subjectId,
 				now: dependencies.clock.now(),
 				resumeTokenHash: decision === "approved" ? _resumeTokenHash(approvalRequestId) : undefined,
+				// The decision authority joins the reserved ToolInvocation and appends its logical
+				// `toolInvocationId`, so the stored result the runtime receives on resume is
+				// `{ approvalRequestId, decision: "approved", toolInvocationId }`.
 				deferredToolResult: decision === "approved" ? { approvalRequestId, decision: "approved" } : undefined,
 			});
 			if (result.outcome === "approved" || (result.outcome === "already_decided" && result.decision === "approved")) { response.status(200).json({ approvalRequestId, state: "approved" }); return; }

@@ -1,6 +1,6 @@
 import { ActionExecutionState, Prisma, type PrismaClient } from "@prisma/client";
 
-import type { ToolInvocationFailureResult, ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "./tool-invocation.types.js";
+import type { ToolInvocationCoordinates, ToolInvocationFailureResult, ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "./tool-invocation.types.js";
 
 /** Maps a completed Prisma row to the dependency-light canonical tool-invocation receipt. */
 function _receipt<TResult>(row: { toolInvocationId: string; requestFingerprint: string; result: Prisma.JsonValue | null }): ToolInvocationReceipt<TResult>
@@ -96,4 +96,36 @@ export class PrismaToolInvocationRepository implements ToolInvocationRepository
 		const updated = await this.prisma.toolInvocation.updateMany({ where: { id: reservationId, state: ActionExecutionState.Reserved }, data: { state: ActionExecutionState.Failed, failureCode, completedAt: new Date() } });
 		return { status: updated.count === 1 ? "failed" : "conflict" };
 	}
+
+	/** Completes the unique Reserved invocation named by its run/attempt/idempotency coordinates. */
+	async markSucceededByCoordinates<TResult>(coordinates: ToolInvocationCoordinates, result: TResult): Promise<ToolInvocationSuccessResult<TResult>>
+	{
+		return __MarkToolInvocationSucceededByCoordinatesInTransaction(this.prisma, coordinates, result);
+	}
+}
+
+/**
+ * Compare-and-set the unique Reserved invocation for `(runId, attempt, toolInvocationId)` inside a
+ * caller-owned transaction (or over the root client).
+ *
+ * The unique `(runId, attempt, toolInvocationId)` key guarantees at most one matching row, so the
+ * update touches exactly the invocation the runtime named or nothing. A count of zero — unknown
+ * coordinates, an already-completed row, or a non-Reserved state — is a conflict, never a retry.
+ *
+ * @param client - Prisma transaction client (preferred, so completion commits with the caller's
+ *   fence) or the root client.
+ * @param coordinates - Attempt-scoped invocation coordinates supplied by the runtime.
+ * @param result - Canonical durable result; for direct-invocation receipts this is a digest only.
+ * @returns The durable receipt on success, or a conflict the caller must refuse.
+ */
+export async function __MarkToolInvocationSucceededByCoordinatesInTransaction<TResult>(client: Prisma.TransactionClient | PrismaClient, coordinates: ToolInvocationCoordinates, result: TResult): Promise<ToolInvocationSuccessResult<TResult>>
+{
+	// 1. CAS on Reserved by the unique coordinate key so a duplicate completion cannot rewrite state.
+	const updated = await client.toolInvocation.updateMany({ where: { runId: coordinates.runId, attempt: coordinates.attempt, toolInvocationId: coordinates.toolInvocationId, state: ActionExecutionState.Reserved }, data: { state: ActionExecutionState.Succeeded, result: result as unknown as Prisma.InputJsonValue, completedAt: new Date() } });
+	if (updated.count !== 1) return { status: "conflict" };
+
+	// 2. Reload the completed row so the caller receives the exact durable receipt.
+	const receipt = await client.toolInvocation.findUnique({ where: { runId_attempt_toolInvocationId: { runId: coordinates.runId, attempt: coordinates.attempt, toolInvocationId: coordinates.toolInvocationId } } });
+	if (receipt === null) return { status: "conflict" };
+	return { status: "succeeded", receipt: _receipt<TResult>(receipt) };
 }

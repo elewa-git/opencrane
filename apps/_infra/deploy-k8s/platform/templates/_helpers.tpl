@@ -204,8 +204,10 @@ instance → release-local Service; shared → sharedPlatform.litellm.shared.end
 {{- end }}
 
 {{/*
-Obot MCP gateway base URL the operator injects into tenant runtimes.
-instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.url.
+Obot MCP gateway base origin consumed by the opencrane-server's OBOT_GATEWAY_URL.
+instance → the fully-qualified release-local Service origin (the server validates a
+`*.svc.cluster.local` origin, so the short Service name is not used here);
+shared → sharedPlatform.mcpGateway.shared.url.
 */}}
 {{- define "opencrane.mcpGatewayUrl" -}}
 {{- if eq (include "opencrane.mcpGatewayShared" .) "true" -}}
@@ -213,7 +215,7 @@ instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.
 {{- if not $u -}}{{- fail "sharedPlatform.mcpGateway.mode=shared requires sharedPlatform.mcpGateway.shared.url" -}}{{- end -}}
 {{- $u -}}
 {{- else -}}
-{{- printf "http://%s-mcp-gateway:%v" (include "opencrane.fullname" .) .Values.mcpGateway.service.port -}}
+{{- printf "http://%s-mcp-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.mcpGateway.service.port -}}
 {{- end -}}
 {{- end }}
 

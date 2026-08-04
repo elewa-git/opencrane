@@ -57,7 +57,8 @@
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
-      "libs/backend/server/iam/identity/main/src/oidc.service.ts"
+      "libs/backend/server/iam/identity/main/src/oidc.service.ts",
+      "libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },
   "exemptions": [
@@ -67,6 +68,42 @@
       "reason": "Admission-time recall-query derivation reads one frozen conversation message inside the existing RunAdmissionTransaction, matching every sibling session-assembly source; migrate together with those sources to a policy-owned repository.",
       "operations": ["delegate"],
       "expiresOn": "2027-02-28"
+    },
+    {
+      "path": "libs/backend/agents/execution/runs/main/src/prisma-run-dispatch-repository.ts",
+      "owner": "execution-runs",
+      "operations": [
+        "delegate"
+      ],
+      "reason": "pre-policy dispatch repository gains one snapshot read for the release-claim obot flag; declaring the adapter needs a TransactionClient constructor refactor",
+      "expiresOn": "2026-12-31"
+    },
+    {
+      "path": "libs/backend/server/iam/authorization/main/src/deferred-tool-approval.ts",
+      "owner": "iam-authorization",
+      "operations": [
+        "delegate"
+      ],
+      "reason": "pre-policy in-transaction approval authority joins the reserved ToolInvocation to record the approved toolInvocationId in the resume payload",
+      "expiresOn": "2026-12-31"
+    },
+    {
+      "path": "libs/backend/server/iam/authorization/main/src/prisma-tool-invocation-repository.ts",
+      "owner": "iam-authorization",
+      "operations": [
+        "delegate"
+      ],
+      "reason": "pre-policy invocation receipt adapter gains the coordinate CAS used by digest-only tool.completed receipts; declaring it needs a TransactionClient constructor refactor",
+      "expiresOn": "2026-12-31"
+    },
+    {
+      "path": "libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts",
+      "owner": "integrations",
+      "operations": [
+        "delegate"
+      ],
+      "reason": "custody route pre-checks the active same-silo integration before any credential can reach Obot; the read belongs in a declared integrations repository later",
+      "expiresOn": "2026-12-31"
     }
   ]
 }

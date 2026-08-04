@@ -166,14 +166,19 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the Obot MCP-invocation port (allow-list enforced), the scoped-memory
+plane), execution authority via the reserve-before-dispatch tool boundary with the Obot transports
+composed (authenticated custody provisioning + a per-attempt Obot key scoped to the run's MCP server
+ids; approved calls execute runtime→Obot directly with digest-only `tool.completed` receipts,
+allow-list enforced), the scoped-memory
 contract freezes the gateway-native dataset selected by admitted authority while the authenticated
 read transport is built but not connected to runtime execution pending attempt-fenced ephemeral
 result delivery, and the attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
 tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
 recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
-live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337). The repository
+live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337); the composed
+custody + direct attempt-key data plane validates Obot responses defensively until that live
+qualification pins the exact shapes. The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,

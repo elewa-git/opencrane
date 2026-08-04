@@ -100,10 +100,10 @@ if grep -Fq '          port: 4318' <<<"$otel_default_deny_rendered"; then
   exit 1
 fi
 
-if grep -Fq '              app.kubernetes.io/component: mcp-gateway' <<<"$server_policy"; then
-  echo "opencrane-server policy grants unused MCP gateway egress" >&2
-  exit 1
-fi
+# The server now provisions custody and mints attempt keys against the release-local Obot
+# management API, so the mcp-gateway egress rule must exist (tool payloads still bypass the server).
+grep -Fq '              app.kubernetes.io/component: mcp-gateway' <<<"$server_policy"
+grep -Fq '          port: 8080' <<<"$server_policy"
 
 if grep -Fq 'cnpg.io/cluster' <<<"$server_policy"; then
   echo "opencrane-server policy bypasses the PostgreSQL pooler" >&2

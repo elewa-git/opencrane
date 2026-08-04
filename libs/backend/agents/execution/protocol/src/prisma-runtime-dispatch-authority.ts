@@ -4,6 +4,7 @@ import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalR
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
+import { __MarkToolInvocationSucceededByCoordinatesInTransaction } from "@opencrane/backend/server/iam/authorization";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
@@ -281,11 +282,35 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 			if (report.outcome === "denied") return { accepted: false, reason: report.reason ?? "terminal_report_denied" };
 		}
 
+		// 2b. A `tool.completed` event closes a direct Obot invocation: the runtime executed the
+		// approved call itself and reports ONLY a content digest. Mark the exact Reserved reservation
+		// Succeeded with that digest inside this admission transaction; the receipt never duplicates
+		// tool content. Unknown or already-completed coordinates are refused 409-style.
+		if (candidate.kind === "event" && candidate.eventType === "tool.completed")
+		{
+			const completion = _toolCompletionPayload(candidate.payload);
+			if (completion === null) return { accepted: false, reason: "invalid_tool_completion" };
+			const marked = await __MarkToolInvocationSucceededByCoordinatesInTransaction(transaction, { runId: context.runId, attempt: context.attempt, toolInvocationId: completion.toolInvocationId }, { resultDigest: completion.resultDigest });
+			if (marked.status !== "succeeded") return { accepted: false, reason: "tool_completion_conflict" };
+		}
+
 		// 3. Append the accepted candidate id monotonically under the held stream lock.
 		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 		if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 		return { accepted: true };
 	});
+}
+
+/** Validate an untrusted `tool.completed` payload into digest-only completion coordinates. */
+function _toolCompletionPayload(payload: JsonValue): { readonly toolInvocationId: string; readonly resultDigest: string } | null
+{
+	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
+	const record = payload as { readonly [key: string]: JsonValue };
+	const toolInvocationId = record["toolInvocationId"];
+	const resultDigest = record["resultDigest"];
+	if (typeof toolInvocationId !== "string" || toolInvocationId.trim().length === 0 || toolInvocationId.length > 256) return null;
+	if (typeof resultDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(resultDigest)) return null;
+	return { toolInvocationId, resultDigest };
 }
 
 /** Return a terminal event type only for workload outcomes the server lets a runtime report. */

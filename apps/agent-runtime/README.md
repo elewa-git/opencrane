@@ -15,9 +15,11 @@ the exact assigned Job, and registers its first Pod. This process then binds its
 key with a one-use bootstrap exchange, opens its command stream, and executes each `start_attempt`
 command as a bounded Pydantic AI model/tool loop over the per-silo LiteLLM proxy, reporting normalized
 candidates as the attempt runs. A model tool call is surfaced as a bounded `external_action`
-candidate for the control plane to authorize — the runtime never executes the tool itself. It also
-handles `resume_attempt` (feeding control-plane-authorized deferred tool results back into the paused
-loop) and `cancel_attempt` (a positive signal that kills the active task while the server retains the
+candidate for the control plane to authorize — the runtime never executes an unapproved tool. It also
+handles `resume_attempt` (the control plane names WHICH proposed tool calls were approved; the
+runtime executes each approved integration call directly against Obot's MCP proxy with an
+attempt-scoped key, reports a digest-only `tool.completed` candidate, and feeds the results back
+into the paused loop) and `cancel_attempt` (a positive signal that kills the active task while the server retains the
 canonical cancellation outcome), absorbs steering only at pre-model-request boundaries, and writes an encrypted,
 version-tagged, replaceable local checkpoint subordinate to canonical server state.
 
@@ -28,9 +30,9 @@ version-tagged, replaceable local checkpoint subordinate to canonical server sta
  ┌──────────────────────────────┐
  │  agent-runtime  ◄── HERE      │  bootstrap exchange + outbound stream + bounded model loop
  └──────────────┬───────────────┘
-                │ event + external_action candidates (tool execution stays server-side authority)
+                │ event + external_action candidates (approval + receipts stay server-side)
                 ▼
- OpenCrane server authority
+ OpenCrane server authority ── approved calls execute runtime→Obot (attempt-scoped key)
 ```
 
 **In this flow:** [OpenCrane server](../opencrane/README.md) ·
@@ -71,8 +73,13 @@ Raw framework events are normalized into stable protocol candidates while the at
 output text, usage, and errors become bounded `event` candidates, while a model tool call becomes a
 bounded `external_action` candidate whose `toolRevisionId` is resolved from the compiled grant set
 and whose `argumentsDigest` is a deterministic `sha256:<hex>` the control plane re-derives. Pydantic
-AI types, ids, and checkpoints never cross that seam. Resume injects only control-plane-authorized
-deferred tool results; cancel is a positive signal that suppresses any late candidate; steering is
+AI types, ids, and checkpoints never cross that seam. Resume delivers control-plane approval
+decisions (`{approvalRequestId, decision, toolInvocationId}`): the runtime maps each approved
+decision back to its recorded pending call, re-checks the compiled allow-list and Obot addressing,
+executes it against `/mcp-connect/<serverId>/mcp` with the mounted attempt key (`src/tools/obot_mcp.py`),
+reports `tool.completed { toolInvocationId, resultDigest }`, and feeds only the resulting per-call
+mapping into the framework; a denial feeds an explicit refusal and every failure is a typed loop
+error, never a fabricated result. Cancel is a positive signal that suppresses any late candidate; steering is
 absorbed only at the safe pre-model-request boundary. Any executor failure surfaces as a real
 `run.failed` terminal report rather than a silent acknowledgement, and a dropped stream bounds further
 candidate emission. Non-terminal replay is allowed only for the control plane's explicit bounded
@@ -110,6 +117,10 @@ of the dependency graph; libraries do not import it. The wire contract is owned 
 - `OPENCRANE_RUNTIME_LITELLM_BASE_URL` — in-cluster LiteLLM proxy base URL the bounded loop calls.
 - `OPENCRANE_RUNTIME_LITELLM_KEY_PATH` — path of the mounted attempt-scoped LiteLLM key (defaults to
   `/var/run/opencrane/litellm/key`).
+- `OPENCRANE_RUNTIME_OBOT_URL` / `OPENCRANE_RUNTIME_OBOT_KEY_PATH` — optional in-cluster Obot MCP
+  base origin and mounted attempt-scoped Obot key path (`/var/run/opencrane/obot/key`). Both absent
+  means direct execution is unavailable and an approved integration tool fails with a typed loop
+  error. The key is server-scoped and lease-expiring; never the Obot service credential.
 - `OPENCRANE_RUNTIME_CHECKPOINT_DIR` — directory for the encrypted local resume checkpoint (defaults
   to `/tmp/opencrane/checkpoints`).
 - `/var/run/opencrane/bootstrap/reference` — read-only opaque lookup reference projected from the
@@ -134,8 +145,9 @@ The current image proves identity, the one-use bootstrap exchange, durable comma
 bounded model/tool loop: it binds its proof key, receives its fenced `start_attempt`,
 `resume_attempt`, and `cancel_attempt` commands with its control-plane-compiled literal input, and
 completes a real agent run over LiteLLM through an attempt-scoped key. It surfaces model tool calls as
-`external_action` candidates for server-side authorization, feeds authorized deferred results on
-resume, kills the active task on a positive cancel signal, absorbs steering at pre-model-request
+`external_action` candidates for server-side authorization, executes approved integration calls
+directly against Obot with the attempt-scoped key (digest-only receipts; live-Obot qualification
+remains gated on issue #337), kills the active task on a positive cancel signal, absorbs steering at pre-model-request
 boundaries, and writes an encrypted, version-tagged, replaceable local checkpoint subordinate to
 canonical server state. The controller creates or exact-adopts the suspended Job, releases the durable
 assignment, and registers the unique first Pod. The offline conformance harness and fault-injection

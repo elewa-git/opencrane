@@ -2,7 +2,7 @@ import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runti
 
 import { _ResolveAgentControllerRuntimeProfile } from "./agent-controller-profiles.js";
 import { AgentControllerReconcileOutcomes, type AgentControllerOptions, type AgentControllerReconcileResult } from "./agent-controller.types.js";
-import { _AgentRuntimeAttemptKeySecretName, _BuildAgentRuntimeAttemptKeySecret } from "./agent-runtime-attempt-key.js";
+import { _AgentRuntimeAttemptKeySecretName, _AgentRuntimeObotKeySecretName, _BuildAgentRuntimeAttemptKeySecret, _BuildAgentRuntimeObotKeySecret } from "./agent-runtime-attempt-key.js";
 
 /** Require an immutable Job UID returned by the Kubernetes API. */
 function _RequireWorkloadUid(uid: string | undefined): string
@@ -44,6 +44,7 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 		namespace: claim.attempt.namespace,
 		bootstrapReference: claim.attempt.bootstrapReference,
 		litellmKeySecretName: _AgentRuntimeAttemptKeySecretName(claim.attempt.bootstrapReference),
+		obotKeySecretName: claim.attempt.obotKey === undefined ? undefined : _AgentRuntimeObotKeySecretName(claim.attempt.bootstrapReference),
 	};
 	const job = __BuildSuspendedAgentRuntimeJob(assignment, profile);
 
@@ -54,6 +55,10 @@ export async function __ReconcileNextAgentRuntimeAttempt(options: AgentControlle
 	// 4. Create the Job-owned key Secret before any release reconciliation can unsuspend the Job.
 	const attemptKeySecret = _BuildAgentRuntimeAttemptKeySecret(persistedJob, workloadUid, assignment.litellmKeySecretName, claim.attempt.litellmKey);
 	await options.kubernetes.__EnsureAttemptKeySecret(attemptKeySecret);
+	if (claim.attempt.obotKey !== undefined && assignment.obotKeySecretName !== undefined)
+	{
+		await options.kubernetes.__EnsureAttemptKeySecret(_BuildAgentRuntimeObotKeySecret(persistedJob, workloadUid, assignment.obotKeySecretName, claim.attempt.obotKey.key, claim.attempt.obotKey.keyId));
+	}
 
 	// 5. Commit the exact Job UID so a separate durable claim may release it.
 	const committed = await options.authority.__CommitAssignment(claim.lease.eventId, {

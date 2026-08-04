@@ -16,13 +16,14 @@ and the agent service. New runs freeze the resulting capability set.
 ## Execute safely
 
 The runtime proposes a tool call. OpenCrane validates the run proof and arguments, opens an
-approval when required, reserves the invocation and then calls the MCP custody adapter.
-Credentials never enter the runtime or browser.
+approval when required and reserves the invocation. After approval the runtime executes the call
+directly against Obot with a short-lived attempt-scoped key and reports back only a result digest.
+Integration credentials stay with Obot; they never enter the runtime or browser.
 
 ::: info
-The registration, grant, approval and receipt authorities are present. The authenticated Obot
-invocation transport is not mounted in the current server composition, so execution fails
-closed after reservation instead of calling an external MCP server.
+The registration, grant, approval, receipt, custody and direct-invocation authorities are present.
+The Obot transports compose only when the deployment mounts the Obot service credential; without
+it execution fails closed after reservation. Live-Obot qualification remains gated on issue #337.
 :::
 
 ::: tip

@@ -7,6 +7,8 @@ import { auditRouter } from "@opencrane/backend/server/iam/audit";
 import { groupsRouter } from "@opencrane/backend/server/iam/groups";
 import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
 import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
+import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
+import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
 import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
 import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
@@ -36,9 +38,10 @@ import type { RouteMount } from "./routes.types.js";
  * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
  * @param runAdmission - Shared managed run-now and scheduler admission port.
  * @param serverNamespace - Namespace in which provider Secrets are managed.
+ * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, serverNamespace: string): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
@@ -62,6 +65,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 	const gatewayRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },
 		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(prisma) },
+		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
 		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
 		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
@@ -98,10 +102,11 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
  * @param memoryGateway - Process-wide authenticated memory-gateway client.
+ * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root; null disables direct invocation.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway, obotAttemptKeys);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },

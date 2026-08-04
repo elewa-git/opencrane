@@ -15,8 +15,8 @@ export { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.rou
 export { _CreateDeferredToolApprovalRouter } from "./prisma-deferred-tool-approval.router.js";
 export type { DeferredToolApprovalCaller, DeferredToolApprovalClock, DeferredToolApprovalRouterDependencies } from "./deferred-tool-approval.router.types.js";
 export { _AuthorizationOpenapiPaths } from "./openapi.js";
-export { PrismaToolInvocationRepository } from "./prisma-tool-invocation-repository.js";
-export type { ToolInvocationFailureResult, ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "./tool-invocation.types.js";
+export { PrismaToolInvocationRepository, __MarkToolInvocationSucceededByCoordinatesInTransaction } from "./prisma-tool-invocation-repository.js";
+export type { ToolInvocationCoordinates, ToolInvocationFailureResult, ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository, ToolInvocationReservationResult, ToolInvocationSuccessResult } from "./tool-invocation.types.js";
 export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js";
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";
 export { __CreateRuntimeBootstrapRouter } from "./runtime-bootstrap.router.js";

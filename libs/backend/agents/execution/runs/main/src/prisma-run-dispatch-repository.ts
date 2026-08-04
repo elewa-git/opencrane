@@ -7,6 +7,7 @@ import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
+import type { AttemptObotKeyIssuer } from "./attempt-obot-key.types.js";
 import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
@@ -39,6 +40,12 @@ interface ClaimedAttemptWithMintInputs
 	readonly maxBudgetUsd: number;
 	/** Whole-second key lifetime bounded to the assignment lifetime. */
 	readonly expirySeconds: number;
+	/** Integrations frozen into the snapshot, scoping an optional attempt Obot key. */
+	readonly obotIntegrationIds: readonly string[];
+	/** Attempt- and delivery-unique Obot key name derived from immutable claim coordinates. */
+	readonly obotKeyName: string;
+	/** Hard Obot key expiry bounded to the assignment lifetime. */
+	readonly obotKeyExpiresAt: Date;
 }
 
 /** Transaction outcome: no eligible work, or a claim whose key must be minted outside the lock. */
@@ -58,14 +65,17 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	private readonly config: RunDispatchRepositoryConfig;
 	/** App-injected issuer that mints the attempt-scoped model key; the master key stays server-side. */
 	private readonly issueAttemptModelKey: AttemptModelKeyIssuer;
+	/** Optional app-injected Obot key issuer; null leaves runtime attempts without any Obot credential. */
+	private readonly issueAttemptObotKey: AttemptObotKeyIssuer | null;
 
-	/** Creates a dispatch adapter over canonical Postgres with an injected attempt-key issuer. */
-	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer)
+	/** Creates a dispatch adapter over canonical Postgres with injected attempt-key issuers. */
+	constructor(prisma: PrismaClient, config: RunDispatchRepositoryConfig, issueAttemptModelKey: AttemptModelKeyIssuer, issueAttemptObotKey?: AttemptObotKeyIssuer | null)
 	{
 		if (!_ConfigIsValid(config)) throw new Error("run dispatch repository requires distinct bounded runtime namespaces and lifetimes");
 		this.prisma = prisma;
 		this.config = config;
 		this.issueAttemptModelKey = issueAttemptModelKey;
+		this.issueAttemptObotKey = issueAttemptObotKey ?? null;
 	}
 
 	/** Claims one eligible event, loads its narrow projection, and mints its transient attempt key. */
@@ -153,7 +163,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				if (queued.count !== 1) throw new Error("claimed run could not enter queued state");
 			}
 
-			// 5. Return the claim plus the inputs to mint the transient key once the lock is released.
+			// 5. Return the claim plus the inputs to mint the transient keys once the lock is released.
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			return {
 				status: RunDispatchResultStatuses.Claimed,
@@ -163,6 +173,9 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				modelAlias,
 				maxBudgetUsd,
 				expirySeconds: _AttemptKeyExpirySeconds(config.assignmentTtlMilliseconds),
+				obotIntegrationIds: _SnapshotIntegrationIds(snapshot.integrationAssignments),
+				obotKeyName: _AttemptObotKeyName(run.id, run.attempt, run.siloId, deliveryCount),
+				obotKeyExpiresAt: new Date(claimedAt.getTime() + config.assignmentTtlMilliseconds),
 			};
 		});
 		if (claimed.status === RunDispatchResultStatuses.None) return { status: RunDispatchResultStatuses.None };
@@ -171,7 +184,16 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 		//    lock, then attach it transiently to the claim response. It is never written to Postgres.
 		const minted = await this.issueAttemptModelKey({ keyAlias: claimed.keyAlias, modelAlias: claimed.modelAlias, siloId: claimed.attempt.siloId, maxBudgetUsd: claimed.maxBudgetUsd, expirySeconds: claimed.expirySeconds });
 		if (typeof minted.key !== "string" || minted.key.length === 0) throw new Error("attempt model key issuer returned no key");
-		return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
+		// 3. Mint one Obot key only when the snapshot froze integration assignments AND the app composed
+		//    the Obot transport. A mint failure fails the whole claim (fail closed) rather than starting
+		//    an attempt whose approved integration tools could never execute.
+		if (this.issueAttemptObotKey === null || claimed.obotIntegrationIds.length === 0)
+		{
+			return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
+		}
+		const mintedObot = await this.issueAttemptObotKey({ runId: claimed.attempt.runId, attempt: claimed.attempt.attempt, siloId: claimed.attempt.siloId, agentRevisionId: claimed.attempt.agentRevisionId, integrationIds: claimed.obotIntegrationIds, keyName: claimed.obotKeyName, expiresAt: claimed.obotKeyExpiresAt });
+		if (typeof mintedObot.key !== "string" || mintedObot.key.length === 0 || typeof mintedObot.keyId !== "string" || mintedObot.keyId.length === 0) throw new Error("attempt Obot key issuer returned no key");
+		return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key, obotKey: { key: mintedObot.key, keyId: mintedObot.keyId } } } };
 	}
 
 	/** Remove one bounded batch of delivered operational records while preserving failed evidence. */
@@ -333,6 +355,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	{
 		const config = this.config;
 		const prisma = this.prisma;
+		const obotComposed = this.issueAttemptObotKey !== null;
 		return ___DoWithTrace("run_dispatch.workload_release.claim", { runtimePlanes: 2 }, async function _traceReleaseClaim(): Promise<ClaimNextRunWorkloadReleaseResult>
 		{
 			return prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<ClaimNextRunWorkloadReleaseResult>
@@ -395,11 +418,16 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				if (claimed.count !== 1) throw new Error("run workload release lost its event fence");
 
 
+				// 5. Reload the immutable snapshot so the release rebuilds the exact assigned Job shape:
+				//    the obot key volume exists iff the claim minted an attempt key for ≥1 assignment.
+				const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
+				const obotKeyProvisioned = obotComposed && snapshot !== null && _SnapshotIntegrationIds(snapshot.integrationAssignments).length > 0;
+
 				return {
 					status: RunDispatchResultStatuses.Claimed,
 					claim: {
 						lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
-						workload: _ReleaseProjection(assignment!, bootstrap!.id),
+						workload: _ReleaseProjection(assignment!, bootstrap!.id, obotKeyProvisioned),
 					},
 				};
 			});
@@ -659,7 +687,7 @@ function _ReleasePayload(assignment: WorkloadAssignment, bootstrapReference: str
 }
 
 /** Map a durable assignment into the narrow controller release projection. */
-function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: string): AgentControllerRunWorkloadReleaseProjection
+function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: string, obotKeyProvisioned: boolean): AgentControllerRunWorkloadReleaseProjection
 {
 	return {
 		runId: assignment.runId,
@@ -673,6 +701,7 @@ function _ReleaseProjection(assignment: WorkloadAssignment, bootstrapReference: 
 		workloadProfile: assignment.workloadProfile,
 		assignmentExpiresAt: assignment.expiresAt.toISOString(),
 		bootstrapReference,
+		obotKeyProvisioned,
 	};
 }
 
@@ -805,6 +834,27 @@ function _AttemptKeyAlias(runId: string, attempt: number, siloId: string, delive
 {
 	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v1", runId, attempt, siloId, deliveryCount]);
 	return `attempt-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
+}
+
+/** Derive one attempt- and delivery-unique Obot key name for audit correlation; never a secret. */
+function _AttemptObotKeyName(runId: string, attempt: number, siloId: string, deliveryCount: number): string
+{
+	const canonical = JSON.stringify(["opencrane-attempt-obot-key-name-v1", runId, attempt, siloId, deliveryCount]);
+	return `attempt-obot-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
+}
+
+/** Parse the integration ids frozen into the immutable snapshot's assignment JSON. */
+function _SnapshotIntegrationIds(value: unknown): readonly string[]
+{
+	if (!Array.isArray(value)) return [];
+	const ids: string[] = [];
+	for (const entry of value)
+	{
+		if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+		const integrationId = (entry as Record<string, unknown>)["integrationId"];
+		if (typeof integrationId === "string" && integrationId.trim().length > 0) ids.push(integrationId);
+	}
+	return ids;
 }
 
 /** Bound the minted key lifetime to whole seconds within the issuer's 24-hour ceiling. */

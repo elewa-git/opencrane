@@ -67,7 +67,7 @@ grep -Fq '    namespace: default' <<<"$ct_read_binding"
 [[ -z "$cleanup_rbac" ]]
 
 test_digest="sha256:$(printf 'a%.0s' {1..64})"
-enabled_rendered="$(helm template opencrane-silo "$CHART_DIR" \
+enabled_rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set agentController.enabled=true \
   --set-string agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32 \
   --set-string agentController.image.digest="$test_digest" \

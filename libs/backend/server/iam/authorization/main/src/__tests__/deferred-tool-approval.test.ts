@@ -4,11 +4,12 @@ import { describe, expect, it, vi } from "vitest";
 import { __DecideDeferredToolRequest, __DeferToolRequest } from "../deferred-tool-approval.js";
 
 /** Build a transaction whose approvalRequest reads return the supplied row and writes report a count. */
-function _transaction(row: unknown, updatedCount: number): { transaction: Prisma.TransactionClient; updateMany: ReturnType<typeof vi.fn> }
+function _transaction(row: unknown, updatedCount: number, invocationRow: unknown = { id: "tool-1", runId: "run-1", attempt: 2, toolInvocationId: "call-7" }): { transaction: Prisma.TransactionClient; updateMany: ReturnType<typeof vi.fn> }
 {
 	const findUnique = vi.fn().mockResolvedValue(row);
 	const updateMany = vi.fn().mockResolvedValue({ count: updatedCount });
-	return { transaction: { approvalRequest: { findUnique, updateMany } } as unknown as Prisma.TransactionClient, updateMany };
+	const invocationFindUnique = vi.fn().mockResolvedValue(invocationRow);
+	return { transaction: { approvalRequest: { findUnique, updateMany }, toolInvocation: { findUnique: invocationFindUnique } } as unknown as Prisma.TransactionClient, updateMany };
 }
 
 /** A pending deferred-tool approval bound to a tool invocation row. */
@@ -21,12 +22,23 @@ const NOW = new Date("2026-07-21T09:00:00.000Z");
 
 describe("deferred tool approval authority", function _suite()
 {
-	it("approves and records the authorized deferred result and resume-token hash", async function _approve()
+	it("approves and records the authorized deferred result bound to the reserved tool invocation", async function _approve()
 	{
 		const { transaction, updateMany } = _transaction(_pending(), 1);
-		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW, resumeTokenHash: "hash-1", deferredToolResult: { ok: true } });
-		expect(result).toEqual({ outcome: "approved", deferredToolResult: { ok: true } });
-		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, resumeTokenHash: "hash-1" }) }));
+		const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW, resumeTokenHash: "hash-1", deferredToolResult: { approvalRequestId: "approval-1", decision: "approved" } });
+		expect(result).toEqual({ outcome: "approved", deferredToolResult: { approvalRequestId: "approval-1", decision: "approved", toolInvocationId: "call-7" } });
+		expect(updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ id: "approval-1", state: ApprovalRequestState.Pending, expiresAt: { gt: NOW } }), data: expect.objectContaining({ state: ApprovalRequestState.Approved, resumeTokenHash: "hash-1", deferredToolResult: { approvalRequestId: "approval-1", decision: "approved", toolInvocationId: "call-7" } }) }));
+	});
+
+	it("conflicts when the reserved tool invocation is missing or belongs to another attempt", async function _brokenReservationLink()
+	{
+		for (const invocationRow of [null, { id: "tool-1", runId: "run-other", attempt: 2, toolInvocationId: "call-7" }, { id: "tool-1", runId: "run-1", attempt: 9, toolInvocationId: "call-7" }])
+		{
+			const { transaction, updateMany } = _transaction(_pending(), 1, invocationRow);
+			const result = await __DecideDeferredToolRequest(transaction, { approvalRequestId: "approval-1", siloId: "silo-1", subjectId: "user-1", decision: "approved", decidedBy: "user-1", now: NOW, resumeTokenHash: "hash-1", deferredToolResult: { approvalRequestId: "approval-1", decision: "approved" } });
+			expect(result).toEqual({ outcome: "conflict" });
+			expect(updateMany).not.toHaveBeenCalled();
+		}
 	});
 
 	it("denies by closing the pending request without a result", async function _deny()

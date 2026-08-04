@@ -25,3 +25,6 @@ CHECKPOINT_FILENAME = "checkpoint.enc"
 MAX_FRAME_BYTES = 65_536
 MAX_CANDIDATE_RETRY_DELAY_SECONDS = 30.0
 TERMINAL_DELIVERY_RETRY_SECONDS = 1.0
+
+# Hard timeout for one direct approved tool invocation against Obot's MCP proxy.
+OBOT_INVOCATION_TIMEOUT_SECONDS = 30.0
