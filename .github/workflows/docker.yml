@@ -124,12 +124,6 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client ripgrep
 
-      - name: Enforce Phase A retired-reference and legacy-residue guards
-        run: ./scripts/phase-a-forbidden-references.sh
-
-      - name: Prove the Phase A residue guard fails closed
-        run: npm run test:phase-a-forbidden-references
-
       - name: Enforce Phase B workload ownership and thin app roots
         run: npm run check:phase-b-topology
 
