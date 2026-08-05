@@ -1,6 +1,6 @@
 import type { RequestHandler, Router } from "express";
 
-import type { RateLimitOptions } from "@opencrane/server/_infra/http";
+import type { RateLimitOptions } from "@opencrane/backend/_server/http";
 
 /** One Express mount shown in the app's route catalogue. */
 export interface RouteMount

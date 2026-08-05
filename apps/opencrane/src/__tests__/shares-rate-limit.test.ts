@@ -3,7 +3,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it } from "vitest";
 
-import type { RateLimitOptions } from "@opencrane/server/_infra/http";
+import type { RateLimitOptions } from "@opencrane/backend/_server/http";
 import { _CreateRateLimitedSharesRouter } from "../app/routes.js";
 
 /** Builds the application-owned shares composition without bypassing its HTTP abuse boundary. */
