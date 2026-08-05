@@ -95,7 +95,7 @@ transport, and external-service seams belong under
 [`libs/server/_infra`](../../libs/server/_infra/README.md). Libraries never import this app.
 
 The public and workload-facing APIs share a process but not an exposure boundary. Public ingress
-routes only to `:8080`. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
+routes `/api` and the database-aware `/healthz` endpoint only to `:8080`. The `:8081` Service is restricted by Kubernetes NetworkPolicy, and endpoints
 that grant workload authority additionally review the caller's projected Kubernetes identity and
 bind it to durable assignment evidence.
 

@@ -1,6 +1,4 @@
-import { createHash } from "node:crypto";
-
-import { ___CanonicalizeJson, type JsonValue } from "@opencrane/util";
+import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { _IsPersonalConfigurationPatch } from "./personal-configuration-patch.js";
 import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand, type ProposePersonalConfigurationChangeResult } from "./personal-configuration-proposal.types.js";
@@ -31,7 +29,7 @@ function _DigestPatch(value: Readonly<Record<string, unknown>>): string | null
 {
 	try
 	{
-		return `sha256:${createHash("sha256").update(___CanonicalizeJson(value as JsonValue), "utf8").digest("hex")}`;
+		return ___DigestCanonicalJson(value as JsonValue);
 	}
 	catch
 	{

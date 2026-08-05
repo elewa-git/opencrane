@@ -7,19 +7,12 @@
     "test": {
       "executor": "nx:run-commands",
       "options": {
-        "commands": [
-          "bash apps/_infra/deploy-k8s/platform/tests/server-key-permissions-contract.sh",
-            "bash apps/_infra/deploy-k8s/platform/tests/server-runtime-cleanup-rbac-contract.sh",
-          "bash apps/_infra/deploy-k8s/platform/tests/server-network-policy-contract.sh",
-          "bash apps/_infra/deploy-k8s/platform/tests/platform-network-policy-contract.sh",
-          "bash apps/_infra/deploy-k8s/platform/tests/skill-workload-contract.sh"
-        ],
-        "parallel": false
+        "command": "bash apps/_infra/deploy-k8s/platform/tests/run-helm-contracts.sh"
       }
     },
     "helm-lint": {
       "executor": "nx:run-commands",
-      "options": { "command": "helm lint apps/_infra/deploy-k8s" }
+      "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/helm-lint-current-sources.sh" }
     },
     "dependency-status": {
       "executor": "nx:run-commands",
