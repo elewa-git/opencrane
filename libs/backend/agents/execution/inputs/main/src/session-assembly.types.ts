@@ -68,13 +68,6 @@ export type IdentityEnvelopeInput = RunInputSnapshotIdentity & {
 	readonly capabilitySetDigest: string;
 };
 
-/** Capability-set digest loaded from the same transaction that verifies membership. */
-export interface CapabilitySetDigestSource
-{
-	/** Resolves the exact proof-bound capability digest accepted for this initial run. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<string>>;
-}
-
 /** Reads run, AgentService, and published revision facts in the assembly transaction. */
 export interface RunAuthoritySource
 {

@@ -1,0 +1,94 @@
+import type { FleetMembershipSignatureVerifier } from "@opencrane/backend/server/iam/membership";
+import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import { describe, expect, it, vi } from "vitest";
+
+import { AgentServiceKinds } from "@opencrane/models/agents";
+
+import { PersonalExecutionIdentityEnvelopeSource } from "../personal-execution-identity-envelope-source.js";
+import type { SessionAssemblyCommand } from "../session-assembly.types.js";
+
+/** Builds a final-admission command whose silo and subject came from trusted server context. */
+function _Command(): SessionAssemblyCommand
+{
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: "thread-1", identityKind: "user", trigger: "interactive", executionSubjectId: "user-1", requestIdempotencyKey: "request-1" };
+}
+
+/** Builds the run authority whose personal kind is required for a browser-session admission. */
+function _Run(): InitialRunAuthority
+{
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "prompt-v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null };
+}
+
+/** Builds one verified revision with the single signed personal assertion available to this user. */
+function _Revision(assertions = [{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "user-1" }])
+{
+	return { id: "membership-7", revision: 7, issuerId: "fleet-1", issuerKeyId: "key-1", siloId: "silo-1", issuedAt: new Date(9000), expiresAt: new Date(20000), payloadDigest: `sha256:${"b".repeat(64)}`, signature: "signature-7", assertions };
+}
+
+/** Builds the run-owned transaction with signed membership, high-watermark, audit, and grant seams. */
+function _Transaction(row = _Revision()): RunAdmissionTransaction
+{
+	return {
+		prisma: {
+			$queryRaw: vi.fn().mockResolvedValue([]),
+			verifiedFleetMembershipRevision: { findFirst: vi.fn().mockResolvedValue(row) },
+			highestAcceptedFleetMembership: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn().mockResolvedValue({ revision: 7 }) },
+			auditDecision: { create: vi.fn().mockResolvedValue({ id: "audit-1" }) },
+			authorizationGrant: { findMany: vi.fn().mockResolvedValue([{ catalogId: "catalog-1", catalogRevision: 3, catalogDigest: `sha256:${"c".repeat(64)}`, capabilityId: "conversation:run", resourceKind: "thread", resourceId: "thread-1", effect: "allow", priority: 10, validFrom: new Date(8000), expiresAt: null }]) },
+		} as never,
+		admittedAt: new Date(10000).toISOString(),
+		admittedAtEpochMs: 10000,
+	};
+}
+
+/** Verifies only evidence whose immutable signed coordinates were selected by the server. */
+class _Verifier implements FleetMembershipSignatureVerifier
+{
+	/** Returns successful verification evidence bound exactly to the signed revision argument. */
+	async verify(revision: Parameters<FleetMembershipSignatureVerifier["verify"]>[0])
+	{
+		return { verified: true, issuerId: revision.issuerId, issuerKeyId: revision.issuerKeyId, revision: revision.revision, siloId: revision.siloId, payloadDigest: revision.payloadDigest, signature: revision.signature };
+	}
+}
+
+/** Creates a source that permits at most three seconds between signature issuance and admission. */
+function _Source(): PersonalExecutionIdentityEnvelopeSource
+{
+	return new PersonalExecutionIdentityEnvelopeSource({ trustedIssuerId: "fleet-1", maximumStalenessMs: 3000, verifier: new _Verifier() });
+}
+
+describe("PersonalExecutionIdentityEnvelopeSource", function _describePersonalIdentityEnvelope()
+{
+	it("freezes exact signed membership and same-transaction effective personal grants", async function _freezesTrustedFacts()
+	{
+		const transaction = _Transaction();
+		const result = await _Source().load(_Command(), _Run(), transaction);
+
+		expect(result).toMatchObject({ outcome: "loaded", value: { executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 7, fleetMembershipAssertionId: "assertion-1", capabilitySetDigest: expect.stringMatching(/^sha256:/) } });
+		expect(transaction.prisma.authorizationGrant.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: expect.objectContaining({ siloId: "silo-1", subjectId: "user-1", scopeResourceId: "user-1", revokedAt: null }) }));
+	});
+
+	it("fails closed when a signed personal assertion is absent or belongs to another scope", async function _deniesForeignPersonalAssertion()
+	{
+		const transaction = _Transaction(_Revision([{ assertionId: "assertion-foreign", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "other-user" }]));
+		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
+		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
+	});
+
+	it("fails closed when the latest membership contains ambiguous personal entitlement", async function _deniesAmbiguousPersonalAssertion()
+	{
+		const transaction = _Transaction(_Revision([
+			{ assertionId: "assertion-1", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-1", scopeResourceId: "user-1" },
+			{ assertionId: "assertion-2", siloId: "silo-1", subjectId: "user-1", scopeKind: "Personal", organizationId: "org-2", scopeResourceId: "user-1" },
+		]));
+		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
+		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
+	});
+
+	it("fails closed when a personally scoped signature is older than the configured trust window", async function _deniesStaleMembership()
+	{
+		const transaction = _Transaction({ ..._Revision(), issuedAt: new Date(1000) });
+		await expect(_Source().load(_Command(), _Run(), transaction)).resolves.toEqual({ outcome: "denied", reason: "membership_stale" });
+		expect(transaction.prisma.authorizationGrant.findMany).not.toHaveBeenCalled();
+	});
+});

@@ -2,8 +2,10 @@
 // the remaining import graph runs. Keep this side-effect import first when editing the entrypoint.
 import "./app/instrument.js";
 
-import { __CreateManagedRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/admission";
+import { __CreateManagedRunAdmissionPort, __CreatePersonalRunAdmissionPort, __ReadRunAdmissionConcurrencyPolicy, _CreateRunAdmissionCapacityGate } from "@opencrane/backend/agents/execution/admission";
+import { GatewayMemoryFactSelector } from "@opencrane/backend/agents/execution/protocol";
 import { _CreateManagedExecutionEvidenceAuthority } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateFleetMembershipEvidenceConfig } from "@opencrane/backend/server/iam/membership";
 import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
@@ -34,15 +36,18 @@ function _Main(): void
 	const kubernetes = _CreateKubernetesClients();
 	const memoryGateway = _CreateMemoryGatewayClient(config.runtime);
 
-	// 3. Compose the single managed-run capacity authority shared by HTTP and scheduled admissions.
-	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, __ReadRunAdmissionConcurrencyPolicy(), _CreateManagedExecutionEvidenceAuthority());
+	// 3. Compose one shared capacity gate and one mounted membership verifier for every run entrypoint.
+	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
+	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
+	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
+	const personalRunAdmission = __CreatePersonalRunAdmissionPort(prisma, runAdmissionCapacityGate, membershipEvidence, new GatewayMemoryFactSelector(memoryGateway));
 
 	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
 	//    route and the runtime dispatch plane always target the same Obot with one credential.
 	const obot = _CreateObotAdapters(config.obot);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, obot.attemptKeys);
 

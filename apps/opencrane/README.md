@@ -43,7 +43,8 @@ Startup proceeds in five visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. compose one managed-run admission port shared by HTTP run-now and scheduled runs;
+3. compose one shared-capacity managed admission port and one session-derived personal admission
+   port, both over the same signed fleet-membership trust configuration;
 4. build the public and internal Express applications; and
 5. start both listeners and bounded workers under one coordinated shutdown path.
 
@@ -73,6 +74,8 @@ its resources to the lifecycle owner.
 - `src/app/config.ts` reads one startup snapshot for listener and worker configuration.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
+- The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
+  common mounted-key fleet-membership verifier configuration used by both admission paths.
 - `src/app/internal-app.ts` builds the workload-facing API on its separate socket.
 - `src/app/routes.ts` contains only named per-area route lists and the trivial mount loop.
 - `src/app/runtime-composition.ts` binds controller, skill-workload, runtime, and optional-worker
@@ -101,14 +104,17 @@ bind it to durable assignment evidence.
 
 ### Why run admission stays in this process
 
-Managed run admission is not an agent proxy and does not execute an agent session. It synchronously
-combines three existing product authorities:
+Run admission is not an agent proxy and does not execute an agent session. Managed admission
+synchronously combines three existing product authorities:
 
 1. verify the managed agent service and its current signed membership evidence;
 2. assemble one immutable input snapshot from the active revision and effective grants; and
 3. persist the run and admission outcome in the canonical transaction.
 
-One process-local capacity gate protects the database pool and is shared by both run-now requests
+Personal admission uses the same immutable snapshot transaction after deriving the caller's subject,
+silo, participant-bound thread, and personal AgentService from trusted server authorities. Its only
+browser-controlled values are its thread identifier and retry key. One process-local capacity gate
+protects the database pool and is shared by personal and managed paths, including run-now requests
 and the scheduler. The reusable composition lives in
 [`execution/admission`](../../libs/backend/agents/execution/admission/main/README.md); this app only
 constructs and injects the port.
@@ -149,8 +155,8 @@ are:
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
-| `AGENT_RUN_ADMISSION_*` | Active and queued managed-admission limits | bounded defaults |
-| `OPENCRANE_FLEET_MEMBERSHIP_*` | Signed managed-service membership trust | required for admission |
+| `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
+| `OPENCRANE_FLEET_MEMBERSHIP_*` | Signed fleet-membership trust for personal and managed admission | required for admission |
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
