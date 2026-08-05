@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 
 for contract in \
   current-chart-sources-contract.sh \
+  provision-contract.sh \
   kubernetes-api-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   server-key-permissions-contract.sh \

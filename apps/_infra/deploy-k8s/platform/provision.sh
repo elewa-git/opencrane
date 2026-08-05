@@ -88,9 +88,11 @@ _provision_gke() {
       --uniform-bucket-level-access \
       --public-access-prevention
   fi
-  local state_location
+  local state_location state_location_normalized region_normalized
   state_location="$(gcloud storage buckets describe "gs://$state_bucket" --project "$project" --format='value(location)')"
-  if [[ "${state_location,,}" != "${region,,}" ]]; then
+  state_location_normalized="$(printf '%s' "$state_location" | tr '[:upper:]' '[:lower:]')"
+  region_normalized="$(printf '%s' "$region" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$state_location_normalized" != "$region_normalized" ]]; then
     _provision_err "Terraform state bucket 'gs://$state_bucket' is in '$state_location', not required region '$region'."
     return 1
   fi
