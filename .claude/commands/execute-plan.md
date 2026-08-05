@@ -118,6 +118,23 @@ blocker; do not hide it behind an interface.
   solely by the configured git user.
 - Committing is local. Pushing / opening a PR is a separate, outward-facing action — only on explicit request.
 
+## SHA-bound long-running checkpoints
+
+- At wave start record `WAVE_BASE`, the intended integration ref, and its fetched SHA. Do not use a
+  moving branch name as review evidence.
+- After every wave commit, review-fix commit, rebase, authorized push, PR open/edit/base change, and
+  at least hourly during an active long-running task, refresh the live PR graph with
+  `npm run check:pr-stack-integrity -- --current-branch "$(git branch --show-current)"`.
+- A parent rewrite invalidates every descendant. Restack and revalidate the full descendant chain
+  before starting unrelated work.
+- When a parent PR merges, retarget its direct child to the integration branch before the child is
+  merged. Merging the child into the already-merged parent branch closes the PR without landing its
+  work on integration.
+- Validate two ranges before handoff: the incremental live `base...head` PR diff and the cumulative
+  integration-SHA-to-stack-tip range. Record exact SHAs for both.
+- Treat committed `WAVE_BASE...HEAD`, staged, unstaged, and untracked changes as separate review
+  overlays. Any change to a SHA, PR base, remote head, or overlay invalidates earlier evidence.
+
 ## Procedure
 
 1. Read `plan.md` once, then read the selected entry, linked implementation issue, and controlling
@@ -127,7 +144,7 @@ blocker; do not hide it behind an interface.
 3. Pick the smallest high-impact slice, build its dependency DAG/wave, state the direct target in
    one sentence, record `WAVE_BASE=$(git rev-parse HEAD)`, then implement it without compatibility
    scaffolding. Also record the intended integration target (`origin/main` or the explicitly chosen
-   protected feature integration branch).
+   protected feature integration branch) and its fetched SHA.
 4. Implement the selected slice(s), including tests and any required docs/config
    updates, following AGENTS.md conventions as you write — not as a cleanup pass. When a slice
    changes a package's public surface, boundary, invariant, owned models, or config, update that
@@ -147,10 +164,12 @@ blocker; do not hide it behind an interface.
 9. **Commit each slice only after reaper PASS, architecture PASS, and validation are green** —
    feature branch only, gitmoji +
    imperative subject, **no Claude/AI co-author trailer** (see Commit cadence).
-10. **Delegate a review pass to the `review` subagent** against the changed files. Resolve
-   Critical/High findings. If review fixes change replacement/deletion boundaries, rerun reaper and
-   architecture, then revalidate and **commit the resolution as a separate post-gate checkpoint**.
-   Do not push or open a PR unless explicitly asked.
+10. **Delegate a review pass to the `review` subagent** with the exact `WAVE_BASE` and current
+   `HEAD` SHAs plus separate staged, unstaged, and untracked manifests. Never default to
+   `git diff HEAD` after committing: that hides the slice being reviewed. Resolve Critical/High
+   findings. If review fixes change replacement/deletion boundaries, rerun reaper and architecture,
+   revalidate, commit the resolution as a separate checkpoint, and review the refreshed explicit
+   range again. Do not push or open a PR unless explicitly asked.
 
 At the final replacement phase, run `WHOLE-REPO-DECOMMISSION` against the entire repository; a
 diff-local clean result is insufficient.

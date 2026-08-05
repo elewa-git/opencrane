@@ -190,6 +190,10 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 		const content = readFileSync(join(_RepositoryRoot, path), "utf8");
 		assert.match(content, /correctness \| security \| maintainability \| residue/u);
 		assert.match(content, /check:module-growth/u);
+		assert.match(content, /exact base and head SHAs|exact base SHA and head SHA/u);
+		assert.match(content, /diff --cached --binary/u);
+		assert.match(content, /incremental/u);
+		assert.match(content, /cumulative/u);
 	}
 
 	const codexHook = readFileSync(
@@ -198,6 +202,20 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 	);
 	assert.match(codexHook, /\.claude\/hooks\/require-review\.sh/u);
 	assert.doesNotMatch(codexHook, /git diff HEAD -- '\*\.ts'/u);
+
+	const sharedHook = readFileSync(
+		join(_RepositoryRoot, ".claude/hooks/require-review.sh"),
+		"utf8",
+	);
+	assert.match(sharedHook, /pr-stack-integrity\.mjs/u);
+	assert.match(sharedHook, /git diff --cached --binary HEAD/u);
+	assert.match(sharedHook, /git ls-files --others --exclude-standard -z/u);
+	assert.match(sharedHook, /git rev-parse HEAD/u);
+
+	const styleCheck = readFileSync(join(_RepositoryRoot, "scripts/agent-style-check.sh"), "utf8");
+	assert.match(styleCheck, /ls-files --others --exclude-standard -z -- '\*\.ts'/u);
+	const prismaCheck = readFileSync(join(_RepositoryRoot, "scripts/prisma-boundary-check.mjs"), "utf8");
+	assert.match(prismaCheck, /ls-files", "--others", "--exclude-standard", "-z"/u);
 });
 
 test("Codex Stop wrapper blocks JUDGE and allows SKIP", (context) =>

@@ -19,6 +19,8 @@
     "test:prisma-boundaries": "node --test scripts/__tests__/prisma-boundary-check.test.mjs",
     "test:affected-deployables": "node --test scripts/__tests__/affected-deployables.test.mjs",
     "test:config-docs-coverage": "node --test scripts/__tests__/config-docs-coverage.test.mjs",
+    "check:pr-stack-integrity": "node scripts/pr-stack-integrity.mjs",
+    "test:pr-stack-integrity": "node --test scripts/__tests__/pr-stack-integrity.test.mjs",
     "check:module-growth": "node scripts/module-growth-check.mjs",
     "test:module-growth": "node --test scripts/__tests__/module-growth-check.test.mjs",
     "check:workload-ownership-app-composition": "./scripts/workload-ownership-app-composition-boundary.sh",
