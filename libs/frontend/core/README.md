@@ -28,6 +28,9 @@ a feature never calls `fetch` directly and never guesses a request or response s
   `context`, `notification`, `settings`, `mcp`, `plan`).
 - `lib/data/*.data.ts` — demo fixtures, temporary until the live API replaces them.
 - `ControlPlaneApiService` — the typed HTTP client and its `CONTROL_PLANE_BASE_URL` injection token.
+- `OpenCraneApiError` — the browser-safe failed-request model. It preserves the public status/code
+  and bounded validation issues so forms can bind `issue.path` to controls, while discarding
+  server-only detail and arbitrary response bodies.
 - `WeOwnAiPreset` (`lib/theme/weownai-preset`) — the PrimeNG (the component library) theme preset.
 - `lib/utils/*` — framework-agnostic helpers (`_ToggleId`, collection helpers).
 
@@ -40,9 +43,9 @@ coupling.
 
 ## Dependency direction
 
-Tagged `scope:web` (the frontend dependency tier): it may import only other `scope:web` packages
-and `scope:shared` contracts. It imports no other frontend package; its one dependency is the
-`scope:shared` `@opencrane/contracts`.
+Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
+only other `scope:web` packages and `scope:shared` contracts. It imports no other frontend package;
+its one dependency is the `scope:shared` `@opencrane/contracts`.
 
 ## See also
 

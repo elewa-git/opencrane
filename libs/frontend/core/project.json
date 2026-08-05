@@ -5,8 +5,9 @@
 	"sourceRoot": "libs/frontend/core/src",
 	"prefix": "wo",
 	"tags": [
-		"scope:web",
-		"type:core"
+		"type:lib",
+		"layer:frontend",
+		"scope:web"
 	],
 	"targets": {
 		"lint": {

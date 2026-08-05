@@ -217,6 +217,6 @@ export interface ModelRoutingDefaultWrite
   clusterTenant?: string;
   /** Default model `publicModelName`. */
   defaultModel?: string;
-  /** Default auto-routing config. */
-  autoConfig?: AutoRoutingConfig;
+	/** Default auto-routing config; explicit null clears the stored configuration. */
+	autoConfig?: AutoRoutingConfig | null;
 }

@@ -13,8 +13,9 @@ every request and response shape). It is the single source of truth for the API 
 It imports each domain's path fragment (for example `_PoliciesOpenapiPaths`, `_GrantsOpenapiPaths`,
 `_AuditOpenapiPaths`) and composes them, in a fixed order, alongside the shared pieces it owns
 directly: the reusable schema components (tenants, policies, groups, audit entries, and so on), the
-error and pagination envelopes, the security scheme, and the handful of cross-cutting endpoints that
-belong to no single domain — the auth flow (`/auth/login`, `/auth/callback`, `/auth/me`, …) and the
+error envelope with optional field-validation issues, the pagination envelope, the security scheme,
+and the cross-cutting endpoints that belong to no single domain — the auth flow (`/auth/login`,
+`/auth/callback`, `/auth/me`, …) and the
 `/openapi.json` document itself.
 
 Used by the running server, which serves this document at `/openapi.json`, and by the SDK/client

@@ -10,4 +10,5 @@ export type * from "./healthz.types.js";
 export * from "./openapi-route.js";
 export * from "./rate-limit.js";
 export type * from "./rate-limit.types.js";
+export { ___WithValidatedPublicBody } from "./request-validation.js";
 export * from "./transport-security.middleware.js";

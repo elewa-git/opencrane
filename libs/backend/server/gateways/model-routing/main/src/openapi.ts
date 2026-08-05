@@ -45,7 +45,7 @@ export const _ModelRoutingOpenapiPaths = {
       },
       responses: {
         200: ok("Model-routing default upserted.", { $ref: "#/components/schemas/ModelRoutingDefault" }),
-        400: badRequest("Request body failed validation (code VALIDATION_ERROR)."),
+        400: badRequest("Request body failed validation (code VALIDATION_ERROR with form-mappable field issues), or contained malformed JSON (code MALFORMED_JSON)."),
         403: { description: "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). Global defaults are operator-only.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
       },
     },

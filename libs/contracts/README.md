@@ -60,6 +60,11 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 ## Public surface
 
 - `___CreateControlPlaneClient`, `ControlPlaneClient`, `paths` — the typed HTTP client and its path map.
+- `API_ERROR_LIMITS`, `ApiErrorEnvelope`, `ApiValidationIssue`, `ApiValidationIssueLocations`, and
+  `___ParseApiErrorEnvelope` — the generated public error contract and bounded runtime parser used
+  to map authorized request failures back to frontend fields without trusting arbitrary responses.
+- `___ModelRoutingDefaultWriteSchema` — the model-adjacent Zod schema shared by the public routing
+  defaults boundary; it enforces known fields while deliberately preserving auto-config extensions.
 - `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`, `AgUiSseRecord`,
   `__ProjectAgUiEvent`, and `__EncodeAgUiSseRecord` — the display-safe input, output, projection,
   and SSE-record contract used by the server-owned AG-UI replay path. They do not authenticate a

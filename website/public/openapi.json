@@ -22,15 +22,65 @@
         "properties": {
           "error": {
             "type": "string",
+            "maxLength": 500,
             "description": "Human-readable error description."
           },
           "code": {
             "type": "string",
+            "maxLength": 100,
             "description": "Machine-readable error code."
           },
           "detail": {
             "type": "string",
+            "maxLength": 2000,
             "description": "Optional extra context."
+          },
+          "issues": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "description": "Field diagnostics returned only for public request validation failures."
+          }
+        }
+      },
+      "ValidationIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "location",
+          "path",
+          "message"
+        ],
+        "properties": {
+          "location": {
+            "type": "string",
+            "enum": [
+              "body"
+            ],
+            "description": "Request coordinate that contains the invalid field."
+          },
+          "path": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "description": "Field path segments suitable for direct form-control mapping."
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "Safe validation message that never includes the rejected value."
           }
         }
       },
@@ -967,6 +1017,8 @@
           },
           "costQualitySlider": {
             "type": "number",
+            "minimum": 0,
+            "maximum": 10,
             "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
           },
           "qualityFloor": {
@@ -975,6 +1027,7 @@
           },
           "maxBudgetUsd": {
             "type": "number",
+            "minimum": 0,
             "description": "Hard per-decision spend ceiling in USD."
           },
           "allowedModels": {
@@ -986,6 +1039,7 @@
           },
           "latencyCeilingMs": {
             "type": "number",
+            "minimum": 0,
             "description": "Reject/penalize models slower than this many milliseconds."
           },
           "fallbacks": {
@@ -1056,6 +1110,8 @@
               },
               "costQualitySlider": {
                 "type": "number",
+                "minimum": 0,
+                "maximum": 10,
                 "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
               },
               "qualityFloor": {
@@ -1064,6 +1120,7 @@
               },
               "maxBudgetUsd": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Hard per-decision spend ceiling in USD."
               },
               "allowedModels": {
@@ -1075,6 +1132,7 @@
               },
               "latencyCeilingMs": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Reject/penalize models slower than this many milliseconds."
               },
               "fallbacks": {
@@ -1109,6 +1167,7 @@
       },
       "ModelRoutingDefaultWrite": {
         "type": "object",
+        "additionalProperties": false,
         "description": "Upsert body for a scope-level model-routing default. At least one of defaultModel or autoConfig is required.",
         "properties": {
           "scope": {
@@ -1134,7 +1193,7 @@
               "sessionPin",
               "explorationRate"
             ],
-            "description": "Default auto-routing config.",
+            "description": "Default auto-routing config; null clears it.",
             "properties": {
               "objective": {
                 "type": "string",
@@ -1147,6 +1206,8 @@
               },
               "costQualitySlider": {
                 "type": "number",
+                "minimum": 0,
+                "maximum": 10,
                 "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
               },
               "qualityFloor": {
@@ -1155,6 +1216,7 @@
               },
               "maxBudgetUsd": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Hard per-decision spend ceiling in USD."
               },
               "allowedModels": {
@@ -1166,6 +1228,7 @@
               },
               "latencyCeilingMs": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Reject/penalize models slower than this many milliseconds."
               },
               "fallbacks": {
@@ -1185,7 +1248,8 @@
                 "maximum": 1,
                 "description": "Fraction of traffic to explore alternatives on (0 = pure exploit)."
               }
-            }
+            },
+            "nullable": true
           }
         }
       },
@@ -4181,7 +4245,7 @@
             }
           },
           "400": {
-            "description": "Request body failed validation (code VALIDATION_ERROR).",
+            "description": "Request body failed validation (code VALIDATION_ERROR with form-mappable field issues), or contained malformed JSON (code MALFORMED_JSON).",
             "content": {
               "application/json": {
                 "schema": {
@@ -4859,6 +4923,127 @@
           },
           "503": {
             "description": "Run status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "startMyRun",
+        "summary": "Start a signed-in user's personal run from an existing conversation",
+        "description": "The body may name only a thread and idempotency key. The server derives the session subject, host silo, personal AgentService, signed personal membership assertion, organization, scope, dataset, and immutable run input snapshot.",
+        "tags": [
+          "Runs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "threadId",
+                  "requestIdempotencyKey"
+                ],
+                "properties": {
+                  "threadId": {
+                    "type": "string",
+                    "description": "Existing conversation thread the signed-in user participates in."
+                  },
+                  "requestIdempotencyKey": {
+                    "type": "string",
+                    "description": "Caller-generated key for safe transport retries."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A duplicate idempotency key returned the already-admitted run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runId"
+                  ],
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new immutable run snapshot was accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runId"
+                  ],
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body omitted a required field or attempted to supply server-owned coordinates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The thread, current personal persona, membership, dataset, or other admission evidence was unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The shared managed-and-personal admission capacity is full.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The run admission authority was unavailable.",
             "content": {
               "application/json": {
                 "schema": {

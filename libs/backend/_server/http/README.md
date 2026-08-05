@@ -17,7 +17,7 @@ It supplies the outer layers of the request pipeline:
  ┌────────────────────────────────────────────────┐
  │   _server/http  ◄── HERE                         │
  │   trusted-proxy parse → transport security →     │
- │   per-IP rate limit → (route) → error handler    │
+ │   rate limit → auth → validation → route → error │
  └────────────────────────────────────────────────┘
         │  clean request in · normalized response / error out
         ▼
@@ -28,8 +28,10 @@ It supplies the outer layers of the request pipeline:
 `apps/opencrane` server *(composes these into its Express app)*
 
 It owns: a **global error handler** that turns thrown errors into consistent HTTP responses; a
-`/healthz` **liveness/readiness probe** that checks the database is reachable (a probe is the small
-endpoint the cluster polls to know the process is alive); a **per-IP rate limiter** (caps how many
+Zod-backed **public request-body wrapper** that hands parsed models to authorized route handlers and
+returns bounded, form-mappable field issues; a sanitized malformed-JSON response that never logs the
+raw caller body; a `/healthz` **liveness/readiness probe** that checks the database is reachable (a
+probe is the small endpoint the cluster polls to know the process is alive); a **per-IP rate limiter** (caps how many
 requests one client address may make); **transport-security** middleware (security response headers);
 a **trusted-proxy** parser (works out the real client IP when the server runs behind a load balancer,
 so the rate limiter and logs see the true address); and a **public OpenAPI route** that serves the
@@ -41,6 +43,8 @@ one probe — regardless of which route handles the request.
 ## Public surface
 
 - `error-handler` — the global Express error-to-response handler.
+- `___WithValidatedPublicBody` — validates an authorized public JSON body and forwards a parsed
+  model, or emits bounded `{ location, path, message }` issues.
 - `healthz` (+ `healthz.types`) — the `/healthz` database liveness/readiness probe.
 - `rate-limit` (+ `rate-limit.types`) — the per-IP fixed-window rate limiter.
 - `transport-security.middleware` — security response headers.
@@ -52,6 +56,9 @@ one probe — regardless of which route handles the request.
 Consumed by the `apps/opencrane` server, which composes these into its Express app. It provides
 transport mechanics only — authentication lives in `_server/auth`, and business behaviour lives in the
 backend domains. It accepts its collaborators as parameters and imports no application-owned package.
+Authorization middleware must be mounted before public validation whenever field diagnostics could
+disclose a protected contract. Internal workload validators remain opaque and are not automatically
+converted into browser-visible validation failures.
 
 ## Dependency direction
 
