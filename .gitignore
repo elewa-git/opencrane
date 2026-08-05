@@ -36,6 +36,13 @@ __pycache__/
 pr-stack-integrity-evidence.json
 .nx/
 
+# Terraform runtime state and downloaded providers. Provider selections stay tracked in
+# apps/_infra/deploy-k8s/platform/terraform/.terraform.lock.hcl.
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
 # Private agent review artifacts and R0 secured evidence packs.
 /.agent-reviews/
 /.r0-estate-evidence*/

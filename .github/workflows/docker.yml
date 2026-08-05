@@ -117,6 +117,19 @@ jobs:
           # renders must not drift with the runner image or a new Helm release.
           version: v4.1.4
 
+      - name: Install Terraform for provisioning validation
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: 1.15.7
+          terraform_wrapper: false
+
+      - name: Validate Terraform provisioning
+        working-directory: apps/_infra/deploy-k8s/platform/terraform
+        run: |
+          terraform fmt -check -recursive
+          terraform init -backend=false -input=false -lockfile=readonly
+          terraform validate -no-color
+
       - name: Install validation clients
         run: |
           sudo apt-get update

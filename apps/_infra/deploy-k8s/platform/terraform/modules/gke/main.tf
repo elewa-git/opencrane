@@ -10,8 +10,7 @@
 # nodes.
 # -----------------------------------------------------------------------------
 
-locals
-{
+locals {
   use_custom_vpc = var.vpc_id != "" && var.subnet_id != ""
 }
 
@@ -33,45 +32,39 @@ locals
 # -----------------------------------------------------------------------------
 
 # The container-engine-robot service agent needs encrypt/decrypt on the key.
-data "google_project" "this"
-{
+data "google_project" "this" {
   count      = var.enable_secrets_encryption ? 1 : 0
   project_id = var.project_id
 }
 
-resource "google_kms_key_ring" "gke"
-{
+resource "google_kms_key_ring" "gke" {
   count    = var.enable_secrets_encryption ? 1 : 0
   name     = "${var.cluster_name}-gke"
   location = var.region
   project  = var.project_id
 }
 
-resource "google_kms_crypto_key" "gke_secrets"
-{
+resource "google_kms_crypto_key" "gke_secrets" {
   count           = var.enable_secrets_encryption ? 1 : 0
   name            = "gke-secrets"
   key_ring        = google_kms_key_ring.gke[0].id
   rotation_period = "7776000s" # 90 days
 
   # Destroying the key would permanently lock the encrypted etcd/backups.
-  lifecycle
-  {
+  lifecycle {
     prevent_destroy = true
   }
 }
 
 # Grant the GKE service agent permission to use the key for envelope encryption.
-resource "google_kms_crypto_key_iam_member" "gke_secrets"
-{
+resource "google_kms_crypto_key_iam_member" "gke_secrets" {
   count         = var.enable_secrets_encryption ? 1 : 0
   crypto_key_id = google_kms_crypto_key.gke_secrets[0].id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
   member        = "serviceAccount:service-${data.google_project.this[0].number}@container-engine-robot.iam.gserviceaccount.com"
 }
 
-resource "google_container_cluster" "cluster"
-{
+resource "google_container_cluster" "cluster" {
   provider = google-beta
 
   name     = var.cluster_name
@@ -95,11 +88,9 @@ resource "google_container_cluster" "cluster"
   enable_autopilot = true
 
   # Private cluster configuration — only when a custom VPC provides Cloud NAT.
-  dynamic "private_cluster_config"
-  {
+  dynamic "private_cluster_config" {
     for_each = var.enable_private_nodes ? [1] : []
-    content
-    {
+    content {
       enable_private_nodes    = true
       enable_private_endpoint = false
       master_ipv4_cidr_block  = "172.16.0.0/28"
@@ -107,10 +98,8 @@ resource "google_container_cluster" "cluster"
   }
 
   # Master authorized networks -- restrict API access
-  master_authorized_networks_config
-  {
-    cidr_blocks
-    {
+  master_authorized_networks_config {
+    cidr_blocks {
       cidr_block   = "0.0.0.0/0"
       display_name = "All (restrict in production)"
     }
@@ -118,35 +107,29 @@ resource "google_container_cluster" "cluster"
 
   # IP allocation policy. With a custom VPC use the named secondary ranges; on
   # the default VPC let GKE auto-allocate (empty block).
-  dynamic "ip_allocation_policy"
-  {
+  dynamic "ip_allocation_policy" {
     for_each = local.use_custom_vpc ? [1] : []
-    content
-    {
+    content {
       cluster_secondary_range_name  = "pods"
       services_secondary_range_name = "services"
     }
   }
 
-  dynamic "ip_allocation_policy"
-  {
+  dynamic "ip_allocation_policy" {
     for_each = local.use_custom_vpc ? [] : [1]
     content {}
   }
 
   # Release channel for automatic upgrades
-  release_channel
-  {
+  release_channel {
     channel = "REGULAR"
   }
 
   # CMEK application-layer Secrets encryption. Gated by enable_secrets_encryption
   # (default ON). The key MUST be in the same location as the cluster.
-  dynamic "database_encryption"
-  {
+  dynamic "database_encryption" {
     for_each = var.enable_secrets_encryption ? [1] : []
-    content
-    {
+    content {
       state    = "ENCRYPTED"
       key_name = google_kms_crypto_key.gke_secrets[0].id
     }

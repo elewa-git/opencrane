@@ -5,6 +5,10 @@
 # it from ~9 files to ~47 and shipping a substrate chart that differs from the one CI validates.
 *.sh
 terraform/
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/*.tfplan
 tests/
 
 # VCS / editor / OS noise (helm only applies its built-in ignore list when this file is ABSENT).

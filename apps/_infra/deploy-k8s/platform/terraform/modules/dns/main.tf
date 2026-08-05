@@ -6,8 +6,7 @@
 # controller.
 # -----------------------------------------------------------------------------
 
-resource "google_dns_managed_zone" "opencrane"
-{
+resource "google_dns_managed_zone" "opencrane" {
   name        = "${var.zone_name}-zone"
   project     = var.project_id
   dns_name    = "${var.domain}."

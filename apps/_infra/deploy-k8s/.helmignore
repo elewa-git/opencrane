@@ -1,0 +1,6 @@
+# Terraform initializes beside the library-chart sources. Keep its downloaded providers,
+# local state, and saved plans out of the umbrella chart while retaining the checked-in HCL.
+platform/terraform/.terraform
+platform/terraform/*.tfstate
+platform/terraform/*.tfstate.*
+platform/terraform/*.tfplan
