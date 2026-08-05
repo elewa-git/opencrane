@@ -54,14 +54,17 @@ _diagnostics()
   kubectl get clusters,databases,poolers -A 2>/dev/null || true
   kubectl get certificates,issuers -A 2>/dev/null || true
   kubectl get events -A --sort-by=.lastTimestamp 2>/dev/null | tail -80 || true
+  local diagnostic_namespace
   local pod
-  while IFS= read -r pod; do
-    [[ -z "$pod" ]] && continue
-    echo "[develop-smoke] --- $NAMESPACE/$pod ---"
-    kubectl describe "$pod" -n "$NAMESPACE" 2>/dev/null | tail -40 || true
-    kubectl logs "$pod" -n "$NAMESPACE" --all-containers --tail=120 2>/dev/null || true
-    kubectl logs "$pod" -n "$NAMESPACE" --all-containers --previous --tail=120 2>/dev/null || true
-  done < <(kubectl get pods -n "$NAMESPACE" -o name 2>/dev/null || true)
+  for diagnostic_namespace in "$NAMESPACE" "$ARTIFACT_NAMESPACE"; do
+    while IFS= read -r pod; do
+      [[ -z "$pod" ]] && continue
+      echo "[develop-smoke] --- $diagnostic_namespace/$pod ---"
+      kubectl describe "$pod" -n "$diagnostic_namespace" 2>/dev/null | tail -40 || true
+      kubectl logs "$pod" -n "$diagnostic_namespace" --all-containers --tail=120 2>/dev/null || true
+      kubectl logs "$pod" -n "$diagnostic_namespace" --all-containers --previous --tail=120 2>/dev/null || true
+    done < <(kubectl get pods -n "$diagnostic_namespace" -o name 2>/dev/null || true)
+  done
   echo "[develop-smoke] ===== end diagnostics ====="
 }
 
