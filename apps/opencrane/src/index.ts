@@ -15,6 +15,7 @@ import { _CreatePublicApp } from "./app/public-app.js";
 import { _CreateArtifactUploadGateway } from "./infra/artifacts/artifact-upload.factory.js";
 import { ___CreatePrismaClient } from "./infra/db/db.js";
 import { _CreateMemoryGatewayClient } from "./infra/memory/memory-gateway-client.factory.js";
+import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory.js";
 
 /**
  * Compose the process once, from telemetry through coordinated shutdown.
@@ -36,12 +37,16 @@ function _Main(): void
 	// 3. Compose the single managed-run capacity authority shared by HTTP and scheduled admissions.
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, __ReadRunAdmissionConcurrencyPolicy(), _CreateManagedExecutionEvidenceAuthority());
 
-	// 4. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace);
-	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
-	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway);
+	// 4. Compose the optional Obot custody and attempt-key transport once, so the public custody
+	//    route and the runtime dispatch plane always target the same Obot with one credential.
+	const obot = _CreateObotAdapters(config.obot);
 
-	// 5. Start listeners and workers under one drain order so shared dependencies close exactly once.
+	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
+	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody);
+	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
+	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, obot.attemptKeys);
+
+	// 6. Start listeners and workers under one drain order so shared dependencies close exactly once.
 	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, unbindConsole);
 }
 

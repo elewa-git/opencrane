@@ -137,6 +137,50 @@ describe("agent-controller orchestration", function _Suite()
 		expect(result).toEqual({ outcome: "assigned", eventId: "event-1", runId: "run-1", attempt: 3, workloadUid: "job-uid-1" });
 	});
 
+	it("creates the Obot key Secret and Job volume only for an obot-keyed claim", async function _AssignsObotKeyedJob()
+	{
+		const secrets: V1Secret[] = [];
+		let createdJob: V1Job | null = null;
+		const bootstrapReference = `bootstrap-v1_${"a".repeat(64)}`;
+		const authority = _Authority({
+			async __Claim() { return { lease: _Claim().lease, attempt: { ..._Claim().attempt, bootstrapReference, obotKey: { key: "ok1-attempt-transient", keyId: "obot-key-id-1" } } }; },
+			async __CommitAssignment(_eventId, command) { return { outcome: "assigned", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }; },
+		});
+		const kubernetes = _Kubernetes({
+			async __EnsureSuspendedJob(expected: V1Job) { createdJob = expected; return { ...expected, metadata: { ...expected.metadata, uid: "job-uid-1" } }; },
+			async __EnsureAttemptKeySecret(expected: V1Secret) { secrets.push(expected); },
+		});
+		const profiles: AgentControllerRuntimeProfiles = { ..._Profiles(), "personal-default": { ..._Profiles()["personal-default"], obotMcpBaseUrl: "http://oc-mcp-gateway.silo-a.svc.cluster.local:8080" } };
+
+		const result = await __ReconcileNextAgentRuntimeAttempt({ ..._Options(authority, kubernetes), profiles }, new AbortController().signal);
+
+		expect(result.outcome).toBe("assigned");
+		// Two Secrets: the LiteLLM key and the Obot key (value + key id, for later revocation only).
+		expect(secrets.map(function _name(secret) { return secret.metadata?.name; })).toEqual([`litellm-key-${"a".repeat(32)}`, `obot-key-${"a".repeat(32)}`]);
+		expect(secrets[1]?.stringData).toEqual({ key: "ok1-attempt-transient", keyId: "obot-key-id-1" });
+		const container = (createdJob as unknown as V1Job).spec?.template.spec?.containers[0];
+		expect(container?.env?.map(function _envName(entry) { return entry.name; })).toContain("OPENCRANE_RUNTIME_OBOT_URL");
+		expect((createdJob as unknown as V1Job).spec?.template.spec?.volumes?.some(function _obotVolume(volume) { return volume.name === "obot-key"; })).toBe(true);
+	});
+
+	it("builds no Obot volume for a claim without an Obot key even when the profile pins the origin", async function _AssignsWithoutObotKey()
+	{
+		let createdJob: V1Job | null = null;
+		const authority = _Authority({
+			async __Claim() { return _Claim(); },
+			async __CommitAssignment(_eventId, command) { return { outcome: "assigned", runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid }; },
+		});
+		const kubernetes = _Kubernetes({
+			async __EnsureSuspendedJob(expected: V1Job) { createdJob = expected; return { ...expected, metadata: { ...expected.metadata, uid: "job-uid-1" } }; },
+			async __EnsureAttemptKeySecret() {},
+		});
+		const profiles: AgentControllerRuntimeProfiles = { ..._Profiles(), "personal-default": { ..._Profiles()["personal-default"], obotMcpBaseUrl: "http://oc-mcp-gateway.silo-a.svc.cluster.local:8080" } };
+
+		await __ReconcileNextAgentRuntimeAttempt({ ..._Options(authority, kubernetes), profiles }, new AbortController().signal);
+
+		expect((createdJob as unknown as V1Job).spec?.template.spec?.volumes?.some(function _obotVolume(volume) { return volume.name === "obot-key"; })).toBe(false);
+	});
+
 	it("does no Kubernetes work when OpenCrane has no desired attempt", async function _Idle()
 	{
 		const authority = _Authority({});

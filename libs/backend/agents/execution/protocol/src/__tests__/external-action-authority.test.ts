@@ -73,6 +73,11 @@ class _Repository implements ToolInvocationRepository
 		return { status: "succeeded", receipt: row.receipt as unknown as ToolInvocationReceipt<TResult> };
 	}
 
+	async markSucceededByCoordinates<TResult>(coordinates: { readonly runId: string; readonly attempt: number; readonly toolInvocationId: string }, result: TResult): Promise<{ status: "succeeded"; receipt: ToolInvocationReceipt<TResult> } | { status: "conflict" }>
+	{
+		return this.markSucceeded(`res-${coordinates.toolInvocationId}`, result);
+	}
+
 	async markFailed(reservationId: string, failureCode: string): Promise<{ status: "failed" | "conflict" }>
 	{
 		const row = this.rows.get(reservationId);

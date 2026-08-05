@@ -35,6 +35,17 @@ export interface InternalRuntimeConfig
 	readonly assignmentTtlMilliseconds: number;
 }
 
+/** Deployment-supplied coordinates of the authenticated Obot management transport. */
+export interface OpenCraneObotConfig
+{
+	/** In-cluster Obot origin (`http`, `*.svc.cluster.local`) with no path, query, or credentials. */
+	readonly gatewayUrl: string;
+	/** Absolute path of the mounted Obot service credential, re-read per call. */
+	readonly serviceTokenPath: string;
+	/** Hard timeout applied to every Obot management exchange. */
+	readonly requestTimeoutMilliseconds: number;
+}
+
 /** Process-owned settings that shape the OpenCrane server lifecycle. */
 export interface OpenCraneProcessConfig
 {
@@ -42,6 +53,8 @@ export interface OpenCraneProcessConfig
 	readonly authWatchNamespace: string;
 	/** Port exposed only to platform workloads. */
 	readonly internalPort: number;
+	/** Obot management transport, or null when the deployment leaves the feature off. */
+	readonly obot: OpenCraneObotConfig | null;
 	/** Workload-facing identity and dispatch configuration. */
 	readonly runtime: InternalRuntimeConfig;
 	/** Public ingress-facing API port. */

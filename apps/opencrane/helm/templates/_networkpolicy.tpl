@@ -203,6 +203,18 @@ spec:
         - protocol: TCP
           port: {{ .Values.litellm.service.port }}
     {{- end }}
+    {{- if and .Values.mcpGateway.enabled (ne (include "opencrane.mcpGatewayShared" .) "true") }}
+    # Release-local Obot management plane: custody provisioning and attempt-key minting only.
+    # Tool invocation payloads flow runtime→Obot directly and never transit this server.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: mcp-gateway
+      ports:
+        - protocol: TCP
+          port: {{ .Values.mcpGateway.service.port }}
+    {{- end }}
     {{- if .Values.observability.otel.enabled }}
     # Release-local operator-supplied OTEL collector for trace export.
     - to:

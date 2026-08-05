@@ -25,6 +25,16 @@ def environment(name: str, default: str | None = None) -> str:
     return value
 
 
+def optional_environment(name: str) -> str | None:
+    """Return an optional setting, or ``None`` when absent or blank.
+
+    Used only for genuinely optional capabilities (direct Obot invocation). A blank value is treated
+    as absent so a templated-but-empty deployment value cannot half-enable a feature.
+    """
+    value = os.environ.get(name)
+    return value if value else None
+
+
 def read_projected_token(token_path: str) -> str:
     """Read the rotating workload token at the moment a connection is opened.
 
@@ -57,6 +67,24 @@ def read_bootstrap_reference(bootstrap_path: str) -> str:
     if not reference:
         raise RuntimeError("projected bootstrap reference is empty")
     return reference
+
+
+def read_attempt_obot_key(key_path: str) -> str:
+    """Read the attempt-scoped Obot key immediately before a direct MCP invocation.
+
+    This is the runtime's only Obot credential: server-scoped and lease-expiring, never the Obot
+    service credential or any integration credential. Like the LiteLLM key it is returned only to
+    the invoking call site and must never be logged, checkpointed, or added to a candidate.
+
+    Raises:
+        OSError: When the mounted Secret cannot be read.
+        RuntimeError: When the mounted Secret is empty.
+    """
+    with open(key_path, "r", encoding="utf-8") as key_file:
+        key = key_file.read().strip()
+    if not key:
+        raise RuntimeError("attempt-scoped Obot key is empty")
+    return key
 
 
 def read_attempt_litellm_key(key_path: str) -> str:

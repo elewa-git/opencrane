@@ -19,6 +19,8 @@ from ..protocol.candidates import (
     normalize_event,
     tool_call_candidate,
 )
+from .deferred_results import resolve_deferred_tool_results
+from .pending_tools import record_pending_tool_call
 from .terminal import TerminalGate
 
 
@@ -169,6 +171,14 @@ def execute_resume_attempt(
         ),
     )
     run_evidence(coordinates, "resumed", inputGeneration=input_generation)
+    # Approval decisions name WHICH proposed calls were approved; the runtime executes each approved
+    # call directly against Obot here and feeds the framework only the resulting per-call mapping.
+    deferred_tool_results = resolve_deferred_tool_results(
+        coordinates,
+        compiled_input,
+        deferred_tool_results,
+        post_candidate,
+    )
     steering_buffer = [item["text"].strip() for item in steering_requests]
     with trace(
         "agent_runtime.resume_attempt",
@@ -248,7 +258,18 @@ def _dispatch_neutral_event(
     supported event types use the ordinary event constructor. Unknown events produce no candidate.
     """
     if neutral_event.get("type") == "tool_call":
-        post_candidate(tool_call_candidate(coordinates, compiled_input, neutral_event))
+        proposal = tool_call_candidate(coordinates, compiled_input, neutral_event)
+        if proposal.get("kind") == "external_action":
+            # Remember the concrete call so an approved resume can execute it directly against
+            # Obot; the candidate itself carries only identifiers the server needs to govern it.
+            record_pending_tool_call(
+                str(coordinates["runId"]),
+                int(coordinates["attempt"]),  # type: ignore[arg-type]
+                str(proposal["toolInvocationId"]),
+                str(neutral_event.get("toolName")),
+                proposal["arguments"],
+            )
+        post_candidate(proposal)
         return
     normalized = normalize_event(neutral_event)
     if normalized is not None:

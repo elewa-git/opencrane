@@ -41,6 +41,24 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		});
 	});
 
+	it("composes the obot block only when both coordinates are present", function _ReadObotBlock()
+	{
+		expect(_ReadProcessConfig().obot).toBeNull();
+
+		vi.stubEnv("OBOT_GATEWAY_URL", "http://oc-mcp-gateway.silo.svc.cluster.local:8080");
+		vi.stubEnv("OBOT_SERVICE_TOKEN_PATH", "/var/run/opencrane/obot/token");
+		expect(_ReadProcessConfig().obot).toEqual({ gatewayUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", serviceTokenPath: "/var/run/opencrane/obot/token", requestTimeoutMilliseconds: 30_000 });
+	});
+
+	it("refuses a partial obot block or a relative token path at startup", function _RejectPartialObotBlock()
+	{
+		vi.stubEnv("OBOT_GATEWAY_URL", "http://oc-mcp-gateway.silo.svc.cluster.local:8080");
+		expect(function _readPartialObot() { _ReadProcessConfig(); }).toThrow(/configured together/);
+
+		vi.stubEnv("OBOT_SERVICE_TOKEN_PATH", "relative/token");
+		expect(function _readRelativeTokenPath() { _ReadProcessConfig(); }).toThrow(/absolute/);
+	});
+
 	it("rejects an artifact output ceiling outside the broker boundary", function _RejectInvalidBodyLimit()
 	{
 		vi.stubEnv("ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES", "67108865");

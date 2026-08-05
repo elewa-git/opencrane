@@ -50,6 +50,17 @@ export type ToolInvocationSuccessResult<TResult> =
 /** Compare-and-set result when completing a reserved invocation as failed. */
 export type ToolInvocationFailureResult = { readonly status: "failed" | "conflict" };
 
+/** Attempt-scoped coordinates that name exactly one durable tool-invocation reservation. */
+export interface ToolInvocationCoordinates
+{
+	/** Logical run owning the reservation. */
+	readonly runId: string;
+	/** Positive attempt the reservation belongs to. */
+	readonly attempt: number;
+	/** Runtime-supplied caller idempotency key unique within the run attempt. */
+	readonly toolInvocationId: string;
+}
+
 /** Persistence boundary that reserves before I/O and completes the durable receipt afterward. */
 export interface ToolInvocationRepository
 {
@@ -59,4 +70,10 @@ export interface ToolInvocationRepository
 	markSucceeded<TResult>(reservationId: string, result: TResult): Promise<ToolInvocationSuccessResult<TResult>>;
 	/** Atomically transitions the exact Reserved invocation to Failed with a stable internal code. */
 	markFailed(reservationId: string, failureCode: string): Promise<ToolInvocationFailureResult>;
+	/**
+	 * Compare-and-set the unique Reserved invocation for `(runId, attempt, toolInvocationId)` to
+	 * Succeeded with its canonical result. An absent, already-completed, or non-Reserved row is a
+	 * conflict — the caller refuses the completion rather than duplicating a durable receipt.
+	 */
+	markSucceededByCoordinates<TResult>(coordinates: ToolInvocationCoordinates, result: TResult): Promise<ToolInvocationSuccessResult<TResult>>;
 }

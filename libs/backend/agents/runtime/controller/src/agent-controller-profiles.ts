@@ -47,7 +47,7 @@ export function __ValidateAgentControllerRuntimeProfiles(value: unknown): AgentC
 		{
 			throw new Error(`agent controller profile '${name}' must own one unique runtime namespace separate from its server namespace`);
 		}
-		__BuildSuspendedAgentRuntimeJob({ runId: "profile-validation", attempt: 1, agentServiceId: "profile-validation", agentRevisionId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, bootstrapReference: "profile-validation", litellmKeySecretName: "litellm-key-profilevalidation" }, profile);
+		__BuildSuspendedAgentRuntimeJob({ runId: "profile-validation", attempt: 1, agentServiceId: "profile-validation", agentRevisionId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, bootstrapReference: "profile-validation", litellmKeySecretName: "litellm-key-profilevalidation", obotKeySecretName: profile.obotMcpBaseUrl === undefined ? undefined : "obot-key-profilevalidation" }, profile);
 		namespaces.add(profile.namespace);
 		profiles[name] = profile;
 	}

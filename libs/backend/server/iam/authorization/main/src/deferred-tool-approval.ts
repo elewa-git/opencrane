@@ -126,8 +126,15 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 		return denied.count === 1 ? { outcome: "denied" } : _conflictOrExpire(transaction, command);
 	}
 
-	// 4. Approve atomically, recording the authorized deferred result and single-use resume-token hash.
-	const deferredToolResult: JsonValue = command.deferredToolResult ?? null;
+	// 4. Join the reserved ToolInvocation so the recorded result names the exact pending tool call the
+	// runtime must map the approval back to. A missing reservation row is a broken linkage: conflict,
+	// never an approval whose resume payload the runtime could not act on.
+	const invocation = await transaction.toolInvocation.findUnique({ where: { id: approval.toolInvocationRowId } });
+	if (invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt) return { outcome: "conflict" };
+
+	// 5. Approve atomically, recording the authorized deferred result and single-use resume-token hash.
+	const suppliedResult = command.deferredToolResult;
+	const deferredToolResult: JsonValue = { ...(suppliedResult !== undefined && suppliedResult !== null && typeof suppliedResult === "object" && !Array.isArray(suppliedResult) ? suppliedResult : {}), toolInvocationId: invocation.toolInvocationId };
 	const approved = await transaction.approvalRequest.updateMany({
 		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 		data: {

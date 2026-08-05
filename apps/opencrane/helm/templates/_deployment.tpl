@@ -150,6 +150,17 @@ spec:
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
             {{- end }}
+            {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
+            # Obot management transport: custody provisioning and attempt-key minting. Rendered only
+            # when the pre-provisioned service-credential Secret is named; otherwise the app composes
+            # fail-closed unavailable adapters and no Obot exchange can occur.
+            - name: OBOT_GATEWAY_URL
+              value: {{ include "opencrane.mcpGatewayUrl" . | quote }}
+            - name: OBOT_SERVICE_TOKEN_PATH
+              value: /var/run/opencrane/obot/token
+            - name: OBOT_TIMEOUT_SECONDS
+              value: {{ .Values.mcpGateway.serverTimeoutSeconds | quote }}
+            {{- end }}
             {{- include "opencrane.clustertenantManagerDatabaseEnv" . | nindent 12 }}
             # Server-owned Kubernetes operations are restricted to this release namespace.
             - name: POD_NAMESPACE
@@ -180,6 +191,11 @@ spec:
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
+            {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
+            - name: obot-service-token
+              mountPath: /var/run/opencrane/obot
+              readOnly: true
+            {{- end }}
           livenessProbe:
             httpGet:
               path: /healthz
@@ -221,4 +237,14 @@ spec:
                   path: token
                   audience: opencrane-memory-gateway
                   expirationSeconds: {{ .Values.clustertenantManager.memoryGateway.projectedTokenTtlSeconds }}
+        {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
+        # Pre-provisioned (out-of-band) Obot service credential; never rendered by the chart.
+        - name: obot-service-token
+          secret:
+            secretName: {{ .Values.mcpGateway.serviceTokenExistingSecret | quote }}
+            defaultMode: 0440
+            items:
+               - key: token
+                 path: token
+        {{- end }}
 {{- end }}

@@ -68,19 +68,29 @@ export function _AssertAgentRuntimeJobProfile(profile: AgentRuntimeJobProfile): 
 		throw new Error("agent runtime profile requires an in-cluster LiteLLM base URL");
 	}
 
-	// 3. Bind the profile to one server namespace and one mutually exclusive runtime identity class.
+	// 3. Pin optional direct Obot invocation to a bare release-local in-cluster origin.
+	if (profile.obotMcpBaseUrl !== undefined)
+	{
+		const obotUrl = URL.parse(profile.obotMcpBaseUrl);
+		if (!obotUrl || obotUrl.protocol !== "http:" || !obotUrl.hostname.endsWith(`.${profile.serverNamespace}.svc.cluster.local`) || obotUrl.pathname !== "/" || obotUrl.search !== "" || obotUrl.hash !== "" || obotUrl.username !== "" || obotUrl.password !== "")
+		{
+			throw new Error("agent runtime profile requires an in-cluster Obot MCP base origin with no path or credentials");
+		}
+	}
+
+	// 4. Bind the profile to one server namespace and one mutually exclusive runtime identity class.
 	if (!/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(profile.serverNamespace) || profile.serverNamespace.length > 63 || !_IsIdentityServiceAccountName(profile, profile.serviceAccountName))
 	{
 		throw new Error("agent runtime profile requires one valid server namespace and bounded runtime ServiceAccount");
 	}
 
-	// 4. Require the projected-token and lifecycle bounds shared with deployment policy.
+	// 5. Require the projected-token and lifecycle bounds shared with deployment policy.
 	if (!Number.isSafeInteger(profile.projectedTokenTtlSeconds) || profile.projectedTokenTtlSeconds < 600 || profile.projectedTokenTtlSeconds > 3600)
 	{
 		throw new Error("agent runtime projected-token TTL must be between 600 and 3600 seconds");
 	}
 
-	// 5. Bound transient storage, lifecycle, CPU, and memory before the manifest reaches an adapter.
+	// 6. Bound transient storage, lifecycle, CPU, and memory before the manifest reaches an adapter.
 	const scratchBytes = _ParseBinaryBytes(profile.scratchSize);
 	if (!scratchBytes || scratchBytes > _MAX_SCRATCH_BYTES || !Number.isSafeInteger(profile.activeDeadlineSeconds) || profile.activeDeadlineSeconds < 1 || profile.ttlSecondsAfterFinished !== 0)
 	{

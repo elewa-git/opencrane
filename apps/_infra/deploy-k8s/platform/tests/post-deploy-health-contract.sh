@@ -15,6 +15,8 @@ source "$VERIFY_SCRIPT"
 cp -R "$CHART_DIR/." "$CHART_FIXTURE"
 helm package "$ROOT_DIR/apps/opencrane/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
 rendered_ingress="$(helm template opencrane-silo "$CHART_FIXTURE" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
   --show-only templates/app-rollups.yaml)"
 health_route="$(awk '
   /          - path: \/healthz/ { capture = 1 }

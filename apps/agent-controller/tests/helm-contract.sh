@@ -165,6 +165,9 @@ grep -Fq 'kubernetes.io/metadata.name: server-ns' "$MANIFEST"
 grep -Fq 'kubernetes.io/metadata.name: kube-system' "$MANIFEST"
 grep -Fq 'app.kubernetes.io/component: litellm' "$RUNTIME_EGRESS"
 grep -Fq 'port: 4000' "$RUNTIME_EGRESS"
+# Direct approved tool invocation: the runtime egress floor names the release-local Obot MCP proxy.
+grep -Fq 'app.kubernetes.io/component: mcp-gateway' "$RUNTIME_EGRESS"
+grep -Fq 'port: 8080' "$RUNTIME_EGRESS"
 test -s "$SERVER_POLICY"
 grep -Fq 'cidr: "10.43.0.1/32"' "$SERVER_POLICY"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$SERVER_POLICY" | grep -F 'port: 443' >/dev/null
@@ -257,6 +260,13 @@ grep -Fq 'if (response.status !== 200 && response.status !== 204)' "$IDENTITY_CO
 grep -Fq "object.spec.template.spec.volumes.size() == 4" "$ADMISSION"
 grep -Fq "object.spec.template.spec.volumes[2].name == 'litellm-key'" "$ADMISSION"
 grep -Fq "secret.name.matches('^litellm-key-[a-f0-9]{32}$')" "$ADMISSION"
+# The optional obot-key variant is pinned exactly: appended env pair, read-only mount, and one
+# projected attempt Secret whose name matches the controller's derived grammar.
+grep -Fq "object.spec.template.spec.containers[0].env[5].name == 'OPENCRANE_RUNTIME_OBOT_URL'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].env[6].value == '/var/run/opencrane/obot/key'" "$ADMISSION"
+grep -Fq "object.spec.template.spec.containers[0].volumeMounts[4].name == 'obot-key'" "$ADMISSION"
+grep -Fq "secret.name.matches('^obot-key-[a-f0-9]{32}$')" "$ADMISSION"
+grep -A6 -F 'name: AGENT_CONTROLLER_PROFILES_JSON' "$MANIFEST" | grep -Fq 'obotMcpBaseUrl'
 grep -Fq 'quantity(object.spec.template.spec.volumes[3].emptyDir.sizeLimit).compareTo(quantity("1Gi")) == 0' "$ADMISSION"
 grep -Fq 'count/jobs.batch: "20"' "$MANAGED_RUNTIME_QUOTA"
 grep -Fq 'count/secrets: "20"' "$MANAGED_RUNTIME_QUOTA"
@@ -276,8 +286,11 @@ grep -Fq 'validationActions: [Deny]' "$MANIFEST"
 grep -Fq 'cidr: "10.43.0.1/32"' "$DISABLED"
 grep -A3 -F 'cidr: "10.43.0.1/32"' "$DISABLED" | grep -F 'port: 443' >/dev/null
 grep -Fq 'cidr: "172.18.0.2/32"' "$DISABLED"
-grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -F 'port: 6443' >/dev/null
-if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime|name: oc-opencrane-managed-runtime|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_PROFILES_JSON' "$DISABLED"; then
+grep -A3 -F 'cidr: "172.18.0.2/32"' "$DISABLED" | grep -Fq 'port: 6443'
+# `name: oc-opencrane-runtime` is anchored so the server-owned `oc-opencrane-runtime-cleanup`
+# RBAC (rendered by the opencrane-server chart regardless of the controller switch) is not
+# misread as controller residue.
+if grep -Eq 'kind: ValidatingAdmissionPolicy|name: oc-opencrane-runtime$|name: oc-opencrane-managed-runtime$|name: oc-opencrane-agent-runtime|opencrane.ai/runtime-release|AGENT_CONTROLLER_PROFILES_JSON' "$DISABLED"; then
   echo "disabled agent-controller rendered runtime authority" >&2
   exit 1
 fi

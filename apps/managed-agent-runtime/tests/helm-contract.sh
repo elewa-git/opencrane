@@ -54,7 +54,13 @@ grep -Fq 'app.kubernetes.io/component: channel-proxy' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: artifact-service' "$EGRESS"
 grep -Fq 'kubernetes.io/metadata.name: default-artifacts' "$EGRESS"
 grep -Fq 'app.kubernetes.io/component: litellm' "$EGRESS"
-grep -Fq 'app.kubernetes.io/component: obot' "$EGRESS"
+# Obot's Deployment carries the mcp-gateway component label; the previous `obot` selector matched
+# no pod, so the direct approved-invocation data plane was unreachable from the managed plane.
+grep -Fq 'app.kubernetes.io/component: mcp-gateway' "$EGRESS"
+if grep -Fq 'app.kubernetes.io/component: obot' "$EGRESS"; then
+  echo "managed runtime egress still targets the nonexistent obot component label" >&2
+  exit 1
+fi
 test "$(grep -Fc 'port: 8080' "$EGRESS")" -eq 3
 grep -Fq 'const _COMPONENT_LABEL = "agent-runtime";' "$ROOT/libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts"
 

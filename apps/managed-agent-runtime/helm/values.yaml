@@ -27,7 +27,7 @@ managedAgentRuntime:
     artifactServiceComponent: artifact-service
     memoryGatewayComponent: opencrane-server
     litellmComponent: litellm
-    obotComponent: obot
+    obotComponent: mcp-gateway
     # Port the managed runtime uses to reach the control-plane internal stream + in-cluster services.
     serverInternalPort: 8081
     channelProxyPort: 8080

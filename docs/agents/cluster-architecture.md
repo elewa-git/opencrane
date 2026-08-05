@@ -19,7 +19,7 @@ organisation ingress
         +-> opencrane server ---- PostgreSQL
                   |
                   +---- memory-gateway ---- Cognee (sealed foundation)
-                  +---- LiteLLM · Obot
+                  +---- LiteLLM · Obot (custody + attempt-key management)
                   |
                   +---- agent-controller
                              |
@@ -27,6 +27,8 @@ organisation ingress
                              +-> managed runtime Job namespace
                              +-> skill-authoring Job namespace
                              +-> tool-runner Job namespace
+
+runtime Jobs ----> LiteLLM (attempt model key) · Obot MCP proxy (attempt Obot key)
 
 artifact-service <---- brokered bytes ---- artifact-preprocessor Job namespace
 ```
@@ -75,6 +77,12 @@ outward; they expose no public listener.
 NetworkPolicy permits only the named service path required by each workload class. Network reach is
 not authorization: every sensitive server route also verifies workload identity and current durable
 assignment.
+
+Two runtime egress edges carry attempt-scoped credentials: LiteLLM (model traffic, per-attempt
+virtual key) and the Obot MCP proxy (approved integration tool invocations, per-attempt Obot key
+scoped to the run's assigned MCP server ids). The server reaches Obot only for management —
+custody provisioning and attempt-key minting — so tool payloads never transit the control plane;
+the runtime reports back a digest-only `tool.completed` receipt.
 
 The release deploys `memory-gateway` as the only NetworkPolicy-admitted path to private Cognee. Its
 search-only route verifies an audience-bound server ServiceAccount token with TokenReview and also

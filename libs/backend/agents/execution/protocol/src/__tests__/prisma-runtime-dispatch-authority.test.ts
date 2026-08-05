@@ -100,14 +100,17 @@ interface FakeOptions
 	readonly pendingSteeringRequests?: readonly unknown[];
 	/** Use tagged managed service evidence and its distinct projected workload identity. */
 	readonly managed?: boolean;
+	/** Durable tool-invocation reservations available for `tool.completed` coordinate completion. */
+	readonly toolInvocations?: readonly { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[];
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const retries: FakeExternalActionRetryRow[] = [];
+	const toolInvocations = [...(options.toolInvocations ?? [])].map(function _row(row) { return { ...row }; });
 	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
 	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const workloadIdentity = options.managed ? _managedIdentity : _identity;
@@ -196,8 +199,23 @@ function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: Re
 				return { count };
 			},
 		},
+		toolInvocation: {
+			async updateMany(args: { where: { runId: string; attempt: number; toolInvocationId: string; state: string }; data: { state: string; result: unknown; completedAt: Date } })
+			{
+				const row = toolInvocations.find(candidate => candidate.runId === args.where.runId && candidate.attempt === args.where.attempt && candidate.toolInvocationId === args.where.toolInvocationId && candidate.state === args.where.state);
+				if (row === undefined) return { count: 0 };
+				row.state = args.data.state;
+				row.result = args.data.result;
+				return { count: 1 };
+			},
+			async findUnique(args: { where: { runId_attempt_toolInvocationId: { runId: string; attempt: number; toolInvocationId: string } } })
+			{
+				const key = args.where.runId_attempt_toolInvocationId;
+				return toolInvocations.find(candidate => candidate.runId === key.runId && candidate.attempt === key.attempt && candidate.toolInvocationId === key.toolInvocationId) ?? null;
+			},
+		},
 	};
-	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests };
+	return { prisma: client as unknown as PrismaClient, queryRaw, streams, commands, retries, approvals, steeringRequests, toolInvocations };
 }
 
 /** Deterministic fake compiler: same snapshot digest always yields byte-identical compiled input. */
@@ -378,6 +396,44 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-cancel", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "run.cancelled", payload: {} };
 
 		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "runtime_cancellation_not_authoritative" });
+	});
+
+	it("marks the exact reserved invocation Succeeded with a digest-only receipt on tool.completed", async function _acceptsToolCompletion()
+	{
+		const digest = `sha256:${"b".repeat(64)}`;
+		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Reserved", result: null }] });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-tc", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload: { toolInvocationId: "call-7", resultDigest: digest } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: true });
+		expect(context.toolInvocations[0]).toMatchObject({ state: "Succeeded", result: { resultDigest: digest } });
+		// The durable receipt is the digest ONLY; tool content never enters the invocation row.
+		expect(JSON.stringify(context.toolInvocations[0]?.result)).not.toContain("content");
+	});
+
+	it("refuses tool.completed for unknown or already-completed invocation coordinates", async function _refusesToolCompletionConflict()
+	{
+		const digest = `sha256:${"b".repeat(64)}`;
+		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Succeeded", result: { resultDigest: digest } }] });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const duplicate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: "candidate-tc-dup", runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload: { toolInvocationId: "call-7", resultDigest: digest } };
+		const unknown: RuntimeCandidate = { ...duplicate, candidateId: "candidate-tc-unknown", payload: { toolInvocationId: "call-absent", resultDigest: digest } };
+
+		await expect(context.authority.__AdmitCandidate(_identity, duplicate)).resolves.toEqual({ accepted: false, reason: "tool_completion_conflict" });
+		await expect(context.authority.__AdmitCandidate(_identity, unknown)).resolves.toEqual({ accepted: false, reason: "tool_completion_conflict" });
+	});
+
+	it("refuses tool.completed payloads without a canonical sha256 digest", async function _refusesInvalidToolCompletion()
+	{
+		const context = _authority({ runState: "Running", toolInvocations: [{ id: "row-1", runId: "run-1", attempt: 1, toolInvocationId: "call-7", requestFingerprint: "sha256:f", state: "Reserved", result: null }] });
+		const start = await context.authority.__NextCommand(_identity, _open, 0);
+		const malformedPayloads: readonly Record<string, string>[] = [{}, { toolInvocationId: "call-7" }, { toolInvocationId: "call-7", resultDigest: "sha256:short" }, { toolInvocationId: "", resultDigest: `sha256:${"b".repeat(64)}` }, { toolInvocationId: "call-7", resultDigest: `md5:${"b".repeat(64)}` }];
+		for (const payload of malformedPayloads)
+		{
+			const candidate: RuntimeCandidate = { protocolVersion: AGENT_RUNTIME_PROTOCOL_V1, runtimeInstanceId: "instance-1", commandId: start?.commandId ?? "command-1", candidateId: `candidate-${JSON.stringify(payload).length}`, runId: "run-1", attempt: 1, fence: 1, kind: "event", eventType: "tool.completed", payload };
+			await expect(context.authority.__AdmitCandidate(_identity, candidate)).resolves.toEqual({ accepted: false, reason: "invalid_tool_completion" });
+		}
+		expect(context.toolInvocations[0]?.state).toBe("Reserved");
 	});
 
 	it("retries only an explicit pre-reservation runner failure within its durable server budget", async function _surfacesExternalActionFailure()

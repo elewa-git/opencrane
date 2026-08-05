@@ -83,6 +83,7 @@ describe("agent-controller OpenCrane HTTP authority", function _Suite()
 		};
 		const authority = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: fetchRequest, readToken: async function _token() { return "rotated-token"; } });
 
+		// The adapter normalises the optional flag: absent on the wire becomes an explicit false.
 		expect(await authority.__ClaimWorkloadRelease(new AbortController().signal)).toEqual(_ReleaseBody());
 		expect(await authority.__RegisterFirstPod("release/1", _Registration(), new AbortController().signal)).toEqual({ outcome: "registered", runId: "run-1", attempt: 1, workloadUid: "job-uid", podUid: "pod-uid" });
 		expect(requests.map(request => [request.init?.method, request.url])).toEqual([

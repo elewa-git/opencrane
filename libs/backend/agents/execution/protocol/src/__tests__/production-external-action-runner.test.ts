@@ -53,6 +53,12 @@ class _InvocationRepository implements ToolInvocationRepository
 	{
 		return { status: "failed" };
 	}
+
+	/** Completes the current reservation by coordinates, reusing the id-based completion path. */
+	async markSucceededByCoordinates<TResult>(_coordinates: { readonly runId: string; readonly attempt: number; readonly toolInvocationId: string }, result: TResult): Promise<ToolInvocationSuccessResult<TResult>>
+	{
+		return this.markSucceeded("reservation-1", result);
+	}
 }
 
 /** Build one immutable snapshot with only the authority facts the runner consumes. */

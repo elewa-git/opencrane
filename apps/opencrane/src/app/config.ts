@@ -1,4 +1,6 @@
-import type { OpenCraneProcessConfig } from "./config.types.js";
+import { isAbsolute } from "node:path";
+
+import type { OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
 
 /** Smallest accepted artifact-preprocessor output body. */
 const _MINIMUM_ARTIFACT_OUTPUT_BYTES = 1_024;
@@ -57,6 +59,29 @@ function _readArtifactPreprocessorBodyLimit(): number
 }
 
 /**
+ * Read the optional Obot management-transport block from the startup environment.
+ *
+ * Both coordinates present composes the authenticated transport; both absent leaves the feature off
+ * (fail-closed unavailable adapters). A partial block is a deployment mistake, so startup refuses it
+ * rather than half-composing an authority that would fail on first use.
+ */
+function _readObotConfig(): OpenCraneObotConfig | null
+{
+	const gatewayUrl = process.env.OBOT_GATEWAY_URL?.trim();
+	const serviceTokenPath = process.env.OBOT_SERVICE_TOKEN_PATH?.trim();
+	if (!gatewayUrl && !serviceTokenPath) return null;
+	if (!gatewayUrl || !serviceTokenPath)
+	{
+		throw new Error("OBOT_GATEWAY_URL and OBOT_SERVICE_TOKEN_PATH must be configured together or not at all");
+	}
+	if (!isAbsolute(serviceTokenPath))
+	{
+		throw new Error("OBOT_SERVICE_TOKEN_PATH must be an absolute mounted file path");
+	}
+	return { gatewayUrl, serviceTokenPath, requestTimeoutMilliseconds: _readBoundedSeconds("OBOT_TIMEOUT_SECONDS", 30, 1, 300) };
+}
+
+/**
  * Read process settings once so listeners and workers share one startup snapshot.
  *
  * Runtime namespace presence and separation remain worker invariants because those values grant
@@ -67,6 +92,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
+		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
 		runtime: {
 			artifactPreprocessorEnabled: process.env.ARTIFACT_PREPROCESSOR_ENABLED === "true",

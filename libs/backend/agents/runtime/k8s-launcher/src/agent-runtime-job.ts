@@ -19,6 +19,12 @@ const _LITELLM_KEY_MOUNT_PATH = "/var/run/opencrane/litellm";
 /** Secret item key and mounted filename of the attempt-scoped LiteLLM virtual key. */
 const _LITELLM_KEY_FILENAME = "key";
 
+/** Read-only directory containing the attempt-scoped Obot key. */
+const _OBOT_KEY_MOUNT_PATH = "/var/run/opencrane/obot";
+
+/** Secret item key and mounted filename of the attempt-scoped Obot key. */
+const _OBOT_KEY_FILENAME = "key";
+
 /** Pod annotation projected as the non-secret bootstrap reference file. */
 const _BOOTSTRAP_REFERENCE_ANNOTATION = "opencrane.ai/bootstrap-reference";
 
@@ -54,7 +60,7 @@ function _AttemptLabels(name: string): Record<string, string>
 }
 
 /** Build the runtime's explicit environment without projecting credentials as environment values. */
-function _RuntimeEnvironment(profile: AgentRuntimeJobProfile): V1EnvVar[]
+function _RuntimeEnvironment(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile): V1EnvVar[]
 {
 	return [
 		{ name: "OPENCRANE_RUNTIME_STREAM_URL", value: profile.runtimeStreamUrl },
@@ -62,30 +68,35 @@ function _RuntimeEnvironment(profile: AgentRuntimeJobProfile): V1EnvVar[]
 		{ name: "OPENCRANE_RUNTIME_LITELLM_BASE_URL", value: profile.litellmBaseUrl },
 		{ name: "OPENCRANE_RUNTIME_LITELLM_KEY_PATH", value: `${_LITELLM_KEY_MOUNT_PATH}/${_LITELLM_KEY_FILENAME}` },
 		{ name: "POD_UID", valueFrom: { fieldRef: { fieldPath: "metadata.uid" } } },
+		...(assignment.obotKeySecretName === undefined ? [] : [
+			{ name: "OPENCRANE_RUNTIME_OBOT_URL", value: profile.obotMcpBaseUrl },
+			{ name: "OPENCRANE_RUNTIME_OBOT_KEY_PATH", value: `${_OBOT_KEY_MOUNT_PATH}/${_OBOT_KEY_FILENAME}` },
+		]),
 	];
 }
 
 /** Build the read-only and ephemeral mounts available to one untrusted runtime container. */
-function _RuntimeVolumeMounts(): V1VolumeMount[]
+function _RuntimeVolumeMounts(assignment: AgentRuntimeJobAssignment): V1VolumeMount[]
 {
 	return [
 		{ name: "runtime-token", mountPath: "/var/run/opencrane/tokens", readOnly: true },
 		{ name: "runtime-bootstrap", mountPath: _BOOTSTRAP_MOUNT_PATH, readOnly: true },
 		{ name: "litellm-key", mountPath: _LITELLM_KEY_MOUNT_PATH, readOnly: true },
 		{ name: "scratch", mountPath: "/tmp" },
+		...(assignment.obotKeySecretName === undefined ? [] : [{ name: "obot-key", mountPath: _OBOT_KEY_MOUNT_PATH, readOnly: true }]),
 	];
 }
 
 /** Build the only executable container, retaining its non-privileged security contract in one place. */
-function _RuntimeContainer(profile: AgentRuntimeJobProfile): V1Container
+function _RuntimeContainer(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile): V1Container
 {
 	return {
 		name: _COMPONENT_LABEL,
 		image: profile.image,
 		imagePullPolicy: profile.imagePullPolicy,
 		securityContext: { allowPrivilegeEscalation: false, capabilities: { drop: ["ALL"] }, readOnlyRootFilesystem: true },
-		env: _RuntimeEnvironment(profile),
-		volumeMounts: _RuntimeVolumeMounts(),
+		env: _RuntimeEnvironment(assignment, profile),
+		volumeMounts: _RuntimeVolumeMounts(assignment),
 		resources: structuredClone(profile.resources),
 	};
 }
@@ -100,12 +111,17 @@ function _RuntimeVolumes(assignment: AgentRuntimeJobAssignment, profile: AgentRu
 		// key, never a provider secret, and never a plaintext environment value.
 		{ name: "litellm-key", projected: { defaultMode: 0o440, sources: [{ secret: { name: assignment.litellmKeySecretName, items: [{ key: _LITELLM_KEY_FILENAME, path: _LITELLM_KEY_FILENAME }] } }] } },
 		{ name: "scratch", emptyDir: { sizeLimit: profile.scratchSize } },
+		...(assignment.obotKeySecretName === undefined ? [] : [{ name: "obot-key", projected: { defaultMode: 0o440, sources: [{ secret: { name: assignment.obotKeySecretName, items: [{ key: _OBOT_KEY_FILENAME, path: _OBOT_KEY_FILENAME }] } }] } }]),
 	];
 }
 
 /** Build a restart-free Pod template whose only writable state is bounded ephemeral scratch. */
 function _RuntimePodTemplate(assignment: AgentRuntimeJobAssignment, profile: AgentRuntimeJobProfile, labels: Record<string, string>): V1PodTemplateSpec
 {
+	if (assignment.obotKeySecretName !== undefined && profile.obotMcpBaseUrl === undefined)
+	{
+		throw new Error("agent runtime assignment carries an Obot key Secret but the profile pins no Obot MCP base origin");
+	}
 	const authorityAnnotations = _AuthorityAnnotations(assignment);
 	const podAnnotations = { ...authorityAnnotations, [_BOOTSTRAP_REFERENCE_ANNOTATION]: assignment.bootstrapReference };
 	const podSpec: V1PodSpec = {
@@ -115,7 +131,7 @@ function _RuntimePodTemplate(assignment: AgentRuntimeJobAssignment, profile: Age
 		restartPolicy: "Never",
 		terminationGracePeriodSeconds: 0,
 		securityContext: { runAsNonRoot: true, runAsUser: 65532, runAsGroup: 65532, fsGroup: 65532, fsGroupChangePolicy: "OnRootMismatch", seccompProfile: { type: "RuntimeDefault" } },
-		containers: [_RuntimeContainer(profile)],
+		containers: [_RuntimeContainer(assignment, profile)],
 		volumes: _RuntimeVolumes(assignment, profile),
 	};
 	return { metadata: { labels: { ...labels }, annotations: podAnnotations }, spec: podSpec };

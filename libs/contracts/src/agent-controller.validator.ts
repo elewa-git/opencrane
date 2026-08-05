@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunAttemptClaimLease, AgentControllerRunAttemptProjection, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim, AgentControllerRunWorkloadReleaseProjection } from "./agent-controller.types.js";
+import type { AgentControllerObotAttemptKey, AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunAttemptClaimLease, AgentControllerRunAttemptProjection, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim, AgentControllerRunWorkloadReleaseProjection } from "./agent-controller.types.js";
 import { _AgentControllerBoundedIdentifierSchema, _AgentControllerMillisecondInstantSchema, _AgentControllerPositiveIntegerSchema, _ParseAgentControllerCommand, _ParseAgentControllerModel } from "./agent-controller-wire.validator.js";
 
 /**
@@ -29,6 +29,12 @@ const _RunAttemptClaimLeaseSchema: z.ZodType<AgentControllerRunAttemptClaimLease
 	if (Date.parse(lease.claimedAt) >= Date.parse(lease.expiresAt)) context.addIssue({ code: z.ZodIssueCode.custom, message: "must expire after it is claimed" });
 });
 
+/** Optional attempt-scoped Obot material returned only on a claim response. */
+const _AgentControllerObotAttemptKeySchema: z.ZodType<AgentControllerObotAttemptKey> = z.object({
+	key: _AgentControllerBoundedIdentifierSchema,
+	keyId: _AgentControllerBoundedIdentifierSchema,
+}).strict();
+
 /** Runtime-attempt projection model exposed to the Kubernetes controller. */
 const _RunAttemptProjectionSchema: z.ZodType<AgentControllerRunAttemptProjection> = z.object({
 	runId: _AgentControllerBoundedIdentifierSchema,
@@ -41,6 +47,7 @@ const _RunAttemptProjectionSchema: z.ZodType<AgentControllerRunAttemptProjection
 	workloadProfile: _AgentControllerBoundedIdentifierSchema,
 	bootstrapReference: _AgentControllerBoundedIdentifierSchema,
 	litellmKey: _AgentControllerBoundedIdentifierSchema,
+	obotKey: _AgentControllerObotAttemptKeySchema.optional(),
 }).strip();
 
 /** Runtime-attempt claim model exposed to the Kubernetes controller. */
@@ -72,6 +79,7 @@ const _RunWorkloadReleaseProjectionSchema: z.ZodType<AgentControllerRunWorkloadR
 	workloadProfile: _AgentControllerBoundedIdentifierSchema,
 	assignmentExpiresAt: _AgentControllerMillisecondInstantSchema,
 	bootstrapReference: _AgentControllerBoundedIdentifierSchema,
+	obotKeyProvisioned: z.boolean().optional(),
 }).strip();
 
 /** Runtime workload-release claim model exposed to the Kubernetes controller. */

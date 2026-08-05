@@ -291,7 +291,7 @@ managedAgentRuntimePlane:
       artifactServiceComponent: artifact-service
       memoryGatewayComponent: opencrane-server
       litellmComponent: litellm
-      obotComponent: obot
+      obotComponent: mcp-gateway
       serverInternalPort: 8081
       channelProxyPort: 8080
       artifactServicePort: 8080
@@ -851,6 +851,13 @@ mcpGateway:
   replicas: 1
   service:
     port: 8080
+  # -- Name of a pre-provisioned Secret (key `token`) carrying the Obot service credential the
+  #    opencrane-server presents for custody provisioning and per-attempt Obot key minting. The
+  #    chart never renders this Secret. Empty (default) leaves the Obot management transport OFF:
+  #    no env/volume renders and the server composes fail-closed unavailable adapters.
+  serviceTokenExistingSecret: ""
+  # -- Hard timeout in whole seconds for one server→Obot management exchange (1 through 300).
+  serverTimeoutSeconds: 30
   # -- Authentication & per-user isolation (P0.1). Default OFF preserves the in-cluster-only
   # posture (NetworkPolicy is the only gate; shared-credential multi-user servers ONLY — NO
   # per-user credentials or access policies).
