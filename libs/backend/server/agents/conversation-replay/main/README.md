@@ -45,7 +45,9 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
   opaque resume position.
 - `__ReadConversationReplay` applies server-owned bounds and display-safe redaction to repository
   rows.
-- `PrismaConversationReplayRepository` reads canonical rows after participant and cursor checks.
+- `_CreateConversationReplayRepository` is the named app-composition factory for the read-only
+  participant-and-cursor-checked repository. It opens no transaction because replay has no durable
+  write or cross-query atomicity requirement.
 - `__CreateConversationReplayRouter` consumes the one-use context and writes the AG-UI SSE snapshot.
 - `__CreateSelfConversationReplayRouter` exposes the same redacted snapshot to the authenticated
   participant at `GET /api/v1/me/conversations/:threadId/events`; it derives the subject and silo
@@ -56,7 +58,9 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
 ## Boundary
 
 The channel route caller supplies a consumed channel-context authority and exact controller-selected
-route identifier. The self route caller supplies only a server-derived session/host identity. This
+route identifier. The self route caller supplies only a server-derived session/host identity. The
+app composition creates the private Prisma repository once; callers receive the replay port, never a
+Prisma adapter. This
 package does not authenticate a browser, resolve a channel target, create a run, register an
 endpoint, or persist new conversation events. It fails closed before a canonical read whenever the
 context, cursor, thread, silo, or participant binding is wrong.

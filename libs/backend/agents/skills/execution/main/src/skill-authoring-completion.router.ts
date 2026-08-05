@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from "express";
 
-import type { SkillAuthoringCheckReport, SkillAuthoringCompletionCommand, SkillAuthoringCompletionRouterDependencies } from "./skill-authoring-completion.types.js";
+import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCheckReport, type SkillAuthoringCompletionCommand, type SkillAuthoringCompletionRouterDependencies } from "./skill-authoring-completion.types.js";
 
 /** Fixed projected-token audience for the isolated authoring worker class. */
 const _AUTHORING_AUDIENCE = "opencrane-skill-authoring";
@@ -42,7 +42,7 @@ export function __CreateSkillAuthoringCompletionRouter(dependencies: SkillAuthor
 			}
 
 			// 2. Atomically compare the reviewed Pod to the canonical bootstrap consumer before terminalising.
-			const outcome = await dependencies.repository.completeAtomically(command, identity);
+			const outcome = await dependencies.authority.completeAtomically(command, identity);
 			if (outcome !== "completed")
 			{
 				response.status(409).json({ error: "completion_unavailable" });
@@ -70,8 +70,8 @@ function _Command(value: unknown): SkillAuthoringCompletionCommand | null
 {
 	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
 	const body = value as Record<string, unknown>;
-	if (body["outcome"] === "succeeded" && _HasKeys(body, ["workloadId", "outcome", "testReport", "scanResult"]) && _Coordinate(body["workloadId"]) && _Report(body["testReport"]) && _Report(body["scanResult"])) return { workloadId: body["workloadId"], outcome: "succeeded", testReport: body["testReport"], scanResult: body["scanResult"] };
-	if (body["outcome"] === "failed" && _HasKeys(body, ["workloadId", "outcome", "failureCode"]) && _Coordinate(body["workloadId"]) && _FailureCode(body["failureCode"])) return { workloadId: body["workloadId"], outcome: "failed", failureCode: body["failureCode"] };
+	if (body["outcome"] === SkillAuthoringCompletionOutcomes.Succeeded && _HasKeys(body, ["workloadId", "outcome", "testReport", "scanResult"]) && _Coordinate(body["workloadId"]) && _Report(body["testReport"]) && _Report(body["scanResult"])) return { workloadId: body["workloadId"], outcome: SkillAuthoringCompletionOutcomes.Succeeded, testReport: body["testReport"], scanResult: body["scanResult"] };
+	if (body["outcome"] === SkillAuthoringCompletionOutcomes.Failed && _HasKeys(body, ["workloadId", "outcome", "failureCode"]) && _Coordinate(body["workloadId"]) && _FailureCode(body["failureCode"])) return { workloadId: body["workloadId"], outcome: SkillAuthoringCompletionOutcomes.Failed, failureCode: body["failureCode"] };
 	return null;
 }
 

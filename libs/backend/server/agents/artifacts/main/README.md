@@ -81,9 +81,13 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 - `__IssueArtifactReadLease` — reload an active artifact's exact published revision and issue one
   internal read lease that expires after at most five minutes.
 - `__UploadArtifact` — orchestrate the full verified upload (lease → promote → finalize).
-- `PrismaArtifactAuthorityRepository` — the Postgres-backed persistence adapter.
-- `PrismaArtifactPreprocessRepository` and `__CreateArtifactPreprocessorRouter` — durable job
-  fencing and the TokenReview-protected broker-only worker protocol.
+- `_CreateArtifactUploadAuthority` — app-only composition for the two short publication
+  transactions on either side of byte-store promotion.
+- `_CreateArtifactPreprocessAuthority` and `__CreateArtifactPreprocessorRouter` — durable job
+  fencing and the TokenReview-protected broker-only worker protocol. Each lifecycle transition has
+  its own private transaction; no transaction crosses TokenReview, byte brokering, or promotion.
+- `_CreateArtifactCatalogueRepository` — read-only active/published catalogue facts for internal
+  lease issuance; it never acquires publication or preprocessing locks.
 - `ArtifactPreprocessSourceLeaseIssuer` — the narrow durable port that lets app composition issue
   source-read facts without depending on the Prisma adapter.
 - `__ClaimArtifactPreprocessJob`, `__IssueArtifactPreprocessOutputLease`,
@@ -102,10 +106,17 @@ authorised artifact-deletion lifecycle once no active job needs those rows.
 
 ## Boundary
 
-The application layer wires the byte-store client, the crypto port, and the Prisma adapter into the
-use cases. Proof verification and replay reservation happen upstream — this package trusts that a
+The application layer wires the byte-store client, the crypto port, and named authority-composition
+factories into the use cases. Proof verification and replay reservation happen upstream — this package trusts that a
 `VerifiedArtifactUploadCommand` is already authorized, and its job is to keep metadata consistent
 with what the byte store actually promoted.
+
+The upload authority deliberately has two transactions: the first reserves the exact single-use
+lease, then the app calls the byte store with no database transaction open, and the second consumes
+the verified receipt, publishes the revision, creates any PDF work, and writes the outbox event.
+Preprocessing follows the same rule one fenced transition at a time. This avoids long-held locks
+around network work while retaining the established lock order, receipt idempotency, and outbox
+ordering.
 
 Read-lease issuance is internal and has no router. It does not decide which workload may name an
 artifact; the caller must already have passed its workload-specific admission authority. The issuer

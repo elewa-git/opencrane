@@ -3,6 +3,7 @@ export { __DigestAgentRevisionContent } from "./agent-revision-content.js";
 export type { AgentRevisionDiff, RevisionLineDiff, RevisionScalarChange, RevisionSetChange, RevisionWidening, RevisionWideningKind } from "./agent-revision-diff.types.js";
 export type { AgentBudget, AgentRevision, AgentRevisionContent, AgentRevisionState, IntegrationAssignmentReference, SkillRevisionReference } from "./agent-revision.types.js";
 export type { AgentRun, AgentRunLineage, AgentRunState, AgentRunTerminalReason, AgentRunTrigger } from "./agent-run.types.js";
+export { AgentServiceKinds, AgentServiceStates } from "./agent-service.types.js";
 export type { AgentService, AgentServiceKind, AgentServiceState } from "./agent-service.types.js";
 export type { GrantScope, GrantSubjectType, RevisionScopeAttachment } from "./scope-attachment.types.js";
 export type { AgentRevisionId, AgentRunId, AgentServiceId, MessageId, PersonaProfileId, PersonaRevisionId, SiloId, ThreadId, UserId } from "./identifiers.types.js";

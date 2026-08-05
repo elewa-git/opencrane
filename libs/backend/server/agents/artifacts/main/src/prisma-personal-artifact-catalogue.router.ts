@@ -6,7 +6,7 @@ import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 
 import { __CreatePersonalArtifactCatalogueRouter } from "./personal-artifact-catalogue.router.js";
 import type { PersonalArtifactCaller } from "./personal-artifact-catalogue.router.types.js";
-import { PrismaArtifactAuthorityRepository } from "./prisma-artifact-authority.js";
+import { _CreateArtifactCatalogueRepository } from "./prisma-artifact-authority.composition.js";
 
 /** Maps authenticated request facts to the caller contract owned by the artifact catalogue. */
 function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0]): PersonalArtifactCaller | null
@@ -25,7 +25,7 @@ export function _CreatePersonalArtifactCatalogueRouter(prisma: PrismaClient, log
 {
 	return __CreatePersonalArtifactCatalogueRouter({
 		resolveCaller: _resolveCaller,
-		catalogue: new PrismaArtifactAuthorityRepository(prisma),
+		catalogue: _CreateArtifactCatalogueRepository(prisma),
 		logger,
 	});
 }

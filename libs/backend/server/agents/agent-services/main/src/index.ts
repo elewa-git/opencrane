@@ -3,6 +3,7 @@ export type { AgentServicePublicationRepository, AtomicAgentRevisionPublication,
 export { PrismaAgentServicePublicationRepository } from "./prisma-agent-publication.js";
 export type { AgentPublicationAuditEvidencePort } from "./prisma-agent-publication.types.js";
 export { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "./agent-revision-lifecycle.js";
+export { ManagedRunAdmissionOutcomes } from "./agent-revision-lifecycle.types.js";
 export type { AgentRevisionLifecycleDenial, AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, AppendAgentRevisionResult, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, ManagedRunTrigger, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 export { PrismaAgentRevisionModelSelectionRepository } from "./prisma-agent-revision-model-selection.js";
 export { AgentRevisionModelSelectionMaterializationCodes, type AgentRevisionModelSelectionRepository, type MaterializeAgentRevisionModelSelectionCommand, type MaterializeAgentRevisionModelSelectionResult } from "./agent-revision-model-selection.types.js";
@@ -15,7 +16,7 @@ export { __IntersectScopeAttachments, __ResolveEffectiveScopeAttachments, __Vali
 export type { AttachAuthorityResult, EffectiveScopeGrant, ScopeAttachmentIntersection, ScopeGrantResolver } from "./scope-attachment-authority.types.js";
 export { PrismaScopeGrantResolver } from "./prisma-scope-grant-resolver.js";
 export { __CreateAgentSchedule, __UpdateAgentSchedule } from "./agent-schedule.js";
-export type { AgentScheduleDeletionResult, AgentScheduleDenial, AgentScheduleMutationResult, AgentScheduleOverlapPolicy, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
+export { AgentScheduleOverlapPolicies, type AgentScheduleDeletionResult, type AgentScheduleDenial, type AgentScheduleMutationResult, type AgentScheduleOverlapPolicy, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "./agent-schedule.types.js";
 export { PrismaAgentScheduleRepository } from "./prisma-agent-schedule.js";
 export { __ManagedAgentServicePrincipal, PrismaManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.js";
 export { _CreateManagedExecutionEvidenceAuthority } from "./prisma-managed-execution-evidence.factory.js";

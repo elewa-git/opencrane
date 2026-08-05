@@ -1,8 +1,7 @@
 import { MANAGED_AGENT_RUNTIME_PROFILE_NAME } from "@opencrane/contracts";
-import { __DiffAgentRevisions, __IsAgentServiceTransitionAllowed } from "@opencrane/models/agents";
-import type { AgentRevisionContent, AgentRevisionId, AgentServiceId, AgentServiceState } from "@opencrane/models/agents";
+import { AgentServiceKinds, AgentServiceStates, __DiffAgentRevisions, __IsAgentServiceTransitionAllowed, type AgentRevisionContent, type AgentRevisionId, type AgentServiceId, type AgentServiceState } from "@opencrane/models/agents";
 
-import type { AgentRevisionLifecycleRepository, AgentServiceHistory, AgentServiceLifecycleAction, ChangeAgentServiceStateCommand, ChangeAgentServiceStateResult, CompareAgentRevisionsResult, CreateManagedAgentServiceCommand, CreateManagedAgentServiceResult, AppendAgentRevisionResult, ManagedRunAdmissionPort, ManagedRunAdmissionResult, ManagedRunNowCommand, RestoreAgentRevisionCommand, ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
+import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AgentServiceLifecycleAction, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CompareAgentRevisionsResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type AppendAgentRevisionResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "./agent-revision-lifecycle.types.js";
 
 /** Returns whether a string carries a non-empty value after trimming. */
 function _isPresent(value: string): boolean
@@ -174,16 +173,16 @@ export async function __AdmitManagedRunNow(repository: AgentRevisionLifecycleRep
 {
 	if (!_isPresent(command.agentServiceId) || !_isPresent(command.siloId) || !_isPresent(command.requestedBy) || !_isPresent(command.requestIdempotencyKey))
 	{
-		return { outcome: "denied", reason: "invalid_command" };
+		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "invalid_command" };
 	}
 	const service = await repository.getService(command.agentServiceId, command.siloId);
 	if (service === null)
 	{
-		return { outcome: "denied", reason: "service_not_found" };
+		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "service_not_found" };
 	}
-	if (service.kind !== "managed" || service.state !== "active" || service.activeRevisionId === null)
+	if (service.kind !== AgentServiceKinds.Managed || service.state !== AgentServiceStates.Active || service.activeRevisionId === null)
 	{
-		return { outcome: "denied", reason: "service_not_runnable" };
+		return { outcome: ManagedRunAdmissionOutcomes.Denied, reason: "service_not_runnable" };
 	}
 	return port.admitManagedRun(command);
 }

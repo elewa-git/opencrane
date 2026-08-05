@@ -21,7 +21,7 @@ This file is the canonical agent instruction file for the repository.
 | **Cluster topology** | [`docs/agents/cluster-architecture.md`](docs/agents/cluster-architecture.md) | you need the whole-cluster picture — planes, namespaces, Helm templates, isolation tiers, multi-instance, Workload Identity. |
 | **Monorepo boundaries** | [`docs/agents/monorepo.md`](docs/agents/monorepo.md) | creating/moving an app or library, adding a deployable workload, or changing NX tags/dependency direction. |
 | **Build, Test & Infra** | [`docs/agents/infra.md`](docs/agents/infra.md) | building/testing, or editing Terraform/Helm/deploy under `platform/`. |
-| **Workflow & Review Gate** | [`docs/agents/workflow.md`](docs/agents/workflow.md) | planning (`plan.md`/`CHANGELOG.md`), writing commit messages, or hitting the review gate. |
+| **Workflow & Review Gate** | [`docs/agents/workflow.md`](docs/agents/workflow.md) | planning (`plan.md`/`CHANGELOG.md`), creating or updating a PR/stack, writing commit messages, or hitting the review gate. |
 | **Language-neutral maintainability** | [`docs/agents/maintainability.md`](docs/agents/maintainability.md) | adding substantial production code in any language, growing an already-large module, or reviewing cohesion and responsibility boundaries. |
 | **App-Specific** | [`docs/agents/app-specific.md`](docs/agents/app-specific.md) | working inside a specific `apps/*` or `libs/*` package; per-package map + API-first rule. |
 | **Package docs** | [`docs/agents/package-docs.md`](docs/agents/package-docs.md) | writing or editing any package `README.md`, or adding/moving/deleting a package — the README standard, the junior-dev voice, and the "update the README in the same change" rule. |

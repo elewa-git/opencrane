@@ -1,153 +1,73 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactIndexState, ArtifactKind, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, Prisma, type PrismaClient } from "@prisma/client";
+import { ArtifactState, ArtifactUploadLeaseState, Prisma } from "@prisma/client";
 
-import type { ArtifactReadLeaseRepository, IssueArtifactReadLeaseCommand, PublishedArtifactReadTarget } from "./artifact-read-lease.types.js";
-import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand, PersonalArtifactCatalogueRepository, PersonalArtifactEntry } from "./artifact-finalization.types.js";
+import type { ArtifactAuthorityRepository, AtomicFinalizeArtifactResult, FinalizeArtifactRevisionCommand } from "./artifact-finalization.types.js";
 import type { ArtifactUploadLeaseRepository, VerifiedArtifactUploadCommand } from "./artifact-upload.types.js";
 
 /** First deterministic preprocessing pipeline scheduled for every published PDF source revision. */
 const _PDF_TO_TEXT_PIPELINE_VERSION = "pdf-to-text/v1";
 
-/** Postgres authority for receipt consumption, immutable revision publication, and outbox creation. */
-export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactReadLeaseRepository, ArtifactUploadLeaseRepository, PersonalArtifactCatalogueRepository
+/** Transaction-scoped artifact publication repository; only its unit of work may construct it. */
+export class PrismaArtifactAuthorityRepository implements ArtifactAuthorityRepository, ArtifactUploadLeaseRepository
 {
-	/** Canonical OpenCrane catalog database client. */
-	private readonly prisma: PrismaClient;
+	/** Private transaction client; this repository can never open or commit a transaction itself. */
+	private readonly transaction: Prisma.TransactionClient;
 
-	/** Creates the artifact authority adapter over the product Postgres authority. */
-	constructor(prisma: PrismaClient)
+	/** Creates the repository for one already-open artifact publication transaction. */
+	constructor(transaction: Prisma.TransactionClient)
 	{
-		this.prisma = prisma;
+		this.transaction = transaction;
 	}
 
-	/** Loads only an active artifact's exact published revision as a storage-neutral read target. */
-	async loadPublishedReadTarget(command: IssueArtifactReadLeaseCommand): Promise<PublishedArtifactReadTarget | null>
+	/** Creates or reloads the one durable proof-bound lease for the exact capability JTI. */
+	async issueLeaseAtomically(command: Omit<VerifiedArtifactUploadCommand, "bytes" | "createdBy" | "revision" | "artifactRevisionId" | "provenance" | "idempotencyKey">): ReturnType<ArtifactUploadLeaseRepository["issueLeaseAtomically"]>
 	{
-		const revision = await this.prisma.artifactRevision.findFirst({
-			where: { id: command.artifactRevisionId, artifactId: command.artifactId, state: ArtifactRevisionState.Published, artifact: { siloId: command.siloId, state: ArtifactState.Active } },
-			select: { id: true, artifactId: true, contentAddress: true, byteLength: true, mediaType: true, artifact: { select: { siloId: true } } },
-		});
-		if (revision === null || revision.byteLength < 0n || revision.byteLength > BigInt(Number.MAX_SAFE_INTEGER)) return null;
-		return { siloId: revision.artifact.siloId, artifactId: revision.artifactId, artifactRevisionId: revision.id, contentAddress: revision.contentAddress, byteLength: Number(revision.byteLength), mediaType: revision.mediaType };
-	}
+		// 1. Serialize on the logical artifact so concurrent proof uses share one catalogue authority.
+		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifacts" WHERE "id" = ${command.artifactId} FOR UPDATE`);
+		const artifact = await this.transaction.artifact.findUnique({ where: { id: command.artifactId } });
+		if (artifact === null || artifact.state !== ArtifactState.Active || artifact.siloId !== command.siloId) return { status: "artifact_not_found" };
 
-	/** List only safe metadata from non-deleted assets owned in the exact trusted silo. */
-	async listOwnedCatalogue(siloId: string, ownerPrincipalId: string): Promise<readonly PersonalArtifactEntry[]>
-	{
-		const artifacts = await this.prisma.artifact.findMany({ where: { siloId, ownerPrincipalId, state: { not: ArtifactState.Deleted }, currentRevisionId: { not: null } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
-		return artifacts.map(function _toPersonalEntry(artifact): PersonalArtifactEntry
+		// 2. Replay the same valid capability deterministically instead of creating parallel write authority.
+		const existing = await this.transaction.artifactUploadLease.findUnique({ where: { capabilityJti: command.capabilityJti } });
+		if (existing !== null)
 		{
-			return { id: artifact.id, kind: _ToKind(artifact.kind), state: artifact.state === ArtifactState.Active ? "active" : "deletion_pending", currentRevisionId: artifact.currentRevisionId, mediaType: artifact.currentRevision?.mediaType ?? null, byteLength: artifact.currentRevision === null ? null : artifact.currentRevision.byteLength.toString(), indexState: artifact.currentRevision === null ? null : _ToIndexState(artifact.currentRevision.indexState), createdAt: artifact.createdAt.toISOString(), updatedAt: artifact.updatedAt.toISOString() };
-		});
-	}
-
-	/** Creates or returns the one durable, proof-bound lease for one exact capability JTI. */
-	async issueLeaseAtomically(command: Omit<VerifiedArtifactUploadCommand, "bytes" | "createdBy" | "revision" | "artifactRevisionId" | "provenance" | "idempotencyKey">): Promise<Awaited<ReturnType<ArtifactUploadLeaseRepository["issueLeaseAtomically"]>>>
-	{
-		try
-		{
-			return await this.prisma.$transaction(async function _issue(transaction: Prisma.TransactionClient)
-			{
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifacts" WHERE "id" = ${command.artifactId} FOR UPDATE`);
-				const artifact = await transaction.artifact.findUnique({ where: { id: command.artifactId } });
-				if (artifact === null || artifact.state !== "Active" || artifact.siloId !== command.siloId) return { status: "artifact_not_found" } as const;
-				const existing = await transaction.artifactUploadLease.findUnique({ where: { capabilityJti: command.capabilityJti } });
-				if (existing !== null)
-				{
-					if (existing.state !== ArtifactUploadLeaseState.Active || existing.expiresAt <= new Date() || existing.artifactId !== command.artifactId || existing.siloId !== command.siloId || existing.expectedContentAddress !== command.expectedContentAddress || existing.expectedByteLength !== BigInt(command.expectedByteLength) || existing.mediaType !== command.mediaType || Math.floor(existing.expiresAt.getTime() / 1_000) !== command.expiresAtEpochSeconds) return { status: "conflict" } as const;
-					return { status: "issued", lease: { leaseId: existing.id, siloId: existing.siloId, artifactId: existing.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(existing.expiresAt.getTime() / 1_000), expectedContentAddress: existing.expectedContentAddress, expectedByteLength: Number(existing.expectedByteLength), mediaType: existing.mediaType } } as const;
-				}
-				const lease = await transaction.artifactUploadLease.create({ data: { id: randomUUID(), artifactId: command.artifactId, siloId: command.siloId, capabilityJti: command.capabilityJti, expectedContentAddress: command.expectedContentAddress, expectedByteLength: BigInt(command.expectedByteLength), mediaType: command.mediaType, expiresAt: new Date(command.expiresAtEpochSeconds * 1_000) } });
-				return { status: "issued", lease: { leaseId: lease.id, siloId: lease.siloId, artifactId: lease.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(lease.expiresAt.getTime() / 1_000), expectedContentAddress: lease.expectedContentAddress, expectedByteLength: Number(lease.expectedByteLength), mediaType: lease.mediaType } } as const;
-			});
+			if (existing.state !== ArtifactUploadLeaseState.Active || existing.expiresAt <= new Date() || existing.artifactId !== command.artifactId || existing.siloId !== command.siloId || existing.expectedContentAddress !== command.expectedContentAddress || existing.expectedByteLength !== BigInt(command.expectedByteLength) || existing.mediaType !== command.mediaType || Math.floor(existing.expiresAt.getTime() / 1_000) !== command.expiresAtEpochSeconds) return { status: "conflict" };
+			return { status: "issued", lease: { leaseId: existing.id, siloId: existing.siloId, artifactId: existing.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(existing.expiresAt.getTime() / 1_000), expectedContentAddress: existing.expectedContentAddress, expectedByteLength: Number(existing.expectedByteLength), mediaType: existing.mediaType } };
 		}
-		catch (error)
-		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return { status: "conflict" };
-			throw error;
-		}
+
+		// 3. Persist only the exact proof facts that artifact-service must later reflect in its receipt.
+		const lease = await this.transaction.artifactUploadLease.create({ data: { id: randomUUID(), artifactId: command.artifactId, siloId: command.siloId, capabilityJti: command.capabilityJti, expectedContentAddress: command.expectedContentAddress, expectedByteLength: BigInt(command.expectedByteLength), mediaType: command.mediaType, expiresAt: new Date(command.expiresAtEpochSeconds * 1_000) } });
+		return { status: "issued", lease: { leaseId: lease.id, siloId: lease.siloId, artifactId: lease.artifactId, action: "artifact.write", expiresAtEpochSeconds: Math.floor(lease.expiresAt.getTime() / 1_000), expectedContentAddress: lease.expectedContentAddress, expectedByteLength: Number(lease.expectedByteLength), mediaType: lease.mediaType } };
 	}
 
-	/** Consumes one exact service receipt and publishes its immutable revision atomically. */
+	/** Consumes one exact service receipt and publishes its immutable revision in this transaction. */
 	async finalizeRevisionAtomically(command: FinalizeArtifactRevisionCommand): Promise<AtomicFinalizeArtifactResult>
 	{
-		try
-		{
-			return await this.prisma.$transaction(async function _finalize(transaction: Prisma.TransactionClient)
-			{
-				// 1. Lock the artifact and lease first: every path serializes on the same catalog authority.
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifacts" WHERE "id" = ${command.artifactId} FOR UPDATE`);
-				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_upload_leases" WHERE "id" = ${command.promotion.leaseId} FOR UPDATE`);
-				const existingOutbox = await transaction.artifactOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
-				if (existingOutbox !== null && existingOutbox.artifactId === command.artifactId && existingOutbox.revisionId === command.artifactRevisionId)
-				{
-					return { status: "idempotent" } as const;
-				}
+		// 1. Lock artifact and lease in the established order, then recognize an exact outbox replay.
+		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifacts" WHERE "id" = ${command.artifactId} FOR UPDATE`);
+		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_upload_leases" WHERE "id" = ${command.promotion.leaseId} FOR UPDATE`);
+		const existingOutbox = await this.transaction.artifactOutboxEvent.findUnique({ where: { idempotencyKey: command.idempotencyKey } });
+		if (existingOutbox !== null && existingOutbox.artifactId === command.artifactId && existingOutbox.revisionId === command.artifactRevisionId) return { status: "idempotent" };
 
-				const artifact = await transaction.artifact.findUnique({ where: { id: command.artifactId } });
-				if (artifact === null || artifact.state !== "Active") return { status: "artifact_not_found" } as const;
-				const lease = await transaction.artifactUploadLease.findUnique({ where: { id: command.promotion.leaseId } });
-				if (lease === null || lease.artifactId !== command.artifactId || lease.expiresAt <= new Date()) return { status: "lease_not_found" } as const;
-				if (lease.state !== ArtifactUploadLeaseState.Active) return { status: "receipt_consumed" } as const;
-				if (lease.expectedContentAddress !== command.promotion.contentAddress || lease.expectedByteLength !== BigInt(command.promotion.byteLength) || lease.mediaType !== command.promotion.mediaType)
-				{
-					return { status: "conflict" } as const;
-				}
+		const artifact = await this.transaction.artifact.findUnique({ where: { id: command.artifactId } });
+		if (artifact === null || artifact.state !== ArtifactState.Active) return { status: "artifact_not_found" };
+		const lease = await this.transaction.artifactUploadLease.findUnique({ where: { id: command.promotion.leaseId } });
+		if (lease === null || lease.artifactId !== command.artifactId || lease.expiresAt <= new Date()) return { status: "lease_not_found" };
+		if (lease.state !== ArtifactUploadLeaseState.Active) return { status: "receipt_consumed" };
+		if (lease.expectedContentAddress !== command.promotion.contentAddress || lease.expectedByteLength !== BigInt(command.promotion.byteLength) || lease.mediaType !== command.promotion.mediaType) return { status: "conflict" };
 
-				// 2. Record promotion before finalization so database lifecycle triggers preserve receipt immutability.
-				await transaction.artifactUploadLease.update({
-					where: { id: lease.id },
-					data: { state: ArtifactUploadLeaseState.Promoted, promotionReceiptDigest: command.promotion.receiptDigest, promotedContentAddress: command.promotion.contentAddress, promotedByteLength: BigInt(command.promotion.byteLength), promotedAt: new Date() },
-				});
-				await transaction.artifactRevision.create({
-					data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy },
-				});
-				await transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
+		// 2. Persist promotion evidence before the revision so lifecycle triggers preserve immutable receipt lineage.
+		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Promoted, promotionReceiptDigest: command.promotion.receiptDigest, promotedContentAddress: command.promotion.contentAddress, promotedByteLength: BigInt(command.promotion.byteLength), promotedAt: new Date() } });
+		await this.transaction.artifactRevision.create({ data: { id: command.artifactRevisionId, artifactId: command.artifactId, revision: command.revision, contentAddress: command.promotion.contentAddress, byteLength: BigInt(command.promotion.byteLength), mediaType: command.promotion.mediaType, provenance: command.provenance as Prisma.InputJsonValue, createdBy: command.createdBy } });
+		await this.transaction.artifact.update({ where: { id: command.artifactId }, data: { currentRevisionId: command.artifactRevisionId } });
 
-				// 3. Schedule the one deterministic PDF derivative in the same source-publication transaction.
-				if (command.promotion.mediaType === "application/pdf")
-				{
-					await transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
-				}
+		// 3. Record required derived work before the publication outbox makes the source externally observable.
+		if (command.promotion.mediaType === "application/pdf") await this.transaction.artifactPreprocessJob.create({ data: { sourceRevisionId: command.artifactRevisionId, pipelineVersion: _PDF_TO_TEXT_PIPELINE_VERSION } });
 
-				// 4. Publish the normal revision event only after its optional derived-work record exists.
-				await transaction.artifactOutboxEvent.create({
-					data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } },
-				});
-				await transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: new Date() } });
-				return { status: "finalized" } as const;
-			});
-		}
-		catch (error)
-		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) return { status: "conflict" };
-			throw error;
-		}
-	}
-}
-
-/** Converts generated artifact-kind values into the stable browser vocabulary. */
-function _ToKind(kind: ArtifactKind): PersonalArtifactEntry["kind"]
-{
-	switch (kind)
-	{
-		case ArtifactKind.Document: return "document";
-		case ArtifactKind.Generated: return "generated";
-		case ArtifactKind.Skill: return "skill";
-		case ArtifactKind.Upload: return "upload";
-	}
-}
-
-/** Converts generated index values into the stable browser vocabulary. */
-function _ToIndexState(state: ArtifactIndexState): NonNullable<PersonalArtifactEntry["indexState"]>
-{
-	switch (state)
-	{
-		case ArtifactIndexState.Pending: return "pending";
-		case ArtifactIndexState.Indexed: return "indexed";
-		case ArtifactIndexState.Failed: return "failed";
-		case ArtifactIndexState.RemovalPending: return "removal_pending";
-		case ArtifactIndexState.Removed: return "removed";
+		// 4. Publish the revision and consume the receipt together so no retry can duplicate either effect.
+		await this.transaction.artifactOutboxEvent.create({ data: { artifactId: command.artifactId, revisionId: command.artifactRevisionId, kind: "RevisionPublished", idempotencyKey: command.idempotencyKey, payload: { contentAddress: command.promotion.contentAddress, byteLength: command.promotion.byteLength, mediaType: command.promotion.mediaType } } });
+		await this.transaction.artifactUploadLease.update({ where: { id: lease.id }, data: { state: ArtifactUploadLeaseState.Finalized, finalizedAt: new Date() } });
+		return { status: "finalized" };
 	}
 }

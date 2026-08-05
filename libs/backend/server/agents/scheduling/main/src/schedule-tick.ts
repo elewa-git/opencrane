@@ -1,10 +1,13 @@
 import { createHash } from "node:crypto";
 
+import { AgentScheduleOverlapPolicies, ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleDenial } from "@opencrane/backend/server/agents/agent-services";
+
 import { __DueScheduledSlots, __IsValidTimezone, __ParseCronExpression } from "./cron-schedule.js";
+import { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
 import type { AgentServiceSchedule, RetryBackoffPolicy, ScheduleTickDependencies, ScheduleTickResult, ScheduledSlotOutcome } from "./schedule-tick.types.js";
 
 /** Admission denial reasons that are transient and warrant a backed-off retry rather than a drop. */
-const _RETRYABLE_DENIALS = new Set(["membership_stale", "admission_concurrency_limited", "persistence_unavailable", "authority_conflict"]);
+const _RETRYABLE_DENIALS: ReadonlySet<AgentRevisionLifecycleDenial> = new Set(["membership_stale", "admission_concurrency_limited", "persistence_unavailable", "authority_conflict"]);
 
 /**
  * Derive the deterministic idempotency key for one scheduled slot.
@@ -56,46 +59,46 @@ export function __NextBackoffDelayMs(attempt: number, policy: RetryBackoffPolicy
  */
 export async function __RunScheduleTick(schedule: AgentServiceSchedule, activeRevisionId: string | null, deps: ScheduleTickDependencies): Promise<ScheduleTickResult>
 {
-	if (!schedule.enabled) return { status: "suspended" };
+	if (!schedule.enabled) return { status: ScheduleTickStatuses.Suspended };
 	const expression = __ParseCronExpression(schedule.cron);
-	if (expression === null) return { status: "invalid_schedule", reason: "invalid_cron" };
-	if (!__IsValidTimezone(schedule.timezone)) return { status: "invalid_schedule", reason: "invalid_timezone" };
-	if (activeRevisionId === null) return { status: "invalid_schedule", reason: "service_not_runnable" };
+	if (expression === null) return { status: ScheduleTickStatuses.InvalidSchedule, reason: ScheduleInvalidReasons.InvalidCron };
+	if (!__IsValidTimezone(schedule.timezone)) return { status: ScheduleTickStatuses.InvalidSchedule, reason: ScheduleInvalidReasons.InvalidTimezone };
+	if (activeRevisionId === null) return { status: ScheduleTickStatuses.InvalidSchedule, reason: ScheduleInvalidReasons.ServiceNotRunnable };
 
 	const nowInstant = deps.clock.now().toISOString();
 	const dueSlots = __DueScheduledSlots(expression, { timezone: schedule.timezone, afterInstant: schedule.lastScheduledAt, nowInstant, catchupWindowSeconds: schedule.catchupWindowSeconds, maxSlots: deps.maxSlotsPerTick });
-	if (dueSlots.length === 0) return { status: "ticked", outcomes: [], nextLastScheduledAt: schedule.lastScheduledAt };
+	if (dueSlots.length === 0) return { status: ScheduleTickStatuses.Ticked, outcomes: [], nextLastScheduledAt: schedule.lastScheduledAt };
 
 	// The `skip` policy consults the in-flight lookup once; when a prior scheduled run is still
 	// active every due slot is dropped and the cursor jumps to the newest so they never re-fire.
-	if (schedule.overlapPolicy === "skip" && await deps.activeRuns.hasActiveScheduledRun(schedule.agentServiceId, schedule.siloId))
+	if (schedule.overlapPolicy === AgentScheduleOverlapPolicies.Skip && await deps.activeRuns.hasActiveScheduledRun(schedule.agentServiceId, schedule.siloId))
 	{
-		const skipped = dueSlots.map(function _skip(slot): ScheduledSlotOutcome { return { slot, outcome: "skipped_overlap", idempotencyKey: __ScheduledRunIdempotencyKey(schedule.agentServiceId, activeRevisionId, slot) }; });
-		return { status: "ticked", outcomes: skipped, nextLastScheduledAt: dueSlots[dueSlots.length - 1] };
+		const skipped = dueSlots.map(function _skip(slot): ScheduledSlotOutcome { return { slot, outcome: ScheduledSlotOutcomes.SkippedOverlap, idempotencyKey: __ScheduledRunIdempotencyKey(schedule.agentServiceId, activeRevisionId, slot) }; });
+		return { status: ScheduleTickStatuses.Ticked, outcomes: skipped, nextLastScheduledAt: dueSlots[dueSlots.length - 1] };
 	}
 
-	const slotsToAdmit = schedule.overlapPolicy === "skip" ? [dueSlots[0]] : dueSlots;
+	const slotsToAdmit = schedule.overlapPolicy === AgentScheduleOverlapPolicies.Skip ? [dueSlots[0]] : dueSlots;
 	const outcomes: ScheduledSlotOutcome[] = [];
 	let cursor = schedule.lastScheduledAt;
 	for (const slot of slotsToAdmit)
 	{
 		const idempotencyKey = __ScheduledRunIdempotencyKey(schedule.agentServiceId, activeRevisionId, slot);
 		const result = await deps.admission.admitManagedRun({ agentServiceId: schedule.agentServiceId, siloId: schedule.siloId, requestedBy: deps.schedulerSubjectId, requestIdempotencyKey: idempotencyKey, trigger: "schedule", scheduledSlot: slot });
-		if (result.outcome === "accepted" || result.outcome === "idempotent")
+		if (result.outcome === ManagedRunAdmissionOutcomes.Accepted || result.outcome === ManagedRunAdmissionOutcomes.Idempotent)
 		{
-			outcomes.push({ slot, outcome: result.outcome, runId: result.runId, idempotencyKey });
+			outcomes.push({ slot, outcome: result.outcome === ManagedRunAdmissionOutcomes.Accepted ? ScheduledSlotOutcomes.Accepted : ScheduledSlotOutcomes.Idempotent, runId: result.runId, idempotencyKey });
 			cursor = slot;
 			continue;
 		}
 		// A transient admission failure stops the tick without advancing past the failed slot, so the
-			// next tick retries the same slot; the hint lets a durable caller decide how long to wait.
+		// next tick retries the same slot; the hint lets a durable caller decide how long to wait.
 		if (_RETRYABLE_DENIALS.has(result.reason))
 		{
-			outcomes.push({ slot, outcome: "retry_hint", reason: result.reason, retryAfterMs: __NextBackoffDelayMs(1, deps.backoff), idempotencyKey });
-			return { status: "ticked", outcomes, nextLastScheduledAt: cursor };
+			outcomes.push({ slot, outcome: ScheduledSlotOutcomes.RetryHint, reason: result.reason, retryAfterMs: __NextBackoffDelayMs(1, deps.backoff), idempotencyKey });
+			return { status: ScheduleTickStatuses.Ticked, outcomes, nextLastScheduledAt: cursor };
 		}
-		outcomes.push({ slot, outcome: "denied", reason: result.reason, idempotencyKey });
+		outcomes.push({ slot, outcome: ScheduledSlotOutcomes.Denied, reason: result.reason, idempotencyKey });
 		cursor = slot;
 	}
-	return { status: "ticked", outcomes, nextLastScheduledAt: cursor };
+	return { status: ScheduleTickStatuses.Ticked, outcomes, nextLastScheduledAt: cursor };
 }

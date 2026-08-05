@@ -1,5 +1,7 @@
 import type { Router } from "express";
 
+import type { SkillWorkloadBootstrapAuthority } from "./skill-workload-authority.types.js";
+
 /** TokenReview-confirmed identity of one governed skill worker Pod. */
 export interface SkillWorkloadBootstrapIdentity
 {
@@ -37,15 +39,6 @@ export interface SkillWorkloadBootstrapRecord
 	readonly podUid: string;
 }
 
-/** Persistence boundary for exact bootstrap lookup and one-time consumption. */
-export interface SkillWorkloadBootstrapRepository
-{
-	/** Loads a still-unconsumed bootstrap authority by hash without accepting a worker identity. */
-	loadUnconsumedByReferenceHash(referenceHash: string): Promise<SkillWorkloadBootstrapRecord | null>;
-	/** Atomically consumes the same reference only under its exact reviewed identity. */
-	consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">;
-}
-
 /** Minimal structured logger surface for the internal worker bootstrap boundary. */
 export interface SkillWorkloadBootstrapLogger
 {
@@ -58,8 +51,8 @@ export interface SkillWorkloadBootstrapRouterDependencies
 {
 	/** TokenReview adapter supplied by the OpenCrane process boundary. */
 	readonly tokenReviewer: SkillWorkloadBootstrapTokenReviewer;
-	/** Durable one-use bootstrap authority. */
-	readonly repository: SkillWorkloadBootstrapRepository;
+	/** Durable one-use bootstrap application authority. */
+	readonly authority: SkillWorkloadBootstrapAuthority;
 	/** Shared structured logger. */
 	readonly logger: SkillWorkloadBootstrapLogger;
 }

@@ -5,7 +5,7 @@ These capabilities govern the managed-agent product plane.
 - `agent-services` publishes immutable agent-service revisions, owns schedules, and enforces scope
   attach-authority + effective access.
 - `scheduling` evaluates a managed-agent schedule into due runs and admits them idempotently.
-- `skills` publishes `SkillRevision` records backed by ArtifactStore.
+- `skills` exposes a browser-safe, silo-scoped catalogue of governed skill metadata.
 - `artifacts` is the finalisation authority for artifact metadata.
 - `channel-targets` authorizes a channel target for a specific operation.
 - `conversation-replay` reads an authorised thread snapshot and returns only display-safe AG-UI SSE

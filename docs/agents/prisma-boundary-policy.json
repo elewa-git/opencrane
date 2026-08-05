@@ -34,6 +34,97 @@
         "contract": "OrgMembershipRepository",
         "contractImportPath": "./org-membership.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts",
+        "adapter": "PrismaSkillWorkloadAssignmentRepository",
+        "contract": "SkillWorkloadAssignmentRepository",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-release-repository.ts",
+        "adapter": "PrismaSkillWorkloadReleaseRepository",
+        "contract": "SkillWorkloadReleaseRepository",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-bootstrap-repository.ts",
+        "adapter": "PrismaSkillWorkloadBootstrapRepository",
+        "contract": "SkillWorkloadBootstrapRepository",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-authoring-completion-repository.ts",
+        "adapter": "PrismaSkillAuthoringCompletionRepository",
+        "contract": "SkillAuthoringCompletionRepository",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-authoring-input-repository.ts",
+        "adapter": "PrismaSkillAuthoringInputRepository",
+        "contract": "SkillAuthoringInputRepository",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.ts",
+        "adapter": "PrismaArtifactAuthorityRepository",
+        "contract": "ArtifactAuthorityRepository",
+        "contractImportPath": "./artifact-finalization.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-catalogue-repository.ts",
+        "adapter": "PrismaArtifactCatalogueRepository",
+        "contract": "ArtifactReadLeaseRepository",
+        "contractImportPath": "./artifact-read-lease.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-preprocessing.ts",
+        "adapter": "PrismaArtifactPreprocessRepository",
+        "contract": "ArtifactPreprocessRepository",
+        "contractImportPath": "./artifact-preprocessing.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
+        "adapter": "_PrismaConversationReplayRepository",
+        "contract": "ConversationReplayRepository",
+        "contractImportPath": "./replay-reader.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
+        "adapter": "PrismaEnabledScheduleSnapshotRepository",
+        "contract": "EnabledScheduleSnapshotRepository",
+        "contractImportPath": "./schedule-ticker-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
+        "adapter": "PrismaActiveScheduledRunRepository",
+        "contract": "ActiveScheduledRunRepository",
+        "contractImportPath": "./schedule-ticker-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-repositories.ts",
+        "adapter": "PrismaScheduleCursorRepository",
+        "contract": "ScheduleCursorRepository",
+        "contractImportPath": "./schedule-ticker-unit-of-work.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/agents/skills/main/src/prisma-skill-catalogue-repository.ts",
+        "adapter": "PrismaSkillCatalogueRepository",
+        "contract": "SkillCatalogueRepository",
+        "contractImportPath": "./skill-catalogue.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -52,13 +143,88 @@
             "importPath": "./prisma-personal-configuration-materialization.js"
           }
         ]
+      },
+      {
+        "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-unit-of-work.ts",
+        "adapter": "PrismaSkillWorkloadUnitOfWork",
+        "contract": "SkillWorkloadExecutionUnitOfWork",
+        "contractImportPath": "./skill-workload-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaSkillWorkloadAssignmentRepository",
+            "importPath": "./prisma-skill-workload-assignment-repository.js"
+          },
+          {
+            "adapter": "PrismaSkillWorkloadReleaseRepository",
+            "importPath": "./prisma-skill-workload-release-repository.js"
+          },
+          {
+            "adapter": "PrismaSkillWorkloadBootstrapRepository",
+            "importPath": "./prisma-skill-workload-bootstrap-repository.js"
+          },
+          {
+            "adapter": "PrismaSkillAuthoringCompletionRepository",
+            "importPath": "./prisma-skill-authoring-completion-repository.js"
+          },
+          {
+            "adapter": "PrismaSkillAuthoringInputRepository",
+            "importPath": "./prisma-skill-authoring-input-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-preprocess-unit-of-work.ts",
+        "adapter": "PrismaArtifactPreprocessUnitOfWork",
+        "contract": "ArtifactPreprocessUnitOfWork",
+        "contractImportPath": "./artifact-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactPreprocessRepository",
+            "importPath": "./prisma-artifact-preprocessing.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/artifacts/main/src/prisma-artifact-publication-unit-of-work.ts",
+        "adapter": "PrismaArtifactPublicationUnitOfWork",
+        "contract": "ArtifactPublicationUnitOfWork",
+        "contractImportPath": "./artifact-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaArtifactAuthorityRepository",
+            "importPath": "./prisma-artifact-authority.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/agents/scheduling/main/src/prisma-schedule-tick-unit-of-work.ts",
+        "adapter": "PrismaScheduleTickerUnitOfWork",
+        "contract": "ScheduleTickerUnitOfWork",
+        "contractImportPath": "./schedule-ticker-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaEnabledScheduleSnapshotRepository",
+            "importPath": "./prisma-schedule-tick-repositories.js"
+          },
+          {
+            "adapter": "PrismaActiveScheduledRunRepository",
+            "importPath": "./prisma-schedule-tick-repositories.js"
+          },
+          {
+            "adapter": "PrismaScheduleCursorRepository",
+            "importPath": "./prisma-schedule-tick-repositories.js"
+          }
+        ]
       }
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
-      "libs/backend/server/iam/identity/main/src/oidc.service.ts",
-      "libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
+		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
+		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
+		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
+		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
+		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },
   "exemptions": [

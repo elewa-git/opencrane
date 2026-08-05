@@ -1,7 +1,6 @@
-import type { ManagedRunAdmissionPort, ManagedRunAdmissionResult } from "@opencrane/backend/server/agents/agent-services";
+import type { AgentScheduleOverlapPolicies, ManagedRunAdmissionPort, ManagedRunAdmissionResult } from "@opencrane/backend/server/agents/agent-services";
 
-/** Behaviour when a prior scheduled run of the same service is still active. */
-export type ScheduleOverlapPolicy = "skip" | "allow";
+import type { ScheduleInvalidReasons, ScheduledSlotOutcomes, ScheduleTickStatuses } from "./schedule-tick.enums.js";
 
 /** One recurring schedule bound to a managed AgentService's active revision. */
 export interface AgentServiceSchedule
@@ -17,7 +16,7 @@ export interface AgentServiceSchedule
 	/** IANA timezone the cron expression is evaluated in. */
 	readonly timezone: string;
 	/** Behaviour when a prior scheduled run is still active. */
-	readonly overlapPolicy: ScheduleOverlapPolicy;
+	readonly overlapPolicy: AgentScheduleOverlapPolicies;
 	/** Whether evaluation is active; `false` suspends the schedule without deleting it. */
 	readonly enabled: boolean;
 	/** Bounded catch-up horizon in seconds. */
@@ -70,16 +69,16 @@ export interface ScheduleTickDependencies
 
 /** Why a due slot was not admitted, or how it was admitted. */
 export type ScheduledSlotOutcome =
-	| { readonly slot: string; readonly outcome: "accepted" | "idempotent"; readonly runId: string; readonly idempotencyKey: string }
-	| { readonly slot: string; readonly outcome: "skipped_overlap"; readonly idempotencyKey: string }
-	| { readonly slot: string; readonly outcome: "retry_hint"; readonly reason: string; readonly retryAfterMs: number; readonly idempotencyKey: string }
-	| { readonly slot: string; readonly outcome: "denied"; readonly reason: string; readonly idempotencyKey: string };
+	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.Accepted | ScheduledSlotOutcomes.Idempotent; readonly runId: string; readonly idempotencyKey: string }
+	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.SkippedOverlap; readonly idempotencyKey: string }
+	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.RetryHint; readonly reason: string; readonly retryAfterMs: number; readonly idempotencyKey: string }
+	| { readonly slot: string; readonly outcome: ScheduledSlotOutcomes.Denied; readonly reason: string; readonly idempotencyKey: string };
 
 /** Result of evaluating one schedule at one instant. */
 export type ScheduleTickResult =
-	| { readonly status: "suspended" }
-	| { readonly status: "invalid_schedule"; readonly reason: "invalid_cron" | "invalid_timezone" | "service_not_runnable" }
-	| { readonly status: "ticked"; readonly outcomes: readonly ScheduledSlotOutcome[]; readonly nextLastScheduledAt: string | null };
+	| { readonly status: ScheduleTickStatuses.Suspended }
+	| { readonly status: ScheduleTickStatuses.InvalidSchedule; readonly reason: ScheduleInvalidReasons }
+	| { readonly status: ScheduleTickStatuses.Ticked; readonly outcomes: readonly ScheduledSlotOutcome[]; readonly nextLastScheduledAt: string | null };
 
 /** Re-export of the admission result union for adapters composing the tick. */
 export type { ManagedRunAdmissionResult };

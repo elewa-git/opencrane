@@ -2,7 +2,7 @@ import type { Request } from "express";
 
 import type { Logger } from "@opencrane/backend/observability";
 
-import type { SkillCatalogueRepository } from "./skill-publication.types.js";
+import type { SkillCatalogueRepository } from "./skill-catalogue.types.js";
 
 /** Trusted browser identity used only to select a skill catalogue silo. */
 export interface SkillCatalogueCaller

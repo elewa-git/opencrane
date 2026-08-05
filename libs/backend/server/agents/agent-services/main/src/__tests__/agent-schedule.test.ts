@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { __CreateAgentSchedule, __UpdateAgentSchedule } from "../agent-schedule.js";
-import type { AgentScheduleMutationResult, AgentScheduleRepository, AgentServiceScheduleRecord, CreateAgentScheduleCommand, UpdateAgentScheduleCommand } from "../agent-schedule.types.js";
+import { AgentScheduleOverlapPolicies, type AgentScheduleMutationResult, type AgentScheduleRepository, type AgentServiceScheduleRecord, type CreateAgentScheduleCommand, type UpdateAgentScheduleCommand } from "../agent-schedule.types.js";
 
 /** In-memory schedule repository that records the last create/update it received. */
 class _Repository implements AgentScheduleRepository
@@ -25,13 +25,13 @@ class _Repository implements AgentScheduleRepository
 /** Builds a schedule record fixture. */
 function _record(cron: string, timezone: string, at: string): AgentServiceScheduleRecord
 {
-	return { id: "sched-1", siloId: "silo-1", agentServiceId: "svc-1", cron, timezone, overlapPolicy: "skip", enabled: true, catchupWindowSeconds: 3600, lastScheduledAt: null, createdAt: at, updatedAt: at };
+	return { id: "sched-1", siloId: "silo-1", agentServiceId: "svc-1", cron, timezone, overlapPolicy: AgentScheduleOverlapPolicies.Skip, enabled: true, catchupWindowSeconds: 3600, lastScheduledAt: null, createdAt: at, updatedAt: at };
 }
 
 /** Builds a valid create command with optional overrides. */
 function _create(overrides: Partial<CreateAgentScheduleCommand> = {}): CreateAgentScheduleCommand
 {
-	return { siloId: "silo-1", agentServiceId: "svc-1", cron: "0 9 * * 1-5", timezone: "Europe/Brussels", overlapPolicy: "skip", enabled: true, catchupWindowSeconds: 3600, ...overrides };
+	return { siloId: "silo-1", agentServiceId: "svc-1", cron: "0 9 * * 1-5", timezone: "Europe/Brussels", overlapPolicy: AgentScheduleOverlapPolicies.Skip, enabled: true, catchupWindowSeconds: 3600, ...overrides };
 }
 
 describe("schedule create/update validation", function _Suite()
@@ -69,9 +69,9 @@ describe("schedule create/update validation", function _Suite()
 	it("validates the same rules on update", async function _UpdateValidates()
 	{
 		const repository = new _Repository();
-		const bad = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "bad", timezone: "UTC", overlapPolicy: "allow", enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
+		const bad = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "bad", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
 		expect(bad).toEqual({ outcome: "denied", reason: "invalid_cron" });
-		const ok = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "*/15 * * * *", timezone: "UTC", overlapPolicy: "allow", enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
+		const ok = await __UpdateAgentSchedule(repository, { siloId: "silo-1", agentServiceId: "svc-1", scheduleId: "sched-1", cron: "*/15 * * * *", timezone: "UTC", overlapPolicy: AgentScheduleOverlapPolicies.Allow, enabled: false, catchupWindowSeconds: 60 }, "2026-07-01T00:00:00.000Z");
 		expect(ok.outcome).toBe("ok");
 	});
 });

@@ -1,9 +1,8 @@
-import { createHash } from "node:crypto";
-
 import { __BuildGovernedSkillWorkloadJob, type SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
+import { __CreateSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
-import type { SkillWorkloadControllerOptions, SkillWorkloadControllerProfiles, SkillWorkloadControllerReconcileResult, SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
+import { SkillWorkloadControllerReconcileOutcomes, type SkillWorkloadControllerOptions, type SkillWorkloadControllerProfiles, type SkillWorkloadControllerReconcileResult, type SkillWorkloadControllerReleaseReconcileResult } from "./skill-workload-controller.types.js";
 
 /** Require the immutable Kubernetes UID returned by the API rather than a derived identifier. */
 function _RequireWorkloadUid(uid: string | undefined): string
@@ -13,16 +12,6 @@ function _RequireWorkloadUid(uid: string | undefined): string
 		throw new Error("Kubernetes did not return an immutable UID for the suspended governed skill Job");
 	}
 	return uid;
-}
-
-/** Derive a stable opaque reference without projecting the workload's durable identifier into Kubernetes. */
-function _CapabilityReference(workloadId: string): string
-{
-	if (!/^[a-zA-Z0-9_-]{1,128}$/.test(workloadId))
-	{
-		throw new Error("governed skill workload id is not safe to project into a capability reference");
-	}
-	return `skill-bootstrap-v1_${createHash("sha256").update(workloadId, "utf8").digest("hex")}`;
 }
 
 /** Require the immutable Pod UID returned by Kubernetes instead of trusting a container value. */
@@ -90,7 +79,7 @@ export function __ValidateSkillWorkloadControllerProfiles(value: unknown): Skill
 		{
 			throw new Error(`skill workload controller ${kind} profile has the wrong workload class`);
 		}
-		__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: _CapabilityReference("profile-validation") }, profile);
+		__BuildGovernedSkillWorkloadJob({ jobId: "profile-validation", siloId: "profile-validation", namespace: profile.namespace, capabilityReference: `skill-bootstrap-v1_${"0".repeat(64)}` }, profile);
 		profiles[kind] = profile;
 	}
 	return profiles;
@@ -103,7 +92,7 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 	{
 		// 1. Claim the durable release fence; Kubernetes never chooses or reconstructs authority state.
 		const claim = await options.authority.__ClaimRelease(signal);
-		if (claim === null) return { outcome: "idle" };
+		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the exact immutable Job from deployment-owned class policy and opaque reference.
 		const profile = options.profiles[claim.kind];
@@ -111,7 +100,8 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 		{
 			throw new Error("governed skill workload release does not match a bounded isolated profile");
 		}
-		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference: _CapabilityReference(claim.workloadId) }, profile);
+		const capabilityReference = await __CreateSkillWorkloadBootstrapReference(claim.workloadId);
+		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Compare-and-swap only suspend=true to false, then durably commit that exact release fence.
 		await options.kubernetes.__EnsureSkillJobReleased(job, claim.workloadUid, claim.expiresAt);
@@ -120,12 +110,12 @@ export async function __ReconcileNextSkillWorkloadRelease(options: SkillWorkload
 
 		// 4. Bind the first exact Job-owned Pod before a worker may exchange its bootstrap reference.
 		const pod = await options.kubernetes.__FindFirstSkillWorkloadPod(job, claim.workloadUid, profile.serviceAccountName);
-		if (pod === null) return { outcome: "pending-pod", workloadId: claim.workloadId, workloadUid: claim.workloadUid };
+		if (pod === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.PendingPod, workloadId: claim.workloadId, workloadUid: claim.workloadUid };
 		const podUid = _RequirePodUid(pod.metadata?.uid);
 		const registered = await options.authority.__RegisterFirstPod(claim.workloadId, { releaseClaimedAt: claim.releaseClaimedAt, releaseDeliveryCount: claim.releaseDeliveryCount, workloadUid: claim.workloadUid, podUid }, signal);
 		if (registered === "conflict") throw new Error("governed skill workload Pod registration lost its durable release fence");
 		options.log.info({ workloadId: claim.workloadId, workloadUid: claim.workloadUid, podUid, outcome: registered }, "governed skill workload released and first Pod registered");
-		return { outcome: registered === "registered" ? "registered" : "idempotent", workloadId: claim.workloadId, workloadUid: claim.workloadUid, podUid };
+		return { outcome: registered === "registered" ? SkillWorkloadControllerReconcileOutcomes.Registered : SkillWorkloadControllerReconcileOutcomes.Idempotent, workloadId: claim.workloadId, workloadUid: claim.workloadUid, podUid };
 	});
 }
 
@@ -136,24 +126,25 @@ export async function __ReconcileNextSkillWorkload(options: SkillWorkloadControl
 	{
 		// 1. Read only the server-owned desired state; Kubernetes never decides which work may run.
 		const claim = await options.authority.__Claim(signal);
-		if (claim === null) return { outcome: "idle" };
+		if (claim === null) return { outcome: SkillWorkloadControllerReconcileOutcomes.Idle };
 
 		// 2. Rebuild the exact hardened suspended Job from a fixed class profile and opaque reference.
 		const profile = options.profiles[claim.kind];
-		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference: _CapabilityReference(claim.workloadId) }, profile);
+		const capabilityReference = await __CreateSkillWorkloadBootstrapReference(claim.workloadId);
+		const job = __BuildGovernedSkillWorkloadJob({ jobId: claim.workloadId, siloId: claim.siloId, namespace: profile.namespace, capabilityReference }, profile);
 
 		// 3. Create or exact-adopt the inert Job and accept only the API-issued immutable UID.
 		const persistedJob = await options.kubernetes.__EnsureSuspendedJob(job);
 		const workloadUid = _RequireWorkloadUid(persistedJob.metadata?.uid);
 
 		// 4. Commit the same database claim generation; a stale replica can never assign this Job.
-		const outcome = await options.authority.__CommitAssignment(claim.workloadId, { claimedAt: claim.claimedAt, deliveryCount: claim.deliveryCount, workloadUid, bootstrapReference: _CapabilityReference(claim.workloadId), namespace: profile.namespace }, signal);
+		const outcome = await options.authority.__CommitAssignment(claim.workloadId, { claimedAt: claim.claimedAt, deliveryCount: claim.deliveryCount, workloadUid, bootstrapReference: capabilityReference, namespace: profile.namespace }, signal);
 		if (outcome === "conflict")
 		{
 			throw new Error("governed skill workload assignment lost its database claim fence");
 		}
 		options.log.info({ workloadId: claim.workloadId, workloadUid, outcome }, "governed skill workload assigned to suspended Job");
-		return { outcome, workloadId: claim.workloadId, workloadUid };
+		return { outcome: outcome === "assigned" ? SkillWorkloadControllerReconcileOutcomes.Assigned : SkillWorkloadControllerReconcileOutcomes.Idempotent, workloadId: claim.workloadId, workloadUid };
 	});
 }
 
@@ -170,7 +161,7 @@ export async function __RunSkillWorkloadController(options: SkillWorkloadControl
 		try
 		{
 			const result = await __ReconcileNextSkillWorkload(options, signal);
-			didWork = result.outcome !== "idle";
+			didWork = result.outcome !== SkillWorkloadControllerReconcileOutcomes.Idle;
 		}
 		catch (err)
 		{
@@ -180,7 +171,7 @@ export async function __RunSkillWorkloadController(options: SkillWorkloadControl
 		try
 		{
 			const release = await __ReconcileNextSkillWorkloadRelease(options, signal);
-			didWork = didWork || (release.outcome !== "idle" && release.outcome !== "pending-pod");
+			didWork = didWork || (release.outcome !== SkillWorkloadControllerReconcileOutcomes.Idle && release.outcome !== SkillWorkloadControllerReconcileOutcomes.PendingPod);
 		}
 		catch (err)
 		{

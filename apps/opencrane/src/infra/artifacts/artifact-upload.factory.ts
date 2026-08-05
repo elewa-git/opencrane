@@ -4,7 +4,7 @@ import { Readable } from "node:stream";
 import type { PrismaClient } from "@prisma/client";
 
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
-import { __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, PrismaArtifactAuthorityRepository, PrismaArtifactPreprocessRepository, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
+import { _CreateArtifactCatalogueRepository, _CreateArtifactPreprocessAuthority, _CreateArtifactUploadAuthority, __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
@@ -19,7 +19,7 @@ export function _CreateArtifactUploadGateway(prisma: PrismaClient, environment: 
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");
 	const receiptPublicKey = _ReadArtifactMountedPem(environment.ARTIFACT_RECEIPT_PUBLIC_KEY_PATH, "ARTIFACT_RECEIPT_PUBLIC_KEY_PATH");
-	const repository = new PrismaArtifactAuthorityRepository(prisma);
+	const repository = _CreateArtifactUploadAuthority(prisma);
 	return {
 		upload(command: VerifiedArtifactUploadCommand): Promise<ArtifactUploadResult>
 		{
@@ -55,7 +55,7 @@ function _PromotionReceipt(value: unknown): { readonly receipt: string }
 /** Build the only server-side bridge from a fenced authoring input to verified ArtifactStore bytes. */
 export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, environment: NodeJS.ProcessEnv = process.env): SkillAuthoringArtifactReader
 {
-	const repository = new PrismaArtifactAuthorityRepository(prisma);
+	const repository = _CreateArtifactCatalogueRepository(prisma);
 	return {
 		async read(input: SkillAuthoringInputRecord): Promise<ReadableStream<Uint8Array>>
 		{
@@ -78,7 +78,7 @@ export function _CreateSkillAuthoringArtifactReader(prisma: PrismaClient, enviro
 export function _CreateArtifactPreprocessOutputBroker(prisma: PrismaClient, maximumOutputBytes: number, environment: NodeJS.ProcessEnv = process.env): ArtifactPreprocessOutputBroker
 {
 	if (!Number.isSafeInteger(maximumOutputBytes) || maximumOutputBytes <= 0) throw new Error("maximumOutputBytes must be a positive safe integer");
-	const jobs = new PrismaArtifactPreprocessRepository(prisma);
+	const jobs = _CreateArtifactPreprocessAuthority(prisma);
 	const serviceUrl = _InternalArtifactServiceUrl(environment.ARTIFACT_SERVICE_URL ?? "");
 	const promotionPort = _CreateArtifactServicePromotionPort(serviceUrl);
 	const leasePrivateKey = _ReadArtifactMountedPem(environment.ARTIFACT_LEASE_PRIVATE_KEY_PATH, "ARTIFACT_LEASE_PRIVATE_KEY_PATH");

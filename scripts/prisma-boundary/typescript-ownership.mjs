@@ -52,15 +52,19 @@ export function authorizedOwner(owner, imports, allowedContracts, path)
 export function repositoryConstructions(source, classCandidates, imports)
 {
 	const constructions = [];
-	const pattern = /\bnew\s+([A-Za-z_$][\w$]*Repository)\s*\(([^)]*)\)/gu;
+	const pattern = /\bnew\s+([A-Za-z_$][\w$]*Repository)\s*\(/gu;
 	for (const match of source.matchAll(pattern))
 	{
 		const owner = enclosingClass(classCandidates, match.index ?? 0);
 		const binding = imports.get(match[1]);
 		const sameFile = classCandidates.some(function _SameFile(candidate) { return candidate.name === match[1]; });
+		const open = (match.index ?? 0) + match[0].lastIndexOf("(");
+		const close = _MatchingDelimiter(source, open, "(", ")");
+		const argumentsList = _SplitTopLevel(source.slice(open + 1, close));
 		constructions.push({
 			adapter: match[1],
-			argument: match[2].trim(),
+			argument: argumentsList[0] ?? "",
+			arguments: argumentsList,
 			importPath: binding?.importPath ?? (sameFile ? "<same-file>" : "<unbound>"),
 			index: match.index ?? 0,
 			owner,
@@ -72,6 +76,10 @@ export function repositoryConstructions(source, classCandidates, imports)
 /** Returns whether a repository receives the exact transaction binding in scope. */
 export function isTransactionScopedConstruction(source, construction, imports)
 {
+	if (construction.arguments.slice(1).some(function _RootClient(argument)
+	{
+		return _ContainsRootPrismaClient(source, construction.owner, argument, imports);
+	})) return false;
 	if (!/^(?:this\.)?[A-Za-z_$][\w$]*$/u.test(construction.argument)) return false;
 	if (construction.argument.startsWith("this."))
 	{
@@ -92,8 +100,21 @@ export function repositoryAcceptsTransactionClient(source, owner, imports)
 	const types = _TransactionClientTypes(imports);
 	if (types.length === 0) return false;
 	const body = source.slice(owner.start, owner.end + 1);
-	const pattern = new RegExp(`\\bconstructor\\s*\\(\\s*[A-Za-z_$][\\w$]*\\s*:\\s*(?:${types.join("|")})\\b`, "u");
-	return pattern.test(body);
+	const constructor = /\bconstructor\s*\(/u.exec(body);
+	if (constructor === null) return false;
+	const open = constructor.index + constructor[0].lastIndexOf("(");
+	const close = _MatchingDelimiter(body, open, "(", ")");
+	const parameters = _SplitTopLevel(body.slice(open + 1, close));
+	const transactionPattern = new RegExp(`\\b[A-Za-z_$][\\w$]*\\s*:\\s*(?:${types.join("|")})\\b`, "u");
+	if (!transactionPattern.test(parameters[0] ?? "")) return false;
+	const prismaClientTypes = _PrismaClientTypes(imports);
+	if (prismaClientTypes.length === 0) return true;
+	const rootPattern = new RegExp(`\\b(?:${prismaClientTypes.join("|")})\\b`, "u");
+	return !parameters.slice(1).some(function _RootParameter(parameter)
+	{
+		const colon = parameter.indexOf(":");
+		return colon >= 0 && rootPattern.test(parameter.slice(colon + 1));
+	});
 }
 
 /** Finds the smallest class body containing one source offset. */
@@ -156,6 +177,121 @@ function _MatchingBrace(source, open)
 	return source.length;
 }
 
+/** Finds a matching delimiter while ignoring nested delimiters, strings, and comments. */
+function _MatchingDelimiter(source, open, opening, closing)
+{
+	let depth = 0;
+	let quote = "";
+	let lineComment = false;
+	let blockComment = false;
+	for (let index = open; index < source.length; index += 1)
+	{
+		const character = source[index];
+		const next = source[index + 1];
+		if (lineComment)
+		{
+			if (character === "\n") lineComment = false;
+			continue;
+		}
+		if (blockComment)
+		{
+			if (character === "*" && next === "/") { blockComment = false; index += 1; }
+			continue;
+		}
+		if (quote)
+		{
+			if (character === "\\") { index += 1; continue; }
+			if (character === quote) quote = "";
+			continue;
+		}
+		if (character === "/" && next === "/") { lineComment = true; index += 1; continue; }
+		if (character === "/" && next === "*") { blockComment = true; index += 1; continue; }
+		if (character === "\"" || character === "'" || character === "`") { quote = character; continue; }
+		if (character === opening) depth += 1;
+		if (character === closing)
+		{
+			depth -= 1;
+			if (depth === 0) return index;
+		}
+	}
+	return source.length;
+}
+
+/** Splits a comma-separated TypeScript list without splitting nested expressions. */
+function _SplitTopLevel(source)
+{
+	const values = [];
+	let start = 0;
+	let round = 0;
+	let square = 0;
+	let curly = 0;
+	let angle = 0;
+	let quote = "";
+	for (let index = 0; index < source.length; index += 1)
+	{
+		const character = source[index];
+		if (quote)
+		{
+			if (character === "\\") { index += 1; continue; }
+			if (character === quote) quote = "";
+			continue;
+		}
+		if (character === "\"" || character === "'" || character === "`") { quote = character; continue; }
+		if (character === "(") round += 1;
+		if (character === ")") round -= 1;
+		if (character === "[") square += 1;
+		if (character === "]") square -= 1;
+		if (character === "{") curly += 1;
+		if (character === "}") curly -= 1;
+		if (character === "<") angle += 1;
+		if (character === ">") angle -= 1;
+		if (character === "," && round === 0 && square === 0 && curly === 0 && angle === 0)
+		{
+			values.push(source.slice(start, index).trim());
+			start = index + 1;
+		}
+	}
+	const tail = source.slice(start).trim();
+	if (tail.length > 0) values.push(tail);
+	return values;
+}
+
+/** Returns whether an additional constructor argument exposes a root PrismaClient binding. */
+function _ContainsRootPrismaClient(source, owner, argument, imports)
+{
+	if (owner === undefined) return false;
+	const types = _PrismaClientTypes(imports);
+	if (types.length === 0) return false;
+	const body = source.slice(owner.start, owner.end + 1);
+	const bindingPattern = new RegExp(`\\b([A-Za-z_$][\\w$]*)\\s*:\\s*(?:${types.join("|")})\\b`, "gu");
+	const rootBindings = new Set();
+	for (const match of body.matchAll(bindingPattern)) rootBindings.add(match[1]);
+	if (/\bthis\.prisma\b/u.test(body)) rootBindings.add("prisma");
+	const aliasPattern = /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*([^;]+);/gu;
+	let added = true;
+	while (added)
+	{
+		added = false;
+		for (const match of body.matchAll(aliasPattern))
+		{
+			if (rootBindings.has(match[1]) || !_ContainsBinding(match[2], rootBindings)) continue;
+			rootBindings.add(match[1]);
+			added = true;
+		}
+	}
+	return _ContainsBinding(argument, rootBindings);
+}
+
+/** Returns whether an expression references one of the named root-client bindings. */
+function _ContainsBinding(expression, bindings)
+{
+	for (const binding of bindings)
+	{
+		if (new RegExp(`(?:\\bthis\\.|\\b)${_EscapeRegex(binding)}\\b`, "u").test(expression)) return true;
+	}
+	return false;
+}
+
 /** Finds transaction-client properties declared by one class. */
 function _TransactionClientProperties(source, owner, imports)
 {
@@ -177,6 +313,17 @@ function _TransactionClientTypes(imports)
 		if (binding.importPath !== "@prisma/client") continue;
 		if (binding.imported === "Prisma") types.push(`${_EscapeRegex(local)}\\.TransactionClient`);
 		if (binding.imported === "TransactionClient") types.push(_EscapeRegex(local));
+	}
+	return types;
+}
+
+/** Returns local type spellings that identify a root PrismaClient. */
+function _PrismaClientTypes(imports)
+{
+	const types = [];
+	for (const [local, binding] of imports.entries())
+	{
+		if (binding.importPath === "@prisma/client" && binding.imported === "PrismaClient") types.push(_EscapeRegex(local));
 	}
 	return types;
 }

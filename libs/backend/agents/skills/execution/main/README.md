@@ -4,10 +4,11 @@
 
 ## What it owns
 
-This package owns the database-fenced claim and assignment contract for isolated candidate-skill and
-tenant-tool Jobs. The OpenCrane server gives the agent controller a single authenticated internal
-route; the controller claims a workload, creates a still-suspended Job, then returns the
-Kubernetes-issued Job UID for an exact durable assignment.
+This package owns the database-fenced lifecycle for isolated candidate-skill and tenant-tool Jobs.
+The OpenCrane server composes one unit of work (a short, all-or-nothing database operation) and one
+application authority, then gives the agent controller a single authenticated internal route. The
+controller claims a workload, creates a still-suspended Job, and returns its Kubernetes-issued UID
+for an exact durable assignment.
 
 ```
  durable SkillWorkload ──► controller-only API ──► claim generation
@@ -22,10 +23,12 @@ Kubernetes-issued Job UID for an exact durable assignment.
 [agent controller](../../../../../../../apps/agent-controller/README.md).
 
 A claim identifies one durable delivery generation; an assignment can bind only the Kubernetes Job
-UID created for that exact generation. At that same durable step it hashes the opaque reference
-already projected into the Job and creates the one-use bootstrap record. This order makes a crash
-safe: an uncommitted Job remains suspended and is safe to adopt later, while a stale controller
-cannot attach a different Job or replace its reference.
+UID created for that exact generation. The transaction-scoped assignment repository owns that
+transition, while a separate release repository owns unsuspending the Job and registering its first
+Pod. At assignment it hashes the opaque reference already projected into the Job and creates the
+one-use bootstrap record. This order makes a crash safe: an uncommitted Job remains suspended and
+is safe to adopt later, while a stale controller cannot attach a different Job or replace its
+reference.
 
 It does not create Kubernetes resources, grant a worker capability, hold ArtifactStore credentials,
 or complete tool invocations. It exposes the narrow one-use acknowledgement route: the shared worker
@@ -37,13 +40,15 @@ remains a separate authority: it must complete its linked `ToolInvocation`, not 
 
 ## Public surface
 
-- `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
+- `SkillWorkloadClaim` — one database-issued delivery generation.
+- `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID and opaque-reference fence.
+- `PrismaSkillWorkloadUnitOfWork` — the sole root Prisma client and transaction owner for this package.
+- `_CreateSkillWorkloadExecutionAuthority` — composes transaction-scoped assignment, release,
+  bootstrap, authoring-input, and authoring-completion repositories for the four internal routes.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 - `__CreateSkillWorkloadBootstrapRouter` — consumes one opaque bootstrap reference only for the
   exact TokenReview-confirmed worker Pod.
-- `PrismaSkillAuthoringCompletionRepository` — atomic authoring receipt and Draft-evidence write.
 - `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only receipt API with strict input bounds.
-- `PrismaSkillAuthoringInputRepository` — exact-worker selection of an active, published, pinned source artifact.
 - `__CreateSkillAuthoringInputRouter` — authoring-audience-only byte broker route with no ArtifactStore credential response.
 
 The controller claim, assignment, release, and Pod-registration DTOs and their strict Zod validators
@@ -67,7 +72,7 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 
 ## Data & persistence
 
-The package owns the claim, assignment, and authoring terminal transitions on `SkillWorkload`. The
+The package owns the claim, assignment, release, first-Pod, bootstrap, and authoring terminal transitions on `SkillWorkload`. The
 clean target baseline enforces its pending → assigned → terminal state fence, monotonic delivery
 generation, immutable Job UID, canonical worker Pod, and terminal receipt independently of this
 TypeScript adapter. It also owns the one-use
@@ -76,8 +81,10 @@ bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, au
 the controller-registered canonical worker Pod UID. A successful authoring receipt can write only
 two passed bounded reports to its still-Draft revision. The input query also binds that draft
 revision's three artifact coordinates to an active Artifact and published ArtifactRevision in the same
-silo before the app signs a short-lived read lease and validates returned metadata. It cannot turn the
-record into a general artifact or runtime credential.
+silo before the app signs a short-lived read lease and validates returned metadata. The selection
+transaction ends before the app calls ArtifactStore: a database share lock cannot protect later
+network I/O, so the broker instead validates the returned immutable metadata against the selected
+coordinates. It cannot turn the record into a general artifact or runtime credential.
 
 ## See also
 

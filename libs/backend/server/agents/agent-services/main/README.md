@@ -77,10 +77,12 @@ with a plain reason.
 publish path and its Postgres adapter. Retiring a service clears its active-revision pointer in the
 same database update, so no retired service can still look runnable.
 - `ManagedRunAdmissionPort` — the app-owned seam through which run-now AND the scheduler record an
-  admission (`trigger: managed_invocation` or `schedule`).
+  admission (`trigger: managed_invocation` or `schedule`). `ManagedRunAdmissionOutcomes` is its
+  documented serialized outcome vocabulary, so consumers do not recreate accepted, idempotent, or
+  denied branch values.
 - Schedule plane: `__CreateAgentSchedule`, `__UpdateAgentSchedule`, `PrismaAgentScheduleRepository`,
-  and the `/:serviceId/schedules` management surface (list/create/update/delete). Evaluation of a
-  schedule into due runs lives in the sibling `scheduling` package.
+  the shared `AgentScheduleOverlapPolicies` vocabulary, and the `/:serviceId/schedules` management
+  surface (list/create/update/delete). Evaluation into due runs lives in sibling `scheduling`.
 - Scope attach-authority + effective access: `__ValidateAttachAuthority`,
   `__ResolveEffectiveScopeAttachments`, `__IntersectScopeAttachments`, `PrismaScopeGrantResolver`.
 - Managed execution evidence: `PrismaManagedExecutionEvidenceAuthority` derives the canonical

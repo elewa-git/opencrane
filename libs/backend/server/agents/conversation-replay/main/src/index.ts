@@ -1,7 +1,7 @@
 export { __DecodeConversationReplayCursor, __EncodeConversationReplayCursor } from "./replay-cursor.js";
 export { __ProjectConversationReplayEvent } from "./replay-projection.js";
 export { __ReadConversationReplay } from "./conversation-replay.js";
-export { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
+export { _CreateConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
 export { __CreateConversationReplayRouter } from "./conversation-replay.router.js";
 export { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";
 export { _CreateSelfConversationReplayRouter } from "./prisma-self-conversation-replay.router.js";
