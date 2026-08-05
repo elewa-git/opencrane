@@ -69,6 +69,13 @@ export function evaluateStack(input)
 		});
 	}
 	const currentChain = current ? stackChain(current.number, topology.parents) : [];
-	findings.push(...reviewOrderFindings(current, currentChain, topology));
+	for (const pullRequest of input.pullRequests)
+	{
+		findings.push(...reviewOrderFindings(
+			pullRequest,
+			stackChain(pullRequest.number, topology.parents),
+			topology,
+		));
+	}
 	return { topology, current, currentChain, findings };
 }

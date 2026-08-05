@@ -66,7 +66,7 @@ test("accepts a stack with historical closed review-order entries", function _St
 {
 	const pullRequests = [
 		_PullRequest(1, "feat/one", "a", "develop", "d"),
-		_PullRequest(2, "feat/two", "b", "feat/one", "a"),
+		_PullRequest(2, "feat/two", "b", "feat/one", "a", "## Review order\n\n1. #99\n2. #1\n3. #2"),
 		_PullRequest(3, "feat/three", "c", "feat/two", "b", "## Review order\n\n1. #99\n2. #1\n3. #2\n4. #3"),
 	];
 	const result = _Validate(pullRequests, {
@@ -153,6 +153,22 @@ test("rejects missing, reversed, duplicate, and unrelated open review entries", 
 		"MISSING_REVIEW_ENTRY",
 		"REVERSED_REVIEW_ORDER",
 	]));
+});
+
+test("checks every open stack review order even when another PR triggered the event", function _GlobalReviewOrder()
+{
+	const pullRequests = [
+		_PullRequest(1, "feat/one", "a", "develop", "d"),
+		_PullRequest(2, "feat/two", "b", "feat/one", "a", "## Review order\n\n1. #2"),
+		_PullRequest(3, "feat/independent", "c", "develop", "d"),
+	];
+	const result = _Validate(pullRequests, {
+		ancestry: new Set(["1:2"]),
+		event: { number: 3, action: "edited", headSha: "c" },
+	});
+	assert.ok(result.evidence.findings.some(function _Missing(finding) {
+		return finding.code === "MISSING_REVIEW_ENTRY" && finding.message.includes("#2");
+	}));
 });
 
 test("rejects event-head drift while allowing a closed event to audit globally", function _EventDrift()
