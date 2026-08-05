@@ -15,13 +15,13 @@ locals {
 }
 
 # -----------------------------------------------------------------------------
-# CMEK — application-layer Secrets encryption (AIR.0)
+# CMEK — application-layer Kubernetes object encryption (AIR.0)
 #
-# By default GKE encrypts Secrets in etcd with a Google-managed key. Enabling
+# By default GKE encrypts cluster state with a Google-managed key. Enabling
 # database_encryption with a customer-managed Cloud KMS key (CMEK) adds an
-# envelope-encryption layer the customer controls: the cluster's Secrets at rest
-# (etcd) and their backups are encrypted with `gke-secrets`, and access can be
-# revoked by disabling the key.
+# envelope-encryption layer the customer controls. Current GKE versions may
+# promote the requested Secrets encryption to all Kubernetes API objects in the
+# cluster state database. Access can be revoked by disabling `gke-secrets`.
 #
 # IMPORTANT scope: CMEK protects etcd-at-rest and backups. It does NOT change the
 # in-cluster authorization boundary — a principal who can `kubectl get secret`
@@ -125,8 +125,9 @@ resource "google_container_cluster" "cluster" {
     channel = "REGULAR"
   }
 
-  # CMEK application-layer Secrets encryption. Gated by enable_secrets_encryption
-  # (default ON). The key MUST be in the same location as the cluster.
+  # CMEK application-layer cluster-state encryption. Gated by
+  # enable_secrets_encryption (default ON). The key MUST be in the same location
+  # as the cluster.
   dynamic "database_encryption" {
     for_each = var.enable_secrets_encryption ? [1] : []
     content {
@@ -137,6 +138,22 @@ resource "google_container_cluster" "cluster" {
 
   # The service-agent IAM grant must land before the cluster references the key.
   depends_on = [google_kms_crypto_key_iam_member.gke_secrets]
+
+  lifecycle {
+    # The provider accepts ENCRYPTED as desired configuration, while current GKE
+    # may return the stronger ALL_OBJECTS_ENCRYPTION_ENABLED state. Do not plan a
+    # downgrade from that server-side promotion. The postcondition still fails
+    # closed if encryption is disabled, and key-name drift remains actionable.
+    ignore_changes = [database_encryption[0].state]
+
+    postcondition {
+      condition = !var.enable_secrets_encryption || try(contains([
+        "ENCRYPTED",
+        "ALL_OBJECTS_ENCRYPTION_ENABLED",
+      ], self.database_encryption[0].state), false)
+      error_message = "GKE application-layer cluster-state encryption is not enabled."
+    }
+  }
 
   deletion_protection = false
 }
