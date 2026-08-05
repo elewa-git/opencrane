@@ -9,9 +9,11 @@ node --input-type=module - "$ROOT" "$WORKLOAD_REGISTRY" "$APP_SOURCE_REGISTRY" <
 import { execFileSync } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
+import { pathToFileURL } from "node:url";
 import ts from "typescript";
 
 const [, , root, workloadRegistryPath, appSourceRegistryPath] = process.argv;
+const { _IsSecretJobOwnerReference } = await import(pathToFileURL(join(root, "scripts/phase-b-topology-ast.mjs")).href);
 const errors = [];
 const info = [];
 const appSourceExtensions = new Set([
@@ -75,7 +77,6 @@ function workspacePath(path)
   }
   return absolute;
 }
-
 function walk(path, visit)
 {
   if (!existsSync(path)) return;
@@ -85,13 +86,11 @@ function walk(path, visit)
   if (!stat.isDirectory() || stat.isSymbolicLink()) return;
   for (const entry of readdirSync(path)) walk(join(path, entry), visit);
 }
-
 function projectTags(projectFile)
 {
   const json = readJson(projectFile);
   return json.tags ?? json.nx?.tags ?? [];
 }
-
 function validateExactOwner(owner, context)
 {
   if (typeof owner !== "string" || owner.trim() === "")
@@ -104,12 +103,10 @@ function validateExactOwner(owner, context)
     fail(`${context}: wildcard owners are forbidden`);
   }
 }
-
 function isRegisteredAppOwner(owner)
 {
   return /^apps\/(?:_infra\/[^/]+|[^/_][^/]*)$/.test(owner ?? "");
 }
-
 const workloadRegistry = readJson(workloadRegistryPath);
 const appSourceRegistry = readJson(appSourceRegistryPath);
 
@@ -122,7 +119,6 @@ const podClassOwners = new Map();
 const renderedPodClasses = new Map();
 const sourceOwners = new Map();
 const compositionOwners = new Map();
-
 function claimIdentity(map, identity, owner, context)
 {
   if (!identity) return;
@@ -139,7 +135,6 @@ function claimIdentity(map, identity, owner, context)
   }
   map.set(identity, { owner, context });
 }
-
 for (const workload of workloadRegistry.workloads ?? [])
 {
   const context = `workload '${workload.id ?? "<missing>"}'`;
@@ -331,15 +326,14 @@ for (const entry of workloadRegistry.runtimeConstructs ?? [])
   }
   runtimeConstructs.set(identity, { ...entry, hit: false });
 }
-
 const nonProducingRuntimeMatches = new Map();
 for (const entry of workloadRegistry.nonProducingRuntimeMatches ?? [])
 {
   const context = `non-producing runtime match '${entry.path ?? "<missing>"}:${entry.anchor ?? "<missing>"}'`;
   const identity = `${entry.path}\u0000${entry.anchor}`;
-  if (!entry.path || !entry.anchor || !entry.reason || nonProducingRuntimeMatches.has(identity))
+  if (!entry.path || !entry.anchor || !entry.context || !entry.reason || nonProducingRuntimeMatches.has(identity))
   {
-    fail(`${context}: path, anchor, reason, and uniqueness are required`);
+    fail(`${context}: path, anchor, context, reason, and uniqueness are required`);
     continue;
   }
   const sourcePath = workspacePath(entry.path);
@@ -355,8 +349,7 @@ for (const entry of workloadRegistry.nonProducingRuntimeMatches ?? [])
   }
   nonProducingRuntimeMatches.set(identity, { ...entry, hit: false });
 }
-
-function classifyRuntimeConstruct(rel, candidate, display)
+function classifyRuntimeConstruct(rel, candidate, display, nonProducerContext)
 {
   const producer = [...runtimeConstructs.values()].find(function matches(entry) {
     return entry.path === rel && candidate.includes(entry.anchor);
@@ -367,7 +360,7 @@ function classifyRuntimeConstruct(rel, candidate, display)
     return;
   }
   const nonProducer = [...nonProducingRuntimeMatches.values()].find(function matches(entry) {
-    return entry.path === rel && candidate.includes(entry.anchor);
+    return entry.path === rel && entry.context === nonProducerContext && candidate.includes(entry.anchor);
   });
   if (nonProducer)
   {
@@ -376,7 +369,6 @@ function classifyRuntimeConstruct(rel, candidate, display)
   }
   fail(`unregistered runtime or installer workload construct: ${rel}: ${display}`);
 }
-
 function objectProperty(object, name, sourceFile)
 {
   return object.properties.find(function findProperty(property) {
@@ -388,7 +380,6 @@ function objectProperty(object, name, sourceFile)
     return property.name.getText(sourceFile).replace(/^["']|["']$/g, "") === name;
   });
 }
-
 for (const scanRoot of ["apps", "libs", "scripts"])
 {
   walk(workspacePath(scanRoot), function inspectRuntimeConstructor(path, stat) {
@@ -407,7 +398,7 @@ for (const scanRoot of ["apps", "libs", "scripts"])
       const dynamicManifestKind = /^(?:kind:)\s*(?:[$][{]|{{)/.test(line);
       const genericKubernetesCreate = rel === "libs/server/_infra/api/src/k8s-apply.ts" && /\.create\s*\(/.test(line);
       if (!runtimeWorkloadLinePattern.test(rawLine) && !dynamicManifestKind && !genericKubernetesCreate) continue;
-      classifyRuntimeConstruct(rel, line, line);
+      if (!typedSourceExtensions.has(extname(rel))) classifyRuntimeConstruct(rel, line, line);
     }
 
     if (typedSourceExtensions.has(extname(rel)))
@@ -425,7 +416,7 @@ for (const scanRoot of ["apps", "libs", "scripts"])
             const initializer = ts.isPropertyAssignment(kind) ? kind.initializer : undefined;
             if (initializer && ts.isStringLiteralLike(initializer))
             {
-              if (workloadKinds.has(initializer.text)) classifyRuntimeConstruct(rel, kindText, kindText);
+              if (workloadKinds.has(initializer.text)) classifyRuntimeConstruct(rel, kindText, kindText, _IsSecretJobOwnerReference(node, sourceFile) ? "secret-owner-reference" : null);
             }
             else
             {

@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { __BuildSuspendedAgentRuntimeJob } from "@opencrane/backend/agents/runtime/k8s-launcher";
 
 import { __CreateKubernetesAgentControllerStore } from "../kubernetes-agent-controller-store.js";
-import type { AgentControllerBatchApi, AgentControllerCoreApi, AgentControllerKubernetesStoreOptions } from "../agent-controller.types.js";
+import type { AgentControllerBatchApi, AgentControllerCoreApi, AgentControllerKubernetesStoreOptions } from "../kubernetes-agent-controller-store.types.js";
 
 /** Add the production deadline policy and a live process signal to focused API fakes. */
 function _StoreOptions(options: Pick<AgentControllerKubernetesStoreOptions, "batchApi" | "coreApi">, shutdownSignal: AbortSignal = new AbortController().signal): AgentControllerKubernetesStoreOptions

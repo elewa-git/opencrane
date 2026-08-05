@@ -4,6 +4,15 @@ export const AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE = "opencrane-agent-contro
 /** Exact Kubernetes ServiceAccount allowed to drive agent-workload reconciliation. */
 export const AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME = "agent-controller";
 
+/** Stable cleanup projections persisted with runtime-workload outbox commands. */
+export enum RunWorkloadCleanupModes
+{
+	/** Cleanup is fenced by an immutable Kubernetes Job UID from durable assignment. */
+	Assigned = "assigned",
+	/** Cleanup may adopt only the exact still-suspended Job created before assignment committed. */
+	UnassignedOrphan = "unassigned_orphan",
+}
+
 /** Database-issued claim generation fencing one controller delivery attempt. */
 export interface AgentControllerRunAttemptClaimLease
 {
@@ -15,40 +24,6 @@ export interface AgentControllerRunAttemptClaimLease
 	readonly deliveryCount: number;
 	/** Database-derived instant after which another controller may reclaim the event. */
 	readonly expiresAt: string;
-}
-
-/** One database-fenced governed skill workload claim exposed only to the agent controller. */
-export interface AgentControllerSkillWorkloadClaim
-{
-	/** Durable workload record identifier. */
-	readonly workloadId: string;
-	/** Silo owning the immutable SkillRevision. */
-	readonly siloId: string;
-	/** Isolated authoring or tool-runner Job class. */
-	readonly kind: "authoring" | "tool-runner";
-	/** Immutable revision selected by the skill-work authority. */
-	readonly skillRevisionId: string;
-	/** Exact database claim instant. */
-	readonly claimedAt: string;
-	/** Monotonic generation that fences stale controller replicas. */
-	readonly deliveryCount: number;
-	/** Database-derived instant after which this claim is invalid. */
-	readonly expiresAt: string;
-}
-
-/** Exact suspended Job evidence submitted for one governed skill workload claim. */
-export interface AgentControllerSkillWorkloadAssignmentCommand
-{
-	/** Exact claim instant returned by the authority. */
-	readonly claimedAt: string;
-	/** Exact claim generation returned by the authority. */
-	readonly deliveryCount: number;
-	/** Immutable Kubernetes UID of the controller-created suspended Job. */
-	readonly workloadUid: string;
-	/** Opaque stable reference projected into the Job and stored only as a database hash. */
-	readonly bootstrapReference: string;
-	/** Deployment-owned namespace selected by the controller's reviewed workload profile. */
-	readonly namespace: string;
 }
 
 /** Narrow desired-state projection needed to build one suspended runtime Job. */
@@ -208,4 +183,11 @@ export interface AgentControllerRunWorkloadRegistrationResult
 	readonly workloadUid: string;
 	/** Immutable Kubernetes Pod UID registered for the attempt. */
 	readonly podUid: string;
+}
+
+/** Bounded response returned after delivered run-outbox maintenance. */
+export interface AgentControllerRunOutboxPruneResult
+{
+	/** Number of retention-expired records removed in one transaction. */
+	readonly deletedCount: number;
 }

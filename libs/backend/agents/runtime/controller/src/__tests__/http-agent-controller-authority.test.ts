@@ -2,7 +2,7 @@ import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunWork
 import { describe, expect, it } from "vitest";
 
 import { __CreateHttpAgentControllerAuthority } from "../http-agent-controller-authority.js";
-import type { AgentControllerFetch } from "../agent-controller.types.js";
+import type { AgentControllerFetch } from "../http-agent-controller-authority.types.js";
 
 /** One exact claim response returned by the OpenCrane authority. */
 function _ClaimBody()
@@ -98,11 +98,11 @@ describe("agent-controller OpenCrane HTTP authority", function _Suite()
 		expect(await idle.__Claim(new AbortController().signal)).toBeNull();
 
 		const malformed = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _malformed() { return new Response(JSON.stringify({ lease: {}, attempt: {} }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
-		await expect(malformed.__Claim(new AbortController().signal)).rejects.toThrow(/malformed controller claim/);
+		await expect(malformed.__Claim(new AbortController().signal)).rejects.toThrow(/controller claim\.lease\.eventId must be a bounded identifier/);
 		const invalidJson = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _invalidJson() { return new Response("{", { status: 200 }); }, readToken: async function _token() { return "token"; } });
 		await expect(invalidJson.__Claim(new AbortController().signal)).rejects.toThrow(/OpenCrane controller response must contain valid JSON/);
 		const malformedRelease = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _malformedRelease() { return new Response(JSON.stringify({ ..._ReleaseBody(), workload: { ..._ReleaseBody().workload, assignmentExpiresAt: "2026-07-20T01:00:00Z" } }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
-		await expect(malformedRelease.__ClaimWorkloadRelease(new AbortController().signal)).rejects.toThrow(/malformed workload-release claim/);
+		await expect(malformedRelease.__ClaimWorkloadRelease(new AbortController().signal)).rejects.toThrow(/workload-release claim\.workload\.assignmentExpiresAt must be a UTC millisecond instant/);
 
 		const mismatched = __CreateHttpAgentControllerAuthority({ openCraneInternalUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001", tokenPath: "/token", requestTimeoutMilliseconds: 5_000, fetch: async function _mismatched() { return new Response(JSON.stringify({ outcome: "assigned", runId: "other", attempt: 1, workloadUid: "job-uid" }), { status: 200 }); }, readToken: async function _token() { return "token"; } });
 		await expect(mismatched.__CommitAssignment("event-1", _Assignment(), new AbortController().signal)).rejects.toThrow(/mismatched controller assignment/);

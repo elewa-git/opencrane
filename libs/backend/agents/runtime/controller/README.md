@@ -52,10 +52,6 @@ ends by the durable expiry; zero Pods means retry while multiple or foreign Pods
 
 - `__RunAgentController` — polls until process shutdown and retries failed claims without repairing
   or replacing Kubernetes objects.
-- `__ReconcileNextAgentRuntimeAttempt` — reconciles at most one durable claim and stops after the
-  suspended assignment is committed.
-- `__ReconcileNextRuntimeRelease` — conditionally unsuspends one exact assigned Job and registers
-  only its unique, strictly owned first Pod.
 - `__ValidateAgentControllerRuntimeProfiles` — validates deployment-supplied profiles through the
   canonical Job builder before polling starts.
 - `__CreateHttpAgentControllerAuthority` — claims and commits over the projected-token-authenticated
@@ -67,6 +63,13 @@ The same controller performs the bounded retention pass for successfully deliver
 records. It runs once at startup, then at its configured interval. A failed pass is recorded and
 retried at the next interval; it can never prevent workload reconciliation or keep the controller
 alive after shutdown.
+
+Internally, the polling loop, runtime-profile policy, attempt-key projection, assignment reconcile,
+release reconcile, bounded HTTP decoding, Kubernetes Job adoption, conditional release planning,
+Pod proof, and transport calls each have one module owner. The package barrel exposes composition
+capabilities and the profile-map type only. The one-attempt assignment and release steps remain
+package-private test seams. Zod validation of controller wire models is owned beside those models in
+`@opencrane/contracts`; this package does not redeclare their accepted fields.
 
 ## Boundary
 

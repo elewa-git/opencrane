@@ -257,6 +257,33 @@ export function _Resolve(): ResolveResult
 }
 ```
 
+## Runtime Validators Stay Beside Their Models
+
+When untrusted runtime data is expected to become a TypeScript model, keep its Zod validator in the
+same folder and package as that model. Pair `example.types.ts` with `example.validator.ts`; export
+the validator through the model package instead of rebuilding the accepted fields in an HTTP
+adapter, router, repository, or generic utility.
+
+The validator module starts with a clarifying comment that names the trust boundary and why the
+model and validator must change together. Type each Zod schema against its TypeScript interface so
+drift fails compilation. Choose `.strict()` or `.strip()` deliberately from the protocol contract,
+and keep cross-field invariants in the model-adjacent validator. Transport code may bound and decode
+JSON, authenticate, and interpret protocol status, but it delegates domain-shape validation.
+
+```typescript
+// WRONG — the transport owns a second, hand-written copy of the model.
+function _ParseClaim(value: unknown): WorkloadClaim
+{
+	if (!value || typeof value !== "object" || /* many inline field checks */) throw new Error("invalid claim");
+	return value as WorkloadClaim;
+}
+
+// CORRECT
+// workload.types.ts exports WorkloadClaim.
+// workload.validator.ts owns a ZodType<WorkloadClaim> and exports _ParseWorkloadClaim.
+// http-workload-authority.ts only bounds JSON and delegates to _ParseWorkloadClaim.
+```
+
 ## Test File Location
 
 Test files live under a `__tests__` directory next to the source they cover, never co-located as

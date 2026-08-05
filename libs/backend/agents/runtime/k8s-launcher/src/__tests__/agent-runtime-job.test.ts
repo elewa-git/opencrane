@@ -1,8 +1,10 @@
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
-import { __AgentRuntimeAttemptResourceName, __BuildSuspendedAgentRuntimeJob, __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-job.js";
-import type { AgentRuntimeJobAssignment, AgentRuntimeJobProfile } from "../agent-runtime-job.types.js";
+import { __BuildSuspendedAgentRuntimeJob } from "../agent-runtime-job.js";
+import { AgentRuntimeIdentityProfiles, type AgentRuntimeJobAssignment, type AgentRuntimeJobProfile } from "../agent-runtime-job.types.js";
+import { __DeriveAgentRuntimeReleaseDeadlineSeconds } from "../agent-runtime-release-deadline.js";
+import { __AgentRuntimeAttemptResourceName } from "../agent-runtime-resource-name.js";
 
 /** Create one valid immutable run-attempt assignment. */
 function _Assignment(): AgentRuntimeJobAssignment
@@ -161,7 +163,7 @@ describe("managed (central) agent runtime identity profile", function _ManagedSu
 	/** Managed profile reusing the shared runtime image with the managed identity class. */
 	function _ManagedProfile(): AgentRuntimeJobProfile
 	{
-		return { ..._Profile(), identityProfile: "managed", serviceAccountName: "managed-agent-runtime-harvester" };
+		return { ..._Profile(), identityProfile: AgentRuntimeIdentityProfiles.Managed, serviceAccountName: "managed-agent-runtime-harvester" };
 	}
 
 	it("projects the distinct managed audience for a managed ServiceAccount", function _ManagedAudience()

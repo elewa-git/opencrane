@@ -1,9 +1,8 @@
 import { Router, type Request, type Response } from "express";
 
-import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, type AgentControllerSkillWorkloadAssignmentCommand } from "@opencrane/contracts";
+import { AGENT_CONTROLLER_PROJECTED_TOKEN_AUDIENCE, AGENT_CONTROLLER_SERVICE_ACCOUNT_NAME, ___IsEmptyAgentControllerCommand, ___ParseAgentControllerSkillWorkloadAssignmentCommand, ___ParseAgentControllerSkillWorkloadPodRegistrationCommand, ___ParseAgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
 
 import type { ReviewedSkillWorkloadControllerIdentity, SkillWorkloadDispatchRouterDependencies } from "./skill-workload-dispatch.types.js";
-import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 
 /**
  * Build the controller-authenticated internal API for governed skill workloads.
@@ -26,7 +25,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 		try
 		{
 			// 1. Authenticate before exposing a pending workload or parsing caller-controlled data.
-			if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+			if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 			{
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
@@ -58,7 +57,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
 			}
-			const command = _ParseAssignmentCommand(request.body);
+			const command = ___ParseAgentControllerSkillWorkloadAssignmentCommand(request.body);
 			const workloadId = request.params["workloadId"];
 			if (command === null || typeof workloadId !== "string" || workloadId.length === 0)
 			{
@@ -84,7 +83,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 
 	router.post("/skill-workloads:release-claim", async function _ClaimRelease(request: Request, response: Response): Promise<void>
 	{
-		if (!await _IsController(request, dependencies) || !_IsEmptyObject(request.body))
+		if (!await _IsController(request, dependencies) || !___IsEmptyAgentControllerCommand(request.body))
 		{
 			_RespondProblem(response, 401, "controller_identity_denied");
 			return;
@@ -113,7 +112,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 			_RespondProblem(response, 401, "controller_identity_denied");
 			return;
 		}
-		const command = _ParseReleaseCommand(request.body);
+		const command = ___ParseAgentControllerSkillWorkloadReleaseCommand(request.body);
 		const workloadId = request.params["workloadId"];
 		if (command === null || typeof workloadId !== "string" || workloadId.length === 0)
 		{
@@ -147,7 +146,7 @@ export function __CreateSkillWorkloadDispatchRouter(dependencies: SkillWorkloadD
 				_RespondProblem(response, 401, "controller_identity_denied");
 				return;
 			}
-			const command = _ParsePodRegistrationCommand(request.body);
+			const command = ___ParseAgentControllerSkillWorkloadPodRegistrationCommand(request.body);
 			const workloadId = request.params["workloadId"];
 			if (command === null || typeof workloadId !== "string" || workloadId.length === 0)
 			{
@@ -196,45 +195,6 @@ function _BearerValue(value: string | undefined): string | null
 {
 	if (!value) return null;
 	return /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null;
-}
-
-/** Accept only an empty object for a server-owned claim request. */
-function _IsEmptyObject(value: unknown): boolean
-{
-	return value !== null && typeof value === "object" && !Array.isArray(value) && Object.keys(value).length === 0;
-}
-
-/** Parse exact assignment evidence without accepting controller-selected policy or extensions. */
-function _ParseAssignmentCommand(value: unknown): AgentControllerSkillWorkloadAssignmentCommand | null
-{
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Record<string, unknown>;
-	const expectedKeys = ["claimedAt", "deliveryCount", "workloadUid", "bootstrapReference", "namespace"];
-	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _HasExpectedKey(key): boolean { return key in body; })) return null;
-	if (typeof body["claimedAt"] !== "string" || typeof body["deliveryCount"] !== "number" || typeof body["workloadUid"] !== "string" || typeof body["bootstrapReference"] !== "string" || typeof body["namespace"] !== "string") return null;
-	return { claimedAt: body["claimedAt"], deliveryCount: body["deliveryCount"], workloadUid: body["workloadUid"], bootstrapReference: body["bootstrapReference"], namespace: body["namespace"] };
-}
-
-/** Parse the exact release fence without accepting controller-selected policy or expiry. */
-function _ParseReleaseCommand(value: unknown): SkillWorkloadReleaseCommand | null
-{
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Record<string, unknown>;
-	const expectedKeys = ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid"];
-	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _hasExpectedKey(key): boolean { return key in body; })) return null;
-	if (typeof body["releaseClaimedAt"] !== "string" || typeof body["releaseDeliveryCount"] !== "number" || typeof body["workloadUid"] !== "string") return null;
-	return { releaseClaimedAt: body["releaseClaimedAt"], releaseDeliveryCount: body["releaseDeliveryCount"], workloadUid: body["workloadUid"] };
-}
-
-/** Parse exact first-Pod evidence without admitting controller-selected extensions. */
-function _ParsePodRegistrationCommand(value: unknown): SkillWorkloadPodRegistrationCommand | null
-{
-	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
-	const body = value as Record<string, unknown>;
-	const expectedKeys = ["releaseClaimedAt", "releaseDeliveryCount", "workloadUid", "podUid"];
-	if (Object.keys(body).length !== expectedKeys.length || !expectedKeys.every(function _HasExpectedKey(key): boolean { return key in body; })) return null;
-	if (typeof body["releaseClaimedAt"] !== "string" || typeof body["releaseDeliveryCount"] !== "number" || typeof body["workloadUid"] !== "string" || typeof body["podUid"] !== "string") return null;
-	return { releaseClaimedAt: body["releaseClaimedAt"], releaseDeliveryCount: body["releaseDeliveryCount"], workloadUid: body["workloadUid"], podUid: body["podUid"] };
 }
 
 /** Write one bounded, non-sensitive internal problem response. */

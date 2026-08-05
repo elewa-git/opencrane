@@ -2,7 +2,9 @@ import { createHash } from "node:crypto";
 
 import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState, type PrismaClient } from "@prisma/client";
 
-import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadClaimsRepository, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
+import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
+
+import type { SkillWorkloadClaimsRepository } from "./skill-workload-claims.types.js";
 
 /** Postgres authority for controller-only claim generations and immutable Job identity binding. */
 export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsRepository
@@ -23,10 +25,10 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 	}
 
 	/** Claims one pending or expired-unassigned record under its exact row lock. */
-	async claimNextAtomically(): Promise<SkillWorkloadClaim | null>
+	async claimNextAtomically(): Promise<AgentControllerSkillWorkloadClaim | null>
 	{
 		const lease = this.claimLeaseMilliseconds;
-		return this.prisma.$transaction(async function _claim(transaction: Prisma.TransactionClient): Promise<SkillWorkloadClaim | null>
+		return this.prisma.$transaction(async function _claim(transaction: Prisma.TransactionClient): Promise<AgentControllerSkillWorkloadClaim | null>
 		{
 			// 1. Revision first — the lifecycle trigger takes this same order before it cancels its workloads.
 			const candidates = await transaction.$queryRaw<Array<{ id: string; skillRevisionId: string; revisionState: SkillRevisionState; kind: SkillWorkloadKind }>>(Prisma.sql`SELECT workload."id", workload."skill_revision_id" AS "skillRevisionId", revision."state" AS "revisionState", workload."kind" FROM "skill_workloads" workload JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id" WHERE workload."state" = 'pending'::"SkillWorkloadState" AND (workload."claimed_at" IS NULL OR workload."claimed_at" <= clock_timestamp() - (${lease} * interval '1 millisecond')) AND ((workload."kind" = 'authoring'::"SkillWorkloadKind" AND revision."state" = 'draft'::"SkillRevisionState") OR (workload."kind" = 'tool_runner'::"SkillWorkloadKind" AND revision."state" = 'published'::"SkillRevisionState")) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF revision SKIP LOCKED`);
@@ -46,12 +48,12 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			const deliveryCount = workload.deliveryCount + 1;
 			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount }, data: { claimedAt, deliveryCount } });
 			if (updated.count !== 1) throw new Error("skill workload claim lost its fence");
-			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + lease).toISOString() };
+			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + lease).toISOString() };
 		});
 	}
 
 	/** Commits only one unexpired exact claim generation, or returns its immutable replay result. */
-	async commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
+	async commitAssignmentAtomically(workloadId: string, command: AgentControllerSkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
 		if (!workloadId || !command.workloadUid || !/^[a-z0-9]([-a-z0-9]*[a-z0-9])?$/.test(command.namespace) || command.namespace.length > 63 || command.bootstrapReference !== _BootstrapReference(workloadId) || !Number.isSafeInteger(command.deliveryCount) || command.deliveryCount < 1 || !Number.isFinite(Date.parse(command.claimedAt))) return "conflict";
 		const lease = this.claimLeaseMilliseconds;
@@ -85,8 +87,8 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 				await transaction.skillWorkloadBootstrap.create({ data: {
 					skillWorkloadId: workloadId,
 					referenceHash: _ReferenceHash(command.bootstrapReference),
-					audience: workload.kind === "Authoring" ? "opencrane-skill-authoring" : "opencrane-tool-runner",
-					serviceAccountName: workload.kind === "Authoring" ? "skill-authoring-default" : "tool-runner-default",
+					audience: workload.kind === SkillWorkloadKind.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner",
+					serviceAccountName: workload.kind === SkillWorkloadKind.Authoring ? "skill-authoring-default" : "tool-runner-default",
 					namespace: command.namespace,
 					workloadUid: command.workloadUid,
 					expiresAt: new Date(now.getTime() + PrismaSkillWorkloadClaimsRepository.bootstrapLifetimeMilliseconds),
@@ -102,10 +104,10 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 	}
 
 	/** Claims one assigned bootstrap-ready workload for an exact Kubernetes release. */
-	async claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>
+	async claimNextReleaseAtomically(): Promise<AgentControllerSkillWorkloadReleaseClaim | null>
 	{
 		const lease = this.claimLeaseMilliseconds;
-		return this.prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<SkillWorkloadReleaseClaim | null>
+		return this.prisma.$transaction(async function _claimRelease(transaction: Prisma.TransactionClient): Promise<AgentControllerSkillWorkloadReleaseClaim | null>
 		{
 			const rows = await transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT workload."id" FROM "skill_workloads" workload JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id" WHERE workload."state" = 'assigned'::"SkillWorkloadState" AND workload."released_at" IS NULL AND bootstrap."consumed_at" IS NULL AND bootstrap."expires_at" > clock_timestamp() AND (workload."release_claimed_at" IS NULL OR workload."release_claimed_at" <= clock_timestamp() - (${lease} * interval '1 millisecond')) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF workload, bootstrap SKIP LOCKED`);
 			const id = rows[0]?.id;
@@ -120,12 +122,12 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 			const expiresAt = new Date(Math.min(claimedAt.getTime() + lease, bootstrap.expiresAt.getTime()));
 			const updated = await transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount: deliveryCount, releaseExpiresAt: expiresAt } });
 			if (updated.count !== 1) throw new Error("skill workload release claim lost its fence");
-			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === "Authoring" ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: expiresAt.toISOString() };
+			return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount: deliveryCount, expiresAt: expiresAt.toISOString() };
 		});
 	}
 
 	/** Commits only the same fresh release claim and exact immutable Kubernetes Job UID. */
-	async commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
+	async commitReleaseAtomically(workloadId: string, command: AgentControllerSkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
 	{
 		if (!workloadId || !command.workloadUid || !Number.isSafeInteger(command.releaseDeliveryCount) || command.releaseDeliveryCount < 1 || !Number.isFinite(Date.parse(command.releaseClaimedAt))) return "conflict";
 		const lease = this.claimLeaseMilliseconds;
@@ -146,7 +148,7 @@ export class PrismaSkillWorkloadClaimsRepository implements SkillWorkloadClaimsR
 	}
 
 	/** Binds the one exact worker Pod only after the same fresh release fence succeeded. */
-	async registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
+	async registerFirstPodAtomically(workloadId: string, command: AgentControllerSkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
 	{
 		if (!workloadId || !command.workloadUid || !command.podUid || !Number.isSafeInteger(command.releaseDeliveryCount) || command.releaseDeliveryCount < 1 || !Number.isFinite(Date.parse(command.releaseClaimedAt))) return "conflict";
 		return this.prisma.$transaction(async function _RegisterFirstPod(transaction: Prisma.TransactionClient): Promise<"registered" | "idempotent" | "conflict">

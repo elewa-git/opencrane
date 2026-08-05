@@ -64,6 +64,16 @@ describe("HTTP governed skill workload authority", function _DescribeAuthority()
 		await expect(authority.__Claim(new AbortController().signal)).rejects.toThrow(/OpenCrane skill workload response must contain valid JSON/);
 	});
 
+	it("delegates malformed claim and release models to the contract validators", async function _RejectsMalformedModels()
+	{
+		const malformedClaim = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(new Response(JSON.stringify({ ..._Claim(), skillRevisionId: "" }), { status: 200 }))));
+		await expect(malformedClaim.__Claim(new AbortController().signal)).rejects.toThrow(/skill workload claim\.skillRevisionId must be a bounded identifier/);
+
+		const release = { workloadId: "workload-1", siloId: "silo-a", kind: "authoring", workloadUid: "job-uid-1", releaseClaimedAt: "2026-07-24T00:00:30.000Z", releaseDeliveryCount: 1, expiresAt: "2026-07-24T00:01:00Z" };
+		const malformedRelease = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(new Response(JSON.stringify(release), { status: 200 }))));
+		await expect(malformedRelease.__ClaimRelease(new AbortController().signal)).rejects.toThrow(/skill workload release claim\.expiresAt must be a UTC millisecond instant/);
+	});
+
 	it("stops a chunked response as soon as it crosses the allocation ceiling", async function _BoundsChunkedResponse()
 	{
 		const authority = __CreateHttpSkillWorkloadControllerAuthority(_Options(vi.fn().mockResolvedValue(_OversizedChunkedResponse(16 * 1024))));

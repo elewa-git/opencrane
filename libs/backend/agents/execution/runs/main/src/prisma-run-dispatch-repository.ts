@@ -2,18 +2,18 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunOutboxPruneResult, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
-import type { ClaimNextRunAttemptResult, ClaimNextRunWorkloadReleaseResult, CommitRunAttemptAssignmentResult, PrunePublishedRunOutboxResult, RegisterRunWorkloadPodResult, RunDispatchRepository, RunDispatchRepositoryConfig, RunOutboxCandidateRow, RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
+import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
 interface SnapshotExecutionIdentity
 {
 	/** Kind of immutable subject evidence admitted into the snapshot. */
-	readonly kind: "user" | "service";
+	readonly kind: RunInputSnapshotIdentityKinds;
 	/** User or delegated subject whose authority the runtime exercises. */
 	readonly subjectId: string;
 	/** Managed service that owns service-principal evidence, or null for a human user. */
@@ -42,7 +42,7 @@ interface ClaimedAttemptWithMintInputs
 }
 
 /** Transaction outcome: no eligible work, or a claim whose key must be minted outside the lock. */
-type ClaimTransactionResult = { readonly status: "none" } | ({ readonly status: "claimed" } & ClaimedAttemptWithMintInputs);
+type ClaimTransactionResult = { readonly status: RunDispatchResultStatuses.None } | ({ readonly status: RunDispatchResultStatuses.Claimed } & ClaimedAttemptWithMintInputs);
 /**
  * Prisma-backed authority for handing one accepted run to the Kubernetes controller.
  *
@@ -92,7 +92,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				LIMIT 1
 			`);
 			const candidate = candidates[0];
-			if (!candidate) return { status: "none" };
+			if (!candidate) return { status: RunDispatchResultStatuses.None };
 
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${candidate.agentServiceId} FOR UPDATE`);
 			// ConversationRunEvent appends take this advisory lock before the run row. Preserve the
@@ -105,32 +105,32 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			const service = await transaction.agentService.findUnique({ where: { id: candidate.agentServiceId } });
 			const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
 			const event = await transaction.outboxEvent.findUnique({ where: { id: candidate.eventId } });
-			if (service === null || run === null || event === null) return { status: "none" };
+			if (service === null || run === null || event === null) return { status: RunDispatchResultStatuses.None };
 			const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 			const now = databaseTime[0]?.now;
-			if (!now || !_ClaimAuthorityIsCurrent(service, run, event, candidate, now, config.claimLeaseMilliseconds)) return { status: "none" };
+			if (!now || !_ClaimAuthorityIsCurrent(service, run, event, candidate, now, config.claimLeaseMilliseconds)) return { status: RunDispatchResultStatuses.None };
 			const existing = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: run.id, attempt: run.attempt } } });
 			if (existing !== null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_ASSIGNMENT_PREEXISTS", AgentRunTerminalReason.RuntimeFailure);
-				return { status: "none" };
+				return { status: RunDispatchResultStatuses.None };
 			}
 			const snapshot = await transaction.runInputSnapshot.findUnique({ where: { runId_digest: { runId: run.id, digest: run.inputSnapshotDigest } } });
 			const identity = _SnapshotExecutionIdentity(snapshot?.identitySnapshot);
 			if (snapshot === null || identity === null || !_SnapshotMatchesRun(snapshot, run))
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_SNAPSHOT_INVALID", AgentRunTerminalReason.InvalidInput);
-				return { status: "none" };
+				return { status: RunDispatchResultStatuses.None };
 			}
 			if (!_SnapshotIdentityMatchesService(identity, service))
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_IDENTITY_SERVICE_MISMATCH", AgentRunTerminalReason.PolicyDenied);
-				return { status: "none" };
+				return { status: RunDispatchResultStatuses.None };
 			}
 			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime())
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MEMBERSHIP_EXPIRED", AgentRunTerminalReason.PolicyDenied);
-				return { status: "none" };
+				return { status: RunDispatchResultStatuses.None };
 			}
 
 			// 3. Read the frozen model alias and cost ceiling; fail closed when either cannot bound a key.
@@ -139,7 +139,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			if (modelAlias === null || maxBudgetUsd === null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MODEL_ROUTE_INVALID", AgentRunTerminalReason.InvalidInput);
-				return { status: "none" };
+				return { status: RunDispatchResultStatuses.None };
 			}
 
 			// 4. Advance both claim coordinates. The exact pair fences stale controller replicas.
@@ -156,7 +156,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			// 5. Return the claim plus the inputs to mint the transient key once the lock is released.
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			return {
-				status: "claimed",
+				status: RunDispatchResultStatuses.Claimed,
 				lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
 				attempt: { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest, namespace: runtimeNamespace, workloadProfile: service.workloadProfile, bootstrapReference: _BootstrapReference(event.id, run.attempt, run, runtimeNamespace) },
 				keyAlias: _AttemptKeyAlias(run.id, run.attempt, run.siloId, deliveryCount),
@@ -165,22 +165,22 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				expirySeconds: _AttemptKeyExpirySeconds(config.assignmentTtlMilliseconds),
 			};
 		});
-		if (claimed.status === "none") return { status: "none" };
+		if (claimed.status === RunDispatchResultStatuses.None) return { status: RunDispatchResultStatuses.None };
 
 		// 2. Mint the attempt-scoped key OUTSIDE the transaction so no external call holds a database
 		//    lock, then attach it transiently to the claim response. It is never written to Postgres.
 		const minted = await this.issueAttemptModelKey({ keyAlias: claimed.keyAlias, modelAlias: claimed.modelAlias, siloId: claimed.attempt.siloId, maxBudgetUsd: claimed.maxBudgetUsd, expirySeconds: claimed.expirySeconds });
 		if (typeof minted.key !== "string" || minted.key.length === 0) throw new Error("attempt model key issuer returned no key");
-		return { status: "claimed", claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
+		return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
 	}
 
 	/** Remove one bounded batch of delivered operational records while preserving failed evidence. */
-	async prunePublishedOutboxEventsAtomically(): Promise<PrunePublishedRunOutboxResult>
+	async prunePublishedOutboxEventsAtomically(): Promise<AgentControllerRunOutboxPruneResult>
 	{
 		const config = this.config;
 		const publishedOutboxRetentionMilliseconds = config.publishedOutboxRetentionMilliseconds ?? 604_800_000;
 		const outboxPruneBatchSize = config.outboxPruneBatchSize ?? 100;
-		return this.prisma.$transaction(async function _prune(transaction: Prisma.TransactionClient): Promise<PrunePublishedRunOutboxResult>
+		return this.prisma.$transaction(async function _prune(transaction: Prisma.TransactionClient): Promise<AgentControllerRunOutboxPruneResult>
 		{
 			// 1. Take database time so the retention boundary is consistent across controller replicas.
 			const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
@@ -211,14 +211,14 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	async commitSuspendedJobAssignmentAtomically(eventId: string, command: AgentControllerRunAttemptAssignmentCommand): Promise<CommitRunAttemptAssignmentResult>
 	{
 		const config = this.config;
-		if (!_AssignmentCommandIsValid(eventId, command)) return { status: "conflict", reason: "invalid_assignment" };
+		if (!_AssignmentCommandIsValid(eventId, command)) return { status: RunDispatchResultStatuses.Conflict, reason: "invalid_assignment" };
 		return this.prisma.$transaction(async function _commit(transaction: Prisma.TransactionClient): Promise<CommitRunAttemptAssignmentResult>
 		{
 			// 1. Pre-read only to discover lock keys. Every value is reloaded after canonical locking.
 			const discoveredEvent = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
-			if (discoveredEvent === null) return { status: "conflict", reason: "claim_not_found" };
+			if (discoveredEvent === null) return { status: RunDispatchResultStatuses.Conflict, reason: "claim_not_found" };
 			const discoveredRun = await transaction.agentRun.findUnique({ where: { id: discoveredEvent.runId } });
-			if (discoveredRun === null) return { status: "conflict", reason: "attempt_conflict" };
+			if (discoveredRun === null) return { status: RunDispatchResultStatuses.Conflict, reason: "attempt_conflict" };
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discoveredRun.agentServiceId} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discoveredRun.id} FOR UPDATE`);
 			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "run_outbox_events" WHERE "id" = ${eventId} FOR UPDATE`);
@@ -229,7 +229,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			const event = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
 			if (service === null || run === null || event === null || event.kind !== RunOutboxEventKind.RunAttemptRequested || event.runId !== command.runId || event.attempt !== command.attempt || run.id !== command.runId)
 			{
-				return { status: "conflict", reason: "attempt_conflict" };
+				return { status: RunDispatchResultStatuses.Conflict, reason: "attempt_conflict" };
 			}
 			const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 			const now = databaseTime[0]?.now;
@@ -238,7 +238,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			const runtimeNamespace = _RuntimeNamespace(service.kind, config);
 			if (!now || snapshot === null || identity === null || !_SnapshotMatchesRun(snapshot, run) || command.namespace !== runtimeNamespace || command.bootstrapReference !== _BootstrapReference(event.id, event.attempt, run, runtimeNamespace))
 			{
-				return { status: "conflict", reason: "authority_conflict" };
+				return { status: RunDispatchResultStatuses.Conflict, reason: "authority_conflict" };
 			}
 
 			// 3. Replay the durable result independently of later Registered, Revoked, or run lifecycle state.
@@ -250,20 +250,20 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				const release = await transaction.outboxEvent.findUnique({ where: { idempotencyKey: _ReleaseIdempotencyKey(run.id, command.attempt) } });
 				if (leaseMatches && event.publishedAt !== null && _AssignmentIdentityMatches(existing, command, run, identity.subjectId, _RuntimeWorkloadIdentity(service.kind).audience) && _BootstrapMatches(bootstrap, command.bootstrapReference, existing) && _ReleaseEventMatches(release, existing, command.bootstrapReference))
 				{
-					return { status: "committed", result: { outcome: "idempotent", runId: run.id, attempt: command.attempt, workloadUid: existing.workloadUid } };
+					return { status: RunDispatchResultStatuses.Committed, result: { outcome: "idempotent", runId: run.id, attempt: command.attempt, workloadUid: existing.workloadUid } };
 				}
-				return { status: "conflict", reason: "assignment_conflict" };
+				return { status: RunDispatchResultStatuses.Conflict, reason: "assignment_conflict" };
 			}
 
 			// 4. Require the exact unexpired database claim generation before authoritative writes begin.
 			const runtimeIdentity = _RuntimeWorkloadIdentity(service.kind);
 			if (identity.fleetMembershipTrustedUntilEpochMilliseconds <= now.getTime() || !_SnapshotIdentityMatchesService(identity, service) || service.id !== run.agentServiceId || service.state !== AgentServiceState.Active || service.siloId !== run.siloId || service.activeRevisionId !== run.agentRevisionId || service.workloadProfile !== command.expectedWorkloadProfile || !runtimeIdentity.isServiceAccountName(command.serviceAccountName))
 			{
-				return { status: "conflict", reason: "authority_conflict" };
+				return { status: RunDispatchResultStatuses.Conflict, reason: "authority_conflict" };
 			}
-			if (event.publishedAt !== null || event.failedAt !== null) return { status: "conflict", reason: "claim_terminal" };
-			if (!leaseMatches || now.getTime() >= event.claimedAt!.getTime() + config.claimLeaseMilliseconds) return { status: "conflict", reason: "stale_claim" };
-			if (run.attempt !== command.attempt || run.state !== AgentRunState.Queued) return { status: "conflict", reason: "attempt_conflict" };
+			if (event.publishedAt !== null || event.failedAt !== null) return { status: RunDispatchResultStatuses.Conflict, reason: "claim_terminal" };
+			if (!leaseMatches || now.getTime() >= event.claimedAt!.getTime() + config.claimLeaseMilliseconds) return { status: RunDispatchResultStatuses.Conflict, reason: "stale_claim" };
+			if (run.attempt !== command.attempt || run.state !== AgentRunState.Queued) return { status: RunDispatchResultStatuses.Conflict, reason: "attempt_conflict" };
 
 			// 5. Insert the immutable PendingPod assignment before advancing the run authority.
 			const createdAt = now;
@@ -324,7 +324,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			// 9. Publish only the attempt event; release remains recoverably claimable until Pod registration.
 			const published = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { publishedAt: now } });
 			if (published.count !== 1) throw new Error("run assignment commit lost its outbox claim fence");
-			return { status: "committed", result: { outcome: "assigned", runId: run.id, attempt: run.attempt, workloadUid: command.workloadUid } };
+			return { status: RunDispatchResultStatuses.Committed, result: { outcome: "assigned", runId: run.id, attempt: run.attempt, workloadUid: command.workloadUid } };
 		});
 	}
 
@@ -355,7 +355,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 					LIMIT 1
 				`);
 				const candidate = candidates[0];
-				if (!candidate) return { status: "none" };
+				if (!candidate) return { status: RunDispatchResultStatuses.None };
 
 
 				// 2. Lock service, run, assignment, bootstrap, then outbox in the shared authority order.
@@ -370,21 +370,21 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				// 3. Reload and verify the complete durable binding with database time under those locks.
 				const event = await transaction.outboxEvent.findUnique({ where: { id: candidate.eventId } });
 				const run = await transaction.agentRun.findUnique({ where: { id: candidate.runId } });
-				if (event === null || run === null) return { status: "none" };
+				if (event === null || run === null) return { status: RunDispatchResultStatuses.None };
 				const assignment = await transaction.workloadAssignment.findUnique({ where: { runId_attempt: { runId: run.id, attempt: event.attempt } } });
 				const bootstrap = await transaction.workloadBootstrap.findUnique({ where: { id: candidate.bootstrapReference } });
 				const databaseTime = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
 				const now = databaseTime[0]?.now;
-				if (!now) return { status: "none" };
+				if (!now) return { status: RunDispatchResultStatuses.None };
 				if (!_ReleaseAuthorityIsCurrent(event, run, assignment, bootstrap, candidate, now, config.claimLeaseMilliseconds))
 				{
 					const failureCode = _ReleasePoisonFailureCode(event, run, assignment, bootstrap, candidate, now, config.claimLeaseMilliseconds);
 					if (failureCode !== null)
 					{
 						await _TerminalizePoisonedRelease(transaction, event, run, assignment, bootstrap, now, failureCode);
-						return { status: "terminalized", eventId: event.id, runId: run.id, attempt: event.attempt, failureCode };
+						return { status: RunDispatchResultStatuses.Terminalized, eventId: event.id, runId: run.id, attempt: event.attempt, failureCode };
 					}
-					return { status: "none" };
+					return { status: RunDispatchResultStatuses.None };
 				}
 
 
@@ -396,7 +396,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 
 
 				return {
-					status: "claimed",
+					status: RunDispatchResultStatuses.Claimed,
 					claim: {
 						lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
 						workload: _ReleaseProjection(assignment!, bootstrap!.id),
@@ -410,7 +410,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 	async registerFirstPodAndPublishReleaseAtomically(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand): Promise<RegisterRunWorkloadPodResult>
 	{
 		const config = this.config;
-		if (!_RegistrationCommandIsValid(eventId, command, config)) return { status: "conflict", reason: "invalid_registration" };
+		if (!_RegistrationCommandIsValid(eventId, command, config)) return { status: RunDispatchResultStatuses.Conflict, reason: "invalid_registration" };
 		const prisma = this.prisma;
 		return ___DoWithTrace("run_dispatch.workload_release.register", { eventId, runId: command.runId, attempt: command.attempt, workloadUid: command.workloadUid, podUid: command.podUid }, async function _tracePodRegistration(): Promise<RegisterRunWorkloadPodResult>
 		{
@@ -418,9 +418,9 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 			{
 				// 1. Discover lock keys, then acquire the same service -> run -> assignment -> bootstrap -> outbox order.
 				const discoveredEvent = await transaction.outboxEvent.findUnique({ where: { id: eventId } });
-				if (discoveredEvent === null) return { status: "conflict", reason: "claim_not_found" };
+				if (discoveredEvent === null) return { status: RunDispatchResultStatuses.Conflict, reason: "claim_not_found" };
 				const discoveredRun = await transaction.agentRun.findUnique({ where: { id: discoveredEvent.runId } });
-				if (discoveredRun === null) return { status: "conflict", reason: "attempt_conflict" };
+				if (discoveredRun === null) return { status: RunDispatchResultStatuses.Conflict, reason: "attempt_conflict" };
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_services" WHERE "id" = ${discoveredRun.agentServiceId} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "agent_runs" WHERE "id" = ${discoveredRun.id} FOR UPDATE`);
 				await transaction.$queryRaw(Prisma.sql`SELECT "run_id" FROM "workload_assignments" WHERE "run_id" = ${command.runId} AND "attempt" = ${command.attempt} FOR UPDATE`);
@@ -437,7 +437,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				const now = databaseTime[0]?.now;
 				if (!now || event === null || run === null || assignment === null || bootstrap === null || event.kind !== RunOutboxEventKind.RunWorkloadReleaseRequested || event.runId !== command.runId || event.attempt !== command.attempt || run.id !== command.runId)
 				{
-					return { status: "conflict", reason: "attempt_conflict" };
+					return { status: RunDispatchResultStatuses.Conflict, reason: "attempt_conflict" };
 				}
 
 
@@ -445,29 +445,29 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				const leaseMatches = event.claimedAt !== null && event.claimedAt.getTime() === Date.parse(command.claimedAt) && event.deliveryCount === command.deliveryCount;
 				if (assignment.state === WorkloadAssignmentState.Registered || assignment.state === WorkloadAssignmentState.Revoked)
 				{
-					if (assignment.podUid !== command.podUid) return { status: "conflict", reason: "pod_conflict" };
+					if (assignment.podUid !== command.podUid) return { status: RunDispatchResultStatuses.Conflict, reason: "pod_conflict" };
 					if (leaseMatches && event.publishedAt !== null && _RegistrationMatches(assignment, bootstrap, event, command))
 					{
-						return { status: "registered", result: { outcome: "idempotent", runId: run.id, attempt: command.attempt, workloadUid: assignment.workloadUid, podUid: assignment.podUid } };
+						return { status: RunDispatchResultStatuses.Registered, result: { outcome: "idempotent", runId: run.id, attempt: command.attempt, workloadUid: assignment.workloadUid, podUid: assignment.podUid } };
 					}
-					return { status: "conflict", reason: "assignment_conflict" };
+					return { status: RunDispatchResultStatuses.Conflict, reason: "assignment_conflict" };
 				}
 
 
 				// 4. Require live exact assignment integrity before inspecting the recoverable release lease.
 				if (run.attempt !== command.attempt || run.state !== AgentRunState.Assigned || assignment.state !== WorkloadAssignmentState.PendingPod || !_RegistrationMatches(assignment, bootstrap, event, command) || assignment.expiresAt.getTime() <= now.getTime() || bootstrap.expiresAt.getTime() <= now.getTime() || bootstrap.consumedAt !== null)
 				{
-					return { status: "conflict", reason: "authority_conflict" };
+					return { status: RunDispatchResultStatuses.Conflict, reason: "authority_conflict" };
 				}
-				if (event.publishedAt !== null || event.failedAt !== null) return { status: "conflict", reason: "claim_terminal" };
-				if (!leaseMatches || now.getTime() >= event.claimedAt!.getTime() + config.claimLeaseMilliseconds) return { status: "conflict", reason: "stale_claim" };
+				if (event.publishedAt !== null || event.failedAt !== null) return { status: RunDispatchResultStatuses.Conflict, reason: "claim_terminal" };
+				if (!leaseMatches || now.getTime() >= event.claimedAt!.getTime() + config.claimLeaseMilliseconds) return { status: RunDispatchResultStatuses.Conflict, reason: "stale_claim" };
 
 
 				// 5. Bind the first Pod under the assignment compare-and-swap, then publish only this release.
 				const registered = await transaction.workloadAssignment.updateMany({ where: { runId: command.runId, attempt: command.attempt, agentServiceId: command.agentServiceId, agentRevisionId: command.agentRevisionId, siloId: command.siloId, namespace: command.namespace, serviceAccountName: command.serviceAccountName, workloadKind: WorkloadKind.Job, workloadUid: command.workloadUid, workloadProfile: command.workloadProfile, state: WorkloadAssignmentState.PendingPod, podUid: null }, data: { state: WorkloadAssignmentState.Registered, podUid: command.podUid, registeredAt: now } });
 				const published = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { publishedAt: now } });
 				if (registered.count !== 1 || published.count !== 1) throw new Error("run workload registration lost its release fence");
-				return { status: "registered", result: { outcome: "registered", runId: run.id, attempt: run.attempt, workloadUid: assignment.workloadUid, podUid: command.podUid } };
+				return { status: RunDispatchResultStatuses.Registered, result: { outcome: "registered", runId: run.id, attempt: run.attempt, workloadUid: assignment.workloadUid, podUid: command.podUid } };
 			});
 		});
 	}
@@ -547,10 +547,10 @@ function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity |
 	const kind = identity["kind"];
 	const subjectId = identity["executionSubjectId"];
 	const trustedUntil = identity["fleetMembershipTrustedUntil"];
-	if ((kind !== "user" && kind !== "service") || typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
+	if ((kind !== RunInputSnapshotIdentityKinds.User && kind !== RunInputSnapshotIdentityKinds.Service) || typeof subjectId !== "string" || subjectId.trim().length === 0 || subjectId.length > 256 || typeof trustedUntil !== "string") return null;
 	const fleetMembershipTrustedUntilEpochMilliseconds = _CanonicalUtcInstantEpochMilliseconds(trustedUntil);
 	if (fleetMembershipTrustedUntilEpochMilliseconds === null) return null;
-	if (kind === "user") return { kind, subjectId, agentServiceId: null, effectiveScopeAttachmentDigest: null, fleetMembershipTrustedUntilEpochMilliseconds };
+	if (kind === RunInputSnapshotIdentityKinds.User) return { kind, subjectId, agentServiceId: null, effectiveScopeAttachmentDigest: null, fleetMembershipTrustedUntilEpochMilliseconds };
 	const agentServiceId = identity["agentServiceId"];
 	const effectiveScopeAttachmentDigest = identity["effectiveScopeAttachmentDigest"];
 	if (typeof agentServiceId !== "string" || agentServiceId.trim().length === 0 || agentServiceId.length > 256 || typeof effectiveScopeAttachmentDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(effectiveScopeAttachmentDigest)) return null;
@@ -560,7 +560,7 @@ function _SnapshotExecutionIdentity(value: unknown): SnapshotExecutionIdentity |
 /** Require a snapshot identity to be the only identity class valid for the active service. */
 function _SnapshotIdentityMatchesService(identity: SnapshotExecutionIdentity, service: { id: string; kind: AgentServiceKind }): boolean
 {
-	if (identity.kind === "user") return service.kind === AgentServiceKind.Personal;
+	if (identity.kind === RunInputSnapshotIdentityKinds.User) return service.kind === AgentServiceKind.Personal;
 	return service.kind === AgentServiceKind.Managed && identity.agentServiceId === service.id && identity.subjectId === `agent-service:${service.id}`;
 }
 

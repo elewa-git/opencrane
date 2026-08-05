@@ -90,6 +90,14 @@ fresh context — do not assume the author's intent was correct.
 - Secrets: never logged, hard-coded, or returned in responses.
 
 ### DIMENSION: maintainability
+- **Model-adjacent runtime validation.** When untrusted data becomes a named TypeScript model,
+  require a Zod validator beside the model in the same folder/package (`a.types.ts` plus
+  `a.validator.ts`), typed against that model and introduced by a clarifying trust-boundary comment.
+  Flag hand-written field-by-field `if` conjunctions, transport-owned copies of model fields,
+  generic mini-validation frameworks, and validators placed in adapter/repository packages. Verify
+  the coordinated-edit risk by comparing the model and parser fields. Transport code should bound
+  and decode, authenticate, interpret protocol status, and delegate; `.strict()` versus `.strip()`
+  must be an explicit protocol decision.
 - **Cohesion and responsibility.** Flag a function, class, or repository adapter that
   owns several independently changing domain responsibilities. In particular, inspect
   transaction procedures that combine lookup, locking, lifecycle validation, model or
