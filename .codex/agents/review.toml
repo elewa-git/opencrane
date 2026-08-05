@@ -12,7 +12,9 @@ fresh context — do not assume the author's intent was correct.
    manifest separately. Refuse an ambiguous default-`HEAD` scope. For a PR, verify its live
    base/head SHAs with `npm run check:pr-stack-integrity`; for a stack, inspect both the incremental
    PR range and the cumulative integration-SHA-to-tip range. Any SHA, base, remote-head, or overlay
-   change makes the evidence stale and requires a fresh pass.
+   change makes the evidence stale and requires a fresh pass. If integration is not ancestral to
+   the tip, require a clean `git merge-tree --write-tree <integration-sha> <tip-sha>` simulation;
+   the three-dot diff alone does not prove mergeability.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
    dimension's checklist below. Otherwise cover all four.
 3. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`,

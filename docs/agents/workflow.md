@@ -61,12 +61,17 @@ earlier conclusion, and at least once per hour while a task remains active:
 | Parent PR merged | Before merging its child, retarget that child to the integration branch and prove the merged parent head is now ancestral there. Never merge a child into an already-merged feature branch. |
 | Authorized push | Confirm the remote head equals the reviewed local `HEAD`; stale local evidence is invalid. |
 | PR open, refresh, edit, or base change | Run the live stack checker and record the PR number, base ref/SHA, head ref/SHA, and review order. |
-| Pre-handoff or pre-merge report | Validate both the incremental `base...head` diff and the cumulative integration-base-to-stack-tip range. |
+| Pre-handoff or pre-merge report | Validate both the incremental `base...head` diff and the cumulative integration-base-to-stack-tip range. If integration is not ancestral to the tip, require a clean `git merge-tree --write-tree <integration-sha> <tip-sha>` simulation. |
 
 Treat committed, staged, unstaged, and untracked files as four separate overlays. Never use
 `git diff HEAD` as proof of a complete change set: staged and unstaged changes can cancel in that
 view, and committed work disappears from it. Evidence from an earlier SHA, base, remote head, or
 overlay manifest is stale and must not be reported as current.
+
+At the first wave checkpoint, persist the immutable local review base with
+`git config "branch.$(git branch --show-current).opencraneWaveBase" "$(git rev-parse HEAD)"`. The
+Stop gate fails closed on a committed pre-PR branch when neither live PR evidence nor this recorded
+base exists. Update it only when deliberately starting a new reviewed wave, never to silence a gate.
 
 ## Commit Messages
 

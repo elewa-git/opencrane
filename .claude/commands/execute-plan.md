@@ -120,7 +120,9 @@ blocker; do not hide it behind an interface.
 
 ## SHA-bound long-running checkpoints
 
-- At wave start record `WAVE_BASE`, the intended integration ref, and its fetched SHA. Do not use a
+- At wave start record `WAVE_BASE`, the intended integration ref, and its fetched SHA. Persist the
+  immutable base for the local Stop gate with
+  `git config "branch.$(git branch --show-current).opencraneWaveBase" "$WAVE_BASE"`. Do not use a
   moving branch name as review evidence.
 - After every wave commit, review-fix commit, rebase, authorized push, PR open/edit/base change, and
   at least hourly during an active long-running task, refresh the live PR graph with
@@ -131,7 +133,9 @@ blocker; do not hide it behind an interface.
   merged. Merging the child into the already-merged parent branch closes the PR without landing its
   work on integration.
 - Validate two ranges before handoff: the incremental live `base...head` PR diff and the cumulative
-  integration-SHA-to-stack-tip range. Record exact SHAs for both.
+  integration-SHA-to-stack-tip range. Record exact SHAs for both. When integration is not ancestral
+  to the tip, also run `git merge-tree --write-tree <integration-sha> <tip-sha>`; a three-dot diff
+  alone cannot expose integration-side conflicts.
 - Treat committed `WAVE_BASE...HEAD`, staged, unstaged, and untracked changes as separate review
   overlays. Any change to a SHA, PR base, remote head, or overlay invalidates earlier evidence.
 

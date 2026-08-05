@@ -44,6 +44,9 @@ stack-tip range. The incremental range prevents reviewing predecessor material t
 cumulative range catches integration conflicts and cross-PR regressions. If a SHA, base, remote
 head, staged/unstaged diff, or untracked manifest changes during review, report the evidence as stale
 and require a fresh pass.
+When the integration SHA is not ancestral to the stack tip, require a clean
+`git merge-tree --write-tree <integration-sha> <tip-sha>` (or equivalent candidate-merge-tree)
+simulation. A three-dot diff scopes tip-side content; it does not prove the two sides merge.
 
 ## Dimension
 

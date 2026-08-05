@@ -56,6 +56,9 @@ _write_context_and_exit() {
     echo "---"
     echo "PR_STACK_INTEGRITY:"
     printf '%s\n' "${stack_output:-}"
+    echo "---"
+    echo "REVIEW_BASE_RESOLUTION:"
+    printf '%s\n' "${base_resolution:-}"
   } > "$context" 2>/dev/null || true
   exit 0
 }
@@ -64,8 +67,7 @@ _write_context_and_exit() {
 #    record the current state as reviewed and let the stop proceed. Prevents loops.
 stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null || echo false)"
 
-# 4. Bind the review fingerprint to the live PR topology. A branch without an open PR is a valid
-#    pre-publication state; a failed live inspection of an open branch routes to judgment.
+# 4. Bind the review fingerprint to the live PR topology and an immutable committed-range base.
 current_branch="$(git branch --show-current 2>/dev/null || true)"
 stack_output=""
 stack_status=0
@@ -74,6 +76,25 @@ if [ -f "$repo/scripts/pr-stack-integrity.mjs" ] && [ -n "$current_branch" ]; th
   stack_output="$(node scripts/pr-stack-integrity.mjs --current-branch "$current_branch" --format json 2>&1)"
   stack_status=$?
   stack_base_oid="$(printf '%s' "$stack_output" | jq -r '.evidence.current.base.sha // empty' 2>/dev/null || true)"
+fi
+base_status=0
+base_resolution="live PR base ${stack_base_oid:-unavailable}"
+if [ -z "$stack_base_oid" ] && [ -n "$current_branch" ]; then
+  recorded_base="$(git config --get "branch.$current_branch.opencraneWaveBase" 2>/dev/null || true)"
+  if [ -n "$recorded_base" ] && git cat-file -e "${recorded_base}^{commit}" 2>/dev/null; then
+    stack_base_oid="$(git rev-parse "$recorded_base" 2>/dev/null || true)"
+    base_resolution="recorded WAVE_BASE $stack_base_oid"
+  else
+    case "$current_branch" in
+      main|develop|own-personal-ai-agent-setup)
+        base_resolution="integration branch $current_branch"
+        ;;
+      *)
+        base_status=1
+        base_resolution="missing immutable base for pre-PR branch $current_branch; record branch.$current_branch.opencraneWaveBase"
+        ;;
+    esac
+  fi
 fi
 
 # 5. Build committed, staged, unstaged, and untracked source overlays separately. `git diff HEAD`
@@ -129,14 +150,14 @@ total_lines=$(( ${committed_lines:-0} + ${staged_lines:-0} + ${unstaged_lines:-0
 growth_output="$(node scripts/module-growth-check.mjs 2>&1)"
 growth_status=$?
 head_oid="$(git rev-parse HEAD 2>/dev/null || true)"
-current_hash="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s' \
+current_hash="$(printf '%s\n%s\n%s\n%s\n%s\n%s\n%s\n%s' \
   "$head_oid" "$stack_base_oid" "$changed_files" "$code_diff" "$untracked_manifest" \
-  "$growth_output" "$stack_output" | shasum -a 256 | awk '{print $1}')"
+  "$growth_output" "$stack_output" "$base_resolution" | shasum -a 256 | awk '{print $1}')"
 
 # 7. Loop guard resolved here (needs current_hash). It never suppresses a deterministic stack
 #    failure: ancestry drift remains blocking until the graph is repaired.
 if [ "$stop_active" = "true" ]; then
-  if [ "$stack_status" -ne 0 ]; then
+  if [ "$stack_status" -ne 0 ] || [ "$base_status" -ne 0 ]; then
     _write_context_and_exit "JUDGE"
   fi
   printf '%s\n' "$current_hash" > "$marker" 2>/dev/null || true
@@ -146,6 +167,9 @@ fi
 # 8. No supported source changes and a valid live stack -> nothing to judge.
 if [ -z "$committed_diff" ] && [ -z "$staged_diff" ] && [ -z "$unstaged_diff" ] \
   && [ -z "$untracked_manifest" ] && [ "$stack_status" -eq 0 ]; then
+  if [ "$base_status" -ne 0 ]; then
+    _write_context_and_exit "JUDGE"
+  fi
   _write_context_and_exit "SKIP"
 fi
 
@@ -178,6 +202,9 @@ if [ "$growth_status" -ne 0 ] \
   critical="yes"
 fi
 if [ "$stack_status" -ne 0 ]; then
+  critical="yes"
+fi
+if [ "$base_status" -ne 0 ]; then
   critical="yes"
 fi
 

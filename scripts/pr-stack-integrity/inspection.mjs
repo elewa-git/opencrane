@@ -34,10 +34,21 @@ export function inspectLiveStack(input)
 	{
 		throw new Error("BASE_REF_DRIFT: a live base branch changed during inspection; rerun against a stable snapshot.");
 	}
+	const gitEvidence = input.git.evidence(snapshotA);
+	const snapshotC = input.github.openPullRequests(input.repository);
+	if (JSON.stringify(snapshotA) !== JSON.stringify(snapshotC))
+	{
+		throw new Error("FINAL_SNAPSHOT_DRIFT: the live PR graph changed while Git evidence was computed; rerun against a stable snapshot.");
+	}
+	const finalBaseHeads = input.git.remoteBaseHeads(Array.from(baseHeads.keys()).sort());
+	if (JSON.stringify(_Entries(baseHeads)) !== JSON.stringify(_Entries(finalBaseHeads)))
+	{
+		throw new Error("FINAL_BASE_REF_DRIFT: a live base branch changed while Git evidence was computed; rerun against a stable snapshot.");
+	}
 	return {
 		pullRequests: snapshotA,
 		baseHeads,
-		...input.git.evidence(snapshotA),
+		...gitEvidence,
 		event: selectedEventNumber ? {
 			number: selectedEventNumber,
 			action: input.event?.action ?? "manual",

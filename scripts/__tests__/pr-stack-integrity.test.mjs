@@ -207,6 +207,25 @@ test("fails when a live base ref changes during inspection", function _BaseDrift
 	}, /BASE_REF_DRIFT/u);
 });
 
+test("fails when the graph changes while Git evidence is computed", function _FinalSnapshotDrift()
+{
+	const first = [_PullRequest(1, "feat/one", "a", "develop", "d")];
+	const changed = [_PullRequest(1, "feat/one", "new-a", "develop", "d")];
+	let calls = 0;
+	assert.throws(function _Inspect() {
+		inspectLiveStack({
+			repository: "example/opencrane",
+			event: { number: 1, action: "synchronize", headSha: "a" },
+			github: { openPullRequests() { calls += 1; return calls < 3 ? first : changed; } },
+			git: {
+				fetchAndVerify() { return new Map([["develop", "d"]]); },
+				remoteBaseHeads() { return new Map([["develop", "d"]]); },
+				evidence() { return { ancestry: new Set(), diffDigests: new Map(), patchIds: new Map() }; },
+			},
+		});
+	}, /FINAL_SNAPSHOT_DRIFT/u);
+});
+
 test("fails when a fetched PR ref does not match GitHub's head SHA", function _FetchedHeadDrift()
 {
 	const commands = {

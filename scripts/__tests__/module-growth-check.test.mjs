@@ -194,6 +194,7 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 		assert.match(content, /diff --cached --binary/u);
 		assert.match(content, /incremental/u);
 		assert.match(content, /cumulative/u);
+		assert.match(content, /merge-tree --write-tree/u);
 	}
 
 	const codexHook = readFileSync(
@@ -211,11 +212,69 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 	assert.match(sharedHook, /git diff --cached --binary HEAD/u);
 	assert.match(sharedHook, /git ls-files --others --exclude-standard -z/u);
 	assert.match(sharedHook, /git rev-parse HEAD/u);
+	assert.match(sharedHook, /opencraneWaveBase/u);
 
 	const styleCheck = readFileSync(join(_RepositoryRoot, "scripts/agent-style-check.sh"), "utf8");
 	assert.match(styleCheck, /ls-files --others --exclude-standard -z -- '\*\.ts'/u);
 	const prismaCheck = readFileSync(join(_RepositoryRoot, "scripts/prisma-boundary-check.mjs"), "utf8");
 	assert.match(prismaCheck, /ls-files", "--others", "--exclude-standard", "-z"/u);
+	const stackWorkflow = readFileSync(join(_RepositoryRoot, ".github/workflows/pr-stack-integrity.yml"), "utf8");
+	assert.match(stackWorkflow, /checks: write/u);
+	assert.match(stackWorkflow, /check-runs/u);
+	assert.match(stackWorkflow, /head_sha=.*github\.event\.pull_request\.head\.sha/u);
+});
+
+test("shared Stop pre-filter blocks a clean committed pre-PR branch without WAVE_BASE", (context) =>
+{
+	const repository = mkdtempSync(join(tmpdir(), "opencrane-review-base-"));
+	context.after(() => rmSync(repository, { recursive: true, force: true }));
+	const fakeBin = join(repository, "fake-bin");
+	const fakeNode = join(fakeBin, "node");
+	const configurationPath = join(repository, "docs/agents/module-growth-policy.json");
+	const sourcePath = join(repository, "apps/runtime.py");
+	mkdirSync(fakeBin, { recursive: true });
+	mkdirSync(join(repository, ".claude"), { recursive: true });
+	mkdirSync(dirname(configurationPath), { recursive: true });
+	mkdirSync(dirname(sourcePath), { recursive: true });
+	writeFileSync(configurationPath, JSON.stringify({ sourceExtensions: [".py"] }));
+	writeFileSync(sourcePath, "value = 1\n");
+	writeFileSync(
+		fakeNode,
+		[
+			"#!/usr/bin/env bash",
+			"if [ \"$1\" = \"-e\" ]; then",
+			"  printf '%s\\n' ':(icase)*.py'",
+			"  exit 0",
+			"fi",
+			"printf '%s\\n' 'module-growth-check: 0 error(s), 0 review candidate(s).'",
+			"",
+		].join("\n"),
+	);
+	chmodSync(fakeNode, 0o755);
+	execFileSync("git", ["init", "--quiet"], { cwd: repository });
+	execFileSync("git", ["add", "."], { cwd: repository });
+	execFileSync("git", [
+		"-c", "user.name=Review Base Test",
+		"-c", "user.email=review-base@example.invalid",
+		"-c", "commit.gpgsign=false",
+		"commit", "--quiet", "-m", "baseline",
+	], { cwd: repository });
+
+	const sharedHook = join(_RepositoryRoot, ".claude/hooks/require-review.sh");
+	const result = spawnSync("bash", [sharedHook], {
+		cwd: repository,
+		encoding: "utf8",
+		env: {
+			...process.env,
+			CLAUDE_PROJECT_DIR: repository,
+			PATH: `${fakeBin}:${process.env.PATH}`,
+		},
+		input: JSON.stringify({ stop_hook_active: false }),
+	});
+	assert.equal(result.status, 0);
+	const reviewContext = readFileSync(join(repository, ".claude/.review-context.md"), "utf8");
+	assert.match(reviewContext, /^VERDICT=JUDGE/mu);
+	assert.match(reviewContext, /missing immutable base/u);
 });
 
 test("Codex Stop wrapper blocks JUDGE and allows SKIP", (context) =>
