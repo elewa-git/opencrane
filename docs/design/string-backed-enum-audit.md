@@ -30,6 +30,16 @@ on one another. Its serialized values remain `persona_refresh` and `model_alias`
 values therefore remain compatible. Package-local enums retain existing serialized result values while
 linking the service, repository, router, and materialization branches at compile time.
 
+The personal persona package now owns its local workflow vocabulary in
+`profile/persona-lifecycle.types.ts`. `PersonaLifecycleOutcomes`, `PersonaOnboardingApiStates`, and
+`PersonaInterviewDenialReasons` keep the interview, drafting, approval, and HTTP branches linked
+without reviving the deleted generic persona model contract. Prisma-generated persona states remain
+adapter-edge values and are mapped explicitly.
+
+Interview lifecycle reads now flow through Prisma model queries, so the persona package compares the
+generated `PersonaInterviewState` enum directly and no longer carries adapter-edge string literals for
+persisted interview states.
+
 ## Priority 0: authority and durable-contract risk
 
 ### Authorization scope kinds
@@ -89,10 +99,8 @@ one dependency-neutral owner and map Prisma values at the persistence edge.
   server channel-target resolution.
 - `ArtifactKind`, `PersonalArtifactState`, and `ArtifactIndexState`, duplicated between artifact
   models, backend finalization, and frontend projections.
-- Persona lifecycle/category enums (`PersonaInterviewCategory`, `PersonaInterviewState`,
-  `PersonaRevisionState`, and `PersonaOnboardingState`) and transcript enums (`ThreadState`,
-  `MessageRole`, `MessageState`, `MessageProvenanceSource`, and `MessageContentBlockType`) in
-  `@opencrane/models/agents`.
+- Transcript enums (`ThreadState`, `MessageRole`, `MessageState`, `MessageProvenanceSource`, and
+  `MessageContentBlockType`) in `@opencrane/models/agents`.
 - `AgentScheduleOverlapPolicy`, duplicated between schedule ticks and agent-service revision
   authoring.
 

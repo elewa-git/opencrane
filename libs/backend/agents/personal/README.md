@@ -6,7 +6,7 @@
 | --- | --- |
 | [configuration](./configuration/main/README.md) | Provenance for changes that apply only to a future run snapshot. |
 | [memory](./memory/main/README.md) | Personal memory facts and consent. |
-| [personas](./personas/main/README.md) | Interview-backed, approved persona revisions. |
+| [personas](./personas/README.md) | Interview-backed, approved persona revisions. |
 
 ```
  agent request ─► configuration change ─► next frozen run input

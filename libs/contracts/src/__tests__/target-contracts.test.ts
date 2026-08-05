@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ApprovalStatus } from "../index.js";
-import type { AgentRun, AgentService, Approval, AuthorizationGrant, PersonaRevision, PlatformPolicy, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import type { AgentRun, AgentService, Approval, AuthorizationGrant, PlatformPolicy, RunEvent, SignedFleetMembershipRevision } from "../index.js";
 
 describe("canonical model exports", function ()
 {
@@ -21,33 +21,6 @@ describe("canonical model exports", function ()
     };
 
     expect(projectGrant.scope).toEqual({ kind: "project", organizationId: "org-1", projectId: "project-cross-functional" });
-  });
-
-  it("exports the approved first-persona gate without a mutable runtime file", function ()
-  {
-    const persona: PersonaRevision = {
-      id: "persona-1",
-      personaProfileId: "profile-1",
-      revision: 1,
-      state: "approved",
-      soulTemplate: { id: "structured-collaborator", version: 2, digest: "sha256:soul" },
-      interviewId: "interview-1",
-      insights: [
-        { id: "insight-1", category: "answer_structure", statement: "Prefer concise options before detail.", provenance: { interviewId: "interview-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1, questionId: "communication-style", answerId: "answer-1" } },
-        { id: "insight-2", category: "approval_risk", statement: "Ask before sharing outside the project.", provenance: { interviewId: "interview-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1, questionId: "privacy-boundary", answerId: "answer-2" } },
-        { id: "insight-3", category: "working_habits", statement: "Track decisions explicitly.", provenance: { interviewId: "interview-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1, questionId: "working-style", answerId: "answer-3" } },
-      ],
-      compiledInstructions: "# Working agreement",
-      previousRevisionId: null,
-      authoredBy: "user-1",
-      createdAt: "2026-07-18T09:00:00.000Z",
-      approvedBy: "user-1",
-      approvedAt: "2026-07-18T09:01:00.000Z",
-      durableSoulMutationPolicy: "forbidden",
-    };
-
-    expect(persona.insights).toHaveLength(3);
-    expect(persona.durableSoulMutationPolicy).toBe("forbidden");
   });
 
   it("binds services, runs, events, and approvals to the target vocabulary", function ()

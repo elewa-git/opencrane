@@ -30,13 +30,14 @@ server-owned reviewed question set
  active persona
 ```
 
-**In this flow:** [runs](../../runs/main/README.md) *(runs execute against the persona this activates)*
+**In this flow:** [runs](../../../execution/runs/main/README.md) *(runs execute against the persona this activates)*
 
-The interview half locks the profile while it starts, so duplicate browser requests reuse the one
-in-progress interview instead of discarding answers. A retry of the same proposal-bound refresh
+The interview half runs every start inside one serializable transaction, so duplicate browser
+requests reuse the one in-progress interview instead of discarding answers, and two racing starts
+resolve as one interview plus one retriable conflict. A retry of the same proposal-bound refresh
 returns that interview and its frozen questions again; a different refresh proposal receives a
-conflict instead of hijacking it. The authority locks the interview again for each answer and for
-completion, ensuring a late answer cannot race a completed record. Answers name the exact question-set
+conflict instead of hijacking it. Each answer and the completion re-read the interview inside the
+same serializable boundary, so a late answer cannot race a completed record. Answers name the exact question-set
 revision and question they answered; completion is refused until every question in that reviewed
 revision has exactly one answer.
 
@@ -51,62 +52,65 @@ match the interview answers; and the policy forbidding a mutable runtime "SOUL" 
 failure is a specific denial (`not_draft`, `interview_incomplete`, `invalid_insights`,
 `template_mismatch`, …).
 
+Every lifecycle adapter returns the same serialized lifecycle outcome and denial values through
+documented string-backed enums. That keeps the API's readable response values stable while ensuring
+the profile, interview, drafting, and approval owners cannot silently drift into different control
+flow vocabularies. Reviewed templates require unique rule priorities within each template, so
+delegate-backed drafting never substitutes application collation for a database rule-ID tie-break.
+
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
-fails closed and a crash leaves the previous active persona intact, never a half-approved one.
+fails closed and a crash leaves the previous active persona intact, never a half-approved one. When
+the interview was started by an accepted refresh proposal, the approval transaction must still find
+and apply that exact proposal; a missing or concurrently changed proposal rejects and rolls back the
+whole approval rather than activating the revision alone.
 
 ## Public surface
 
-- `__StartPersonaInterview`, `__RecordPersonaInterviewAnswer`, `__CompletePersonaInterview` — start,
-  append to, and complete the reviewed onboarding interview lifecycle.
-- `StartPersonaInterviewCommand` / `StartPersonaInterviewResult`,
-  `RecordPersonaInterviewAnswerCommand` / `RecordPersonaInterviewAnswerResult`, and
-  `CompletePersonaInterviewCommand` / `CompletePersonaInterviewResult` — the lifecycle requests and
-  stable outcomes.
-- `PersonaInterviewRepository` / `PrismaPersonaInterviewRepository` — the lifecycle persistence port
-  and its canonical product-database implementation.
-- `__CreatePersonaDraft(repository, command)` — derives the selected template, next revision, and
-  answer provenance from a completed interview; callers supply only reviewable insight statements.
-- `CreatePersonaDraftCommand` / `CreatePersonaDraftResult`, `CreatePersonaDraftPersistenceResult`,
-  `PersonaDraftInsightCommand`, and `PersonaDraftRepository` — the request, stable outcome, raw
-  persistence result, insight evidence, and draft persistence port.
-- `PrismaPersonaDraftRepository` — locks profile and interview evidence, then persists the derived
-  template and three-to-five answer-bound insights as one draft.
-- `__ApprovePersona(repository, command)` — validates evidence, then approves and activates atomically.
-- `ApprovePersonaCommand` / `ApprovePersonaResult` — the request and stable allow/deny outcome.
-- `PersonaApprovalSnapshot`, `AtomicApprovePersonaCommand`, `AtomicApprovePersonaResult`, and
-  `PersonaAuthorityRepository` — the consistent evidence and injected approval persistence boundary.
-- `PrismaPersonaAuthorityRepository` — the target Postgres implementation; it locks the profile,
-  approves the checked draft, and moves the active pointer in one transaction.
-- `__EnsurePersonaOnboarding` — validates the authenticated owner coordinates before provisioning the
-  owner profile and current reviewed interview source.
-- `PersonaOnboardingRepository` / `PrismaPersonaOnboardingRepository` — the provisioning port and
-target Postgres implementation. It creates the initial product catalogue only as `Draft`, fills all
-required questions, then reviews it; a conflicting source identity fails closed. Its app-supplied
-logger records handled database failures with the silo and error details, while a trace covers the
-whole provisioning transaction.
-- `PERSONA_ONBOARDING_QUESTION_SET_ID`, `PERSONA_ONBOARDING_QUESTION_SET_VERSION`,
-  `PERSONA_ONBOARDING_QUESTIONS`, and `PERSONA_ONBOARDING_SOUL_TEMPLATES` — the reviewed catalogue
-  source: eight key questions and three role-selected SOUL.md starting templates.
 - `__CreatePersonaOnboardingRouter` — the API-first self-persona surface. It starts ordinary or
   proposal-bound refresh interviews, records one answer, and completes them using only
   session-and-host-derived ownership.
 - `_CreatePersonaOnboardingRouter` — the ready-to-mount Prisma composition. It maps the shared
-  request principal to the persona caller and owns every onboarding repository and the clock.
+  request principal to the persona caller and supplies one aggregate persistence unit of work and the clock.
+- `_PersonaOnboardingOpenapiPaths` — the OpenAPI paths for that owner-only router.
+- `PersonaOnboardingCaller`, `PersonaOnboardingClock`, and
+  `PersonaOnboardingRouterDependencies` — the three types needed to compose the router without
+  exposing the lifecycle authorities or persistence adapters.
 
 ## Boundary
 
 Consumed by the persona-onboarding path. It owns the interview lifecycle and approval, but does not
-generate insights or execute the agent. It accepts only reviewable insight statements and derives
-template selection plus every other durable draft coordinate from the completed interview. It never
+execute the agent. Its drafting authority derives bounded owner-visible insight statements, template
+selection, and every durable draft coordinate from one serializable completed-interview snapshot. It never
 activates a draft that is not fully evidenced, and it never mints an editable runtime persona file.
-Storage is injected through its three authority repositories; the provisioning adapter also receives
-the composing app's structured logger rather than creating a second logging root.
+The capability stays one aggregate lifecycle, but its implementation is grouped by responsibility:
+`profile/` provisions and reports owner state, `interview/` records immutable answers, `drafting/`
+derives reviewable evidence, `approval/` activates the revision, and `http/` adapts the owner-only
+API. The route module composes these owners; it contains no persistence policy.
+
+`PrismaPersonaPersistenceUnitOfWork` is the sole owner of persona transaction creation. For each
+operation it constructs the lifecycle repositories once with the exact callback transaction; the
+repositories cannot retain or receive the root Prisma client. The aggregate read repository in
+`profile/` owns shared lifecycle evidence reads and next-revision allocation. It takes no row locks,
+so a concurrent writer surfaces as an explicit conflict outcome instead of a blocked lock. Drafting
+owns the separate deterministic template selector and pure instruction
+compiler, so a reader can verify template priority and instruction content without tracing lifecycle
+transactions. Every selected template stores its source identity, digest, rule, and sorted answer IDs.
+
+The lifecycle functions, their command/result types, repository ports, Prisma repositories, local
+catalogue, persistence unit of work, and status adapter are internal cohesive owners. `profile/`
+owns profile provisioning and status, `interview/` owns append-only evidence, `drafting/` owns draft
+derivation, `approval/` owns activation, and `http/` alone exposes the public router composition.
+Callers cannot bypass that composition through the package barrel.
 
 ## Dependency direction
 
-Tagged `scope:personal-personas`: it may depend only on `scope:personal-personas` and `scope:shared`
-plus the narrow `scope:auth` request-principal seam — never on apps or sibling business domains.
+Tagged `scope:personal-personas`: it may depend on its own scope, `scope:shared`, and the narrow
+`scope:auth` request-principal seam. It also has one intentional sibling dependency on
+`scope:personal-configuration`: the configuration-owned
+`PrismaPersonalConfigurationPersonaRefreshRepository` claims and applies the exact accepted refresh
+proposal on the persona unit of work's transaction. Configuration retains delegate ownership; this
+package imports no other sibling business domain and never depends on an app.
 
 ## Data & persistence
 
@@ -114,8 +118,12 @@ Provisions one `PersonaProfile` for each authenticated `(silo, user)` pair and t
 `PersonaQuestionSet` / `PersonaQuestion` / `PersonaSoulTemplate` catalogue in the canonical product
 database. It also starts, appends answers to, and completes `PersonaInterview` and
 `PersonaInterviewAnswer` rows; reads a joined approval snapshot (profile · revision · interview ·
-template · insights); and commits approval plus the active-persona pointer in one transaction.
-Postgres-level lifecycle behaviour is exercised by the `test:sql` target (`tests/persona-authority.sql`).
+template · insights); and commits approval plus the active-persona pointer in one transaction. A
+configuration-owned repository joins a proposal-bound refresh to that same transaction: persona
+logic retains only the opaque change identifier and never accesses `PersonalConfigurationChange`
+through a Prisma delegate.
+Postgres-level lifecycle behaviour is exercised by the `test:sql` target
+(`src/approval/__tests__/persona-authority.sql`).
 On a clean database, the target baseline supplies one reviewed eight-question onboarding set and two
 reviewed `SOUL.md` templates. The relationship and challenge answers select the direct or supportive
 template deterministically; profiles and interview evidence remain user-owned runtime records.
