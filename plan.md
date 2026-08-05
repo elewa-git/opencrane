@@ -190,12 +190,26 @@ real cluster.
 Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-manager, and
 CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
 `testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, and the
-confidential Zitadel OIDC application exists.
-The approved cleanup of twelve detached legacy PVC disks brought regional SSD quota usage down to
-`291/500 GiB`, leaving 209 GiB free for the initial 50 GiB silo volumes. The current operator still
-lacks Billing Account Viewer access to prove the billing account's monthly GKE credit is unused.
-OpenCrane workloads, logical-database credential isolation, trusted TLS, browser login, runtime
-isolation, and the final monthly cost remain live exit gates.
+confidential Zitadel OIDC application exists. GKE transiently expanded to four managed nodes, then
+consolidated to two: regional SSD quota is now `230/500 GiB` (270 GiB free), comprising two
+Autopilot boot/ephemeral disks plus an unrelated 30 GiB `opencrane-sandbox` disk. No OpenCrane PVC
+exists yet, so the initial 50 GiB aggregate silo PVC demand (PostgreSQL 20 GiB, artifacts 20 GiB,
+and Cognee 10 GiB) has sufficient current quota headroom.
+
+The first namespace deploy test stopped cleanly before mutation: the app-owned deploy engine
+correctly requires four separately pre-created external PostgreSQL basic-auth Secrets (OpenCrane,
+Obot, LiteLLM, and database-admin) and validates rather than generates them. No sanctioned
+testv2 external-secret provisioner or input source is present in this checkout, and its OIDC
+issuer/client/client-secret inputs were not available to the deploy shell. The later live check
+confirmed `standard-rwo` is the default expandable class, so storage-class admission is not the
+current test blocker; the project has no default Compute Engine KMS key, however, so this does not
+qualify the CMEK durable-storage gate. Although `testv2.dev.opencrane.ai` currently resolves to the
+ingress address, the deployer incorrectly requires `dev.opencrane.ai` to be a delegated DNS zone;
+a served record subtree has no child NS set. Supply the four external credential authorities and
+secure OIDC input, and repair the deployer preflight before retrying the namespaced release. The
+current operator still lacks Billing Account Viewer access to prove the billing account's monthly
+GKE credit is unused. OpenCrane workloads, logical-database credential isolation, trusted TLS,
+browser login, runtime isolation, and the final monthly cost remain live exit gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
@@ -239,31 +253,32 @@ runbooks, generated clients, and CI forbidden-reference checks.
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
 to create, share, schedule, observe, revoke, and delete agents and assets.
 
-## Issue disposition
+## Open issue disposition
 
 | Issue | Target-state action |
 |---|---|
 | [#127](https://github.com/elewa-git/opencrane/issues/127) | Keep enforcing CNI, per-silo routing, encrypted-storage preflights, and live probes |
 | [#128](https://github.com/elewa-git/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
-| [#129](https://github.com/elewa-git/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
-| [#133](https://github.com/elewa-git/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#353](https://github.com/elewa-git/opencrane/issues/353) | Remove provider-secret broadcast and obsolete plaintext provider-key paths |
 | [#136](https://github.com/elewa-git/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
-| [#150](https://github.com/elewa-git/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
 | [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
 | [#162](https://github.com/elewa-git/opencrane/issues/162) | Retain target chart-native UI deployment work |
-| [#174](https://github.com/elewa-git/opencrane/issues/174) | Fix bounded LiteLLM provisioning/reconcile behavior if it remains in the target adapter |
 | [#220](https://github.com/elewa-git/opencrane/issues/220) | Delete OpenClaw-specific scope; carry least privilege into target workload profiles |
-| [#221](https://github.com/elewa-git/opencrane/issues/221) | Generalize canonical KSA identity and repair into the target identity matrix |
 | [#222](https://github.com/elewa-git/opencrane/issues/222) | Build artifact-backed, scanned, signed, revocable skills and isolated Python execution |
 | [#224](https://github.com/elewa-git/opencrane/issues/224) | Build the target model/cost/provider/budget console |
-| [#225](https://github.com/elewa-git/opencrane/issues/225) | Retain runtime-neutral stream/render/artifact/security work; delete OpenClaw gateway scope |
 | [#226](https://github.com/elewa-git/opencrane/issues/226) | Build membership management over authoritative target APIs |
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
-| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
+
+Closed issues are intentionally absent from the active list: [#129](https://github.com/elewa-git/opencrane/issues/129),
+[#133](https://github.com/elewa-git/opencrane/issues/133),
+[#150](https://github.com/elewa-git/opencrane/issues/150),
+[#174](https://github.com/elewa-git/opencrane/issues/174),
+[#221](https://github.com/elewa-git/opencrane/issues/221),
+[#225](https://github.com/elewa-git/opencrane/issues/225),
+[#255](https://github.com/elewa-git/opencrane/issues/255), and
+[#353](https://github.com/elewa-git/opencrane/issues/353).
 
 ## Deferred research
 

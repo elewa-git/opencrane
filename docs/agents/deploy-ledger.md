@@ -70,3 +70,22 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: render and cost the admitted request floor, free at least 25 GiB more SSD quota without
   deleting unverified data, and wait for public DNS convergence before requesting the silo's ACME
   certificate.
+
+## 2026-08-05 · dev · testv2 single-silo preflight · 0a526d8df3f7676b7e50f3a1445806680d3484ad · FAILED
+
+- findings: config: the executor has no OIDC issuer/client/client-secret inputs; `opencrane-testv2`
+  and its four required external PostgreSQL basic-auth Secrets do not exist; `dev.opencrane.ai` has
+  no delegated NS record although `testv2.dev.opencrane.ai` resolves to the ingress.
+- friction: the silo deployer intentionally validates external database credentials but the repository
+  has no app-owned credential-provisioning entrypoint for a fresh namespace under the script-only rule.
+- lesson: supply the secure OIDC source and pre-provisioned credential Secret names, select an explicit
+  expandable StorageClass, and restore base-domain delegation before retrying the silo deploy.
+
+## 2026-08-05 · dev · testv2 single-silo preflight correction · 0a526d8df3f7676b7e50f3a1445806680d3484ad · PARTIAL
+
+- findings: script: later direct inspection proves `standard-rwo` is the default expandable class;
+  the previous default-StorageClass finding was incorrect. The preflight's child-NS test is instead
+  too strict for `dev.opencrane.ai`, which is served by the `opencrane.ai` zone and need not be a
+  delegated zone itself.
+- lesson: validate that the supplied base domain has authoritative DNS service, not that it is a
+  separately delegated zone; retain the missing external credential and OIDC-input findings.
