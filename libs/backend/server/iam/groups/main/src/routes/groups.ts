@@ -5,7 +5,7 @@ import { createGroup, deleteGroup, getGroup, listGroups, updateGroup } from "../
 import type { GroupWriteRequest } from "./groups.types.js";
 
 /**
- * CRUD router for domain access groups and awareness-linked grants.
+ * CRUD router for domain access groups.
  *
  * @param prisma - Prisma client used for persistence.
  * @returns Configured Express router.
@@ -14,7 +14,7 @@ export function groupsRouter(prisma: PrismaClient): Router
 {
   const router = Router();
 
-  /** List all groups with member counts and attached awareness grants. */
+  /** List all groups with member counts. */
   router.get("/", async function _listGroups(req, res)
   {
     res.json(await listGroups(prisma));
@@ -33,21 +33,21 @@ export function groupsRouter(prisma: PrismaClient): Router
     res.json(group);
   });
 
-  /** Create a new group and optional awareness grants. */
+  /** Create a new group. */
   router.post("/", async function _createGroup(req, res)
   {
     const body = req.body as GroupWriteRequest;
     res.status(201).json(await createGroup(prisma, body));
   });
 
-  /** Update a group and fully replace attached awareness grants. */
+  /** Update a group. */
   router.put("/:id", async function _updateGroup(req, res)
   {
     const body = req.body as Partial<GroupWriteRequest>;
     res.json(await updateGroup(prisma, req.params.id, body));
   });
 
-  /** Delete a group and any awareness grants linked to it. */
+  /** Delete a group. */
   router.delete("/:id", async function _deleteGroup(req, res)
   {
     res.json(await deleteGroup(prisma, req.params.id));

@@ -451,6 +451,7 @@ CREATE TABLE "authorization_grants" (
     "valid_from" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "expires_at" TIMESTAMP(3),
     "revoked_at" TIMESTAMP(3),
+    "require_approval" BOOLEAN NOT NULL DEFAULT false,
     "created_by" TEXT NOT NULL,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
@@ -1670,7 +1671,13 @@ CREATE INDEX "authorization_grants_silo_id_resource_kind_resource_id_prio_idx" O
 CREATE INDEX "authorization_grants_catalog_id_catalog_revision_capability_idx" ON "authorization_grants"("catalog_id", "catalog_revision", "capability_id");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority") NULLS NOT DISTINCT;
+CREATE UNIQUE INDEX "authorization_grant_exact_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "scope_resource_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority");
+
+-- CreateIndex
+-- PostgreSQL considers NULL values distinct in a regular unique index. Scope kinds without a
+-- resource dimension store NULL here, so this partial index completes the exact-authority
+-- invariant and makes duplicate share creation deterministically conflict instead of duplicating.
+CREATE UNIQUE INDEX "authorization_grant_null_scope_authority_key" ON "authorization_grants"("silo_id", "subject_id", "scope_kind", "organization_id", "catalog_id", "catalog_revision", "capability_id", "resource_kind", "resource_id", "effect", "priority") WHERE "scope_resource_id" IS NULL;
 
 -- CreateIndex
 CREATE UNIQUE INDEX "capability_catalog_revisions_catalog_id_revision_key" ON "capability_catalog_revisions"("catalog_id", "revision");

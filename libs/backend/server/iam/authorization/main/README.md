@@ -97,6 +97,14 @@ Tagged `scope:authorization`: it may depend only on `scope:audit` (to record dec
 
 ## Data & persistence
 
+`PrismaShareAuthorizationUnitOfWork` binds the candidate-grant reader and
+`PrismaShareAuthorizationRepository` to one transaction for each sharing procedure. The repository
+owns the narrow catalog-seeding and share-grant persistence seam used by the sharing API. It scopes
+every grant lookup, list and revocation to one `siloId`, so
+a principal can never discover or revoke a delegation held by another ClusterTenant. The catalog
+revision is seeded idempotently; the stored digest, rather than a caller-supplied value, binds later
+grant evaluation to the canonical capability list.
+
 Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
 `ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`.
 

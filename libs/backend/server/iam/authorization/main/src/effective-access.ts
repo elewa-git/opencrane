@@ -1,7 +1,7 @@
-import { __AuthorizationScopesEqual, __DecideAuthorization, __IsAuthorizationResourceLocator } from "@opencrane/models/authorization";
+import { __AuthorizationScopesEqual, __DecideAuthorization, __IsAuthorizationResourceLocator, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
 import type { AuthorizationGrant, AuthorizationRequest, CapabilityReference } from "@opencrane/models/authorization";
 
-import type { AuthorizationGrantRepository, AuthorizationMembershipAuthority, EffectiveCapabilityEvidence, ResolveEffectiveAccessCommand, ResolveEffectiveAccessResult } from "./effective-access.types.js";
+import { AuthorizationMembershipOutcomes, type AuthorizationGrantRepository, type AuthorizationMembershipAuthority, type EffectiveCapabilityEvidence, type ResolveEffectiveAccessCommand, type ResolveEffectiveAccessResult } from "./effective-access.types.js";
 
 /** Produces a stable lexical key for an immutable capability reference. */
 function _capabilityKey(capability: CapabilityReference): string
@@ -68,7 +68,7 @@ export async function __ResolveEffectiveAccess(membershipAuthority: Authorizatio
 
 	// 2. Require current signed membership and independently enforce its returned trust boundary.
 	const membership = await membershipAuthority.verifyCurrentMembership(command.membership);
-	if (membership.outcome !== "trusted")
+	if (membership.outcome === AuthorizationMembershipOutcomes.Denied)
 	{
 		return { outcome: "denied", reason: "membership_denied", membershipReason: membership.reason, evidence: [] };
 	}
@@ -109,7 +109,7 @@ export async function __ResolveEffectiveAccess(membershipAuthority: Authorizatio
 	});
 
 	// 6. Intersect only dual allows; an empty grant intersection fails closed.
-	const capabilities = evidence.filter(item => item.actorDecision.outcome === "allow" && item.agentServiceDecision.outcome === "allow").map(item => item.capability);
+	const capabilities = evidence.filter(item => item.actorDecision.outcome === AuthorizationDecisionOutcomes.Allow && item.agentServiceDecision.outcome === AuthorizationDecisionOutcomes.Allow).map(item => item.capability);
 	if (capabilities.length === 0)
 	{
 		return { outcome: "denied", reason: "empty_intersection", evidence };

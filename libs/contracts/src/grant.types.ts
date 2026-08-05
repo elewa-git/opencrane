@@ -52,7 +52,7 @@ export interface Grant
   scope: GrantScope;
   /** Principal family receiving the decision. */
   subjectType: GrantSubjectType;
-  /** Stable principal identifier used by the compiler. */
+  /** Stable principal identifier the authorization decision resolves against. */
   subjectId: string;
   /** Human-readable principal label shown to operators. */
   subjectName: string;
