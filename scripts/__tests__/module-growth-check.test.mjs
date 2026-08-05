@@ -221,8 +221,10 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 	const stackWorkflow = readFileSync(join(_RepositoryRoot, ".github/workflows/pr-stack-integrity.yml"), "utf8");
 	assert.match(stackWorkflow, /checks: write/u);
 	assert.match(stackWorkflow, /check-runs/u);
-	assert.match(stackWorkflow, /gh pr list/u);
-	assert.match(stackWorkflow, /json headRefOid/u);
+	assert.match(stackWorkflow, /\.pullRequests\[\]\.head\.sha/u);
+	assert.match(stackWorkflow, /gh api/u);
+	assert.match(stackWorkflow, /--paginate/u);
+	assert.doesNotMatch(stackWorkflow, /gh pr list/u);
 	assert.match(stackWorkflow, /head_sha="\$head_sha"/u);
 });
 
