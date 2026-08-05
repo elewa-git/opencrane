@@ -55,4 +55,4 @@ Tagged `scope:authorization` (`layer:model`): it may depend only on `scope:autho
 ## See also
 
 - Parent index: [models](../../README.md)
-- Siblings: [agents](../../agents/main/README.md) · [artifacts](../../artifacts/main/README.md) · [platform-policy](../../platform-policy/main/README.md)
+- Siblings: [agents](../../agents/main/README.md) · [artifacts](../../artifacts/main/README.md)

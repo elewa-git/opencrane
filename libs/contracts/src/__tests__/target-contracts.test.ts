@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { AgentServiceKinds, ApprovalStatus, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
-import type { AgentRun, AgentService, Approval, AuthorizationGrant, PlatformPolicy, RunEvent, SignedFleetMembershipRevision } from "../index.js";
+import type { AgentRun, AgentService, Approval, AuthorizationGrant, RunEvent, SignedFleetMembershipRevision } from "../index.js";
 
 describe("canonical model exports", function ()
 {
@@ -89,16 +89,4 @@ describe("canonical fleet and platform exports", function ()
     expect(signedRevision.assertions[0]?.scope.kind).toBe("project");
   });
 
-  it("requires durable mounts, ephemeral runtime scratch, and sub-five-minute updates", function ()
-  {
-    const policy: PlatformPolicy = {
-      durableState: { retention: "until-authorized-deletion", storage: "persistent", expansion: "online", alertBeforeExhaustion: true, expandBeforeExhaustion: true, backup: "required" },
-      runtimeFilesystem: { rootAuthority: "non-authoritative", rootAccess: "read-only-when-supported", workspaceAuthority: "non-authoritative-scratch", workspaceLifetime: "lease-scoped", workspaceBackup: "never", clearWorkspaceOn: ["replacement", "scale-zero", "lease-expiry"] },
-      siloUpdate: { maximumDurationExclusiveMs: 300000, volumeHandling: "remount-existing", stateHandling: "resume-canonical", predecessorRuntime: "forbidden", predecessorDataTransformation: "forbidden" },
-    };
-
-    expect(policy.durableState.expansion).toBe("online");
-    expect(policy.runtimeFilesystem.workspaceBackup).toBe("never");
-    expect(policy.siloUpdate.maximumDurationExclusiveMs).toBe(300000);
-  });
 });

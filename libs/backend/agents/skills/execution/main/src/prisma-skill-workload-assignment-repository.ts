@@ -71,7 +71,10 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 		// 3. CAS assignment and bootstrap creation together so neither durable record can exist alone.
 		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
 		if (updated.count !== 1) return "conflict";
-		await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience: workload.kind === SkillWorkloadKind.Authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner", serviceAccountName: workload.kind === SkillWorkloadKind.Authoring ? "skill-authoring-default" : "tool-runner-default", namespace: command.namespace, workloadUid: command.workloadUid, expiresAt: new Date(now.getTime() + _BOOTSTRAP_LIFETIME_MILLISECONDS) } });
+		const isAuthoring = workload.kind === SkillWorkloadKind.Authoring;
+		const audience = isAuthoring ? "opencrane-skill-authoring" : "opencrane-tool-runner";
+		const serviceAccountName = isAuthoring ? "skill-authoring-default" : "tool-runner-default";
+		await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience, serviceAccountName, namespace: command.namespace, workloadUid: command.workloadUid, expiresAt: new Date(now.getTime() + _BOOTSTRAP_LIFETIME_MILLISECONDS) } });
 		return "assigned";
 	}
 

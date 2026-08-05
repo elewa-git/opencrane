@@ -107,7 +107,7 @@ one dependency-neutral owner and map Prisma values at the persistence edge.
 ## Priority 2: cohesive local policy vocabularies
 
 - `AgentServiceLifecycleAction`, `DeferredToolDecision`, `SteeringDisposition`, `ActionReplayMode`,
-  `RuntimeWorkspaceClearEvent`, `AuditDecisionActorKind`, and `AuditDecisionOutcome`.
+  `AuditDecisionActorKind`, and `AuditDecisionOutcome`.
 
 ## Deliberate exclusions
 

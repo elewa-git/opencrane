@@ -124,9 +124,6 @@
       "@opencrane/models/authorization": [
         "./libs/models/authorization/main/src/index.ts"
       ],
-      "@opencrane/models/platform-policy": [
-        "./libs/models/platform-policy/main/src/index.ts"
-      ],
       "@opencrane/backend/observability": [
         "./libs/backend/observability/src/index.ts"
       ],

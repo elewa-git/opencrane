@@ -27,7 +27,12 @@ export class PrismaArtifactCatalogueRepository implements ArtifactReadLeaseRepos
 	async listOwnedCatalogue(siloId: string, ownerPrincipalId: string): Promise<readonly PersonalArtifactEntry[]>
 	{
 		const artifacts = await this.prisma.artifact.findMany({ where: { siloId, ownerPrincipalId, state: { not: ArtifactState.Deleted }, currentRevisionId: { not: null } }, select: { id: true, kind: true, state: true, currentRevisionId: true, currentRevision: { select: { mediaType: true, byteLength: true, indexState: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: 50 });
-		return artifacts.map(function _ToPersonalEntry(artifact): PersonalArtifactEntry { return { id: artifact.id, kind: _ToKind(artifact.kind), state: artifact.state === ArtifactState.Active ? "active" : "deletion_pending", currentRevisionId: artifact.currentRevisionId, mediaType: artifact.currentRevision?.mediaType ?? null, byteLength: artifact.currentRevision === null ? null : artifact.currentRevision.byteLength.toString(), indexState: artifact.currentRevision === null ? null : _ToIndexState(artifact.currentRevision.indexState), createdAt: artifact.createdAt.toISOString(), updatedAt: artifact.updatedAt.toISOString() }; });
+		return artifacts.map(function _ToPersonalEntry(artifact): PersonalArtifactEntry
+		{
+			const byteLength = artifact.currentRevision === null ? null : artifact.currentRevision.byteLength.toString();
+			const indexState = artifact.currentRevision === null ? null : _ToIndexState(artifact.currentRevision.indexState);
+			return { id: artifact.id, kind: _ToKind(artifact.kind), state: artifact.state === ArtifactState.Active ? "active" : "deletion_pending", currentRevisionId: artifact.currentRevisionId, mediaType: artifact.currentRevision?.mediaType ?? null, byteLength, indexState, createdAt: artifact.createdAt.toISOString(), updatedAt: artifact.updatedAt.toISOString() };
+		});
 	}
 }
 

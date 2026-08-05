@@ -55,4 +55,4 @@ packages — never on apps, backend domains, or other model domains.
 ## See also
 
 - Parent index: [models](../../README.md)
-- Siblings: [artifacts](../../artifacts/main/README.md) · [authorization](../../authorization/main/README.md) · [platform-policy](../../platform-policy/main/README.md)
+- Siblings: [artifacts](../../artifacts/main/README.md) · [authorization](../../authorization/main/README.md)

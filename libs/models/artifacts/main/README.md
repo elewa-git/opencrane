@@ -51,4 +51,4 @@ Tagged `scope:artifacts` (`layer:model`): it may depend only on other `scope:art
 ## See also
 
 - Parent index: [models](../../README.md)
-- Siblings: [agents](../../agents/main/README.md) · [authorization](../../authorization/main/README.md) · [platform-policy](../../platform-policy/main/README.md)
+- Siblings: [agents](../../agents/main/README.md) · [authorization](../../authorization/main/README.md)

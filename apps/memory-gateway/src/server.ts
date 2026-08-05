@@ -119,15 +119,35 @@ export function _CreateServer(config: MemoryGatewayProcessConfig, tokenReviewer:
 			catch (error)
 			{
 				log.error({ err: error, path }, "memory gateway request failed");
-				_Respond(response, error instanceof MemorySearchContractViolation ? 422 : error instanceof RangeError ? 413 : 502);
+				_Respond(response, _ErrorStatus(error));
 			}
 		});
 	});
+}
+
+/** Map internal failures to the gateway's bounded public status vocabulary. */
+function _ErrorStatus(error: unknown): number
+{
+	if (error instanceof MemorySearchContractViolation) return 422;
+	if (error instanceof RangeError) return 413;
+	return 502;
+}
+
+/** Map one public status to its stable response code. */
+function _ErrorCode(status: number): string
+{
+	switch (status)
+	{
+		case 401: return "unauthorized";
+		case 404: return "not_found";
+		case 422: return "invalid_search";
+		default: return "memory_gateway_unavailable";
+	}
 }
 
 /** Write a status-only refusal without exposing provider details. */
 function _Respond(response: ServerResponse, status: number): void
 {
 	response.writeHead(status, { "content-type": "application/json" });
-	response.end(JSON.stringify({ error: status === 401 ? "unauthorized" : status === 404 ? "not_found" : status === 422 ? "invalid_search" : "memory_gateway_unavailable" }));
+	response.end(JSON.stringify({ error: _ErrorCode(status) }));
 }
