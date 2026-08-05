@@ -89,3 +89,17 @@ Full run reports belong in the corresponding pull request or issue.
   delegated zone itself.
 - lesson: validate that the supplied base domain has authoritative DNS service, not that it is a
   separately delegated zone; retain the missing external credential and OIDC-input findings.
+
+## 2026-08-05 · dev · testv2 single-silo namespace deploy · d2f26df0bf257c00be4aea3892174b016e0c057c · PARTIAL
+
+- findings: infra: PostgreSQL and its pooler are Ready, but a later database-privileges hook cannot
+  schedule on the three-node Autopilot fleet (`Insufficient memory` / pod-capacity events), so the
+  app-owned deployment stops before changing the tenant Helm release. config: the server remains
+  fail-closed on the absent Fleet-owned membership-verification public-key Secret. CI: the manual
+  bootstrap-image workflow is green and published immutable `sha-d2f26df0` channel-proxy and
+  memory-gateway images after recording Linux Terraform-provider checksums.
+- friction: image-only recovery still reconciles PostgreSQL first; a shortcut that skipped the hook
+  was rejected in independent review because it could bypass unproven database grants.
+- lesson: keep the database privilege proof intact; qualify a low-cost, schedulable retry design or
+  obtain stable Autopilot capacity before retrying the tenant Helm release, and source the Fleet
+  verification key from its owning authority before attempting server readiness.

@@ -189,27 +189,31 @@ real cluster.
 **Live qualification status (2026-08-05):** the app-owned Terraform path created the regional
 Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-manager, and
 CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
-`testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, and the
-confidential Zitadel OIDC application exists. GKE transiently expanded to four managed nodes, then
-consolidated to two: regional SSD quota is now `230/500 GiB` (270 GiB free), comprising two
-Autopilot boot/ephemeral disks plus an unrelated 30 GiB `opencrane-sandbox` disk. No OpenCrane PVC
-exists yet, so the initial 50 GiB aggregate silo PVC demand (PostgreSQL 20 GiB, artifacts 20 GiB,
-and Cognee 10 GiB) has sufficient current quota headroom.
+`testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, the confidential
+Zitadel OIDC application and client Secret are configured, and the namespace now has four distinct
+PostgreSQL bootstrap Secrets. The corrected deploy preflight accepts `dev.opencrane.ai` as the
+authoritative record subtree (not a separately delegated child zone), and `standard-rwo` is the
+default expandable class. GKE reports regional SSD quota at `230/500 GiB` (270 GiB free); the
+project has no default Compute Engine KMS key, so this deployment cannot qualify the CMEK
+durable-storage gate.
 
-The first namespace deploy test stopped cleanly before mutation: the app-owned deploy engine
-correctly requires four separately pre-created external PostgreSQL basic-auth Secrets (OpenCrane,
-Obot, LiteLLM, and database-admin) and validates rather than generates them. No sanctioned
-testv2 external-secret provisioner or input source is present in this checkout, and its OIDC
-issuer/client/client-secret inputs were not available to the deploy shell. The later live check
-confirmed `standard-rwo` is the default expandable class, so storage-class admission is not the
-current test blocker; the project has no default Compute Engine KMS key, however, so this does not
-qualify the CMEK durable-storage gate. Although `testv2.dev.opencrane.ai` currently resolves to the
-ingress address, the deployer incorrectly requires `dev.opencrane.ai` to be a delegated DNS zone;
-a served record subtree has no child NS set. Supply the four external credential authorities and
-secure OIDC input, and repair the deployer preflight before retrying the namespaced release. The
-current operator still lacks Billing Account Viewer access to prove the billing account's monthly
-GKE credit is unused. OpenCrane workloads, logical-database credential isolation, trusted TLS,
-browser login, runtime isolation, and the final monthly cost remain live exit gates.
+The first real `testv2` release created and kept its namespace, CNPG Cluster/PgBouncer, ingress,
+certificate, UI, Cognee, LiteLLM, and Obot gateway. PostgreSQL and its original privileges hook
+completed. The OpenCrane server remains correctly fail-closed because the fleet-owned
+`opencrane-fleet-membership-verification` Ed25519 public-key Secret is absent; it must be supplied
+by the Fleet authority, never invented in a silo. The initial channel-proxy and memory-gateway image
+references did not exist. CI now publishes both from `d2f26df0` under immutable
+`sha-d2f26df0` tags, and the complete CI run is green, including Terraform's read-only provider
+lock validation.
+
+The image upgrade is presently blocked before the tenant Helm release changes: its normal
+PostgreSQL `post-upgrade` privileges hook has three 64 MiB containers and GKE Autopilot cannot
+schedule it on the current three nodes (`Insufficient memory` / pod-capacity events). Bypassing
+that hook would weaken the database privilege proof and is rejected. Autopilot general-purpose
+workloads are billed from requested Pod resources rather than underlying node size, but the current
+Billing Account Viewer gap means the final monthly total remains unproven. Trusted TLS, browser
+Zitadel login, running server/channel/memory workloads, logical-database isolation, runtime
+isolation, and the final monthly cost remain live exit gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
