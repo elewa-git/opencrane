@@ -323,7 +323,7 @@ _run_preflight() {
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
   #    sits in ImagePullBackOff. A best-effort manifest check (skopeo/crane/docker) that
   #    only WARNS if no inspector is available (we never block on a missing local tool).
-  local _img="ghcr.io/elewa-git/opencrane-clustertenant-manager:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
+  local _img="ghcr.io/elewa-git/opencrane-server:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
   if command -v skopeo >/dev/null 2>&1; then
     skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
   elif command -v crane >/dev/null 2>&1; then
@@ -334,14 +334,14 @@ _run_preflight() {
     warn "Preflight: no image inspector (skopeo/crane/docker) — skipping the image-pull check."
   fi
 
-  # 4. Registrar NS-delegation for --base-domain. The public host cannot resolve if the
-  #    domain's authoritative name servers are not delegated to the DNS zone. We
-  #    only assert it resolves to SOME name servers (an undelegated domain returns none).
+  # 4. DNS authority for --base-domain. The base can be either a delegated zone or a
+  #    record subtree served by a parent zone, so an NS RRset on the base itself is not
+  #    required. Its SOA lookup must nevertheless reach an authoritative serving zone.
   if [[ -n "$BASE_DOMAIN" ]]; then
     if command -v dig >/dev/null 2>&1; then
-      [[ -n "$(dig +short NS "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar (see Terraform output dns_name_servers).")
+      [[ -n "$(dig +noall +authority SOA "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     elif command -v host >/dev/null 2>&1; then
-      host -t NS "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar.")
+      host -t SOA "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     else
       warn "Preflight: no dig/host — skipping the NS-delegation check for '$BASE_DOMAIN'."
     fi
