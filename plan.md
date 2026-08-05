@@ -191,11 +191,11 @@ Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-
 CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
 `testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, and the
 confidential Zitadel OIDC application exists.
-The OpenCrane silo is not installed yet: it requires 50 GiB of durable volumes while the region has
-only 25 GiB of SSD quota free (`475/500 GiB`), and the current operator lacks Billing Account Viewer
-access to prove the billing account's monthly GKE credit is unused. OpenCrane workloads,
-logical-database credential isolation, trusted TLS, browser login, runtime isolation, and the final
-monthly cost remain live exit gates.
+The approved cleanup of twelve detached legacy PVC disks brought regional SSD quota usage down to
+`291/500 GiB`, leaving 209 GiB free for the initial 50 GiB silo volumes. The current operator still
+lacks Billing Account Viewer access to prove the billing account's monthly GKE credit is unused.
+OpenCrane workloads, logical-database credential isolation, trusted TLS, browser login, runtime
+isolation, and the final monthly cost remain live exit gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
