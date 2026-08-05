@@ -269,6 +269,7 @@ fi
 ! grep -Fq 'helm upgrade' "$TEST_DIR/owned-namespace-foreign-crd.calls"
 
 grep -Fq 'replicaCount: 1' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/prerequisites/gke-autopilot-dev/cert-manager.yaml"
+grep -Fq 'namespace: cert-manager' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/prerequisites/gke-autopilot-dev/cert-manager.yaml"
 grep -Fq 'podMonitorEnabled: false' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/prerequisites/gke-autopilot-dev/cloudnative-pg.yaml"
 grep -Fq 'allowSnippetAnnotations: false' "$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/prerequisites/gke-autopilot-dev/ingress-nginx.yaml"
 

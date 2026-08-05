@@ -40,7 +40,9 @@ The command downloads each locked archive once, verifies its committed SHA-256, 
 archive before it changes the cluster, then installs the same bytes with atomic, waited Helm upgrades.
 Its complete cluster-scoped inventory prevents accidental adoption of foreign CRDs, RBAC, ingress
 classes, or webhooks. Bootstrap-owned namespaces carry explicit retry markers so an atomic first-run
-failure can be retried without accepting an arbitrary pre-existing namespace. It never installs
+failure can be retried without accepting an arbitrary pre-existing namespace. The GKE profile keeps
+cert-manager leader election in its own namespace because Autopilot denies third-party writes to its
+managed `kube-system` namespace. It never installs
 external-dns or DNS credentials and it does not create a cluster-wide certificate issuer. Each silo
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.

@@ -2,6 +2,11 @@ crds:
   enabled: true
   keep: true
 
+global:
+  leaderElection:
+    # GKE Autopilot denies third-party writes in its managed kube-system namespace.
+    namespace: cert-manager
+
 replicaCount: 1
 resources:
   requests:

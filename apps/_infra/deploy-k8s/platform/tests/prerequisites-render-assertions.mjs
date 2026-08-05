@@ -137,6 +137,12 @@ for (const deploymentName of ['cert-manager', 'cert-manager-webhook', 'cert-mana
   assertRequests(deployment, '10m', '32Mi');
   assertHardened(deployment);
 }
+for (const deploymentName of ['cert-manager', 'cert-manager-cainjector']) {
+  const args = primaryContainer(findResource(certManager, 'Deployment', deploymentName)).args ?? [];
+  if (!args.includes('--leader-election-namespace=cert-manager')) {
+    fail(`${deploymentName} does not keep leader election out of GKE-managed kube-system`);
+  }
+}
 const startupApiCheck = findResource(certManager, 'Job', 'cert-manager-startupapicheck');
 assertRequests(startupApiCheck, '10m', '32Mi');
 assertHardened(startupApiCheck);
