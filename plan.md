@@ -98,9 +98,9 @@ custody/credential/discovery slices from `main` per
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
 
-### Phase E — personal runtime and AgentService plane (implementation complete; live qualification next)
+### Phase E — personal runtime and AgentService plane (core runtime built; phase incomplete)
 
-**Implementation complete offline:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
+**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
 the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
 crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
 Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,
@@ -181,6 +181,22 @@ custody + direct attempt-key data plane validates Obot responses defensively unt
 qualification pins the exact shapes. The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 
+Here, **built and CI-qualified** means the source, contracts, fault tests, and rendered deployment
+artifacts pass without depending on a live external environment. It does not mean PostgreSQL,
+Kubernetes Jobs, LiteLLM, Obot, Zitadel login, TLS, recovery, or isolation have passed together on a
+real cluster.
+
+**Live qualification status (2026-08-05):** the app-owned Terraform path created the regional
+Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-manager, and
+CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
+`testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, and the
+confidential Zitadel OIDC application exists.
+The OpenCrane silo is not installed yet: it requires 50 GiB of durable volumes while the region has
+only 25 GiB of SSD quota free (`475/500 GiB`), and the current operator lacks Billing Account Viewer
+access to prove the billing account's monthly GKE credit is unused. OpenCrane workloads,
+logical-database credential isolation, trusted TLS, browser login, runtime isolation, and the final
+monthly cost remain live exit gates.
+
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
 
@@ -191,6 +207,13 @@ schedules and runs, approvals, assets, skills, membership, effective-access expl
 health, model/cost/budget, and runtime versions
 ([#224](https://github.com/elewa-git/opencrane/issues/224),
 [#226](https://github.com/elewa-git/opencrane/issues/226)). Upstream consoles remain diagnostic.
+
+**Current implementation status:** the Angular shell has same-origin OIDC/session guards and early
+operator screens for catalogue, access policy, and model keys. It does not yet expose the Phase F
+conversation, thread, prompt/stream, approval, persona, memory, run-history, schedule, membership,
+audit, asset, or skill journeys. Onboarding currently returns to the welcome flow, tool/OAuth success
+is not backed by the real exchange, and there is no route-level end-to-end suite. The production
+Angular build is green, but that build proves packaging rather than the missing product journeys.
 
 Exit: named end-to-end user and operator journeys work only through the target APIs and UI;
 parallel legacy product surfaces are deleted.

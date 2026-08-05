@@ -38,3 +38,35 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: gate future GKE provisioning on Terraform formatting and validation, Bash 3.2 contract
   coverage, an unlocked regional backend, and a post-create no-op plan; zero nodes are expected for
   an empty Autopilot cluster.
+
+## 2026-08-05 · dev · GKE shared prerequisites · 97bbdfa2afeb613ac29ccdbbf64249689a3c7762 · FAILED
+
+- findings: script: Helm 4 rejected the removed `helm list --all` flag before any namespace,
+  release, or cluster-scoped resource was changed.
+- friction: the contract suite covered Helm 3 release discovery but not Helm 4's explicit status
+  union.
+- lesson: keep release discovery compatible with both supported Helm major versions and fail before
+  mutation when the local client contract is unsupported.
+
+## 2026-08-05 · dev · GKE shared prerequisites · f49d8e6459ae2c4f4bdea02361fd17ba27a1a3d1 · PARTIAL
+
+- findings: config: ingress-nginx reached Ready on reserved address `35.205.225.244`; cert-manager's
+  cainjector could not acquire its lease in Autopilot-managed `kube-system`, so the atomic release
+  rolled back while its established retained custom resource definitions remained; CloudNativePG
+  was not attempted.
+- friction: cert-manager's upstream default election namespace crossed GKE Autopilot's managed
+  namespace boundary.
+- lesson: pin third-party leader election to the controller's own namespace and accept only the
+  bootstrap-owned retained-resource retry shape.
+
+## 2026-08-05 · dev · GKE shared prerequisites · 6da7110f063b9b08efcb02bf14a040a3462a083e · LIVE
+
+- findings: infra: ingress-nginx `4.15.1`, cert-manager `v1.21.1`, and CloudNativePG `0.29.0` are
+  deployed and Ready with the locked chart digests; all required webhooks, ingress class, and
+  certificate/database custom resource definitions are present. `europe-west1` SSD quota is
+  `475/500 GiB`, so a 50 GiB OpenCrane silo cannot be admitted yet.
+- friction: GKE Autopilot raised sub-minimum requests to `50m/52Mi` or `100m/103Mi`; recursive DNS
+  continued to serve the prior wildcard address after the dedicated authoritative record changed.
+- lesson: render and cost the admitted request floor, free at least 25 GiB more SSD quota without
+  deleting unverified data, and wait for public DNS convergence before requesting the silo's ACME
+  certificate.
