@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
+import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
 
 /** Run a command and return trimmed stdout. */
 function _run(command, args)
@@ -51,6 +51,7 @@ const deployables = selectAffectedDeployables(affectedContainerProjects.map(func
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
 const apiContractChanged = selectApiContractChanged(affectedProjects);
+const developSmokeRequired = selectDevelopSmokeRequired(changedFiles);
 const guardInputsChanged = selectGuardInputsChanged(changedFiles);
 
 _output("nx_base", base);
@@ -58,4 +59,5 @@ _output("nx_head", head);
 _output("deployables", JSON.stringify({ include: deployables }));
 _output("has_deployables", String(deployables.length > 0));
 _output("api_contract_changed", String(apiContractChanged));
+_output("develop_smoke_required", String(developSmokeRequired));
 _output("guard_inputs_changed", String(guardInputsChanged));
