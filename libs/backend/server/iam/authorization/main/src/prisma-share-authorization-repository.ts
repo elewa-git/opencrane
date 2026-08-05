@@ -1,20 +1,49 @@
-import { Prisma } from "@prisma/client";
+import { AuthorizationScopeKind, Prisma } from "@prisma/client";
 
-import type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types.js";
+import { ShareAuthorizationScopeKinds, type CreateOrFindShareAuthorizationGrantResult, type CreateShareAuthorizationGrant, type ShareAuthorizationGrant, type ShareAuthorizationRepository, type ShareCapabilityCatalogRevision } from "./share-authorization-repository.types.js";
 
-/** Maps the authorization-owned Prisma row into the share-specific persistence contract. */
-function _share(row: { id: string; siloId: string; subjectId: string; scopeKind: string; organizationId: string; catalogId: string; catalogRevision: number; catalogDigest: string; capabilityId: string; resourceKind: string; resourceId: string; createdBy: string; createdAt: Date }): ShareAuthorizationGrant
+/** Exact persistence fields that the sharing contract may expose. */
+const _SHARE_SELECT = {
+	id: true,
+	subjectId: true,
+	scopeKind: true,
+	resourceKind: true,
+	resourceId: true,
+	createdBy: true,
+	createdAt: true,
+} as const satisfies Prisma.AuthorizationGrantSelect;
+
+/** Prisma-generated result for the exact share projection. */
+type ShareAuthorizationGrantRow = Prisma.AuthorizationGrantGetPayload<{ select: typeof _SHARE_SELECT }>;
+
+/** Prisma scope value written for each supported sharing scope. */
+const _PRISMA_SCOPE_BY_SHARE: Record<ShareAuthorizationScopeKinds, AuthorizationScopeKind> = {
+	[ShareAuthorizationScopeKinds.Organization]: AuthorizationScopeKind.Organization,
+	[ShareAuthorizationScopeKinds.Department]: AuthorizationScopeKind.Department,
+	[ShareAuthorizationScopeKinds.Project]: AuthorizationScopeKind.Project,
+	[ShareAuthorizationScopeKinds.Personal]: AuthorizationScopeKind.Personal,
+};
+
+/** Maps a stored Prisma scope into the narrower share-domain vocabulary. */
+function _shareScopeKind(kind: AuthorizationScopeKind): ShareAuthorizationScopeKinds
+{
+	switch (kind)
+	{
+		case AuthorizationScopeKind.Organization: return ShareAuthorizationScopeKinds.Organization;
+		case AuthorizationScopeKind.Department: return ShareAuthorizationScopeKinds.Department;
+		case AuthorizationScopeKind.Project: return ShareAuthorizationScopeKinds.Project;
+		case AuthorizationScopeKind.Personal: return ShareAuthorizationScopeKinds.Personal;
+		default: throw new Error(`authorization grant scope ${kind} is not supported by sharing`);
+	}
+}
+
+/** Maps the selected authorization-owned Prisma row into the share-specific contract. */
+function _share(row: ShareAuthorizationGrantRow): ShareAuthorizationGrant
 {
 	return {
 		id: row.id,
-		siloId: row.siloId,
 		subjectId: row.subjectId,
-		scopeKind: row.scopeKind,
-		organizationId: row.organizationId,
-		catalogId: row.catalogId,
-		catalogRevision: row.catalogRevision,
-		catalogDigest: row.catalogDigest,
-		capabilityId: row.capabilityId,
+		scopeKind: _shareScopeKind(row.scopeKind),
 		resourceKind: row.resourceKind,
 		resourceId: row.resourceId,
 		createdBy: row.createdBy,
@@ -67,7 +96,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 				data: {
 					siloId: input.siloId,
 					subjectId: input.subjectId,
-					scopeKind: input.scopeKind as never,
+					scopeKind: _PRISMA_SCOPE_BY_SHARE[input.scopeKind],
 					organizationId: input.organizationId,
 					scopeResourceId: null,
 					catalogId: input.catalogId,
@@ -80,6 +109,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 					priority: input.priority,
 					createdBy: input.createdBy,
 				},
+				select: _SHARE_SELECT,
 			});
 			return { share: _share(created), created: true };
 		}
@@ -103,7 +133,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 			where: {
 				siloId: input.siloId,
 				subjectId: input.subjectId,
-				scopeKind: input.scopeKind as never,
+				scopeKind: _PRISMA_SCOPE_BY_SHARE[input.scopeKind],
 				organizationId: input.organizationId,
 				scopeResourceId: null,
 				catalogId: input.catalogId,
@@ -114,6 +144,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 				effect: "Allow",
 				priority: input.priority,
 			},
+			select: _SHARE_SELECT,
 		});
 		return row === null ? null : _share(row);
 	}
@@ -124,6 +155,7 @@ export class PrismaShareAuthorizationRepository implements ShareAuthorizationRep
 		const rows = await this._prisma.authorizationGrant.findMany({
 			where: { siloId, createdBy, catalogId, capabilityId, revokedAt: null },
 			orderBy: { createdAt: "desc" },
+			select: _SHARE_SELECT,
 		});
 		return rows.map(function _mapShare(row)
 		{

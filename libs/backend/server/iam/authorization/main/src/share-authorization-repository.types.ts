@@ -1,5 +1,24 @@
 import type { JsonValue } from "@opencrane/util";
 
+/**
+ * Stable authorization scope categories supported by the sharing capability.
+ *
+ * These domain values cross the grants-to-authorization package boundary. The Prisma adapter maps
+ * them explicitly to its generated persistence enum rather than leaking database spellings into
+ * callers.
+ */
+export enum ShareAuthorizationScopeKinds
+{
+	/** Applies the share across one organization. */
+	Organization = "organization",
+	/** Applies the share within one department. */
+	Department = "department",
+	/** Applies the share within one independent project. */
+	Project = "project",
+	/** Applies the share to one personal-agent scope. */
+	Personal = "personal",
+}
+
 /** A persisted capability-catalog revision used to bind a share to its evaluated capability. */
 export interface ShareCapabilityCatalogRevision
 {
@@ -20,22 +39,10 @@ export interface ShareAuthorizationGrant
 {
 	/** Stable authorization-grant identifier. */
 	readonly id: string;
-	/** Silo that contains the sharer, recipient, and governed resource. */
-	readonly siloId: string;
 	/** Recipient identity, which may be an opaque user or a group identifier. */
 	readonly subjectId: string;
-	/** Independent authorization scope kind serialized by the Prisma schema. */
-	readonly scopeKind: string;
-	/** Organization dimension of the independent authorization scope. */
-	readonly organizationId: string;
-	/** Capability catalog identifier that supplied the granted capability. */
-	readonly catalogId: string;
-	/** Immutable capability catalog revision used by the grant. */
-	readonly catalogRevision: number;
-	/** Digest that binds the grant to the exact catalog revision contents. */
-	readonly catalogDigest: string;
-	/** Capability granted to the recipient. */
-	readonly capabilityId: string;
+	/** Independent authorization scope category supported by sharing. */
+	readonly scopeKind: ShareAuthorizationScopeKinds;
 	/** Stable resource family, for example `mcp-server`. */
 	readonly resourceKind: string;
 	/** Exact resource instance granted to the recipient. */
@@ -53,8 +60,8 @@ export interface CreateShareAuthorizationGrant
 	readonly siloId: string;
 	/** Recipient that will receive the grant. */
 	readonly subjectId: string;
-	/** Prisma-backed independent scope kind. */
-	readonly scopeKind: string;
+	/** Independent authorization scope category supported by sharing. */
+	readonly scopeKind: ShareAuthorizationScopeKinds;
 	/** Organization dimension required by every share scope. */
 	readonly organizationId: string;
 	/** Catalog that owns the share capability. */

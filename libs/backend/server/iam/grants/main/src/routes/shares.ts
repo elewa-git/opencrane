@@ -1,10 +1,8 @@
 import { Router, type NextFunction, type Request, type Response } from "express";
-import type { AuthorizationScopeKind, PrismaClient } from "@prisma/client";
+import type { PrismaClient } from "@prisma/client";
 
-import { __DecideAuthorization, AuthorizationDecisionOutcomes } from "@opencrane/models/authorization";
-import type { AuthorizationRequest, AuthorizationScope } from "@opencrane/models/authorization";
-import { __DigestCanonicalJson, PrismaShareAuthorizationUnitOfWork } from "@opencrane/backend/server/iam/authorization";
-import type { ShareAuthorizationGrant, ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
+import { __DecideAuthorization, AuthorizationDecisionOutcomes, type AuthorizationRequest, type AuthorizationScope } from "@opencrane/models/authorization";
+import { __DigestCanonicalJson, PrismaShareAuthorizationUnitOfWork, ShareAuthorizationScopeKinds, type ShareAuthorizationGrant, type ShareAuthorizationRepository } from "@opencrane/backend/server/iam/authorization";
 import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 import type { JsonValue } from "@opencrane/util";
 import { _log } from "../log.js";
@@ -16,7 +14,7 @@ import "@opencrane/backend/_server/auth";
 const _PAYLOAD_TYPES: readonly SharePayloadType[] = ["mcp-server"];
 /** Recipient kinds a share may target. */
 const _RECIPIENT_TYPES: readonly ShareRecipientType[] = ["user", "group"];
-/** Visibility scopes a share may carry (mirrors AuthorizationScopeKind; defaults to personal). */
+/** Visibility scopes that the public sharing API accepts. */
 const _SCOPES: readonly ShareScope[] = ["org", "department", "project", "personal"];
 
 /** Well-known catalog for platform-owned share capabilities. */
@@ -30,13 +28,21 @@ const _SHARES_RESOURCE_KIND = "mcp-server";
 /** Priority for share-originated grants (user-to-user delegation, lowest tier). */
 const _SHARES_GRANT_PRIORITY = 0;
 
-/** Map the API scope string to the Prisma AuthorizationScopeKind enum. */
-const _PRISMA_SCOPE_BY_API: Record<ShareScope, AuthorizationScopeKind> =
+/** Map each public API scope into the authorization-owned sharing vocabulary. */
+const _SHARE_SCOPE_BY_API: Record<ShareScope, ShareAuthorizationScopeKinds> =
 {
-	org: "Organization" as AuthorizationScopeKind,
-	department: "Department" as AuthorizationScopeKind,
-	project: "Project" as AuthorizationScopeKind,
-	personal: "Personal" as AuthorizationScopeKind,
+	org: ShareAuthorizationScopeKinds.Organization,
+	department: ShareAuthorizationScopeKinds.Department,
+	project: ShareAuthorizationScopeKinds.Project,
+	personal: ShareAuthorizationScopeKinds.Personal,
+};
+
+/** Map authorization-owned sharing scopes back into the public API vocabulary. */
+const _API_SCOPE_BY_SHARE: Record<ShareAuthorizationScopeKinds, ShareScope> = {
+	[ShareAuthorizationScopeKinds.Organization]: "org",
+	[ShareAuthorizationScopeKinds.Department]: "department",
+	[ShareAuthorizationScopeKinds.Project]: "project",
+	[ShareAuthorizationScopeKinds.Personal]: "personal",
 };
 
 /** Map the API scope string to the domain AuthorizationScope used for grant evaluation. */
@@ -88,23 +94,10 @@ function _ToShare(row: ShareAuthorizationGrant)
 		payloadId: row.resourceId,
 		recipientType: "user" as ShareRecipientType,
 		recipientId: row.subjectId,
-		scope: _ApiScopeFromPrisma(row.scopeKind),
+		scope: _API_SCOPE_BY_SHARE[row.scopeKind],
 		sharedBy: row.createdBy,
 		createdAt: row.createdAt.toISOString(),
 	};
-}
-
-/** Reverse-map a Prisma AuthorizationScopeKind to the API scope string. */
-function _ApiScopeFromPrisma(kind: string): ShareScope
-{
-	switch (kind)
-	{
-		case "Organization": return "org";
-		case "Department": return "department";
-		case "Project": return "project";
-		case "Personal": return "personal";
-		default: return "personal";
-	}
 }
 
 /**
@@ -207,7 +200,7 @@ export function sharesRouter(prisma: PrismaClient): Router
 				const persisted = await shareRepository.createOrFindExactShare({
 				siloId,
 				subjectId: recipientId,
-				scopeKind: _PRISMA_SCOPE_BY_API[scope],
+				scopeKind: _SHARE_SCOPE_BY_API[scope],
 				organizationId,
 				catalogId: _SHARES_CATALOG_ID,
 				catalogRevision: _SHARES_CATALOG_REVISION,

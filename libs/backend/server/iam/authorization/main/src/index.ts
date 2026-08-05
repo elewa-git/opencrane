@@ -22,6 +22,7 @@ export { PrismaRuntimeAuthorityRepository } from "./prisma-runtime-authority.js"
 export { PrismaAuthorizationGrantRepository } from "./prisma-authorization-grants.js";
 export { PrismaShareAuthorizationRepository } from "./prisma-share-authorization-repository.js";
 export { PrismaShareAuthorizationUnitOfWork } from "./prisma-share-authorization-unit-of-work.js";
+export { ShareAuthorizationScopeKinds } from "./share-authorization-repository.types.js";
 export type { CreateOrFindShareAuthorizationGrantResult, CreateShareAuthorizationGrant, ShareAuthorizationGrant, ShareAuthorizationRepository, ShareCapabilityCatalogRevision } from "./share-authorization-repository.types.js";
 export type { ShareAuthorizationTransaction, ShareAuthorizationUnitOfWork } from "./share-authorization-unit-of-work.types.js";
 export { __CreateRuntimeBootstrapRouter } from "./runtime-bootstrap.router.js";
