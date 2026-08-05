@@ -80,19 +80,22 @@ function _Scope(arguments_)
 {
 	if (arguments_[0] === "--all")
 	{
-		return { files: _Git(["ls-files", "--", "*.ts"]) };
+		return { files: _GitNull(["ls-files", "-z", "--", "*.ts"]) };
 	}
 	if (arguments_[0] === "--diff")
 	{
 		if (!arguments_[1]) throw new Error("--diff requires a base ref");
 		return {
-			files: _Unique(_Git(["diff", "--name-only", "--diff-filter=ACMR", arguments_[1], "--", "*.ts"])),
+			files: _Unique([
+				..._GitNull(["diff", "--name-only", "--diff-filter=ACMR", "-z", arguments_[1], "--", "*.ts"]),
+				..._GitNull(["ls-files", "--others", "--exclude-standard", "-z", "--", "*.ts"]),
+			]),
 			base: arguments_[1],
 		};
 	}
 	if (arguments_.length > 0) return { files: _Unique(arguments_) };
-	const tracked = _Git(["diff", "--name-only", "--diff-filter=ACMR", "HEAD", "--", "*.ts"]);
-	const untracked = _Git(["ls-files", "--others", "--exclude-standard", "--", "*.ts"]);
+	const tracked = _GitNull(["diff", "--name-only", "--diff-filter=ACMR", "-z", "HEAD", "--", "*.ts"]);
+	const untracked = _GitNull(["ls-files", "--others", "--exclude-standard", "-z", "--", "*.ts"]);
 	return { files: _Unique([...tracked, ...untracked]), base: "HEAD" };
 }
 
@@ -109,11 +112,11 @@ function _BaseSource(base, path)
 	}
 }
 
-/** Runs a Git query and returns its non-empty output lines. */
-function _Git(arguments_)
+/** Runs a NUL-delimited Git path query without corrupting whitespace in filenames. */
+function _GitNull(arguments_)
 {
 	const output = execFileSync("git", arguments_, { cwd: _ROOT, encoding: "utf8" });
-	return output.split("\n").filter(Boolean);
+	return output.split("\0").filter(Boolean);
 }
 
 /** Removes duplicate paths without changing Git order. */

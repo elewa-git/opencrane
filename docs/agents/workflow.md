@@ -41,6 +41,38 @@ The hand-off must state the resulting stack order, absorbed/closed PRs, and inte
 PRs. A passing check, remembered branch relationship, or similar title is not evidence of ancestry;
 re-read the current PR bases, heads, commits, and changed files.
 
+Run `npm run check:pr-stack-integrity -- --current-branch "$(git branch --show-current)"` at every
+PR checkpoint. The checker takes two live GitHub snapshots around exact ref fetches, rejects a graph
+that changed during inspection, and binds its evidence to every open PR's base/head SHA, incremental
+diff digest, stable patch id, parent edge, and topological review level. It fails when an open child
+still targets a merged/closed feature branch, when a parent head was rewritten without restacking its
+children, or when one open PR contains another outside its declared base chain. Patch ids detect
+replayed whole patches; semantic overlap after squashing still needs reviewer judgment.
+
+### Long-running checkpoint cadence
+
+Re-read the live graph and regenerate SHA-bound evidence after every event that can invalidate an
+earlier conclusion, and at least once per hour while a task remains active:
+
+| Event | Required checkpoint |
+|-------|---------------------|
+| Slice/wave commit or review-fix commit | Record the new `HEAD`; review the explicit `WAVE_BASE...HEAD` range plus staged, unstaged, and untracked overlays. |
+| Parent push, force-update, or rebase | Re-fetch the parent SHA and restack every descendant before unrelated work continues. |
+| Parent PR merged | Before merging its child, retarget that child to the integration branch and prove the merged parent head is now ancestral there. Never merge a child into an already-merged feature branch. |
+| Authorized push | Confirm the remote head equals the reviewed local `HEAD`; stale local evidence is invalid. |
+| PR open, refresh, edit, or base change | Run the live stack checker and record the PR number, base ref/SHA, head ref/SHA, and review order. |
+| Pre-handoff or pre-merge report | Validate both the incremental `base...head` diff and the cumulative integration-base-to-stack-tip range. If integration is not ancestral to the tip, require a clean `git merge-tree --write-tree <integration-sha> <tip-sha>` simulation. |
+
+Treat committed, staged, unstaged, and untracked files as four separate overlays. Never use
+`git diff HEAD` as proof of a complete change set: staged and unstaged changes can cancel in that
+view, and committed work disappears from it. Evidence from an earlier SHA, base, remote head, or
+overlay manifest is stale and must not be reported as current.
+
+At the first wave checkpoint, persist the immutable local review base with
+`git config "branch.$(git branch --show-current).opencraneWaveBase" "$(git rev-parse HEAD)"`. The
+Stop gate fails closed on a committed pre-PR branch when neither live PR evidence nor this recorded
+base exists. Update it only when deliberately starting a new reviewed wave, never to silence a gate.
+
 ## Commit Messages
 
 - Always end each work cycle with a suggested commit message.
@@ -116,8 +148,9 @@ does **not** update that package's `README.md` in the same change is an incomple
 review gate treats a stale or missing package README as a finding. See
 [`package-docs.md`](./package-docs.md) for the standard.
 
-Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`, and
-`npm run check:module-growth` before delegating. The first checks TypeScript mechanics and invokes
+Run `scripts/agent-style-check.sh`, `npm run check:prisma-boundaries -- --diff <base-ref>`,
+`npm run check:module-growth`, and `npm run check:pr-stack-integrity -- --current-branch <branch>`
+before delegating. The first checks TypeScript mechanics and invokes
 the same diff-scoped Prisma ownership floor; the explicit Prisma command is useful when reporting
 that gate separately; the final command produces language-neutral architecture candidates.
 The Prisma gate authorizes exact adapter class/path/contract tuples, raw-query ownership, transaction
@@ -140,8 +173,9 @@ or dependency boundary, run its current boundary guard before review:
 
 - `.claude/hooks/require-review.sh` — a free shell pre-filter. It skips the obvious
   cases (no supported production-source change, trivial size, test/type-only/generated files,
-  already-reviewed) and escalates the rest. It writes `.claude/.review-context.md`
-  for the judge.
+  already-reviewed) and escalates the rest. Its fingerprint includes the live PR-stack evidence,
+  committed base range, `HEAD`, staged diff, unstaged diff, and untracked source bodies. It writes
+  `.claude/.review-context.md` for the judge.
 - In Claude Code, a **Haiku agent hook** reads that context plus `.claude/review-policy.md` in
   parallel with the pre-filter. It judges whether the change carries real risk (auth, secrets,
   network, IAM, money, or non-trivial production control flow) and blocks only when warranted.

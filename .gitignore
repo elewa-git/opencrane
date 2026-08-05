@@ -33,6 +33,7 @@ __pycache__/
 # Claude Code local review-gate state
 .claude/.last-review-hash
 .claude/.review-context.md
+pr-stack-integrity-evidence.json
 .nx/
 
 # Private agent review artifacts and R0 secured evidence packs.

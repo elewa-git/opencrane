@@ -33,9 +33,20 @@ from the current version.
 - Verify AGENTS.md alignment for TypeScript conventions and planning discipline.
 - Validate that any roadmap status changes in `plan.md` are backed by real evidence.
 
-Determine what changed first. Prefer `git diff --stat HEAD` and `git diff HEAD` to
-scope the review to actual changes. If the caller named specific files or a PR
-scope, review those.
+Require the caller to provide an exact base SHA and head SHA. Review `base...head` for committed
+work, then inspect `git diff --cached --binary`, `git diff --binary`, and the NUL-delimited untracked
+manifest as separate overlays. Refuse an ambiguous default-`HEAD` scope: after a commit it is empty
+and can silently omit the entire slice. If the caller names a PR, verify its live base/head SHAs and
+run the PR-stack integrity check before trusting the range.
+
+For stacked work, review both the incremental live PR range and the cumulative integration-SHA to
+stack-tip range. The incremental range prevents reviewing predecessor material twice; the
+cumulative range catches integration conflicts and cross-PR regressions. If a SHA, base, remote
+head, staged/unstaged diff, or untracked manifest changes during review, report the evidence as stale
+and require a fresh pass.
+When the integration SHA is not ancestral to the stack tip, require a clean
+`git merge-tree --write-tree <integration-sha> <tip-sha>` (or equivalent candidate-merge-tree)
+simulation. A three-dot diff scopes tip-side content; it does not prove the two sides merge.
 
 ## Dimension
 
@@ -214,6 +225,8 @@ Return these sections in order:
 2. **Open questions / assumptions** — anything you could not verify.
 3. **Residual risks / testing gaps**
 4. **Brief summary** — one short paragraph.
+5. **Evidence** — exact base SHA, head SHA, live PR base/head SHAs when applicable, incremental and
+   cumulative ranges reviewed, and whether staged, unstaged, and untracked overlays were present.
 
 If there are no Critical or High findings, state explicitly:
 "No critical or high-severity findings detected." Then either list medium/low risks,
