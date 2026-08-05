@@ -29,4 +29,12 @@ Full run reports belong in the corresponding pull request or issue.
 
 ## Runs
 
-No current-architecture deployment run has been recorded yet.
+## 2026-08-05 · dev · GKE cluster-only · fba5e7ae1f7fa110be7a921a5ae4a2a69927d5a2 · LIVE
+
+- findings: none; the remote-backend Terraform plan reports no changes and all live regional GKE,
+  CMEK/IAM, state, context, and API checks pass.
+- friction: earlier HCL syntax, Bash 3.2 portability, and CMEK read-back drift required repair
+  iterations before final qualification.
+- lesson: gate future GKE provisioning on Terraform formatting and validation, Bash 3.2 contract
+  coverage, an unlocked regional backend, and a post-create no-op plan; zero nodes are expected for
+  an empty Autopilot cluster.
