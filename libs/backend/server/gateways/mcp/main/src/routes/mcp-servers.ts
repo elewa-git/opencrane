@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import type { PrismaClient } from "@prisma/client";
 
 import { addMcpServerCredential, createMcpServer, deleteMcpServer, deleteMcpServerCredential, getMcpServer, listMcpServerCredentials, listMcpServers, updateMcpServer } from "../core/mcp-servers.logic.js";
+import { PrismaMcpServerMutationUnitOfWork } from "../core/prisma-mcp-server-mutation-unit-of-work.js";
 import { _RequireOrgAdmin } from "@opencrane/backend/_server/auth";
 import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-servers.types.js";
 
@@ -19,9 +20,10 @@ import type { McpServerCredentialInput, McpServerWriteRequest } from "./mcp-serv
  */
 export function mcpServersRouter(prisma: PrismaClient): Router
 {
-  const router = Router();
+	const router = Router();
+	const mutationRepository = new PrismaMcpServerMutationUnitOfWork(prisma);
 
-  /** List all MCP servers with grants and credentials. */
+  /** List all MCP servers with credentials. */
   router.get("/", async function _listMcpServers(req, res)
   {
     res.json(await listMcpServers(prisma));
@@ -40,24 +42,24 @@ export function mcpServersRouter(prisma: PrismaClient): Router
     res.json(server);
   });
 
-  /** Create a new MCP server plus generic grant rows for the compiler. Org-admin only. */
+  /** Create a new MCP server. Org-admin only. */
   router.post("/", _RequireOrgAdmin(), async function _createMcpServer(req, res)
   {
     const body = req.body as McpServerWriteRequest;
-    res.status(201).json(await createMcpServer(prisma, body));
+		res.status(201).json(await createMcpServer(mutationRepository, body));
   });
 
-  /** Update an MCP server and fully replace grants and credentials. Org-admin only. */
+  /** Update an MCP server and fully replace credentials. Org-admin only. */
   router.put("/:id", _RequireOrgAdmin(), async function _updateMcpServer(req: Request<{ id: string }>, res)
   {
     const body = req.body as Partial<McpServerWriteRequest>;
-    res.json(await updateMcpServer(prisma, req.params.id, body));
+		res.json(await updateMcpServer(mutationRepository, req.params.id, body));
   });
 
-  /** Delete an MCP server and its linked grant rows. Org-admin only. */
+  /** Delete an MCP server and its credentials. Org-admin only. */
   router.delete("/:id", _RequireOrgAdmin(), async function _deleteMcpServer(req: Request<{ id: string }>, res)
   {
-    res.json(await deleteMcpServer(prisma, req.params.id));
+		res.json(await deleteMcpServer(mutationRepository, req.params.id));
   });
 
   /** List the brokered credentials of an MCP server. */
@@ -73,7 +75,7 @@ export function mcpServersRouter(prisma: PrismaClient): Router
     res.json(credentials);
   });
 
-  /** Add a single brokered credential to an MCP server (additive — grants untouched). */
+  /** Add a single brokered credential to an MCP server. */
   router.post("/:id/credentials", async function _addMcpServerCredential(req, res)
   {
     const credential = await addMcpServerCredential(prisma, req.params.id, req.body as McpServerCredentialInput);

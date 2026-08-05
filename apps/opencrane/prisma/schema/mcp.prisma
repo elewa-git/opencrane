@@ -58,8 +58,6 @@ model McpServer {
   lastSyncedAt       DateTime?              @map("last_synced_at")
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
-  grants             Grant[]
-  scopedGrants       McpServerGrant[]
   credentials        McpServerCredential[]
   installs           McpServerInstall[]
   accessPolicy       McpServerAccessPolicy?
@@ -118,27 +116,6 @@ model McpServerAccessUser {
   @@unique([accessPolicyId, userId])
   @@index([userId])
   @@map("mcp_server_access_users")
-}
-
-model McpServerGrant {
-  id          String           @id @default(cuid())
-  mcpServerId String           @map("mcp_server_id")
-  grantId     String           @unique @map("grant_id")
-  scope       GrantScope
-  subjectType GrantSubjectType @map("subject_type")
-  subjectId   String           @map("subject_id")
-  access      GrantAccess
-  priority    Int              @default(0)
-  note        String?
-  groupId     String?          @map("group_id")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  mcpServer   McpServer        @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-  grant       Grant            @relation(fields: [grantId], references: [id], onDelete: Cascade)
-  group       Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
-
-  @@index([mcpServerId])
-  @@map("mcp_server_grants")
 }
 
 model McpServerCredential {

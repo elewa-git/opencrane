@@ -83,12 +83,6 @@ CREATE TYPE "GrantScope" AS ENUM ('org', 'department', 'team', 'project', 'perso
 CREATE TYPE "GrantSubjectType" AS ENUM ('group', 'user');
 
 -- CreateEnum
-CREATE TYPE "GrantAccess" AS ENUM ('allow', 'deny');
-
--- CreateEnum
-CREATE TYPE "GrantPayloadType" AS ENUM ('mcp-server');
-
--- CreateEnum
 CREATE TYPE "IntegrationState" AS ENUM ('active', 'retired');
 
 -- CreateEnum
@@ -685,26 +679,6 @@ CREATE TABLE "conversation_context_revisions" (
 );
 
 -- CreateTable
-CREATE TABLE "grants" (
-    "id" TEXT NOT NULL,
-    "payload_type" "GrantPayloadType" NOT NULL,
-    "payload_id" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
-    "subject_type" "GrantSubjectType" NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "access" "GrantAccess" NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 0,
-    "note" TEXT,
-    "shared_by" TEXT,
-    "group_id" TEXT,
-    "mcp_server_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "grants_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "groups" (
     "id" TEXT NOT NULL,
     "name" TEXT NOT NULL,
@@ -804,24 +778,6 @@ CREATE TABLE "mcp_server_access_users" (
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "mcp_server_access_users_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
-CREATE TABLE "mcp_server_grants" (
-    "id" TEXT NOT NULL,
-    "mcp_server_id" TEXT NOT NULL,
-    "grant_id" TEXT NOT NULL,
-    "scope" "GrantScope" NOT NULL,
-    "subject_type" "GrantSubjectType" NOT NULL,
-    "subject_id" TEXT NOT NULL,
-    "access" "GrantAccess" NOT NULL,
-    "priority" INTEGER NOT NULL DEFAULT 0,
-    "note" TEXT,
-    "group_id" TEXT,
-    "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "mcp_server_grants_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
@@ -1773,15 +1729,6 @@ CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_revision_key" ON "
 CREATE UNIQUE INDEX "conversation_context_revisions_thread_id_id_key" ON "conversation_context_revisions"("thread_id", "id");
 
 -- CreateIndex
-CREATE INDEX "grants_payload_type_payload_id_idx" ON "grants"("payload_type", "payload_id");
-
--- CreateIndex
-CREATE INDEX "grants_subject_type_subject_id_idx" ON "grants"("subject_type", "subject_id");
-
--- CreateIndex
-CREATE INDEX "grants_shared_by_idx" ON "grants"("shared_by");
-
--- CreateIndex
 CREATE UNIQUE INDEX "groups_name_key" ON "groups"("name");
 
 -- CreateIndex
@@ -1828,12 +1775,6 @@ CREATE INDEX "mcp_server_access_users_user_id_idx" ON "mcp_server_access_users"(
 
 -- CreateIndex
 CREATE UNIQUE INDEX "mcp_server_access_users_access_policy_id_user_id_key" ON "mcp_server_access_users"("access_policy_id", "user_id");
-
--- CreateIndex
-CREATE UNIQUE INDEX "mcp_server_grants_grant_id_key" ON "mcp_server_grants"("grant_id");
-
--- CreateIndex
-CREATE INDEX "mcp_server_grants_mcp_server_id_idx" ON "mcp_server_grants"("mcp_server_id");
 
 -- CreateIndex
 CREATE INDEX "mcp_server_credentials_mcp_server_id_idx" ON "mcp_server_credentials"("mcp_server_id");
@@ -2289,12 +2230,6 @@ ALTER TABLE "conversation_messages" ADD CONSTRAINT "conversation_messages_thread
 ALTER TABLE "conversation_context_revisions" ADD CONSTRAINT "conversation_context_revisions_thread_id_fkey" FOREIGN KEY ("thread_id") REFERENCES "conversation_threads"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "grants" ADD CONSTRAINT "grants_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "grants" ADD CONSTRAINT "grants_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
 ALTER TABLE "integration_custody_references" ADD CONSTRAINT "integration_custody_references_integration_id_silo_id_fkey" FOREIGN KEY ("integration_id", "silo_id") REFERENCES "integrations"("id", "silo_id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
@@ -2308,15 +2243,6 @@ ALTER TABLE "mcp_server_access_policies" ADD CONSTRAINT "mcp_server_access_polic
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_access_users" ADD CONSTRAINT "mcp_server_access_users_access_policy_id_fkey" FOREIGN KEY ("access_policy_id") REFERENCES "mcp_server_access_policies"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_grant_id_fkey" FOREIGN KEY ("grant_id") REFERENCES "grants"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-
--- AddForeignKey
-ALTER TABLE "mcp_server_grants" ADD CONSTRAINT "mcp_server_grants_group_id_fkey" FOREIGN KEY ("group_id") REFERENCES "groups"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "mcp_server_credentials" ADD CONSTRAINT "mcp_server_credentials_mcp_server_id_fkey" FOREIGN KEY ("mcp_server_id") REFERENCES "mcp_servers"("id") ON DELETE CASCADE ON UPDATE CASCADE;
