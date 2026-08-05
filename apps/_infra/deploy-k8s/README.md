@@ -32,7 +32,7 @@ wires the pieces and the per-silo networking together.
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
- ingress-nginx · external-dns · CloudNativePG · cert-manager issuer
+ ingress controller · serving DNS · CloudNativePG · cert-manager
 ```
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
@@ -43,9 +43,12 @@ wires the pieces and the per-silo networking together.
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md)
 
-A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress-nginx,
-external-dns, CloudNativePG, cert-manager) are external prerequisites a silo never installs. Dependencies
-resolve from `Chart.lock` via `helm dep build` (pinned, reproducible) — never from open version ranges.
+A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress,
+CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
+"External" here means outside the organisation release: a cluster operator may explicitly install
+the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
+never invokes that helper. Dependencies resolve from `Chart.lock` via `helm dep build` (pinned,
+reproducible) — never from open version ranges.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
 identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image is
@@ -101,8 +104,8 @@ package imports it.
 
 - **[platform/README.md](platform/README.md)** — the cluster and release substrate: the `k8s-platform`
   Helm library (labels, names, RBAC, endpoint/database/identity/observability helpers), the
-  `k8s-deploy.sh` install engine, OIDC configuration, cluster provisioning, Terraform, values profiles,
-  and the k3d conformance tests.
+  `k8s-deploy.sh` install engine, explicit shared-controller bootstrap, OIDC configuration, cluster
+  provisioning, Terraform, values profiles, and the k3d conformance tests.
 ## See also
 
 - Parent index: [_infra](../README.md)

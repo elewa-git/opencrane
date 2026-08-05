@@ -1,0 +1,23 @@
+replicaCount: 1
+
+crds:
+  create: true
+
+config:
+  clusterWide: true
+
+rbac:
+  create: true
+  aggregateClusterRoles: false
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 100Mi
+  limits:
+    memory: 200Mi
+
+monitoring:
+  podMonitorEnabled: false
+  grafanaDashboard:
+    create: false
