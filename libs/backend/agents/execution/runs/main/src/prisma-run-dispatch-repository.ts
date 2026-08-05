@@ -2,12 +2,14 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, Prisma, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type AgentRun, type OutboxEvent, type PrismaClient, type WorkloadAssignment, type WorkloadBootstrap } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptClaimLease, type AgentControllerRunAttemptProjection, type AgentControllerRunOutboxPruneResult, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, RunInputSnapshotIdentityKinds, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunOutboxPruneResult, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadReleaseProjection } from "@opencrane/contracts";
 import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DeliverChildRunCompletionInTransaction } from "./prisma-child-run-completion-repository.js";
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
 import type { AttemptObotKeyIssuer } from "./attempt-obot-key.types.js";
+import { _BuildRunAttemptCredentialMintInputs, _MintRunAttemptCredentials, _SnapshotIntegrationIds } from "./run-attempt-credential-minting.js";
+import type { ClaimTransactionResult } from "./run-dispatch-persistence.types.js";
 import { RunDispatchResultStatuses, type ClaimNextRunAttemptResult, type ClaimNextRunWorkloadReleaseResult, type CommitRunAttemptAssignmentResult, type RegisterRunWorkloadPodResult, type RunDispatchRepository, type RunDispatchRepositoryConfig, type RunOutboxCandidateRow, type RunWorkloadReleaseCandidateRow } from "./run-dispatch.types.js";
 
 /** Snapshot identity fields required at the dispatch authority boundary. */
@@ -25,31 +27,6 @@ interface SnapshotExecutionIdentity
 	readonly fleetMembershipTrustedUntilEpochMilliseconds: number;
 }
 
-/** Claim plus the inputs needed to mint the attempt key after the database transaction commits. */
-interface ClaimedAttemptWithMintInputs
-{
-	/** Database-issued claim generation fencing the delivery. */
-	readonly lease: AgentControllerRunAttemptClaimLease;
-	/** Narrow attempt projection without the transient key, which is attached after minting. */
-	readonly attempt: Omit<AgentControllerRunAttemptProjection, "litellmKey">;
-	/** Attempt- and delivery-unique alias the minted key is bound to. */
-	readonly keyAlias: string;
-	/** Single model alias frozen into the snapshot's server-selected route. */
-	readonly modelAlias: string;
-	/** Positive US-dollar spend ceiling derived from the snapshot's budget policy. */
-	readonly maxBudgetUsd: number;
-	/** Whole-second key lifetime bounded to the assignment lifetime. */
-	readonly expirySeconds: number;
-	/** Integrations frozen into the snapshot, scoping an optional attempt Obot key. */
-	readonly obotIntegrationIds: readonly string[];
-	/** Attempt- and delivery-unique Obot key name derived from immutable claim coordinates. */
-	readonly obotKeyName: string;
-	/** Hard Obot key expiry bounded to the assignment lifetime. */
-	readonly obotKeyExpiresAt: Date;
-}
-
-/** Transaction outcome: no eligible work, or a claim whose key must be minted outside the lock. */
-type ClaimTransactionResult = { readonly status: RunDispatchResultStatuses.None } | ({ readonly status: RunDispatchResultStatuses.Claimed } & ClaimedAttemptWithMintInputs);
 /**
  * Prisma-backed authority for handing one accepted run to the Kubernetes controller.
  *
@@ -143,18 +120,17 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				return { status: RunDispatchResultStatuses.None };
 			}
 
-			// 3. Read the frozen model alias and cost ceiling; fail closed when either cannot bound a key.
-			const modelAlias = _SnapshotModelAlias(snapshot.modelRoute);
-			const maxBudgetUsd = _SnapshotMaxBudgetUsd(snapshot.budgetPolicy);
-			if (modelAlias === null || maxBudgetUsd === null)
+			// 3. Derive the exact post-commit credential requests; invalid frozen policy fails closed.
+			const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
+			const deliveryCount = event.deliveryCount + 1;
+			const credentials = _BuildRunAttemptCredentialMintInputs({ modelRoute: snapshot.modelRoute, budgetPolicy: snapshot.budgetPolicy, integrationAssignments: snapshot.integrationAssignments, runId: run.id, attempt: run.attempt, siloId: run.siloId, deliveryCount, assignmentTtlMilliseconds: config.assignmentTtlMilliseconds, claimedAt });
+			if (credentials === null)
 			{
 				await _TerminalizeUndispatchableAttempt(transaction, event, run, now, "RUN_DISPATCH_MODEL_ROUTE_INVALID", AgentRunTerminalReason.InvalidInput);
 				return { status: RunDispatchResultStatuses.None };
 			}
 
 			// 4. Advance both claim coordinates. The exact pair fences stale controller replicas.
-			const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
-			const deliveryCount = event.deliveryCount + 1;
 			const claimedEvent = await transaction.outboxEvent.updateMany({ where: { id: event.id, claimedAt: event.claimedAt, deliveryCount: event.deliveryCount, publishedAt: null, failedAt: null }, data: { claimedAt, deliveryCount } });
 			if (claimedEvent.count !== 1) throw new Error("run dispatch claim lost its event fence");
 			if (run.state === AgentRunState.Accepted)
@@ -169,31 +145,12 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 				status: RunDispatchResultStatuses.Claimed,
 				lease: { eventId: event.id, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + config.claimLeaseMilliseconds).toISOString() },
 				attempt: { runId: run.id, attempt: run.attempt, siloId: run.siloId, agentServiceId: run.agentServiceId, agentRevisionId: run.agentRevisionId, inputSnapshotDigest: run.inputSnapshotDigest, namespace: runtimeNamespace, workloadProfile: service.workloadProfile, bootstrapReference: _BootstrapReference(event.id, run.attempt, run, runtimeNamespace) },
-				keyAlias: _AttemptKeyAlias(run.id, run.attempt, run.siloId, deliveryCount),
-				modelAlias,
-				maxBudgetUsd,
-				expirySeconds: _AttemptKeyExpirySeconds(config.assignmentTtlMilliseconds),
-				obotIntegrationIds: _SnapshotIntegrationIds(snapshot.integrationAssignments),
-				obotKeyName: _AttemptObotKeyName(run.id, run.attempt, run.siloId, deliveryCount),
-				obotKeyExpiresAt: new Date(claimedAt.getTime() + config.assignmentTtlMilliseconds),
+				...credentials,
 			};
 		});
 		if (claimed.status === RunDispatchResultStatuses.None) return { status: RunDispatchResultStatuses.None };
-
-		// 2. Mint the attempt-scoped key OUTSIDE the transaction so no external call holds a database
-		//    lock, then attach it transiently to the claim response. It is never written to Postgres.
-		const minted = await this.issueAttemptModelKey({ keyAlias: claimed.keyAlias, modelAlias: claimed.modelAlias, siloId: claimed.attempt.siloId, maxBudgetUsd: claimed.maxBudgetUsd, expirySeconds: claimed.expirySeconds });
-		if (typeof minted.key !== "string" || minted.key.length === 0) throw new Error("attempt model key issuer returned no key");
-		// 3. Mint one Obot key only when the snapshot froze integration assignments AND the app composed
-		//    the Obot transport. A mint failure fails the whole claim (fail closed) rather than starting
-		//    an attempt whose approved integration tools could never execute.
-		if (this.issueAttemptObotKey === null || claimed.obotIntegrationIds.length === 0)
-		{
-			return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key } } };
-		}
-		const mintedObot = await this.issueAttemptObotKey({ runId: claimed.attempt.runId, attempt: claimed.attempt.attempt, siloId: claimed.attempt.siloId, agentRevisionId: claimed.attempt.agentRevisionId, integrationIds: claimed.obotIntegrationIds, keyName: claimed.obotKeyName, expiresAt: claimed.obotKeyExpiresAt });
-		if (typeof mintedObot.key !== "string" || mintedObot.key.length === 0 || typeof mintedObot.keyId !== "string" || mintedObot.keyId.length === 0) throw new Error("attempt Obot key issuer returned no key");
-		return { status: RunDispatchResultStatuses.Claimed, claim: { lease: claimed.lease, attempt: { ...claimed.attempt, litellmKey: minted.key, obotKey: { key: mintedObot.key, keyId: mintedObot.keyId } } } };
+		// Mint after commit so neither provider call can hold a database lock.
+		return _MintRunAttemptCredentials(claimed, this.issueAttemptModelKey, this.issueAttemptObotKey);
 	}
 
 	/** Remove one bounded batch of delivered operational records while preserving failed evidence. */
@@ -809,59 +766,6 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
 		await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode }, occurredAt: now } });
 	}
-}
-
-/** Extract the single model alias frozen into the snapshot's server-selected route. */
-function _SnapshotModelAlias(modelRoute: unknown): string | null
-{
-	if (!modelRoute || typeof modelRoute !== "object" || Array.isArray(modelRoute)) return null;
-	const route = modelRoute as Record<string, unknown>;
-	const publicModelName = typeof route["publicModelName"] === "string" ? route["publicModelName"] : "";
-	const alias = typeof route["alias"] === "string" ? route["alias"] : publicModelName;
-	return alias.trim().length > 0 && alias.length <= 128 ? alias : null;
-}
-
-/** Derive the positive US-dollar spend ceiling from the snapshot's micro-dollar cost policy. */
-function _SnapshotMaxBudgetUsd(budgetPolicy: unknown): number | null
-{
-	if (!budgetPolicy || typeof budgetPolicy !== "object" || Array.isArray(budgetPolicy)) return null;
-	const micros = (budgetPolicy as Record<string, unknown>)["maxCostUsdMicros"];
-	if (typeof micros !== "number" || !Number.isSafeInteger(micros) || micros <= 0) return null;
-	return micros / 1_000_000;
-}
-
-/** Derive one attempt- and delivery-unique key alias satisfying the issuer's `attempt-<hex>` grammar. */
-function _AttemptKeyAlias(runId: string, attempt: number, siloId: string, deliveryCount: number): string
-{
-	const canonical = JSON.stringify(["opencrane-attempt-litellm-key-alias-v1", runId, attempt, siloId, deliveryCount]);
-	return `attempt-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
-}
-
-/** Derive one attempt- and delivery-unique Obot key name for audit correlation; never a secret. */
-function _AttemptObotKeyName(runId: string, attempt: number, siloId: string, deliveryCount: number): string
-{
-	const canonical = JSON.stringify(["opencrane-attempt-obot-key-name-v1", runId, attempt, siloId, deliveryCount]);
-	return `attempt-obot-${createHash("sha256").update(canonical, "utf8").digest("hex").slice(0, 32)}`;
-}
-
-/** Parse the integration ids frozen into the immutable snapshot's assignment JSON. */
-function _SnapshotIntegrationIds(value: unknown): readonly string[]
-{
-	if (!Array.isArray(value)) return [];
-	const ids: string[] = [];
-	for (const entry of value)
-	{
-		if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
-		const integrationId = (entry as Record<string, unknown>)["integrationId"];
-		if (typeof integrationId === "string" && integrationId.trim().length > 0) ids.push(integrationId);
-	}
-	return ids;
-}
-
-/** Bound the minted key lifetime to whole seconds within the issuer's 24-hour ceiling. */
-function _AttemptKeyExpirySeconds(assignmentTtlMilliseconds: number): number
-{
-	return Math.min(Math.floor(assignmentTtlMilliseconds / 1_000), 86_400);
 }
 
 /** Validate untrusted first-Pod evidence before it reaches Prisma or SQL. */
