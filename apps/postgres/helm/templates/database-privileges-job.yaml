@@ -25,6 +25,8 @@ spec:
         {{- range $databaseIndex, $database := .Values.databases }}
         - name: {{ printf "%s-privileges" $database.name | trunc 63 | trimSuffix "-" }}
           image: {{ $.Values.image | quote }}
+          resources:
+            {{- toYaml $.Values.privileges.resources | nindent 12 }}
           command: ["/bin/sh", "-ceu"]
           args:
             - |

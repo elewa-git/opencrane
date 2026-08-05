@@ -59,6 +59,11 @@ grep -q '^kind: Pooler$' "$OUTPUT"
 test "$(grep -c '^kind: Pooler$' "$OUTPUT")" -eq 1
 grep -q 'name: opencrane-postgres-pooler' "$OUTPUT"
 grep -q 'image: "ghcr.io/cloudnative-pg/pgbouncer:1.25.1"' "$OUTPUT"
+POOLER_RESOURCE_BLOCK="$(awk 'BEGIN { RS="---" } /kind: Pooler/ { print }' "$OUTPUT")"
+grep -q 'cpu: 250m' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'memory: 256Mi' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'cpu: 100m' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'memory: 128Mi' <<<"$POOLER_RESOURCE_BLOCK"
 grep -q 'poolMode: "session"' "$OUTPUT"
 grep -q 'max_client_conn: "50"' "$OUTPUT"
 grep -q 'max_db_connections: "10"' "$OUTPUT"
@@ -73,6 +78,8 @@ grep -q 'REVOKE CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q 'GRANT CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q -- '--single-transaction' "$OUTPUT"
 test "$(grep -c 'until psql' "$OUTPUT")" -eq 3
+test "$(grep -c 'cpu: 50m' "$OUTPUT")" -eq 3
+test "$(grep -c 'memory: 64Mi' "$OUTPUT")" -eq 3
 grep -q 'until recorded_baseline=' "$OUTPUT"
 grep -q "Timed out reading the target baseline from logical database" "$OUTPUT"
 grep -q "Timed out applying privileges for logical database" "$OUTPUT"

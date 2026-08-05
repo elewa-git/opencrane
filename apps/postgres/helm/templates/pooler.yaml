@@ -23,3 +23,5 @@ spec:
         - name: pgbouncer
           image: {{ .Values.pooler.image | quote }}
           imagePullPolicy: IfNotPresent
+          resources:
+            {{- toYaml .Values.pooler.resources | nindent 12 }}
