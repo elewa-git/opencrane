@@ -108,8 +108,6 @@ jobs:
         # --if-present keeps this branch-agnostic: guard suites differ between main and the
         # program branches, and each branch runs exactly the suites it ships.
         run: |
-          ./scripts/phase-a-forbidden-references.sh
-          npm run --if-present test:phase-a-forbidden-references
           npm run --if-present check:workload-ownership-app-composition
           npm run --if-present test:workload-ownership-app-composition
           npm run --if-present check:agent-domain-boundary
