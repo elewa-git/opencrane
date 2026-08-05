@@ -96,7 +96,7 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
 - **Maintainers can now navigate deployment and server ownership directly from the directory
   structure.** Deployment-only applications live under `apps/_infra`, the installation chart lives
   under `apps/_infra/deploy-k8s`, reusable OpenCrane server domains live
-  under `libs/backend/server`, and server-process support lives under `libs/server/_infra`.
+  under `libs/backend/server`, and server-process support lives under `libs/backend/_server`.
 
 - **Operators can now identify and release every deployed workload from its owning app package.**
   OpenCrane server and UI definitions stay with their product apps; Cognee, LiteLLM, and Obot live

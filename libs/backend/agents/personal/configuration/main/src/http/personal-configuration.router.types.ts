@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { PersonalConfigurationChangeDecisionRepository } from "../decision/personal-configuration-decision.types.js";
 import type { PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";

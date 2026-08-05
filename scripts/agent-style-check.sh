@@ -18,7 +18,7 @@
 #   MIDFILE-IMPORT    import below the first non-import statement
 #   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
-#   CONSOLE           raw console.* in shipped code (use @opencrane/observability)
+#   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
 #   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
@@ -199,11 +199,11 @@ for f in "${CHECKABLE[@]}"; do
 		_report "$f" "$ln" ERROR PKG-IMPORT-EXT "@opencrane package specifier must not end in .js"
 	done < <(grep -nE 'from[[:space:]]+"@opencrane/[^"]+\.js"' "$f" || true)
 
-	# CONSOLE — shipped code logs via @opencrane/observability.
+	# CONSOLE — shipped code logs via @opencrane/backend/observability.
 	case "$f" in
 		*)
 			while IFS=: read -r ln _; do
-				_report "$f" "$ln" ERROR CONSOLE "raw console.* — use the structured logger (@opencrane/observability)"
+				_report "$f" "$ln" ERROR CONSOLE "raw console.* — use the structured logger (@opencrane/backend/observability)"
 			done < <(grep -nE '(^|[^.[:alnum:]_])console\.(log|warn|error|info|debug)\(' "$f" || true)
 			;;
 	esac

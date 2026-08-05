@@ -1,6 +1,6 @@
 import { PROMPT_COMPILER_VERSION } from "@opencrane/contracts";
 import type { CompiledBudget, CompiledRunInput, CompiledToolDefinition, RunInputSnapshot } from "@opencrane/contracts";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import type { PromptCompilerRepositories } from "./prompt-compiler.types.js";

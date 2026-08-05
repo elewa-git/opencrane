@@ -404,7 +404,7 @@ import type { CreateTenantRequest } from "../types.js";
 | 1 | Node builtins | `node:fs`, `node:path`, `node:crypto` |
 | 2 | External - Utils | `date-fns`, `lodash` |
 | 3 | External - Framework | `express`, `@kubernetes/client-node`, `pino`, `@prisma/client` |
-| 4 | Local packages | `@opencrane/contracts`, `@opencrane/observability` |
+| 4 | Local packages | `@opencrane/contracts`, `@opencrane/backend/observability` |
 | 5 | Local file imports | `./reconciler.js`, `../types.js` |
 
 ## Single-Line Imports

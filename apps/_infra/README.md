@@ -20,7 +20,7 @@ listed below own how the product uses each service.
 
 Add deployment configuration here only when it belongs to a rendered workload or release
 composition. Put reusable application behaviour under the matching `libs/backend/server` domain,
-server-process infrastructure under `libs/server/_infra`, and Kubernetes release mechanisms under
+server-process infrastructure under `libs/backend/_server`, and Kubernetes release mechanisms under
 `apps/_infra/deploy-k8s/platform`. A third-party deployment may be replaced without moving its
 OpenCrane functional contract out of those libraries.
 

@@ -1,6 +1,6 @@
 import type { Request } from "express";
 
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { DeferredToolApprovalDecisionRepository, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
 

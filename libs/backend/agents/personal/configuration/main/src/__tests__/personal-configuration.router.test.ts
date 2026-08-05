@@ -2,7 +2,7 @@ import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
 import { AgentConfigPatchKinds } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreatePersonalConfigurationRouter } from "../http/personal-configuration.router.js";
 import { PersonalConfigurationMaterializationCodes, type PersonalConfigurationChangeMaterializationRepository } from "../materialization/personal-configuration-materialization.types.js";

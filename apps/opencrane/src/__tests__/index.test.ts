@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
 import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
-import { ___AuthMiddleware } from "@opencrane/server/_infra/auth";
-import { _RateLimit } from "@opencrane/server/_infra/http";
+import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
+import { _RateLimit } from "@opencrane/backend/_server/http";
 import { _ReadProcessConfig } from "../app/config.js";
 
 /**

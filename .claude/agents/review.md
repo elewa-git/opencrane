@@ -59,7 +59,7 @@ fresh context — do not assume the author's intent was correct.
 - Failure handling: retries, timeouts, resource cleanup.
 - **Silent failures are a defect**: a bare `catch {}` or fail-closed
   `return null`/`continue` on an anomalous path with no structured log line
-  (via `@opencrane/observability`, correct level, structured fields, no secrets)
+  (via `@opencrane/backend/observability`, correct level, structured fields, no secrets)
   is a finding. Expected/benign early returns need no log.
 - Tests exist for changed behaviour and for the regression being fixed. When in
   doubt run them: `npx nx run <project>:test`.

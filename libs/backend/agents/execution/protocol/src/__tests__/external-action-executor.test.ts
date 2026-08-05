@@ -1,7 +1,7 @@
 import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/server/_infra/obot-custody";
-import { __UnavailableSandboxJobExecutor } from "@opencrane/server/_infra/sandbox-execution";
-import { __UnavailableMemoryGatewayClient } from "@opencrane/server/_infra/memory-gateway-client";
+import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
+import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __CreateExternalActionExecutor, __PersonalMemoryDatasetId, MemoryScopeUnavailableError, UnsupportedExternalActionError } from "../external-action-executor.js";

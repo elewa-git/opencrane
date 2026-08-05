@@ -5,6 +5,6 @@
  * `http`/`express`/`pg`/`fetch` before the rest of the server graph is evaluated.
  * Keep this module tiny and dependency-light for that reason.
  */
-import { ___StartTelemetry } from "@opencrane/observability/telemetry";
+import { ___StartTelemetry } from "@opencrane/backend/observability/telemetry";
 
 await ___StartTelemetry({ serviceName: "opencrane-server", serviceVersion: process.env["npm_package_version"] ?? "0.1.0" });

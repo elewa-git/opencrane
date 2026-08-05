@@ -1,4 +1,4 @@
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 /**
  * Require the credential-free internal endpoint that is allowed to receive

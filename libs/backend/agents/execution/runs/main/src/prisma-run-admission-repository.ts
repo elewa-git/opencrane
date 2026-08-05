@@ -1,7 +1,7 @@
 import { Prisma, RunOutboxEventKind, type PrismaClient } from "@prisma/client";
 
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import { ___CreateLogger, type Logger } from "@opencrane/observability";
+import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 import { ___CloneCanonicalJson } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 

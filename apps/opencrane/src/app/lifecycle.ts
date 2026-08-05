@@ -5,7 +5,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Express } from "express";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { ___ShutdownTelemetry } from "@opencrane/observability";
+import { ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _StartBackgroundWorkers } from "./background-workers.js";
 import type { OpenCraneProcessConfig } from "./config.types.js";

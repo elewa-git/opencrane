@@ -5,8 +5,8 @@ import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
 import { pinoHttp } from "pino-http";
 
-import { ___GetContext, ___RequestContext } from "@opencrane/observability";
-import { _ErrorHandler } from "@opencrane/server/_infra/http";
+import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
+import { _ErrorHandler } from "@opencrane/backend/_server/http";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";

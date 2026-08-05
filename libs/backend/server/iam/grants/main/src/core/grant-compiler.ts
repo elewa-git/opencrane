@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from "@prisma/client";
 
-import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/observability";
+import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 
 import { ___SomeArray, ___SomeRecord, ___SortBy } from "@opencrane/util";
 

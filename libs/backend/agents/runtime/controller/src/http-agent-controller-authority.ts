@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
 
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___IsAgentControllerIdentifier, ___ParseAgentControllerOutboxPrunedCount, ___ParseAgentControllerRunAttemptAssignmentResult, ___ParseAgentControllerRunAttemptClaim, ___ParseAgentControllerRunWorkloadRegistrationResult, ___ParseAgentControllerRunWorkloadReleaseClaim, type AgentControllerRunAttemptAssignmentCommand, type AgentControllerRunAttemptAssignmentResult, type AgentControllerRunAttemptClaim, type AgentControllerRunWorkloadRegistrationCommand, type AgentControllerRunWorkloadRegistrationResult, type AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
 import type { AgentControllerAuthority } from "./agent-controller.types.js";

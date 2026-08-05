@@ -109,8 +109,8 @@
     "libs/backend/server/api-spec/main/project.json",
     "libs/backend/agents/runtime/controller/project.json",
     "libs/backend/server/iam/identity/main/project.json",
-    "libs/server/_infra/api/project.json",
-    "libs/server/_infra/auth/project.json",
-    "libs/server/_infra/http/project.json"
+    "libs/backend/_server/api/project.json",
+    "libs/backend/_server/auth/project.json",
+    "libs/backend/_server/http/project.json"
   ]
 }

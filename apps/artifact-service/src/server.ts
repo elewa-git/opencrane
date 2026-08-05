@@ -6,7 +6,7 @@ import { __FilesystemArtifactStore } from "@opencrane/backend/artifacts/filesyst
 import { __SignArtifactPromotionReceipt, __VerifyArtifactReadLease, __VerifyArtifactWriteLease } from "@opencrane/backend/artifacts/authorization";
 import { __PromoteArtifactUpload } from "@opencrane/backend/artifacts/store";
 import type { ArtifactPromotionLeaseVerifier, ArtifactPromotionReceiptSigner, ArtifactStore, BoundedArtifactUploadByteSource, PromoteArtifactUploadResult } from "@opencrane/backend/artifacts/store";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import type { ArtifactServiceProcessConfig } from "./config.types.js";
 import { _log as log } from "./log.js";

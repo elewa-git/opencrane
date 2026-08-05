@@ -56,4 +56,4 @@ protocol details remain owned inside their package.
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
 - Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
-- Server stream transport: [agent-runtime-stream](../../../server/_infra/agent-runtime-stream/README.md)
+- Server stream transport: [agent-runtime-stream](../../_server/agent-runtime-stream/README.md)

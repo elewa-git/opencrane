@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreateSkillCatalogueRouter } from "../skill-catalogue.router.js";
 import type { SkillCatalogueRouterDependencies } from "../skill-catalogue.router.types.js";

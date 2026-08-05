@@ -1,6 +1,6 @@
 import { PersonalConfigurationChangeState, type PrismaClient } from "@prisma/client";
 
-import { ___CreateLogger, type Logger } from "@opencrane/observability";
+import { ___CreateLogger, type Logger } from "@opencrane/backend/observability";
 
 import { PersonalConfigurationDecisionCodes, type DecidePersonalConfigurationChangeCommand, type PersonalConfigurationChangeDecisionRepository } from "./personal-configuration-decision.types.js";
 

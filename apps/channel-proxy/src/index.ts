@@ -1,6 +1,6 @@
 import "./instrument.js";
 
-import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/observability";
+import { ___BindConsole, ___ShutdownTelemetry } from "@opencrane/backend/observability";
 
 import { _ReadConfig } from "./config.js";
 import { _log as log } from "./log.js";

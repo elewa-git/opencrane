@@ -7,9 +7,9 @@ import { pinoHttp } from "pino-http";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/iam/identity";
-import { ___GetContext, ___RequestContext } from "@opencrane/observability";
-import { ___AuthMiddleware } from "@opencrane/server/_infra/auth";
-import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/server/_infra/http";
+import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
+import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
+import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/_server/http";
 
 import { _log } from "./log.js";
 import { _RegisterRoutes } from "./routes.js";

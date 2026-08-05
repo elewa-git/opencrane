@@ -20,7 +20,7 @@ import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/a
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
-import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
+import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/backend/_server/http";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
