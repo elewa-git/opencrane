@@ -75,7 +75,10 @@ composes the HTTP route; the controller consumes it through an outbound adapter.
 The package owns the claim, assignment, release, first-Pod, bootstrap, and authoring terminal transitions on `SkillWorkload`. The
 clean target baseline enforces its pending → assigned → terminal state fence, monotonic delivery
 generation, immutable Job UID, canonical worker Pod, and terminal receipt independently of this
-TypeScript adapter. It also owns the one-use
+TypeScript adapter. Typed read-only Prisma views retain database-clock expiry and PostgreSQL
+`SKIP LOCKED` selection without giving the adapter a raw-query capability; serializable transactions
+and exact delegate updates preserve each claim fence. Database triggers replace timestamp proposals
+with their own clock and create the bounded bootstrap expiry. It also owns the one-use
 `SkillWorkloadBootstrap` record: only a SHA-256 hash of the worker reference is stored, and it is
 bound to the exact assigned Job UID plus the fixed namespace, ServiceAccount, audience, expiry, and
 the controller-registered canonical worker Pod UID. A successful authoring receipt can write only

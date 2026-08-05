@@ -12,6 +12,11 @@ export class PrismaWidgetRepository implements WidgetRepository
 
 	async find(): Promise<unknown>
 	{
+		const database = this.transaction;
+		await database.$queryRaw`SELECT 1`;
+		await database.$queryRawUnsafe("SELECT 1");
+		await database.$executeRaw`SELECT 1`;
+		await database.$executeRawUnsafe("SELECT 1");
 		return this.transaction.widget.findFirst({});
 	}
 }

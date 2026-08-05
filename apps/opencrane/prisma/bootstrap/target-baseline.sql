@@ -1395,6 +1395,7 @@ CREATE TABLE "skill_workloads" (
     "skill_revision_id" TEXT NOT NULL,
     "tool_invocation_id" TEXT,
     "claimed_at" TIMESTAMP(3),
+    "claim_expires_at" TIMESTAMP(3),
     "delivery_count" INTEGER NOT NULL DEFAULT 0,
     "workload_uid" TEXT,
     "worker_pod_uid" TEXT,
@@ -1419,7 +1420,7 @@ CREATE TABLE "skill_workload_bootstraps" (
     "service_account_name" TEXT NOT NULL,
     "namespace" TEXT NOT NULL,
     "workload_uid" TEXT NOT NULL,
-    "expires_at" TIMESTAMP(3) NOT NULL,
+    "expires_at" TIMESTAMP(3) NOT NULL DEFAULT (clock_timestamp() + '00:15:00'::interval),
     "consumed_at" TIMESTAMP(3),
     "consumed_by_pod_uid" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -2089,7 +2090,10 @@ CREATE UNIQUE INDEX "skill_workloads_workload_uid_key" ON "skill_workloads"("wor
 CREATE UNIQUE INDEX "skill_workloads_worker_pod_uid_key" ON "skill_workloads"("worker_pod_uid");
 
 -- CreateIndex
-CREATE INDEX "skill_workloads_state_release_claimed_at_idx" ON "skill_workloads"("state", "release_claimed_at");
+CREATE INDEX "skill_workloads_state_release_expires_at_idx" ON "skill_workloads"("state", "release_expires_at");
+
+-- CreateIndex
+CREATE INDEX "skill_workloads_state_claim_expires_at_idx" ON "skill_workloads"("state", "claim_expires_at");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "skill_workloads_one_authoring_per_revision_key" ON "skill_workloads"("skill_revision_id") WHERE "kind" = 'authoring';
@@ -3966,6 +3970,33 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+-- Read-only Prisma delegates expose database time and the existing nonblocking claim selector
+-- without granting application code a general raw-SQL capability.
+CREATE VIEW "artifact_authority_clock" AS
+    SELECT 1::INTEGER AS "singleton", clock_timestamp()::TIMESTAMP(3) AS "now";
+CREATE FUNCTION "select_artifact_preprocess_claim_candidate"() RETURNS TABLE (
+    "job_id" TEXT,
+    "attempt" INTEGER,
+    "derived_artifact_id" TEXT,
+    "source_revision_id" TEXT,
+    "source_artifact_id" TEXT,
+    "silo_id" TEXT,
+    "owner_principal_id" TEXT,
+    "source_byte_length" BIGINT
+) LANGUAGE sql VOLATILE AS $$
+    SELECT job."id", job."attempt", job."derived_artifact_id", revision."id", revision."artifact_id",
+           artifact."silo_id", artifact."owner_principal_id", revision."byte_length"
+      FROM "artifact_preprocess_jobs" job
+      JOIN "artifact_revisions" revision ON revision."id" = job."source_revision_id"
+      JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id"
+     WHERE job."state" IN ('pending', 'retryable_failed')
+       AND (job."next_attempt_at" IS NULL OR job."next_attempt_at" <= clock_timestamp())
+     ORDER BY job."created_at", job."id"
+     FOR UPDATE OF job, revision, artifact SKIP LOCKED
+     LIMIT 1;
+$$;
+CREATE VIEW "artifact_preprocess_claim_candidates" AS
+    SELECT * FROM "select_artifact_preprocess_claim_candidate"();
 CREATE FUNCTION "enforce_artifact_preprocess_job_lifecycle"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE source_state "ArtifactRevisionState"; source_media_type TEXT; source_silo_id TEXT; source_owner_principal_id TEXT; source_artifact_state "ArtifactState";
         output_silo_id TEXT; output_owner_principal_id TEXT; output_kind "ArtifactKind"; output_state "ArtifactState"; output_revision_artifact_id TEXT; output_revision_media_type TEXT; output_revision_state "ArtifactRevisionState"; output_revision_address TEXT; output_revision_length BIGINT;
@@ -4057,26 +4088,96 @@ BEGIN
     RETURN NEW;
 END;
 $$;
+CREATE VIEW "skill_authority_clock" AS
+    SELECT 1::INTEGER AS "singleton", clock_timestamp()::TIMESTAMP(3) AS "now";
+CREATE FUNCTION "select_skill_workload_claim_candidate"() RETURNS TABLE (
+    "id" TEXT,
+    "silo_id" TEXT,
+    "kind" "SkillWorkloadKind",
+    "skill_revision_id" TEXT,
+    "revision_state" "SkillRevisionState"
+) LANGUAGE plpgsql VOLATILE AS $$
+DECLARE candidate_id TEXT; candidate_silo_id TEXT; candidate_kind "SkillWorkloadKind";
+        candidate_skill_revision_id TEXT; candidate_revision_state "SkillRevisionState";
+BEGIN
+    SELECT workload."id", workload."silo_id", workload."kind", workload."skill_revision_id", revision."state"
+      INTO candidate_id, candidate_silo_id, candidate_kind, candidate_skill_revision_id, candidate_revision_state
+      FROM "skill_workloads" workload
+      JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id"
+     WHERE workload."state" = 'pending'
+       AND (workload."claim_expires_at" IS NULL OR workload."claim_expires_at" <= clock_timestamp())
+       AND ((workload."kind" = 'authoring' AND revision."state" = 'draft')
+         OR (workload."kind" = 'tool_runner' AND revision."state" = 'published'))
+     ORDER BY workload."created_at", workload."id"
+     FOR UPDATE OF revision SKIP LOCKED
+     LIMIT 1;
+    IF candidate_id IS NULL THEN RETURN; END IF;
+    PERFORM 1 FROM "skill_workloads" workload WHERE workload."id" = candidate_id FOR UPDATE;
+    "id" := candidate_id;
+    "silo_id" := candidate_silo_id;
+    "kind" := candidate_kind;
+    "skill_revision_id" := candidate_skill_revision_id;
+    "revision_state" := candidate_revision_state;
+    RETURN NEXT;
+END;
+$$;
+CREATE VIEW "skill_workload_claim_candidates" AS
+    SELECT * FROM "select_skill_workload_claim_candidate"();
+CREATE FUNCTION "select_skill_workload_release_claim_candidate"() RETURNS TABLE ("id" TEXT) LANGUAGE sql VOLATILE AS $$
+    SELECT workload."id"
+      FROM "skill_workloads" workload
+      JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id"
+     WHERE workload."state" = 'assigned'
+       AND workload."released_at" IS NULL
+       AND workload."workload_uid" IS NOT NULL
+       AND bootstrap."consumed_at" IS NULL
+       AND bootstrap."expires_at" > clock_timestamp()
+       AND (workload."release_expires_at" IS NULL OR workload."release_expires_at" <= clock_timestamp())
+     ORDER BY workload."created_at", workload."id"
+     FOR UPDATE OF workload, bootstrap SKIP LOCKED
+     LIMIT 1;
+$$;
+CREATE VIEW "skill_workload_release_claim_candidates" AS
+    SELECT * FROM "select_skill_workload_release_claim_candidate"();
 CREATE FUNCTION "enforce_skill_workload_authority"() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE revision_silo_id TEXT; revision_state "SkillRevisionState"; revision_trust "SkillTrustClass";
+        bootstrap_expires_at TIMESTAMP(3); requested_lease INTERVAL; transition_time TIMESTAMP(3);
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkload rows cannot be deleted'; END IF;
-    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND NEW."delivery_count" = OLD."delivery_count" + 1 THEN
+        requested_lease := NEW."claim_expires_at" - NEW."claimed_at";
+        IF requested_lease IS NULL OR requested_lease < interval '1 millisecond' OR requested_lease > interval '5 minutes' THEN RAISE EXCEPTION 'SkillWorkload claim lease must be bounded'; END IF;
+        transition_time := clock_timestamp();
+        NEW."claimed_at" := CASE WHEN OLD."claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."claimed_at" + interval '1 millisecond') END;
+        NEW."claim_expires_at" := NEW."claimed_at" + requested_lease;
+    END IF;
+    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND NEW."release_delivery_count" = OLD."release_delivery_count" + 1 THEN
+        requested_lease := NEW."release_expires_at" - NEW."release_claimed_at";
+        IF requested_lease IS NULL OR requested_lease < interval '1 millisecond' OR requested_lease > interval '5 minutes' THEN RAISE EXCEPTION 'SkillWorkload release claim lease must be bounded'; END IF;
+        SELECT "expires_at" INTO bootstrap_expires_at FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL FOR UPDATE;
+        transition_time := clock_timestamp();
+        NEW."release_claimed_at" := CASE WHEN OLD."release_claimed_at" IS NULL THEN transition_time ELSE GREATEST(transition_time, OLD."release_claimed_at" + interval '1 millisecond') END;
+        NEW."release_expires_at" := LEAST(NEW."release_claimed_at" + requested_lease, bootstrap_expires_at);
+        IF NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" THEN RAISE EXCEPTION 'SkillWorkload release claim requires a current bootstrap'; END IF;
+    END IF;
+    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL THEN NEW."released_at" := clock_timestamp(); END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'assigned' AND NEW."state" IN ('succeeded', 'failed') THEN NEW."completed_at" := clock_timestamp(); END IF;
+    IF TG_OP = 'INSERT' AND (NEW."state" <> 'pending' OR NEW."claimed_at" IS NOT NULL OR NEW."claim_expires_at" IS NOT NULL OR NEW."delivery_count" <> 0 OR NEW."workload_uid" IS NOT NULL OR NEW."worker_pod_uid" IS NOT NULL OR NEW."release_claimed_at" IS NOT NULL OR NEW."release_delivery_count" <> 0 OR NEW."release_expires_at" IS NOT NULL OR NEW."released_at" IS NOT NULL OR NEW."completed_at" IS NOT NULL OR NEW."failure_code" IS NOT NULL OR NEW."cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload must begin pending without claim or assignment'; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."silo_id" IS DISTINCT FROM OLD."silo_id" OR NEW."kind" IS DISTINCT FROM OLD."kind" OR NEW."skill_revision_id" IS DISTINCT FROM OLD."skill_revision_id" OR NEW."tool_invocation_id" IS DISTINCT FROM OLD."tool_invocation_id") THEN
         RAISE EXCEPTION 'SkillWorkload source coordinates are immutable';
     END IF;
     IF TG_OP = 'UPDATE' AND OLD."state" IN ('succeeded', 'failed', 'cancelled') AND (NEW."state" IS DISTINCT FROM OLD."state" OR NEW."completed_at" IS DISTINCT FROM OLD."completed_at" OR NEW."failure_code" IS DISTINCT FROM OLD."failure_code" OR NEW."cancelled_at" IS DISTINCT FROM OLD."cancelled_at") THEN RAISE EXCEPTION 'terminal SkillWorkload is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."workload_uid" IS NOT NULL AND NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" THEN RAISE EXCEPTION 'SkillWorkload assignment identity is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NOT NULL AND NEW."worker_pod_uid" IS DISTINCT FROM OLD."worker_pod_uid" THEN RAISE EXCEPTION 'SkillWorkload worker Pod identity is immutable'; END IF;
-    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned workload'; END IF;
+    IF NEW."worker_pod_uid" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed', 'cancelled') OR btrim(NEW."worker_pod_uid") = '') THEN RAISE EXCEPTION 'SkillWorkload worker Pod requires its assigned or terminal workload'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."worker_pod_uid" IS NULL AND NEW."worker_pod_uid" IS NOT NULL AND (OLD."state" <> 'assigned' OR NEW."state" <> 'assigned' OR OLD."released_at" IS NULL OR OLD."release_expires_at" IS NULL OR clock_timestamp() >= OLD."release_expires_at") THEN RAISE EXCEPTION 'SkillWorkload worker Pod registration requires a current released workload'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."released_at" IS NOT NULL AND (NEW."released_at" IS DISTINCT FROM OLD."released_at" OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") THEN RAISE EXCEPTION 'released SkillWorkload is terminal'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > clock_timestamp() OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > clock_timestamp() OR clock_timestamp() >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > clock_timestamp())) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."released_at" IS NULL AND NEW."released_at" IS NOT NULL AND (OLD."release_claimed_at" IS NULL OR OLD."release_expires_at" IS NULL OR OLD."release_claimed_at" > clock_timestamp() OR NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at" OR NEW."released_at" > clock_timestamp() OR clock_timestamp() >= OLD."release_expires_at" OR NOT EXISTS (SELECT 1 FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = NEW."id" AND "consumed_at" IS NULL AND "expires_at" > clock_timestamp())) THEN RAISE EXCEPTION 'SkillWorkload release requires a current bootstrap-backed prior release claim'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."released_at" IS NULL AND (NEW."release_claimed_at" IS DISTINCT FROM OLD."release_claimed_at" OR NEW."release_delivery_count" IS DISTINCT FROM OLD."release_delivery_count" OR NEW."release_expires_at" IS DISTINCT FROM OLD."release_expires_at") AND (NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_expires_at" <= NEW."release_claimed_at" OR NEW."release_delivery_count" <> OLD."release_delivery_count" + 1 OR (OLD."release_claimed_at" IS NOT NULL AND NEW."release_claimed_at" <= OLD."release_claimed_at")) THEN RAISE EXCEPTION 'SkillWorkload release claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at") OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
-    IF TG_OP = 'UPDATE' AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" = OLD."claimed_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact prior claim'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" = 'pending' AND NEW."state" = 'pending' AND (NEW."delivery_count" < OLD."delivery_count" OR (NEW."delivery_count" = OLD."delivery_count" AND (NEW."claimed_at" IS DISTINCT FROM OLD."claimed_at" OR NEW."claim_expires_at" IS DISTINCT FROM OLD."claim_expires_at")) OR (NEW."delivery_count" > OLD."delivery_count" AND (NEW."delivery_count" <> OLD."delivery_count" + 1 OR NEW."claimed_at" IS NULL OR NEW."claim_expires_at" IS NULL OR NEW."claim_expires_at" <= NEW."claimed_at" OR (OLD."claimed_at" IS NOT NULL AND NEW."claimed_at" <= OLD."claimed_at")))) THEN RAISE EXCEPTION 'SkillWorkload claim generation must advance monotonically'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."state" IS DISTINCT FROM NEW."state" AND NEW."state" = 'assigned' AND NOT (OLD."state" = 'pending' AND OLD."claimed_at" IS NOT NULL AND OLD."claim_expires_at" IS NOT NULL AND clock_timestamp() < OLD."claim_expires_at" AND NEW."claimed_at" = OLD."claimed_at" AND NEW."claim_expires_at" = OLD."claim_expires_at" AND NEW."delivery_count" = OLD."delivery_count" AND NEW."workload_uid" IS NOT NULL) THEN RAISE EXCEPTION 'SkillWorkload assignment requires exact current prior claim'; END IF;
     IF TG_OP = 'UPDATE' AND NEW."state" IN ('succeeded', 'failed') AND NOT (OLD."state" = 'assigned' AND OLD."released_at" IS NOT NULL AND OLD."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."completed_at" >= OLD."released_at") THEN RAISE EXCEPTION 'SkillWorkload completion requires released registered assignment'; END IF;
-    IF NEW."delivery_count" < 0 OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
+    IF NEW."delivery_count" < 0 OR ((NEW."claimed_at" IS NULL) <> (NEW."claim_expires_at" IS NULL)) OR NEW."release_delivery_count" < 0 OR ((NEW."release_claimed_at" IS NULL) <> (NEW."release_expires_at" IS NULL)) OR (NEW."released_at" IS NOT NULL AND (NEW."state" NOT IN ('assigned', 'succeeded', 'failed') OR NEW."release_claimed_at" IS NULL OR NEW."release_expires_at" IS NULL OR NEW."release_delivery_count" < 1)) OR NOT ((NEW."state" = 'pending' AND NEW."cancelled_at" IS NULL AND NEW."workload_uid" IS NULL AND NEW."worker_pod_uid" IS NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'assigned' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."completed_at" IS NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'succeeded' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NULL) OR (NEW."state" = 'failed' AND NEW."cancelled_at" IS NULL AND NEW."claimed_at" IS NOT NULL AND NEW."claim_expires_at" IS NOT NULL AND NEW."delivery_count" > 0 AND NEW."workload_uid" IS NOT NULL AND NEW."worker_pod_uid" IS NOT NULL AND NEW."completed_at" IS NOT NULL AND NEW."failure_code" IS NOT NULL AND btrim(NEW."failure_code") <> '') OR (NEW."state" = 'cancelled' AND NEW."cancelled_at" IS NOT NULL)) THEN RAISE EXCEPTION 'SkillWorkload state requires matching claim, assignment, completion, and cancellation evidence'; END IF;
     IF TG_OP = 'INSERT' THEN
         SELECT skill."silo_id", revision."state", revision."trust_class" INTO revision_silo_id, revision_state, revision_trust FROM "skill_revisions" revision JOIN "skills" skill ON skill."id" = revision."skill_id" WHERE revision."id" = NEW."skill_revision_id" FOR UPDATE OF revision, skill;
         IF revision_silo_id IS DISTINCT FROM NEW."silo_id" OR revision_trust IS DISTINCT FROM 'sandboxed_python' THEN RAISE EXCEPTION 'SkillWorkload requires same-silo SandboxedPython SkillRevision'; END IF;
@@ -4098,6 +4199,7 @@ DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; 
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'SkillWorkloadBootstrap rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' AND (NEW."consumed_at" IS NOT NULL OR NEW."consumed_by_pod_uid" IS NOT NULL) THEN RAISE EXCEPTION 'a new SkillWorkloadBootstrap must begin unconsumed'; END IF;
+    IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NULL AND NEW."consumed_at" IS NOT NULL THEN NEW."consumed_at" := transition_time; END IF;
     IF TG_OP = 'UPDATE' AND (NEW."skill_workload_id" IS DISTINCT FROM OLD."skill_workload_id" OR NEW."reference_hash" IS DISTINCT FROM OLD."reference_hash" OR NEW."audience" IS DISTINCT FROM OLD."audience" OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid" OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at") THEN RAISE EXCEPTION 'SkillWorkloadBootstrap identity is immutable'; END IF;
     IF TG_OP = 'UPDATE' AND OLD."consumed_at" IS NOT NULL AND (NEW."consumed_at" IS DISTINCT FROM OLD."consumed_at" OR NEW."consumed_by_pod_uid" IS DISTINCT FROM OLD."consumed_by_pod_uid") THEN RAISE EXCEPTION 'consumed SkillWorkloadBootstrap is terminal'; END IF;
     IF TG_OP = 'UPDATE' AND (OLD."consumed_at" IS NOT NULL OR NEW."consumed_at" IS NULL OR NEW."consumed_by_pod_uid" IS NULL) THEN RAISE EXCEPTION 'SkillWorkloadBootstrap may be consumed exactly once'; END IF;

@@ -1,6 +1,7 @@
-import { Prisma, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
+import { SkillWorkloadKind, SkillWorkloadState, type Prisma } from "@prisma/client";
 
 import type { SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
+import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import type { SkillWorkloadReleaseRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Transaction-scoped Postgres authority for Job release and first-Pod registration. */
@@ -8,7 +9,7 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 {
 	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Database-owned release-claim lifetime applied consistently to every claim. */
+	/** Bounded release-claim lifetime applied consistently to every claim. */
 	private readonly claimLeaseMilliseconds: number;
 	/** Creates the release persistence capability within an existing transaction. */
 	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
@@ -21,34 +22,36 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 	/** Claims one assigned bootstrap-ready Job for a later Kubernetes unsuspend operation. */
 	async claimNextRelease(): Promise<SkillWorkloadReleaseClaim | null>
 	{
-		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
-		const rows = await this.transaction.$queryRaw<Array<{ id: string }>>(Prisma.sql`SELECT workload."id" FROM "skill_workloads" workload JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id" WHERE workload."state" = 'assigned'::"SkillWorkloadState" AND workload."released_at" IS NULL AND bootstrap."consumed_at" IS NULL AND bootstrap."expires_at" > clock_timestamp() AND (workload."release_claimed_at" IS NULL OR workload."release_claimed_at" <= clock_timestamp() - (${claimLeaseMilliseconds} * interval '1 millisecond')) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF workload, bootstrap SKIP LOCKED`);
-		const id = rows[0]?.id;
-		if (id === undefined) return null;
-		const workload = await this.transaction.skillWorkload.findUnique({ where: { id } });
-		const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: id } });
-		const now = await this._databaseTime();
-		if (workload === null || bootstrap === null || now === null || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid === null) return null;
-		const claimedAt = new Date(Math.max(now.getTime(), (workload.releaseClaimedAt?.getTime() ?? -1) + 1));
+		// 1. The read-only view retains database-clock filtering and nonblocking peer selection.
+		const candidate = await this.transaction.skillWorkloadReleaseClaimCandidate.findFirst();
+		if (candidate === null) return null;
+		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: candidate.id }, include: { bootstrap: true } });
+		const bootstrap = workload?.bootstrap;
+		if (workload === null || bootstrap === null || bootstrap === undefined || workload.workloadUid === null) return null;
+
+		// 2. The proposal carries only the bounded duration; the trigger owns the timestamp and bootstrap cap.
 		const releaseDeliveryCount = workload.releaseDeliveryCount + 1;
-		const expiresAt = new Date(Math.min(claimedAt.getTime() + claimLeaseMilliseconds, bootstrap.expiresAt.getTime()));
-		const updated = await this.transaction.skillWorkload.updateMany({ where: { id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount }, data: { releaseClaimedAt: claimedAt, releaseDeliveryCount, releaseExpiresAt: expiresAt } });
-		if (updated.count !== 1) throw new Error("skill workload release claim lost its fence");
-		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claimedAt.toISOString(), releaseDeliveryCount, expiresAt: expiresAt.toISOString() };
+		const claimed = await this.transaction.skillWorkload.updateManyAndReturn({
+			where: { id: workload.id, state: SkillWorkloadState.Assigned, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, bootstrap: { is: { consumedAt: null, expiresAt: bootstrap.expiresAt } } },
+			data: { releaseClaimedAt: _SkillWorkloadTimestampProposal, releaseDeliveryCount, releaseExpiresAt: _SkillWorkloadLeaseExpiryProposal(this.claimLeaseMilliseconds) },
+			select: { releaseClaimedAt: true, releaseExpiresAt: true },
+		});
+		const claim = claimed[0];
+		if (claim === undefined || claim.releaseClaimedAt === null || claim.releaseExpiresAt === null) throw new Error("skill workload release claim lost its fence");
+		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", workloadUid: workload.workloadUid, releaseClaimedAt: claim.releaseClaimedAt.toISOString(), releaseDeliveryCount, expiresAt: claim.releaseExpiresAt.toISOString() };
 	}
 
 	/** Commits an exact fresh release claim, or accepts only its immutable replay. */
 	async commitRelease(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
 	{
 		if (!_IsReleaseCommandValid(workloadId, command)) return "conflict";
-		await this._lockWorkloadAndBootstrap(workloadId);
-		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId } });
+		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { bootstrap: true } });
 		if (workload === null) return "conflict";
 		if (workload.releasedAt !== null) return _IsSameRelease(workload, command) ? "idempotent" : "conflict";
-		const now = await this._databaseTime();
-		const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
-		if (now === null || bootstrap === null || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid !== command.workloadUid || !_IsSameRelease(workload, command) || workload.releaseExpiresAt === null || now >= workload.releaseExpiresAt) return "conflict";
-		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, releaseExpiresAt: workload.releaseExpiresAt }, data: { releasedAt: now } });
+		const now = await this._databaseNow();
+		const bootstrap = workload.bootstrap;
+		if (bootstrap === null || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || workload.state !== SkillWorkloadState.Assigned || workload.workloadUid !== command.workloadUid || !_IsSameRelease(workload, command) || workload.releaseExpiresAt === null || now >= workload.releaseExpiresAt) return "conflict";
+		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid, releasedAt: null, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, releaseExpiresAt: workload.releaseExpiresAt, bootstrap: { is: { consumedAt: null, expiresAt: { gt: now } } } }, data: { releasedAt: _SkillWorkloadTimestampProposal } });
 		return updated.count === 1 ? "released" : "conflict";
 	}
 
@@ -56,29 +59,22 @@ export class PrismaSkillWorkloadReleaseRepository implements SkillWorkloadReleas
 	async registerFirstPod(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
 	{
 		if (!_IsReleaseCommandValid(workloadId, command) || command.podUid.length === 0) return "conflict";
-		await this._lockWorkloadAndBootstrap(workloadId);
-		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId } });
-		const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
-		if (workload === null || bootstrap === null) return "conflict";
+		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { bootstrap: true } });
+		const bootstrap = workload?.bootstrap;
+		if (workload === null || bootstrap === null || bootstrap === undefined) return "conflict";
 		if (workload.workerPodUid !== null) return workload.workerPodUid === command.podUid && _IsSameRelease(workload, command) ? "idempotent" : "conflict";
-		const now = await this._databaseTime();
-		if (now === null || workload.state !== SkillWorkloadState.Assigned || workload.releasedAt === null || workload.workloadUid !== command.workloadUid || !_IsSameRelease(workload, command) || workload.releaseExpiresAt === null || now >= workload.releaseExpiresAt || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || bootstrap.workloadUid !== command.workloadUid) return "conflict";
-		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, workerPodUid: null, workloadUid: command.workloadUid, releasedAt: workload.releasedAt, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, releaseExpiresAt: workload.releaseExpiresAt }, data: { workerPodUid: command.podUid } });
+		const now = await this._databaseNow();
+		if (workload.state !== SkillWorkloadState.Assigned || workload.releasedAt === null || workload.workloadUid !== command.workloadUid || !_IsSameRelease(workload, command) || workload.releaseExpiresAt === null || now >= workload.releaseExpiresAt || bootstrap.consumedAt !== null || bootstrap.expiresAt <= now || bootstrap.workloadUid !== command.workloadUid) return "conflict";
+		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, workerPodUid: null, workloadUid: command.workloadUid, releasedAt: workload.releasedAt, releaseClaimedAt: workload.releaseClaimedAt, releaseDeliveryCount: workload.releaseDeliveryCount, releaseExpiresAt: workload.releaseExpiresAt, bootstrap: { is: { consumedAt: null, expiresAt: bootstrap.expiresAt, workloadUid: command.workloadUid } } }, data: { workerPodUid: command.podUid } });
 		return updated.count === 1 ? "registered" : "conflict";
 	}
 
-	/** Reads database time so a controller clock cannot extend a release lease. */
-	private async _databaseTime(): Promise<Date | null>
+	/** Reads database time through the read-only typed view owned by this repository. */
+	private async _databaseNow(): Promise<Date>
 	{
-		const rows = await this.transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
-		return rows[0]?.now ?? null;
-	}
-
-	/** Locks workload then bootstrap, matching every release-side transition. */
-	private async _lockWorkloadAndBootstrap(workloadId: string): Promise<void>
-	{
-		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
-		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workload_bootstraps" WHERE "skill_workload_id" = ${workloadId} FOR UPDATE`);
+		const clock = await this.transaction.skillAuthorityClock.findUnique({ where: { singleton: 1 } });
+		if (clock === null || Number.isNaN(clock.now.getTime())) throw new Error("skill workload database clock unavailable");
+		return clock.now;
 	}
 }
 

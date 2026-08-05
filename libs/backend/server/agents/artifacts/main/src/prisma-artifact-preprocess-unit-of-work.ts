@@ -31,7 +31,7 @@ export class PrismaArtifactPreprocessUnitOfWork implements ArtifactPreprocessUni
 				return await this.prisma.$transaction(async function _Run(transaction): Promise<Result>
 				{
 					return work(new PrismaArtifactPreprocessRepository(transaction));
-				});
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (error)
 			{

@@ -33,7 +33,7 @@ export class PrismaArtifactPublicationUnitOfWork implements ArtifactPublicationU
 					const authority = new PrismaArtifactAuthorityRepository(transaction);
 					const repositories: ArtifactPublicationTransaction = { revisions: authority, uploadLeases: authority };
 					return work(repositories);
-				});
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 			}
 			catch (error)
 			{

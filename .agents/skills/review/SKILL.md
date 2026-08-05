@@ -141,7 +141,7 @@ maintainability pass.
    - Treat `PRISMA-TRANSACTION-OWNER` and `PRISMA-DELEGATE-OWNER` as deterministic architecture
      failures: application services/materializers/use cases consume repository and UnitOfWork ports;
      repository adapters own model delegates and UnitOfWork implementations own `$transaction`.
-	 `PRISMA-RAW-QUERY-OWNER` reserves raw SQL for exact repository adapters, while
+	 `PRISMA-RAW-QUERY-FORBIDDEN` rejects raw Prisma methods in every production TypeScript owner, while
 	 `PRISMA-REPOSITORY-CONSTRUCTION` and `PRISMA-POLICY-*` require transaction-scoped repository
 	 wiring, constructor types, exact callback bindings, adapter names, source paths, and contract
 	 imports to match reviewed policy exactly.

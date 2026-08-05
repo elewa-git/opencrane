@@ -56,12 +56,17 @@ test("requires the exact policy path and adapter name for Prisma ownership", fun
 	assert.equal(movedFindings.some(function _Import(finding) { return finding.rule === "PRISMA-IMPORT-OWNER"; }), true);
 });
 
-test("allows raw queries only in exact policy-authorized repository adapters", function _RejectsUnitOfWorkRawQuery()
+test("forbids every raw Prisma method inside a policy-authorized repository", function _RejectsAuthorizedRepositoryRawMethods()
 {
-	const repository = inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("positive-repository"), ["widget"], _OWNERS);
-	const unitOfWork = inspectPrismaBoundary("libs/widgets/prisma-widget-unit-of-work.ts", _Fixture("negative-unit-of-work-raw-query"), ["widget"], _OWNERS);
-	assert.equal(repository.some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-OWNER"; }), false);
-	assert.equal(unitOfWork.some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-OWNER"; }), true);
+	const findings = inspectPrismaBoundary("libs/widgets/prisma-widget-repository.ts", _Fixture("negative-authorized-repository-raw-methods"), ["widget"], _OWNERS);
+	const rawFindings = findings.filter(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; });
+	assert.equal(rawFindings.length, 4);
+	assert.deepEqual(rawFindings.map(function _Message(finding) { return finding.message.split(" ")[0]; }).sort(), [
+		"$executeRaw",
+		"$executeRawUnsafe",
+		"$queryRaw",
+		"$queryRawUnsafe",
+	]);
 });
 
 test("requires transaction-scoped repository construction to match the owning policy entry", function _RejectsUndeclaredConstruction()
@@ -113,12 +118,12 @@ test("fails closed when live owner declarations drift from policy", function _Re
 	assert.equal(wrappedConstructorFindings.some(function _Owner(finding) { return finding.rule === "PRISMA-POLICY-OWNER"; }), true);
 });
 
-test("detects computed raw-query access without matching prose or unrelated receivers", function _ScopesRawQueries()
+test("detects computed and aliased raw Prisma access without matching prose", function _ScopesRawMethods()
 {
 	const bypass = inspectPrismaBoundary("libs/widgets/computed-service.ts", _Fixture("negative-computed-raw-service"), ["widget"], _OWNERS);
 	const examples = inspectPrismaBoundary("libs/widgets/examples.ts", _Fixture("positive-raw-false-positives"), ["widget"], _OWNERS);
-	assert.equal(bypass.filter(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-OWNER"; }).length, 2);
-	assert.equal(examples.some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-OWNER"; }), false);
+	assert.equal(bypass.filter(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }).length, 2);
+	assert.equal(examples.some(function _Raw(finding) { return finding.rule === "PRISMA-RAW-QUERY-FORBIDDEN"; }), false);
 });
 
 test("rejects aliased imports, delegate aliases, destructuring, and transaction aliases", function _RejectsAliases()
@@ -150,9 +155,9 @@ test("treats relocation to a different owner as a new bypass", function _Detects
 	assert.equal(findingDelta(base, current).length, 1);
 });
 
-test("extracts canonical delegate names from Prisma schemas", function _ExtractsModels()
+test("extracts canonical model and view delegate names from Prisma schemas", function _ExtractsDelegates()
 {
-	assert.deepEqual(prismaModelDelegates(["model Widget {\n id String @id\n}\nmodel APIKey {\n id String @id\n}\n"]), ["aPIKey", "widget"]);
+	assert.deepEqual(prismaModelDelegates(["model Widget {\n id String @id\n}\nmodel APIKey {\n id String @id\n}\nview ClaimCandidate {\n id String @unique\n}\n"]), ["aPIKey", "claimCandidate", "widget"]);
 });
 
 test("fails closed on broad, ownerless, stale, or malformed exemptions", function _RejectsMalformedExemptions()
@@ -162,9 +167,10 @@ test("fails closed on broad, ownerless, stale, or malformed exemptions", functio
 		{ path: "libs/service.ts", operations: ["unknown"], owner: "", reason: "short", expiresOn: "tomorrow" },
 		{ path: "libs/expired.ts", operations: ["transaction"], owner: "team", reason: "A sufficiently detailed temporary reason.", expiresOn: "2026-07-01" },
 		{ path: "libs/impossible-date.ts", operations: ["delegate"], owner: "team", reason: "A sufficiently detailed temporary reason.", expiresOn: "2026-02-30" },
+		{ path: "libs/raw-method.ts", operations: ["raw-query"], owner: "team", reason: "Raw Prisma methods must never be exemptible.", expiresOn: "2026-09-01" },
 	], "2026-08-01");
 	assert.equal(resolved.active.size, 0);
-	assert.equal(resolved.errors.length, 4);
+	assert.equal(resolved.errors.length, 5);
 	assert.throws(function _InvalidPolicy() { validatePolicy({ version: 2, owners: { repositories: [], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary policy schema/u);
 	assert.throws(function _BroadOwner() { validatePolicy({ version: 1, owners: { repositories: [{ path: "libs/*/repository.ts", adapter: "PrismaWidgetRepository", contract: "WidgetRepository", contractImportPath: "./widget.types.js", constructs: [] }], unitsOfWork: [], compositions: [] }, exemptions: [] }); }, /invalid Prisma-boundary owner/u);
 });

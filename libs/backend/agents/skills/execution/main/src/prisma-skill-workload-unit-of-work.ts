@@ -27,27 +27,36 @@ export class PrismaSkillWorkloadUnitOfWork implements SkillWorkloadExecutionUnit
 	async run<Result>(work: SkillWorkloadExecutionWork<Result>): Promise<Result>
 	{
 		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
-		try
+		let finalConflict: Prisma.PrismaClientKnownRequestError | null = null;
+		for (let attempt = 1; attempt <= _SERIALIZABLE_ATTEMPTS; attempt += 1)
 		{
-			return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
+			try
 			{
-				// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
-				const repositories: SkillWorkloadExecutionTransaction = {
-					assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
-					releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
-					bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
-					authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
-					authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
-				};
+				return await this.prisma.$transaction(async function _RunTransaction(transaction): Promise<Result>
+				{
+					// 1. Bind every persistence capability to the same transaction so none can open an independent commit.
+					const repositories: SkillWorkloadExecutionTransaction = {
+						assignments: new PrismaSkillWorkloadAssignmentRepository(transaction, claimLeaseMilliseconds),
+						releases: new PrismaSkillWorkloadReleaseRepository(transaction, claimLeaseMilliseconds),
+						bootstraps: new PrismaSkillWorkloadBootstrapRepository(transaction),
+						authoringCompletions: new PrismaSkillAuthoringCompletionRepository(transaction),
+						authoringInputs: new PrismaSkillAuthoringInputRepository(transaction),
+					};
 
-				// 2. Keep the transaction lifetime limited to durable authority work; callers perform external I/O afterwards.
-				return work(repositories);
-			});
+					// 2. Keep the transaction lifetime limited to durable authority work; callers perform external I/O afterwards.
+					return work(repositories);
+				}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
+			}
+			catch (error)
+			{
+				if (!(error instanceof Prisma.PrismaClientKnownRequestError) || (error.code !== "P2002" && error.code !== "P2034")) throw error;
+				if (error.code === "P2002") throw new _SkillWorkloadPersistenceConflictError("skill workload persistence conflict", { cause: error });
+				finalConflict = error;
+			}
 		}
-		catch (error)
-		{
-			if (error instanceof Prisma.PrismaClientKnownRequestError && (error.code === "P2002" || error.code === "P2034")) throw new _SkillWorkloadPersistenceConflictError("skill workload persistence conflict", { cause: error });
-			throw error;
-		}
+		throw new _SkillWorkloadPersistenceConflictError("skill workload persistence conflict after bounded serializable retries", { cause: finalConflict ?? undefined });
 	}
 }
+
+/** Maximum fresh serializable transactions used to resolve ordinary controller contention. */
+const _SERIALIZABLE_ATTEMPTS = 3;

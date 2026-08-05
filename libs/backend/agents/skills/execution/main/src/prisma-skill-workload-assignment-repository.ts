@@ -1,8 +1,9 @@
-import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState } from "@prisma/client";
+import { SkillRevisionState, SkillWorkloadKind, SkillWorkloadState, type Prisma } from "@prisma/client";
 
 import { __CreateSkillWorkloadBootstrapReference, __HashSkillWorkloadBootstrapReference } from "@opencrane/contracts";
 
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim } from "./skill-workload-claims.types.js";
+import { _SkillWorkloadLeaseExpiryProposal, _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
 import type { SkillWorkloadAssignmentRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Transaction-scoped Postgres authority for controller claim and suspended-Job assignment. */
@@ -10,7 +11,7 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 {
 	/** Transaction-scoped ORM client supplied only by the execution unit of work. */
 	private readonly transaction: Prisma.TransactionClient;
-	/** Database-owned claim lifetime applied consistently to claim and commit. */
+	/** Bounded claim lifetime applied consistently to claim and commit. */
 	private readonly claimLeaseMilliseconds: number;
 	/** Creates the assignment persistence capability within an existing transaction. */
 	constructor(transaction: Prisma.TransactionClient, claimLeaseMilliseconds: number)
@@ -23,71 +24,59 @@ export class PrismaSkillWorkloadAssignmentRepository implements SkillWorkloadAss
 	/** Claims one pending workload while keeping revision lifecycle and delivery generation fenced. */
 	async claimNext(): Promise<SkillWorkloadClaim | null>
 	{
-		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
-		// 1. Lock revision first so lifecycle cancellation cannot race the eligibility decision.
-		const candidates = await this.transaction.$queryRaw<Array<{ id: string; skillRevisionId: string; revisionState: SkillRevisionState; kind: SkillWorkloadKind }>>(Prisma.sql`SELECT workload."id", workload."skill_revision_id" AS "skillRevisionId", revision."state" AS "revisionState", workload."kind" FROM "skill_workloads" workload JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id" WHERE workload."state" = 'pending'::"SkillWorkloadState" AND (workload."claimed_at" IS NULL OR workload."claimed_at" <= clock_timestamp() - (${claimLeaseMilliseconds} * interval '1 millisecond')) AND ((workload."kind" = 'authoring'::"SkillWorkloadKind" AND revision."state" = 'draft'::"SkillRevisionState") OR (workload."kind" = 'tool_runner'::"SkillWorkloadKind" AND revision."state" = 'published'::"SkillRevisionState")) ORDER BY workload."created_at", workload."id" LIMIT 1 FOR UPDATE OF revision SKIP LOCKED`);
-		const candidate = candidates[0];
-		if (candidate === undefined || !_IsEligibleRevisionForKind(candidate.kind, candidate.revisionState)) return null;
-
-		// 2. Lock workload second before reading the exact generation that the controller must return.
-		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${candidate.id} FOR UPDATE`);
+		// 1. The read-only view keeps the established database-clock and SKIP LOCKED selection semantics.
+		const candidate = await this.transaction.skillWorkloadClaimCandidate.findFirst();
+		if (candidate === null || !_IsEligibleRevisionForKind(candidate.kind, candidate.revisionState)) return null;
 		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: candidate.id } });
-		const now = await this._databaseTime();
-		if (workload === null || now === null || workload.state !== SkillWorkloadState.Pending || !_IsEligibleRevisionForKind(workload.kind, candidate.revisionState)) return null;
+		if (workload === null || workload.state !== SkillWorkloadState.Pending || workload.skillRevisionId !== candidate.skillRevisionId) return null;
 
-		// 3. Advance the delivery generation atomically so controller replicas cannot share a claim.
-		const claimedAt = new Date(Math.max(now.getTime(), (workload.claimedAt?.getTime() ?? -1) + 1));
+		// 2. The proposal encodes only the lease duration; the trigger anchors both timestamps to database time.
 		const deliveryCount = workload.deliveryCount + 1;
-		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workload.id, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount }, data: { claimedAt, deliveryCount } });
-		if (updated.count !== 1) throw new Error("skill workload claim lost its fence");
-		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claimedAt.toISOString(), deliveryCount, expiresAt: new Date(claimedAt.getTime() + claimLeaseMilliseconds).toISOString() };
+		const claimed = await this.transaction.skillWorkload.updateManyAndReturn({
+			where: { id: workload.id, state: SkillWorkloadState.Pending, skillRevisionId: workload.skillRevisionId, claimedAt: workload.claimedAt, claimExpiresAt: workload.claimExpiresAt, deliveryCount: workload.deliveryCount },
+			data: { claimedAt: _SkillWorkloadTimestampProposal, claimExpiresAt: _SkillWorkloadLeaseExpiryProposal(this.claimLeaseMilliseconds), deliveryCount },
+			select: { claimedAt: true, claimExpiresAt: true },
+		});
+		const claim = claimed[0];
+		if (claim === undefined || claim.claimedAt === null || claim.claimExpiresAt === null) throw new Error("skill workload claim lost its fence");
+		return { workloadId: workload.id, siloId: workload.siloId, kind: workload.kind === SkillWorkloadKind.Authoring ? "authoring" : "tool-runner", skillRevisionId: workload.skillRevisionId, claimedAt: claim.claimedAt.toISOString(), deliveryCount, expiresAt: claim.claimExpiresAt.toISOString() };
 	}
 
 	/** Commits one exact claim generation with a hash-only bootstrap record. */
 	async commitAssignment(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
-		const claimLeaseMilliseconds = this.claimLeaseMilliseconds;
 		if (!await _IsAssignmentCommandValid(workloadId, command)) return "conflict";
 
-		// 1. Lock revision before workload, matching lifecycle trigger lock ordering.
-		const sources = await this.transaction.$queryRaw<Array<{ skillRevisionId: string }>>(Prisma.sql`SELECT "skill_revision_id" AS "skillRevisionId" FROM "skill_workloads" WHERE "id" = ${workloadId}`);
-		const source = sources[0];
-		if (source === undefined) return "conflict";
-		const revisions = await this.transaction.$queryRaw<Array<{ state: SkillRevisionState }>>(Prisma.sql`SELECT "state" FROM "skill_revisions" WHERE "id" = ${source.skillRevisionId} FOR UPDATE`);
-		await this.transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${workloadId} FOR UPDATE`);
-		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId } });
-		const revision = revisions[0];
-		if (workload === null || revision === undefined || !_IsEligibleRevisionForKind(workload.kind, revision.state)) return "conflict";
+		// 1. Rebind the workload, revision lifecycle, and any existing bootstrap in one snapshot.
+		const workload = await this.transaction.skillWorkload.findUnique({ where: { id: workloadId }, include: { skillRevision: { select: { state: true } }, bootstrap: true } });
+		if (workload === null || !_IsEligibleRevisionForKind(workload.kind, workload.skillRevision.state)) return "conflict";
 		if (workload.state === SkillWorkloadState.Assigned)
 		{
-			const bootstrap = await this.transaction.skillWorkloadBootstrap.findUnique({ where: { skillWorkloadId: workloadId } });
-			return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && bootstrap?.referenceHash === await __HashSkillWorkloadBootstrapReference(command.bootstrapReference) ? "idempotent" : "conflict";
+			return workload.workloadUid === command.workloadUid && workload.claimedAt?.getTime() === Date.parse(command.claimedAt) && workload.deliveryCount === command.deliveryCount && workload.bootstrap?.referenceHash === await __HashSkillWorkloadBootstrapReference(command.bootstrapReference) ? "idempotent" : "conflict";
 		}
 
-		// 2. Re-check the exact lease under the locks before the irreversible assignment transition.
-		const now = await this._databaseTime();
-		if (now === null || workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.deliveryCount !== command.deliveryCount || now.getTime() >= workload.claimedAt.getTime() + claimLeaseMilliseconds) return "conflict";
+		// 2. Re-check the exact persisted lease before the irreversible assignment transition.
+		const now = await this._databaseNow();
+		if (workload.state !== SkillWorkloadState.Pending || workload.claimedAt?.getTime() !== Date.parse(command.claimedAt) || workload.claimExpiresAt === null || workload.deliveryCount !== command.deliveryCount || now >= workload.claimExpiresAt) return "conflict";
 
-		// 3. CAS assignment and bootstrap creation together so neither durable record can exist alone.
-		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, claimedAt: workload.claimedAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
+		// 3. Compare-and-swap assignment and create its bootstrap in the same serializable transaction.
+		const updated = await this.transaction.skillWorkload.updateMany({ where: { id: workloadId, state: SkillWorkloadState.Pending, skillRevisionId: workload.skillRevisionId, claimedAt: workload.claimedAt, claimExpiresAt: workload.claimExpiresAt, deliveryCount: workload.deliveryCount, workloadUid: null }, data: { state: SkillWorkloadState.Assigned, workloadUid: command.workloadUid } });
 		if (updated.count !== 1) return "conflict";
-		const isAuthoring = workload.kind === SkillWorkloadKind.Authoring;
-		const audience = isAuthoring ? "opencrane-skill-authoring" : "opencrane-tool-runner";
-		const serviceAccountName = isAuthoring ? "skill-authoring-default" : "tool-runner-default";
-		await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience, serviceAccountName, namespace: command.namespace, workloadUid: command.workloadUid, expiresAt: new Date(now.getTime() + _BOOTSTRAP_LIFETIME_MILLISECONDS) } });
+		const authoring = workload.kind === SkillWorkloadKind.Authoring;
+		const audience = authoring ? "opencrane-skill-authoring" : "opencrane-tool-runner";
+		const serviceAccountName = authoring ? "skill-authoring-default" : "tool-runner-default";
+		await this.transaction.skillWorkloadBootstrap.create({ data: { skillWorkloadId: workloadId, referenceHash: await __HashSkillWorkloadBootstrapReference(command.bootstrapReference), audience, serviceAccountName, namespace: command.namespace, workloadUid: command.workloadUid } });
 		return "assigned";
 	}
 
-	/** Reads database time so a controller clock cannot extend a lease. */
-	private async _databaseTime(): Promise<Date | null>
+	/** Reads database time through the read-only typed view owned by this repository. */
+	private async _databaseNow(): Promise<Date>
 	{
-		const rows = await this.transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp()::timestamp(3) AS "now"`);
-		return rows[0]?.now ?? null;
+		const clock = await this.transaction.skillAuthorityClock.findUnique({ where: { singleton: 1 } });
+		if (clock === null || Number.isNaN(clock.now.getTime())) throw new Error("skill workload database clock unavailable");
+		return clock.now;
 	}
 }
-
-/** Bootstrap remains valid only for the governed worker's bounded lifetime. */
-const _BOOTSTRAP_LIFETIME_MILLISECONDS = 900_000;
 
 /** Validates all caller-visible assignment coordinates before it queries durable authority state. */
 async function _IsAssignmentCommandValid(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<boolean>

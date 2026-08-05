@@ -38,9 +38,10 @@ fresh context — do not assume the author's intent was correct.
    Module-growth output is a responsibility-inventory trigger, not a finding: review the
    cited module through the evidence-based maintainability checklist below.
    Prisma-boundary errors are deterministic findings: repository adapter class/path/contract,
-  raw-query ownership, UnitOfWork transaction ownership, and transaction-scoped repository
-  construction (including the constructor type and exact callback binding) must match
-  `docs/agents/prisma-boundary-policy.json` exactly.
+   UnitOfWork transaction ownership, and transaction-scoped repository construction (including the
+   constructor type and exact callback binding) must match
+   `docs/agents/prisma-boundary-policy.json` exactly. Raw Prisma methods are unconditionally
+   forbidden in production TypeScript and cannot be authorized or exempted.
 4. **Grounding reads — only what the change touches:**
    - `.ts` changed → the style script covers mechanics; read `docs/agents/typescript.md`
      only if you need to confirm a convention the script flagged as WARN.
