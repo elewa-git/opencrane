@@ -11,6 +11,10 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'ALTER TABLE "authorization_grants" ADD CONSTRAINT "authorization_grants_exact_check"',
 	'CREATE FUNCTION "enforce_agent_revision_assignment_immutability"()',
 	'CREATE CONSTRAINT TRIGGER agent_runs_input_snapshot_complete',
+	'CREATE VIEW "artifact_authority_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
+	'CREATE VIEW "skill_authority_clock" AS\n    SELECT 1::INTEGER AS "singleton", date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3) AS "now";',
+	'bootstrap_expires_at TIMESTAMP(3); requested_lease INTERVAL;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
+	'DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
 	'INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES (\'personal-agent-onboarding\', 1);',
 ];
 

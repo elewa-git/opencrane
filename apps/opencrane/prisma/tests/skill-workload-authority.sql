@@ -70,7 +70,7 @@ UPDATE "skill_revisions" SET "state"='review' WHERE "id"='work-draft';
 UPDATE "skill_revisions" SET "state"='review' WHERE "id"='work-draft-unconsumed';
 DO $$ BEGIN IF NOT EXISTS (SELECT 1 FROM "skill_workloads" WHERE "id"='authoring-work' AND "state"='cancelled' AND "cancelled_at" IS NOT NULL) THEN RAISE EXCEPTION 'FAIL: leaving Draft must cancel assigned authoring workload'; END IF; END; $$;
 SELECT pg_temp.expect_failure('cancelled workload bootstrap cannot be consumed', $statement$UPDATE "skill_workload_bootstraps" SET "consumed_at"=clock_timestamp(), "consumed_by_pod_uid"='pod-uid-2' WHERE "id"='bootstrap-unconsumed'$statement$, 'exact assigned workload UID');
-SELECT pg_temp.expect_failure('cancelled workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='pending', "cancelled_at"=NULL WHERE "id"='authoring-work'$statement$, 'cancelled SkillWorkload is terminal');
+SELECT pg_temp.expect_failure('cancelled workload is terminal', $statement$UPDATE "skill_workloads" SET "state"='pending', "cancelled_at"=NULL WHERE "id"='authoring-work'$statement$, 'terminal SkillWorkload is immutable');
 UPDATE "skill_revisions" SET "state"='published', "reviewed_by"='reviewer', "test_report"='{"passed":true}', "scan_result"='{"passed":true}', "signature"='signature', "signer_key_id"='key', "published_at"=clock_timestamp() WHERE "id"='work-draft';
 SELECT pg_temp.expect_failure('authoring requires draft revision', $statement$INSERT INTO "skill_workloads" ("id", "silo_id", "kind", "skill_revision_id") VALUES ('authoring-published','work-silo','authoring','work-draft')$statement$, 'authoring SkillWorkload requires Draft');
 UPDATE "skill_revisions" SET "state"='revoked', "revoked_at"=clock_timestamp() WHERE "id"='work-draft';
