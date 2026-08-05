@@ -44,3 +44,13 @@ export function selectGuardInputsChanged(changedFiles)
 			|| file === ".github/workflows/docker.yml";
 	});
 }
+
+/** Determines whether a pull request changed the live deployment surface exercised by k3d. */
+export function selectDevelopSmokeRequired(changedFiles)
+{
+	return changedFiles.some(function _DevelopSmokeInput(file) {
+		return file.startsWith("apps/_infra/deploy-k8s/")
+			|| (file.startsWith("apps/") && (file.includes("/helm/") || file.includes("/deploy/")))
+			|| file === ".github/workflows/docker.yml";
+	});
+}
