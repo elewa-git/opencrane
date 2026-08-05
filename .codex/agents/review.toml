@@ -22,7 +22,7 @@ fresh context — do not assume the author's intent was correct.
    Module-growth output is a responsibility-inventory trigger, not a finding: review the
    cited module through the evidence-based maintainability checklist below.
    Prisma-boundary errors are deterministic findings: repository adapter class/path/contract,
-   raw-query ownership, UnitOfWork transaction ownership, and transaction-scoped repository
+   unconditionally forbidden raw Prisma methods, UnitOfWork transaction ownership, and transaction-scoped repository
    construction (including the constructor type and exact callback binding) must match
    `docs/agents/prisma-boundary-policy.json` exactly.
 4. **Grounding reads — only what the change touches:**

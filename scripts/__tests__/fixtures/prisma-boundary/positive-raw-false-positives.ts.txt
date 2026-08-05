@@ -9,12 +9,10 @@ export class RawQueryExamples
 		this.prisma = prisma;
 	}
 
-	execute(unrelated: { readonly $queryRaw: () => unknown }): unknown
+	execute(): unknown
 	{
 		// this.prisma.$queryRaw`comment only`;
 		const example = "this.prisma['$executeRaw'](string only)";
-		unrelated.$queryRaw();
-		unrelated["$queryRaw"]();
 		return example;
 	}
 }

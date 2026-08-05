@@ -28,30 +28,26 @@ export function transactionMatches(source, imports)
 	return matches;
 }
 
-/** Finds raw-query property access rooted only in imported Prisma client symbols. */
-export function rawQueryMatches(source, imports)
+/** Finds every raw Prisma property access; no receiver or owner can authorize these methods. */
+export function rawPrismaMethodMatches(source)
 {
 	const methodNames = ["$executeRaw", "$executeRawUnsafe", "$queryRaw", "$queryRawUnsafe"];
 	const matches = [];
 	const code = _CodeOnly(source);
-	for (const expression of _PrismaClientExpressions(source, imports))
+	for (const method of methodNames)
 	{
-		const root = `(?<![\\w$.])${_EscapeRegex(expression)}(?![\\w$])`;
-		for (const method of methodNames)
+		const escapedMethod = _EscapeRegex(method);
+		const dot = new RegExp(`\\.\\s*${escapedMethod}\\b`, "gu");
+		for (const match of code.matchAll(dot)) matches.push({ index: match.index, method });
+
+		const computed = new RegExp(`\\[\\s*([\"'])${escapedMethod}\\1\\s*\\]`, "gu");
+		for (const match of source.matchAll(computed))
 		{
-			const escapedMethod = _EscapeRegex(method);
-			const dot = new RegExp(`${root}\\s*\\.\\s*${escapedMethod}\\b`, "gu");
-			for (const match of code.matchAll(dot)) matches.push({ index: match.index, method });
-
-			const computed = new RegExp(`${root}\\s*\\[\\s*([\"'])${escapedMethod}\\1\\s*\\]`, "gu");
-			for (const match of source.matchAll(computed))
-			{
-				if (_ExpressionIsCode(code, match.index ?? 0, expression)) matches.push({ index: match.index, method });
-			}
-
-			const destructured = new RegExp(`\\bconst\\s*\\{[^}]*(?<![\\w$])${escapedMethod}(?![\\w$])[^}]*\\}\\s*=\\s*${root}`, "gu");
-			for (const match of code.matchAll(destructured)) matches.push({ index: match.index, method });
+			if (code[match.index ?? 0] === "[") matches.push({ index: match.index, method });
 		}
+
+		const destructured = new RegExp(`\\bconst\\s*\\{[^}]*(?<![\\w$])${escapedMethod}(?![\\w$])[^}]*\\}\\s*=`, "gu");
+		for (const match of code.matchAll(destructured)) matches.push({ index: match.index, method });
 	}
 	return _UniqueRawMatches(matches);
 }
@@ -161,12 +157,6 @@ function _CodeOnly(source)
 		if (character === "\"" || character === "'" || character === "`") { characters[index] = " "; quote = character; }
 	}
 	return characters.join("");
-}
-
-/** Returns whether a computed-access receiver is executable code at the matched offset. */
-function _ExpressionIsCode(code, index, expression)
-{
-	return code.slice(index, index + expression.length) === expression;
 }
 
 /** Removes duplicate raw-operation matches without hiding distinct source offsets. */

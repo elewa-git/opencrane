@@ -65,11 +65,13 @@ Read leases contain only facts reloaded from the catalogue; caller-provided dige
 media types, storage paths, and URLs never become read authority.
 
 Preprocessing uses the same rule. The database owns claim expiry, retry ceilings, output identity,
-and source lineage. Source issuance locks the job against failure and reclaim, then caps signed
-authority to the earlier of the claim deadline or the 30-second retry quiet period. An expired or
-early-failed attempt therefore cannot overlap a reclaimed one. Incomplete generated artifacts have
-no current revision and remain absent from the user catalogue. The isolated worker never receives a
-content address, ArtifactStore endpoint, signed lease, or promotion receipt.
+and source lineage. A typed read-only Prisma view performs the database-owned `SKIP LOCKED`
+selection, and a second view supplies the database clock used by serializable delegate updates.
+Source issuance revalidates the exact fenced job and caps signed authority to the earlier of the
+claim deadline or the 30-second retry quiet period. An expired or early-failed attempt therefore
+cannot overlap a reclaimed one. Incomplete generated artifacts have no current revision and remain
+absent from the user catalogue. The isolated worker never receives a content address, ArtifactStore
+endpoint, signed lease, or promotion receipt.
 
 Only an in-flight preprocessing job holds its source and output metadata in place. A completed or
 terminally failed job remains immutable audit evidence, but it does not indefinitely prevent an
@@ -145,7 +147,8 @@ Owns `Artifact`, `ArtifactRevision`, `ArtifactRevisionParent`, `ArtifactUploadLe
 `ArtifactPreprocessJob`, and `ArtifactOutboxEvent` in
 `apps/opencrane/prisma/schema/artifacts.prisma`. A companion SQL authority test in
 `tests/artifact-authority.sql` proves job fencing, exact output binding, lease finalization, and
-immutable source lineage.
+immutable source lineage. Production TypeScript uses only typed Prisma delegates; PostgreSQL-specific
+clock and nonblocking claim semantics remain in the reviewed clean target baseline.
 
 ## See also
 

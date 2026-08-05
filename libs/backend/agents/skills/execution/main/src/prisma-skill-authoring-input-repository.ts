@@ -1,4 +1,4 @@
-import { Prisma } from "@prisma/client";
+import { ArtifactRevisionState, ArtifactState, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState, type Prisma } from "@prisma/client";
 
 import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
@@ -19,48 +19,21 @@ export class PrismaSkillAuthoringInputRepository implements SkillAuthoringInputR
 	/** Reads one active, published, fully-pinned artifact before the later broker revalidates its lease. */
 	async load(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
 	{
-		// 1. Select every immutable coordinate under the reviewed worker identity before the broker sees it.
-		const rows = await this.transaction.$queryRaw<readonly _InputRow[]>(Prisma.sql`
-			SELECT workload."silo_id" AS "siloId", revision."artifact_id" AS "artifactId", revision."artifact_revision_id" AS "artifactRevisionId", revision."artifact_content_address" AS "contentAddress", artifact_revision."byte_length" AS "byteLength", artifact_revision."media_type" AS "mediaType"
-			FROM "skill_workloads" workload
-			JOIN "skill_workload_bootstraps" bootstrap ON bootstrap."skill_workload_id" = workload."id"
-			JOIN "skill_revisions" revision ON revision."id" = workload."skill_revision_id"
-			JOIN "artifact_revisions" artifact_revision ON artifact_revision."id" = revision."artifact_revision_id" AND artifact_revision."artifact_id" = revision."artifact_id" AND artifact_revision."content_address" = revision."artifact_content_address"
-			JOIN "artifacts" artifact ON artifact."id" = artifact_revision."artifact_id" AND artifact."silo_id" = workload."silo_id"
-			WHERE workload."id" = ${workloadId}
-				AND workload."kind" = 'authoring'
-				AND workload."state" = 'assigned'
-				AND workload."released_at" IS NOT NULL
-				AND workload."worker_pod_uid" = ${identity.podUid}
-				AND bootstrap."consumed_at" IS NOT NULL
-				AND bootstrap."consumed_by_pod_uid" = ${identity.podUid}
-				AND bootstrap."namespace" = ${identity.namespace}
-				AND bootstrap."service_account_name" = ${identity.serviceAccountName}
-				AND bootstrap."audience" = 'opencrane-skill-authoring'
-				AND bootstrap."workload_uid" = workload."workload_uid"
-				AND revision."state" = 'draft'
-				AND artifact."state" = 'active'
-				AND artifact_revision."state" = 'published'
-		`);
-		// 2. End the read transaction before external ArtifactStore I/O; the broker verifies returned bytes anew.
-		if (rows.length !== 1 || !Number.isSafeInteger(Number(rows[0].byteLength)) || Number(rows[0].byteLength) < 0) return null;
-		return { siloId: rows[0].siloId, artifactId: rows[0].artifactId, artifactRevisionId: rows[0].artifactRevisionId, contentAddress: rows[0].contentAddress, byteLength: Number(rows[0].byteLength), mediaType: rows[0].mediaType };
-	}
-}
+		// 1. Rebind the workload, worker, bootstrap, and draft revision through typed relations.
+		const workload = await this.transaction.skillWorkload.findFirst({
+			where: { id: workloadId, kind: SkillWorkloadKind.Authoring, state: SkillWorkloadState.Assigned, releasedAt: { not: null }, workerPodUid: identity.podUid, skillRevision: { state: SkillRevisionState.Draft }, bootstrap: { is: { consumedAt: { not: null }, consumedByPodUid: identity.podUid, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName, audience: "opencrane-skill-authoring" } } },
+			select: { siloId: true, workloadUid: true, bootstrap: { select: { workloadUid: true } }, skillRevision: { select: { artifactId: true, artifactRevisionId: true, artifactContentAddress: true } } },
+		});
+		if (workload === null || workload.workloadUid === null || workload.bootstrap?.workloadUid !== workload.workloadUid) return null;
 
-/** Raw Postgres projection retained narrow so product records never expose unrelated source metadata. */
-interface _InputRow
-{
-	/** Durable silo coordinate. */
-	readonly siloId: string;
-	/** Pinned artifact coordinate. */
-	readonly artifactId: string;
-	/** Pinned artifact revision coordinate. */
-	readonly artifactRevisionId: string;
-	/** Pinned canonical content address. */
-	readonly contentAddress: string;
-	/** Immutable byte length from Postgres bigint. */
-	readonly byteLength: bigint;
-	/** Immutable media type. */
-	readonly mediaType: string;
+		// 2. Rebind the pinned revision to its active same-silo Artifact in the same snapshot.
+		const revision = await this.transaction.artifactRevision.findFirst({
+			where: { id: workload.skillRevision.artifactRevisionId, artifactId: workload.skillRevision.artifactId, contentAddress: workload.skillRevision.artifactContentAddress, state: ArtifactRevisionState.Published, artifact: { siloId: workload.siloId, state: ArtifactState.Active } },
+			select: { artifactId: true, id: true, contentAddress: true, byteLength: true, mediaType: true },
+		});
+
+		// 3. End the read transaction before external ArtifactStore I/O; the broker verifies returned bytes anew.
+		if (revision === null || !Number.isSafeInteger(Number(revision.byteLength)) || Number(revision.byteLength) < 0) return null;
+		return { siloId: workload.siloId, artifactId: revision.artifactId, artifactRevisionId: revision.id, contentAddress: revision.contentAddress, byteLength: Number(revision.byteLength), mediaType: revision.mediaType };
+	}
 }

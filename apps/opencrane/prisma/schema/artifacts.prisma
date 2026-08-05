@@ -156,6 +156,28 @@ model ArtifactPreprocessJob {
   @@map("artifact_preprocess_jobs")
 }
 
+/// One database-owned timestamp for typed delegate lease and retry decisions.
+view ArtifactAuthorityClock {
+  singleton Int      @unique
+  now       DateTime
+
+  @@map("artifact_authority_clock")
+}
+
+/// One locked eligible preprocessing job selected without blocking a peer poller.
+view ArtifactPreprocessClaimCandidate {
+  jobId             String  @unique @map("job_id")
+  attempt           Int
+  derivedArtifactId String? @map("derived_artifact_id")
+  sourceRevisionId  String  @map("source_revision_id")
+  sourceArtifactId  String  @map("source_artifact_id")
+  siloId            String  @map("silo_id")
+  ownerPrincipalId  String  @map("owner_principal_id")
+  sourceByteLength  BigInt  @map("source_byte_length")
+
+  @@map("artifact_preprocess_claim_candidates")
+}
+
 model ArtifactRevisionParent {
   childRevisionId  String           @map("child_revision_id")
   parentRevisionId String           @map("parent_revision_id")

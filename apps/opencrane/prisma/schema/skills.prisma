@@ -91,6 +91,7 @@ model SkillWorkload {
   skillRevisionId  String             @map("skill_revision_id")
   toolInvocationId String?            @unique @map("tool_invocation_id")
   claimedAt        DateTime?          @map("claimed_at")
+  claimExpiresAt   DateTime?          @map("claim_expires_at")
   deliveryCount    Int                @default(0) @map("delivery_count")
   workloadUid      String?            @unique @map("workload_uid")
   workerPodUid     String?            @unique @map("worker_pod_uid")
@@ -107,7 +108,8 @@ model SkillWorkload {
   bootstrap        SkillWorkloadBootstrap?
 
   @@index([siloId, state, createdAt])
-  @@index([state, releaseClaimedAt])
+  @@index([state, claimExpiresAt])
+  @@index([state, releaseExpiresAt])
   @@map("skill_workloads")
 }
 
@@ -120,7 +122,7 @@ model SkillWorkloadBootstrap {
   serviceAccountName String        @map("service_account_name")
   namespace          String
   workloadUid        String        @map("workload_uid")
-  expiresAt          DateTime      @map("expires_at")
+  expiresAt          DateTime      @default(dbgenerated("(clock_timestamp() + '00:15:00'::interval)")) @map("expires_at")
   consumedAt         DateTime?     @map("consumed_at")
   consumedByPodUid   String?       @map("consumed_by_pod_uid")
   createdAt          DateTime      @default(now()) @map("created_at")
@@ -128,4 +130,30 @@ model SkillWorkloadBootstrap {
 
   @@index([expiresAt])
   @@map("skill_workload_bootstraps")
+}
+
+/// One database-owned timestamp for typed delegate expiry decisions.
+view SkillAuthorityClock {
+  singleton Int      @unique
+  now       DateTime
+
+  @@map("skill_authority_clock")
+}
+
+/// One locked eligible workload selected without blocking a peer dispatcher.
+view SkillWorkloadClaimCandidate {
+  id              String             @unique
+  siloId          String             @map("silo_id")
+  kind            SkillWorkloadKind
+  skillRevisionId String             @map("skill_revision_id")
+  revisionState   SkillRevisionState @map("revision_state")
+
+  @@map("skill_workload_claim_candidates")
+}
+
+/// One locked eligible assigned workload selected without blocking a peer releaser.
+view SkillWorkloadReleaseClaimCandidate {
+  id String @unique
+
+  @@map("skill_workload_release_claim_candidates")
 }

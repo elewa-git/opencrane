@@ -41,20 +41,24 @@ Production TypeScript reaches Prisma through reviewed capability boundaries, enf
 
 1. Domain services, materializers, and use cases do not import Prisma or call model delegates.
 2. Only an exact repository adapter declared in
-   [`prisma-boundary-policy.json`](./prisma-boundary-policy.json) may call model delegates or raw
-   query methods. A declaration binds the repository contract import, adapter class, and source
-   path; renaming or moving any of them requires policy review.
+   [`prisma-boundary-policy.json`](./prisma-boundary-policy.json) may call model delegates. A
+   declaration binds the repository contract import, adapter class, and source path; renaming or
+   moving any of them requires policy review. `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and
+   `$executeRawUnsafe` are forbidden in production TypeScript, including declared repositories.
 3. Only an exact declared UnitOfWork adapter may call `$transaction`.
 4. Passing a transaction client into another repository is also policy-owned. Every declared
 	repository constructor accepts `Prisma.TransactionClient`, and each declared construction must
 	receive the exact `$transaction` callback binding (or an owning repository's typed transaction
 	property), never the root `PrismaClient`. Stale declarations and substituted bindings fail.
 5. Composition roots may import `PrismaClient` only at exact listed paths. That permits dependency
-   wiring, never delegate, raw-query, or transaction ownership.
+   wiring, never delegate or transaction ownership.
 
 The checker compares new findings with the base revision, so inherited violations remain visible
 through `--all` without blocking unrelated slices. Exact temporary exemptions require an owner,
-reason, allowed operation, and a real UTC calendar expiry; malformed or stale policy fails closed.
+reason, an allowed delegate or transaction operation, and a real UTC calendar expiry; malformed or
+stale policy fails closed. Raw Prisma methods cannot be authorized by an owner declaration or an
+exemption; database-specific invariants belong in the reviewed target baseline while repositories
+access them through typed delegates.
 
 ## Why this exists
 

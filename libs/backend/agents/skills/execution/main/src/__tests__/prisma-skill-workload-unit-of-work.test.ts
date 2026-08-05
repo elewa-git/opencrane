@@ -8,8 +8,8 @@ import { _SkillWorkloadPersistenceConflictError } from "../skill-workload-unit-o
 /** Builds one root-client double that exposes a fresh transaction to each unit-of-work call. */
 function _Prisma()
 {
-	const firstTransaction = { $queryRaw: vi.fn().mockResolvedValue([]) };
-	const secondTransaction = { $queryRaw: vi.fn().mockResolvedValue([]) };
+	const firstTransaction = {};
+	const secondTransaction = {};
 	const transactions = [firstTransaction, secondTransaction];
 	const prisma = { $transaction: vi.fn(async function _Transaction(work: (transaction: unknown) => Promise<unknown>): Promise<unknown> { const transaction = transactions.shift(); return work(transaction); }) };
 	return { prisma, firstTransaction, secondTransaction };
@@ -21,26 +21,40 @@ describe("Prisma skill workload unit of work", function _DescribeUnitOfWork()
 	{
 		const { prisma, firstTransaction, secondTransaction } = _Prisma();
 		const unitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma as never, 30_000);
-		const firstAssignments = await unitOfWork.run(async function _First(transaction): Promise<object> { await transaction.assignments.claimNext(); return transaction.assignments as object; });
-		const secondAssignments = await unitOfWork.run(async function _Second(transaction): Promise<object> { await transaction.assignments.claimNext(); return transaction.assignments as object; });
+		const firstAssignments = await unitOfWork.run(async function _First(transaction): Promise<object> { return transaction.assignments as object; });
+		const secondAssignments = await unitOfWork.run(async function _Second(transaction): Promise<object> { return transaction.assignments as object; });
 
 		expect(prisma.$transaction).toHaveBeenCalledTimes(2);
 		expect(firstAssignments).not.toBe(secondAssignments);
-		expect(firstTransaction.$queryRaw).toHaveBeenCalledOnce();
-		expect(secondTransaction.$queryRaw).toHaveBeenCalledOnce();
+		expect(firstTransaction).not.toBe(secondTransaction);
+		expect(prisma.$transaction).toHaveBeenNthCalledWith(1, expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	});
 
-	it("translates a commit-time Prisma conflict only after the transaction callback exits", async function _TranslatesCommitConflict()
+	it("retries a fresh serializable transaction after commit-time contention", async function _RetriesCommitConflict()
 	{
 		const conflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
+		let attempts = 0;
 		const prisma = { $transaction: vi.fn(async function _Transaction(work: (transaction: unknown) => Promise<unknown>): Promise<unknown>
 		{
-			expect(await work({})).toBe("assigned");
-			throw conflict;
+			attempts += 1;
+			const result = await work({});
+			if (attempts < 3) throw conflict;
+			return result;
 		}) };
 		const unitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma as never, 30_000);
 
+		await expect(unitOfWork.run(async function _Work(): Promise<"assigned"> { return "assigned"; })).resolves.toBe("assigned");
+		expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+	});
+
+	it("translates contention only after bounded serializable retries are exhausted", async function _TranslatesExhaustedConflict()
+	{
+		const conflict = new Prisma.PrismaClientKnownRequestError("serialization conflict", { code: "P2034", clientVersion: "test" });
+		const prisma = { $transaction: vi.fn().mockRejectedValue(conflict) };
+		const unitOfWork = new PrismaSkillWorkloadUnitOfWork(prisma as never, 30_000);
+
 		await expect(unitOfWork.run(async function _Work(): Promise<"assigned"> { return "assigned"; })).rejects.toBeInstanceOf(_SkillWorkloadPersistenceConflictError);
+		expect(prisma.$transaction).toHaveBeenCalledTimes(3);
 	});
 
 	it("maps a rolled-back persistence conflict to the assignment conflict contract", async function _MapsAssignmentConflict()
