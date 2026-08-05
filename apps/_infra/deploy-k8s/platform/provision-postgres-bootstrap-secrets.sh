@@ -30,6 +30,7 @@ _ensure_secret() {
   if kubectl get secret "$secret" -n "$NAMESPACE" >/dev/null 2>&1; then
     [[ "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.type}')" == "kubernetes.io/basic-auth" ]] || { _err "Existing $secret has the wrong type."; exit 1; }
     [[ "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.data.username}' | base64 -d)" == "$username" ]] || { _err "Existing $secret has the wrong username."; exit 1; }
+    [[ -n "$(kubectl get secret "$secret" -n "$NAMESPACE" -o jsonpath='{.data.password}')" ]] || { _err "Existing $secret has no password."; exit 1; }
     return
   fi
   password="$(openssl rand -base64 36 | tr -d '\n')"

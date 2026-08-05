@@ -20,7 +20,7 @@ function _AffectedProjects(target)
 
 function _ContainerProjects()
 {
-  if (process.env.FORCE_DEPLOYABLES === "all")
+  if (process.env.FORCE_DEPLOYABLES === "bootstrap")
   {
     return ["channel-proxy", "memory-gateway"];
   }
