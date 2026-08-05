@@ -1,5 +1,6 @@
 import type { RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
-import { __FakeObotMcpInvocationAdapter, __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
+import { __UnavailableObotMcpInvocationAdapter } from "@opencrane/backend/_server/obot-custody";
+import type { ObotMcpInvocationPort, ObotMcpToolInvocationCommand } from "@opencrane/backend/_server/obot-custody";
 import { __UnavailableSandboxJobExecutor } from "@opencrane/backend/_server/sandbox-execution";
 import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 import { describe, expect, it, vi } from "vitest";
@@ -15,6 +16,20 @@ function _candidate(toolRevisionId: string): RuntimeExternalActionCandidate
 
 /** The composition root wires only fail-closed transports until a real one is verified. */
 const DEPENDENCIES = { siloId: "silo-1", subjectId: "user-1", cogneeDatasetId: "cognee-personal-1", agentRevisionId: "revision-1", integrations: { resolveAssignment: async function _resolve() { return { outcome: "resolved" as const, assignment: { integrationId: "calendar", obotCatalogEntryId: "calendar", obotCustodyReference: "obot:calendar", allowedTools: ["calendar.read"] } }; } }, obotMcpInvocation: new __UnavailableObotMcpInvocationAdapter(), sandboxExecutor: new __UnavailableSandboxJobExecutor(), memoryGateway: new __UnavailableMemoryGatewayClient() };
+
+/** Test-local successful Obot port; production exports only the fail-closed unavailable adapter. */
+class _RecordingObotInvocation implements ObotMcpInvocationPort
+{
+	/** Commands that crossed the executor boundary. */
+	readonly commands: ObotMcpToolInvocationCommand[] = [];
+
+	/** Record one command and return a controlled opaque result. */
+	async invokeTool(command: ObotMcpToolInvocationCommand)
+	{
+		this.commands.push(command);
+		return { content: { result: "ok" } };
+	}
+}
 
 /** Proves one live-custody refusal remains typed and never reaches the Obot invocation port. */
 async function _expectAssignmentUnavailable(reason: IntegrationAssignmentUnavailableReason): Promise<void>
@@ -35,7 +50,7 @@ describe("composition-root external action executor", function _suite()
 
 	it("resolves a revision integration and invokes only its allowed tool through Obot", async function _integration()
 	{
-		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new __FakeObotMcpInvocationAdapter({ content: { result: "ok" } }) });
+		const executor = __CreateExternalActionExecutor(_candidate("integration:calendar:calendar.read"), { ...DEPENDENCIES, obotMcpInvocation: new _RecordingObotInvocation() });
 		await expect(executor.execute()).resolves.toEqual({ result: "ok" });
 	});
 

@@ -35,6 +35,8 @@ correlation id follows the work — so a request can be traced end to end even a
 - `___BindConsole` — route `console.*` into structured logs.
 - `___RequestContext` — Express per-request context + span middleware.
 - `___DoWithTrace`, `___GetActiveSpan` — wrap work in an OTEL span.
+- `___DoWithoutTrace` — suppress automatic child spans for an outbound address that itself carries
+  sensitive custody material, while retaining its surrounding OpenCrane operation span.
 - `___StartTelemetry`, `___ShutdownTelemetry` — OTEL SDK lifecycle (also at `/telemetry`).
 - `RequestContext`, `LoggerOptions`, `TelemetryOptions` — option/read types.
 

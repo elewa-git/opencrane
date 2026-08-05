@@ -150,6 +150,34 @@ channelProxy:
       cpu: 250m
       memory: 256Mi
 
+# -- The only pod permitted to reach the private release-local Cognee Service. Its search-only route
+# is prepared to TokenReview the future OpenCrane server token before forwarding the fixed allowlist.
+memoryGateway:
+  image:
+    repository: ghcr.io/elewa-git/opencrane-memory-gateway
+    # -- Deliberate promoted application version; never select a mutable rolling tag.
+    tag: 0.1.0
+    pullPolicy: IfNotPresent
+  replicas: 1
+  service:
+    port: 8080
+  projectedTokenTtlSeconds: 600
+  # -- Hard timeout applied to gateway-to-Cognee HTTP exchanges (1-300s).
+  httpTimeoutSeconds: 30
+  # -- Exact Kubernetes API Service IPs and backing endpoint IPs that the gateway needs for
+  # TokenReview. Supply a /32 or /128 per address; the private gateway refuses to render without both.
+  kubernetesApiServerCidrs: []
+  kubernetesApiServerPort: 443
+  kubernetesApiServerEndpointCidrs: []
+  kubernetesApiServerEndpointPort: 443
+  resources:
+    requests:
+      cpu: 25m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
 # -- Isolated capability-only candidate-skill authoring Job plane. It contains no standing worker.
 # The dependency name is intentional: Helm passes its contents to the child chart.
 opencrane-skill-authoring:
@@ -434,26 +462,10 @@ clustertenantManager:
     existingSecret: ""
     # -- Key within the Secret that holds the connection string
     secretKey: DATABASE_URL
-  # -- Cognee integration for opencrane-ui permission synchronization
+  # -- Private Cognee memory service, reachable only through the release-local memory gateway.
   cognee:
-    # -- Install an in-cluster Cognee as part of this release. Cognee is a REQUIRED
-    #    service (the opencrane-ui's permission sync + the awareness retrieval ACL
-    #    both depend on it), so this defaults true — a fresh cluster gets a working
-    #    Cognee with no extra step. Set false to bring your own (BYO): the endpoint
-    #    below then points at your external/shared Cognee and no workload is rendered.
-    #    Separate from `backendAccessControl` (the runtime enforcement switch) so an
-    #    operator can BYO Cognee while still enforcing the backend ACL.
+    # -- Keep true. The memory gateway currently supports only the release-local private service.
     install: true
-    # -- Cognee HTTP endpoint used by opencrane-ui permission sync routes. When
-    #    `install` is true the in-chart Service is reachable at this name; point it
-    #    elsewhere only when BYO (`install: false`).
-    endpoint: "http://cognee:8000"
-    # -- Enable Cognee backend access controls (tenant isolation + RBAC enforcement).
-    #    Defaults true: the bundled Cognee makes this a real, enforced default rather
-    #    than a latent fresh-cluster gap pointing at a service nobody installed.
-    backendAccessControl: true
-    # -- Permission sync timeout in milliseconds
-    permissionsTimeoutMs: 5000
     # -- In-chart Cognee workload settings (only consumed when `install` is true).
     image:
       repository: cognee/cognee

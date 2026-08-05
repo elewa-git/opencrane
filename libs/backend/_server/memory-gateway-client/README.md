@@ -4,70 +4,89 @@
 
 ## What it owns
 
-This library owns the **boundary for a subject's personal memory** — recalling, correcting, and
-forgetting stored facts through the memory gateway instead of calling Cognee directly. A recall also
-names the gateway-native dataset that OpenCrane froze in the admitted run snapshot; a subject id is
-never enough to select a dataset. The *memory
-gateway* is the green-side authority that fronts org/personal memory; routing every read and write
-through this port is what lets the platform stop reaching into Cognee from scattered call sites (see
-the org-memory wiring notes). This package is a **port** — a runtime-neutral contract (a TypeScript
-interface) that says *what* memory operations exist, with the real transport wired in elsewhere.
+This library owns the **boundary for a subject's personal memory**. Every recall names the Cognee
+dataset UUID that OpenCrane froze in the admitted run snapshot; a subject id is never
+enough to select a dataset. The port still defines recall, record, correction, forgetting, and
+scoped operations, but the shipped authenticated transport implements reads only. Writes fail closed
+until the gateway owns a recoverable cross-system lifecycle rather than calling Cognee directly.
 
-It sits between the personal-agent backend and the remote memory gateway:
+It is the future transport seam between the personal-agent backend and the private memory gateway:
 
 ```
- personal-agent backend  (recall / record / correct / forget in an admitted personal dataset)
+ personal-agent backend  (operations in an admitted personal dataset)
           │  MemoryQueryCommand · PersonalMemoryRecordCommand · MemoryCorrectionCommand · MemoryForgetCommand
           ▼
  ┌────────────────────────────────────┐
- │  memory-gateway-client  ◄── HERE    │  MemoryGatewayClient: query · record · correct · forget
+ │  memory-gateway-client  ◄── HERE    │  authenticated query/recall; writes fail closed
  └────────────────────────────────────┘
           │  MemoryQueryResult (gateway-minted facts)
-          │  PersonalMemoryRecordResult (gateway id + sha256: digest / idempotency conflict)
+          │  write commands currently fail closed
           ▼
- remote memory gateway authority
+ authenticated memory transport boundary
 ```
 
-**In this flow:** the personal-agent backend *(consumer)* · the remote memory gateway *(holds the
-facts, mints fact references)*
+**In this flow:** the personal-agent backend *(consumer)* · the authenticated memory transport
+boundary *(forwards only authorised reads)* · Cognee *(holds facts and mints fact references)*
 
 It owns: the `MemoryGatewayClient` interface (`query` / `recordPersonalFact` / `correct` / `forget`
 for a subject's personal memory, plus `recallScoped` / `injectScoped` for a shared knowledge SCOPE); the request/result
 types, where recall returns only gateway-originated facts and a fact reference is only ever real if
 the gateway minted it; and a **fail-closed** default implementation,
 `__UnavailableMemoryGatewayClient`, which throws `MemoryGatewayUnavailableError` for every call. That
-default ships until an authenticated memory-gateway transport is verified, so no code path can invent
-an empty recall or a fake write in the meantime.
+default remains available for non-production composition, while the authenticated transport never
+invents an empty recall or a fake write.
 
-A managed agent reads and writes shared knowledge scopes ONLY through this port (never Cognee
-directly), and every scoped write carries mandatory `MemoryProvenance` — the central-agent id, the
-revision, the run id, the timestamp, and the source reference. `__AssertMemoryProvenanceComplete`
-enforces this before any transport, so an unattributable record fails closed with
-`MemoryProvenanceIncompleteError` rather than being written. Invariant: absent a working transport
-the answer is a hard failure, not a placeholder result; and no scoped record is ever injected without
-complete provenance.
+A managed agent accesses shared knowledge scopes only through this port. Every scoped write command
+still carries mandatory `MemoryProvenance`; the guard runs before the current transport refuses the
+write, preserving the contract without pretending that durable injection exists.
+
+### The authenticated Cognee read transport
+
+`__CreateHttpCogneeMemoryGatewayClient` is the authenticated read-transport foundation, composed from `cognee-http.ts`
+(projected-token-authenticated, timeout-guarded, 256 KiB-bounded exchanges) and
+`cognee-payloads.ts` (defensive response projection). It maps `query` and `recallScoped` onto
+`POST /api/v1/search`. `recordPersonalFact`, `correct`, `forget`, and `injectScoped` throw
+`MemoryGatewayUnavailableError` without issuing transport.
+
+Scoped recall uses only the Cognee dataset UUID frozen in the admitted run snapshot. Any stored
+record whose envelope or provenance fails validation is **dropped** — an
+unattributable scoped fact never reaches a managed agent. An unrecognised search response is a
+`MemoryGatewayProtocolError`, never a silently empty recall.
+
+When composed, the client presents the OpenCrane server's rotating, audience-bound projected token
+to the private memory gateway. Cognee credentials are never mounted in the server; the gateway
+TokenReviews the token, accepts only this ServiceAccount, and is the only pod that can reach Cognee. **TODO:** an
+authenticated BYO/non-private Cognee transport is not implemented. Failures are bounded —
+`MemoryGatewayTransportError` carries only a
+`timeout | network | oversize | http_<status>` code.
+
+The client is exported and tested but not composed into the production external-action runner. No
+server token is mounted until recalled content has an attempt-fenced ephemeral return channel.
+
+> Cognee's search response shapes are defensively validated. Version drift against the deployed
+> image surfaces as a protocol error rather than a wrong answer.
 
 ## Public surface
 
 - `MemoryGatewayClient` — the runtime-neutral query/record/correct/forget + recallScoped/injectScoped contract.
 - `MemoryQueryCommand`, `MemoryQueryResult`, `MemoryFact`, `MemoryCorrectionCommand`, `MemoryForgetCommand` — the personal-memory I/O types.
-- `PersonalMemoryRecordCommand` / `PersonalMemoryRecordResult` — authenticated personal-memory retention:
-  the gateway receives the fact text and returns its own external id and SHA-256 digest only after
-  durable acceptance. The digest is always a lowercase `sha256:` content address; a reused key with
-  different content returns the explicit `idempotency_conflict` denial instead of silently reusing a
-  fact for the wrong statement.
-- `__AssertPersonalMemoryRecordResult` / `MemoryGatewayProtocolError` — response guard that every
-  concrete transport uses before exposing record evidence to the catalog boundary.
+- `PersonalMemoryRecordCommand` / `PersonalMemoryRecordResult` — the retained write contract; the
+  authenticated transport refuses it until durable delivery and mutation semantics are implemented.
+- `__AssertPersonalMemoryRecordResult` / `MemoryGatewayProtocolError` — the future write-response
+  guard and the live read-response protocol error.
 - `MemoryProvenance`, `ScopedMemoryRecallCommand`, `ScopedMemoryRecallResult`, `ScopedMemoryFact`, `ScopedMemoryInjectionCommand` — the scoped read/write I/O types.
 - `__AssertMemoryProvenanceComplete`, `MemoryProvenanceIncompleteError` — the provenance guard and its error.
 - `__UnavailableMemoryGatewayClient`, `MemoryGatewayUnavailableError` — the fail-closed default and its error.
+- `__CreateHttpCogneeMemoryGatewayClient`, `CogneeMemoryGatewayHttpOptions`, `CogneeFetch` — the authenticated private-gateway transport and its configuration.
+- `MemoryGatewayTransportError`, `MemoryGatewayTransportFailureCode` — the bounded failure taxonomy.
 
 ## Boundary
 
-Consumed by the personal-agent backend. It defines the memory contract and a safe default; it does
-not talk to the gateway or Cognee itself yet — a concrete, authenticated client is wired when the
-gateway API contract is confirmed. It stores nothing and holds no fact beyond the single in-flight
-call. In particular, record and query commands use the gateway-native dataset id, while the OpenCrane
+The port is consumed by the personal-agent backend and the external-action executor; the HTTP adapter
+is not production-composed. It stores nothing itself and
+holds no fact beyond the single in-flight read. Query commands use Cognee's gateway-native dataset
+UUID,
+while the OpenCrane
 memory catalog's internal id stays at the catalog boundary. A runtime supplies that query id only
 from its immutable personal-memory policy; no tool argument or subject id may select another
 dataset. That prevents a caller from treating an OpenCrane row as proof that the gateway accepted

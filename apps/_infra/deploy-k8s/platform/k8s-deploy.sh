@@ -55,8 +55,8 @@
 # (platform.<base-domain>), and release hosts. Never hardcode a real domain in the repo.
 #
 # In-chart services:
-#   Cognee        — the required graph-RAG service, installed via
-#                   clustertenantManager.cognee.install=true (set false to BYO an external one).
+#   Cognee        — the required release-local graph-RAG service, installed via
+#                   clustertenantManager.cognee.install=true. External/BYO Cognee is unsupported.
 #
 # The platform-operator seed email bootstraps the FIRST platform operator: the
 # caller whose VERIFIED OIDC email equals it becomes a platform operator. It is a
@@ -84,6 +84,7 @@ if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
   exit 1
 fi
 source "$POST_DEPLOY_VERIFY"
+source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
 # The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
 # app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
 # = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
@@ -460,36 +461,10 @@ if [[ ! "$POSTGRES_BASELINE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
   exit 1
 fi
 
-_postgres_api_host_cidr() {
-  local address="$1"
-  if [[ "$address" == *:* ]]; then
-    printf '%s/128' "$address"
-  else
-    printf '%s/32' "$address"
-  fi
-}
-
-POSTGRES_KUBERNETES_API_SERVICE_IP="$(kubectl get service kubernetes -n default -o jsonpath='{.spec.clusterIP}')"
-POSTGRES_KUBERNETES_API_SERVICE_PORT="$(kubectl get service kubernetes -n default -o jsonpath='{.spec.ports[0].port}')"
-POSTGRES_KUBERNETES_API_ENDPOINT_PORT="$(kubectl get endpoints kubernetes -n default -o jsonpath='{.subsets[0].ports[0].port}')"
-if [[ -z "$POSTGRES_KUBERNETES_API_SERVICE_IP" || -z "$POSTGRES_KUBERNETES_API_SERVICE_PORT" || -z "$POSTGRES_KUBERNETES_API_ENDPOINT_PORT" ]]; then
-  err "Kubernetes API Service and endpoint addresses are required for bounded PostgreSQL pooler egress."
-  exit 1
-fi
-POSTGRES_KUBERNETES_API_ARGS=(
-  --set-string "networkPolicy.kubernetesApiServerCidrs[0]=$(_postgres_api_host_cidr "$POSTGRES_KUBERNETES_API_SERVICE_IP")"
-  --set "networkPolicy.kubernetesApiServerPort=$POSTGRES_KUBERNETES_API_SERVICE_PORT"
-  --set "networkPolicy.kubernetesApiServerEndpointPort=$POSTGRES_KUBERNETES_API_ENDPOINT_PORT")
-POSTGRES_KUBERNETES_API_ENDPOINT_INDEX=0
-while IFS= read -r postgres_api_endpoint_ip; do
-  [[ -z "$postgres_api_endpoint_ip" ]] && continue
-  POSTGRES_KUBERNETES_API_ARGS+=(--set-string "networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]=$(_postgres_api_host_cidr "$postgres_api_endpoint_ip")")
-  POSTGRES_KUBERNETES_API_ENDPOINT_INDEX=$((POSTGRES_KUBERNETES_API_ENDPOINT_INDEX + 1))
-done < <(kubectl get endpoints kubernetes -n default -o jsonpath='{range .subsets[*].addresses[*]}{.ip}{"\n"}{end}')
-if [[ "$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX" -eq 0 ]]; then
-  err "Kubernetes API has no backing endpoints for bounded PostgreSQL pooler egress."
-  exit 1
-fi
+_load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
+POSTGRES_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
+_load_kubernetes_api_helm_args memoryGateway "memory gateway"
+MEMORY_GATEWAY_KUBERNETES_API_ARGS=("${KUBERNETES_API_HELM_ARGS[@]}")
 
 _install_postgres_server() {
   local pooler_client_selectors_json='[{"matchLabels":{"app.kubernetes.io/component":"opencrane-server"}},{"matchLabels":{"app.kubernetes.io/component":"mcp-gateway"}},{"matchLabels":{"app.kubernetes.io/component":"litellm"}}]'
@@ -688,7 +663,8 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
-  --set "litellm.existingSecret=opencrane-litellm")
+  --set "litellm.existingSecret=opencrane-litellm"
+  "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
 # Pinned-tag float guard: detect if the prior release pinned component images to a specific
 # tag. If this invocation does not restate it (no --opencrane-server-tag),
 # re-pin from the prior release so they don't silently float to chart-default (a 2026-07-12 live gotcha).

@@ -18,6 +18,8 @@ render_enabled() {
     --namespace server-ns \
     --set artifactPreprocessor.enabled=true \
     --set-string artifactPreprocessor.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
+    --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+    --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
     "$@"
 }
 

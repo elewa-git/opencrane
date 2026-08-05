@@ -16,8 +16,8 @@ authority**. A runtime can request memory actions only through the control plane
 | Run input compiler | Selects authorised memory evidence for one run snapshot |
 | Runtime | Proposes a memory action; never selects another user's dataset |
 
-OpenCrane does not duplicate fact text in its product database. It records a content digest and
-exact provenance after Cognee has durably accepted the content.
+OpenCrane does not duplicate fact text in its product database. Its planned write contract records a
+content digest and exact provenance only after Cognee has durably accepted the content.
 
 ## Personal dataset binding
 
@@ -25,7 +25,9 @@ A personal memory dataset resolves from the verified `(silo, organisation, subje
 The browser and runtime cannot supply a different dataset id. Organisation and shared datasets
 are filtered through the same membership and grant authority used at run admission.
 
-## Recording a fact
+## Planned recording contract
+
+The target write sequence is:
 
 ```text
 authorised memory action
@@ -42,9 +44,10 @@ explicit user statement. Explicit statements must identify the same authenticate
 the target personal dataset.
 
 ::: info Current transport status
-The catalogue, dataset resolver and provenance rules are implemented. The current OpenCrane
-composition injects an unavailable memory-gateway client, so runtime Cognee reads and writes
-fail closed until the authenticated transport is mounted.
+The catalogue, dataset resolver and provenance rules are implemented. An authenticated private
+gateway and read-only Cognee client are also built, but the production external-action composition
+does not use them: runtime recall has no attempt-fenced ephemeral result channel. Reads and writes
+therefore remain fail closed, and no write transport is implemented.
 :::
 
 ::: tip
@@ -55,8 +58,8 @@ its governance record was not accepted.
 ## Retrieval during a run
 
 The control plane freezes the memory query policy and selected memory facts in the
-`RunInputSnapshot`. Further memory reads or writes appear as governed external actions and are
-subject to the same approval, receipt and audit boundaries as other tools.
+`RunInputSnapshot`. When runtime recall is connected, further memory reads or writes must remain
+governed external actions subject to the same approval, receipt and audit boundaries as other tools.
 
 ## Failure posture
 

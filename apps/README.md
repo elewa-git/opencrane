@@ -15,6 +15,7 @@ testing on its own, it belongs in a library, not here.
 | [`opencrane`](./opencrane/README.md) | The organisation control plane and authenticated REST API. |
 | [`opencrane-ui`](./opencrane-ui/README.md) | The org-admin single-page app. |
 | [`channel-proxy`](./channel-proxy/README.md) | The inbound-channel edge trust boundary. |
+| [`memory-gateway`](./memory-gateway/README.md) | The private authenticated boundary in front of Cognee. |
 | [`artifact-service`](./artifact-service/README.md) | The artifact promote-and-receipt service. |
 | [`artifact-preprocessor`](./artifact-preprocessor/README.md) | Outbound-only PDF-to-text worker behind the OpenCrane artifact broker. |
 | [`agent-runtime`](./agent-runtime/README.md) | Outbound-only personal-agent process prepared as one suspended Job per run attempt. |
@@ -31,7 +32,7 @@ service map.
 ```
    opencrane (control plane) ──serves──► opencrane-ui (SPA)
         │                                  channel-proxy (edge)
-        ├── artifact-service · artifact-preprocessor
+        ├── memory-gateway · artifact-service · artifact-preprocessor
         ├── agent-controller · agent-runtime · managed-agent-runtime
         ├── skill-authoring · tool-runner
         └── postgres (durable DB)

@@ -1,25 +1,13 @@
 {{- define "opencrane.cognee.resources" -}}
-{{- /* In-cluster Cognee — the graph-RAG service the opencrane-ui syncs awareness
-       grants/permissions to and that tenant pods query for org context. Cognee is a
-       REQUIRED service, so it is installed by default (controlPlane.cognee.install:
-       true). Set that false to BYO an external/shared Cognee — the opencrane-ui then
-       talks to controlPlane.cognee.endpoint and no workload is rendered here.
-
-       The Service is named `cognee` (a cluster singleton, like ingress-nginx) so it
-       matches the default endpoint `http://cognee:8000`; if you BYO, point the endpoint
-       elsewhere. This `*.install` flag is deliberately separate from
-       `*.backendAccessControl` (the runtime ACL-enforcement switch) so an operator can
-       BYO Cognee while still enforcing the backend access control.
-
-       SILO role (S6 / ADR 0002): every ClusterTenant gets its OWN dedicated Cognee, so
-       the bundled workload IS rendered here — but the Service is release-prefixed
-       (`<fullname>-cognee`, B5), so
-       two silos never collide. The opencrane-ui's COGNEE_ENDPOINT is derived from this
-       release-prefixed Service by the `opencrane.cogneeEndpoint` helper.
-
-       CENTRAL role: Cognee is a per-CT plane, not a central component (ADR 0002 decision
-       2), so the bundled workload is NOT rendered. */ -}}
+{{- /* In-cluster Cognee is the durable per-silo graph memory store. It is always paired with the
+       release-local memory gateway: Cognee deliberately has no public ingress, authentication, or
+       direct server route. The gateway TokenReviews the exact server identity and is the only caller
+       admitted by Cognee's policy. BYO/non-private Cognee is intentionally rejected by the gateway
+       chart until an authenticated transport is designed and implemented. */ -}}
 {{- if and .Values.clustertenantManager.cognee.install }}
+{{- if eq (include "opencrane.litellmShared" .) "true" }}
+{{- fail "private Cognee requires release-local LiteLLM so its NetworkPolicy can name the sole model egress path" }}
+{{- end }}
 ---
 apiVersion: v1
 kind: Service
@@ -99,6 +87,13 @@ spec:
               value: "0.0.0.0"
             - name: PORT
               value: {{ .Values.clustertenantManager.cognee.service.port | quote }}
+            # Cognee is not an application authorization boundary in this deployment. The
+            # authenticated memory gateway is its only NetworkPolicy-admitted caller, so disable
+            # Cognee's user-login middleware explicitly instead of relying on vendor defaults.
+            - name: ENABLE_BACKEND_ACCESS_CONTROL
+              value: "false"
+            - name: REQUIRE_AUTHENTICATION
+              value: "false"
             {{- if .Values.clustertenantManager.cognee.persistence.enabled }}
             # Point Cognee's data + system roots at the mounted PVC so its relational/identity
             # DB, graph store, and vector store survive pod restarts. Cognee's BaseConfig is
@@ -186,9 +181,8 @@ spec:
 {{- end }}
 {{- if .Values.networkPolicy.enabled }}
 ---
-# Defence-in-depth ingress policy for the bundled Cognee. Only the opencrane-ui
-# (awareness grant / permission sync) and tenant pods (direct org-context queries via
-# the Cognee memory plugin) reach it; everything else is denied at the network layer.
+# Private Cognee's complete network boundary: only the memory gateway can call it, and its own
+# egress is limited to release-local model routing, DNS, and optional trace export.
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -203,18 +197,51 @@ spec:
       app.kubernetes.io/component: cognee
   policyTypes:
     - Ingress
+    - Egress
   ingress:
     - from:
         - podSelector:
             matchLabels:
               {{- include "opencrane.selectorLabels" . | nindent 14 }}
-              app.kubernetes.io/component: opencrane-server
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/component: tenant
+              app.kubernetes.io/component: memory-gateway
       ports:
         - protocol: TCP
           port: {{ .Values.clustertenantManager.cognee.service.port }}
+  egress:
+    {{- if .Values.litellm.enabled }}
+    # Cognee's extraction and embedding requests must terminate at this release's LiteLLM proxy.
+    - to:
+        - podSelector:
+            matchLabels:
+              {{- include "opencrane.selectorLabels" . | nindent 14 }}
+              app.kubernetes.io/component: litellm
+      ports:
+        - protocol: TCP
+          port: {{ .Values.litellm.service.port }}
+    {{- end }}
+    {{- if .Values.networkPolicy.allowDNS }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    {{- end }}
+    {{- if .Values.observability.otel.enabled }}
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/component: otel-collector
+      ports:
+        - protocol: TCP
+          port: {{ .Values.observability.otel.collector.otlpPort }}
+    {{- end }}
 {{- end }}
 {{- end }}
 {{- end }}

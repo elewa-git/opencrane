@@ -43,7 +43,8 @@ the credential — plus the tool, its validated arguments, and the immutable `al
 copied from the revision's `AgentRevisionIntegrationAssignment`. Every implementation enforces the
 allow-list FIRST (`__AssertToolAllowed`), so a tool outside the assignment is rejected fail-closed
 regardless of transport. The `__UnavailableObotMcpInvocationAdapter` default enforces the allow-list
-and then refuses; `__FakeObotMcpInvocationAdapter` is the test/offline double.
+and then refuses. Tests that need a successful invocation provide a local recording double without
+publishing a fake-success adapter from this infrastructure package.
 
 ## Public surface
 
@@ -52,13 +53,14 @@ and then refuses; `__FakeObotMcpInvocationAdapter` is the test/offline double.
 - `__UnavailableObotCustodyAdapter`, `ObotCustodyUnavailableError` — the fail-closed default and its error.
 - `ObotMcpInvocationPort`, `ObotMcpToolInvocationCommand`, `ObotMcpToolResult` — the MCP-invocation contract and I/O.
 - `__AssertToolAllowed` — the single allow-list enforcement point every adapter calls.
-- `__UnavailableObotMcpInvocationAdapter`, `__FakeObotMcpInvocationAdapter`, `ObotMcpInvocationUnavailableError`, `ObotMcpToolNotAllowedError`.
+- `__UnavailableObotMcpInvocationAdapter`, `ObotMcpInvocationUnavailableError`, `ObotMcpToolNotAllowedError`.
 
 ## Boundary
 
-Consumed by the `integrations` backend gateway. It defines the custody contract and a safe default;
-it does not talk to Obot itself yet — a concrete, authenticated adapter is wired when the Obot API
-contract is confirmed. It stores nothing and holds no secret beyond the single in-flight call.
+Consumed by the `integrations` backend gateway (custody) and by the external-action executor
+(MCP invocation). Neither boundary has an authenticated concrete transport yet, so the unavailable
+adapters remain the only production implementations. It stores nothing and holds no secret beyond
+the single in-flight call.
 
 ## Dependency direction
 
