@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest";
 
 // Side-effect import: loads the express-session SessionData.authUser augmentation.
 import "@opencrane/backend/_server/auth";
+import { _ErrorHandler } from "@opencrane/backend/_server/http";
 import type { AuthUser } from "@opencrane/backend/_server/auth";
 import { modelRoutingDefaultsRouter } from "../routes/model-routing-defaults.js";
 
@@ -104,6 +105,7 @@ function _buildApp(prisma: PrismaClient, user: AuthUser | null = _authUser({ isP
     });
   }
   app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
+  app.use(_ErrorHandler({ warn: function _warn() {}, error: function _error() {} } as never));
   return app;
 }
 
@@ -177,6 +179,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
     const res = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({});
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(res.body.issues).toContainEqual({ location: "body", path: ["defaultModel"], message: "Provide a default model or auto-routing configuration." });
   });
 
   it("rejects clusterTenant scope without a clusterTenant (400)", async function _missingCt()
@@ -184,6 +187,7 @@ describe("modelRoutingDefaultsRouter", function _suite()
     const res = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({ scope: "clusterTenant", defaultModel: "x" });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(res.body.issues).toContainEqual({ location: "body", path: ["clusterTenant"], message: "A cluster tenant is required for this scope." });
   });
 
   it("rejects a malformed auto config (400)", async function _badAuto()
@@ -191,7 +195,25 @@ describe("modelRoutingDefaultsRouter", function _suite()
     const res = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({ autoConfig: { objective: "nope", sessionPin: true, explorationRate: 0 } });
     expect(res.status).toBe(400);
     expect(res.body.code).toBe("VALIDATION_ERROR");
+    expect(res.body.issues).toContainEqual({ location: "body", path: ["autoConfig", "objective"], message: "This field has an unsupported value." });
   });
+
+	it("preserves extension fields in a validated auto config", async function _PreserveExtensions()
+	{
+		const response = await request(_buildApp(_mockPrisma(new Map()))).put("/api/v1/model-routing/defaults").send({ autoConfig: { ..._autoConfig(), futureKnob: "kept" } });
+
+		expect(response.status).toBe(200);
+		expect(response.body.autoConfig.futureKnob).toBe("kept");
+	});
+
+	it("runs the authorization guard before field validation", async function _AuthorizeBeforeValidation()
+	{
+		const app = _buildApp(_mockPrisma(new Map()), _authUser({ sub: "user-acme" }));
+		const response = await request(app).put("/api/v1/model-routing/defaults").send({ defaultModel: 42 });
+
+		expect(response.status).toBe(403);
+		expect(response.body).toEqual({ error: "Not authorized for this resource scope.", code: "FORBIDDEN_SCOPE" });
+	});
 
   it("returns 404 for an unknown default", async function _get404()
   {

@@ -1,12 +1,9 @@
 import { Router } from "express";
-import { AutoRoutingObjective, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefault, type ModelRoutingDefaultWrite } from "@opencrane/contracts";
 import { Prisma, type PrismaClient, type ModelRoutingDefault as PrismaModelRoutingDefault } from "@prisma/client";
 
+import { ___WithValidatedPublicBody } from "@opencrane/backend/_server/http";
 import { _ClusterTenantScopeGuard, type ClusterTenantScopedResource } from "@opencrane/backend/server/tenancy/cluster-tenants";
-import type { ValidationFailure } from "./model-routing-defaults.types.js";
-
-/** The valid {@link AutoRoutingObjective} string values, used to validate an incoming config. */
-const _VALID_OBJECTIVES: readonly string[] = Object.values(AutoRoutingObjective);
+import { ___ModelRoutingDefaultWriteSchema, ModelRoutingScope, type AutoRoutingConfig, type ModelRoutingDefault } from "@opencrane/contracts";
 
 /**
  * Project a persisted `ModelRoutingDefault` row into its contract DTO. The Prisma enum maps 1:1
@@ -36,88 +33,6 @@ function _toPrismaScope(scope: ModelRoutingScope): "Global" | "ClusterTenant"
 }
 
 /**
- * Validate the shape of an inbound {@link AutoRoutingConfig}. Only checks the fields that carry a
- * closed contract (objective enum, required booleans, numeric ranges) — the surface is a config
- * blob, so unknown extra keys are tolerated. Returns a failure envelope or null when acceptable.
- *
- * @param raw - The untrusted `autoConfig` value from the request body.
- * @returns A `{ error, code }` payload when invalid; null when valid.
- */
-function _validateAutoConfig(raw: unknown): ValidationFailure | null
-{
-  // 1. Must be a plain object — anything else cannot carry the required config knobs.
-  if (typeof raw !== "object" || raw === null || Array.isArray(raw))
-  {
-    return { error: "autoConfig must be an object.", code: "VALIDATION_ERROR" };
-  }
-
-  const config = raw as Record<string, unknown>;
-
-  // 2. The optimization objective is the one required closed enum on the config.
-  if (typeof config.objective !== "string" || !_VALID_OBJECTIVES.includes(config.objective))
-  {
-    return { error: `autoConfig.objective must be one of: ${_VALID_OBJECTIVES.join(", ")}.`, code: "VALIDATION_ERROR" };
-  }
-
-  // 3. sessionPin and explorationRate are required by the contract; enforce their types/range so a
-  //    malformed config cannot reach the runtime optimizer (AIR.7) as silently-wrong knobs.
-  if (typeof config.sessionPin !== "boolean")
-  {
-    return { error: "autoConfig.sessionPin must be a boolean.", code: "VALIDATION_ERROR" };
-  }
-  if (typeof config.explorationRate !== "number" || config.explorationRate < 0 || config.explorationRate > 1)
-  {
-    return { error: "autoConfig.explorationRate must be a number between 0 and 1.", code: "VALIDATION_ERROR" };
-  }
-
-  return null;
-}
-
-/**
- * Validate a {@link ModelRoutingDefaultWrite} body. Enforces a valid scope, a `clusterTenant`
- * when the scope is `clusterTenant`, at least one of `defaultModel`/`autoConfig` (an empty
- * default is meaningless), and a well-formed `autoConfig` when present.
- *
- * @param body - The untrusted request body.
- * @returns A `{ error, code }` payload when invalid; null when valid.
- */
-function _validateWrite(body: Record<string, unknown>): ValidationFailure | null
-{
-  // 1. Scope must be one of the two known values when present.
-  const scope = body.scope ?? ModelRoutingScope.Global;
-  if (scope !== ModelRoutingScope.Global && scope !== ModelRoutingScope.ClusterTenant)
-  {
-    return { error: "scope must be 'global' or 'clusterTenant'.", code: "VALIDATION_ERROR" };
-  }
-
-  // 2. A ClusterTenant-scoped default must name its owning clusterTenant.
-  if (scope === ModelRoutingScope.ClusterTenant && !(typeof body.clusterTenant === "string" && body.clusterTenant.trim()))
-  {
-    return { error: "clusterTenant is required when scope is 'clusterTenant'.", code: "VALIDATION_ERROR" };
-  }
-
-  // 3. A default that names neither a model nor an auto config carries no decision — reject it.
-  const hasModel = typeof body.defaultModel === "string" && body.defaultModel.trim().length > 0;
-  const hasAuto = body.autoConfig !== undefined && body.autoConfig !== null;
-  if (!hasModel && !hasAuto)
-  {
-    return { error: "at least one of defaultModel or autoConfig is required.", code: "VALIDATION_ERROR" };
-  }
-
-  // 4. When an auto config is supplied it must be well-formed.
-  if (hasAuto)
-  {
-    const autoError = _validateAutoConfig(body.autoConfig);
-    if (autoError)
-    {
-      return autoError;
-    }
-  }
-
-  return null;
-}
-
-/**
  * CRUD router for {@link ModelRoutingDefault} — the scope-level model + auto-config default
  * consulted when a skill declares no posture of its own (Track AIR.4). A default is uniquely keyed
  * by `(scope, clusterTenant)`, so the write path upserts on that key rather than allocating a new
@@ -137,8 +52,10 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient): Router
   {
     if (req.method === "PUT")
     {
-      const body = (req.body ?? {}) as ModelRoutingDefaultWrite;
-      return { scope: body.scope ?? ModelRoutingScope.Global, clusterTenant: body.clusterTenant ?? null };
+			const body = typeof req.body === "object" && req.body !== null ? req.body as Record<string, unknown> : {};
+			const scope = body["scope"] === ModelRoutingScope.ClusterTenant ? ModelRoutingScope.ClusterTenant : ModelRoutingScope.Global;
+			const clusterTenant = typeof body["clusterTenant"] === "string" ? body["clusterTenant"] : null;
+			return { scope, clusterTenant };
     }
 
     const row = await prisma.modelRoutingDefault.findUnique({ where: { id: String(req.params.id) } });
@@ -149,7 +66,6 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient): Router
     return { scope: row.scope === "ClusterTenant" ? ModelRoutingScope.ClusterTenant : ModelRoutingScope.Global, clusterTenant: row.clusterTenant };
   });
 
-  router.put("/", guard);
   router.delete("/:id", guard);
 
   /** List model-routing defaults, optionally filtered to one ClusterTenant. */
@@ -176,19 +92,9 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient): Router
   });
 
   /** Upsert the model-routing default for a (scope, clusterTenant) pair. */
-  router.put("/", async function _upsertDefault(req, res)
+  router.put("/", guard, ___WithValidatedPublicBody(___ModelRoutingDefaultWriteSchema, async function _upsertDefault(_req, res, _next, write)
   {
-    const body = (req.body ?? {}) as Record<string, unknown>;
-
-    // 1. Validate the body before any persistence.
-    const error = _validateWrite(body);
-    if (error)
-    {
-      res.status(400).json(error);
-      return;
-    }
-
-    const write = body as unknown as ModelRoutingDefaultWrite;
+    // 1. Normalise the validated command before persistence.
     const scope = write.scope ?? ModelRoutingScope.Global;
     const clusterTenant = scope === ModelRoutingScope.ClusterTenant ? write.clusterTenant!.trim() : null;
     const defaultModel = typeof write.defaultModel === "string" && write.defaultModel.trim() ? write.defaultModel.trim() : null;
@@ -234,7 +140,7 @@ export function modelRoutingDefaultsRouter(prisma: PrismaClient): Router
       }
     }
     res.json(_toContract(row));
-  });
+  }));
 
   /** Delete a model-routing default by id. */
   router.delete("/:id", async function _deleteDefault(req, res)

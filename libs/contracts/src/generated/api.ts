@@ -719,7 +719,11 @@ export interface paths {
          */
         get: operations["listMyRuns"];
         put?: never;
-        post?: never;
+        /**
+         * Start a signed-in user's personal run from an existing conversation
+         * @description The body may name only a thread and idempotency key. The server derives the session subject, host silo, personal AgentService, signed personal membership assertion, organization, scope, dataset, and immutable run input snapshot.
+         */
+        post: operations["startMyRun"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1011,6 +1015,19 @@ export interface components {
             code: string;
             /** @description Optional extra context. */
             detail?: string;
+            /** @description Field diagnostics returned only for public request validation failures. */
+            issues?: components["schemas"]["ValidationIssue"][];
+        };
+        ValidationIssue: {
+            /**
+             * @description Request coordinate that contains the invalid field.
+             * @enum {string}
+             */
+            location: "body";
+            /** @description Field path segments suitable for direct form-control mapping. */
+            path: (string | number)[];
+            /** @description Safe validation message that never includes the rejected value. */
+            message: string;
         };
         Pagination: {
             limit: number;
@@ -1432,7 +1449,7 @@ export interface components {
             clusterTenant?: string;
             /** @description Default model publicModelName. */
             defaultModel?: string;
-            /** @description Default auto-routing config. */
+            /** @description Default auto-routing config; null clears it. */
             autoConfig?: {
                 /**
                  * @description The optimization objective.
@@ -1455,7 +1472,7 @@ export interface components {
                 sessionPin: boolean;
                 /** @description Fraction of traffic to explore alternatives on (0 = pure exploit). */
                 explorationRate: number;
-            };
+            } | null;
         };
         Budget: {
             monthlyLimitUsd?: number;
@@ -3467,7 +3484,7 @@ export interface operations {
                     "application/json": components["schemas"]["ModelRoutingDefault"];
                 };
             };
-            /** @description Request body failed validation (code VALIDATION_ERROR). */
+            /** @description Request body failed validation (code VALIDATION_ERROR with form-mappable field issues), or contained malformed JSON (code MALFORMED_JSON). */
             400: {
                 headers: {
                     [name: string]: unknown;
@@ -3933,6 +3950,93 @@ export interface operations {
                 };
             };
             /** @description Run status could not be read. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
+    startMyRun: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    /** @description Existing conversation thread the signed-in user participates in. */
+                    threadId: string;
+                    /** @description Caller-generated key for safe transport retries. */
+                    requestIdempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description A duplicate idempotency key returned the already-admitted run. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runId: string;
+                    };
+                };
+            };
+            /** @description A new immutable run snapshot was accepted. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        runId: string;
+                    };
+                };
+            };
+            /** @description The body omitted a required field or attempted to supply server-owned coordinates. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The thread, current personal persona, membership, dataset, or other admission evidence was unavailable. */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The shared managed-and-personal admission capacity is full. */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The run admission authority was unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

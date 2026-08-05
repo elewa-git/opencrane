@@ -1,5 +1,7 @@
 export { ___CreateControlPlaneClient, type paths } from "./client.js";
 export { type ControlPlaneClient } from "./client.types.js";
+export { API_ERROR_LIMITS, ApiValidationIssueLocations, type ApiErrorEnvelope, type ApiValidationIssue } from "./api-error.types.js";
+export { ___ParseApiErrorEnvelope } from "./api-error.validator.js";
 export { AG_UI_PROJECTION_VERSION, type AgUiCustomEvent, type AgUiProjectionEvent, type AgUiProjectionSourceEvent, type AgUiPublicEventPayload, type AgUiSseRecord, type AgUiTextMessageContentEvent, type AgUiTextMessageEndEvent, type AgUiTextMessageStartEvent, type AgUiToolCallArgsEvent, type AgUiToolCallEndEvent, type AgUiToolCallResultEvent, type AgUiToolCallStartEvent } from "./ag-ui-projection.types.js";
 export { __EncodeAgUiSseRecord } from "./ag-ui-sse.js";
 export { __ProjectAgUiEvent } from "./ag-ui-projector.js";
@@ -54,6 +56,7 @@ export {
   type ProviderKeySetRequest,
   type ProviderKeyStatus,
 } from "./model-routing.types.js";
+export { ___ModelRoutingDefaultWriteSchema } from "./model-routing.validator.js";
 export { type CompiledBudget, type CompiledMessage, type CompiledModelRoute, type CompiledRunInput, type CompiledToolDefinition } from "./compiled-run-input.types.js";
 export { PROMPT_COMPILER_VERSION } from "./prompt-compiler-version.js";
 export { AgentConfigPatchKinds } from "./personal-configuration.types.js";

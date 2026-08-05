@@ -1,8 +1,13 @@
-import type { NextFunction, Request, Response } from "express";
+import express, { type NextFunction, type Request, type Response } from "express";
 import pino from "pino";
+import type { Logger } from "pino";
+import request from "supertest";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { z } from "zod";
 
+import { ApiValidationIssueLocations } from "@opencrane/contracts";
 import { _ErrorHandler } from "../error-handler.js";
+import { _RequestValidationProblem } from "../request-validation.js";
 
 const log = pino({ level: "silent" });
 
@@ -76,4 +81,56 @@ describe("_ErrorHandler", function _suite()
     expect(sent.status).toBe(500);
     expect(sent.body?.["detail"]).toBe("boom");
   });
+
+	it("returns bounded field issues only for the dedicated public validation problem", function _publicValidation()
+	{
+		const { res, sent } = _mockRes();
+		const err = new _RequestValidationProblem([{ location: ApiValidationIssueLocations.Body, path: ["profile", "email"], message: "This field has an invalid format." }]);
+
+		_ErrorHandler(log)(err, req, res, next);
+
+		expect(sent.status).toBe(400);
+		expect(sent.body).toEqual({
+			error: "Request validation failed.",
+			code: "VALIDATION_ERROR",
+			issues: [{ location: "body", path: ["profile", "email"], message: "This field has an invalid format." }],
+		});
+	});
+
+	it("keeps an unrelated ZodError opaque on the internal-error path in every environment", function _internalZodError()
+	{
+		process.env["NODE_ENV"] = "development";
+		const { res, sent } = _mockRes();
+		const parsed = z.object({ secret: z.string() }).safeParse({});
+		if (parsed.success)
+		{
+			throw new Error("Expected the test schema to reject its input.");
+		}
+
+		_ErrorHandler(log)(parsed.error, req, res, next);
+
+		expect(sent.status).toBe(500);
+		expect(sent.body).toEqual({ error: "An unexpected error occurred", code: "INTERNAL_ERROR" });
+	});
+
+	it("maps malformed JSON without logging body-parser's retained request body", async function _malformedJson()
+	{
+		const warn = vi.fn();
+		const error = vi.fn();
+		const app = express();
+		app.use(express.json());
+		app.post("/json", function _acceptJson(_request, response)
+		{
+			response.json({ accepted: true });
+		});
+		app.use(_ErrorHandler({ warn, error } as unknown as Logger));
+
+		const response = await request(app).post("/json?token=top-secret-query").set("Content-Type", "application/json").send('{"password":"top-secret-body",');
+
+		expect(response.status).toBe(400);
+		expect(response.body).toEqual({ error: "Request body must contain valid JSON.", code: "MALFORMED_JSON" });
+		expect(JSON.stringify(warn.mock.calls)).not.toContain("top-secret-body");
+		expect(JSON.stringify(warn.mock.calls)).not.toContain("top-secret-query");
+		expect(error).not.toHaveBeenCalled();
+	});
 });

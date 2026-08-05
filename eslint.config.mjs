@@ -151,7 +151,7 @@ export default [
             { sourceTag: "scope:sandbox-execution", onlyDependOnLibsWithTags: ["scope:sandbox-execution", "scope:shared"] },
             { sourceTag: "scope:memory-gateway-client", onlyDependOnLibsWithTags: ["scope:memory-gateway-client", "scope:shared"] },
             { sourceTag: "scope:memory-gateway", onlyDependOnLibsWithTags: ["scope:memory-gateway", "scope:shared", "scope:workload-identity"] },
-            { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:model-routing", "scope:shared"] },
+            { sourceTag: "scope:model-routing", onlyDependOnLibsWithTags: ["scope:auth", "scope:cluster-tenants", "scope:http", "scope:model-routing", "scope:shared"] },
             { sourceTag: "scope:personal-personas", onlyDependOnLibsWithTags: ["scope:auth", "scope:personal-configuration", "scope:personal-personas", "scope:shared"] },
             { sourceTag: "scope:execution-inputs", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:agents", "scope:artifacts", "scope:authorization", "scope:membership", "scope:execution-runs", "scope:execution-inputs", "scope:personal-memory", "scope:shared"] },
             { sourceTag: "scope:execution-admission", onlyDependOnLibsWithTags: ["scope:agent-services", "scope:execution-admission", "scope:execution-inputs", "scope:execution-runs", "scope:membership", "scope:shared"] },

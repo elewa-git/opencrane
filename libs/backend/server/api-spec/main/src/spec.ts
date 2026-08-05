@@ -11,20 +11,11 @@
  */
 
 import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
+import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
 // ---------------------------------------------------------------------------
-
-const ErrorEnvelope = {
-  type: "object" as const,
-  required: ["error", "code"],
-  properties: {
-    error: { type: "string", description: "Human-readable error description." },
-    code: { type: "string", description: "Machine-readable error code." },
-    detail: { type: "string", description: "Optional extra context." },
-  },
-};
 
 const Pagination = {
   type: "object" as const,
@@ -432,11 +423,11 @@ const AutoRoutingConfigSchema = {
   description: "Opt-in auto-routing configuration. Auto routing applies ONLY when a skill (or scope default) selects it; the runtime optimizer that consumes it is a later track item (AIR.7).",
   properties: {
     objective: { type: "string", enum: ["cheapest-passing-bar", "best-quality-within-budget", "balanced"], description: "The optimization objective." },
-    costQualitySlider: { type: "number", description: "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best." },
+    costQualitySlider: { type: "number", minimum: 0, maximum: 10, description: "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best." },
     qualityFloor: { type: "number", description: "Minimum eval score a model must clear; defaults to the skill's own bar when omitted." },
-    maxBudgetUsd: { type: "number", description: "Hard per-decision spend ceiling in USD." },
+    maxBudgetUsd: { type: "number", minimum: 0, description: "Hard per-decision spend ceiling in USD." },
     allowedModels: { type: "array", items: { type: "string" }, description: "Restrict auto to this subset of publicModelNames; must stay within the key's allowlist." },
-    latencyCeilingMs: { type: "number", description: "Reject/penalize models slower than this many milliseconds." },
+    latencyCeilingMs: { type: "number", minimum: 0, description: "Reject/penalize models slower than this many milliseconds." },
     fallbacks: { type: "array", items: { type: "string" }, description: "Ordered fallback publicModelNames on failure/unavailability." },
     sessionPin: { type: "boolean", description: "Keep the chosen model stable within a conversation to preserve prompt caches." },
     explorationRate: { type: "number", minimum: 0, maximum: 1, description: "Fraction of traffic to explore alternatives on (0 = pure exploit)." },
@@ -459,12 +450,13 @@ const ModelRoutingDefaultSchema = {
 
 const ModelRoutingDefaultWriteSchema = {
   type: "object" as const,
+	additionalProperties: false,
   description: "Upsert body for a scope-level model-routing default. At least one of defaultModel or autoConfig is required.",
   properties: {
     scope: { type: "string", enum: ["global", "clusterTenant"], description: "Defaults to global when omitted." },
     clusterTenant: { type: "string", description: "Required when scope is clusterTenant." },
     defaultModel: { type: "string", description: "Default model publicModelName." },
-    autoConfig: { ...AutoRoutingConfigSchema, description: "Default auto-routing config." },
+    autoConfig: { ...AutoRoutingConfigSchema, nullable: true, description: "Default auto-routing config; null clears it." },
   },
 };
 
@@ -535,7 +527,8 @@ export const spec = {
   ],
   components: {
     schemas: {
-      Error: ErrorEnvelope,
+      Error: _ErrorEnvelopeSchema,
+      ValidationIssue: _ValidationIssueSchema,
       Pagination,
       McpServer: McpServerSchema,
       McpServerCredential: McpServerCredentialSchema,

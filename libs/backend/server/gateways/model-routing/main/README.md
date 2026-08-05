@@ -41,7 +41,8 @@ traffic. The BYOK (bring-your-own-key) model catalogue (`_BYOK_PROVIDER_CATALOG`
 ## Public surface
 
 - `modelRoutingDefaultsRouter` — the routing-defaults router, mounted at
-  `/api/v1/model-routing/defaults`.
+  `/api/v1/model-routing/defaults`; writes run the tenant-scope guard before the shared Zod request
+  boundary and return field paths for authorized validation failures.
 - `_ResolveSkillModel` — resolve a skill's effective model by the locked precedence chain.
 - `_ProvisionByokKey`, `_DeprovisionByokKey`, `_RegisterLiteLlmModel`, `_UpsertLiteLlmCredential`,
   `_DeleteLiteLlmCredential` — the LiteLLM provisioning helpers reused by the provider gateway.
@@ -60,7 +61,7 @@ model calls or hold provider secrets (LiteLLM and the provider gateway do).
 ## Dependency direction
 
 Tagged `scope:model-routing`: it may depend only on `scope:auth`, `scope:cluster-tenants`,
-`scope:model-routing`, and `scope:shared` — never on apps or other server domains.
+`scope:http`, `scope:model-routing`, and `scope:shared` — never on apps or other server domains.
 
 ## Data & persistence
 

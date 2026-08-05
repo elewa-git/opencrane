@@ -1,5 +1,7 @@
 import createClient, { Client, Middleware } from "openapi-fetch";
 
+import { _CreateOpenCraneApiError } from "./api-error.js";
+
 /**
  * Shared base for the frontend's typed OpenCrane clients.
  *
@@ -41,7 +43,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 	 * @param path    - Path relative to the `/api/v1` base (must start with `/`).
 	 * @param options - Optional JSON `body` and `query` params.
 	 * @returns The parsed JSON response body, or `undefined` for a 204.
-	 * @throws Error when the response status is not 2xx.
+	 * @throws OpenCraneApiError with the public code and field issues when the response is not 2xx.
 	 */
 	public async request<TResponse>(method: string, path: string, options?: { body?: unknown; query?: Record<string, string | number | boolean> }): Promise<TResponse>
 	{
@@ -55,7 +57,7 @@ export abstract class OpenCraneApiClientBase<TPaths extends object>
 		this._redirectIfUnauthorized(response);
 		if (!response.ok)
 		{
-			throw new Error(`${method} ${path} failed: ${response.status}`);
+			throw await _CreateOpenCraneApiError(response, method, path);
 		}
 		if (response.status === 204)
 		{
