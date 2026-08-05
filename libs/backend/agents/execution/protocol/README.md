@@ -25,6 +25,9 @@ hydrates the immutable snapshot through the same locked Prisma transaction befor
 For the two workload-reportable terminal results, the app injects the canonical run authority into
 that transaction: `run.completed` and `run.failed` become one durable run outcome, stream event, and
 child-to-parent notification. A runtime cannot cancel itself; cancellation remains server-owned.
+The package-private candidate-side-effect adapter keeps those terminal writes and digest-only
+`tool.completed` receipts inside the already-admitted transaction; it never advances the stream or
+dispatches provider I/O.
 
 ```
  OpenCrane run authority + immutable snapshot

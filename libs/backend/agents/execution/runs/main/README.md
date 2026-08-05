@@ -44,7 +44,8 @@ snapshot field except its own digest. The persisted snapshot stores revision-sel
 tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
 is rechecked only when an action is actually attempted.
 
-`RunAdmissionConcurrencyGate` is the upstream overload boundary for a live admission entrypoint.
+`RunAdmissionConcurrencyGate` is the upstream overload boundary used by the shared admission
+capacity boundary for live personal and managed entrypoints.
 It partitions capacity by `(siloId, AgentServiceId)`, starts only the configured number of admissions,
 and holds a bounded FIFO queue **before** its work can open a PostgreSQL transaction. A full queue is
 rejected with `admission_concurrency_limited`; it does not turn a hot service row lock into an
@@ -85,6 +86,9 @@ model-routing gateway, which holds the LiteLLM master key) using the alias and b
 snapshot, and attaches the transient virtual key to the claim response only — it is never written to
 Postgres. Minting happens outside the database transaction so no external call holds a lock. That commit also creates an
 unconsumed bootstrap record and a second durable command asking the controller to release the Job.
+The package-private credential-minting seam derives both model and optional Obot requests from the
+locked immutable snapshot, then performs both provider calls only after the claim transaction has
+committed; the public repository remains the single controller-facing facade.
 The bootstrap reference is an opaque label, not a password: it grants nothing without the exact
 projected workload identity, assigned Job and registered first Pod. The stored integrity digest binds
 the label to every immutable assignment field, including the selected workload profile.

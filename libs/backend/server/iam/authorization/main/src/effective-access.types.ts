@@ -1,5 +1,14 @@
 import type { AuthorizationDecision, AuthorizationGrant, AuthorizationResourceLocator, AuthorizationScope, CapabilityReference } from "@opencrane/models/authorization";
 
+/** Stable membership-authority result vocabulary consumed by effective-access evaluation. */
+export enum AuthorizationMembershipOutcomes
+{
+	/** A signed membership revision is current for the exact requested scope. */
+	Trusted = "trusted",
+	/** No current signed membership revision authorizes the exact requested scope. */
+	Denied = "denied",
+}
+
 /** Exact signed-membership requirement evaluated before grant intersection. */
 export interface AuthorizationMembershipRequirement
 {

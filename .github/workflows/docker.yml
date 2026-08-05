@@ -6,11 +6,9 @@ on:
       - main
       - develop
       - own-personal-ai-agent-setup
+  # Stacked PRs target feature branches. Validate every PR base so descendants receive the same
+  # build/test gate as integration-root changes.
   pull_request:
-    branches:
-      - main
-      - develop
-      - own-personal-ai-agent-setup
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
 # Pushes to the integration branches are never cancelled mid-publish.
@@ -124,19 +122,19 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client ripgrep
 
-      - name: Enforce Phase B workload ownership and thin app roots
-        run: npm run check:phase-b-topology
+      - name: Enforce workload ownership and app composition
+        run: npm run check:workload-ownership-app-composition
 
-      - name: Prove Phase B topology guard rejects drift
+      - name: Prove workload ownership and app composition reject drift
         # Tests the guard, not the repo — re-prove only when the guard or its inputs change.
         if: needs.prepare.outputs.guard_inputs_changed == 'true' || github.event_name == 'push'
-        run: npm run test:phase-b-topology
+        run: npm run test:workload-ownership-app-composition
 
-      - name: Enforce Phase D personal-agent namespace boundary
-        run: npm run check:phase-d-agent-namespaces
+      - name: Enforce personal, execution, and operator agent domains
+        run: npm run check:agent-domain-boundary
 
-      - name: Prove the Phase D namespace boundary rejects drift
-        run: npm run test:phase-d-agent-namespaces
+      - name: Prove the agent-domain boundary rejects drift
+        run: npm run test:agent-domain-boundary
 
       - name: Enforce mechanical TypeScript agent style
         run: scripts/agent-style-check.sh --diff "$NX_BASE"
@@ -149,6 +147,9 @@ jobs:
 
       - name: Prove the module-growth classifier
         run: npm run test:module-growth
+
+      - name: Prove the PR-stack integrity classifier
+        run: npm run test:pr-stack-integrity
 
       - name: Prove configuration documentation coverage
         run: npm run test:config-docs-coverage
@@ -166,6 +167,9 @@ jobs:
       # generator can introduce transient files beneath an app root.
       - name: Generate the database client
         run: npm run db:generate -w @opencrane/server
+
+      - name: Verify the reviewed target authority baseline is intact
+        run: npm run test:authority-baseline -w @opencrane/server
 
       - name: Apply the fresh target database baseline
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql

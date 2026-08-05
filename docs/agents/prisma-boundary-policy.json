@@ -233,6 +233,41 @@
         "contract": "PersonalMemoryAdmissionRepository",
         "contractImportPath": "./personal-memory-dataset.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/admission/main/src/prisma-personal-run-admission-repository.ts",
+        "adapter": "PrismaPersonalRunAdmissionRepository",
+        "contract": "PersonalRunAdmissionReadRepository",
+        "contractImportPath": "./personal-run-admission.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/agents/execution/inputs/main/src/prisma-personal-execution-identity-authority-repository.ts",
+        "adapter": "PrismaPersonalExecutionIdentityAuthorityRepository",
+        "contract": "PersonalExecutionIdentityAuthorityRepository",
+        "contractImportPath": "./personal-execution-identity-envelope-source.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-authorization-grants.ts",
+        "adapter": "PrismaAuthorizationGrantRepository",
+        "contract": "AuthorizationGrantRepository",
+        "contractImportPath": "./effective-access.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
+        "adapter": "PrismaShareAuthorizationRepository",
+        "contract": "ShareAuthorizationRepository",
+        "contractImportPath": "./share-authorization-repository.types.js",
+        "constructs": []
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-repository.ts",
+        "adapter": "PrismaMcpServerMutationRepository",
+        "contract": "McpServerMutationRepository",
+        "contractImportPath": "./mcp-server-mutation-repository.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -367,12 +402,55 @@
             "importPath": "./prisma-memory-catalog-collision-repository.js"
           }
         ]
+      },
+      {
+        "path": "libs/backend/agents/execution/admission/main/src/prisma-personal-run-admission-unit-of-work.ts",
+        "adapter": "PrismaPersonalRunAdmissionUnitOfWork",
+        "contract": "PersonalRunAdmissionUnitOfWork",
+        "contractImportPath": "./personal-run-admission.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaPersonalRunAdmissionRepository",
+            "importPath": "./prisma-personal-run-admission-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-unit-of-work.ts",
+        "adapter": "PrismaShareAuthorizationUnitOfWork",
+        "contract": "ShareAuthorizationUnitOfWork",
+        "contractImportPath": "./share-authorization-unit-of-work.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaAuthorizationGrantRepository",
+            "importPath": "./prisma-authorization-grants.js"
+          },
+          {
+            "adapter": "PrismaShareAuthorizationRepository",
+            "importPath": "./prisma-share-authorization-repository.js"
+          }
+        ]
+      },
+      {
+        "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-unit-of-work.ts",
+        "adapter": "PrismaMcpServerMutationUnitOfWork",
+        "contract": "McpServerMutationUnitOfWork",
+        "contractImportPath": "./mcp-server-mutation-repository.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaMcpServerMutationRepository",
+            "importPath": "./prisma-mcp-server-mutation-repository.js"
+          }
+        ]
       }
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
       "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
 		"libs/backend/agents/personal/personas/main/src/http/prisma-persona-onboarding.router.ts",
+		"libs/backend/agents/execution/inputs/main/src/personal-execution-identity-envelope-source.ts",
+		"libs/backend/agents/execution/inputs/main/src/prisma-session-assembly-authorities.ts",
+		"libs/backend/agents/execution/admission/main/src/personal-run-admission.composition.ts",
 		"libs/backend/server/agents/artifacts/main/src/prisma-artifact-authority.composition.ts",
 		"libs/backend/server/agents/conversation-replay/main/src/prisma-conversation-replay-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",

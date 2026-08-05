@@ -19,19 +19,6 @@ export interface VerifyFleetMembershipCommand
 	readonly maximumStalenessMs: number;
 }
 
-/** Fixed fleet and scope policy configured before an execution subject is admitted. */
-export interface FleetMembershipAdmissionExpectation
-{
-	/** Fleet issuer trusted to sign the current membership revision. */
-	readonly trustedIssuerId: string;
-	/** Signed assertion that must authorize the execution subject. */
-	readonly assertionId: string;
-	/** Independent scope required for the admitted run. */
-	readonly scope: AuthorizationScope;
-	/** Maximum allowed age of the signed revision at the server-owned admission instant. */
-	readonly maximumStalenessMs: number;
-}
-
 /** Atomic high-watermark acceptance request after membership verification. */
 export interface FleetMembershipAcceptance
 {
@@ -66,6 +53,26 @@ export interface FleetMembershipSignatureVerifier
 {
 	/** Verifies the exact envelope and returns evidence bound to every signed field. */
 	verify(revision: SignedFleetMembershipRevision): Promise<FleetSignatureVerificationEvidence>;
+}
+
+/** Mounted-key-backed fleet-membership trust values shared by every admission composition. */
+export interface FleetMembershipEvidenceConfig
+{
+	/** Only fleet issuer whose signed revisions can establish local membership. */
+	readonly trustedIssuerId: string;
+	/** Maximum permitted age of a signed revision at admission. */
+	readonly maximumStalenessMs: number;
+	/** Projected-key-backed verifier that proves an exact signed revision. */
+	readonly verifier: FleetMembershipSignatureVerifier;
+}
+
+/** Stable outcomes from verifying and accepting signed fleet-membership evidence. */
+export enum FleetMembershipEvidenceOutcomes
+{
+	/** The exact signed assertion is current and accepted for admission. */
+	Trusted = "trusted",
+	/** Membership evidence failed closed and grants no admission authority. */
+	Denied = "denied",
 }
 
 /** Complete signed membership evidence pinned by one transaction-fenced run admission. */

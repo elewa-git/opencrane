@@ -1,4 +1,4 @@
-import type { PrismaClient } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
 
 import type { AuthorizationGrant, AuthorizationScope } from "@opencrane/models/authorization";
 
@@ -41,10 +41,10 @@ function _grant(row: { id: string; siloId: string; subjectId: string; scopeKind:
 export class PrismaAuthorizationGrantRepository implements AuthorizationGrantRepository
 {
 	/** OpenCrane product-authority database client. */
-	private readonly prisma: PrismaClient;
+	private readonly prisma: Prisma.TransactionClient;
 
 	/** Creates a grant reader over canonical Postgres. */
-	constructor(prisma: PrismaClient)
+	constructor(prisma: Prisma.TransactionClient)
 	{
 		this.prisma = prisma;
 	}

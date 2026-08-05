@@ -1,4 +1,4 @@
-import type { Express, Router } from "express";
+import { Router, type Express } from "express";
 import type { PrismaClient } from "@prisma/client";
 import type * as k8s from "@kubernetes/client-node";
 
@@ -20,15 +20,17 @@ import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/serve
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
+import { __CreatePersonalRunAdmissionRouter, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
-import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/backend/_server/http";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/_server/http";
 import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
-import type { RouteMount } from "./routes.types.js";
+import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -37,16 +39,17 @@ import type { RouteMount } from "./routes.types.js";
  * @param prisma - Canonical product-authority database client.
  * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
  * @param runAdmission - Shared managed run-now and scheduler admission port.
+ * @param personalRunAdmission - Shared personal browser-run admission port.
  * @param serverNamespace - Namespace in which provider Secrets are managed.
  * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
  * @returns The configured public listener.
  */
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
-		{ method: "use", path: "/api/v1/shares", handler: sharesRouter(prisma) },
+		{ method: "use", path: "/api/v1/shares", handler: _CreateRateLimitedSharesRouter(prisma) },
 		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
 	];
 	const agentRoutes: readonly RouteMount[] = [
@@ -57,6 +60,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: __CreatePersonalRunAdmissionRouter({ resolveCaller: _ResolveRequestPrincipal, admission: personalRunAdmission, logger: _log }) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
@@ -92,6 +96,23 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		infrastructureRoutes,
 	]);
 	return app;
+}
+
+/**
+ * Composes the share authority behind the shared per-IP limiter before identity or database work.
+ *
+ * The grants domain stays transport-agnostic; the OpenCrane app owns HTTP abuse protection.
+ *
+ * @param prisma - Canonical product-authority database client.
+ * @param options - Optional bounded limiter tuning for an isolated application test.
+ * @returns The protected sharing router.
+ */
+export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: SharesRouteOptions): Router
+{
+	const router = Router();
+	router.use(_RateLimit(options?.rateLimit));
+	router.use(sharesRouter(prisma));
+	return router;
 }
 
 /**

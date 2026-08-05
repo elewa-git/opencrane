@@ -1,6 +1,6 @@
 import { Prisma, SkillRevisionState, SkillState } from "@prisma/client";
 
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { SkillCatalogueRevisionStates, SkillCatalogueStates, type SkillCatalogueEntry, type SkillCatalogueRepository } from "./skill-catalogue.types.js";
 
@@ -28,7 +28,16 @@ export class PrismaSkillCatalogueRepository implements SkillCatalogueRepository
 			const skills = await self.prisma.skill.findMany({ where: { siloId }, select: { id: true, name: true, description: true, state: true, currentRevisionId: true, currentRevision: { select: { state: true } }, createdAt: true, updatedAt: true }, orderBy: [{ updatedAt: "desc" }, { id: "desc" }], take: _CATALOGUE_ENTRY_LIMIT });
 			return skills.map(function _MapSkill(skill): SkillCatalogueEntry
 			{
-				return { id: skill.id, name: skill.name, description: skill.description, state: skill.state === SkillState.Active ? SkillCatalogueStates.Active : SkillCatalogueStates.Retired, currentRevisionId: skill.currentRevisionId, currentRevisionState: skill.currentRevision === null ? null : _RevisionState(skill.currentRevision.state), createdAt: skill.createdAt.toISOString(), updatedAt: skill.updatedAt.toISOString() };
+				return {
+					id: skill.id,
+					name: skill.name,
+					description: skill.description,
+					state: skill.state === SkillState.Active ? SkillCatalogueStates.Active : SkillCatalogueStates.Retired,
+					currentRevisionId: skill.currentRevisionId,
+					currentRevisionState: skill.currentRevision === null ? null : _RevisionState(skill.currentRevision.state),
+					createdAt: skill.createdAt.toISOString(),
+					updatedAt: skill.updatedAt.toISOString(),
+				};
 			});
 		});
 	}

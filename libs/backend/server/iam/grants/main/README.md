@@ -1,70 +1,60 @@
-# @opencrane/backend/server/iam/grants — turns "who shared what" into "who can see what"
+# @opencrane/backend/server/iam/grants — inter-user sharing via AuthorizationGrant
 
 > [backend](../../../../README.md) › [server](../../../README.md) › [iam](../../README.md) › grants
 
 ## What it owns
 
 This package is part of **IAM** — *identity and access management*, the side of OpenCrane that
-answers **who is making this request, and are they allowed to do this?** Grants owns the rules that
-say a subject (a person or a group) may access something, and the logic that turns a pile of those
-rules into a single, definite answer for a given subject.
+answers **who is making this request, and are they allowed to do this?** Grants owns the sharing
+routes that let a user delegate an entitlement they hold to another user or group.
 
-A **grant** is one allow-record: "this subject may access this thing, at this scope". People create
-grants by **sharing** — a user shares a tool they hold with a colleague, or a file with a small set of
-people. This package owns the sharing API (`/api/v1/shares`, `/api/v1/resource-shares`), the **grant
-compiler** that resolves many overlapping grants into one decision (expanding groups to their members
-and applying precedence so a more specific or higher-priority grant wins), and the **derived dataset
-membership** that tells the knowledge layer which datasets a person may retrieve from. It also keeps
-Cognee — the org-memory service — in sync with those awareness grants.
+A **share** is an `AuthorizationGrant` with effect `Allow`: "this recipient may use this resource,
+at this scope". People create shares by calling the sharing API (`/api/v1/shares`,
+`/api/v1/resource-shares`). The least-privilege gate evaluates the caller's own grants via
+`__DecideAuthorization` before writing, so sharing can never escalate privilege. Silo scoping
+ensures cross-silo isolation.
 
 ```
  user shares a tool / file    POST /api/v1/shares · /resource-shares
-        │  (groups supply their members)
+        │  (silo-scoped, least-privilege gated)
         ▼
  ┌───────────────────────────────┐
- │   grants   ◄── HERE            │  compile grants → one decision per subject
+ │   grants   ◄── HERE            │  writes AuthorizationGrant rows
  └───────────────────────────────┘
-        │  derived dataset membership          awareness sync
-        ▼                                        ▼
-  knowledge retrieval sees what a user may read   Cognee org-memory
+        │  authorization evaluates grants at runtime
+        ▼
+  RbacAuthority / __DecideAuthorization resolves access decisions
 ```
 
-**In this flow:** [groups](../../groups/main/README.md) · knowledge retrieval *(consumes derived dataset membership)*
+**In this flow:** [authorization](../../authorization/main/README.md) · [groups](../../groups/main/README.md)
 
-Invariant: the compiler is deterministic — the same grants always produce the same decision, with a
-defined precedence so overlaps never resolve ambiguously. Derived dataset membership is a projection
-of the grants, never a second source of truth. Share creation, listing and revocation derive the
-sharer only from the authenticated OpenID Connect (OIDC) session subject (falling back to the email
-stored in that authenticated session when no subject is present), never from a request-body
-identity; missing identity fails with `401`. The API accepts only its explicit scope, recipient and
-allow semantics; generated database enum objects are not a second runtime contract, so packaging
-changes cannot silently widen who receives access.
+Invariant: share creation, listing and revocation derive the sharer from the authenticated
+principal resolved by `_ResolveRequestPrincipal`, never from a request-body identity; missing
+identity fails with `401`. The API accepts only its explicit scope, recipient and allow semantics.
 
 ## Public surface
 
-- The grant compiler in `core/grant-compiler` — resolves a subject's grants into a `CompiledGrantDecision`.
-- `core/derive-dataset-membership` — projects grants into the dataset membership (per tenant, i.e.
-  per customer workspace) the knowledge layer reads.
-- `core/cognee-awareness-sync` — keeps Cognee's awareness grants aligned with the compiled state.
 - The share routes (`routes/shares`, `routes/resource-shares`) and their types — the inter-user and
   direct-resource sharing APIs.
 - `_GrantsOpenapiPaths` — the OpenAPI (REST API description) path fragment this domain contributes to the aggregated spec.
 
 ## Boundary
 
-Consumed by the server's HTTP composition root, by [api-spec](../../../api-spec/main/README.md), and
-by the knowledge layer that reads derived dataset membership. It resolves *entitlement*; it does not
-run the per-request runtime allow/deny with cryptographic proof — that is
-[authorization](../../authorization/main/README.md).
+Consumed by the server's HTTP composition root and by [api-spec](../../../api-spec/main/README.md).
+It writes *entitlement grants*; it does not run the per-request runtime allow/deny with
+cryptographic proof — that is [authorization](../../authorization/main/README.md).
 
 ## Dependency direction
 
-Tagged `scope:grants`: it may depend only on `scope:auth`, `scope:grants`, `scope:retrieval`, and
-`scope:shared` — never on apps or other sibling domains.
+Tagged `scope:grants`: it may depend only on `scope:auth`, `scope:authorization`, `scope:grants`,
+and `scope:shared` — never on apps or other sibling domains.
 
 ## Data & persistence
 
-Owns the `Grant` model in `apps/opencrane/prisma/schema/grants.prisma`.
+Writes `AuthorizationGrant` rows in `apps/opencrane/prisma/schema/authorization.prisma`. The
+`GrantScope` and `GrantSubjectType` enums in `apps/opencrane/prisma/schema/grants.prisma` are
+cross-package enums referenced by `Group.scope`, `McpServer.scope`, and
+`AgentRevisionScopeAttachment`.
 
 ## See also
 

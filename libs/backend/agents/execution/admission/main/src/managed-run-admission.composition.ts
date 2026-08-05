@@ -7,8 +7,8 @@ import { PrismaRunAdmissionRepository } from "@opencrane/backend/agents/executio
 import type { RunAdmissionConcurrencyPolicy } from "@opencrane/backend/agents/execution/runs";
 import type { ManagedExecutionEvidenceAuthority, ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 
-import { _CreateManagedRunAdmissionPortWithGate, _CreateRunAdmissionCapacityGate } from "./managed-run-admission.js";
-import type { ManagedSnapshotAssembler } from "./managed-run-admission.types.js";
+import { _CreateManagedRunAdmissionPortWithGate } from "./managed-run-admission.js";
+import type { ManagedSnapshotAssembler, RunAdmissionCapacityGate } from "./managed-run-admission.types.js";
 
 /** Conservative server-process limits aligned to the five-connection Prisma budget. */
 const _DEFAULT_POLICY: RunAdmissionConcurrencyPolicy = { maxConcurrentAdmissions: 2, maxQueuedAdmissions: 10 };
@@ -37,14 +37,13 @@ export function __ReadRunAdmissionConcurrencyPolicy(environment: NodeJS.ProcessE
  * would let those two entrypoints each exceed the capacity budget for one silo and AgentService.
  *
  * @param prisma - Canonical product-authority client.
- * @param policy - Validated server capacity policy.
+ * @param capacityGate - App-owned shared capacity boundary also used by personal admissions.
  * @param evidenceAuthority - Service-owned signed identity and scope-capability authority.
  * @returns A fail-closed, capacity-bounded managed run admission port.
  */
-export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, policy: RunAdmissionConcurrencyPolicy, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
+export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, capacityGate: RunAdmissionCapacityGate, evidenceAuthority: ManagedExecutionEvidenceAuthority): ManagedRunAdmissionPort
 {
 	const admission = new PrismaRunAdmissionRepository(prisma);
-	const gate = _CreateRunAdmissionCapacityGate(policy);
 	const identityEnvelope = new ManagedExecutionIdentityEnvelopeSource(evidenceAuthority);
 	const authorities = __CreatePrismaManagedSessionAssemblyAuthorities(admission, identityEnvelope, new PrismaSkillRevisionEligibilitySource());
 	const assemble: ManagedSnapshotAssembler = async function _assemble(command)
@@ -59,7 +58,7 @@ export function __CreateManagedRunAdmissionPort(prisma: PrismaClient, policy: Ru
 			requestIdempotencyKey: command.requestIdempotencyKey,
 		}, authorities);
 	};
-	return _CreateManagedRunAdmissionPortWithGate(assemble, gate);
+	return _CreateManagedRunAdmissionPortWithGate(assemble, capacityGate);
 }
 
 /** Read one bounded non-negative integer without silently coercing malformed deployment config. */

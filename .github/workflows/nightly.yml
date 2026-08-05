@@ -89,6 +89,10 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes postgresql-client ripgrep
 
+      - name: Verify the reviewed target authority baseline is intact
+        if: steps.fresh.outputs.changed == 'true'
+        run: npm run test:authority-baseline -w @opencrane/server
+
       - name: Apply the fresh target database baseline
         if: steps.fresh.outputs.changed == 'true'
         run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
@@ -108,10 +112,10 @@ jobs:
         # --if-present keeps this branch-agnostic: guard suites differ between main and the
         # program branches, and each branch runs exactly the suites it ships.
         run: |
-          npm run --if-present check:phase-b-topology
-          npm run --if-present test:phase-b-topology
-          npm run --if-present check:phase-d-agent-namespaces
-          npm run --if-present test:phase-d-agent-namespaces
+          npm run --if-present check:workload-ownership-app-composition
+          npm run --if-present test:workload-ownership-app-composition
+          npm run --if-present check:agent-domain-boundary
+          npm run --if-present test:agent-domain-boundary
           scripts/agent-style-check.sh --diff "${{ steps.fresh.outputs.base }}"
           npm run --if-present test:agent-style
           npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"

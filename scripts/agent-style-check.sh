@@ -41,9 +41,11 @@ cd "$REPO_ROOT"
 #    scopes to what the current change actually touched.
 FILES=()
 if [[ $# -eq 0 ]]; then
-	while IFS= read -r f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR HEAD -- '*.ts' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- '*.ts' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 elif [[ "${1:-}" == "--diff" ]]; then
-	while IFS= read -r f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR "${2:?--diff needs a ref}" -- '*.ts')
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "${2:?--diff needs a ref}" -- '*.ts')
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 else
 	FILES=("$@")
 fi
@@ -52,7 +54,7 @@ fi
 #    files follow looser rules; generated files are not hand-maintained.
 CHECKABLE=()
 INLINE_CHECKABLE=()
-for f in "${FILES[@]:-}"; do
+for f in ${FILES[@]+"${FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
 		*.d.ts|*node_modules*|*dist/*|*generated*) continue ;;
@@ -77,7 +79,7 @@ _report()
 # TEST-LOCATION — every *.test.ts must live under a __tests__ directory,
 # never co-located next to the source file it tests. Runs against the raw
 # FILES list since test files are otherwise excluded from CHECKABLE below.
-for f in "${FILES[@]:-}"; do
+for f in ${FILES[@]+"${FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
 		*.test.ts)
@@ -91,7 +93,7 @@ done
 
 # INLINE-CONDITIONAL — unlike the looser declaration/style rules below, conditional density applies
 # to production and test TypeScript alike. One physical line may contain at most one ternary.
-for f in "${INLINE_CHECKABLE[@]:-}"; do
+for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
 	while IFS=: read -r ln _; do
 		_report "$f" "$ln" ERROR INLINE-CONDITIONAL "more than one ternary conditional on one line — use an exhaustive lookup, switch, or helper"
 	done < <(node scripts/inline-conditional-check.mjs "$f")
@@ -103,11 +105,13 @@ done
 # explicit files were passed.
 DOC_FILES=()
 if [[ $# -eq 0 ]]; then
-	while IFS= read -r f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR HEAD -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
 elif [[ "${1:-}" == "--diff" ]]; then
-	while IFS= read -r f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR "$2" -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "$2" -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
 fi
-for f in "${DOC_FILES[@]:-}"; do
+for f in ${DOC_FILES[@]+"${DOC_FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	dir="$(dirname "$f")"
 	case "$f" in

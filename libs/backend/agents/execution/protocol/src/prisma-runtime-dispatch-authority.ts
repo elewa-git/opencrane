@@ -2,11 +2,11 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeEventCandidate, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
-import { __MarkToolInvocationSucceededByCoordinatesInTransaction } from "@opencrane/backend/server/iam/authorization";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
+import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
@@ -259,9 +259,8 @@ async function _nextCommand(prisma: PrismaClient, config: RuntimeDispatchAuthori
 /** Admit one runtime candidate and durably record its id when the pure authority accepts it. */
 async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuthorityConfig, clock: RuntimeProtocolClock, identity: RuntimeStreamWorkloadIdentity, candidate: RuntimeCandidate, terminalReporter: RuntimeTerminalReporter | null): Promise<RuntimeCandidateDispatchResult>
 {
-	const terminal = _terminalRuntimeEvent(candidate);
 	if (candidate.kind === "event" && candidate.eventType === "run.cancelled") return { accepted: false, reason: "runtime_cancellation_not_authoritative" };
-	if (terminal !== null && terminalReporter === null) return { accepted: false, reason: "terminal_reporter_unavailable" };
+	if (_RuntimeCandidateRequiresTerminalReporter(candidate) && terminalReporter === null) return { accepted: false, reason: "terminal_reporter_unavailable" };
 	return prisma.$transaction(async function _admit(transaction: Prisma.TransactionClient): Promise<RuntimeCandidateDispatchResult>
 	{
 		// 1. Load and lock the live assignment, run, and snapshot for the reviewed Pod.
@@ -276,50 +275,15 @@ async function _admitCandidate(prisma: PrismaClient, config: RuntimeDispatchAuth
 		const admission = __AdmitRuntimeCandidate({ authority, candidate, clock });
 		if (admission.outcome === "idempotent") return { accepted: true };
 		if (admission.outcome === "denied") return { accepted: false, reason: admission.reason };
-		if (terminal !== null && terminalReporter !== null)
-		{
-			const report = await terminalReporter.reportInTransaction(transaction, { runId: context.runId, attempt: context.attempt, eventType: terminal });
-			if (report.outcome === "denied") return { accepted: false, reason: report.reason ?? "terminal_report_denied" };
-		}
-
-		// 2b. A `tool.completed` event closes a direct Obot invocation: the runtime executed the
-		// approved call itself and reports ONLY a content digest. Mark the exact Reserved reservation
-		// Succeeded with that digest inside this admission transaction; the receipt never duplicates
-		// tool content. Unknown or already-completed coordinates are refused 409-style.
-		if (candidate.kind === "event" && candidate.eventType === "tool.completed")
-		{
-			const completion = _toolCompletionPayload(candidate.payload);
-			if (completion === null) return { accepted: false, reason: "invalid_tool_completion" };
-			const marked = await __MarkToolInvocationSucceededByCoordinatesInTransaction(transaction, { runId: context.runId, attempt: context.attempt, toolInvocationId: completion.toolInvocationId }, { resultDigest: completion.resultDigest });
-			if (marked.status !== "succeeded") return { accepted: false, reason: "tool_completion_conflict" };
-		}
+		// 2b. Apply only transaction-local terminal and digest-receipt effects before accepting the id.
+		const sideEffectDenial = await _ApplyRuntimeCandidateSideEffects(transaction, candidate, context.runId, context.attempt, terminalReporter);
+		if (sideEffectDenial !== null) return { accepted: false, reason: sideEffectDenial };
 
 		// 3. Append the accepted candidate id monotonically under the held stream lock.
 		const appended = await transaction.runtimeCommandStream.updateMany({ where: { runId: context.runId, attempt: context.attempt, nextCommandSequence: stream.nextCommandSequence }, data: { acceptedCandidateIds: { push: candidate.candidateId } } });
 		if (appended.count !== 1) throw new Error("runtime dispatch lost its candidate acceptance fence");
 		return { accepted: true };
 	});
-}
-
-/** Validate an untrusted `tool.completed` payload into digest-only completion coordinates. */
-function _toolCompletionPayload(payload: JsonValue): { readonly toolInvocationId: string; readonly resultDigest: string } | null
-{
-	if (payload === null || typeof payload !== "object" || Array.isArray(payload)) return null;
-	const record = payload as { readonly [key: string]: JsonValue };
-	const toolInvocationId = record["toolInvocationId"];
-	const resultDigest = record["resultDigest"];
-	if (typeof toolInvocationId !== "string" || toolInvocationId.trim().length === 0 || toolInvocationId.length > 256) return null;
-	if (typeof resultDigest !== "string" || !/^sha256:[0-9a-f]{64}$/.test(resultDigest)) return null;
-	return { toolInvocationId, resultDigest };
-}
-
-/** Return a terminal event type only for workload outcomes the server lets a runtime report. */
-function _terminalRuntimeEvent(candidate: RuntimeCandidate): "run.completed" | "run.failed" | null
-{
-	if (candidate.kind !== "event") return null;
-	const event = candidate as RuntimeEventCandidate;
-	if (event.eventType === "run.completed" || event.eventType === "run.failed") return event.eventType;
-	return null;
 }
 
 /** Reserve and dispatch one admitted external-action candidate through the composition-root runner. */

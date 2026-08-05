@@ -59,9 +59,12 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
   public-key files. A stored assertion cannot change independently of its signature.
 - `__DigestFleetMembershipSignedPayload` — the shared issuer/verifier contract that canonicalizes
   every issuer, time, silo, subject, assertion, and scope field before signing.
+- `_CreateFleetMembershipEvidenceConfig(environment?)` — reads the bounded, mounted-key trust
+  configuration once for app composition and returns a verifier that reloads its projected Ed25519
+  public key before every membership decision. It is neutral to personal and managed agents.
 - Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
   `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
-  `FleetMembershipAdmissionExpectation`, and `TrustedFleetMembershipEvidence`.
+  `FleetMembershipEvidenceConfig`, and `TrustedFleetMembershipEvidence`.
 
 ## Boundary
 
@@ -75,8 +78,8 @@ snapshot share one commit or rollback together.
 
 ## Dependency direction
 
-Tagged `scope:membership`: it may depend only on `scope:audit`, `scope:authorization`, `scope:membership`,
-and `scope:shared` — never on apps or other sibling domains.
+Tagged `scope:membership`: it may depend only on `scope:audit`, `scope:auth`, `scope:authorization`,
+`scope:membership`, and `scope:shared` — never on apps or other sibling domains.
 
 ## Data & persistence
 

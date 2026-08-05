@@ -27,7 +27,9 @@ clean target baseline remain, and every model/enum has exactly one owning domain
    `apps/opencrane/prisma/bootstrap/target-baseline.sql`, then prove it against a new empty database.
    Prisma's generated diff does not contain the hand-written triggers, partial/NULL-safe indexes,
    and authority constraints in the reviewed baseline. Regeneration must preserve and revalidate
-   those blocks explicitly. Do not add incremental scripts or a runtime schema runner.
+   those blocks explicitly. Do not add incremental scripts or a runtime schema runner. Run
+   `npm run test:authority-baseline -w @opencrane/server` as well: it fails closed when a
+   Prisma-only rewrite has discarded the reviewed functions, triggers, constraints, or seeds.
 4. **CNPG `initdb` is the only application-schema setup boundary.** The deployment publisher
    prepends `SET ROLE` for the configured application owner and exposes the canonical SQL through
    one immutable, content-addressed ConfigMap. Its superuser envelope records the full baseline

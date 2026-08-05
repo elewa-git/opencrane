@@ -18,7 +18,7 @@ Two halves:
   the wrong body fails to compile rather than at runtime.
 - **The shared DTOs, enums, and wire validators.** Some are hand-written here (grants, groups, cluster-tenant,
   MCP-server, model-routing, memory, approvals, …); others are **re-exported straight from the model
-  packages** (`@opencrane/models/{agents,artifacts,authorization,platform-policy}`) so a caller has
+  packages** (`@opencrane/models/{agents,artifacts,authorization}`) so a caller has
   one import for the whole surface and the wire types stay identical to the domain types. Private
   controller DTOs use adjacent `*.types.ts`/`*.validator.ts` pairs for runtime attempts and governed
   skill workloads; those Zod schemas keep runtime acceptance, strict request fields, and TypeScript
@@ -110,7 +110,7 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   claim/failure commands — the narrow broker protocol for the isolated PDF converter. These DTOs
   carry only an expiring attempt fence and bounded source metadata; storage addresses, content
   addresses, leases, receipts, and catalogue coordinates remain server-private.
-- Re-exported model types: the agent, artifact, authorization, and platform-policy DTOs.
+- Re-exported model types: the agent, artifact, and authorization DTOs.
 
 ## Boundary
 
@@ -155,4 +155,4 @@ and other shared packages — never on apps, backend domains, or the frontend/se
 
 - Parent index: [OpenCrane](../../README.md)
 - Siblings: [util](../util/README.md) · [observability](../backend/observability/README.md)
-- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md) · [models/platform-policy](../models/platform-policy/main/README.md)
+- Re-exported models: [models/agents](../models/agents/main/README.md) · [models/artifacts](../models/artifacts/main/README.md) · [models/authorization](../models/authorization/main/README.md)

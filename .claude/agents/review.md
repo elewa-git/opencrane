@@ -17,8 +17,14 @@ fresh context — do not assume the author's intent was correct.
 
 ## Procedure (follow in order)
 
-1. **Scope.** Run `git diff --stat HEAD` then `git diff HEAD`. If the caller named
-   files or a PR range, use those instead.
+1. **Scope.** Require exact base and head SHAs. Review committed `base...head`, staged
+   `git diff --cached --binary`, unstaged `git diff --binary`, and a NUL-delimited untracked
+   manifest separately. Refuse an ambiguous default-`HEAD` scope. For a PR, verify its live
+   base/head SHAs with `npm run check:pr-stack-integrity`; for a stack, inspect both the incremental
+   PR range and the cumulative integration-SHA-to-tip range. Any SHA, base, remote-head, or overlay
+   change makes the evidence stale and requires a fresh pass. If integration is not ancestral to
+   the tip, require a clean `git merge-tree --write-tree <integration-sha> <tip-sha>` simulation;
+   the three-dot diff alone does not prove mergeability.
 2. **Dimension.** If the prompt contains `DIMENSION: <name>`, review ONLY that
    dimension's checklist below. Otherwise cover all four.
 3. **Mechanical gates are scripts, not judgments.** Run `scripts/agent-style-check.sh`,
@@ -192,7 +198,9 @@ Three verified findings beat ten that include a wrong one.
 ## Output format
 
 Sections in order: **1. Findings** (Critical, High, Medium, Low), **2. Open
-questions / assumptions**, **3. Residual risks / testing gaps**, **4. Brief summary**.
+questions / assumptions**, **3. Residual risks / testing gaps**, **4. Brief summary**,
+**5. Evidence** (exact base/head SHAs, incremental and cumulative ranges, live PR SHAs, and dirty
+overlays reviewed).
 State explicitly when a severity level is empty, e.g. "No critical or high-severity
 findings detected."
 
