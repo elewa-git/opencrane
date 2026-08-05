@@ -134,9 +134,10 @@ jobs:
 
       - name: Validate Terraform provisioning
         working-directory: apps/_infra/deploy-k8s/platform/terraform
+        env:
+          TF_DATA_DIR: ${{ runner.temp }}/opencrane-terraform
         run: |
           terraform fmt -check -recursive
-          rm -rf .terraform
           terraform init -backend=false -input=false -lockfile=readonly
           terraform validate -no-color
 
