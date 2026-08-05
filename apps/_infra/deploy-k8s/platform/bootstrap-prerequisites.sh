@@ -162,7 +162,12 @@ helm_release_chart()
 {
   local release="$1" namespace="$2"
   helm list \
-    --all \
+    --deployed \
+    --failed \
+    --pending \
+    --uninstalled \
+    --superseded \
+    --uninstalling \
     --namespace "$namespace" \
     --kube-context "$EXPECTED_CONTEXT" \
     --filter "^${release}$" \

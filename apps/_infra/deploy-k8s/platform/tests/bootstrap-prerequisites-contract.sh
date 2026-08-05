@@ -165,6 +165,8 @@ if ! run_case success; then
   exit 1
 fi
 SUCCESS_CALLS="$TEST_DIR/success.calls"
+grep -Fq 'helm list --deployed --failed --pending --uninstalled --superseded --uninstalling --namespace ingress-nginx' "$SUCCESS_CALLS"
+! grep -Fq 'helm list --all ' "$SUCCESS_CALLS"
 grep -Fq 'helm pull ingress-nginx --repo https://kubernetes.github.io/ingress-nginx --version 4.15.1' "$SUCCESS_CALLS"
 grep -Fq 'helm pull cert-manager --repo https://charts.jetstack.io --version v1.21.1' "$SUCCESS_CALLS"
 grep -Fq 'helm pull cloudnative-pg --repo https://cloudnative-pg.github.io/charts --version 0.29.0' "$SUCCESS_CALLS"

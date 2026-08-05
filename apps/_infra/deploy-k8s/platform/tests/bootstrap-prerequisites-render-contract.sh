@@ -10,6 +10,17 @@ source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/prerequisite-chart-lock.sh"
 command -v helm >/dev/null 2>&1 || { echo 'helm is required' >&2; exit 1; }
 command -v node >/dev/null 2>&1 || { echo 'node is required' >&2; exit 1; }
 
+# Helm 4 removed `helm list --all`; this exact status union remains valid in both
+# supported Helm 3 and Helm 4 clients and preserves fail-closed release discovery.
+helm list \
+  --deployed \
+  --failed \
+  --pending \
+  --uninstalled \
+  --superseded \
+  --uninstalling \
+  --help >/dev/null
+
 pull_and_verify()
 {
   local chart="$1" repository="$2" version="$3" expected_sha256="$4"
