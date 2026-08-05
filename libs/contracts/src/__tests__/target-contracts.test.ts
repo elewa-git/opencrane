@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApprovalStatus } from "../index.js";
+import { AgentServiceKinds, ApprovalStatus, MemoryFactProvenanceSourceKinds, RunInputSnapshotIdentityKinds } from "../index.js";
 import type { AgentRun, AgentService, Approval, AuthorizationGrant, PlatformPolicy, RunEvent, SignedFleetMembershipRevision } from "../index.js";
 
 describe("canonical model exports", function ()
@@ -28,7 +28,7 @@ describe("canonical model exports", function ()
     const service: AgentService = {
       id: "agent-1",
       siloId: "silo-1",
-      kind: "personal",
+      kind: AgentServiceKinds.Personal,
       name: "My agent",
       state: "active",
       activeRevisionId: "revision-1",
@@ -60,6 +60,13 @@ describe("canonical model exports", function ()
 
     expect(event.runId).toBe(approval.runId);
     expect(run.agentServiceId).toBe(service.id);
+  });
+
+  it("preserves serialized agent, identity, and memory provenance discriminants", function ()
+  {
+    expect([AgentServiceKinds.Personal, AgentServiceKinds.Managed]).toEqual(["personal", "managed"]);
+    expect([RunInputSnapshotIdentityKinds.User, RunInputSnapshotIdentityKinds.Service]).toEqual(["user", "service"]);
+    expect([MemoryFactProvenanceSourceKinds.Message, MemoryFactProvenanceSourceKinds.Artifact, MemoryFactProvenanceSourceKinds.ExplicitUserFact]).toEqual(["message", "artifact", "explicit-user-fact"]);
   });
 });
 describe("canonical fleet and platform exports", function ()

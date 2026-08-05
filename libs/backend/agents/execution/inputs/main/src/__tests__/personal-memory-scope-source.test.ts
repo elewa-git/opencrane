@@ -27,7 +27,7 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 		const datasets = _Datasets();
 		const selector = { select: vi.fn().mockResolvedValue([{ factId: "fact-1", contentDigest: _DIGEST_A }, { factId: "fact-2", contentDigest: _DIGEST_B }]) };
 		const transaction = _Transaction({ "message-2": { role: "User", blocks: [{ text: "what did we decide" }] } });
-		const source = new PersonalMemoryScopeSource(datasets as never, selector);
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
 		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2"] }, transaction as never)).resolves.toEqual({
 			outcome: "loaded",
@@ -44,7 +44,8 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 	{
 		const selector = { select: vi.fn().mockResolvedValue([]) };
 		const transaction = _Transaction({ "message-3": { role: "Assistant", blocks: [{ text: "an answer" }] }, "message-2": { role: "User", blocks: "latest question" } });
-		const source = new PersonalMemoryScopeSource(_Datasets() as never, selector);
+		const datasets = _Datasets();
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
 		await source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2", "message-3"] }, transaction as never);
 
@@ -54,7 +55,8 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 	it("freezes coordinates with no facts when the thread has no user message", async function _freezesEmptyWithoutUserMessage()
 	{
 		const selector = { select: vi.fn() };
-		const source = new PersonalMemoryScopeSource(_Datasets() as never, selector);
+		const datasets = _Datasets();
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
 		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [] }, _Transaction({}) as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }, memoryFacts: [] } });
 		expect(selector.select).not.toHaveBeenCalled();
@@ -64,7 +66,8 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 	{
 		const selector = { select: vi.fn().mockRejectedValue(new Error("gateway unreachable")) };
 		const transaction = _Transaction({ "message-1": { role: "User", blocks: "question" } });
-		const source = new PersonalMemoryScopeSource(_Datasets() as never, selector);
+		const datasets = _Datasets();
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
 		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1"] }, transaction as never)).resolves.toEqual({ outcome: "denied", reason: "memory_unavailable" });
 	});
@@ -72,7 +75,7 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 	it("refuses a managed run before personal dataset lookup", async function _deniesManagedRun()
 	{
 		const datasets = { findActivePersonalDataset: vi.fn() };
-		const source = new PersonalMemoryScopeSource(datasets as never, { select: vi.fn() });
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, { select: vi.fn() });
 
 		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "managed" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [] }, _Transaction({}) as never)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
 		expect(datasets.findActivePersonalDataset).not.toHaveBeenCalled();

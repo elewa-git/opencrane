@@ -1,11 +1,12 @@
 import { AgentRevisionState, ArtifactRevisionState, IntegrationCustodyState, IntegrationState, ModelRoutingScope, SkillRevisionState, SkillState } from "@prisma/client";
 import type { RunAdmissionCommand, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "../prisma-revision-tool-policy-source.js";
 
 /** Fixed active managed authority shared by policy source tests. */
-const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "managed", effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
+const _RUN = { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Managed, effectiveContractDigest: `sha256:${"a".repeat(64)}`, promptCompilerVersion: "v1", trigger: "managed_invocation", delegatedUserId: null, rootRunId: "run-1", parentRunId: null } as const;
 /** Fixed session-assembly command scoped to the active managed service. */
 const _COMMAND: RunAdmissionCommand = { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1" };
 

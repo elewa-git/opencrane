@@ -1,10 +1,9 @@
-import type { RunAdmissionRepository } from "@opencrane/backend/agents/execution/runs";
-import type { PersonalMemoryDatasetRepository } from "@opencrane/backend/agents/personal/memory";
+import type { RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
+import type { PersonalMemoryAdmissionRepository } from "@opencrane/backend/agents/personal/memory";
 
 import { ManagedNoPersonalMemoryScopeSource } from "./managed-no-personal-memory-scope-source.js";
 import { PersonalMemoryScopeSource } from "./personal-memory-scope-source.js";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
-import { PrismaPreferenceFactSource } from "./prisma-preference-fact-source.js";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source.js";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
 import { PrismaThreadContextSource } from "./prisma-thread-context-source.js";
@@ -25,9 +24,9 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
  * caller-provided dataset or fact reference. Only the `agentKind: personal` path may receive this
  * composition — the personal scope source refuses managed runs by construction.
  */
-export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, datasets: PersonalMemoryDatasetRepository, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
+export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunAdmissionRepository, identityEnvelope: IdentityEnvelopeSource, skillEligibility: SkillRevisionEligibilitySource, createPersonalMemory: (transaction: RunAdmissionTransaction) => PersonalMemoryAdmissionRepository, memoryFactSelector: PersonalMemoryFactSelector): SessionAssemblyAuthorities
 {
-	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new PersonalMemoryScopeSource(datasets, memoryFactSelector));
+	return _CreateAuthorities(admission, identityEnvelope, skillEligibility, new PersonalMemoryScopeSource(createPersonalMemory, memoryFactSelector));
 }
 
 /** Assemble the shared Prisma-backed source set around one variant-selected memory scope authority. */
@@ -38,7 +37,7 @@ function _CreateAuthorities(admission: RunAdmissionRepository, identityEnvelope:
 		runAuthority: new PrismaRunAuthoritySource(),
 		approvedPersona: new PrismaApprovedPersonaSource(),
 		threadContext: new PrismaThreadContextSource(),
-		preferenceFacts: new PrismaPreferenceFactSource(),
+		preferenceFacts: { load: async function _LoadEmptyPreferences() { return { outcome: "loaded", value: [] }; } },
 		memoryScope,
 		toolPolicy: new PrismaRevisionToolPolicySource(),
 		skillEligibility,

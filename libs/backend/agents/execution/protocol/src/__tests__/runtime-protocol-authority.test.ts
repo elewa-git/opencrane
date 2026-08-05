@@ -1,4 +1,4 @@
-import { AGENT_RUNTIME_PROTOCOL_V1, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROTOCOL_V1, RunInputSnapshotIdentityKinds, type CompiledRunInput, type RunInputSnapshot, type RuntimeCandidate, type RuntimeCommandEnvelope } from "@opencrane/contracts";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "../runtime-protocol-authority.js";
@@ -28,7 +28,7 @@ type RuntimeStartAttemptCommand = Extract<RuntimeCommandEnvelope, { readonly kin
 /** Returns the canonical input snapshot for a start command. */
 function _snapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: "user", executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-07-20T00:05:00.000Z" }, capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "agent-1", agentRevisionId: "revision-1", snapshotVersion: 1, threadId: null, messageIds: [], personaRevisionId: null, preferenceFactIds: [], artifactRevisionIds: [], skillRevisionIds: [], memoryFacts: [], memoryQueryPolicy: {}, integrationAssignments: [], modelRoute: {}, budgetPolicy: {}, identitySnapshot: { kind: RunInputSnapshotIdentityKinds.User, executionSubjectId: "user-1", organizationId: "org-1", fleetMembershipRevision: 1, fleetMembershipIssuer: "issuer", fleetMembershipIssuerKeyId: "key-1", fleetMembershipAssertionId: "assertion-1", fleetMembershipPayloadDigest: "sha256:membership", fleetMembershipTrustedUntil: "2026-07-20T00:05:00.000Z" }, capabilitySetDigest: "sha256:capabilities", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", digest: "sha256:snapshot", compiledAt: "2026-07-20T00:00:00.000Z" };
 }
 
 /** Returns the compiled literal input carried alongside the snapshot on a start command. */

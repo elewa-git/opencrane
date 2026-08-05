@@ -40,7 +40,7 @@ export interface RunInputSnapshotFleetMembershipEvidence
 export interface UserRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
 	/** Discriminant that prevents a service principal from being mistaken for a user. */
-	kind: "user";
+	kind: RunInputSnapshotIdentityKinds.User;
 	/** Human subject whose verified membership and grants authorize this exact run. */
 	executionSubjectId: string;
 }
@@ -60,7 +60,7 @@ export interface ManagedRunInputScopeAttachment
 export interface ServiceRunInputSnapshotIdentity extends RunInputSnapshotFleetMembershipEvidence
 {
 	/** Discriminant that prevents service evidence from falling through to personal-user paths. */
-	kind: "service";
+	kind: RunInputSnapshotIdentityKinds.Service;
 	/** Canonical derived principal in `agent-service:<AgentServiceId>` form. */
 	executionSubjectId: string;
 	/** Active managed service whose revision owns this exact execution authority. */

@@ -76,6 +76,10 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
 - `AgentConfigPatchKinds` — the durable `persona_refresh` and `model_alias` vocabulary shared by
   personal-configuration validators, persistence, and public schemas. It keeps the readable JSON
   values stable while making patch branches compile against one shared owner.
+- `MemoryFactProvenanceSourceKinds` and `RunInputSnapshotIdentityKinds` — stable memory-source and
+  tagged-execution-identity vocabularies used by catalogue validation and frozen run-input branches.
+  Their readable serialised values remain part of the contract; the enums prevent independent
+  persistence and admission code from drifting on which branch a value selects.
 - `AGENT_RUNTIME_PROTOCOL_V1`, the personal and managed runtime audience constants and validators,
   `RuntimeStreamOpen`, `RuntimeCommandEnvelope`, and `RuntimeCandidate` — the private workload
   protocol for an agent process that opens its own authenticated stream. The opening frame binds the

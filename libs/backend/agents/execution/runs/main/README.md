@@ -222,4 +222,4 @@ Cancellation reuses the same outbox with `RunCancellationRequested` and
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [inputs](../../inputs/main/README.md) · [runtime cleanup](../../../runtime/cleanup/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)
+- Siblings: [inputs](../../inputs/main/README.md) · [runtime cleanup](../../../runtime/cleanup/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [agent memory](../../../memory/main/README.md) · [personal-memory selection](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

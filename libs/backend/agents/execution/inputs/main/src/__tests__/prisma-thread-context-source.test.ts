@@ -1,13 +1,14 @@
 import { ConversationMessageState, ConversationThreadState } from "@prisma/client";
 import type { InitialRunAuthority, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
 import { describe, expect, it, vi } from "vitest";
+import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import { PrismaThreadContextSource } from "../prisma-thread-context-source.js";
 
 /** Creates personal run authority bound to the target conversation service. */
 function _Run(): InitialRunAuthority
 {
-	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: "personal", effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null };
+	return { agentServiceId: "service-1", agentRevisionId: "revision-1", agentKind: AgentServiceKinds.Personal, effectiveContractDigest: "sha256:contract", promptCompilerVersion: "v1", trigger: "interactive", delegatedUserId: "user-1", rootRunId: "run-1", parentRunId: null };
 }
 
 /** Creates the command coordinates for an authenticated conversation participant. */

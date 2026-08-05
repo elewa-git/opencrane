@@ -1,8 +1,15 @@
-import type { AgentRevision, AgentRevisionContent, AgentService } from "@opencrane/models/agents";
+import { AgentServiceKinds, type AgentRevision, type AgentRevisionContent, type AgentService } from "@opencrane/models/agents";
 import { describe, expect, it } from "vitest";
 
 import { __AdmitManagedRunNow, __ChangeAgentServiceState, __CompareAgentRevisions, __CreateManagedAgentService, __ReadAgentServiceHistory, __RestoreAgentRevision, __ReviseAgentRevision } from "../agent-revision-lifecycle.js";
 import { ManagedRunAdmissionOutcomes, type AgentRevisionLifecycleRepository, type AgentServiceHistory, type AppendAgentRevisionResult, type ChangeAgentServiceStateCommand, type ChangeAgentServiceStateResult, type CreateManagedAgentServiceCommand, type CreateManagedAgentServiceResult, type ManagedRunAdmissionPort, type ManagedRunAdmissionResult, type ManagedRunNowCommand, type RestoreAgentRevisionCommand, type ReviseAgentRevisionCommand } from "../agent-revision-lifecycle.types.js";
+
+/** Exhaustive service-state result for each lifecycle action used by the repository double. */
+const _STATE_BY_ACTION: Readonly<Record<ChangeAgentServiceStateCommand["action"], AgentService["state"]>> = {
+	enable: "active",
+	pause: "paused",
+	retire: "retired",
+};
 
 /** Builds valid executable content for a managed revision. */
 function _content(overrides: Partial<AgentRevisionContent> = {}): AgentRevisionContent
@@ -19,7 +26,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 
 	async listManagedServices(siloId: string): Promise<readonly AgentService[]>
 	{
-		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === "managed").sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
+		return [...this.services.values()].filter(service => service.siloId === siloId && service.kind === AgentServiceKinds.Managed).sort(function _newestFirst(left, right) { return right.updatedAt.localeCompare(left.updatedAt) || right.id.localeCompare(left.id); });
 	}
 
 	async getService(id: string, siloId: string): Promise<AgentService | null>
@@ -39,7 +46,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 	async createManagedService(command: CreateManagedAgentServiceCommand, createdAt: string): Promise<CreateManagedAgentServiceResult>
 	{
 		const serviceId = `service-${++this.counter}`;
-		const service: AgentService = { id: serviceId, siloId: command.siloId, kind: "managed", name: command.name, state: "draft", activeRevisionId: null, workloadProfile: command.workloadProfile, createdAt, updatedAt: createdAt };
+		const service: AgentService = { id: serviceId, siloId: command.siloId, kind: AgentServiceKinds.Managed, name: command.name, state: "draft", activeRevisionId: null, workloadProfile: command.workloadProfile, createdAt, updatedAt: createdAt };
 		const revision = this._append(serviceId, 1, null, null, command.content, command.authoredBy, command.changeMessage, createdAt);
 		this.services.set(serviceId, service);
 		return { outcome: "created", service, revision };
@@ -71,7 +78,7 @@ class _Repository implements AgentRevisionLifecycleRepository
 		if (service === null) return { outcome: "denied", reason: "service_not_found" };
 		if (service.state !== command.expectedState) return { outcome: "conflict", currentState: service.state };
 		if (command.action === "enable" && service.activeRevisionId === null) return { outcome: "denied", reason: "service_not_runnable" };
-		const state = command.action === "enable" ? "active" : command.action === "pause" ? "paused" : "retired";
+		const state = _STATE_BY_ACTION[command.action];
 		const updated: AgentService = { ...service, state, activeRevisionId: command.action === "retire" ? null : service.activeRevisionId, updatedAt: changedAt };
 		this.services.set(service.id, updated);
 		return { outcome: "changed", service: updated };
