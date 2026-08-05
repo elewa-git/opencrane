@@ -22,7 +22,7 @@ function _ContainerProjects()
 {
   if (process.env.FORCE_DEPLOYABLES === "all")
   {
-    return JSON.parse(_run("npx", ["nx", "show", "projects", "--withTarget=container", "--json"]));
+    return ["channel-proxy", "memory-gateway"];
   }
   return _AffectedProjects("container");
 }
