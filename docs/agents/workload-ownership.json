@@ -1,6 +1,6 @@
 {
-  "version": 1,
-  "policy": "Every pod class has one exact owner. Paths slated for direct removal use classification delete; compatibility and time-boxed ownership exceptions are forbidden.",
+  "version": 2,
+  "policy": "Every current workload class has one exact app owner, one current source anchor, and a complete rendered or runtime-created inventory. Paths slated for direct removal use classification delete; compatibility and time-boxed ownership exceptions are forbidden.",
   "requiredWorkloadIds": [
     "opencrane-server",
     "opencrane-ui",
@@ -71,7 +71,7 @@
       ]
     }
   ],
-  "runtimeConstructs": [
+  "dynamicWorkloads": [
     {
       "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
       "anchor": "kind: \"Job\"",
@@ -96,27 +96,6 @@
       "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
       "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
       "workloadIds": ["skill-authoring", "tool-runner"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "local postgres_args=(upgrade --install \"$POSTGRES_RELEASE\" \"$POSTGRES_CHART_DIR\"",
-      "workloadIds": ["postgres-database"]
-    },
-    {
-      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
-      "anchor": "helm_args=(upgrade --install \"$RELEASE\" \"$CHART_DIR\"",
-      "workloadIds": [
-        "opencrane-server",
-        "opencrane-ui",
-        "channel-proxy",
-        "memory-gateway",
-        "artifact-service",
-        "artifact-preprocessor",
-        "agent-controller",
-        "cognee",
-        "litellm",
-        "obot-gateway-controller"
-      ]
     }
   ],
   "nonProducingRuntimeMatches": [
@@ -153,7 +132,6 @@
       "renderedPodClass": "Deployment/opencrane-opencrane-server",
       "image": "ghcr.io/elewa-git/opencrane-server:<release-tag>",
       "owner": "apps/opencrane",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/opencrane/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.server.deployment\"" }
     },
@@ -163,7 +141,6 @@
       "renderedPodClass": "Deployment/opencrane-opencrane-ui-spa",
       "image": "ghcr.io/elewa-git/opencrane-ui:<release-tag>",
       "owner": "apps/opencrane-ui",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/opencrane-ui/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.ui.deployment\"" }
     },
@@ -173,7 +150,6 @@
       "renderedPodClass": "Deployment/opencrane-channel-proxy",
       "image": "ghcr.io/elewa-git/opencrane-channel-proxy:<release-tag>",
       "owner": "apps/channel-proxy",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/channel-proxy/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.channelProxy.resources\"" }
     },
@@ -193,7 +169,6 @@
       "renderedPodClass": "Deployment/opencrane-artifact-service",
       "image": "ghcr.io/elewa-git/opencrane-artifact-service:<release-tag>",
       "owner": "apps/artifact-service",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/artifact-service/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactService.resources\"" }
     },
@@ -203,7 +178,6 @@
       "renderedPodClass": "Deployment/opencrane-artifact-preprocessor",
       "image": "ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:<release-digest>",
       "owner": "apps/artifact-preprocessor",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/artifact-preprocessor/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactPreprocessor.resources\"" }
     },
@@ -213,7 +187,6 @@
       "renderedPodClass": "Deployment/opencrane-agent-controller",
       "image": "ghcr.io/elewa-git/opencrane-agent-controller@sha256:<release-digest>",
       "owner": "apps/agent-controller",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentController.resources\"" }
     },
@@ -222,30 +195,21 @@
       "podClass": "Job/agent-runtime-attempt",
       "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
       "owner": "apps/agent-runtime",
-      "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" },
-      "classification": "survivor",
-      "reason": "The agent controller creates one suspended, zero-retry Job per durable run attempt."
+      "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "skill-authoring",
       "podClass": "Job/skill-authoring-attempt",
       "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
       "owner": "apps/skill-authoring",
-      "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" },
-      "classification": "survivor",
-      "reason": "The agent controller will create isolated draft-capability authoring Jobs only after a durable claim exists."
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "tool-runner",
       "podClass": "Job/tool-runner-invocation",
       "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
       "owner": "apps/tool-runner",
-      "localOwner": true,
-      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" },
-      "classification": "survivor",
-      "reason": "The agent controller will create isolated capability-bound tool Jobs only after a durable claim and reply protocol exists."
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" }
     },
     {
       "id": "cognee",
@@ -253,7 +217,6 @@
       "renderedPodClass": "Deployment/opencrane-cognee",
       "image": "cognee/cognee:1.2.1",
       "owner": "apps/_infra/cognee",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/_infra/cognee/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.cognee.resources\"" }
     },
@@ -263,7 +226,6 @@
       "renderedPodClass": "Deployment/opencrane-litellm",
       "image": "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable",
       "owner": "apps/_infra/litellm",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
     },
@@ -273,7 +235,6 @@
       "renderedPodClass": "Deployment/opencrane-mcp-gateway",
       "image": "ghcr.io/obot-platform/obot:v0.23.1",
       "owner": "apps/_infra/obot",
-      "localOwner": true,
       "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
       "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.obot.deployment\"" }
     },
@@ -282,40 +243,28 @@
       "podClass": "Obot-created Pod-or-Deployment/MCP-server",
       "image": "Obot catalog selected image",
       "owner": "apps/_infra/obot",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_rbac.tpl", "anchor": "resources: [\"deployments\", \"replicasets\"]" },
-      "classification": "survivor",
-      "reason": "Refactor this capability directly to the confined Obot contract; do not preserve privileged controller behavior."
+      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_rbac.tpl", "anchor": "resources: [\"deployments\", \"replicasets\"]" }
     },
     {
       "id": "postgres-database",
       "podClass": "Pod/CNPG-postgresql-instance",
       "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
       "owner": "apps/postgres",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/postgres/helm/templates/cluster.yaml", "anchor": "kind: Cluster" },
-      "classification": "survivor",
-      "reason": "apps/postgres owns the durable CNPG Cluster contract over a separately supplied CNPG operator."
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/cluster.yaml", "anchor": "kind: Cluster" }
     },
     {
       "id": "postgres-database-privileges",
       "podClass": "Job/postgres-database-privileges",
       "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
       "owner": "apps/postgres",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true },
-      "classification": "survivor",
-      "reason": "apps/postgres owns the bounded credential-fed hook that removes PostgreSQL PUBLIC access from each logical database."
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
     },
     {
       "id": "postgres-pooler",
       "podClass": "Deployment/CNPG-pgbouncer-pooler",
       "image": "ghcr.io/cloudnative-pg/pgbouncer:1.25.1",
       "owner": "apps/postgres",
-      "localOwner": true,
-      "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" },
-      "classification": "survivor",
-      "reason": "apps/postgres owns the pinned CNPG Pooler contract that bounds every application connection before PostgreSQL."
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" }
     }
   ]
 }

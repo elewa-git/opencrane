@@ -1,5 +1,5 @@
 {
-  "version": 1,
+  "version": 2,
   "policy": "Deployable implementation source under apps is closed by default across TypeScript, JavaScript, Python, Go, Rust, JVM, Vue, and Svelte files. Named test trees are excluded because they prove the composition without becoming part of it. Every retained implementation file is exact; adding one requires an ownership decision and this registry change. Artifact broker composition is an explicit app-only class: it binds this server process's mounted credentials, private ArtifactStore service route, and durable artifact authority; it is not a reusable storage client.",
   "forbiddenPaths": [
     "apps/opencrane/src/gateways",
@@ -37,6 +37,8 @@
     { "path": "apps/opencrane/src/infra/artifacts/artifact-read-lease-signer.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-service-read-port.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/infra/obot/obot-adapters.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
+    { "path": "apps/opencrane/src/infra/obot/obot-adapters.factory.types.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
@@ -90,6 +92,8 @@
     { "path": "apps/skill-authoring/src/authoring_worker.py", "owner": "apps/skill-authoring", "classification": "process-entrypoint" },
 
     { "path": "apps/agent-runtime/src/attempts/execution.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/attempts/deferred_results.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/attempts/pending_tools.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/attempts/terminal.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/bootstrap/exchange.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/bootstrap/proof.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
@@ -101,7 +105,8 @@
     { "path": "apps/agent-runtime/src/protocol/candidates.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
     { "path": "apps/agent-runtime/src/runtime.py", "owner": "apps/agent-runtime", "classification": "process-entrypoint" },
     { "path": "apps/agent-runtime/src/transport/http.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
-    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
+    { "path": "apps/agent-runtime/src/transport/stream.py", "owner": "apps/agent-runtime", "classification": "process-composition" },
+    { "path": "apps/agent-runtime/src/tools/obot_mcp.py", "owner": "apps/agent-runtime", "classification": "process-composition" }
   ],
   "requiredTaggedProjects": [
     "apps/_infra/cognee/project.json",

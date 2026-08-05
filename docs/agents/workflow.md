@@ -128,6 +128,14 @@ substitution fails even when the class and import still match policy.
 Mechanical errors are cheaper to fix before review, while module-growth warnings give the reviewer
 the exact files that need a responsibility inventory.
 
+When a change touches a workload, app composition, agent-domain project metadata, TypeScript alias,
+or dependency boundary, run its current boundary guard before review:
+
+- `npm run check:workload-ownership-app-composition` and its negative test for workload ownership,
+  rendered profiles, runtime-created Jobs, and thin app roots;
+- `npm run check:agent-domain-boundary` and its negative test for personal, shared execution, and
+  operator domains.
+
 **How the gate decides**:
 
 - `.claude/hooks/require-review.sh` — a free shell pre-filter. It skips the obvious

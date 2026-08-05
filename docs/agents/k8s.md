@@ -68,7 +68,9 @@ Do not add public ingress to a runtime Job.
 ## Resource ownership
 
 Each resource template belongs to the app that owns the workload. The
-`apps/_infra/deploy-k8s` chart may compose those templates but must not duplicate them.
+`apps/_infra/deploy-k8s` chart may compose those templates but must not duplicate them. The
+workload-ownership and app-composition boundary guard renders every supported profile and checks
+that each rendered workload and runtime-created Job has one exact app owner.
 
 Cluster-wide ingress, certificate, DNS, CloudNativePG, and policy controllers are external
 prerequisites. An organisation release creates only its own namespaced resources plus explicitly
@@ -78,7 +80,8 @@ named release-scoped policy objects.
 
 When changing Kubernetes resources, verify:
 
-- the workload owner is registered in `docs/agents/workload-ownership.json`;
+- the workload owner is registered in `docs/agents/workload-ownership.json`, then run
+  `npm run check:workload-ownership-app-composition`;
 - service-account token automount and projected audiences are explicit;
 - RBAC contains only required verbs, API groups, and resource names;
 - default-deny remains effective;
