@@ -288,7 +288,9 @@ test("binds successful checks to validated heads and paginates failure invalidat
 	const workflow = readFileSync(".github/workflows/pr-stack-integrity.yml", "utf8");
 	assert.match(workflow, /set -euo pipefail/u);
 	assert.match(workflow, /\.pullRequests\[\]\.head\.sha/u);
-	assert.match(workflow, /gh api \\\n\s+--paginate \\\n\s+--slurp/u);
+	assert.match(workflow, /gh api \\\n\s+--paginate/u);
+	assert.match(workflow, /--jq '\.\[\] \| \.head\.sha'/u);
+	assert.doesNotMatch(workflow, /--slurp/u);
 	assert.doesNotMatch(workflow, /gh pr list/u);
 	assert.doesNotMatch(workflow, /--limit 100/u);
 });

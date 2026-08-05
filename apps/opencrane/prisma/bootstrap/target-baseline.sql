@@ -3973,7 +3973,7 @@ $$;
 -- Read-only Prisma delegates expose database time and the existing nonblocking claim selector
 -- without granting application code a general raw-SQL capability.
 CREATE VIEW "artifact_authority_clock" AS
-    SELECT 1::INTEGER AS "singleton", clock_timestamp()::TIMESTAMP(3) AS "now";
+    SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
 CREATE FUNCTION "select_artifact_preprocess_claim_candidate"() RETURNS TABLE (
     "job_id" TEXT,
     "attempt" INTEGER,
@@ -4089,7 +4089,7 @@ BEGIN
 END;
 $$;
 CREATE VIEW "skill_authority_clock" AS
-    SELECT 1::INTEGER AS "singleton", clock_timestamp()::TIMESTAMP(3) AS "now";
+    SELECT 1::INTEGER AS "singleton", date_trunc('milliseconds', clock_timestamp())::TIMESTAMP(3) AS "now";
 CREATE FUNCTION "select_skill_workload_claim_candidate"() RETURNS TABLE (
     "id" TEXT,
     "silo_id" TEXT,

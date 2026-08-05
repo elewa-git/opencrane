@@ -78,7 +78,8 @@ function _ParseCpuMillis(value: string): number | null
 {
 	const milli = /^([1-9][0-9]*)m$/.exec(value);
 	const cores = /^([1-9][0-9]*(?:\.[0-9]+)?)$/.exec(value);
-	const parsed = milli ? Number(milli[1]) : cores ? Number(cores[1]) * 1_000 : 0;
+	const parsedCores = cores ? Number(cores[1]) * 1_000 : 0;
+	const parsed = milli ? Number(milli[1]) : parsedCores;
 	return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
 }
 

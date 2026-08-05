@@ -61,9 +61,8 @@ jobs:
           else
             gh api \
               --paginate \
-              --slurp \
               "repos/${{ github.repository }}/pulls?state=open&per_page=100" \
-              --jq '.[][] | .head.sha' > pr-stack-check-heads.txt
+              --jq '.[] | .head.sha' > pr-stack-check-heads.txt
             printf '%s\n' "${{ github.event.pull_request.head.sha }}" >> pr-stack-check-heads.txt
           fi
           sed '/^$/d' pr-stack-check-heads.txt | sort -u > pr-stack-check-heads-unique.txt
