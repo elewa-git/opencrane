@@ -70,6 +70,8 @@ legitimate request — never hand out access it should not.
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
   stores for accepted proofs/receipts and for candidate grants.
+- `ShareAuthorizationScopeKinds` — the four domain scope categories that sharing accepts; the
+  Prisma adapter translates them explicitly and rejects any unsupported stored category.
 - Contract types: `ResolveEffectiveAccessCommand`/`Result`, `AuthorizationGrantRepository`,
   `AuthorizationMembershipAuthority`, `CapabilityActionExecutor`, and their siblings.
 
@@ -103,7 +105,9 @@ owns the narrow catalog-seeding and share-grant persistence seam used by the sha
 every grant lookup, list and revocation to one `siloId`, so
 a principal can never discover or revoke a delegation held by another ClusterTenant. The catalog
 revision is seeded idempotently; the stored digest, rather than a caller-supplied value, binds later
-grant evaluation to the canonical capability list.
+grant evaluation to the canonical capability list. Share reads select only the fields in the public
+repository contract and map the generated Prisma scope enum into the narrower sharing vocabulary;
+an unsupported stored scope fails closed rather than being cast into the domain result.
 
 Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
 `ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`.
