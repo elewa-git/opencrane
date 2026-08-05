@@ -1,4 +1,4 @@
-import { delegateMatches, rawQueryMatches, transactionMatches } from "./prisma-bindings.mjs";
+import { delegateMatches, rawPrismaMethodMatches, transactionMatches } from "./prisma-bindings.mjs";
 import { authorizedOwner, classes, enclosingClass, importedBindings, isTransactionScopedConstruction, ownerIdentity, repositoryAcceptsTransactionClient, repositoryConstructions } from "./typescript-ownership.mjs";
 
 /** Returns whether a path is hand-maintained production TypeScript. */
@@ -40,14 +40,9 @@ export function inspectPrismaBoundary(path, source, modelDelegates, owners, exem
 			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-TRANSACTION-OWNER", "direct $transaction call outside an exact policy-authorized UnitOfWork adapter", ownerIdentity(source, classOwners, match.index ?? 0)));
 		}
 	}
-	for (const match of rawQueryMatches(source, imports))
+	for (const match of rawPrismaMethodMatches(source))
 	{
-		if (exemption.has("raw-query")) continue;
-		const owner = enclosingClass(classOwners, match.index ?? 0);
-		if (authorizedOwner(owner, imports, owners.repositories, path) === undefined)
-		{
-			findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-RAW-QUERY-OWNER", `direct ${match.method} access outside an exact policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
-		}
+		findings.push(_Finding(path, source, match.index ?? 0, "PRISMA-RAW-QUERY-FORBIDDEN", `${match.method} is forbidden in production TypeScript; use typed Prisma delegates behind a policy-authorized Repository adapter`, ownerIdentity(source, classOwners, match.index ?? 0)));
 	}
 	for (const match of delegateMatches(source, modelDelegates, imports))
 	{
@@ -110,13 +105,13 @@ export function validateOwnerDeclarations(path, source, owners)
 	return findings;
 }
 
-/** Extracts lower-camel Prisma delegate names from schema model declarations. */
+/** Extracts lower-camel Prisma delegate names from schema model and view declarations. */
 export function prismaModelDelegates(schemaSources)
 {
 	const delegates = new Set();
 	for (const source of schemaSources)
 	{
-		for (const match of source.matchAll(/^model\s+([A-Za-z][A-Za-z0-9_]*)\s*\{/gmu))
+		for (const match of source.matchAll(/^(?:model|view)\s+([A-Za-z][A-Za-z0-9_]*)\s*\{/gmu))
 		{
 			delegates.add(match[1][0].toLowerCase() + match[1].slice(1));
 		}

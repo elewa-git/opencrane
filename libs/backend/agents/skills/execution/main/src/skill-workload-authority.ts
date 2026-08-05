@@ -3,7 +3,7 @@ import type { SkillAuthoringInputRecord } from "./skill-authoring-input.types.js
 import type { SkillWorkloadBootstrapIdentity, SkillWorkloadBootstrapRecord } from "./skill-workload-bootstrap.types.js";
 import type { SkillWorkloadAssignmentCommand, SkillWorkloadClaim, SkillWorkloadPodRegistrationCommand, SkillWorkloadReleaseClaim, SkillWorkloadReleaseCommand } from "./skill-workload-claims.types.js";
 import type { SkillWorkloadExecutionAuthority } from "./skill-workload-authority.types.js";
-import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork } from "./skill-workload-unit-of-work.types.js";
+import { _SkillWorkloadPersistenceConflictError, type SkillWorkloadExecutionUnitOfWork, type SkillWorkloadExecutionWork } from "./skill-workload-unit-of-work.types.js";
 
 /** Application authority coordinating each governed skill-execution transition through one unit of work. */
 export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionAuthority
@@ -18,41 +18,33 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 	}
 
 	/** Claims one controller-visible workload within one fenced durable transaction. */
-	claimNextAtomically(): Promise<SkillWorkloadClaim | null>
+	async claimNextAtomically(): Promise<SkillWorkloadClaim | null>
 	{
-		return this.unitOfWork.run(function _Claim(transaction): Promise<SkillWorkloadClaim | null> { return transaction.assignments.claimNext(); });
+		return this._runConflictAs(function _Claim(transaction): Promise<SkillWorkloadClaim | null> { return transaction.assignments.claimNext(); }, null);
 	}
 
 	/** Commits the exact controller claim and immutable Job UID in one durable transaction. */
 	async commitAssignmentAtomically(workloadId: string, command: SkillWorkloadAssignmentCommand): Promise<"assigned" | "idempotent" | "conflict">
 	{
-		try
-		{
-			return await this.unitOfWork.run(function _Assign(transaction): Promise<"assigned" | "idempotent" | "conflict"> { return transaction.assignments.commitAssignment(workloadId, command); });
-		}
-		catch (error)
-		{
-			if (error instanceof _SkillWorkloadPersistenceConflictError) return "conflict";
-			throw error;
-		}
+		return this._runConflictAs(function _Assign(transaction): Promise<"assigned" | "idempotent" | "conflict"> { return transaction.assignments.commitAssignment(workloadId, command); }, "conflict");
 	}
 
 	/** Claims one previously assigned Job for the controller's unsuspend operation. */
-	claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>
+	async claimNextReleaseAtomically(): Promise<SkillWorkloadReleaseClaim | null>
 	{
-		return this.unitOfWork.run(function _ClaimRelease(transaction): Promise<SkillWorkloadReleaseClaim | null> { return transaction.releases.claimNextRelease(); });
+		return this._runConflictAs(function _ClaimRelease(transaction): Promise<SkillWorkloadReleaseClaim | null> { return transaction.releases.claimNextRelease(); }, null);
 	}
 
 	/** Commits one exact successful Job release. */
-	commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
+	async commitReleaseAtomically(workloadId: string, command: SkillWorkloadReleaseCommand): Promise<"released" | "idempotent" | "conflict">
 	{
-		return this.unitOfWork.run(function _CommitRelease(transaction): Promise<"released" | "idempotent" | "conflict"> { return transaction.releases.commitRelease(workloadId, command); });
+		return this._runConflictAs(function _CommitRelease(transaction): Promise<"released" | "idempotent" | "conflict"> { return transaction.releases.commitRelease(workloadId, command); }, "conflict");
 	}
 
 	/** Registers only the first Pod Kubernetes proves belongs to the released Job. */
-	registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
+	async registerFirstPodAtomically(workloadId: string, command: SkillWorkloadPodRegistrationCommand): Promise<"registered" | "idempotent" | "conflict">
 	{
-		return this.unitOfWork.run(function _RegisterFirstPod(transaction): Promise<"registered" | "idempotent" | "conflict"> { return transaction.releases.registerFirstPod(workloadId, command); });
+		return this._runConflictAs(function _RegisterFirstPod(transaction): Promise<"registered" | "idempotent" | "conflict"> { return transaction.releases.registerFirstPod(workloadId, command); }, "conflict");
 	}
 
 	/** Selects bootstrap identity fences in a short read transaction before external TokenReview. */
@@ -62,21 +54,35 @@ export class _SkillWorkloadExecutionAuthority implements SkillWorkloadExecutionA
 	}
 
 	/** Atomically consumes the bootstrap after the router independently TokenReviews the selected identity. */
-	consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">
+	async consumeAtomically(referenceHash: string, identity: SkillWorkloadBootstrapIdentity): Promise<"consumed" | "conflict">
 	{
-		return this.unitOfWork.run(function _ConsumeBootstrap(transaction): Promise<"consumed" | "conflict"> { return transaction.bootstraps.consume(referenceHash, identity); });
+		return this._runConflictAs(function _ConsumeBootstrap(transaction): Promise<"consumed" | "conflict"> { return transaction.bootstraps.consume(referenceHash, identity); }, "conflict");
 	}
 
 	/** Commits bounded authoring evidence and the terminal workload state as one transaction. */
-	completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
+	async completeAtomically(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
 	{
-		return this.unitOfWork.run(function _CompleteAuthoring(transaction): Promise<"completed" | "conflict"> { return transaction.authoringCompletions.complete(command, identity); });
+		return this._runConflictAs(function _CompleteAuthoring(transaction): Promise<"completed" | "conflict"> { return transaction.authoringCompletions.complete(command, identity); }, "conflict");
 	}
 
 	/** Selects source coordinates transactionally, releasing the transaction before ArtifactStore I/O begins. */
 	loadForWorker(workloadId: string, identity: SkillWorkloadBootstrapIdentity): Promise<SkillAuthoringInputRecord | null>
 	{
 		return this.unitOfWork.run(function _LoadAuthoringInput(transaction): Promise<SkillAuthoringInputRecord | null> { return transaction.authoringInputs.load(workloadId, identity); });
+	}
+
+	/** Runs one durable operation while translating only an exhausted rolled-back conflict. */
+	private async _runConflictAs<Result>(work: SkillWorkloadExecutionWork<Result>, conflict: Result): Promise<Result>
+	{
+		try
+		{
+			return await this.unitOfWork.run(work);
+		}
+		catch (error)
+		{
+			if (error instanceof _SkillWorkloadPersistenceConflictError) return conflict;
+			throw error;
+		}
 	}
 }
 

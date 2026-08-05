@@ -20,7 +20,7 @@ export function resolveExemptions(entries, today)
 			&& typeof entry?.reason === "string"
 			&& entry.reason.trim().length >= 20
 			&& operations.length > 0
-			&& operations.every(function _IsKnownOperation(operation) { return operation === "delegate" || operation === "raw-query" || operation === "transaction"; })
+			&& operations.every(function _IsKnownOperation(operation) { return operation === "delegate" || operation === "transaction"; })
 			&& _IsUtcCalendarDate(expiry);
 		if (!valid)
 		{

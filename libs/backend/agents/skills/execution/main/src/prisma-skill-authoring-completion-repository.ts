@@ -2,7 +2,8 @@ import { Prisma, SkillRevisionState, SkillWorkloadKind, SkillWorkloadState } fro
 
 import { SkillAuthoringCompletionOutcomes, type SkillAuthoringCompletionCommand } from "./skill-authoring-completion.types.js";
 import type { SkillWorkloadBootstrapIdentity } from "./skill-workload-bootstrap.types.js";
-import type { SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
+import { _SkillWorkloadTimestampProposal } from "./prisma-skill-workload-timestamps.js";
+import { _SkillWorkloadPersistenceConflictError, type SkillAuthoringCompletionRepository } from "./skill-workload-unit-of-work.types.js";
 
 /** Prisma authority for one exact authoring worker's terminal evidence report. */
 export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringCompletionRepository
@@ -19,15 +20,11 @@ export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringC
 	/** Completes one bootstrap-consumed Draft authoring workload and persists only bounded evidence. */
 	async complete(command: SkillAuthoringCompletionCommand, identity: SkillWorkloadBootstrapIdentity): Promise<"completed" | "conflict">
 	{
-		// 1. Lock the workload so a duplicate report cannot alter its revision after a competing completion.
-		const locked = await this.transaction.$queryRaw<readonly { readonly id: string }[]>(Prisma.sql`SELECT "id" FROM "skill_workloads" WHERE "id" = ${command.workloadId} FOR UPDATE`);
-		if (locked.length !== 1) return "conflict";
-
-		// 2. Fence against the exact canonical worker Pod and consumed bootstrap before any revision evidence changes.
+		// 1. Rebind every completion fence inside the serializable transaction snapshot.
 		const workload = await this.transaction.skillWorkload.findFirst({ where: { id: command.workloadId, kind: SkillWorkloadKind.Authoring, state: SkillWorkloadState.Assigned, releasedAt: { not: null }, workerPodUid: identity.podUid, bootstrap: { is: { consumedAt: { not: null }, consumedByPodUid: identity.podUid, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName } } }, include: { skillRevision: true } });
 		if (workload === null || workload.skillRevision.state !== SkillRevisionState.Draft) return "conflict";
 
-		// 3. Store passed reports before terminalising the locked row; a failure records only a stable code.
+		// 2. Store passed reports before terminalising the fenced row; a failure records only a stable code.
 		if (command.outcome === SkillAuthoringCompletionOutcomes.Succeeded)
 		{
 			if (!command.testReport.passed || !command.scanResult.passed) return "conflict";
@@ -35,7 +32,12 @@ export class PrismaSkillAuthoringCompletionRepository implements SkillAuthoringC
 			if (revision.count !== 1) return "conflict";
 		}
 
-		const completed = await this.transaction.skillWorkload.updateMany({ where: { id: workload.id, state: SkillWorkloadState.Assigned }, data: command.outcome === SkillAuthoringCompletionOutcomes.Succeeded ? { state: SkillWorkloadState.Succeeded, completedAt: new Date(), failureCode: null } : { state: SkillWorkloadState.Failed, completedAt: new Date(), failureCode: command.failureCode } });
-		return completed.count === 1 ? "completed" : "conflict";
+		const completed = await this.transaction.skillWorkload.updateMany({
+			where: { id: workload.id, kind: SkillWorkloadKind.Authoring, state: SkillWorkloadState.Assigned, releasedAt: workload.releasedAt, workerPodUid: identity.podUid, skillRevisionId: workload.skillRevisionId, bootstrap: { is: { consumedAt: { not: null }, consumedByPodUid: identity.podUid, namespace: identity.namespace, serviceAccountName: identity.serviceAccountName } } },
+			data: command.outcome === SkillAuthoringCompletionOutcomes.Succeeded ? { state: SkillWorkloadState.Succeeded, completedAt: _SkillWorkloadTimestampProposal, failureCode: null } : { state: SkillWorkloadState.Failed, completedAt: _SkillWorkloadTimestampProposal, failureCode: command.failureCode },
+		});
+		if (completed.count === 1) return "completed";
+		if (command.outcome === SkillAuthoringCompletionOutcomes.Succeeded) throw new _SkillWorkloadPersistenceConflictError("skill authoring completion lost its workload fence after writing revision evidence");
+		return "conflict";
 	}
 }

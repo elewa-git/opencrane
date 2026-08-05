@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, Prisma } from "@prisma/client";
+import { ArtifactKind, ArtifactPreprocessJobState, ArtifactRevisionState, ArtifactState, ArtifactUploadLeaseState, type Prisma } from "@prisma/client";
 
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand } from "@opencrane/contracts";
 import { ___IsSha256ContentAddress } from "@opencrane/models/artifacts";
@@ -43,12 +43,12 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 		{
 			const transaction = this.transaction;
 			// 1. Recover expired claims first; the lifecycle trigger cancels any stale output lease.
-			await transaction.$executeRaw(Prisma.sql`UPDATE "artifact_preprocess_jobs" SET "state" = 'retryable_failed', "output_lease_id" = NULL, "failure_code" = 'claim_expired', "next_attempt_at" = clock_timestamp(), "updated_at" = clock_timestamp() WHERE "state" = 'claimed' AND "claim_expires_at" <= clock_timestamp()`);
+			const recoveryNow = await this._databaseNow();
+			await transaction.artifactPreprocessJob.updateMany({ where: { state: ArtifactPreprocessJobState.Claimed, claimExpiresAt: { lte: recoveryNow } }, data: { state: ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: "claim_expired", nextAttemptAt: recoveryNow } });
 
-			// 2. Lock one eligible job and its immutable source; SKIP LOCKED keeps peer pollers independent.
-			const candidates = await transaction.$queryRaw<Array<{ jobId: string; attempt: number; derivedArtifactId: string | null; sourceRevisionId: string; sourceArtifactId: string; siloId: string; ownerPrincipalId: string; sourceByteLength: bigint }>>(Prisma.sql`SELECT job."id" AS "jobId", job."attempt", job."derived_artifact_id" AS "derivedArtifactId", revision."id" AS "sourceRevisionId", revision."artifact_id" AS "sourceArtifactId", artifact."silo_id" AS "siloId", artifact."owner_principal_id" AS "ownerPrincipalId", revision."byte_length" AS "sourceByteLength" FROM "artifact_preprocess_jobs" job JOIN "artifact_revisions" revision ON revision."id" = job."source_revision_id" JOIN "artifacts" artifact ON artifact."id" = revision."artifact_id" WHERE job."state" IN ('pending', 'retryable_failed') AND (job."next_attempt_at" IS NULL OR job."next_attempt_at" <= clock_timestamp()) ORDER BY job."created_at" FOR UPDATE OF job, revision, artifact SKIP LOCKED LIMIT 1`);
-			const candidate = candidates[0];
-			if (candidate === undefined) return { status: "none" };
+			// 2. Read the database-owned SKIP LOCKED projection that retains the selected row locks.
+			const candidate = await transaction.artifactPreprocessClaimCandidate.findFirst({ select: { jobId: true, attempt: true, derivedArtifactId: true, sourceRevisionId: true, sourceArtifactId: true, siloId: true, ownerPrincipalId: true, sourceByteLength: true } });
+			if (candidate === null) return { status: "none" };
 			if (!_IsSafeByteLength(candidate.sourceByteLength)) throw new Error("artifact preprocess source byte length exceeds the supported range");
 
 			// 3. Allocate the hidden generated Artifact once; catalogue listings require a current revision.
@@ -59,7 +59,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 			}
 
 			// 4. Advance from database time so every poller observes the same claim-expiry authority.
-			const now = await _DatabaseNow(transaction);
+			const now = await this._databaseNow();
 			const claimFence = randomUUID();
 			const claimExpiresAt = new Date(now.getTime() + _CLAIM_LIFETIME_MILLISECONDS);
 			await transaction.artifactPreprocessJob.update({ where: { id: candidate.jobId }, data: { state: ArtifactPreprocessJobState.Claimed, attempt: candidate.attempt + 1, claimFence, claimExpiresAt, nextAttemptAt: null, failureCode: null, outputLeaseId: null, derivedArtifactId } });
@@ -73,11 +73,8 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	{
 		{
 			const transaction = this.transaction;
-			// 1. Lock the job before reading its fence so failure and reclaim cannot interleave with lease issuance.
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${command.jobId} FOR UPDATE`);
-
-			// 2. Load database time and the exact job relation in one transaction so the fence decision uses one authority.
-			const now = await _DatabaseNow(transaction);
+			// 1. Load database time and the exact job relation from one serializable snapshot.
+			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId }, include: { sourceRevision: { include: { artifact: true } } } });
 			if (job === null
 				|| job.state !== ArtifactPreprocessJobState.Claimed
@@ -95,7 +92,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 				return null;
 			}
 
-			// 3. Cap authority to both the claim and retry quiet period, so failure cannot create overlapping attempts.
+			// 2. Cap authority to both the claim and retry quiet period, so failure cannot create overlapping attempts.
 			const expiresAtEpochSeconds = Math.floor(Math.min(job.claimExpiresAt.getTime(), now.getTime() + _SOURCE_READ_LEASE_MILLISECONDS) / 1_000);
 			if (expiresAtEpochSeconds <= Math.floor(now.getTime() / 1_000)) return null;
 			return {
@@ -121,8 +118,7 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	{
 		{
 			const transaction = this.transaction;
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${request.jobId} FOR UPDATE`);
-			const now = await _DatabaseNow(transaction);
+			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { derivedArtifact: true, outputLease: true } });
 			if (job === null || job.derivedArtifact === null) return { status: "conflict", reason: "claim_not_found" };
 			if (job.attempt !== request.attempt || job.claimFence !== request.claimFence) return { status: "conflict", reason: "stale_claim" };
@@ -164,12 +160,9 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	{
 		{
 			const transaction = this.transaction;
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${request.jobId} FOR UPDATE`);
-			const now = await _DatabaseNow(transaction);
+			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: request.jobId }, include: { outputLease: true, derivedArtifact: true } });
 			if (job === null || job.outputLease === null || job.derivedArtifact === null) return { status: "conflict", reason: "claim_not_found" };
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_upload_leases" WHERE "id" = ${job.outputLease.id} FOR UPDATE`);
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifacts" WHERE "id" = ${job.derivedArtifact.id} FOR UPDATE`);
 			if (job.attempt !== request.attempt || job.claimFence !== request.claimFence || request.derivedRevisionId !== _DerivedRevisionId(job.outputLease.id)) return { status: "conflict", reason: "stale_claim" };
 			if (!_MatchesPromotion(request, job.outputLease)) return { status: "conflict", reason: "invalid_receipt" };
 			if (job.state === ArtifactPreprocessJobState.Completed) return { status: "completed" };
@@ -196,29 +189,29 @@ export class PrismaArtifactPreprocessRepository implements ArtifactPreprocessRep
 	{
 		{
 			const transaction = this.transaction;
-			await transaction.$queryRaw(Prisma.sql`SELECT "id" FROM "artifact_preprocess_jobs" WHERE "id" = ${command.jobId} FOR UPDATE`);
-			const now = await _DatabaseNow(transaction);
+			const now = await this._databaseNow();
 			const job = await transaction.artifactPreprocessJob.findUnique({ where: { id: command.jobId } });
 			if (job === null) return { status: "conflict", reason: "claim_not_found" };
 			if (job.state !== ArtifactPreprocessJobState.Claimed || job.attempt !== command.attempt || job.claimFence !== command.claimFence || job.claimExpiresAt === null || job.claimExpiresAt <= now) return { status: "conflict", reason: "stale_claim" };
 
 			const terminal = job.attempt >= _MAX_ATTEMPTS;
+			const state = terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed;
+			const nextAttemptAt = terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt);
 			await transaction.artifactPreprocessJob.update({
 				where: { id: job.id },
-				data: { state: terminal ? ArtifactPreprocessJobState.TerminalFailed : ArtifactPreprocessJobState.RetryableFailed, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt: terminal ? null : new Date(now.getTime() + _RETRY_DELAY_MILLISECONDS * job.attempt) },
+				data: { state, outputLeaseId: null, failureCode: command.failureCode, nextAttemptAt },
 			});
 			return { status: terminal ? "terminal" : "retryable" };
 		}
 	}
-}
 
-/** Read database time inside the active transaction so expiry decisions share one clock. */
-async function _DatabaseNow(transaction: Prisma.TransactionClient): Promise<Date>
-{
-	const rows = await transaction.$queryRaw<Array<{ now: Date }>>(Prisma.sql`SELECT clock_timestamp() AS "now"`);
-	const now = rows[0]?.now;
-	if (!(now instanceof Date) || Number.isNaN(now.getTime())) throw new Error("database clock unavailable");
-	return now;
+	/** Reads one database-owned wall-clock sample through the read-only Prisma view. */
+	private async _databaseNow(): Promise<Date>
+	{
+		const clock = await this.transaction.artifactAuthorityClock.findUnique({ where: { singleton: 1 }, select: { now: true } });
+		if (clock === null || !(clock.now instanceof Date) || Number.isNaN(clock.now.getTime())) throw new Error("artifact authority database clock unavailable");
+		return clock.now;
+	}
 }
 
 /** Prove a Postgres bigint can cross the JavaScript and HTTP boundaries without truncation. */
