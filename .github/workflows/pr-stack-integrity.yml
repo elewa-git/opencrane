@@ -47,19 +47,30 @@ jobs:
           echo "status=$status" >> "$GITHUB_OUTPUT"
           exit 0
 
-      # pull_request_target runs trusted default-branch tooling, but its workflow SHA is not the
-      # candidate SHA. Publish the enforcement result explicitly on the immutable PR head.
-      - name: Publish the PR-head check
-        if: github.event.pull_request
+      # pull_request_target runs trusted default-branch tooling, but its workflow SHA is not any
+      # candidate SHA. The graph is repository-wide, so refresh the same required check on every
+      # currently open PR head; a parent-close failure must invalidate its orphaned child too.
+      - name: Publish repository-wide PR-head checks
         env:
           GH_TOKEN: ${{ github.token }}
           CONCLUSION: ${{ steps.validate.outputs.status == '0' && 'success' || 'failure' }}
-        run: >-
-          gh api --method POST "repos/${{ github.repository }}/check-runs"
-          -f name="PR stack integrity"
-          -f head_sha="${{ github.event.pull_request.head.sha }}"
-          -f status=completed
-          -f conclusion="$CONCLUSION"
+        run: |
+          set -o pipefail
+          {
+            gh pr list \
+              --repo "${{ github.repository }}" \
+              --state open \
+              --limit 100 \
+              --json headRefOid \
+              --jq '.[].headRefOid'
+            printf '%s\n' "${{ github.event.pull_request.head.sha }}"
+          } | sed '/^$/d' | sort -u | while IFS= read -r head_sha; do
+            gh api --method POST "repos/${{ github.repository }}/check-runs" \
+              -f name="PR stack integrity" \
+              -f head_sha="$head_sha" \
+              -f status=completed \
+              -f conclusion="$CONCLUSION"
+          done
 
       - name: Enforce the result
         if: steps.validate.outputs.status != '0'

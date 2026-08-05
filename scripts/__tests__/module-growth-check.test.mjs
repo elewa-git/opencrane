@@ -221,7 +221,9 @@ test("keeps every review-agent surface on the maintainability gate", () =>
 	const stackWorkflow = readFileSync(join(_RepositoryRoot, ".github/workflows/pr-stack-integrity.yml"), "utf8");
 	assert.match(stackWorkflow, /checks: write/u);
 	assert.match(stackWorkflow, /check-runs/u);
-	assert.match(stackWorkflow, /head_sha=.*github\.event\.pull_request\.head\.sha/u);
+	assert.match(stackWorkflow, /gh pr list/u);
+	assert.match(stackWorkflow, /json headRefOid/u);
+	assert.match(stackWorkflow, /head_sha="\$head_sha"/u);
 });
 
 test("shared Stop pre-filter blocks a clean committed pre-PR branch without WAVE_BASE", (context) =>
