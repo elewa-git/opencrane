@@ -9,6 +9,13 @@ on:
   # Stacked PRs target feature branches. Validate every PR base so descendants receive the same
   # build/test gate as integration-root changes.
   pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_all_images:
+        description: Publish every app-owned container image
+        required: true
+        type: boolean
+        default: false
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
 # Pushes to the integration branches are never cancelled mid-publish.
@@ -65,6 +72,8 @@ jobs:
 
       - name: Emit affected deployable matrix
         id: affected
+        env:
+          FORCE_DEPLOYABLES: ${{ inputs.publish_all_images && 'all' || '' }}
         run: node scripts/affected-deployables.mjs
 
   test:

@@ -18,6 +18,15 @@ function _AffectedProjects(target)
   return JSON.parse(_run("npx", ["nx", "show", "projects", "--affected", ...targetArguments, "--json"]));
 }
 
+function _ContainerProjects()
+{
+  if (process.env.FORCE_DEPLOYABLES === "all")
+  {
+    return JSON.parse(_run("npx", ["nx", "show", "projects", "--withTarget=container", "--json"]));
+  }
+  return _AffectedProjects("container");
+}
+
 /** Reads the complete app-owned project configuration from the NX graph. */
 function _Project(project)
 {
@@ -46,7 +55,7 @@ if (!base || !head)
 }
 
 const affectedProjects = _AffectedProjects();
-const affectedContainerProjects = _AffectedProjects("container");
+const affectedContainerProjects = _ContainerProjects();
 const deployables = selectAffectedDeployables(affectedContainerProjects.map(function _Config(project) { return _Project(project); }));
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 
