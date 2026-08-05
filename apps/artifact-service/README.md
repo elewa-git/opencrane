@@ -68,7 +68,7 @@ this process is only the HTTP adapter and byte pump around them.
 ## Dependency direction
 
 Tagged `type:app`, `layer:entrypoint`, `scope:artifacts`. As an entrypoint it composes the artifact
-backend libraries and `@opencrane/observability`; nothing imports it.
+backend libraries and `@opencrane/backend/observability`; nothing imports it.
 
 ## Runtime & config
 

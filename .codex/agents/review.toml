@@ -41,7 +41,7 @@ fresh context — do not assume the author's intent was correct.
 - Failure handling: retries, timeouts, resource cleanup.
 - **Silent failures are a defect**: a bare `catch {}` or fail-closed
   `return null`/`continue` on an anomalous path with no structured log line
-  (via `@opencrane/observability`, correct level, structured fields, no secrets)
+  (via `@opencrane/backend/observability`, correct level, structured fields, no secrets)
   is a finding. Expected/benign early returns need no log.
 - Tests exist for changed behaviour and for the regression being fixed. When in
   doubt run them: `npx nx run <project>:test`.
@@ -72,6 +72,14 @@ fresh context — do not assume the author's intent was correct.
 - Secrets: never logged, hard-coded, or returned in responses.
 
 ### DIMENSION: maintainability
+- **Model-adjacent runtime validation.** When untrusted data becomes a named TypeScript model,
+  require a Zod validator beside the model in the same folder/package (`a.types.ts` plus
+  `a.validator.ts`), typed against that model and introduced by a clarifying trust-boundary comment.
+  Flag hand-written field-by-field `if` conjunctions, transport-owned copies of model fields,
+  generic mini-validation frameworks, and validators placed in adapter/repository packages. Verify
+  the coordinated-edit risk by comparing the model and parser fields. Transport code should bound
+  and decode, authenticate, interpret protocol status, and delegate; `.strict()` versus `.strip()`
+  must be an explicit protocol decision.
 - **Cohesion and responsibility.** Flag a function, class, or repository adapter that
   owns several independently changing domain responsibilities. Name the cohesive
   boundaries that should exist; size alone is not proof.

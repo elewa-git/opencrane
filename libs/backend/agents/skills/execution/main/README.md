@@ -37,8 +37,6 @@ remains a separate authority: it must complete its linked `ToolInvocation`, not 
 
 ## Public surface
 
-- `SkillWorkloadClaim` — one database-issued delivery generation.
-- `SkillWorkloadAssignmentCommand` — the controller's exact suspended-Job UID and opaque-reference fence.
 - `PrismaSkillWorkloadClaimsRepository` — Postgres implementation of the fenced claim and commit.
 - `__CreateSkillWorkloadDispatchRouter` — projected-token-authenticated internal claim and assignment API.
 - `__CreateSkillWorkloadBootstrapRouter` — consumes one opaque bootstrap reference only for the
@@ -47,6 +45,10 @@ remains a separate authority: it must complete its linked `ToolInvocation`, not 
 - `__CreateSkillAuthoringCompletionRouter` — authoring-audience-only receipt API with strict input bounds.
 - `PrismaSkillAuthoringInputRepository` — exact-worker selection of an active, published, pinned source artifact.
 - `__CreateSkillAuthoringInputRouter` — authoring-audience-only byte broker route with no ArtifactStore credential response.
+
+The controller claim, assignment, release, and Pod-registration DTOs and their strict Zod validators
+are shared through `@opencrane/contracts`; this package owns their durable transitions, not a second
+copy of their transport shapes.
 
 ## Boundary
 

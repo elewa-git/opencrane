@@ -73,7 +73,7 @@ logic lives in the composed library, not here.
 ## Dependency direction
 
 Tagged `type:app`, `layer:entrypoint`, `scope:app`. As an entrypoint it may compose backend
-libraries (here `@opencrane/backend/channel-proxy` and `@opencrane/observability`); no other package
+libraries (here `@opencrane/backend/channel-proxy` and `@opencrane/backend/observability`); no other package
 may import it.
 
 ## Runtime & config

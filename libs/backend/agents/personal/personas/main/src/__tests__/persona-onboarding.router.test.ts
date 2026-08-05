@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi } from "vitest";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreatePersonaOnboardingRouter } from "../persona-onboarding.router.js";
 import type { PersonaOnboardingRouterDependencies } from "../persona-onboarding.router.types.js";

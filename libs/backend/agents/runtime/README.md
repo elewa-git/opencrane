@@ -44,6 +44,10 @@ composes it. Cleanup implements the execution/runs physical store contract struc
 the backend-to-infrastructure dependency direction. Runtime packages do not import a model driver.
 Canonical run/event persistence remains in its owning backend domain.
 
+Each package barrel is a composition boundary: it exposes runnable factories and required policy
+types, while reconciliation seams, Kubernetes client ports, response decoders, and manifest
+protocol details remain owned inside their package.
+
 ## See also
 
 - Parent group: [agents](../README.md)
@@ -52,4 +56,4 @@ Canonical run/event persistence remains in its owning backend domain.
 - Assignment-and-release controller: [runtime/controller](./controller/README.md)
 - Exact Job cleanup adapter: [runtime/cleanup](./cleanup/main/README.md)
 - Execution run authority: [execution/runs](../execution/runs/main/README.md)
-- Server stream transport: [agent-runtime-stream](../../../server/_infra/agent-runtime-stream/README.md)
+- Server stream transport: [agent-runtime-stream](../../_server/agent-runtime-stream/README.md)

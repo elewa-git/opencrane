@@ -1,5 +1,5 @@
 import type { ArtifactPreprocessorClaimCommand, ArtifactPreprocessorFailureCommand, ArtifactPreprocessorJobClaim } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 /** Minimal OpenCrane broker surface available to the isolated worker. */
 export interface ArtifactPreprocessorRemote

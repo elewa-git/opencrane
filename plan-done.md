@@ -1366,7 +1366,8 @@ workloads or runtime behaviour.
   and pre-upgrade Job that runs `prisma migrate deploy`.
 - [x] **Backend code is grouped by responsibility.** Reusable OpenCrane server domains live under
   `libs/backend/server`; Kubernetes API access, authentication, HTTP, channel proxy, and tenant
-  hosting support live under `libs/server/_infra`.
+  hosting support live under `libs/server/_infra`. **Superseded note (2026-08-01):** the server
+  support libraries now live under `libs/backend/_server`, alongside their backend consumers.
 - [x] **The move is direct.** Imports, Nx project roots and names, TypeScript aliases, tests,
   deployment scripts, guards, and reader-facing documentation point only at the new locations;
   no compatibility exports or duplicate project owners remain.

@@ -1,5 +1,5 @@
 import type { V1Job } from "@kubernetes/client-node";
-import { type Logger } from "@opencrane/observability";
+import { type Logger } from "@opencrane/backend/observability";
 import { describe, expect, it } from "vitest";
 
 import { __ReconcileNextSkillWorkload, __ReconcileNextSkillWorkloadRelease, __RunSkillWorkloadController, __ValidateSkillWorkloadControllerProfiles } from "../skill-workload-controller.js";

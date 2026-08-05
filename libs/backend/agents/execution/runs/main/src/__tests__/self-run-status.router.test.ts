@@ -1,7 +1,7 @@
 import express from "express";
 import request from "supertest";
 import { describe, expect, it, vi, type Mock } from "vitest";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __CreateSelfRunStatusRouter } from "../self-run-status.router.js";
 import type { SelfRunStatus } from "../self-run-status.router.types.js";

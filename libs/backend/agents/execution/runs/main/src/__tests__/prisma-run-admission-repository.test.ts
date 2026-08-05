@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 import type { RunInputSnapshot } from "@opencrane/contracts";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunAdmissionRepository } from "../prisma-run-admission-repository.js";

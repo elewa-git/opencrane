@@ -3,10 +3,11 @@
 > [OpenCrane](../../README.md) › backend
 
 Backend libraries are grouped first by the application that owns their composition boundary. The
-OpenCrane API server owns the capabilities under `server/`. Its process-only transport and platform
-support lives separately under [`libs/server/_infra`](../server/_infra/) so business capabilities
-do not become mixed with server machinery. Apps remain thin entrypoints that mount routers,
-construct clients, and manage process lifecycle.
+OpenCrane API server owns the capabilities under `server/`; its process-only transport and platform
+support lives under [`_server`](./_server/README.md), so business capabilities do not become mixed with server
+machinery. [`observability`](./observability/) is the shared logging and tracing capability for
+server-side processes. Apps remain thin entrypoints that mount routers, construct clients, and
+manage process lifecycle.
 
 ## Layout
 
@@ -23,6 +24,8 @@ libs/backend/
     src/routes/               Express transport adapters
     src/core/                 domain services and use cases
     src/__tests__/             capability tests
+  _server/<capability>/        server runtime and external-I/O seams
+  observability/               structured logging and execution tracing
 ```
 
 The `/main` level lets a capability namespace gain a deliberately separate peer later without
@@ -38,11 +41,12 @@ capabilities merely because the OpenCrane app currently composes some of their p
 
 ## Dependency rules
 
-- Server capabilities may depend on models, contracts, utilities, `libs/server/_infra` support,
+- Server capabilities may depend on models, contracts, utilities, `_server` support, observability,
   and explicit backend peers; they never depend on an app.
 - Cross-capability imports use a public barrel such as
   `@opencrane/backend/server/<group>/<domain>`, never an internal source path.
-- Server-runtime imports use `@opencrane/server/_infra/<runtime>`.
+- Server-runtime imports use `@opencrane/backend/_server/<runtime>`; server-side logging and tracing
+  imports use `@opencrane/backend/observability`.
 - Agent runtime imports use `@opencrane/backend/agents/execution/protocol` for authority and
   `@opencrane/backend/agents/runtime/k8s-launcher` for the controller projection.
 - Database models remain in the OpenCrane app's per-domain Prisma schema files; see
@@ -68,3 +72,5 @@ new source-only backend library does not need its own Dockerfile.
 - Parent front door: [OpenCrane](../../README.md)
 - Server capabilities: [server](./server/README.md)
 - Agent capabilities: [agents](./agents/README.md)
+- Server runtime seams: [_server](./_server/README.md)
+- Telemetry: [observability](./observability/README.md)

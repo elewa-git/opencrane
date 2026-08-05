@@ -1,6 +1,6 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/observability";
+import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { PersonalConfigurationProposalCodes, type PersonalConfigurationChangeRepository, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
 import type { PersonalConfigurationProposalTransaction, PersonalConfigurationProposalUnitOfWork, PersonalConfigurationProposalWork } from "./personal-configuration-proposal-unit-of-work.types.js";

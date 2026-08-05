@@ -20,7 +20,8 @@ import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/a
 import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
 import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
 import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
-import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/server/_infra/http";
+import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/backend/_server/http";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
@@ -96,10 +97,11 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
  * @param prisma - Canonical product-authority database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen workload-facing configuration shared with workers and body parsing.
+ * @param memoryGateway - Process-wide authenticated memory-gateway client.
  */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): void
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): void
 {
-	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config);
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway);
 	const internalControllerRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
 		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },

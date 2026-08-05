@@ -3,7 +3,7 @@ import type { Logger } from "pino";
 import type * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
-import { OidcAuthServiceBase, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, type AuthUser, type LoginClient } from "@opencrane/server/_infra/auth";
+import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromHost, _OrgScope, _RequestHost, _ResolvePerOrgClient, type AuthUser, type LoginClient } from "@opencrane/backend/_server/auth";
 
 import { _MirrorGroupsOnLogin } from "./mirror-groups.js";
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
@@ -39,8 +39,8 @@ export class OidcAuthService extends OidcAuthServiceBase
 
   /**
    * @param log            - Parent logger; a child scoped to `oidc-auth` is derived by the base.
-   * @param prisma         - Prisma client (also the base's `OrgMembership` read surface + the
-   *                         `/auth/me` email→tenant lookup).
+   * @param prisma         - Prisma client for the organization-membership repository and `/auth/me`
+   *                         email→tenant lookup.
    * @param customApi      - Kubernetes custom-objects client used to read the cluster-scoped
    *                         ClusterTenant CR for per-org login resolution; null in dev/test (login
    *                         then always uses the masters client).
@@ -49,7 +49,7 @@ export class OidcAuthService extends OidcAuthServiceBase
    */
   constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null)
   {
-    super(log, prisma);
+    super(log, new PrismaOrgMembershipRepository(prisma));
     this.prisma = prisma;
     this.customApi = customApi;
   }

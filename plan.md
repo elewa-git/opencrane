@@ -74,7 +74,7 @@ workload-identity contracts now define the Phase D implementation boundary. The 
 
 Deployment-only app owners now live under `apps/_infra`, OpenCrane's installation chart is
 `apps/_infra/deploy-k8s`, reusable server domains are grouped under `libs/backend/server`, and
-process-supporting server internals are isolated under `libs/server/_infra`. This is a direct
+process-supporting server internals are isolated under `libs/backend/_server`. This is a direct
 path and ownership refactor; it adds no compatibility aliases and changes no runtime behaviour.
 
 ### Phase D — foundations, identity, and fresh provisioning
@@ -121,9 +121,20 @@ an owner may decide only their own pending tool approval or queue bounded text o
 run. The deferred-tool DECIDE authority and steering queue feed a fenced, single-use resume command;
 the runtime absorbs the queued steering only at safe pre-model boundaries. The
 runtime also writes encrypted, version-tagged, replaceable LOCAL checkpoints subordinate to canonical
-state (no server-side checkpoint model). The MCP, memory, and sandbox execution transports are ports
-with fail-closed stubs wired only in the composition root. The offline conformance harness and
-fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
+state (no server-side checkpoint model). The MCP and sandbox execution ports remain fail-closed in
+the production composition root. The authenticated memory transport IS composed: the server mounts
+its audience-bound projected token and shares one gateway client between admission and dispatch.
+Admission-time recall freezes gateway-selected fact references (id + content digest, never text)
+into the personal `RunInputSnapshot`, and compile-time statement loading re-resolves and
+digest-verifies every reference before inlining it — so redelivered `start_attempt` frames stay
+byte-identical or fail closed. Mid-run recall through the external-action executor remains gated:
+`AgentRuntimeProtocol v1` has no attempt-fenced ephemeral tool-result channel, and persisted
+`ToolInvocation` receipts must not duplicate Cognee fact content. Record, correction, forgetting,
+and scoped injection also remain fail-closed pending a recoverable gateway write lifecycle.
+
+**MEMORY TRANSPORT COMPOSED; ADMISSION+COMPILE RECALL LIVE; MID-RUN RECALL AND WRITES STILL GATED**
+
+The offline conformance harness and fault-injection matrix are built and CI-runnable (runtime protocol/reliability, attempt-scoped
 credential rejection, observability evidence). The live-LiteLLM conformance leg and driver-adoption
 evidence remain gated on [#337](https://github.com/elewa-git/opencrane/issues/337). The remaining
 E1/E2 product capabilities below are also incomplete.
@@ -155,10 +166,13 @@ catch-up, overlap/backoff/suspension, idempotent run creation through the existi
 `ManagedRunAdmissionPort` with `trigger: schedule`), the `AgentServiceSchedule` model + management
 API, the connector-scoped managed identity (`managed-agent-runtime-*` SA class + distinct token
 audience, the launcher's selectable identity profile, and the chart-only `apps/managed-agent-runtime`
-plane), execution authority via the Obot MCP-invocation port (allow-list enforced) and
-memory-gateway scoped read/write with mandatory provenance, and the attach-authority + runtime
+plane), execution authority via the Obot MCP-invocation port (allow-list enforced), the scoped-memory
+contract freezes the gateway-native dataset selected by admitted authority while the authenticated
+read transport is built but not connected to runtime execution pending attempt-fenced ephemeral
+result delivery, and the attach-authority + runtime
 effective-access intersection over the grant compiler (closes the slice-5 deferral; scope-isolation
-tested). NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
+tested). Scoped injection and personal record/correct/forget remain fail-closed pending a durable,
+recoverable gateway write lifecycle. NOT done — a NAMED LATER GATE: **create and qualify the harvesting central agent against
 live Obot**, tracked under [#337](https://github.com/elewa-git/opencrane/issues/337). The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 

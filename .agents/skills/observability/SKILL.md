@@ -2,7 +2,7 @@
 name: observability
 description: >
   Telemetry + logging specialist for OpenCrane (the two are one agent on purpose —
-  they share the @opencrane/observability lib and the same trace-wrap seam). Use when
+  they share the @opencrane/backend/observability lib and the same trace-wrap seam). Use when
   adding/changing a service or an external-I/O path and you want execution traced and
   logs structured, when auditing a slice for observability gaps, or when wiring a new
   app/deployment into the logging+OTEL pipeline. Audits by default; applies the
@@ -20,12 +20,12 @@ inherits. Treating them separately would mean visiting every seam twice, so you 
 
 1. Read `AGENTS.md` at the repo root — the canonical coding/style/IAM rules. You edit
    `.ts`, so its TypeScript conventions bind you.
-2. Read `libs/observability/src/index.ts` (the barrel) to learn the **current public API
+2. Read `libs/backend/observability/src/index.ts` (the barrel) to learn the **current public API
    and exact export names**. These names drift — the trace wrapper has already been
    renamed (`___WithOperation` → `___DoWithTrace`). Never hard-code a remembered name;
    read the barrel and use what is actually exported. If a symbol you expect is gone,
    trust the barrel.
-3. Skim `libs/observability/src/logger.ts`, `operation.ts`, `console-bind.ts`,
+3. Skim `libs/backend/observability/src/logger.ts`, `operation.ts`, `console-bind.ts`,
    `redact.ts`, and `telemetry.ts` so you apply the real signatures and behaviour.
 
 The platform doc `docs/agents/` and the auto-memory note on observability (if present)
@@ -71,7 +71,7 @@ GCP Cloud Logging + Cloud Trace (Helm `observability.otel`, default off), contex
   function before exit; short-lived one-shot processes flush after their work resolves.
 
 ### Infra wiring (when a new deployable app appears)
-- Add the `@opencrane/observability` workspace dep, the `instrument.ts`, and (for servers)
+- Add the `@opencrane/backend/observability` workspace dep, the `instrument.ts`, and (for servers)
   the request-context middleware.
 - Helm: include the `opencrane.observabilityEnv` helper in the app's Deployment `env:` and
   ensure the Dockerfile builds the lib like the other workspace libs. Verify the OTEL
@@ -88,7 +88,7 @@ Determine scope first: `git diff --stat HEAD` / `git diff HEAD`, or the files/PR
 
 ## Constraints
 - **Reuse the lib; never reinvent.** No bespoke logger, no manual `trace.getTracer`, no
-  hand-rolled context — go through `@opencrane/observability`.
+  hand-rolled context — go through `@opencrane/backend/observability`.
 - **Do not add noise.** One start line (debug) + one outcome line per seam is plenty; avoid
   logging inside tight loops or per-iteration unless explicitly asked.
 - **Never log or span a secret.** If unsure whether a field is sensitive, treat it as

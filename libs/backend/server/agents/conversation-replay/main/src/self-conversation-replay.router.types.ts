@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { ConversationReplayRepository } from "./replay-reader.types.js";
 

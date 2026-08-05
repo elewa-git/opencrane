@@ -3,7 +3,7 @@ import type { IncomingHttpHeaders, IncomingMessage, Server, ServerResponse } fro
 
 import { __FixedWindowRateLimiter, __ForwardCommand, __OpenCraneTargetResolver, __RelayEvents } from "@opencrane/backend/channel-proxy";
 import type { ChannelProxyDependencies } from "@opencrane/backend/channel-proxy";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import type { ChannelProxyProcessConfig } from "./config.types.js";
 import { _log as log } from "./log.js";
 

@@ -1,9 +1,15 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { _ReadProcessConfig } from "../config.js";
 
 describe("opencrane process config", function _ProcessConfigSuite()
 {
+	beforeEach(function _stubRequiredMemoryGatewayEnvironment()
+	{
+		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+	});
+
 	afterEach(function _restoreEnvironment()
 	{
 		vi.unstubAllEnvs();
@@ -25,6 +31,9 @@ describe("opencrane process config", function _ProcessConfigSuite()
 			publicPort: 9080,
 			runtime: {
 				managedRuntimeNamespace: "managed-runs",
+				memoryGatewayTimeoutMilliseconds: 30_000,
+				memoryGatewayTokenPath: "/var/run/opencrane/memory-gateway/token",
+				memoryGatewayUrl: "http://opencrane-memory-gateway.default.svc.cluster.local:8080",
 				personalRuntimeNamespace: "personal-runs",
 			},
 			schedulerEnabled: true,
@@ -36,6 +45,26 @@ describe("opencrane process config", function _ProcessConfigSuite()
 	{
 		vi.stubEnv("ARTIFACT_PREPROCESSOR_MAX_OUTPUT_BYTES", "67108865");
 		expect(function _readInvalidConfig() { _ReadProcessConfig(); }).toThrow(/integer from 1024 through 67108864/);
+	});
+
+	it("fails boot when the memory-gateway origin or token path is missing", function _RejectMissingMemoryGateway()
+	{
+		vi.stubEnv("MEMORY_GATEWAY_URL", "");
+		expect(function _readWithoutGatewayUrl() { _ReadProcessConfig(); }).toThrow(/MEMORY_GATEWAY_URL is required/);
+
+		vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.default.svc.cluster.local:8080");
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "");
+		expect(function _readWithoutTokenPath() { _ReadProcessConfig(); }).toThrow(/MEMORY_GATEWAY_TOKEN_PATH is required/);
+	});
+
+	it("rejects a relative memory-gateway token path and an out-of-bounds timeout", function _RejectInvalidMemoryGatewaySettings()
+	{
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "var/run/token");
+		expect(function _readRelativeTokenPath() { _ReadProcessConfig(); }).toThrow(/MEMORY_GATEWAY_TOKEN_PATH must be an absolute path/);
+
+		vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
+		vi.stubEnv("MEMORY_GATEWAY_TIMEOUT_SECONDS", "301");
+		expect(function _readExcessiveTimeout() { _ReadProcessConfig(); }).toThrow(/integer from 1 through 300/);
 	});
 
 	it("rejects malformed or excessive scheduler intervals before a tight loop can start", function _RejectInvalidSchedulerInterval()

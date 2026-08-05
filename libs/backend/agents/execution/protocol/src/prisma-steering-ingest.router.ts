@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "pino";
 
-import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 
 import { PrismaSteeringRequestRepository } from "./prisma-steering-request-repository.js";
 import { __CreateSteeringIngestRouter } from "./steering-ingest.router.js";

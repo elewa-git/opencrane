@@ -13,6 +13,7 @@ Kubernetes rules ([`k8s.md`](./k8s.md)) apply throughout.
 | [`apps/opencrane`](../../apps/opencrane/README.md) | Authenticated REST API, durable product authority, process composition, Prisma, and the server Helm unit. |
 | [`apps/opencrane-ui`](../../apps/opencrane-ui/README.md) | Angular web client for organisation and employee surfaces. |
 | [`apps/channel-proxy`](../../apps/channel-proxy/README.md) | Inbound channel authentication and routing boundary. |
+| [`apps/memory-gateway`](../../apps/memory-gateway/README.md) | Private Cognee transport boundary that TokenReviews the server identity. |
 | [`apps/agent-controller`](../../apps/agent-controller/README.md) | Sole Kubernetes mutator for governed run-attempt Jobs. |
 | [`apps/agent-runtime`](../../apps/agent-runtime/README.md) | Outbound-only process for one personal or managed run attempt. |
 | [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime/README.md) | Isolated namespace and identity profile for scheduled and triggered managed runs. |
@@ -37,6 +38,8 @@ app's source.
 | `libs/backend/artifacts/*` | Artifact authorization, storage, and preprocessing. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
+| [`libs/backend/_server`](../../libs/backend/_server/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
+| [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 
 The durable execution authority is `Thread -> AgentRun -> ordered RunEvent`. A runtime receives one
 immutable input snapshot and proposes output; it never becomes a second event, approval, or artifact
@@ -44,7 +47,7 @@ authority.
 
 ## Server infrastructure
 
-[`libs/server/_infra`](../../libs/server/_infra/README.md) contains process-specific seams for HTTP,
+[`libs/backend/_server`](../../libs/backend/_server/README.md) contains process-specific seams for HTTP,
 authentication, Kubernetes access, projected workload identity, the runtime stream, memory,
 credential custody, and sandbox execution. These packages contain no business-domain authority.
 

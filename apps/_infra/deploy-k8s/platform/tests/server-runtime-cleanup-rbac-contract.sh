@@ -7,8 +7,9 @@ source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 prepare_current_chart_sources
 trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
+MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
 
-rendered="$(helm template opencrane-silo "$CHART_DIR")"
+rendered="$(helm template opencrane-silo "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}")"
 ct_read_role="$(printf '%s\n' "$rendered" | awk '
   BEGIN { RS="---" }
   $0 ~ /\nkind: ClusterRole\n/ && $0 ~ /\n  name: opencrane-silo-opencrane-server-ct-read-default\n/ { print $0 }

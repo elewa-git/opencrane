@@ -36,6 +36,7 @@
     { "path": "apps/opencrane/src/infra/artifacts/artifact-preprocess-source-broker.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-read-lease-signer.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
     { "path": "apps/opencrane/src/infra/artifacts/artifact-service-read-port.factory.ts", "owner": "apps/opencrane", "classification": "artifact-broker-composition" },
+    { "path": "apps/opencrane/src/infra/memory/memory-gateway-client.factory.ts", "owner": "apps/opencrane", "classification": "process-composition" },
     { "path": "apps/opencrane/vitest.config.ts", "owner": "apps/opencrane", "classification": "test-config" },
 
     { "path": "apps/opencrane-ui/src/app/app.component.ts", "owner": "apps/opencrane-ui", "classification": "browser-composition" },
@@ -54,6 +55,15 @@
     { "path": "apps/channel-proxy/src/instrument.ts", "owner": "apps/channel-proxy", "classification": "process-instrumentation" },
     { "path": "apps/channel-proxy/src/log.ts", "owner": "apps/channel-proxy", "classification": "process-logging" },
     { "path": "apps/channel-proxy/src/server.ts", "owner": "apps/channel-proxy", "classification": "route-composition" },
+
+    { "path": "apps/memory-gateway/src/config.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
+    { "path": "apps/memory-gateway/src/config.types.ts", "owner": "apps/memory-gateway", "classification": "app-config" },
+    { "path": "apps/memory-gateway/src/index.ts", "owner": "apps/memory-gateway", "classification": "process-entrypoint" },
+    { "path": "apps/memory-gateway/src/instrument.ts", "owner": "apps/memory-gateway", "classification": "process-instrumentation" },
+    { "path": "apps/memory-gateway/src/log.ts", "owner": "apps/memory-gateway", "classification": "process-logging" },
+    { "path": "apps/memory-gateway/src/search-contract.ts", "owner": "apps/memory-gateway", "classification": "route-composition" },
+    { "path": "apps/memory-gateway/src/server.ts", "owner": "apps/memory-gateway", "classification": "route-composition" },
+    { "path": "apps/memory-gateway/vitest.config.ts", "owner": "apps/memory-gateway", "classification": "test-config" },
 
     { "path": "apps/artifact-service/src/config.ts", "owner": "apps/artifact-service", "classification": "app-config" },
     { "path": "apps/artifact-service/src/config.types.ts", "owner": "apps/artifact-service", "classification": "app-config" },
@@ -98,6 +108,7 @@
     "apps/_infra/litellm/project.json",
     "apps/_infra/obot/project.json",
     "apps/channel-proxy/project.json",
+    "apps/memory-gateway/project.json",
     "apps/artifact-service/project.json",
     "apps/artifact-preprocessor/project.json",
     "apps/agent-controller/project.json",
@@ -109,8 +120,8 @@
     "libs/backend/server/api-spec/main/project.json",
     "libs/backend/agents/runtime/controller/project.json",
     "libs/backend/server/iam/identity/main/project.json",
-    "libs/server/_infra/api/project.json",
-    "libs/server/_infra/auth/project.json",
-    "libs/server/_infra/http/project.json"
+    "libs/backend/_server/api/project.json",
+    "libs/backend/_server/auth/project.json",
+    "libs/backend/_server/http/project.json"
   ]
 }

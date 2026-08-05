@@ -1,6 +1,6 @@
 import { ActionExecutionState, type PrismaClient } from "@prisma/client";
 
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import { __DeferToolRequest } from "./deferred-tool-approval.js";
 import type { OpenDeferredToolApprovalCommand } from "./deferred-tool-approval.types.js";

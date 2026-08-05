@@ -1,10 +1,14 @@
 import type { V1Job, V1Pod, V1Secret } from "@kubernetes/client-node";
-import { ___GetContext, type Logger } from "@opencrane/observability";
+import { AgentRuntimeIdentityProfiles } from "@opencrane/backend/agents/runtime/k8s-launcher";
+import { ___GetContext, type Logger } from "@opencrane/backend/observability";
 import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { __ReconcileNextAgentRuntimeAttempt, __ReconcileNextRuntimeRelease, __RunAgentController, __ValidateAgentControllerRuntimeProfiles } from "../agent-controller.js";
+import { __RunAgentController } from "../agent-controller.js";
+import { __ValidateAgentControllerRuntimeProfiles } from "../agent-controller-profiles.js";
 import type { AgentControllerAuthority, AgentControllerKubernetesStore, AgentControllerOptions, AgentControllerRuntimeProfiles } from "../agent-controller.types.js";
+import { __ReconcileNextAgentRuntimeAttempt } from "../agent-runtime-attempt-assignment.js";
+import { __ReconcileNextRuntimeRelease } from "../agent-runtime-release.js";
 
 /** Silent structured logger used by orchestration tests. */
 const _log = { info: function _info() {}, error: function _error() {} } as unknown as Logger;
@@ -29,7 +33,7 @@ function _Profiles(): AgentControllerRuntimeProfiles
 		},
 		"managed-default": {
 			namespace: "silo-a-managed-runtime",
-			identityProfile: "managed",
+			identityProfile: AgentRuntimeIdentityProfiles.Managed,
 			image: "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			imagePullPolicy: "IfNotPresent",
 			runtimeStreamUrl: "http://opencrane-server.silo-a.svc.cluster.local:3001/api/internal/agent-runtime",
@@ -261,6 +265,28 @@ describe("agent-controller orchestration", function _Suite()
 		await running;
 
 		expect(removeListener).toHaveBeenCalledTimes(1);
+	});
+
+	it("does not start maintenance after shutdown aborts a failed reconciliation", async function _StopsBeforeMaintenance()
+	{
+		const shutdown = new AbortController();
+		let pruneAttempts = 0;
+		const authority = _Authority({
+			async __Claim()
+			{
+				shutdown.abort("SIGTERM");
+				throw new Error("assignment authority stopped");
+			},
+			async __PrunePublishedOutbox()
+			{
+				pruneAttempts += 1;
+				return 0;
+			},
+		});
+
+		await __RunAgentController(_Options(authority, _Kubernetes({})), shutdown.signal);
+
+		expect(pruneAttempts).toBe(0);
 	});
 
 	it("prunes at startup, retries after a maintenance failure, and stops without arming another delay", async function _PrunesDeliveredOutboxReliably()

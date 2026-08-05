@@ -28,6 +28,22 @@ function _readBoundedSeconds(name: string, fallbackSeconds: number, minimumSecon
 	return _readBoundedInteger(name, fallbackSeconds, minimumSeconds, maximumSeconds) * 1_000;
 }
 
+/** Require one non-empty setting so a missing chart value fails boot instead of composing a dead client. */
+function _readRequired(name: string): string
+{
+	const value = process.env[name]?.trim() ?? "";
+	if (value.length === 0) throw new Error(`${name} is required`);
+	return value;
+}
+
+/** Require one absolute mounted-file path for the projected memory-gateway caller token. */
+function _readRequiredAbsolutePath(name: string): string
+{
+	const value = _readRequired(name);
+	if (!value.startsWith("/")) throw new Error(`${name} must be an absolute path`);
+	return value;
+}
+
 /** Read the bounded output ceiling shared with the server-side promotion broker. */
 function _readArtifactPreprocessorBodyLimit(): number
 {
@@ -62,6 +78,9 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 			commandRecoveryMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_RECOVERY_POLL_SECONDS", 5, 5, 300),
 			commandTtlMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_COMMAND_TTL_SECONDS", 60, 1, 300),
 			managedRuntimeNamespace: process.env.AGENT_RUNTIME_MANAGED_NAMESPACE?.trim(),
+			memoryGatewayTimeoutMilliseconds: _readBoundedSeconds("MEMORY_GATEWAY_TIMEOUT_SECONDS", 30, 1, 300),
+			memoryGatewayTokenPath: _readRequiredAbsolutePath("MEMORY_GATEWAY_TOKEN_PATH"),
+			memoryGatewayUrl: _readRequired("MEMORY_GATEWAY_URL"),
 			outboxPruneBatchSize: _readBoundedInteger("AGENT_RUNTIME_OUTBOX_PRUNE_BATCH_SIZE", 100, 1, 1_000),
 			personalRuntimeNamespace: process.env.AGENT_RUNTIME_PERSONAL_NAMESPACE?.trim(),
 			publishedOutboxRetentionMilliseconds: _readBoundedSeconds("AGENT_RUNTIME_OUTBOX_RETENTION_SECONDS", 604_800, 3_600, 7_776_000),

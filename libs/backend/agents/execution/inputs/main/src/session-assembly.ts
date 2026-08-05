@@ -52,7 +52,7 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
 		const preferences = await authorities.preferenceFacts.load(command, run.value, identity.value, transaction);
 		if (preferences.outcome === "denied") return preferences;
-		const memory = await authorities.memoryScope.load(command, run.value, identity.value, transaction);
+		const memory = await authorities.memoryScope.load(command, run.value, identity.value, thread.value, transaction);
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;

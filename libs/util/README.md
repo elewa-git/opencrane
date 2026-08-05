@@ -63,4 +63,4 @@ is allowed to depend on.
 ## See also
 
 - Parent index: [OpenCrane](../../README.md)
-- Siblings: [observability](../observability/README.md) · [contracts](../contracts/README.md)
+- Siblings: [observability](../backend/observability/README.md) · [contracts](../contracts/README.md)

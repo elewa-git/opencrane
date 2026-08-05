@@ -8,10 +8,11 @@ APP_SOURCE_REGISTRY="$ROOT/docs/agents/app-source-allowlist.json"
 TMP_DIR="$(mktemp -d)"
 RENDER_PROBE="$ROOT/apps/_infra/deploy-k8s/templates/phase-b-guard-probe.yaml"
 COMPUTED_KIND_PROBE="$ROOT/apps/_infra/deploy-k8s/templates/phase-b-computed-kind-probe.yaml"
-RUNTIME_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-guard-probe.ts"
+RUNTIME_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-guard-probe.ts"
 RUNTIME_COMMAND_PROBE="$ROOT/scripts/phase-b-runtime-command-guard-probe.sh"
-RUNTIME_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts"
-RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
+RUNTIME_DUPLICATE_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-duplicate-guard-probe.ts"
+RUNTIME_NONPRODUCING_DUPLICATE_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts"
+RUNTIME_NONPRODUCING_CONTEXT_PROBE="$ROOT/libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts"
 APP_SOURCE_PROBE="$ROOT/apps/opencrane/src/phase-b-app-guard-probe.py"
 APP_TEST_SOURCE_PROBE="$ROOT/apps/opencrane/src/app/__tests__/phase-b-app-test-guard-probe.py"
 BUILD_SOURCE_PROBE="$ROOT/apps/opencrane/src/build/phase-b-build-source-guard-probe.py"
@@ -22,6 +23,7 @@ cleanup()
 {
   rm -f "$RENDER_PROBE" "$COMPUTED_KIND_PROBE" "$RUNTIME_PROBE" "$RUNTIME_COMMAND_PROBE"
   rm -f "$RUNTIME_DUPLICATE_PROBE" "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
+  rm -f "$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
   rm -f "$APP_SOURCE_PROBE" "$BUILD_SOURCE_PROBE"
   rm -f "$APP_TEST_SOURCE_PROBE"
   rm -f "$GENERATED_DIST_PROBE" "$GENERATED_CACHE_PROBE"
@@ -124,7 +126,7 @@ else if (action === "empty-runtime")
 else if (action === "duplicate-runtime-anchor")
 {
   registry.runtimeConstructs.push({
-    path: "libs/server/_infra/http/src/phase-b-runtime-duplicate-guard-probe.ts",
+    path: "libs/backend/_server/http/src/phase-b-runtime-duplicate-guard-probe.ts",
     anchor: "kind: \"Deployment\"",
     workloadIds: ["agent-runtime"],
   });
@@ -132,10 +134,21 @@ else if (action === "duplicate-runtime-anchor")
 else if (action === "duplicate-nonproducing-anchor")
 {
   registry.nonProducingRuntimeMatches.push({
-    path: "libs/server/_infra/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts",
-    anchor: "kind: \"Deployment\"",
+    path: "libs/backend/_server/http/src/phase-b-runtime-nonproducing-duplicate-guard-probe.ts",
+    anchor: "kind: \"Job\"",
+    context: "secret-owner-reference",
     reason: "Mutation probe: duplicate delete selectors must not share one exemption.",
   });
+}
+else if (action === "remove-attempt-key-nonproducer")
+{
+  registry.nonProducingRuntimeMatches = registry.nonProducingRuntimeMatches.filter(function keep(entry) {
+    return entry.path !== "libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts";
+  });
+}
+else if (action === "nonproducer-context-bypass")
+{
+  registry.nonProducingRuntimeMatches[0].path = "libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts";
 }
 else
 {
@@ -214,13 +227,27 @@ expect_failure "anchor must occur exactly once, found 2" \
 rm -f "$RUNTIME_DUPLICATE_PROBE"
 
 printf '%s\n' \
-  'export const firstDeleteSelector = { apiVersion: "apps/v1", kind: "Deployment" };' \
-  'export const secondDeleteSelector = { apiVersion: "apps/v1", kind: "Deployment" };' \
+  'export const firstDeleteSelector = { apiVersion: "v1", kind: "Secret", metadata: { ownerReferences: [{ apiVersion: "batch/v1", kind: "Job" }] } };' \
+  'export const secondDeleteSelector = { apiVersion: "v1", kind: "Secret", metadata: { ownerReferences: [{ apiVersion: "batch/v1", kind: "Job" }] } };' \
   >"$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
 registry="$(mutate_registry duplicate-nonproducing-anchor)"
 expect_failure "anchor must occur exactly once, found 2" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 rm -f "$RUNTIME_NONPRODUCING_DUPLICATE_PROBE"
+
+registry="$(mutate_registry remove-attempt-key-nonproducer)"
+expect_failure "unregistered runtime or installer workload construct: libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts: kind: \"Job\"" \
+  env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
+
+printf '%s\n' 'export const convertedSecret = { apiVersion: "batch/v1", kind: "Job" };' >"$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
+registry="$(mutate_registry nonproducer-context-bypass)"
+expect_failure "unregistered runtime or installer workload construct: libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
+  env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
+
+printf '%s\n' 'export const convertedSecret = { apiVersion: "v1", kind: "Secret", metadata: { ownerReferences: [{ apiVersion: "batch/v1", kind: "Job" }] }, ...{ kind: "Job" } };' >"$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
+expect_failure "unregistered runtime or installer workload construct: libs/backend/_server/http/src/phase-b-runtime-nonproducing-context-guard-probe.ts: kind: \"Job\"" \
+  env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
+rm -f "$RUNTIME_NONPRODUCING_CONTEXT_PROBE"
 
 mkdir -p "$(dirname "$GENERATED_DIST_PROBE")" "$(dirname "$GENERATED_CACHE_PROBE")"
 printf '%s\n' 'export const generatedProbe = { apiVersion: "batch/v1", kind: "Job" };' >"$GENERATED_DIST_PROBE"
@@ -280,4 +307,4 @@ registry="$(mutate_registry empty-runtime)"
 expect_failure "workloadIds must map the construct to at least one exact owner" \
   env PHASE_B_WORKLOAD_REGISTRY="$registry" "$GUARD"
 
-printf 'Phase B topology negative tests passed (17 rejection paths plus generated-output regression).\n'
+printf 'Phase B topology negative tests passed (20 rejection paths plus generated-output regression).\n'

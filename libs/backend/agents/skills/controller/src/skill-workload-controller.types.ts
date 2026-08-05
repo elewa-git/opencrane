@@ -1,8 +1,8 @@
 import type { ConfigurationOptions, V1Job, V1Pod, V1PodList } from "@kubernetes/client-node";
 
-import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim } from "@opencrane/contracts";
+import type { AgentControllerSkillWorkloadAssignmentCommand, AgentControllerSkillWorkloadClaim, AgentControllerSkillWorkloadPodRegistrationCommand, AgentControllerSkillWorkloadReleaseClaim, AgentControllerSkillWorkloadReleaseCommand } from "@opencrane/contracts";
 import type { SkillWorkloadJobProfile } from "@opencrane/backend/agents/skills/k8s-launcher";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 /** Immutable profile map keyed by the one permitted governed skill workload class. */
 export type SkillWorkloadControllerProfiles = Readonly<Record<AgentControllerSkillWorkloadClaim["kind"], SkillWorkloadJobProfile>>;
@@ -15,48 +15,11 @@ export interface SkillWorkloadControllerAuthority
 	/** Atomically bind the exact Kubernetes Job UID to the claimed workload generation. */
 	__CommitAssignment(workloadId: string, command: AgentControllerSkillWorkloadAssignmentCommand, signal: AbortSignal): Promise<"assigned" | "idempotent" | "conflict">;
 	/** Claim one durable Job release or incomplete first-Pod registration. */
-	__ClaimRelease(signal: AbortSignal): Promise<SkillWorkloadControllerReleaseClaim | null>;
+	__ClaimRelease(signal: AbortSignal): Promise<AgentControllerSkillWorkloadReleaseClaim | null>;
 	/** Commit the exact successful Kubernetes unsuspend operation. */
-	__CommitRelease(workloadId: string, command: SkillWorkloadControllerReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">;
+	__CommitRelease(workloadId: string, command: AgentControllerSkillWorkloadReleaseCommand, signal: AbortSignal): Promise<"released" | "idempotent" | "conflict">;
 	/** Bind the first exact Job-owned worker Pod before bootstrap can become usable. */
-	__RegisterFirstPod(workloadId: string, command: SkillWorkloadControllerPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">;
-}
-
-/** Database-fenced skill Job release that contains only reconstruction coordinates. */
-export interface SkillWorkloadControllerReleaseClaim
-{
-	/** Stable governed skill workload identifier. */
-	readonly workloadId: string;
-	/** ClusterTenant silo owning this Job. */
-	readonly siloId: string;
-	/** Fixed worker class that selects the immutable deployment profile. */
-	readonly kind: AgentControllerSkillWorkloadClaim["kind"];
-	/** Immutable Kubernetes Job UID expected by every release and Pod operation. */
-	readonly workloadUid: string;
-	/** Database-issued release-claim instant. */
-	readonly releaseClaimedAt: string;
-	/** Monotonic database release generation. */
-	readonly releaseDeliveryCount: number;
-	/** Absolute release-claim or bootstrap expiry. */
-	readonly expiresAt: string;
-}
-
-/** Exact release fence sent back after the Kubernetes conditional patch succeeds. */
-export interface SkillWorkloadControllerReleaseCommand
-{
-	/** Same database-issued release-claim instant. */
-	readonly releaseClaimedAt: string;
-	/** Same monotonic database release generation. */
-	readonly releaseDeliveryCount: number;
-	/** Immutable Job UID returned by Kubernetes. */
-	readonly workloadUid: string;
-}
-
-/** Exact first-Pod evidence sent back only after Kubernetes identity checks pass. */
-export interface SkillWorkloadControllerPodRegistrationCommand extends SkillWorkloadControllerReleaseCommand
-{
-	/** Immutable UID of the sole selected Job-owned Pod. */
-	readonly podUid: string;
+	__RegisterFirstPod(workloadId: string, command: AgentControllerSkillWorkloadPodRegistrationCommand, signal: AbortSignal): Promise<"registered" | "idempotent" | "conflict">;
 }
 
 /** Kubernetes operation permitted to the skill controller reconciliation. */

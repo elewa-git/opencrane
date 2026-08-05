@@ -3,7 +3,7 @@ import type { GrantScope, PrismaClient } from "@prisma/client";
 
 import { _log } from "../log.js";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
-import "@opencrane/server/_infra/auth";
+import "@opencrane/backend/_server/auth";
 
 /** Prisma enum literal used as data, not a runtime value from a generated client. */
 const _PRISMA_PERSONAL_SCOPE = "Personal" as GrantScope;

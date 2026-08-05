@@ -34,9 +34,10 @@ the run authority can publish cleanup completion.
 
 - `__CreateKubernetesRuntimeWorkloadCleanupStore(options)` — create the narrow exact-read and
   UID-preconditioned-delete adapter with a hard request deadline and process shutdown signal.
-- `KubernetesRuntimeWorkloadCleanupBatchApi` — the two-method Kubernetes Batch API port.
-- `KubernetesRuntimeWorkloadCleanupStore` and related projection/result types — the structural
-  contract composed with the execution/runs cleanup use case.
+
+The package barrel intentionally exposes only that composition factory. The two-method Kubernetes
+client seam and structural projection/result types stay package-local, while exact projection proof
+is isolated from transport and mutation.
 
 ## Boundary
 
@@ -56,7 +57,8 @@ app. Its structural store contract preserves the backend-to-infrastructure depen
 The app supplies a Kubernetes Batch client whose Role grants only `get` and `delete` for Jobs in
 the two runtime namespaces, a hard per-request deadline, and process shutdown cancellation.
 Deletion always includes the UID returned by the immediately preceding read, preventing a same-name
-replacement from being removed.
+replacement from being removed. The read-proof-delete exchange runs in one structured trace with
+only run, attempt, and namespace coordinates; the opaque bootstrap reference is never recorded.
 
 ## See also
 

@@ -6,7 +6,7 @@ import { GrantCompilerAccess, GrantCompilerPayloadType } from "../core/grant-com
 import { _log } from "../log.js";
 import type { CreateShareBody, SharePayloadType, ShareRecipientType, ShareScope } from "./shares.types.js";
 // Side-effect import: loads the express-session `SessionData.authUser` augmentation.
-import "@opencrane/server/_infra/auth";
+import "@opencrane/backend/_server/auth";
 
 /** Payload families a user may share (the entitlement surfaces the runtime contract carries). */
 const _PAYLOAD_TYPES: readonly SharePayloadType[] = ["mcp-server"];

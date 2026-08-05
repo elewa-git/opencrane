@@ -1,6 +1,23 @@
-import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
+import type { AgentControllerRunAttemptAssignmentCommand, AgentControllerRunAttemptAssignmentResult, AgentControllerRunAttemptClaim, AgentControllerRunOutboxPruneResult, AgentControllerRunWorkloadRegistrationCommand, AgentControllerRunWorkloadRegistrationResult, AgentControllerRunWorkloadReleaseClaim } from "@opencrane/contracts";
 
 import type { AttemptModelKeyIssuer } from "./attempt-model-key.types.js";
+
+/** Stable database-authority outcomes returned to the private agent-controller adapter. */
+export enum RunDispatchResultStatuses
+{
+	/** A fresh database-fenced command is ready for the controller. */
+	Claimed = "claimed",
+	/** No eligible work is currently available. */
+	None = "none",
+	/** The exact assignment command was committed. */
+	Committed = "committed",
+	/** The submitted command did not match current durable authority. */
+	Conflict = "conflict",
+	/** A poisoned release was durably failed instead of being returned. */
+	Terminalized = "terminalized",
+	/** The exact first worker Pod was registered. */
+	Registered = "registered",
+}
 
 /** Fixed database-owned lease and assignment policy for run dispatch. */
 export interface RunDispatchRepositoryConfig
@@ -21,31 +38,24 @@ export interface RunDispatchRepositoryConfig
 
 /** Outcome of claiming the next eligible runtime attempt. */
 export type ClaimNextRunAttemptResult =
-	| { readonly status: "claimed"; readonly claim: AgentControllerRunAttemptClaim }
-	| { readonly status: "none" };
+	| { readonly status: RunDispatchResultStatuses.Claimed; readonly claim: AgentControllerRunAttemptClaim }
+	| { readonly status: RunDispatchResultStatuses.None };
 
 /** Outcome of committing a suspended Job as the current attempt assignment. */
 export type CommitRunAttemptAssignmentResult =
-	| { readonly status: "committed"; readonly result: AgentControllerRunAttemptAssignmentResult }
-	| { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "invalid_assignment" };
+	| { readonly status: RunDispatchResultStatuses.Committed; readonly result: AgentControllerRunAttemptAssignmentResult }
+	| { readonly status: RunDispatchResultStatuses.Conflict; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "invalid_assignment" };
 
 /** Outcome of claiming the next eligible suspended workload release. */
 export type ClaimNextRunWorkloadReleaseResult =
-	| { readonly status: "claimed"; readonly claim: AgentControllerRunWorkloadReleaseClaim }
-	| { readonly status: "terminalized"; readonly eventId: string; readonly runId: string; readonly attempt: number; readonly failureCode: string }
-	| { readonly status: "none" };
+	| { readonly status: RunDispatchResultStatuses.Claimed; readonly claim: AgentControllerRunWorkloadReleaseClaim }
+	| { readonly status: RunDispatchResultStatuses.Terminalized; readonly eventId: string; readonly runId: string; readonly attempt: number; readonly failureCode: string }
+	| { readonly status: RunDispatchResultStatuses.None };
 
 /** Outcome of atomically registering the first Pod and publishing its release command. */
 export type RegisterRunWorkloadPodResult =
-	| { readonly status: "registered"; readonly result: AgentControllerRunWorkloadRegistrationResult }
-	| { readonly status: "conflict"; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "pod_conflict" | "invalid_registration" };
-
-/** Bounded result of removing delivered, non-failed operational outbox records. */
-export interface PrunePublishedRunOutboxResult
-{
-	/** Number of records removed in this maintenance transaction. */
-	readonly deletedCount: number;
-}
+	| { readonly status: RunDispatchResultStatuses.Registered; readonly result: AgentControllerRunWorkloadRegistrationResult }
+	| { readonly status: RunDispatchResultStatuses.Conflict; readonly reason: "claim_not_found" | "stale_claim" | "claim_terminal" | "attempt_conflict" | "authority_conflict" | "assignment_conflict" | "pod_conflict" | "invalid_registration" };
 
 /** Run-owned persistence port used by the controller-only internal API. */
 export interface RunDispatchRepository
@@ -59,7 +69,7 @@ export interface RunDispatchRepository
 	/** Registers only the first Pod for the exact current release claim and publishes that command. */
 	registerFirstPodAndPublishReleaseAtomically(eventId: string, command: AgentControllerRunWorkloadRegistrationCommand): Promise<RegisterRunWorkloadPodResult>;
 	/** Removes a bounded batch of retention-expired successfully delivered operational records. */
-	prunePublishedOutboxEventsAtomically(): Promise<PrunePublishedRunOutboxResult>;
+	prunePublishedOutboxEventsAtomically(): Promise<AgentControllerRunOutboxPruneResult>;
 }
 
 /** TokenReview-confirmed identity of an in-cluster workload. */

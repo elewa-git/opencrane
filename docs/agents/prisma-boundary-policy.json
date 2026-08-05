@@ -27,6 +27,13 @@
         "contract": "AgentRevisionWriterRepository",
         "contractImportPath": "./prisma-agent-revision-writer.types.js",
         "constructs": []
+      },
+      {
+        "path": "libs/backend/_server/auth/src/prisma-org-membership-repository.ts",
+        "adapter": "PrismaOrgMembershipRepository",
+        "contract": "OrgMembershipRepository",
+        "contractImportPath": "./org-membership.types.js",
+        "constructs": []
       }
     ],
     "unitsOfWork": [
@@ -49,8 +56,17 @@
     ],
     "compositions": [
       "apps/opencrane/src/app/runtime-composition.ts",
-      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts"
+      "libs/backend/agents/personal/configuration/main/src/prisma-personal-configuration.router.ts",
+      "libs/backend/server/iam/identity/main/src/oidc.service.ts"
     ]
   },
-  "exemptions": []
+  "exemptions": [
+    {
+      "path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",
+      "owner": "PersonalMemoryScopeSource",
+      "reason": "Admission-time recall-query derivation reads one frozen conversation message inside the existing RunAdmissionTransaction, matching every sibling session-assembly source; migrate together with those sources to a policy-owned repository.",
+      "operations": ["delegate"],
+      "expiresOn": "2027-02-28"
+    }
+  ]
 }

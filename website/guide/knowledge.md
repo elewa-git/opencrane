@@ -22,9 +22,11 @@ derives personal dataset identity from the verified silo, organisation and subje
 records provenance for durable facts.
 
 ::: info
-The dataset and provenance authorities are present. The current server composition uses an
-unavailable memory-gateway transport, so runtime Cognee reads and writes fail closed until the
-authenticated transport is mounted.
+Reads are live: run admission freezes gateway-selected fact references (id and content digest only)
+into the `RunInputSnapshot`, and prompt compilation inlines each statement only after verifying it
+against the frozen digest. Mid-run memory actions and every write remain fail closed — recalled
+text still has no safe, attempt-fenced ephemeral result channel, and no durable write lifecycle
+exists yet.
 :::
 
 ::: warning

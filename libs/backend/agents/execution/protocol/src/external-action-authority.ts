@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import type { JsonValue } from "@opencrane/util";
 import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { ToolInvocationIntent, ToolInvocationReceipt, ToolInvocationRepository } from "@opencrane/backend/server/iam/authorization";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { ExecuteExternalActionCommand, ExecuteExternalActionResult, ExternalActionExecutor } from "./external-action-authority.types.js";
 import { IntegrationAssignmentUnavailableError } from "./external-action-errors.js";

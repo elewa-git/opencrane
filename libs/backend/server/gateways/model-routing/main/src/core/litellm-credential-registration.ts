@@ -1,4 +1,4 @@
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { _log } from "../log.js";
 import type { LiteLlmCredentialUpsert } from "./litellm-credential-registration.types.js";

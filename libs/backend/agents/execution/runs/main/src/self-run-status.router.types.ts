@@ -1,5 +1,5 @@
 import type { Request } from "express";
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 /** Session-derived owner identity for the self-only run status surface. */
 export interface SelfRunStatusCaller

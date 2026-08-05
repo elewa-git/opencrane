@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { AgentRunState, AgentRunTerminalReason, AgentServiceKind, AgentServiceState, RunOutboxEventKind, WorkloadAssignmentState, WorkloadKind, type PrismaClient } from "@prisma/client";
-import { ___GetContext } from "@opencrane/observability";
+import { ___GetContext } from "@opencrane/backend/observability";
 import { describe, expect, it, vi } from "vitest";
 
 import { PrismaRunDispatchRepository } from "../prisma-run-dispatch-repository.js";

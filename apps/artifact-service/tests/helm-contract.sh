@@ -7,7 +7,9 @@ OUTPUT="$(mktemp)"
 trap 'rm -f "$OUTPUT"' EXIT
 
 helm dependency build "$CHART" >/dev/null
-helm template opencrane "$CHART" >"$OUTPUT"
+helm template opencrane "$CHART" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' >"$OUTPUT"
 
 grep -q 'name: opencrane-artifact-service' "$OUTPUT"
 grep -q 'namespace: default-artifacts' "$OUTPUT"

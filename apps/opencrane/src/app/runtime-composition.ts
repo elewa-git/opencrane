@@ -2,7 +2,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 
 import { _IssueAttemptLiteLlmKey } from "@opencrane/backend/server/gateways/model-routing";
-import { _RegisterInternalAgentRuntimeStream } from "@opencrane/server/_infra/agent-runtime-stream";
+import { _RegisterInternalAgentRuntimeStream } from "@opencrane/backend/_server/agent-runtime-stream";
 import { PrismaRunDispatchRepository, __CreateAgentControllerRunDispatchRouter, type AttemptModelKeyMintRequest, type MintedAttemptModelKey } from "@opencrane/backend/agents/execution/runs";
 import { PrismaSkillAuthoringCompletionRepository, PrismaSkillAuthoringInputRepository, PrismaSkillWorkloadBootstrapRepository, PrismaSkillWorkloadClaimsRepository, __CreateSkillAuthoringCompletionRouter, __CreateSkillAuthoringInputRouter, __CreateSkillWorkloadBootstrapRouter, __CreateSkillWorkloadDispatchRouter } from "@opencrane/backend/agents/skills/execution";
 import { __CreateProductionRuntimeDispatchAuthority } from "@opencrane/backend/agents/execution/protocol";
@@ -10,7 +10,8 @@ import { PrismaRuntimeBootstrapExchange, __CreateRuntimeBootstrapRouter } from "
 import { __CreateConversationReplayRouter, PrismaConversationReplayRepository } from "@opencrane/backend/server/agents/conversation-replay";
 import { PrismaChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 import { PrismaArtifactPreprocessRepository, __CreateArtifactPreprocessorRouter } from "@opencrane/backend/server/agents/artifacts";
-import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/server/_infra/workload-identity";
+import { _CreateAgentControllerTokenReviewer, _CreateArtifactPreprocessorTokenReviewer, _CreateRuntimeTokenReviewer, _CreateSkillWorkloadTokenReviewer, _ValidateIsolatedWorkloadNamespace, _ValidateRuntimeIdentityNamespaces, type RuntimeIdentityNamespaces } from "@opencrane/backend/_server/workload-identity";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
 
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
@@ -114,9 +115,10 @@ function _CreateSkillWorkloadRuntimeComposition(prisma: PrismaClient, tokenRevie
  * @param config - Frozen command time-to-live and recovery settings.
  * @param namespaces - Validated server, personal-runtime, and managed-runtime identity planes.
  * @param tokenReviewer - Reviewer constrained to the two runtime identity planes.
+ * @param memoryGateway - Authenticated memory-gateway client shared by compile-time recall and the action transport.
  * @returns Runtime bootstrap and stream routers.
  */
-function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>): RuntimeProtocolComposition
+function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: InternalRuntimeConfig, namespaces: RuntimeIdentityNamespaces, tokenReviewer: ReturnType<typeof _CreateRuntimeTokenReviewer>, memoryGateway: MemoryGatewayClient): RuntimeProtocolComposition
 {
 	const runtimeDispatchAuthority = __CreateProductionRuntimeDispatchAuthority(prisma, {
 		personalRuntimeNamespace: namespaces.personalRuntimeNamespace,
@@ -124,7 +126,7 @@ function _CreateRuntimeProtocolComposition(prisma: PrismaClient, config: Interna
 		commandTtlMilliseconds: config.commandTtlMilliseconds,
 		externalActionRetryLimit: 3,
 		externalActionRetryWindowMilliseconds: 30_000,
-	}, _log);
+	}, _log, memoryGateway);
 	return {
 		runtimeBootstrap: __CreateRuntimeBootstrapRouter({
 			tokenReviewer,
@@ -193,9 +195,10 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
  * @param prisma - Canonical product-authority database client.
  * @param authApi - Kubernetes TokenReview client for workload identity.
  * @param config - Frozen startup configuration shared with the internal body parser and workers.
+ * @param memoryGateway - Process-wide authenticated memory-gateway client built once at startup.
  * @returns Routers composed from controller, skill-workload, runtime, and optional-worker plane authorities.
  */
-export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig): InternalRuntimeComposition
+export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient): InternalRuntimeComposition
 {
 	// 1. Validate all identity planes before constructing a router, so malformed coordinates fail
 	// startup rather than leaving a partially mounted internal API.
@@ -211,7 +214,7 @@ export function _CreateInternalRuntimeComposition(prisma: PrismaClient, authApi:
 	return {
 		..._CreateControllerRuntimeComposition(prisma, config, namespaces, controllerTokenReviewer),
 		..._CreateSkillWorkloadRuntimeComposition(prisma, skillWorkloadTokenReviewer),
-		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer),
+		..._CreateRuntimeProtocolComposition(prisma, config, namespaces, runtimeTokenReviewer, memoryGateway),
 		..._CreateOptionalRuntimeComposition(prisma, authApi, config, namespaces.serverNamespace),
 	};
 }

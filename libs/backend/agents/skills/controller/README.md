@@ -31,11 +31,14 @@ Python code running.
   exact first worker Pod.
 - `__RunSkillWorkloadController` — polls until process shutdown while isolating one failed claim.
 - `__ValidateSkillWorkloadControllerProfiles` — validates the two deployment-owned job-class profiles.
+- `__CreateHttpSkillWorkloadControllerAuthority` — bounds and decodes internal responses, then
+  delegates every wire shape and echo invariant to the model-adjacent Zod validators in
+  `@opencrane/contracts`.
 
 ## Boundary
 
 This package accepts ports for OpenCrane and Kubernetes; it does not use Prisma, issue a capability,
-read artifact bytes, or run a worker. It releases only an exact UID-bound Job under a short durable
+read artifact bytes, duplicate controller wire validators, or run a worker. It releases only an exact UID-bound Job under a short durable
 release claim, then binds one Kubernetes-issued Pod UID. A later worker protocol must exchange the
 non-secret Job reference through a separately authenticated boundary before any code can run.
 

@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "pino";
 
-import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 
 import { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.router.js";
 import type { DeferredToolApprovalCaller } from "./deferred-tool-approval.router.types.js";

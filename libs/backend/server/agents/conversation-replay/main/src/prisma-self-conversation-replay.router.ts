@@ -2,7 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 import type { Router } from "express";
 import type { Logger } from "pino";
 
-import { _ResolveRequestPrincipal } from "@opencrane/server/_infra/auth";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 
 import { PrismaConversationReplayRepository } from "./prisma-conversation-replay-repository.js";
 import { __CreateSelfConversationReplayRouter } from "./self-conversation-replay.router.js";

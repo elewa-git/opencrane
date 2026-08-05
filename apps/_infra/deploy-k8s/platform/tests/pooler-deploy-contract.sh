@@ -5,14 +5,18 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
+KUBERNETES_API_ARGS="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kubernetes-api-helm-args.sh"
 
 grep -Fq 'POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"
-grep -Fq 'networkPolicy.kubernetesApiServerCidrs[0]' "$DEPLOY_SCRIPT"
-grep -Fq 'networkPolicy.kubernetesApiServerEndpointCidrs[$POSTGRES_KUBERNETES_API_ENDPOINT_INDEX]' "$DEPLOY_SCRIPT"
-grep -Fq 'networkPolicy.kubernetesApiServerEndpointPort=$POSTGRES_KUBERNETES_API_ENDPOINT_PORT' "$DEPLOY_SCRIPT"
+grep -Fq '_load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"' "$DEPLOY_SCRIPT"
+grep -Fq '_load_kubernetes_api_helm_args memoryGateway "memory gateway"' "$DEPLOY_SCRIPT"
+grep -Fq '$values_prefix.kubernetesApiServerCidrs[0]' "$KUBERNETES_API_ARGS"
+grep -Fq '$values_prefix.kubernetesApiServerEndpointCidrs[$endpoint_index]' "$KUBERNETES_API_ARGS"
+grep -Fq '$values_prefix.kubernetesApiServerEndpointPort=$endpoint_port' "$KUBERNETES_API_ARGS"
+grep -Fq '"${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}"' "$DEPLOY_SCRIPT"
 
 echo "pooler deploy contract: PASS"

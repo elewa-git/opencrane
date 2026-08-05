@@ -217,6 +217,21 @@ instance → release-local Service; shared → sharedPlatform.mcpGateway.shared.
 {{- end -}}
 {{- end }}
 
+{{/* Release-local Cognee endpoint the private memory gateway should call. */}}
+{{- define "opencrane.cogneeEndpoint" -}}
+{{- $c := .Values.clustertenantManager.cognee | default dict -}}
+{{- printf "http://%s-cognee.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace $c.service.port -}}
+{{- end }}
+
+{{/*
+Release-local private memory-gateway origin the OpenCrane server calls with its projected
+`opencrane-memory-gateway` audience token. Always the in-release Service; the gateway is the
+only permitted Cognee caller, so the server never receives a Cognee endpoint directly.
+*/}}
+{{- define "opencrane.memoryGatewayUrl" -}}
+{{- printf "http://%s-memory-gateway.%s.svc.cluster.local:%v" (include "opencrane.fullname" .) .Release.Namespace .Values.memoryGateway.service.port -}}
+{{- end }}
+
 {{/*
 Name of the Secret holding Obot's PostgreSQL DSN (key `dsn`).
 instance → release-prefixed `<fullname>-obot` (per-instance, collision-free; B5).
@@ -235,7 +250,7 @@ Call with a dict carrying the root context + the logical service name, e.g.:
 
 NODE_ENV + LOG_LEVEL are always emitted so logs are consistent JSON. The OTEL_*
 vars are emitted only when observability.otel.enabled, pointing apps at the
-operator-supplied release-local collector Service; omitting them leaves @opencrane/observability's
+operator-supplied release-local collector Service; omitting them leaves @opencrane/backend/observability's
 startTelemetry a no-op (it keys off OTEL_EXPORTER_OTLP_ENDPOINT). The service name
 is also set in code, so this stays correct even if the env var is dropped. This chart
 does not deploy the operator-supplied collector.

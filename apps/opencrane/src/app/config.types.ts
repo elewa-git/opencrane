@@ -17,6 +17,12 @@ export interface InternalRuntimeConfig
 	readonly commandRecoveryMilliseconds: number;
 	/** Namespace reserved for managed-agent runtime Jobs. */
 	readonly managedRuntimeNamespace: string | undefined;
+	/** Hard timeout applied to every memory-gateway HTTP exchange. */
+	readonly memoryGatewayTimeoutMilliseconds: number;
+	/** Absolute path of the projected audience-bound memory-gateway caller token. */
+	readonly memoryGatewayTokenPath: string;
+	/** Release-local private memory-gateway origin; the client validates its exact shape. */
+	readonly memoryGatewayUrl: string;
 	/** Maximum retained published runtime outbox rows removed in one pass. */
 	readonly outboxPruneBatchSize: number;
 	/** Namespace reserved for personal-agent runtime Jobs. */

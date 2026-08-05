@@ -7,10 +7,13 @@ source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 prepare_current_chart_sources
 trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
+MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
 
 rendered="$(helm template opencrane-silo "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler)"
 runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set agentController.enabled=true \
   --set-string agentController.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa \
   --set-string agentController.runtimeProfile.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb \
@@ -18,8 +21,9 @@ runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   --set-string agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd \
   --set-string 'agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'agentController.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')"
-otel_rendered="$(helm template acme "$CHART_DIR" --set observability.otel.enabled=true)"
+otel_rendered="$(helm template acme "$CHART_DIR" "${MEMORY_GATEWAY_API_ARGS[@]}" --set observability.otel.enabled=true)"
 otel_default_deny_rendered="$(helm template acme "$CHART_DIR" \
+  "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set observability.otel.enabled=true \
   --set networkPolicy.mainNetworkDefaultDeny.enabled=true \
   --show-only templates/networkpolicy-main-default-deny.yaml)"
@@ -85,6 +89,8 @@ grep -Fq '              k8s-app: kube-dns' <<<"$server_policy"
 grep -Fq '          port: 53' <<<"$server_policy"
 grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy"
 grep -Fq '          port: 4000' <<<"$server_policy"
+grep -Fq '              app.kubernetes.io/component: memory-gateway' <<<"$server_policy"
+grep -Fq '          port: 8080' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: "opencrane-silo-managed-runtime"' <<<"$runtime_server_policy"
 grep -Fq '              app.kubernetes.io/component: agent-runtime' <<<"$runtime_server_policy"
 grep -Fq 'value: "http://acme-opencrane-otel-collector.default.svc:4318"' <<<"$otel_rendered"

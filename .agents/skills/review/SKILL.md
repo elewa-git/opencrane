@@ -116,6 +116,14 @@ maintainability pass.
      and in what order), not just "this looks unused." When the caller
      asks for fixes, perform the removal following that sequencing.
 8. **Maintainability and readability (a modeled design concern, not cosmetic style)**
+   - **Model-adjacent runtime validation is mandatory.** When untrusted data becomes a named
+     TypeScript model, require a Zod validator beside that model in the same folder/package
+     (`a.types.ts` + `a.validator.ts`) with a clarifying trust-boundary comment and a schema typed
+     against the model. Flag hand-written field-by-field `if` conjunctions, transport-owned copies
+     of a model's accepted fields, generic mini-validation frameworks, or validators placed in an
+     adapter/repository package. Verify the concrete coordinated-edit risk by comparing the model
+     and parser fields; transport code should only authenticate, bound/decode, interpret status,
+     and delegate. Deliberate `.strict()` versus `.strip()` behavior remains part of the protocol.
    - Treat `PRISMA-TRANSACTION-OWNER` and `PRISMA-DELEGATE-OWNER` as deterministic architecture
      failures: application services/materializers/use cases consume repository and UnitOfWork ports;
      repository adapters own model delegates and UnitOfWork implementations own `$transaction`.

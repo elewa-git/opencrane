@@ -16,8 +16,8 @@ authority**. A runtime can request memory actions only through the control plane
 | Run input compiler | Selects authorised memory evidence for one run snapshot |
 | Runtime | Proposes a memory action; never selects another user's dataset |
 
-OpenCrane does not duplicate fact text in its product database. It records a content digest and
-exact provenance after Cognee has durably accepted the content.
+OpenCrane does not duplicate fact text in its product database. Its planned write contract records a
+content digest and exact provenance only after Cognee has durably accepted the content.
 
 ## Personal dataset binding
 
@@ -25,7 +25,9 @@ A personal memory dataset resolves from the verified `(silo, organisation, subje
 The browser and runtime cannot supply a different dataset id. Organisation and shared datasets
 are filtered through the same membership and grant authority used at run admission.
 
-## Recording a fact
+## Planned recording contract
+
+The target write sequence is:
 
 ```text
 authorised memory action
@@ -42,9 +44,12 @@ explicit user statement. Explicit statements must identify the same authenticate
 the target personal dataset.
 
 ::: info Current transport status
-The catalogue, dataset resolver and provenance rules are implemented. The current OpenCrane
-composition injects an unavailable memory-gateway client, so runtime Cognee reads and writes
-fail closed until the authenticated transport is mounted.
+Reads are live through the authenticated private gateway: admission freezes gateway-selected fact
+references (fact id and `sha256:` content digest, never fact text) into the run snapshot, and the
+compile step re-resolves each reference and verifies it against the frozen digest before inlining —
+a mismatch or missing fact fails the compile closed rather than producing a partial prompt. Mid-run
+memory actions still have no attempt-fenced ephemeral result channel and remain fail closed, and no
+write transport is implemented.
 :::
 
 ::: tip
@@ -55,8 +60,8 @@ its governance record was not accepted.
 ## Retrieval during a run
 
 The control plane freezes the memory query policy and selected memory facts in the
-`RunInputSnapshot`. Further memory reads or writes appear as governed external actions and are
-subject to the same approval, receipt and audit boundaries as other tools.
+`RunInputSnapshot`. When runtime recall is connected, further memory reads or writes must remain
+governed external actions subject to the same approval, receipt and audit boundaries as other tools.
 
 ## Failure posture
 
@@ -67,4 +72,4 @@ subject to the same approval, receipt and audit boundaries as other tools.
 - Runtime-local scratch is never promoted to durable memory implicitly.
 
 Source: [`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md)
-and [`libs/server/_infra/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/server/_infra/memory-gateway-client/README.md).
+and [`libs/backend/_server/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).

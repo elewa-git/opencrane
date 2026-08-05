@@ -98,7 +98,7 @@ Source implementations:
 - [`apps/agent-runtime`](../../apps/agent-runtime)
 - [`apps/managed-agent-runtime`](../../apps/managed-agent-runtime)
 - [`libs/backend/agents/execution/protocol`](../../libs/backend/agents/execution/protocol)
-- [`libs/server/_infra/agent-runtime-stream`](../../libs/server/_infra/agent-runtime-stream)
+- [`libs/backend/_server/agent-runtime-stream`](../../libs/backend/_server/agent-runtime-stream)
 
 ## External actions and artifacts
 

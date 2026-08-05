@@ -6,7 +6,7 @@ import type { PrismaClient } from "@prisma/client";
 import { __SignArtifactWriteLease, __VerifyArtifactPromotionReceipt } from "@opencrane/backend/artifacts/authorization";
 import { __CompleteArtifactPreprocessJob, __IssueArtifactPreprocessOutputLease, __IssueArtifactReadLease, __UploadArtifact, IssueArtifactReadLeaseOutcomes, PrismaArtifactAuthorityRepository, PrismaArtifactPreprocessRepository, type ArtifactPreprocessOutputBroker, type ArtifactUploadResult, type VerifiedArtifactUploadCommand } from "@opencrane/backend/server/agents/artifacts";
 import type { SkillAuthoringArtifactReader, SkillAuthoringInputRecord } from "@opencrane/backend/agents/skills/execution";
-import { ___DoWithTrace } from "@opencrane/observability";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { _ReadArtifactMountedPem } from "./artifact-mounted-key.loader.js";

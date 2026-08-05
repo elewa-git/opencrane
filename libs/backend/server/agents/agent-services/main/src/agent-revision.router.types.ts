@@ -1,6 +1,6 @@
 import type { Request } from "express";
 
-import type { Logger } from "@opencrane/observability";
+import type { Logger } from "@opencrane/backend/observability";
 
 import type { AgentServicePublicationRepository } from "./agent-publication.types.js";
 import type { AgentRevisionLifecycleRepository, ManagedRunAdmissionPort } from "./agent-revision-lifecycle.types.js";
