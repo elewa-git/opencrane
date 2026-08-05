@@ -282,3 +282,13 @@ test("publishes deterministic JSON evidence and matching Markdown", function _Pu
 	assert.equal(readFileSync(summaryPath, "utf8"), renderMarkdown(result));
 	assert.deepEqual(JSON.parse(output), result);
 });
+
+test("binds successful checks to validated heads and paginates failure invalidation", function _WorkflowPublication()
+{
+	const workflow = readFileSync(".github/workflows/pr-stack-integrity.yml", "utf8");
+	assert.match(workflow, /set -euo pipefail/u);
+	assert.match(workflow, /\.pullRequests\[\]\.head\.sha/u);
+	assert.match(workflow, /gh api \\\n\s+--paginate \\\n\s+--slurp/u);
+	assert.doesNotMatch(workflow, /gh pr list/u);
+	assert.doesNotMatch(workflow, /--limit 100/u);
+});

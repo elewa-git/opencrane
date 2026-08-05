@@ -55,22 +55,25 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           CONCLUSION: ${{ steps.validate.outputs.status == '0' && 'success' || 'failure' }}
         run: |
-          set -o pipefail
-          {
-            gh pr list \
-              --repo "${{ github.repository }}" \
-              --state open \
-              --limit 100 \
-              --json headRefOid \
-              --jq '.[].headRefOid'
-            printf '%s\n' "${{ github.event.pull_request.head.sha }}"
-          } | sed '/^$/d' | sort -u | while IFS= read -r head_sha; do
+          set -euo pipefail
+          if [[ "$CONCLUSION" == "success" ]]; then
+            jq -r '.pullRequests[].head.sha' pr-stack-integrity-evidence.json > pr-stack-check-heads.txt
+          else
+            gh api \
+              --paginate \
+              --slurp \
+              "repos/${{ github.repository }}/pulls?state=open&per_page=100" \
+              --jq '.[][] | .head.sha' > pr-stack-check-heads.txt
+            printf '%s\n' "${{ github.event.pull_request.head.sha }}" >> pr-stack-check-heads.txt
+          fi
+          sed '/^$/d' pr-stack-check-heads.txt | sort -u > pr-stack-check-heads-unique.txt
+          while IFS= read -r head_sha; do
             gh api --method POST "repos/${{ github.repository }}/check-runs" \
               -f name="PR stack integrity" \
               -f head_sha="$head_sha" \
               -f status=completed \
               -f conclusion="$CONCLUSION"
-          done
+          done < pr-stack-check-heads-unique.txt
 
       - name: Enforce the result
         if: steps.validate.outputs.status != '0'
