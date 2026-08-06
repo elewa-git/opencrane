@@ -32,6 +32,7 @@ grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$INSTANCE_POLICY"
 grep -q 'app.kubernetes.io/component: opencrane-server' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: mcp-gateway' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: litellm' <<<"$POOLER_POLICY"
+grep -q 'kubernetes.io/metadata.name: "opencrane"' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/cluster: opencrane-postgres' <<<"$POOLER_POLICY"
 grep -q '    - Egress' <<<"$POOLER_POLICY"
@@ -41,10 +42,6 @@ grep -q '            cidr: "10.43.0.1/32"' <<<"$POOLER_POLICY"
 grep -q '            cidr: "172.18.0.2/32"' <<<"$POOLER_POLICY"
 grep -q '          port: 443' <<<"$POOLER_POLICY"
 grep -q '          port: 6443' <<<"$POOLER_POLICY"
-if grep -q 'namespaceSelector' <<<"$POOLER_POLICY"; then
-  echo "postgres pooler boundary must not admit cross-namespace clients or destinations" >&2
-  exit 1
-fi
 if grep -Eq 'app.kubernetes.io/component: (opencrane-server|mcp-gateway|litellm)' <<<"$INSTANCE_POLICY"; then
   echo "postgres instance policy allows an application to bypass the pooler" >&2
   exit 1
