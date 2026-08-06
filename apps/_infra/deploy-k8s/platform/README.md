@@ -50,7 +50,11 @@ ingress Service reports the reserved address.
 The bootstrap also owns `opencrane-database-proof`, a GKE Autopilot ComputeClass used only by the
 short-lived PostgreSQL privilege-proof Job through `values/postgres-gke-autopilot.yaml`. Its explicit
 `ScaleUpAnyway` policy allows the proof to receive capacity when GKE system balloon Pods reserve all
-otherwise idle capacity. It does not change the Job's database grants, credentials, network path, or
+otherwise idle capacity. Its ten-GiB boot disk is the GKE minimum, sufficient for the Job's three
+one-GiB ephemeral-storage requests and small enough for the development SSD quota. It uses the
+two-vCPU, two-GiB `e2-small` machine type because GKE only permits an explicit boot disk with a
+machine type or family, not with a `podFamily`; this makes the node-based cost bounded to the
+short-lived proof Job. It does not change the Job's database grants, credentials, network path, or
 completion requirement.
 
 The pinned ingress-nginx release is accepted only for this single-silo development qualification.

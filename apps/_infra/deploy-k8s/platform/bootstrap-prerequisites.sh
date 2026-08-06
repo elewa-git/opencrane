@@ -466,11 +466,18 @@ verify_prerequisites()
   wait_for_established_crds "${CNPG_CLUSTER_RESOURCES[@]}"
   kubectl --context "$EXPECTED_CONTEXT" wait \
     --for=condition=Health "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" --timeout=2m
-  local scale_policy
+  local scale_policy boot_disk_size machine_type
   scale_policy="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
     --output=jsonpath='{.spec.whenUnsatisfiable}')"
   [[ "$scale_policy" == "ScaleUpAnyway" ]] || fail \
     "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' has whenUnsatisfiable '$scale_policy', expected ScaleUpAnyway"
+  boot_disk_size="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
+    --output=jsonpath='{.spec.priorities[0].storage.bootDiskSize}')"
+  [[ "$boot_disk_size" == "10" ]] || fail \
+    "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' has bootDiskSize '$boot_disk_size', expected 10 GiB"
+  machine_type="$(kubectl --context "$EXPECTED_CONTEXT" get "computeclass/$DATABASE_PROOF_COMPUTE_CLASS" \
+    --output=jsonpath='{.spec.priorities[0].machineType}')"
+  [[ "$machine_type" == "e2-small" ]] || fail "ComputeClass '$DATABASE_PROOF_COMPUTE_CLASS' machineType '$machine_type', expected e2-small"
   wait_for_ingress_address
 
   log "shared prerequisites are ready; ingress address: $INGRESS_ADDRESS_IP"

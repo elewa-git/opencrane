@@ -73,6 +73,8 @@ case "$command_name" in
         *"managed-by}"*) printf '%s' "${MOCK_COMPUTE_CLASS_MANAGED_BY:-foreign-manager}" ;;
         *"prerequisite-profile}"*) printf '%s' "${MOCK_COMPUTE_CLASS_PROFILE:-foreign-profile}" ;;
         *"whenUnsatisfiable}"*) printf '%s' "${MOCK_COMPUTE_CLASS_SCALE_POLICY:-ScaleUpAnyway}" ;;
+        *"bootDiskSize}"*) printf '%s' "${MOCK_COMPUTE_CLASS_BOOT_DISK_SIZE:-10}" ;;
+        *"machineType}"*) printf '%s' "${MOCK_COMPUTE_CLASS_MACHINE_TYPE:-e2-small}" ;;
       esac
       exit
     fi
@@ -220,6 +222,16 @@ if run_case foreign-compute-class MOCK_FOREIGN_COMPUTE_CLASS=1; then
   exit 1
 fi
 ! grep -Fq 'helm upgrade' "$TEST_DIR/foreign-compute-class.calls"
+
+if run_case compute-class-disk-drift MOCK_COMPUTE_CLASS_BOOT_DISK_SIZE=20; then
+  echo 'ComputeClass boot-disk drift unexpectedly succeeded' >&2
+  exit 1
+fi
+
+if run_case compute-class-machine-drift MOCK_COMPUTE_CLASS_MACHINE_TYPE=e2-medium; then
+  echo 'ComputeClass machine-type drift unexpectedly succeeded' >&2
+  exit 1
+fi
 
 if run_case render-failure MOCK_RENDER_FAIL=1; then
   echo 'chart render failure unexpectedly succeeded' >&2
