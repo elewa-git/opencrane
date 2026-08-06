@@ -9,14 +9,18 @@ CONNECTION_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/postgres-connection
 KUBERNETES_API_ARGS="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kubernetes-api-helm-args.sh"
 
 grep -Fq 'POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"' "$DEPLOY_SCRIPT"
-grep -Fq 'POSTGRES_POOLER_CLIENT_HOST="${POSTGRES_POOLER_HOST}-client"' "$DEPLOY_SCRIPT"
+if grep -Fq 'POSTGRES_POOLER_CLIENT_HOST=' "$DEPLOY_SCRIPT"; then
+  echo "deploy must use CNPG's stable Pooler Service, not a headless client alias" >&2
+  exit 1
+fi
 grep -Fq 'source "$SCRIPT_DIR/postgres-connection.sh"' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIPT"
 grep -Fq 'publish_postgres_database_connection' "$CONNECTION_HELPER"
 grep -Fq 'restart_postgres_connection_consumers' "$CONNECTION_HELPER"
-grep -Fq '"$POSTGRES_POOLER_CLIENT_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
-grep -Fq '"$POSTGRES_POOLER_CLIENT_HOST" obot' "$DEPLOY_SCRIPT"
-grep -Fq '"$POSTGRES_POOLER_CLIENT_HOST" litellm' "$DEPLOY_SCRIPT"
+grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
+grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"
+grep -Fq '"$POSTGRES_POOLER_HOST" litellm' "$DEPLOY_SCRIPT"
+grep -Fq '"$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane' "$DEPLOY_SCRIPT"
 grep -Fq '"${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway"' "$DEPLOY_SCRIPT"
 grep -Fq '_load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"' "$DEPLOY_SCRIPT"
 grep -Fq '_load_kubernetes_api_helm_args memoryGateway "memory gateway"' "$DEPLOY_SCRIPT"

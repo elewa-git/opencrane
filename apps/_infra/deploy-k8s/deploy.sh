@@ -17,13 +17,14 @@
 #   apps/_infra/deploy-k8s/deploy.sh \
 #       --base-domain dev.opencrane.ai \
 #       --cluster-tenant acme \
+#       --acme-email operator@example.com \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
 #
-# --base-domain and --cluster-tenant are required. The silo is installed into namespace
+# --base-domain, --cluster-tenant, and --acme-email are required. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
@@ -39,6 +40,7 @@ export OPENCRANE_CHART_DIR="$SCRIPT_DIR"
 CLUSTER_TENANT=""
 NAMESPACE=""
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
+ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"
 PASSTHROUGH=()
 
 err() { echo -e "\033[0;31m[silo]\033[0m $1" >&2; }
@@ -49,6 +51,9 @@ while [[ $# -gt 0 ]]; do
     --cluster-tenant)  CLUSTER_TENANT="$2"; shift 2 ;;
     --namespace)       NAMESPACE="$2"; shift 2 ;;
     --base-domain)     BASE_DOMAIN="$2"; PASSTHROUGH+=(--base-domain "$2"); shift 2 ;;
+    --acme-email)      ACME_EMAIL="$2"; shift 2 ;;
+    --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
+    --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -56,6 +61,7 @@ done
 
 [[ -n "$BASE_DOMAIN" ]]     || { err "--base-domain is required (the platform wildcard base this silo is served under)."; exit 1; }
 [[ -n "$CLUSTER_TENANT" ]]  || { err "--cluster-tenant is required (the ClusterTenant this silo serves)."; exit 1; }
+[[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
 
 # Fail fast if the external CloudNativePG prerequisite is absent.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
@@ -89,6 +95,11 @@ PROFILE_SET=(
   --set "ingress.tls.enabled=true"
   # Issue the ClusterTenant boundary's TLS certificate through its release-owned namespaced Issuer.
   --set "certManager.enabled=true"
+  # A public ClusterTenant host is complete only with a browser-trusted certificate.
+  # A distinct Issuer name makes an upgrade from the old self-signed profile reissue.
+  --set "certManager.mode=acme"
+  --set "certManager.issuerName=opencrane-acme-issuer"
+  --set "certManager.acme.email=${ACME_EMAIL}"
   # The server is served at the ClusterTenant host `<cluster-tenant>.<base>`.
   --set "ingress.controlPlaneHost=${CLUSTER_TENANT}.${BASE_DOMAIN}"
 )

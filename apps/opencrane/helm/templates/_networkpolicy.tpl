@@ -164,12 +164,11 @@ spec:
     # Every application connection goes through the CNPG-owned PgBouncer pooler.
     # The database Secret binds the exact authority while the pooler owns the
     # connection budget; direct CNPG-instance egress would bypass that boundary.
-    # A Pod selector without a namespace selector is deliberately release-local;
-    # it admits only matching Pooler Pods in this NetworkPolicy's namespace.
-    - to:
-        - podSelector:
-            matchLabels:
-              cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
+    # GKE Dataplane V2 evaluates server egress before the CNPG ClusterIP is
+    # translated to its Pooler Pod, so a Pod selector cannot admit this path.
+    # The rule is limited to PostgreSQL's port; the Pooler's ingress policy still
+    # admits only this labelled server Pod (and its two named peer clients).
+    -
       ports:
         - protocol: TCP
           port: 5432
@@ -180,15 +179,10 @@ spec:
         - protocol: TCP
           port: 443
     {{- if .Values.networkPolicy.allowDNS }}
-    # Cluster DNS lives outside the release namespace.
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
+    # GKE Dataplane V2 evaluates egress before the kube-dns ClusterIP maps to a
+    # CoreDNS Pod, so a Pod selector would reject DNS queries. Keep this limited
+    # to DNS ports; every other outbound path is named below.
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP
@@ -287,14 +281,9 @@ spec:
         - protocol: TCP
           port: {{ $internalPort }}
     {{- if $.Values.networkPolicy.allowDNS }}
-    - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: kube-system
-          podSelector:
-            matchLabels:
-              k8s-app: kube-dns
-      ports:
+    # See the server policy: Dataplane V2 evaluates this before Service
+    # translation, so this must be port-scoped instead of CoreDNS-Pod-scoped.
+    - ports:
         - protocol: UDP
           port: 53
         - protocol: TCP

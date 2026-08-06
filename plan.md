@@ -186,7 +186,7 @@ artifacts pass without depending on a live external environment. It does not mea
 Kubernetes Jobs, LiteLLM, Obot, Zitadel login, TLS, recovery, or isolation have passed together on a
 real cluster.
 
-**Live qualification status (2026-08-05):** the app-owned Terraform path created the regional
+**Live qualification status (2026-08-06):** the app-owned Terraform path created the regional
 Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-manager, and
 CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
 `testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, the confidential
@@ -208,18 +208,19 @@ channel-proxy and memory-gateway image references did not exist. CI now publishe
 `sha-d2f26df0` tags, and the complete CI run is green, including Terraform's read-only provider
 lock validation.
 
-The server-image CI is now green and published immutable `sha-16572286`. Its live retry also stops
-before the tenant Helm release changes: the normal PostgreSQL `post-upgrade` privileges hook has
-three 64 MiB containers and GKE Autopilot cannot schedule it. The three live
-`gke-system-balloon-pod` workloads reserve 99% of each node's allocatable memory, including the
-new node provisioned for the retry, so this is a capacity-placement constraint rather than an
-application memory leak. Bypassing the hook or altering GKE-managed system Pods would weaken the
-database privilege proof or the platform boundary and is rejected. Autopilot general-purpose
-workloads are billed from requested Pod resources rather than underlying node size, but the current
-Billing Account Viewer gap means the final monthly total remains unproven. Trusted TLS, browser
-Zitadel login, running server/channel/memory workloads, logical-database isolation, runtime
-isolation, a local standalone membership issuer for runnable personal/managed agents, and the final
-monthly cost remain live exit gates.
+The server-image CI is now green and published immutable `sha-ffc4dfc`. The live single-silo
+deployment is healthy: the app-owned deploy script uses current chart sources rather than stale
+local archives; all server database clients use the CNPG Pooler ClusterIP; GKE Dataplane V2 admits
+that Service and DNS through port-limited egress while the Pooler ingress policy names its three
+approved clients. The server is Ready with a healthy Prisma query, public `/healthz` returns
+`{"status":"ok","db":true}`, and its liveness no longer restarts an otherwise recoverable database
+path. `testv2.dev.opencrane.ai` now has a browser-trusted Let's Encrypt HTTP-01 certificate and the
+login endpoint redirects to the configured Zitadel confidential client. The privileges proof remains
+intact: Autopilot provisions its isolated ComputeClass node and the three-container Job completes;
+this cold-node/image-pull delay is operational friction, not an application memory leak. The final
+monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callback, runtime-job
+execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
+the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.

@@ -211,8 +211,11 @@ spec:
               readOnly: true
             {{- end }}
           livenessProbe:
-            httpGet:
-              path: /healthz
+            # A running server can repair a transient database connection; the
+            # database-backed health route remains the readiness/public gate.
+            # Liveness therefore proves only that the control-plane listener is
+            # alive, rather than restarting it for an upstream dependency.
+            tcpSocket:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10

@@ -22,6 +22,7 @@ export OIDC_CLIENT_ID=<organisation-client-id>
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain <your-domain> \
   --cluster-tenant <org-name> \
+  --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
   --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
@@ -31,10 +32,10 @@ The chart installs trusted services and distinct restricted namespaces for perso
 managed and worker Jobs. A single-node cluster does not collapse those boundaries. Create the
 three PostgreSQL bootstrap Secrets in the target namespace first, using distinct credentials.
 
-Add `--verify` when you want an advisory check of pod readiness, hostname resolution, and the public
-server/database health endpoint after installation. For a local self-signed certificate, use
-`--verify --verify-insecure`; omit `--verify-insecure` whenever the certificate is trusted. These
-checks report diagnostics without turning a completed installation into a failed release.
+Point the public host at the ingress address before installing so Let's Encrypt HTTP-01 can issue the
+browser-trusted certificate. Add `--verify` when you want an advisory check of pod readiness,
+hostname resolution, and the public server/database health endpoint after installation. These checks
+report diagnostics without turning a completed installation into a failed release.
 
 ::: warning
 Single-node does not mean single namespace. OpenCrane refuses a deployment that places

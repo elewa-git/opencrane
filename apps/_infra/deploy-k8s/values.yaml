@@ -797,7 +797,7 @@ certManager:
   # -- Provision this release's namespaced Issuer. Set false only when a separately
   #    managed Issuer already owns the resource referenced by this release's Certificates.
   selfManagedIssuer: true
-  # -- Issuer mode: "acme" (production, public CA via DNS-01) or "selfSigned" (dev/local).
+  # -- Issuer mode: "acme" (production, public CA via HTTP-01; DNS-01 is optional) or "selfSigned" (dev/local).
   mode: selfSigned
   # -- Include the bare `<ingress.domain>` apex as a SAN on the platform wildcard
   # Certificate. OFF by default: many installs use the apex as a marketing site

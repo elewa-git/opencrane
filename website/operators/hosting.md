@@ -63,6 +63,7 @@ export OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL=operator@example.com
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example.com \
   --cluster-tenant acme \
+  --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
   --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
@@ -73,6 +74,9 @@ The script delegates to `apps/_infra/deploy-k8s/platform/k8s-deploy.sh` and inst
 `opencrane-silo` umbrella chart. It does not install a second management plane. The three
 PostgreSQL bootstrap Secrets must already exist in the target namespace and use distinct
 credentials.
+
+The public host must already resolve to the ingress address. The entrypoint uses Let's Encrypt
+HTTP-01 and needs `--acme-email`; it fails before applying a self-signed certificate.
 
 ::: warning
 Do not deploy the personal and managed runtimes into the trusted server namespace. The server

@@ -26,6 +26,17 @@ _verify_health_url() {
   fi
 }
 
+_wait_for_release_certificate() {
+  local certificate lookup
+  certificate="${RELEASE}-clustertenant-tls"
+  if lookup="$(kubectl get certificate "$certificate" -n "$NAMESPACE" -o name 2>&1)"; then
+    kubectl wait --for=condition=Ready "certificate/$certificate" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
+  elif [[ "$lookup" != *"(NotFound)"* ]]; then
+    printf 'Unable to determine Certificate %s readiness: %s\n' "$certificate" "$lookup" >&2
+    return 1
+  fi
+}
+
 # Verification stays advisory: every failed diagnostic becomes a warning, never a failed release.
 _post_deploy_verify() {
   [[ "$VERIFY" == "1" ]] || return 0

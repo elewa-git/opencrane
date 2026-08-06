@@ -88,16 +88,15 @@ source "$POST_DEPLOY_VERIFY"
 source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
 source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
-# The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
-# app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
-# = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
-# own chart dir before exec'ing this engine; running k8s-deploy.sh directly without it fails loud
-# rather than guessing.
+source "$SCRIPT_DIR/current-chart-sources.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
   exit 1
 fi
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
+trap cleanup_current_chart_sources EXIT
 POSTGRES_CHART_DIR="${OPENCRANE_POSTGRES_CHART_DIR:-$SCRIPT_DIR/../../../postgres/helm}"
 if [[ ! -f "$POSTGRES_CHART_DIR/Chart.yaml" ]]; then
   echo "[k8s-deploy] PostgreSQL chart not found at '$POSTGRES_CHART_DIR'." >&2
@@ -515,12 +514,11 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-POSTGRES_POOLER_CLIENT_HOST="${POSTGRES_POOLER_HOST}-client"
 # Five Prisma connections keep PgBouncer's thirty-connection logical-database budget authoritative.
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" obot
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" litellm
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" opencrane
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -620,11 +618,7 @@ fi
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
 # 3. The OpenCrane chart.
-# Rebuild local chart dependencies from the committed lock without re-resolving
-# versions. This does not rewrite Chart.lock, so deploys use the same app-owned
-# chart versions that CI validated.
-log "Fetching chart dependencies (from Chart.lock)…"
-helm dep build "$CHART_DIR"
+log "Using current app-owned chart sources from the committed dependency lock…"
 
 log "Installing the OpenCrane Helm release '$RELEASE'…"
 # --force-conflicts: Helm 4 applies server-side, so any out-of-band actor that has
@@ -753,6 +747,8 @@ for _comp in fleet-manager clustertenant-manager; do
     kubectl rollout status "deployment/${RELEASE}-${_comp}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   fi
 done
+
+_wait_for_release_certificate
 
 _post_deploy_verify
 

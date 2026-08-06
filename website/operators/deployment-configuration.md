@@ -17,6 +17,7 @@ settings rather than asking you to repeat those values in a file.
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example.com \
   --cluster-tenant acme \
+  --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
   --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
@@ -42,7 +43,7 @@ These are the public configuration roots owned by the silo umbrella chart.
 | `multiInstance` | Keep multiple independently named releases isolated in one cluster. |
 | `sharedPlatform` | Deliberately use a verified shared LiteLLM, MCP gateway, or external-secret store. |
 | `ingress` | Set the public domain, host, ingress class, annotations, and TLS reference. |
-| `certManager` | Configure the release-owned issuer and DNS-01 certificate behaviour. |
+| `certManager` | Configure the release-owned issuer and ACME certificate behaviour. The silo entrypoint uses browser-trusted ACME HTTP-01 by default. |
 | `networkPolicy` | Tune the release's default-deny and narrowly admitted network paths. |
 | `externalSecrets` | Connect an External Secrets Operator store when that controller is already installed. |
 | `observability` | Enable OpenTelemetry export and choose its logging detail. |
