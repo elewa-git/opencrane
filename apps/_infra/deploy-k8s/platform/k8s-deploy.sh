@@ -86,6 +86,7 @@ if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
 fi
 source "$POST_DEPLOY_VERIFY"
 source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
+source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 # The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
 # app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
@@ -496,19 +497,6 @@ _install_postgres_server() {
   done
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
 }
-_publish_database_connection() {
-  local credentials_secret="$1"
-  local app_secret="$2"
-  local host="$3"
-  local database_name="$4"
-  local connection_options="${5:-}"
-  local publisher_args=("$NAMESPACE" "$credentials_secret" "$app_secret" "$host" "$database_name")
-  if [[ -n "$connection_options" ]]; then
-    publisher_args+=("$connection_options")
-  fi
-  bash "$POSTGRES_CONNECTION_PUBLISHER" \
-    "${publisher_args[@]}"
-}
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
   local target_secret="$2"
@@ -527,18 +515,14 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-POSTGRES_POOLER_SERVICE_IP="$(kubectl get service "$POSTGRES_POOLER_HOST" -n "$NAMESPACE" -o jsonpath='{.spec.clusterIP}')"
-if [[ ! "$POSTGRES_POOLER_SERVICE_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
-  err "CNPG Pooler Service '$POSTGRES_POOLER_HOST' has no IPv4 ClusterIP. This deployment requires a stable IPv4 Pooler Service."
-  exit 1
-fi
+POSTGRES_POOLER_SERVICE_IP="$(discover_postgres_pooler_service_ip "$NAMESPACE" "$POSTGRES_POOLER_HOST")"
 # The one replica of the OpenCrane server gets five Prisma connections at most.
 # This leaves 75 of the 80 physical-server connections outside Prisma's process
 # pool and keeps the 30-connection PgBouncer database budget authoritative.
-_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
-_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
-_publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
