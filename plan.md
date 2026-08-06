@@ -208,10 +208,13 @@ channel-proxy and memory-gateway image references did not exist. CI now publishe
 `sha-d2f26df0` tags, and the complete CI run is green, including Terraform's read-only provider
 lock validation.
 
-The image upgrade is presently blocked before the tenant Helm release changes: its normal
-PostgreSQL `post-upgrade` privileges hook has three 64 MiB containers and GKE Autopilot cannot
-schedule it on the current three nodes (`Insufficient memory` / pod-capacity events). Bypassing
-that hook would weaken the database privilege proof and is rejected. Autopilot general-purpose
+The server-image CI is now green and published immutable `sha-16572286`. Its live retry also stops
+before the tenant Helm release changes: the normal PostgreSQL `post-upgrade` privileges hook has
+three 64 MiB containers and GKE Autopilot cannot schedule it. The three live
+`gke-system-balloon-pod` workloads reserve 99% of each node's allocatable memory, including the
+new node provisioned for the retry, so this is a capacity-placement constraint rather than an
+application memory leak. Bypassing the hook or altering GKE-managed system Pods would weaken the
+database privilege proof or the platform boundary and is rejected. Autopilot general-purpose
 workloads are billed from requested Pod resources rather than underlying node size, but the current
 Billing Account Viewer gap means the final monthly total remains unproven. Trusted TLS, browser
 Zitadel login, running server/channel/memory workloads, logical-database isolation, runtime
