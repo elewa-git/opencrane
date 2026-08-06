@@ -67,6 +67,18 @@ the next deploy cannot reproduce, which defeats your purpose.
    upgrade errors "cannot be imported into the current release". Flag the hazard as a
    `chart` finding BEFORE applying — it has cost this fleet multiple failed revisions.
 
+## Single-silo input contract
+
+For `apps/_infra/deploy-k8s/deploy.sh`, ask for only: target kubectl context; ClusterTenant and
+base domain; OIDC issuer, client ID and securely supplied client secret; first platform-operator
+email or IdP group mapping; three distinct external PostgreSQL bootstrap credential Secrets; and a
+namespace-local registry pull Secret only when images are private. The script derives the namespace
+and default callback URL and creates the OIDC Secret—do not ask for those separately. On GKE
+Autopilot, confirm regional SSD quota and that the database-privileges Job can schedule.
+
+Report `LIVE` only after the privilege Job completes, all current Pods are Ready, CI image tags are
+running, `/healthz` returns 200 over TLS, and the OIDC login route redirects to the configured issuer.
+
 ## Running the deploy
 
 - Invoke the profile script with the flags/values the caller specified (values presets

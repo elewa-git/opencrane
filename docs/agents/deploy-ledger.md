@@ -26,6 +26,10 @@ Full run reports belong in the corresponding pull request or issue.
   the live object and release manifest before applying.
 - Verify the running image digest and application health after rollout.
 - Mutate clusters only through the app-owned deployment scripts.
+- The minimal single-silo handoff is context, tenant/domain, OIDC issuer/client/secret, first
+  operator, three distinct external database bootstrap Secrets, and a pull Secret only for private images.
+- On GKE Autopilot, prove the database-privileges Job schedules; requested capacity, not observed
+  workload use, decides admission.
 
 ## Runs
 
