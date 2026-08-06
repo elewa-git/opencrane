@@ -61,6 +61,15 @@ test "$(grep -c '^kind: Pooler$' "$OUTPUT")" -eq 1
 grep -q 'name: opencrane-postgres-pooler' "$OUTPUT"
 grep -q 'image: "ghcr.io/cloudnative-pg/pgbouncer:1.25.1"' "$OUTPUT"
 POOLER_RESOURCE_BLOCK="$(awk 'BEGIN { RS="---" } /kind: Pooler/ { print }' "$OUTPUT")"
+POOLER_CLIENT_SERVICE="$(awk 'BEGIN { RS="---" } /kind: Service/ && /name: opencrane-postgres-pooler-client/ { print }' "$OUTPUT")"
+[[ -n "$POOLER_CLIENT_SERVICE" ]]
+grep -q 'clusterIP: None' <<<"$POOLER_CLIENT_SERVICE"
+grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$POOLER_CLIENT_SERVICE"
+grep -q 'port: 5432' <<<"$POOLER_CLIENT_SERVICE"
+if grep -q 'cnpg.io/cluster' <<<"$POOLER_CLIENT_SERVICE"; then
+  echo "postgres Pooler client Service must select only PgBouncer Pods" >&2
+  exit 1
+fi
 grep -q 'cpu: 250m' <<<"$POOLER_RESOURCE_BLOCK"
 grep -q 'memory: 256Mi' <<<"$POOLER_RESOURCE_BLOCK"
 grep -q 'cpu: 100m' <<<"$POOLER_RESOURCE_BLOCK"

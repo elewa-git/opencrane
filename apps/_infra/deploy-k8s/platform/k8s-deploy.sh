@@ -515,13 +515,12 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-# The one replica of the OpenCrane server gets five Prisma connections at most.
-# This leaves 75 of the 80 physical-server connections outside Prisma's process
-# pool and keeps the 30-connection PgBouncer database budget authoritative.
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
-publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
+POSTGRES_POOLER_CLIENT_HOST="${POSTGRES_POOLER_HOST}-client"
+# Five Prisma connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" obot
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" litellm
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_CLIENT_HOST" opencrane
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -741,6 +740,7 @@ elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
   helm_args+=(--reset-then-reuse-values)
 fi
 helm "${helm_args[@]}"
+restart_postgres_connection_consumers "$NAMESPACE" "$TIMEOUT" "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway"
 
 # 4. Wait for the core workloads. The database schema was fixed during CNPG initdb;
 # application startup never mutates it. A changed baseline requires a clean database.

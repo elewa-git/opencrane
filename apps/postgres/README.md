@@ -70,6 +70,10 @@ Autopilot profile selects the bootstrap-owned `opencrane-database-proof` Compute
 scale-up policy gives this bounded proof Job a real placement when system capacity-reservation Pods
 fill otherwise idle nodes.
 
+Applications connect through the chart's `-pooler-client` headless Service. It keeps one stable DNS
+name while resolving only the CNPG-managed PgBouncer Pods, so a GKE NetworkPolicy can admit that
+exact data path without permitting a direct connection to a PostgreSQL instance or pinning a Pod IP.
+
 **Invariant.** One CNPG Cluster hosts many databases (not one cluster per authority — that wastes idle
 pods and volumes). Because CNPG (as the database-pod controller) generates the instance-manager
 `ServiceAccount` and its narrow `Role`/`RoleBinding` — deterministically named after the Cluster and

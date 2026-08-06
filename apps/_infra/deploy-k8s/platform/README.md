@@ -9,7 +9,7 @@ local source consumer.
 | Path | Responsibility |
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
-| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
+| `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. It republishes each database consumer's URI and waits for the exact server, LiteLLM, and Obot workloads to restart, because Kubernetes environment variables do not reload Secret changes. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
 | `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers, plus the narrowly selected GKE Autopilot database-proof ComputeClass. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
 | `prerequisite-chart-lock.sh` | Immutable upstream chart coordinates, SHA-256 archive identities, and complete rendered cluster-scoped resource inventories consumed by the bootstrap and render contract. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
