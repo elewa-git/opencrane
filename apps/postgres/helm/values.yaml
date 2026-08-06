@@ -109,6 +109,10 @@ privileges:
   # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
   # after its retry budget expires instead of terminating the Job first.
   jobDeadlineGraceSeconds: 30
+  # Optional scheduler constraints for the one-shot proof Job. Keep this empty for portable
+  # Kubernetes installs; the GKE Autopilot profile selects an owned ComputeClass that can scale
+  # when otherwise-idle node capacity is held by GKE system Pods.
+  nodeSelector: {}
   # The hook starts one small psql container per logical database. Explicit requests avoid a
   # provider default for every container during fresh provisioning and upgrades.
   resources:

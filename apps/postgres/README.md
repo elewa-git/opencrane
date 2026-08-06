@@ -65,7 +65,10 @@ lock. If replica counts or database count change, change these numbers together 
 pooler budget below `postgresql.maxConnections`. The pooler and the one-shot privilege containers
 also declare small CPU and memory requests explicitly. This prevents managed Kubernetes platforms
 from replacing an omitted request with a much larger provider default; raise those requests only from
-observed utilisation.
+observed utilisation. The portable chart leaves the proof Job's node selector empty. The GKE
+Autopilot profile selects the bootstrap-owned `opencrane-database-proof` ComputeClass, whose
+scale-up policy gives this bounded proof Job a real placement when system capacity-reservation Pods
+fill otherwise idle nodes.
 
 **Invariant.** One CNPG Cluster hosts many databases (not one cluster per authority — that wastes idle
 pods and volumes). Because CNPG (as the database-pod controller) generates the instance-manager

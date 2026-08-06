@@ -10,7 +10,7 @@ local source consumer.
 |---|---|
 | `Chart.yaml`, `templates/` | Helm library chart providing labels, names, RBAC, endpoint, database, identity, and observability helpers to the parent release. It renders no workload by itself. |
 | `k8s-deploy.sh` | Provider-neutral install and upgrade engine used by the release wrapper. Its optional `--verify` check reports pod readiness, DNS resolution, and public server/database health without changing deployment success. |
-| `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded GKE Autopilot development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
+| `bootstrap-prerequisites.sh` | Explicit operator bootstrap for the pinned ingress-nginx, cert-manager, and CloudNativePG cluster-wide controllers, plus the narrowly selected GKE Autopilot database-proof ComputeClass. It validates the exact Kubernetes context and reserved regional address before mutation, fails closed around existing foreign resources, and installs resource-bounded development profiles from `values/prerequisites/`. It is not invoked by a silo deployment. |
 | `prerequisite-chart-lock.sh` | Immutable upstream chart coordinates, SHA-256 archive identities, and complete rendered cluster-scoped resource inventories consumed by the bootstrap and render contract. |
 | `configure-oidc.sh` | Surgical OIDC configuration for an existing installation. |
 | `provision.sh` | Optional local, GKE Autopilot, or VPS cluster provisioning invoked before deployment. The GKE path bootstraps a private, versioned Terraform-state bucket in the cluster region; set `OPENCRANE_TERRAFORM_STATE_BUCKET` only when the deterministic `<project>-<cluster>-tfstate` name cannot be used. |
@@ -46,6 +46,12 @@ managed `kube-system` namespace. It never installs
 external-dns or DNS credentials and it does not create a cluster-wide certificate issuer. Each silo
 owns its namespaced HTTP-01 `Issuer`; the operator creates the serving DNS record only after the
 ingress Service reports the reserved address.
+
+The bootstrap also owns `opencrane-database-proof`, a GKE Autopilot ComputeClass used only by the
+short-lived PostgreSQL privilege-proof Job through `values/postgres-gke-autopilot.yaml`. Its explicit
+`ScaleUpAnyway` policy allows the proof to receive capacity when GKE system balloon Pods reserve all
+otherwise idle capacity. It does not change the Job's database grants, credentials, network path, or
+completion requirement.
 
 The pinned ingress-nginx release is accepted only for this single-silo development qualification.
 The upstream project is archived, so a supported ingress controller must replace it before a

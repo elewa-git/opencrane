@@ -61,6 +61,21 @@ case "$command_name" in
       printf '%s\n' "${MOCK_CURRENT_CONTEXT:-gke_weownai-proto_europe-west1_opencrane-dev}"
       exit 0
     fi
+    if [[ "$*" == *" get crd/computeclasses.cloud.google.com"* ]]; then
+      [[ "${MOCK_COMPUTE_CLASS_CRD_ABSENT:-0}" == "0" ]]
+      exit
+    fi
+    if [[ "$*" == *" get computeclass/opencrane-database-proof"* ]]; then
+      if [[ "${MOCK_FOREIGN_COMPUTE_CLASS:-0}" != "1" && ! -e "$MOCK_MUTATED" ]]; then
+        exit 1
+      fi
+      case "$*" in
+        *"managed-by}"*) printf '%s' "${MOCK_COMPUTE_CLASS_MANAGED_BY:-foreign-manager}" ;;
+        *"prerequisite-profile}"*) printf '%s' "${MOCK_COMPUTE_CLASS_PROFILE:-foreign-profile}" ;;
+        *"whenUnsatisfiable}"*) printf '%s' "${MOCK_COMPUTE_CLASS_SCALE_POLICY:-ScaleUpAnyway}" ;;
+      esac
+      exit
+    fi
     if [[ "$*" == *" get namespace "* ]]; then
       if [[ "$*" != *" ${MOCK_FOREIGN_NAMESPACE:-__none__}"* ]]; then
         exit 1
@@ -101,6 +116,10 @@ case "$command_name" in
     fi
     if [[ "$*" == *" wait --for=condition=Established crd/"* ]]; then
       [[ "${MOCK_CRD_ESTABLISHED_FAIL:-0}" == "0" ]]
+      exit
+    fi
+    if [[ "$*" == *" wait --for=condition=Health computeclass/opencrane-database-proof"* ]]; then
+      [[ "${MOCK_COMPUTE_CLASS_HEALTH_FAIL:-0}" == "0" ]]
       exit
     fi
     if [[ "$*" == *" get ingressclass/nginx"* || "$*" == *" get crd/"* ]]; then
@@ -175,6 +194,8 @@ grep -Eq 'helm upgrade --install ingress-nginx .*/ingress-nginx-4\.15\.1\.tgz --
 grep -Fq -- '--set-string controller.service.loadBalancerIP=35.205.225.244' "$SUCCESS_CALLS"
 grep -Fq -- '--atomic --wait --wait-for-jobs --timeout 20m' "$SUCCESS_CALLS"
 grep -Fq 'kubectl --context gke_weownai-proto_europe-west1_opencrane-dev wait --for=condition=Established crd/subscriptions.postgresql.cnpg.io --timeout=2m' "$SUCCESS_CALLS"
+grep -Eq 'kubectl --context gke_weownai-proto_europe-west1_opencrane-dev apply --server-side --field-manager=opencrane-prerequisite-bootstrap --filename=.*/database-proof-compute-class\.yaml' "$SUCCESS_CALLS"
+grep -Fq 'kubectl --context gke_weownai-proto_europe-west1_opencrane-dev wait --for=condition=Health computeclass/opencrane-database-proof --timeout=2m' "$SUCCESS_CALLS"
 
 if run_case context-mismatch MOCK_CURRENT_CONTEXT=other-context; then
   echo 'context mismatch unexpectedly succeeded' >&2
@@ -193,6 +214,12 @@ if run_case foreign-resource MOCK_FOREIGN_NAMESPACE=cert-manager; then
   exit 1
 fi
 ! grep -Fq 'helm upgrade' "$TEST_DIR/foreign-resource.calls"
+
+if run_case foreign-compute-class MOCK_FOREIGN_COMPUTE_CLASS=1; then
+  echo 'foreign ComputeClass unexpectedly succeeded' >&2
+  exit 1
+fi
+! grep -Fq 'helm upgrade' "$TEST_DIR/foreign-compute-class.calls"
 
 if run_case render-failure MOCK_RENDER_FAIL=1; then
   echo 'chart render failure unexpectedly succeeded' >&2

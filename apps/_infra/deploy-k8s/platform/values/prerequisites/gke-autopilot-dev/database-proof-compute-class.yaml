@@ -1,0 +1,17 @@
+apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: opencrane-database-proof
+  labels:
+    app.kubernetes.io/managed-by: opencrane-prerequisite-bootstrap
+    app.kubernetes.io/part-of: opencrane
+  annotations:
+    opencrane.ai/prerequisite-profile: gke-autopilot-dev
+spec:
+  autopilot:
+    enabled: true
+  priorities:
+    - podFamily: general-purpose
+  # Unlike GKE's built-in autopilot ComputeClass, scale when the proof Job has no existing
+  # placement. This class is selected only by that bounded, one-shot Job.
+  whenUnsatisfiable: ScaleUpAnyway

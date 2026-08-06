@@ -10,6 +10,7 @@ DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"po
 BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
+GKE_AUTOPILOT_VALUES="$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/postgres-gke-autopilot.yaml"
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
 bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/pooler-deploy-contract.sh"
@@ -94,6 +95,14 @@ grep -q 'helm.sh/resource-policy: keep' "$OUTPUT"
 grep -q 'opencrane.ai/cnpg-service-account: "opencrane-postgres"' "$OUTPUT"
 grep -q 'size: "20Gi"' "$OUTPUT"
 grep -q 'resizeInUseVolumes: true' "$OUTPUT"
+
+GKE_PRIVILEGES_JOB="$(helm template opencrane-postgres "$CHART" \
+  --namespace opencrane \
+  "${COMMON_VALUES[@]}" \
+  --values "$GKE_AUTOPILOT_VALUES" \
+  | awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencrane-postgres-database-privileges/ { print }')"
+[[ -n "$GKE_PRIVILEGES_JOB" ]]
+grep -Fq 'cloud.google.com/compute-class: opencrane-database-proof' <<<"$GKE_PRIVILEGES_JOB"
 grep -q -- '- ReadWriteOnce' "$OUTPUT"
 grep -q 'storageClass: "expandable-rwo"' "$OUTPUT"
 grep -q 'name: "postgres-opencrane-bootstrap"' "$OUTPUT"
