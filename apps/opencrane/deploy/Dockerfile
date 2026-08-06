@@ -24,6 +24,10 @@ RUN find /app -path '*/node_modules/.prisma/client' -type d | head -1 | \
 FROM node:22-bookworm-slim
 
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 # The runtime image receives only the application manifest. Prisma generation and the target
 # database baseline are build/provisioning inputs; server startup never mutates schema.
