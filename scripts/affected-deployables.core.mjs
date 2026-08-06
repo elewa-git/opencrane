@@ -19,6 +19,21 @@ function _ReleaseDescriptor(project)
 	};
 }
 
+/**
+ * Resolves the intentionally narrow manual publication set.
+ *
+ * `null` delegates to the normal affected-project calculation (push and pull-request validation),
+ * while `none` produces no matrix entry so workflow dispatch is validation-only by default.
+ */
+export function selectForcedContainerProjects(force)
+{
+	if (!force) return null;
+	if (force === "none") return [];
+	if (force === "bootstrap") return ["channel-proxy", "memory-gateway"];
+	if (force === "server") return ["opencrane"];
+	throw new Error(`unsupported FORCE_DEPLOYABLES value: ${force}`);
+}
+
 /** Selects deterministic publish entries from affected app-owned container targets. */
 export function selectAffectedDeployables(containerProjects)
 {

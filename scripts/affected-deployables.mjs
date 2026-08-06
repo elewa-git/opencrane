@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
+import { selectAffectedDeployables, selectApiContractChanged, selectForcedContainerProjects, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
 
 /** Run a command and return trimmed stdout. */
 function _run(command, args)
@@ -20,10 +20,8 @@ function _AffectedProjects(target)
 
 function _ContainerProjects()
 {
-  if (process.env.FORCE_DEPLOYABLES === "bootstrap")
-  {
-    return ["channel-proxy", "memory-gateway"];
-  }
+  const forced = selectForcedContainerProjects(process.env.FORCE_DEPLOYABLES);
+  if (forced !== null) return forced;
   return _AffectedProjects("container");
 }
 
