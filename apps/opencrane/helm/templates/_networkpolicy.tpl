@@ -165,7 +165,10 @@ spec:
     # The database Secret binds the exact authority while the pooler owns the
     # connection budget; direct CNPG-instance egress would bypass that boundary.
     - to:
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
+          podSelector:
             matchLabels:
               cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
       ports:
