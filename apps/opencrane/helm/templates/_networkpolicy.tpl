@@ -164,11 +164,10 @@ spec:
     # Every application connection goes through the CNPG-owned PgBouncer pooler.
     # The database Secret binds the exact authority while the pooler owns the
     # connection budget; direct CNPG-instance egress would bypass that boundary.
+    # A Pod selector without a namespace selector is deliberately release-local;
+    # it admits only matching Pooler Pods in this NetworkPolicy's namespace.
     - to:
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: {{ .Release.Namespace | quote }}
-          podSelector:
+        - podSelector:
             matchLabels:
               cnpg.io/poolerName: {{ include "opencrane.postgresPoolerName" . }}
       ports:
