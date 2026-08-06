@@ -10,6 +10,7 @@
     "@opentelemetry/auto-instrumentations-node": "^0.78.0",
     "@opentelemetry/exporter-trace-otlp-proto": "^0.220.0",
     "@opentelemetry/sdk-node": "^0.220.0",
+    "openapi-fetch": "^0.17.0",
     "pino": "^9.6.0"
   }
 }

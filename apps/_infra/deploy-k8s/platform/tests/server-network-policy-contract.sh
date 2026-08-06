@@ -11,7 +11,8 @@ MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]
 
 rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler)"
+  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler \
+  --set-string networkPolicy.postgresPoolerServiceIp=10.96.42.17)"
 runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set agentController.enabled=true \
@@ -82,6 +83,7 @@ runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
 
 [[ -n "$server_policy" ]]
 grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$server_policy"
+grep -Fq '            cidr: "10.96.42.17/32"' <<<"$server_policy"
 grep -Fq '          port: 5432' <<<"$server_policy"
 grep -Fq '          port: 443' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: kube-system' <<<"$server_policy"

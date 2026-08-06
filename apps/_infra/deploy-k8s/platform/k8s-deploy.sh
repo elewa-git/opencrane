@@ -527,6 +527,11 @@ OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
+POSTGRES_POOLER_SERVICE_IP="$(kubectl get service "$POSTGRES_POOLER_HOST" -n "$NAMESPACE" -o jsonpath='{.spec.clusterIP}')"
+if [[ ! "$POSTGRES_POOLER_SERVICE_IP" =~ ^([0-9]{1,3}\.){3}[0-9]{1,3}$ ]]; then
+  err "CNPG Pooler Service '$POSTGRES_POOLER_HOST' has no IPv4 ClusterIP. This deployment requires a stable IPv4 Pooler Service."
+  exit 1
+fi
 # The one replica of the OpenCrane server gets five Prisma connections at most.
 # This leaves 75 of the 80 physical-server connections outside Prisma's process
 # pool and keeps the 30-connection PgBouncer database budget authoritative.
@@ -652,6 +657,7 @@ log "Installing the OpenCrane Helm release '$RELEASE'…"
 helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --create-namespace
   --force-conflicts
   --set-string "networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST"
+  --set-string "networkPolicy.postgresPoolerServiceIp=$POSTGRES_POOLER_SERVICE_IP"
   --set-string "clustertenantManager.database.existingSecret=$POSTGRES_APP_SECRET"
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"

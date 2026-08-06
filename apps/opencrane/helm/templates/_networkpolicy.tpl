@@ -171,6 +171,17 @@ spec:
       ports:
         - protocol: TCP
           port: 5432
+    {{- if .Values.networkPolicy.postgresPoolerServiceIp }}
+    # GKE Dataplane V2 applies the Service ClusterIP before the endpoint Pod
+    # selector. Admit only the Pooler Service's discovered /32; this does not
+    # permit direct traffic to a CNPG instance Pod.
+    - to:
+        - ipBlock:
+            cidr: {{ printf "%s/32" .Values.networkPolicy.postgresPoolerServiceIp | quote }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    {{- end }}
     # Kubernetes API calls and external OIDC/provider APIs use HTTPS. Standard
     # NetworkPolicy cannot select the API Service or constrain external FQDNs, so
     # this is intentionally port-scoped; use Cilium to narrow external hostnames.
