@@ -83,7 +83,10 @@ runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
 
 [[ -n "$server_policy" ]]
 grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$server_policy"
-grep -Fq '            cidr: "10.96.42.17/32"' <<<"$server_policy"
+if grep -Fq 'cidr: "10.96.42.17/32"' <<<"$server_policy"; then
+  echo "opencrane-server policy must select the Pooler by label, never by Service IP" >&2
+  exit 1
+fi
 grep -Fq '          port: 5432' <<<"$server_policy"
 grep -Fq '          port: 443' <<<"$server_policy"
 grep -Fq '              kubernetes.io/metadata.name: kube-system' <<<"$server_policy"

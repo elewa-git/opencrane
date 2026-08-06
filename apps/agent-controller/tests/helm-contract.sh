@@ -2,8 +2,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
-SOURCE_CHART_ROOT="$(mktemp -d)"
+source "$ROOT/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 CONFORMANCE="$ROOT/apps/agent-controller/tests/admission-conformance.sh"
 IDENTITY_CONFORMANCE="$ROOT/apps/agent-controller/tests/identity-conformance.sh"
 MANIFEST="$(mktemp)"
@@ -21,13 +20,9 @@ SERVER_POLICY="$(mktemp)"
 CONTROLLER_POLICY="$(mktemp)"
 RUNTIME_DENY="$(mktemp)"
 RUNTIME_EGRESS="$(mktemp)"
-trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
-
-# The umbrella vendors chart archives. Replace only the controller archive in a disposable copy so
-# this contract always renders the source template under test without refreshing remote dependencies.
-cp -R "$CHART_ROOT/." "$SOURCE_CHART_ROOT"
-helm package "$ROOT/apps/agent-controller/helm" --destination "$SOURCE_CHART_ROOT/charts" >/dev/null
-CHART_ROOT="$SOURCE_CHART_ROOT"
+prepare_current_chart_sources
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST" "$DISABLED" "$ROLE" "$BINDING" "$CLEANUP_ROLE" "$CLEANUP_BINDING" "$RUNTIME_NAMESPACE" "$RUNTIME_QUOTA" "$MANAGED_RUNTIME_QUOTA" "$ADMISSION" "$SKILL_URL_OVERRIDE" "$SERVER_POLICY" "$CONTROLLER_POLICY" "$RUNTIME_DENY" "$RUNTIME_EGRESS"' EXIT
+CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \

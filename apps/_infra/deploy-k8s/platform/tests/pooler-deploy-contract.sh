@@ -10,9 +10,7 @@ KUBERNETES_API_ARGS="$ROOT_DIR/apps/_infra/deploy-k8s/platform/kubernetes-api-he
 
 grep -Fq 'POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"' "$DEPLOY_SCRIPT"
 grep -Fq 'source "$SCRIPT_DIR/postgres-connection.sh"' "$DEPLOY_SCRIPT"
-grep -Fq 'discover_postgres_pooler_service_ip "$NAMESPACE" "$POSTGRES_POOLER_HOST"' "$DEPLOY_SCRIPT"
 grep -Fq 'networkPolicy.postgresPoolerName=$POSTGRES_POOLER_HOST' "$DEPLOY_SCRIPT"
-grep -Fq 'networkPolicy.postgresPoolerServiceIp=$POSTGRES_POOLER_SERVICE_IP' "$DEPLOY_SCRIPT"
 grep -Fq 'publish_postgres_database_connection' "$CONNECTION_HELPER"
 grep -Fq '"$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"' "$DEPLOY_SCRIPT"
 grep -Fq '"$POSTGRES_POOLER_HOST" obot' "$DEPLOY_SCRIPT"

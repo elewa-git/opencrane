@@ -934,10 +934,6 @@ networkPolicy:
   # Defaults to `<release>-postgres-pooler`; deploy tooling sets it explicitly so a
   # recovery smoke can point the application at a separately named restored cluster.
   postgresPoolerName: ""
-  # -- Exact ClusterIP of the CNPG-managed Pooler Service. GKE Dataplane V2 evaluates
-  #    Service traffic before the endpoint Pod selector, so deploy tooling discovers this
-  #    value after the Pooler becomes ready and admits only this /32 on PostgreSQL's port.
-  postgresPoolerServiceIp: ""
   # -- Allow DNS resolution (still consumed by the multi-instance cross-namespace policy)
   allowDNS: true
   # -- Reserved for a future FQDN egress policy (requires Cilium). The per-silo egress
