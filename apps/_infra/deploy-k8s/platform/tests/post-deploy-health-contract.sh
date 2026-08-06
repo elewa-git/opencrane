@@ -28,6 +28,13 @@ grep -Fq '            pathType: Exact' <<<"$health_route"
 grep -Fq '                name: opencrane-silo-opencrane-server' <<<"$health_route"
 grep -Fq '                  number: 8080' <<<"$health_route"
 
+rendered_pull_secret="$(helm template opencrane-silo "$CHART_FIXTURE" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set-string 'global.imagePullSecret=opencrane-ghcr-pull' \
+  --show-only templates/app-rollups.yaml)"
+[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "3" ]]
+
 _run_verify() {
   local curl_outcome="$1"
   local insecure="$2"

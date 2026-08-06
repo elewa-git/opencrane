@@ -36,7 +36,7 @@ These are the public configuration roots owned by the silo umbrella chart.
 
 | Input | Use it for |
 | --- | --- |
-| `global` | Select the deployment environment used by Helm validations. |
+| `global` | Select the deployment environment and, only for private first-party images, a namespace-local registry pull Secret. |
 | `multiCt` | Enable the explicit many-ClusterTenant profile and its required isolation floor. |
 | `crds` | Decide whether this release installs the ClusterTenant custom resource definition. |
 | `multiInstance` | Keep multiple independently named releases isolated in one cluster. |

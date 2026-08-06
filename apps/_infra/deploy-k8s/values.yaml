@@ -8,6 +8,9 @@ nameOverride: opencrane
 global:
   # -- Deployment environment used for Helm validations (`dev`, `staging`, `prod`).
   environment: dev
+  # -- Existing namespace-local `kubernetes.io/dockerconfigjson` Secret used only when first-party
+  # images are private. Empty keeps the default public-GHCR install credential-free.
+  imagePullSecret: ""
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
 #    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,

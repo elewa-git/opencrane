@@ -25,6 +25,10 @@ spec:
         app.kubernetes.io/component: opencrane-server
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-opencrane-server
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.clustertenantManager.podSecurityContext | nindent 8 }}
       containers:

@@ -16,6 +16,7 @@
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG]
+#                            [--registry-pull-secret NAME --registry-pull-config-file FILE]
 #                            [--oidc-issuer-url URL] [--oidc-client-id ID]
 #                            [--oidc-redirect-uri URI] [--oidc-client-secret SECRET]
 #                            [--oidc-session-secret SECRET]
@@ -85,6 +86,7 @@ if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
 fi
 source "$POST_DEPLOY_VERIFY"
 source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
+source "$SCRIPT_DIR/registry-pull-secret.sh"
 # The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
 # app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
 # = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
@@ -111,11 +113,12 @@ if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; 
   echo "[k8s-deploy] OpenCrane database baseline publisher or target SQL is missing." >&2
   exit 1
 fi
-
 NAMESPACE="opencrane-system"
 RELEASE="opencrane"
 IMAGE_TAG="latest"
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
+REGISTRY_PULL_SECRET=""
+REGISTRY_PULL_CONFIG_FILE=""
 # --base-domain is the platform BASE domain for this install (e.g. dev.opencrane.ai).
 # It drives the chart's ingress.domain and derived release hosts. OPENCRANE_BASE_DOMAIN
 # lets the wizard or CI supply it off the command line.
@@ -133,7 +136,6 @@ if [[ -n "${OPENCRANE_HELM_EXTRA_ARGS:-}" ]]; then
   EXTRA_HELM_ARGS+=("${_env_helm_args[@]}")
 fi
 ALLOW_TAG_FLOAT="${OPENCRANE_ALLOW_TAG_FLOAT:-0}"  # allow component images to float to chart-default
-
 # OIDC + per-cluster operator bootstrap. All default empty (OIDC stays disabled and the
 # seed grants operator to nobody — fail-closed). The seed also accepts an env var so a
 # secret manager / CI can supply it without it appearing on the command line.
@@ -153,7 +155,6 @@ PLATFORM_OPERATOR_SEED_EMAIL="${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
-
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
@@ -204,6 +205,8 @@ while [[ $# -gt 0 ]]; do
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
+    --registry-pull-secret) REGISTRY_PULL_SECRET="$2"; shift 2 ;;
+    --registry-pull-config-file) REGISTRY_PULL_CONFIG_FILE="$2"; shift 2 ;;
     --storage-class) STORAGE_CLASS="$2"; shift 2 ;;
     --oidc-issuer-url)     OIDC_ISSUER_URL="$2"; shift 2 ;;
     --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
@@ -234,10 +237,8 @@ while [[ $# -gt 0 ]]; do
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
-
 for c in kubectl helm; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
-
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
 # release hosts.
@@ -252,7 +253,6 @@ _validate_base_domain() {
 if [[ -n "$BASE_DOMAIN" ]]; then
   _validate_base_domain "$BASE_DOMAIN"
 fi
-
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
 # so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
@@ -496,7 +496,6 @@ _install_postgres_server() {
   done
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
 }
-
 _publish_database_connection() {
   local credentials_secret="$1"
   local app_secret="$2"
@@ -510,7 +509,6 @@ _publish_database_connection() {
   bash "$POSTGRES_CONNECTION_PUBLISHER" \
     "${publisher_args[@]}"
 }
-
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
   local target_secret="$2"
@@ -523,7 +521,6 @@ _copy_cnpg_uri_secret() {
         --from-file="${target_key}=/dev/stdin" --dry-run=client -o yaml \
     | kubectl apply -f -
 }
-
 _install_postgres_server
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
@@ -614,8 +611,6 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
-
-
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install crash-looped on a missing Secret. Create it
@@ -634,6 +629,8 @@ if [[ -n "$OIDC_ISSUER_URL" ]]; then
     --from-literal=OIDC_SESSION_SECRET="$OIDC_SESSION_SECRET" \
     --dry-run=client -o yaml | kubectl apply -f -
 fi
+
+ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
 # 3. The OpenCrane chart.
 # Rebuild local chart dependencies from the committed lock without re-resolving
@@ -665,6 +662,7 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
+[[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 # Pinned-tag float guard: detect if the prior release pinned component images to a specific
 # tag. If this invocation does not restate it (no --opencrane-server-tag),
 # re-pin from the prior release so they don't silently float to chart-default (a 2026-07-12 live gotcha).
