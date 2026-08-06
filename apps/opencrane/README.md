@@ -44,7 +44,8 @@ Startup proceeds in five visible stages:
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
 3. compose one shared-capacity managed admission port and one session-derived personal admission
-   port, both over the same signed fleet-membership trust configuration;
+   port, both over the same signed membership configuration. A standalone deployment has no Fleet
+   key but deliberately denies run admission until it has a local signed-membership issuer;
 4. build the public and internal Express applications; and
 5. start both listeners and bounded workers under one coordinated shutdown path.
 
@@ -144,8 +145,9 @@ conversation, approval, or artifact records.
 
 ## Runtime & config
 
-The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, mounted
-verification and signing keys, internal service endpoints, and listener settings. Important groups
+The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, membership
+issuer configuration (a Fleet verification key only in Fleet mode), artifact signing keys, internal
+service endpoints, and listener settings. Important groups
 are:
 
 | Configuration | Purpose | Default |
@@ -157,7 +159,7 @@ are:
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
-| `OPENCRANE_FLEET_MEMBERSHIP_*` | Signed fleet-membership trust for personal and managed admission | required for admission |
+| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |

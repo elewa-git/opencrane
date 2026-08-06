@@ -36,7 +36,8 @@ function _Main(): void
 	const kubernetes = _CreateKubernetesClients();
 	const memoryGateway = _CreateMemoryGatewayClient(config.runtime);
 
-	// 3. Compose one shared capacity gate and one mounted membership verifier for every run entrypoint.
+	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
+	//    entrypoint. Standalone has no key mount and remains deny-only until a local issuer exists.
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());

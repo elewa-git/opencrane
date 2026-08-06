@@ -430,14 +430,18 @@ clustertenantManager:
   runAdmission:
     maxConcurrent: 2
     maxQueued: 10
-  # -- Signed fleet-membership trust used for managed-service run admission.
-  # The existing Secret contains only the fleet's Ed25519 public verification key.
-  fleetMembership:
-    trustedIssuerId: opencrane-fleet
-    issuerKeyId: fleet-key-1
-    existingSecret: opencrane-fleet-membership-verification
-    publicKeyKey: public-key.pem
+  # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
+  # without a verification-key mount. It deliberately denies run admission until a local issuer
+  # produces signed revisions; it never treats an unsigned OIDC session as membership.
+  membership:
+    mode: standalone
     maximumStalenessMs: 300000
+    # -- Required only when `mode: fleet`; this public key is the independent Fleet trust root.
+    fleet:
+      trustedIssuerId: ""
+      issuerKeyId: ""
+      existingSecret: ""
+      publicKeyKey: public-key.pem
   service:
     # -- Public API port (ingress-facing): /api/v1/*, /auth. Session-authed.
     port: 8080

@@ -66,6 +66,22 @@ export interface FleetMembershipEvidenceConfig
 	readonly verifier: FleetMembershipSignatureVerifier;
 }
 
+/**
+ * Explicit deployment model for the membership issuer consumed by one silo.
+ *
+ * The value is deployment configuration, not a request claim: `Fleet` retains the independent
+ * Fleet signer boundary, while `Standalone` lets a silo start without pretending that an absent
+ * Fleet key establishes membership. Standalone admission remains denied until a local issuer is
+ * implemented and has issued a signed revision.
+ */
+export enum FleetMembershipDeploymentModes
+{
+	/** Requires the independently managed Fleet public verification key. */
+	Fleet = "fleet",
+	/** Starts a silo without Fleet trust; no unsigned membership is ever accepted. */
+	Standalone = "standalone",
+}
+
 /** Stable outcomes from verifying and accepting signed fleet-membership evidence. */
 export enum FleetMembershipEvidenceOutcomes
 {

@@ -1,6 +1,10 @@
 {{- define "opencrane.server.deployment" -}}
 {{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
 {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $membership := .Values.clustertenantManager.membership -}}
+{{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
+{{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -57,14 +61,18 @@ spec:
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_ISSUER_ID
-              value: {{ required "clustertenantManager.fleetMembership.trustedIssuerId is required" .Values.clustertenantManager.fleetMembership.trustedIssuerId | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_KEY_ID
-              value: {{ required "clustertenantManager.fleetMembership.issuerKeyId is required" .Values.clustertenantManager.fleetMembership.issuerKeyId | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE
-              value: /var/run/opencrane/fleet-membership/public-key.pem
-            - name: OPENCRANE_FLEET_MEMBERSHIP_MAX_STALENESS_MS
-              value: {{ .Values.clustertenantManager.fleetMembership.maximumStalenessMs | quote }}
+            - name: OPENCRANE_MEMBERSHIP_MODE
+              value: {{ $membership.mode | quote }}
+            - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
+              value: {{ $membership.maximumStalenessMs | quote }}
+            {{- if eq $membership.mode "fleet" }}
+            - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
+              value: {{ required "clustertenantManager.membership.fleet.trustedIssuerId is required in fleet mode" $membership.fleet.trustedIssuerId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_KEY_ID
+              value: {{ required "clustertenantManager.membership.fleet.issuerKeyId is required in fleet mode" $membership.fleet.issuerKeyId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE
+              value: /var/run/opencrane/membership/public-key.pem
+            {{- end }}
             # The server binds each runtime identity class to its own Helm-owned restricted namespace.
             - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
@@ -185,9 +193,11 @@ spec:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
-            - name: fleet-membership-key
-              mountPath: /var/run/opencrane/fleet-membership
+            {{- if eq $membership.mode "fleet" }}
+            - name: membership-verification-key
+              mountPath: /var/run/opencrane/membership
               readOnly: true
+            {{- end }}
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
@@ -220,13 +230,15 @@ spec:
                 path: lease-private.pem
               - key: receipt-public.pem
                 path: receipt-public.pem
-        - name: fleet-membership-key
+        {{- if eq $membership.mode "fleet" }}
+        - name: membership-verification-key
           secret:
-            secretName: {{ required "clustertenantManager.fleetMembership.existingSecret is required" .Values.clustertenantManager.fleetMembership.existingSecret | quote }}
+            secretName: {{ required "clustertenantManager.membership.fleet.existingSecret is required in fleet mode" $membership.fleet.existingSecret | quote }}
             defaultMode: 0440
             items:
-              - key: {{ required "clustertenantManager.fleetMembership.publicKeyKey is required" .Values.clustertenantManager.fleetMembership.publicKeyKey | quote }}
+              - key: {{ required "clustertenantManager.membership.fleet.publicKeyKey is required in fleet mode" $membership.fleet.publicKeyKey | quote }}
                 path: public-key.pem
+        {{- end }}
         # Audience-bound caller credential for the private memory gateway; rotated by the kubelet.
         # The audience must equal MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE in @opencrane/contracts.
         - name: memory-gateway-token

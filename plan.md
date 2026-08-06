@@ -199,10 +199,12 @@ durable-storage gate.
 
 The first real `testv2` release created and kept its namespace, CNPG Cluster/PgBouncer, ingress,
 certificate, UI, Cognee, LiteLLM, and Obot gateway. PostgreSQL and its original privileges hook
-completed. The OpenCrane server remains correctly fail-closed because the fleet-owned
-`opencrane-fleet-membership-verification` Ed25519 public-key Secret is absent; it must be supplied
-by the Fleet authority, never invented in a silo. The initial channel-proxy and memory-gateway image
-references did not exist. CI now publishes both from `d2f26df0` under immutable
+completed. The release exposed an invalid architecture assumption: its server treated every silo as
+Fleet-attached and required an external `public-key.pem`, despite this test being a standalone
+ClusterTenant. The deployment contract now has explicit `standalone` and `fleet` membership modes;
+`standalone` removes the Fleet Secret/key mount and starts without converting an OIDC session into
+membership, so runtime admission remains fail-closed until a local issuer is built. The initial
+channel-proxy and memory-gateway image references did not exist. CI now publishes both from `d2f26df0` under immutable
 `sha-d2f26df0` tags, and the complete CI run is green, including Terraform's read-only provider
 lock validation.
 
@@ -213,7 +215,8 @@ that hook would weaken the database privilege proof and is rejected. Autopilot g
 workloads are billed from requested Pod resources rather than underlying node size, but the current
 Billing Account Viewer gap means the final monthly total remains unproven. Trusted TLS, browser
 Zitadel login, running server/channel/memory workloads, logical-database isolation, runtime
-isolation, and the final monthly cost remain live exit gates.
+isolation, a local standalone membership issuer for runnable personal/managed agents, and the final
+monthly cost remain live exit gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
