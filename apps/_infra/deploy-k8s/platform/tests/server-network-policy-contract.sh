@@ -9,7 +9,7 @@ trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
 MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
 
-rendered="$(helm template opencrane-silo "$CHART_DIR" \
+rendered="$(helm template opencrane-silo "$CHART_DIR" --namespace pooler-ns \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler \
   --set-string networkPolicy.postgresPoolerServiceIp=10.96.42.17)"
@@ -82,7 +82,7 @@ runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
 ')"
 
 [[ -n "$server_policy" ]]
-grep -Fq '              kubernetes.io/metadata.name: "default"' <<<"$server_policy"
+grep -Fq '              kubernetes.io/metadata.name: "pooler-ns"' <<<"$server_policy"
 grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$server_policy"
 if grep -Fq 'cidr: "10.96.42.17/32"' <<<"$server_policy"; then
   echo "opencrane-server policy must select the Pooler by label, never by Service IP" >&2
