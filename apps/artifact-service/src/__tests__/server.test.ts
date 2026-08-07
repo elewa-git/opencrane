@@ -19,8 +19,21 @@ const _servers: Array<ReturnType<typeof _CreateServer>> = [];
 
 afterEach(async function _closeServers()
 {
-	await Promise.all(_servers.splice(0).map(server => new Promise<void>(function _close(resolve) { server.close(function _closed() { resolve(); }); })));
+	await Promise.all(_servers.splice(0).map(function _close(server) { return _closeServer(server); }));
 });
+
+/**
+ * Closes a test server after terminating fetch keep-alive connections.
+ *
+ * @param server - Server whose listener and client connections must be released.
+ */
+async function _closeServer(server: ReturnType<typeof _CreateServer>): Promise<void>
+{
+	// 1. Drop Node fetch's idle keep-alive sockets so `close` cannot wait indefinitely after a completed request.
+	server.closeAllConnections();
+	// 2. Await listener shutdown so the following test starts from an isolated server state.
+	await new Promise<void>(function _close(resolve) { server.close(function _closed() { resolve(); }); });
+}
 
 describe("artifact-service promotion endpoint", function _suite()
 {
