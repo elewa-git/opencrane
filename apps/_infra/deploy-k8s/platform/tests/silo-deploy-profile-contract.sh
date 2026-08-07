@@ -44,6 +44,18 @@ grep -Fq -- 'omitting --first-user-email' "$DEPLOY_CORE"
 grep -Fq -- 'requires --oidc-issuer-url on every upgrade' "$DEPLOY_CORE"
 grep -Fq -- 'Do not use --values or --reset-values' "$DEPLOY_CORE"
 grep -Fq -- 'Do not override clustertenantManager.firstUser through --helm-arg' "$DEPLOY_CORE"
+grep -Fq -- '"${EXTRA_HELM_ARGS[@]-}"' "$DEPLOY_CORE"
+
+# Strict mode must not abort the immutable issuer guard when the normal
+# deployment path provides no raw Helm arguments. Bash may expand this as zero
+# entries or one empty entry, neither of which is a supplied Helm argument.
+empty_helm_args=()
+for _empty_helm_arg in "${empty_helm_args[@]-}"; do
+  if [[ -n "$_empty_helm_arg" ]]; then
+    echo "empty raw Helm arguments must not yield a supplied Helm argument" >&2
+    exit 1
+  fi
+done
 
 provider_secret_calls=()
 kubectl()

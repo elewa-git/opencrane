@@ -691,7 +691,10 @@ _guard_standalone_first_user_issuer() {
       exit 1
     fi
   done
-  for extra_helm_arg in "${EXTRA_HELM_ARGS[@]}"; do
+  # With `set -u`, Bash treats an initialized-but-empty array as unset when it
+  # is expanded inside a `for` list. Keep the immutable-binding guard usable
+  # for normal deployments that do not pass any raw Helm arguments.
+  for extra_helm_arg in "${EXTRA_HELM_ARGS[@]-}"; do
     if [[ -n "$prior_first_user_email" && "$extra_helm_arg" == *clustertenantManager.oidc.issuerUrl* ]]; then
       err "Do not override clustertenantManager.oidc.issuerUrl through --helm-arg after a standalone first owner is configured. Pass --oidc-issuer-url so the immutable issuer guard can validate it."
       exit 1
