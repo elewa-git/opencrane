@@ -5,7 +5,7 @@ import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME } from "../core/provision-byok-key.js";
+import { _ProvisionByokKey, _AUTO_EMBEDDING_MODEL_NAME, _RequireLiteLlmModelRegistration } from "../core/provision-byok-key.js";
 
 /**
  * Covers `_ensureProviderEmbeddingModel` (the embedding-registration step added alongside the
@@ -188,7 +188,7 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     expect(infoCalls).toHaveLength(0);
   });
 
-  it("does not crash the set when embedding registration fails (best-effort, non-fatal)", async function _resilient()
+	it("does not crash the set when embedding registration fails (best-effort, non-fatal)", async function _resilient()
   {
     const fetchMock = vi.fn().mockImplementation(async function _fetch(url: string)
     {
@@ -208,5 +208,14 @@ describe("_ProvisionByokKey — embedding model registration", function _suite()
     await expect(
       _ProvisionByokKey({ prisma: _mockPrisma(), coreApi: _mockCoreApi(), operatorNamespace: "default", provider: "openai", apiKey: "sk-test", log: _log }),
     ).resolves.toBeDefined();
-  });
+	});
+
+	it("requires a live default model when deployment bootstrap asks for it", async function _requireLiveModel()
+	{
+		vi.stubGlobal("fetch", _routedFetch([{ model_name: "auto" }]));
+		await expect(_RequireLiteLlmModelRegistration("auto")).resolves.toBeUndefined();
+
+		vi.stubGlobal("fetch", _routedFetch([]));
+		await expect(_RequireLiteLlmModelRegistration("auto")).rejects.toThrow(/has not registered required model/);
+	});
 });

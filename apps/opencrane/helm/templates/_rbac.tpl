@@ -35,6 +35,46 @@ subjects:
     namespace: {{ .Release.Namespace }}
 ---
 {{/*
+  The provider gateway owns release-local provider-key custody. Kubernetes RBAC cannot express a
+  safe dynamic-name prefix, so the deployment engine pre-creates the finite provider catalogue.
+  This Role is namespaced (never cluster-scoped), and every verb is resource-name bounded. It is also
+  used once at startup to converge the deployment-supplied initial provider Secret into LiteLLM's
+  encrypted credential store.
+*/}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "opencrane.fullname" . }}-provider-key-custody
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - byok-provider-key-openai
+      - byok-provider-key-anthropic
+      - byok-provider-key-gemini
+      - byok-provider-key-mistral
+      - byok-provider-key-deepseek
+      - byok-provider-key-glm
+    verbs: ["get", "update", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "opencrane.fullname" . }}-provider-key-custody
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "opencrane.fullname" . }}-provider-key-custody
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "opencrane.fullname" . }}-opencrane-server
+    namespace: {{ .Release.Namespace }}
+---
+{{/*
   Per-org OIDC login may read the ClusterTenant host/client binding. It never mutates the CR.
 */}}
 apiVersion: rbac.authorization.k8s.io/v1

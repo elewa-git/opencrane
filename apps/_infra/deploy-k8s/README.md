@@ -65,7 +65,10 @@ if the controller identity is compromised. The admission boundary requires Kuber
 
 `Entrypoint: deploy.sh` — the per-ClusterTenant silo deploy profile, a thin wrapper over the shared
 install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, and one
-pre-created PostgreSQL basic-auth Secret per logical database (server, obot, litellm).
+pre-created PostgreSQL basic-auth Secret per logical database (server, obot, litellm). A new silo
+can also pass `--initial-model-provider` with `OPENCRANE_INITIAL_MODEL_API_KEY` in its environment;
+the key never enters Helm values and is registered through the release-local LiteLLM before the
+server becomes ready.
 
 ## Boundary
 
@@ -95,6 +98,9 @@ package imports it.
   and aggregate Job quota; it contains no standing worker.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
   Job quota; it contains no standing worker.
+- `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
+  supported model provider. The engine writes the key to the release-local provider-custody Secret;
+  the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
 - `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
   the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate

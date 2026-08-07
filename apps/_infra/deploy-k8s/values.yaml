@@ -433,6 +433,13 @@ clustertenantManager:
   runAdmission:
     maxConcurrent: 2
     maxQueued: 10
+  # -- Optional first model credential. The deploy engine creates the named provider-custody
+  # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
+  # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.
+  initialModel:
+    provider: ""
+    existingSecret: ""
+    apiKeySecretKey: apiKey
   # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
   # without a verification-key mount. It deliberately denies run admission until a local issuer
   # produces signed revisions; it never treats an unsigned OIDC session as membership.

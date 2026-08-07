@@ -18,13 +18,16 @@
 #       --base-domain dev.opencrane.ai \
 #       --cluster-tenant acme \
 #       --acme-email operator@example.com \
+#       --initial-model-provider openai \
+#       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
 #
-# --base-domain, --cluster-tenant, and --acme-email are required. The silo is installed into namespace
+# --base-domain, --cluster-tenant, and --acme-email are required. `--initial-model-provider` plus
+# OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
@@ -54,6 +57,7 @@ while [[ $# -gt 0 ]]; do
     --acme-email)      ACME_EMAIL="$2"; shift 2 ;;
     --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
     --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
+    --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac

@@ -2,8 +2,15 @@
 {{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
 {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
+{{- $initialModel := .Values.clustertenantManager.initialModel -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
+{{- end -}}
+{{- if ne (empty $initialModel.provider) (empty $initialModel.existingSecret) -}}
+{{- fail "clustertenantManager.initialModel.provider and existingSecret must be configured together" -}}
+{{- end -}}
+{{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
+{{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -161,6 +168,19 @@ spec:
                   name: {{ include "opencrane.fullname" . }}-litellm
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
+            {{- end }}
+            {{- with $initialModel }}
+            {{- if .provider }}
+            # Deployment-time model bootstrap. The raw key remains in the provider custody Secret;
+            # this process consumes it only to register LiteLLM's encrypted credential and catalog.
+            - name: OPENCRANE_INITIAL_MODEL_PROVIDER
+              value: {{ .provider | quote }}
+            - name: OPENCRANE_INITIAL_MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret }}
+                  key: {{ .apiKeySecretKey }}
+            {{- end }}
             {{- end }}
             {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
             # Obot management transport: custody provisioning and attempt-key minting. Rendered only

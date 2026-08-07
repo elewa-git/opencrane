@@ -22,6 +22,7 @@
 #                            [--oidc-session-secret SECRET]
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
+#                            [--initial-model-provider PROVIDER]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
@@ -65,6 +66,11 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
+# `--initial-model-provider` pairs with the required environment-only
+# OPENCRANE_INITIAL_MODEL_API_KEY. The installer writes that raw key directly to the release-local
+# provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
+# and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
+#
 # --image-tag pins the OpenCrane server image. To roll it to a different build,
 # pass --opencrane-server-tag (for example, sha-abc123); it overrides --image-tag.
 # Always bump component images this way —
@@ -89,6 +95,7 @@ source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
 source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
+source "$SCRIPT_DIR/initial-model-provider.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -155,6 +162,8 @@ PLATFORM_OPERATOR_SEED_EMAIL="${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
+INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
+INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
@@ -215,6 +224,7 @@ while [[ $# -gt 0 ]]; do
     --oidc-session-secret) OIDC_SESSION_SECRET="$2"; shift 2 ;;
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
+    --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
@@ -381,6 +391,8 @@ _require_expandable_artifact_storage() {
   fi
 }
 _require_expandable_artifact_storage
+
+validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY" || exit 1
 
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
@@ -596,6 +608,8 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
+ensure_provider_key_secrets "$NAMESPACE"
+publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
 # Secret already existed, so a fresh OIDC install crash-looped on a missing Secret. Create it
@@ -710,6 +724,8 @@ fi
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorGroups=$PLATFORM_OPERATOR_GROUPS")
 fi
+build_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
+helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).

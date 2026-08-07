@@ -3,14 +3,15 @@ import { Buffer } from "node:buffer";
 import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
 import type { PrismaClient } from "@prisma/client";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import { _DeprovisionByokKey, _ProvisionByokKey, _byokSecretName } from "../core/provision-byok-key.js";
 
 /**
  * The shared provisioning core behind both the BYOK route and the boot-time bootstrap. These pin
  * its contract directly (the bootstrap calls it without the HTTP layer): a set writes the Secret,
- * records the Global credential, and seeds a default model; a deprovision removes all three.
+ * records the Global credential, and seeds a default model; deprovision clears the fixed Secret so
+ * restricted RBAC can safely accept a subsequent set.
  */
 
 type Row = Record<string, unknown>;
@@ -80,14 +81,46 @@ describe("_ProvisionByokKey / _DeprovisionByokKey", function _suite()
     expect(seeded.filter(function d(m) { return m.isDefault; })).toHaveLength(1);
   });
 
-  it("deprovisions: removes the Secret and the credential row", async function _deprovision()
+  it("deprovisions: clears the fixed Secret, removes the credential row, and can be re-provisioned", async function _deprovision()
   {
     const creds = new Map<string, Row>([["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "openai" }]]);
     const secrets = new Map<string, k8s.V1Secret>([[_byokSecretName("openai"), { metadata: { name: _byokSecretName("openai"), namespace: _NS } }]]);
 
     await _DeprovisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai" });
 
-    expect(secrets.has(_byokSecretName("openai"))).toBe(false);
+    expect(secrets.has(_byokSecretName("openai"))).toBe(true);
+    expect(Buffer.from(secrets.get(_byokSecretName("openai"))!.data!.apiKey, "base64").toString("utf8")).toBe("");
     expect(creds.size).toBe(0);
+
+    await _ProvisionByokKey({ prisma: _mockPrisma(creds, new Map()), coreApi: _mockCoreApi(secrets), operatorNamespace: _NS, provider: "openai", apiKey: "sk-readded", log: _log });
+    expect(Buffer.from(secrets.get(_byokSecretName("openai"))!.data!.apiKey, "base64").toString("utf8")).toBe("sk-readded");
+  });
+
+  it("strict bootstrap replaces persisted placeholder model ids with live LiteLLM deployment ids", async function _reconcileLiveIds()
+  {
+    const creds = new Map<string, Row>();
+    const models = new Map<string, Row>();
+    const secrets = new Map<string, k8s.V1Secret>();
+    const prisma = _mockPrisma(creds, models);
+    const coreApi = _mockCoreApi(secrets);
+
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-first", log: _log });
+    expect(Array.from(models.values()).every(function _placeholder(row) { return (row.litellmModelId as string).startsWith("placeholder:"); })).toBe(true);
+
+    process.env.LITELLM_ENDPOINT = "http://litellm:4000";
+    process.env.LITELLM_MASTER_KEY = "sk-master";
+    vi.stubGlobal("fetch", vi.fn().mockImplementation(async function _fetch(url: string)
+    {
+      if (url.endsWith("/credentials")) return new Response("{}", { status: 200 });
+      if (url.endsWith("/model/new")) return new Response(JSON.stringify({ model_id: `live-${Math.random()}` }), { status: 200 });
+      if (url.endsWith("/model/info")) return new Response(JSON.stringify({ data: [{ model_name: "auto" }] }), { status: 200 });
+      return new Response("not found", { status: 404 });
+    }));
+
+    await _ProvisionByokKey({ prisma, coreApi, operatorNamespace: _NS, provider: "openai", apiKey: "sk-second", log: _log, requireLiveModels: true });
+    expect(Array.from(models.values()).every(function _live(row) { return (row.litellmModelId as string).startsWith("live-"); })).toBe(true);
+    vi.unstubAllGlobals();
+    delete process.env.LITELLM_ENDPOINT;
+    delete process.env.LITELLM_MASTER_KEY;
   });
 });

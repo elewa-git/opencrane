@@ -17,6 +17,8 @@ export interface ProvisionByokKeyOptions
   apiKey: string;
   /** Scoped logger for best-effort registration warnings. */
   log: Logger;
+  /** Require exact model reconciliation instead of the interactive route's best-effort seed. */
+  requireLiveModels?: boolean;
 }
 
 /** Inputs required to remove a provider's BYOK key. */
