@@ -142,17 +142,19 @@ grep -Fq '      - byok-provider-key-openai' <<<"$initial_model_rendered"
 grep -Fq '      - byok-provider-key-glm' <<<"$initial_model_rendered"
 grep -Fq 'verbs: ["get", "update", "delete"]' <<<"$initial_model_rendered"
 provider_key_role="$(printf '%s\n' "$initial_model_rendered" | awk '
+  function flush_document() {
+    if (in_role && document ~ /name: opencrane-silo-provider-key-custody/) {
+      printf "%s", document
+    }
+    document = ""
+    in_role = 0
+  }
   /^kind: Role$/ { in_role = 1; document = $0 ORS; next }
   in_role { document = document $0 ORS }
-  /^---$/ && in_role {
-    if (document ~ /name: opencrane-silo-provider-key-custody/) {
-      print document
-      exit
-    }
-    in_role = 0
-    document = ""
-  }
+  /^---$/ { flush_document(); next }
+  END { flush_document() }
 ')"
+[[ -n "$provider_key_role" ]]
 if grep -Fq 'verbs: ["create"]' <<<"$provider_key_role"; then
   echo "provider-key custody Role must not create arbitrary Secrets" >&2
   exit 1
