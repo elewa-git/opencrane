@@ -144,3 +144,23 @@ Full run reports belong in the corresponding pull request or issue.
 - open: Jente must log out and back in to exercise the first callback and create the local Owner row.
   The pre-existing `artifact-service` ImagePullBackOff also keeps the namespace short of full
   workload health; it is unrelated to the first-owner path.
+
+## 2026-08-07 · dev · testv2 artifact recovery and workload qualification · 7ebcfa89 · PARTIAL
+
+- findings: CI run `31173602224` passed its build, test, lint, and artifact-image publication gates.
+  The app-owned deployer applied OpenCrane revision 30 and PostgreSQL revision 48 with
+  `opencrane-artifact-service:sha-7ebcfa8`. The artifact deployment is `1/1 Available`, every main
+  namespace deployment is Ready, the database-privileges Job completed, public `/healthz` returns 200
+  with `{"status":"ok","db":true}`, and `/api/v1/auth/login` redirects to Zitadel client
+  `384935596856002567` with the exact configured callback.
+- friction: artifact-service had no CI-published image, then exposed an undeclared runtime
+  `@noble/hashes` dependency. CI gained explicit artifact publication, and the artifact workspace now
+  declares its emitted runtime dependency. The live validation also exposed a Helm-contract parser
+  that ignored a final YAML `Role` document; it now flushes at EOF and asserts that the role exists.
+- lesson: deployment qualification must include every enabled workload's Ready state, not only the
+  main namespace. Pin the seven-character CI SHA tag and run the app-owned deployer through its
+  completion; GKE Autopilot may reschedule a newly updated pod while it preserves availability.
+- open: Jente must still log out and log back in to invoke the proof-bearing Zitadel callback once.
+  That callback creates the local `testv2` Owner membership and removes the existing session's
+  `/no-tenant` result. Personal-agent/workspace creation and Phase E runtime qualification remain
+  separate live gates.
