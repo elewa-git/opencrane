@@ -32,6 +32,7 @@ export function selectForcedContainerProjects(force)
 	if (force === "bootstrap") return ["channel-proxy", "memory-gateway"];
 	if (force === "artifact") return ["artifact-service"];
 	if (force === "server") return ["opencrane"];
+	if (force === "ui") return ["opencrane-ui"];
 	throw new Error(`unsupported FORCE_DEPLOYABLES value: ${force}`);
 }
 

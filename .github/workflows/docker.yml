@@ -21,6 +21,7 @@ on:
           - bootstrap
           - artifact
           - server
+          - ui
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
 # Pushes to the integration branches are never cancelled mid-publish.

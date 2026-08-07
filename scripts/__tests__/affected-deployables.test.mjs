@@ -34,6 +34,7 @@ test("uses an explicit publication set and makes manual dispatch validation-only
 	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["channel-proxy", "memory-gateway"]);
 	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
 	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
+	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
 	assert.equal(selectForcedContainerProjects(""), null);
 	assert.throws(function _UnknownForce() { selectForcedContainerProjects("all"); }, /unsupported FORCE_DEPLOYABLES value: all/u);
 });
