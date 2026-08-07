@@ -8,6 +8,9 @@ nameOverride: opencrane
 global:
   # -- Deployment environment used for Helm validations (`dev`, `staging`, `prod`).
   environment: dev
+  # -- Existing namespace-local `kubernetes.io/dockerconfigjson` Secret used only when first-party
+  # images are private. Empty keeps the default public-GHCR install credential-free.
+  imagePullSecret: ""
 
 # -- Per-ClusterTenant tenant DB (S6 / ADR 0002 decision 3). Each silo runs ONE CNPG server
 #    IN ITS OWN NAMESPACE. It hosts isolated logical databases and credentials for OpenCrane,
@@ -430,14 +433,30 @@ clustertenantManager:
   runAdmission:
     maxConcurrent: 2
     maxQueued: 10
-  # -- Signed fleet-membership trust used for managed-service run admission.
-  # The existing Secret contains only the fleet's Ed25519 public verification key.
-  fleetMembership:
-    trustedIssuerId: opencrane-fleet
-    issuerKeyId: fleet-key-1
-    existingSecret: opencrane-fleet-membership-verification
-    publicKeyKey: public-key.pem
+  # -- Optional first model credential. The deploy engine creates the named provider-custody
+  # Secret from OPENCRANE_INITIAL_MODEL_API_KEY, then the server seeds it through LiteLLM before
+  # becoming ready. Keep both fields empty for a deliberately model-unconfigured install.
+  initialModel:
+    provider: ""
+    existingSecret: ""
+    apiKeySecretKey: apiKey
+  # -- One verified OIDC email may claim this standalone silo's first active Owner membership.
+  # The deploy profile supplies both values; Helm never writes database membership data itself.
+  firstUser:
+    email: ""
+    clusterTenant: ""
+  # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
+  # without a verification-key mount. It deliberately denies run admission until a local issuer
+  # produces signed revisions; it never treats an unsigned OIDC session as membership.
+  membership:
+    mode: standalone
     maximumStalenessMs: 300000
+    # -- Required only when `mode: fleet`; this public key is the independent Fleet trust root.
+    fleet:
+      trustedIssuerId: ""
+      issuerKeyId: ""
+      existingSecret: ""
+      publicKeyKey: public-key.pem
   service:
     # -- Public API port (ingress-facing): /api/v1/*, /auth. Session-authed.
     port: 8080
@@ -790,7 +809,7 @@ certManager:
   # -- Provision this release's namespaced Issuer. Set false only when a separately
   #    managed Issuer already owns the resource referenced by this release's Certificates.
   selfManagedIssuer: true
-  # -- Issuer mode: "acme" (production, public CA via DNS-01) or "selfSigned" (dev/local).
+  # -- Issuer mode: "acme" (production, public CA via HTTP-01; DNS-01 is optional) or "selfSigned" (dev/local).
   mode: selfSigned
   # -- Include the bare `<ingress.domain>` apex as a SAN on the platform wildcard
   # Certificate. OFF by default: many installs use the apex as a marketing site

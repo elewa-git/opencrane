@@ -61,6 +61,15 @@ resources:
 pooler:
   image: ghcr.io/cloudnative-pg/pgbouncer:1.25.1
   instances: 1
+  # Explicit requests keep managed Kubernetes platforms from applying oversized defaults to the
+  # operator-generated PgBouncer Pod. Raise these from live utilisation evidence, not node size.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
   poolMode: session
   maxClientConnections: 50
   maxDbConnections: 10
@@ -100,6 +109,19 @@ privileges:
   # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
   # after its retry budget expires instead of terminating the Job first.
   jobDeadlineGraceSeconds: 30
+  # Optional scheduler constraints for the one-shot proof Job. Keep this empty for portable
+  # Kubernetes installs; the GKE Autopilot profile selects an owned ComputeClass that can scale
+  # when otherwise-idle node capacity is held by GKE system Pods.
+  nodeSelector: {}
+  # The hook starts one small psql container per logical database. Explicit requests avoid a
+  # provider default for every container during fresh provisioning and upgrades.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
 
 backup:
   enabled: false

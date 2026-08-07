@@ -50,6 +50,46 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(_ReadProcessConfig().obot).toEqual({ gatewayUrl: "http://oc-mcp-gateway.silo.svc.cluster.local:8080", serviceTokenPath: "/var/run/opencrane/obot/token", requestTimeoutMilliseconds: 30_000 });
 	});
 
+	it("reads the initial model credential only when its provider and key are both present", function _ReadInitialModelBootstrap()
+	{
+		expect(_ReadProcessConfig().initialModelBootstrap).toBeNull();
+
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "OPENAI");
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
+		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", apiKey: "sk-test" });
+	});
+
+	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
+	{
+		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toBeNull();
+
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "JENTE@ELEWA.KE");
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
+		vi.stubEnv("OIDC_ISSUER_URL", "https://issuer.example");
+		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toEqual({ email: "jente@elewa.ke", clusterTenant: "testv2", issuer: "https://issuer.example" });
+	});
+
+	it("rejects a partial or non-standalone first-owner admission contract", function _RejectInvalidStandaloneFirstUserAdmission()
+	{
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "jente@elewa.ke");
+		expect(function _readPartialStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/configured together/);
+
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
+		expect(function _readFleetStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/MEMBERSHIP_MODE=standalone/);
+	});
+
+	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()
+	{
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "openai");
+		expect(function _readPartialInitialModel() { _ReadProcessConfig(); }).toThrow(/configured together/);
+
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_API_KEY", "sk-test");
+		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "unknown");
+		expect(function _readUnsupportedInitialModel() { _ReadProcessConfig(); }).toThrow(/unsupported/);
+	});
+
 	it("refuses a partial obot block or a relative token path at startup", function _RejectPartialObotBlock()
 	{
 		vi.stubEnv("OBOT_GATEWAY_URL", "http://oc-mcp-gateway.silo.svc.cluster.local:8080");

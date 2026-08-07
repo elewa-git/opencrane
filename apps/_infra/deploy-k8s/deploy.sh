@@ -17,13 +17,20 @@
 #   apps/_infra/deploy-k8s/deploy.sh \
 #       --base-domain dev.opencrane.ai \
 #       --cluster-tenant acme \
+#       --acme-email operator@example.com \
+#       --first-user-email owner@example.com \
+#       --initial-model-provider openai \
+#       # OPENCRANE_INITIAL_MODEL_API_KEY is required in the environment \
 #       --postgres-credentials-secret opencrane-postgres-bootstrap \
 #       --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
 #       --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap \
 #       [--namespace opencrane-acme] \
 #       [ANY k8s-deploy.sh flag]
 #
-# --base-domain and --cluster-tenant are required. The silo is installed into namespace
+# --base-domain, --cluster-tenant, --acme-email, and --first-user-email are required. The first
+# user must sign in with this exact verified OIDC email to claim the standalone silo's first owner.
+# `--initial-model-provider` plus
+# OPENCRANE_INITIAL_MODEL_API_KEY seed the first routable model through LiteLLM. The silo is installed into namespace
 # `opencrane-<cluster-tenant>` unless --namespace overrides it.
 #
 # Prereqs: kubectl, helm, the cluster-wide controllers, and the PostgreSQL credentials
@@ -39,6 +46,8 @@ export OPENCRANE_CHART_DIR="$SCRIPT_DIR"
 CLUSTER_TENANT=""
 NAMESPACE=""
 BASE_DOMAIN="${OPENCRANE_BASE_DOMAIN:-}"
+ACME_EMAIL="${OPENCRANE_ACME_EMAIL:-}"
+FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 PASSTHROUGH=()
 
 err() { echo -e "\033[0;31m[silo]\033[0m $1" >&2; }
@@ -49,6 +58,11 @@ while [[ $# -gt 0 ]]; do
     --cluster-tenant)  CLUSTER_TENANT="$2"; shift 2 ;;
     --namespace)       NAMESPACE="$2"; shift 2 ;;
     --base-domain)     BASE_DOMAIN="$2"; PASSTHROUGH+=(--base-domain "$2"); shift 2 ;;
+    --acme-email)      ACME_EMAIL="$2"; shift 2 ;;
+    --first-user-email) FIRST_USER_EMAIL="$2"; PASSTHROUGH+=(--first-user-email "$2"); shift 2 ;;
+    --oidc-issuer-url) OIDC_ISSUER_URL="$2"; PASSTHROUGH+=(--oidc-issuer-url "$2"); shift 2 ;;
+    --oidc-client-id)  OIDC_CLIENT_ID="$2"; PASSTHROUGH+=(--oidc-client-id "$2"); shift 2 ;;
+    --initial-model-provider) PASSTHROUGH+=(--initial-model-provider "$2"); shift 2 ;;
     -h|--help)         grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)                 PASSTHROUGH+=("$1"); shift ;;
   esac
@@ -56,6 +70,8 @@ done
 
 [[ -n "$BASE_DOMAIN" ]]     || { err "--base-domain is required (the platform wildcard base this silo is served under)."; exit 1; }
 [[ -n "$CLUSTER_TENANT" ]]  || { err "--cluster-tenant is required (the ClusterTenant this silo serves)."; exit 1; }
+[[ -n "$ACME_EMAIL" ]]      || { err "--acme-email is required to issue a browser-trusted certificate for this public silo host."; exit 1; }
+[[ -n "$FIRST_USER_EMAIL" ]] || { err "--first-user-email is required to claim this standalone silo's first owner from a verified OIDC login."; exit 1; }
 
 # Fail fast if the external CloudNativePG prerequisite is absent.
 command -v kubectl >/dev/null 2>&1 || { err "kubectl not found."; exit 1; }
@@ -89,8 +105,16 @@ PROFILE_SET=(
   --set "ingress.tls.enabled=true"
   # Issue the ClusterTenant boundary's TLS certificate through its release-owned namespaced Issuer.
   --set "certManager.enabled=true"
+  # A public ClusterTenant host is complete only with a browser-trusted certificate.
+  # A distinct Issuer name makes an upgrade from the old self-signed profile reissue.
+  --set "certManager.mode=acme"
+  --set "certManager.issuerName=opencrane-acme-issuer"
+  --set "certManager.acme.email=${ACME_EMAIL}"
   # The server is served at the ClusterTenant host `<cluster-tenant>.<base>`.
   --set "ingress.controlPlaneHost=${CLUSTER_TENANT}.${BASE_DOMAIN}"
+  # First-owner admission stays a release-local, non-secret contract; durable ownership is
+  # created later from verified OIDC callback evidence, never from Helm data.
+  --set-string "clustertenantManager.firstUser.clusterTenant=${CLUSTER_TENANT}"
 )
 echo -e "\033[0;32m[silo]\033[0m Profile: silo for ClusterTenant '$CLUSTER_TENANT' in namespace '$NAMESPACE' on $BASE_DOMAIN"
 exec "$CORE" "${PROFILE_SET[@]}" "${PASSTHROUGH[@]}"

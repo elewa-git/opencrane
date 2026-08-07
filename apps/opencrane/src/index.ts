@@ -10,6 +10,7 @@ import { ___BindConsole } from "@opencrane/backend/observability";
 
 import { _ReadProcessConfig } from "./app/config.js";
 import { _CreateInternalApp } from "./app/internal-app.js";
+import { _BootstrapInitialModel } from "./app/initial-model-bootstrap.js";
 import { _CreateKubernetesClients } from "./app/kubernetes-clients.js";
 import { _StartProcessLifecycle } from "./app/lifecycle.js";
 import { _log } from "./app/log.js";
@@ -25,7 +26,7 @@ import { _CreateObotAdapters } from "./infra/obot/obot-adapters.factory.js";
  * This entrypoint owns only app wiring and lifecycle. Product authorities remain in packages, and
  * the public and workload-facing routers remain separate even though they share one process.
  */
-function _Main(): void
+async function _Main(): Promise<void>
 {
 	// 1. Capture stray console output before constructing dependencies that may log during startup.
 	const unbindConsole = ___BindConsole(_log);
@@ -35,8 +36,10 @@ function _Main(): void
 	const prisma = ___CreatePrismaClient(_log);
 	const kubernetes = _CreateKubernetesClients();
 	const memoryGateway = _CreateMemoryGatewayClient(config.runtime);
+	await _BootstrapInitialModel({ prisma, coreApi: kubernetes.coreApi, config: config.initialModelBootstrap, namespace: config.runtime.serverNamespace });
 
-	// 3. Compose one shared capacity gate and one mounted membership verifier for every run entrypoint.
+	// 3. Compose one shared capacity gate and deployment-selected membership evidence for every run
+	//    entrypoint. Standalone has no key mount and remains deny-only until a local issuer exists.
 	const runAdmissionCapacityGate = _CreateRunAdmissionCapacityGate(__ReadRunAdmissionConcurrencyPolicy());
 	const membershipEvidence = _CreateFleetMembershipEvidenceConfig();
 	const managedRunAdmission = __CreateManagedRunAdmissionPort(prisma, runAdmissionCapacityGate, _CreateManagedExecutionEvidenceAuthority());
@@ -47,7 +50,7 @@ function _Main(): void
 	const obot = _CreateObotAdapters(config.obot);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody, config.standaloneFirstUserAdmission);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, obot.attemptKeys);
 
@@ -55,4 +58,8 @@ function _Main(): void
 	_StartProcessLifecycle(publicApp, internalApp, prisma, kubernetes.batchApi, managedRunAdmission, config, unbindConsole);
 }
 
-_Main();
+void _Main().catch(function _fatalStartupError(err: unknown)
+{
+	_log.fatal({ err }, "opencrane control plane startup failed");
+	process.exitCode = 1;
+});

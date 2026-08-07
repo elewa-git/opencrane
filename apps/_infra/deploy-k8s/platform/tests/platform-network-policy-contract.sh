@@ -103,7 +103,8 @@ CROSS_INSTANCE_POLICY="$(awk '
 ' "$MULTI_OUTPUT")"
 
 test -n "$CROSS_INSTANCE_POLICY"
-grep -Fq '              cnpg.io/poolerName: oc-acme-postgres-pooler' <"$MULTI_OUTPUT"
+# PostgreSQL is a separately installed Helm release, so the umbrella render cannot contain a
+# CNPG Pooler Pod. The single-instance render above asserts the platform's actual pooler egress.
 grep -Fq '        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]' <<<"$CROSS_INSTANCE_POLICY"
 grep -Fq '      - key: cnpg.io/poolerName' <<<"$CROSS_INSTANCE_POLICY"
 grep -Fq '        operator: DoesNotExist' <<<"$CROSS_INSTANCE_POLICY"

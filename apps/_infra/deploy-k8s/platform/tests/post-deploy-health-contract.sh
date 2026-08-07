@@ -14,6 +14,8 @@ source "$VERIFY_SCRIPT"
 # Render against the current app-owned server chart, not the potentially stale committed archive.
 cp -R "$CHART_DIR/." "$CHART_FIXTURE"
 helm package "$ROOT_DIR/apps/opencrane/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
+helm package "$ROOT_DIR/apps/channel-proxy/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
+helm package "$ROOT_DIR/apps/memory-gateway/helm" --destination "$CHART_FIXTURE/charts" >/dev/null
 rendered_ingress="$(helm template opencrane-silo "$CHART_FIXTURE" \
   --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
   --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
@@ -27,6 +29,27 @@ grep -Fq '          - path: /healthz' <<<"$health_route"
 grep -Fq '            pathType: Exact' <<<"$health_route"
 grep -Fq '                name: opencrane-silo-opencrane-server' <<<"$health_route"
 grep -Fq '                  number: 8080' <<<"$health_route"
+
+server_deployment="$(helm template opencrane-silo "$CHART_FIXTURE" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --show-only templates/app-rollups.yaml | awk 'BEGIN { RS="---" } /kind: Deployment/ && /name: opencrane-silo-opencrane-server/ { print }')"
+[[ -n "$server_deployment" ]]
+grep -Fq 'livenessProbe:' <<<"$server_deployment"
+grep -Fq 'tcpSocket:' <<<"$server_deployment"
+if awk '/livenessProbe:/,/readinessProbe:/' <<<"$server_deployment" | grep -Fq 'path: /healthz'; then
+  echo "server liveness must not depend on the database-backed health route" >&2
+  exit 1
+fi
+grep -Fq 'readinessProbe:' <<<"$server_deployment"
+grep -Fq 'path: /healthz' <<<"$server_deployment"
+
+rendered_pull_secret="$(helm template opencrane-silo "$CHART_FIXTURE" \
+  --set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' \
+  --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32' \
+  --set-string 'global.imagePullSecret=opencrane-ghcr-pull' \
+  --show-only templates/app-rollups.yaml)"
+[[ "$(grep -Fc 'name: "opencrane-ghcr-pull"' <<<"$rendered_pull_secret")" == "3" ]]
 
 _run_verify() {
   local curl_outcome="$1"
@@ -55,6 +78,9 @@ _run_verify() {
   }
 
   _post_deploy_verify
+  grep -Fq '_wait_for_release_certificate' "$DEPLOY_SCRIPT"
+  grep -Fq 'kubectl wait --for=condition=Ready "certificate/$certificate" -n "$NAMESPACE" --timeout="${TIMEOUT}s"' "$VERIFY_SCRIPT"
+  grep -Fq '[[ "$lookup" != *"(NotFound)"* ]]' "$VERIFY_SCRIPT"
   cat "$curl_args_file"
   rm -f "$curl_args_file"
 }

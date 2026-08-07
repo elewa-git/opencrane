@@ -6,12 +6,15 @@
 # install OpenCrane through apps/_infra/deploy-k8s. Custom VPC/NAT, Artifact Registry,
 # and Cloud DNS are opt-in (see variables.tf).
 #
-# Easiest start — only the project id is required:
-#   cd platform/terraform
-#   terraform init
-#   terraform apply -var project_id=YOUR_GCP_PROJECT
+# Easiest start — use platform/provision.sh so the regional, versioned GCS state
+# backend is bootstrapped before this module is planned and applied.
+# A manual init must supply that existing bucket and a per-cluster prefix:
+#   terraform init \
+#     -backend-config="bucket=YOUR_PROJECT-YOUR_CLUSTER-tfstate" \
+#     -backend-config="prefix=clusters/YOUR_CLUSTER"
+#   terraform apply -var project_id=YOUR_GCP_PROJECT -var cluster_name=YOUR_CLUSTER
 #   eval "$(terraform output -raw kubeconfig_command)"
-#   helm install opencrane ../helm --set ingress.domain=YOUR_DOMAIN
+#   ../../deploy.sh --help  # then deploy through the owning silo entrypoint
 # -----------------------------------------------------------------------------
 
 data "google_client_config" "default" {}
@@ -21,8 +24,7 @@ data "google_client_config" "default" {}
 # When enable_custom_vpc=false (default) GKE runs on the project default VPC and
 # no networking resources are created.
 
-module "networking"
-{
+module "networking" {
   source = "./modules/networking"
   count  = var.enable_custom_vpc ? 1 : 0
 
@@ -33,8 +35,7 @@ module "networking"
 
 # ---- Phase 2: GKE Cluster ----
 
-module "gke"
-{
+module "gke" {
   source = "./modules/gke"
 
   project_id   = var.project_id
@@ -52,17 +53,14 @@ module "gke"
 }
 
 # Configure kubernetes and helm providers using GKE cluster credentials
-provider "kubernetes"
-{
+provider "kubernetes" {
   host                   = "https://${module.gke.cluster_endpoint}"
   cluster_ca_certificate = base64decode(module.gke.cluster_ca_certificate)
   token                  = data.google_client_config.default.access_token
 }
 
-provider "helm"
-{
-  kubernetes
-  {
+provider "helm" {
+  kubernetes {
     host                   = "https://${module.gke.cluster_endpoint}"
     cluster_ca_certificate = base64decode(module.gke.cluster_ca_certificate)
     token                  = data.google_client_config.default.access_token
@@ -74,8 +72,7 @@ provider "helm"
 # Default flow pushes images to an external registry (e.g. ghcr.io). Enable to
 # provision a GCP Artifact Registry instead.
 
-module "artifact_registry"
-{
+module "artifact_registry" {
   source = "./modules/artifact-registry"
   count  = var.enable_artifact_registry ? 1 : 0
 
@@ -84,8 +81,7 @@ module "artifact_registry"
   repository_id = "opencrane"
 }
 
-locals
-{
+locals {
   registry_url = var.enable_artifact_registry ? module.artifact_registry[0].repository_url : var.registry_url
 }
 
@@ -94,10 +90,9 @@ locals
 # Enable this to create the authoritative zone. Host records are an explicit operator
 # responsibility after the ingress address is known.
 
-module "dns"
-{
+module "dns" {
   source = "./modules/dns"
-  count = var.enable_cloud_dns ? 1 : 0
+  count  = var.enable_cloud_dns ? 1 : 0
 
   project_id = var.project_id
   domain     = var.domain

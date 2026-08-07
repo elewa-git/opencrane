@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectGuardInputsChanged } from "../affected-deployables.core.mjs";
+import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectForcedContainerProjects, selectGuardInputsChanged } from "../affected-deployables.core.mjs";
 
 /** Reads the stable selector fixture. */
 function _Fixture()
@@ -33,6 +33,17 @@ test("fails closed when a container target is not publishable", function _Reject
 	assert.throws(function _Selection() {
 		selectAffectedDeployables([{ name: "smoke-only", targets: { container: { options: { command: "bash test.sh" } } } }]);
 	}, /must declare targets\.container\.metadata\.release\.image and dockerfile/u);
+});
+
+test("uses an explicit publication set and makes manual dispatch validation-only by default", function _SelectsForcedProjects()
+{
+	assert.deepEqual(selectForcedContainerProjects("none"), []);
+	assert.deepEqual(selectForcedContainerProjects("bootstrap"), ["channel-proxy", "memory-gateway"]);
+	assert.deepEqual(selectForcedContainerProjects("artifact"), ["artifact-service"]);
+	assert.deepEqual(selectForcedContainerProjects("server"), ["opencrane"]);
+	assert.deepEqual(selectForcedContainerProjects("ui"), ["opencrane-ui"]);
+	assert.equal(selectForcedContainerProjects(""), null);
+	assert.throws(function _UnknownForce() { selectForcedContainerProjects("all"); }, /unsupported FORCE_DEPLOYABLES value: all/u);
 });
 
 test("uses all affected projects for contract verification and changed files for guard fixtures", function _SelectsPipelineInputs()

@@ -32,7 +32,7 @@ wires the pieces and the per-silo networking together.
  └────────────────────────────────────────────────────────────┘
         │  requires (external prerequisites, NOT installed here)
         ▼
- ingress-nginx · external-dns · CloudNativePG · cert-manager issuer
+ ingress controller · serving DNS · CloudNativePG · cert-manager
 ```
 
 **In this flow:** [opencrane server](../../opencrane/README.md) · [opencrane-ui](../../opencrane-ui/README.md)
@@ -43,9 +43,12 @@ wires the pieces and the per-silo networking together.
 · [postgres](../../postgres/README.md) · [cognee](../cognee/README.md) · [litellm](../litellm/README.md)
 · [obot](../obot/README.md)
 
-A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress-nginx,
-external-dns, CloudNativePG, cert-manager) are external prerequisites a silo never installs. Dependencies
-resolve from `Chart.lock` via `helm dep build` (pinned, reproducible) — never from open version ranges.
+A silo installs **only** its own namespaced app releases. Cluster-wide controllers (ingress,
+CloudNativePG, cert-manager) and serving DNS are external prerequisites a silo never installs.
+"External" here means outside the organisation release: a cluster operator may explicitly install
+the pinned development controller set with `platform/bootstrap-prerequisites.sh`, but `deploy.sh`
+never invokes that helper. Dependencies resolve from `Chart.lock` via `helm dep build` (pinned,
+reproducible) — never from open version ranges.
 
 The artifact preprocessor runs in its own PSA-restricted sibling namespace with a fixed zero-RBAC
 identity, bounded scratch, and no ArtifactStore route. The personal `agent-runtime` image is
@@ -61,8 +64,13 @@ if the controller identity is compromised. The admission boundary requires Kuber
 ## Public surface
 
 `Entrypoint: deploy.sh` — the per-ClusterTenant silo deploy profile, a thin wrapper over the shared
-install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, and one
-pre-created PostgreSQL basic-auth Secret per logical database (server, obot, litellm).
+install core (`platform/k8s-deploy.sh`). It requires a base domain, a ClusterTenant name, one
+`--first-user-email` value, and one pre-created PostgreSQL basic-auth Secret per logical database
+(server, obot, litellm). The named email is non-secret and only selects the verified OIDC identity
+that can claim the silo's one subject-bound Owner row at first login; deployment never writes a user
+row directly. A new silo can also pass `--initial-model-provider` with
+`OPENCRANE_INITIAL_MODEL_API_KEY` in its environment; the key never enters Helm values and is
+registered through the release-local LiteLLM before the server becomes ready.
 
 ## Boundary
 
@@ -92,6 +100,16 @@ package imports it.
   and aggregate Job quota; it contains no standing worker.
 - `opencrane-tool-runner.toolRunner` — the separate, default-deny tenant-tool namespace and aggregate
   Job quota; it contains no standing worker.
+- `--first-user-email` — required standalone-onboarding input. It is matched exactly against an
+  IdP-verified email after a browser login on this silo host, then records only that identity's OIDC
+  `sub` as the local Owner. It is distinct from `--platform-operator-seed-email` and grants no
+  platform-wide operator privilege. The deploy engine rejects an issuer change after this contract
+  exists, because a `sub` is scoped to its original OIDC issuer. Later upgrades must restate that
+  same `--oidc-issuer-url`; they may not use chart `--values` or `--reset-values`, which could
+  replace or erase the binding.
+- `--initial-model-provider` plus `OPENCRANE_INITIAL_MODEL_API_KEY` — optional bootstrap of the first
+  supported model provider. The engine writes the key to the release-local provider-custody Secret;
+  the server then registers its encrypted LiteLLM credential and catalogue before accepting work.
 - Reusable environment/multi-instance profiles live under `values/` and `platform/values/`.
 - `npx nx run deploy-k8s:test` and `npx nx run deploy-k8s:helm-lint` build a disposable copy from
   the committed `Chart.lock`, linked to the current app-owned chart sources. They therefore validate
@@ -106,8 +124,8 @@ package imports it.
 
 - **[platform/README.md](platform/README.md)** — the cluster and release substrate: the `k8s-platform`
   Helm library (labels, names, RBAC, endpoint/database/identity/observability helpers), the
-  `k8s-deploy.sh` install engine, OIDC configuration, cluster provisioning, Terraform, values profiles,
-  and the k3d conformance tests.
+  `k8s-deploy.sh` install engine, explicit shared-controller bootstrap, OIDC configuration, cluster
+  provisioning, Terraform, values profiles, and the k3d conformance tests.
 ## See also
 
 - Parent index: [_infra](../README.md)

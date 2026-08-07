@@ -1,6 +1,24 @@
 {{- define "opencrane.server.deployment" -}}
 {{- $managedPlane := (index .Values "managedAgentRuntimePlane").managedAgentRuntime -}}
 {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
+{{- $membership := .Values.clustertenantManager.membership -}}
+{{- $initialModel := .Values.clustertenantManager.initialModel -}}
+{{- $firstUser := .Values.clustertenantManager.firstUser -}}
+{{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
+{{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
+{{- end -}}
+{{- if ne (empty $initialModel.provider) (empty $initialModel.existingSecret) -}}
+{{- fail "clustertenantManager.initialModel.provider and existingSecret must be configured together" -}}
+{{- end -}}
+{{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
+{{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
+{{- end -}}
+{{- if ne (empty $firstUser.email) (empty $firstUser.clusterTenant) -}}
+{{- fail "clustertenantManager.firstUser.email and clusterTenant must be configured together" -}}
+{{- end -}}
+{{- if and $firstUser.email (ne $membership.mode "standalone") -}}
+{{- fail "clustertenantManager.firstUser requires membership.mode=standalone" -}}
+{{- end -}}
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -21,6 +39,10 @@ spec:
         app.kubernetes.io/component: opencrane-server
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-opencrane-server
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+      {{- end }}
       securityContext:
         {{- toYaml .Values.clustertenantManager.podSecurityContext | nindent 8 }}
       containers:
@@ -57,14 +79,26 @@ spec:
               value: {{ .Values.clustertenantManager.runAdmission.maxConcurrent | quote }}
             - name: AGENT_RUN_ADMISSION_MAX_QUEUED
               value: {{ .Values.clustertenantManager.runAdmission.maxQueued | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_ISSUER_ID
-              value: {{ required "clustertenantManager.fleetMembership.trustedIssuerId is required" .Values.clustertenantManager.fleetMembership.trustedIssuerId | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_KEY_ID
-              value: {{ required "clustertenantManager.fleetMembership.issuerKeyId is required" .Values.clustertenantManager.fleetMembership.issuerKeyId | quote }}
-            - name: OPENCRANE_FLEET_MEMBERSHIP_PUBLIC_KEY_FILE
-              value: /var/run/opencrane/fleet-membership/public-key.pem
-            - name: OPENCRANE_FLEET_MEMBERSHIP_MAX_STALENESS_MS
-              value: {{ .Values.clustertenantManager.fleetMembership.maximumStalenessMs | quote }}
+            - name: OPENCRANE_MEMBERSHIP_MODE
+              value: {{ $membership.mode | quote }}
+            - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
+              value: {{ $membership.maximumStalenessMs | quote }}
+            {{- if $firstUser.email }}
+            # One-time standalone owner admission stays subject-bound: email merely selects the
+            # verified OIDC identity that may claim this release's local owner slot.
+            - name: OPENCRANE_STANDALONE_FIRST_USER_EMAIL
+              value: {{ $firstUser.email | quote }}
+            - name: OPENCRANE_STANDALONE_CLUSTER_TENANT
+              value: {{ $firstUser.clusterTenant | quote }}
+            {{- end }}
+            {{- if eq $membership.mode "fleet" }}
+            - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
+              value: {{ required "clustertenantManager.membership.fleet.trustedIssuerId is required in fleet mode" $membership.fleet.trustedIssuerId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_KEY_ID
+              value: {{ required "clustertenantManager.membership.fleet.issuerKeyId is required in fleet mode" $membership.fleet.issuerKeyId | quote }}
+            - name: OPENCRANE_MEMBERSHIP_PUBLIC_KEY_FILE
+              value: /var/run/opencrane/membership/public-key.pem
+            {{- end }}
             # The server binds each runtime identity class to its own Helm-owned restricted namespace.
             - name: AGENT_RUNTIME_PERSONAL_NAMESPACE
               value: {{ include "opencrane.agentController.runtimeNamespace" . | quote }}
@@ -150,6 +184,19 @@ spec:
                   {{- end }}
                   key: {{ .Values.litellm.secretKey }}
             {{- end }}
+            {{- with $initialModel }}
+            {{- if .provider }}
+            # Deployment-time model bootstrap. The raw key remains in the provider custody Secret;
+            # this process consumes it only to register LiteLLM's encrypted credential and catalog.
+            - name: OPENCRANE_INITIAL_MODEL_PROVIDER
+              value: {{ .provider | quote }}
+            - name: OPENCRANE_INITIAL_MODEL_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .existingSecret }}
+                  key: {{ .apiKeySecretKey }}
+            {{- end }}
+            {{- end }}
             {{- if .Values.mcpGateway.serviceTokenExistingSecret }}
             # Obot management transport: custody provisioning and attempt-key minting. Rendered only
             # when the pre-provisioned service-credential Secret is named; otherwise the app composes
@@ -185,9 +232,11 @@ spec:
             - name: artifact-keys
               mountPath: /var/run/opencrane/artifact-keys
               readOnly: true
-            - name: fleet-membership-key
-              mountPath: /var/run/opencrane/fleet-membership
+            {{- if eq $membership.mode "fleet" }}
+            - name: membership-verification-key
+              mountPath: /var/run/opencrane/membership
               readOnly: true
+            {{- end }}
             - name: memory-gateway-token
               mountPath: /var/run/opencrane/memory-gateway
               readOnly: true
@@ -197,8 +246,11 @@ spec:
               readOnly: true
             {{- end }}
           livenessProbe:
-            httpGet:
-              path: /healthz
+            # A running server can repair a transient database connection; the
+            # database-backed health route remains the readiness/public gate.
+            # Liveness therefore proves only that the control-plane listener is
+            # alive, rather than restarting it for an upstream dependency.
+            tcpSocket:
               port: http
             initialDelaySeconds: 5
             periodSeconds: 10
@@ -220,13 +272,15 @@ spec:
                 path: lease-private.pem
               - key: receipt-public.pem
                 path: receipt-public.pem
-        - name: fleet-membership-key
+        {{- if eq $membership.mode "fleet" }}
+        - name: membership-verification-key
           secret:
-            secretName: {{ required "clustertenantManager.fleetMembership.existingSecret is required" .Values.clustertenantManager.fleetMembership.existingSecret | quote }}
+            secretName: {{ required "clustertenantManager.membership.fleet.existingSecret is required in fleet mode" $membership.fleet.existingSecret | quote }}
             defaultMode: 0440
             items:
-              - key: {{ required "clustertenantManager.fleetMembership.publicKeyKey is required" .Values.clustertenantManager.fleetMembership.publicKeyKey | quote }}
+              - key: {{ required "clustertenantManager.membership.fleet.publicKeyKey is required in fleet mode" $membership.fleet.publicKeyKey | quote }}
                 path: public-key.pem
+        {{- end }}
         # Audience-bound caller credential for the private memory gateway; rotated by the kubelet.
         # The audience must equal MEMORY_GATEWAY_PROJECTED_TOKEN_AUDIENCE in @opencrane/contracts.
         - name: memory-gateway-token

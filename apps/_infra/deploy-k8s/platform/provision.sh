@@ -51,21 +51,64 @@ _provision_local() {
   k3d cluster create "$name" --agents 1
 }
 
-# gke: a standard GKE cluster via Terraform (cluster only), then point kubectl at it.
+# gke: a GKE Autopilot cluster via Terraform (cluster only), then point kubectl at it.
 # BASE_DOMAIN (a global in the calling deploy script) threads into the Cloud DNS zone var.
 _provision_gke() {
   local project="$1" region="$2" cluster="$3" yes="$4"
   local tf_dir; tf_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/terraform"
+  local state_bucket="${OPENCRANE_TERRAFORM_STATE_BUCKET:-${project}-${cluster}-tfstate}"
   local c; for c in gcloud terraform kubectl; do command -v "$c" >/dev/null 2>&1 || { _provision_err "missing required command: $c"; return 1; }; done
   if [[ -z "$project" && -t 0 ]]; then read -rp "GCP Project ID: " project; fi
   [[ -n "$project" ]] || { _provision_err "gke provisioning needs --project-id"; return 1; }
+  state_bucket="${OPENCRANE_TERRAFORM_STATE_BUCKET:-${project}-${cluster}-tfstate}"
+  if [[ ! "$state_bucket" =~ ^[a-z0-9][a-z0-9._-]{1,61}[a-z0-9]$ ]]; then
+    _provision_err "Terraform state bucket '$state_bucket' is not a valid 3-63 character GCS bucket name. Set OPENCRANE_TERRAFORM_STATE_BUCKET explicitly."
+    return 1
+  fi
   if [[ "$yes" != "1" && -t 0 ]]; then
     read -rp "Provision GKE cluster '$cluster' in $project/$region? [Y/n]: " c; [[ "${c:-Y}" =~ ^[Yy]$ ]] || { _provision_err "aborted."; return 1; }
   fi
-  _provision_log "enabling GCP APIs (container, compute)…"
-  gcloud services enable container.googleapis.com compute.googleapis.com --project "$project" --quiet
+  _provision_log "validating the checked-in Terraform configuration…"
+  terraform -chdir="$tf_dir" fmt -check -recursive
+  _provision_log "enabling GCP APIs (container, compute, Cloud KMS, Cloud Storage)…"
+  # The Terraform module enables CMEK-backed Kubernetes Secret encryption by default, so
+  # Cloud KMS is a required baseline API rather than an optional deployment extra.
+  gcloud services enable \
+    container.googleapis.com \
+    compute.googleapis.com \
+    cloudkms.googleapis.com \
+    storage.googleapis.com \
+    --project "$project" \
+    --quiet
+  if ! gcloud storage buckets describe "gs://$state_bucket" --project "$project" >/dev/null 2>&1; then
+    _provision_log "creating regional Terraform state bucket 'gs://$state_bucket'…"
+    gcloud storage buckets create "gs://$state_bucket" \
+      --project "$project" \
+      --location "$region" \
+      --uniform-bucket-level-access \
+      --public-access-prevention
+  fi
+  local state_location state_location_normalized region_normalized
+  state_location="$(gcloud storage buckets describe "gs://$state_bucket" --project "$project" --format='value(location)')"
+  state_location_normalized="$(printf '%s' "$state_location" | tr '[:upper:]' '[:lower:]')"
+  region_normalized="$(printf '%s' "$region" | tr '[:upper:]' '[:lower:]')"
+  if [[ "$state_location_normalized" != "$region_normalized" ]]; then
+    _provision_err "Terraform state bucket 'gs://$state_bucket' is in '$state_location', not required region '$region'."
+    return 1
+  fi
+  gcloud storage buckets update "gs://$state_bucket" \
+    --project "$project" \
+    --uniform-bucket-level-access \
+    --public-access-prevention \
+    --versioning
+  terraform -chdir="$tf_dir" init \
+    -input=false \
+    -lockfile=readonly \
+    -reconfigure \
+    -backend-config="bucket=$state_bucket" \
+    -backend-config="prefix=clusters/$cluster"
+  terraform -chdir="$tf_dir" validate
   _provision_log "provisioning the GKE cluster with Terraform…"
-  terraform -chdir="$tf_dir" init -upgrade -input=false
   terraform -chdir="$tf_dir" apply -input=false -auto-approve \
     -var "project_id=$project" -var "region=$region" -var "cluster_name=$cluster" \
     ${BASE_DOMAIN:+-var "domain=$BASE_DOMAIN"}

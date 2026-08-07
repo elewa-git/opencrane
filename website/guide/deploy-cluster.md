@@ -23,6 +23,7 @@ export OIDC_CLIENT_ID=<organisation-client-id>
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example.com \
   --cluster-tenant acme \
+  --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
   --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
@@ -32,6 +33,9 @@ The `opencrane-silo` chart composes the trusted control plane, supporting servic
 agent controller and separate restricted Job namespaces. Cluster-wide controllers remain
 external prerequisites. Create the three named PostgreSQL bootstrap Secrets in the target
 namespace before running the script; each must hold distinct credentials.
+
+Point `<cluster-tenant>.<base-domain>` at the ingress address before deploying. The entrypoint
+uses Let's Encrypt HTTP-01 to obtain the browser-trusted certificate.
 
 ## Validate the boundary
 

@@ -1,0 +1,62 @@
+controller:
+  replicaCount: 1
+  allowSnippetAnnotations: false
+  ingressClass: nginx
+  ingressClassResource:
+    enabled: true
+    name: nginx
+    default: false
+    controllerValue: k8s.io/ingress-nginx
+  publishService:
+    enabled: true
+  service:
+    type: LoadBalancer
+    externalTrafficPolicy: Local
+  resources:
+    requests:
+      cpu: 100m
+      memory: 90Mi
+    limits:
+      memory: 192Mi
+  podSecurityContext:
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 82
+    seccompProfile:
+      type: RuntimeDefault
+  containerSecurityContext:
+    allowPrivilegeEscalation: false
+    readOnlyRootFilesystem: false
+    runAsNonRoot: true
+    runAsUser: 101
+    runAsGroup: 82
+    capabilities:
+      drop:
+        - ALL
+      add:
+        - NET_BIND_SERVICE
+  metrics:
+    enabled: false
+    service:
+      enabled: false
+    serviceMonitor:
+      enabled: false
+  admissionWebhooks:
+    enabled: true
+    createSecretJob:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 20Mi
+        limits:
+          memory: 32Mi
+    patchWebhookJob:
+      resources:
+        requests:
+          cpu: 10m
+          memory: 20Mi
+        limits:
+          memory: 32Mi
+
+defaultBackend:
+  enabled: false

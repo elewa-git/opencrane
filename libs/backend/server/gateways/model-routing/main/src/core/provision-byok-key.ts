@@ -4,6 +4,7 @@ import * as k8s from "@kubernetes/client-node";
 import type { Logger } from "pino";
 import type { PrismaClient, ProviderCredential as PrismaProviderCredential } from "@prisma/client";
 
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 import { ModelRoutingScope } from "@opencrane/contracts";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 import { _DeleteLiteLlmCredential, _UpsertLiteLlmCredential } from "./litellm-credential-registration.js";
@@ -27,8 +28,6 @@ import type { DeprovisionByokKeyOptions, ProvisionByokKeyOptions, ProvisionByokK
  * today (LiteLLM has no capability-aware routing); the AIR router can re-point it later without
  * callers/skills re-selecting. See `_ensureProviderModels` step 3.
  */
-const _AUTO_MODEL_NAME = "auto";
-
 /**
  * Public model name of the stable EMBEDDING selection — the embedding-side mirror of
  * {@link _AUTO_MODEL_NAME}. Backed by the configured provider's catalogued embedding model
@@ -41,6 +40,47 @@ const _AUTO_MODEL_NAME = "auto";
  * import this constant), exactly like the `cognee-litellm-key` Secret-name agreement.
  */
 export const _AUTO_EMBEDDING_MODEL_NAME = "auto-embedding";
+
+/** Stable public model selection whose upstream provider model can improve without caller changes. */
+const _AUTO_MODEL_NAME = "auto";
+
+/**
+ * Require LiteLLM to report one live public model deployment. This is deliberately stricter than
+ * the interactive BYOK route: an installation bootstrap must not accept traffic until its default
+ * model alias can actually be resolved by the release-local LiteLLM instance.
+ *
+ * @param publicModelName - LiteLLM `model_name` required to be present in its live inventory.
+ */
+export async function _RequireLiteLlmModelRegistration(publicModelName: string): Promise<void>
+{
+  const endpoint = process.env.LITELLM_ENDPOINT?.trim() ?? "";
+  const masterKey = process.env.LITELLM_MASTER_KEY?.trim() ?? "";
+  if (!endpoint || !masterKey)
+  {
+    throw new Error("LiteLLM endpoint and master key are required to validate the initial model");
+  }
+
+  const registered = await ___DoWithTrace(
+    "litellm.model.require",
+    { publicModelName },
+    async function _readInventory(): Promise<Set<string>>
+    {
+      const response = await fetch(`${endpoint}/model/info`, {
+        headers: { Authorization: `Bearer ${masterKey}` },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!response.ok)
+      {
+        throw new Error(`LiteLLM model inventory returned HTTP ${response.status}`);
+      }
+      return ___ParseAndValidateJson(await response.text(), "LiteLLM model inventory response", _RegisteredModelNames);
+    },
+  );
+  if (!registered.has(publicModelName))
+  {
+    throw new Error(`LiteLLM has not registered required model '${publicModelName}'`);
+  }
+}
 
 /** Name of the k8s Secret carrying a provider's raw BYOK key, in the operator's own namespace. */
 export function _byokSecretName(provider: string): string
@@ -68,7 +108,7 @@ export function _byokCredentialName(provider: string): string
  */
 export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<ProvisionByokKeyResult>
 {
-  const { prisma, coreApi, operatorNamespace, provider, apiKey, log } = opts;
+  const { prisma, coreApi, operatorNamespace, provider, apiKey, log, requireLiveModels = false } = opts;
   const catalog = _BYOK_PROVIDER_CATALOG[provider];
 
   // 1. Persist the raw key to its k8s Secret first — the durable source of truth.
@@ -88,10 +128,11 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   //    so LiteLLM can switch across tiers on the single key. Never fail the set if this trips.
   try
   {
-    await _ensureProviderModels(prisma, catalog, row.id, litellmCredentialName);
+    await _ensureProviderModels(prisma, catalog, row.id, litellmCredentialName, requireLiveModels);
   }
   catch (err)
   {
+    if (requireLiveModels) throw err;
     log.warn({ provider, err }, "byok model seed failed; key is set but its models were not seeded");
   }
 
@@ -99,10 +140,11 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
   //    deliberately OUTSIDE step 4's ModelDefinition path (see ByokProviderCatalog.embeddingModel).
   try
   {
-    await _ensureProviderEmbeddingModel(catalog, litellmCredentialName, log);
+    await _ensureProviderEmbeddingModel(catalog, litellmCredentialName, log, requireLiveModels);
   }
   catch (err)
   {
+    if (requireLiveModels) throw err;
     log.warn({ provider, err }, "byok embedding model registration failed; key is set but no embedding model was registered");
   }
 
@@ -110,7 +152,8 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
 }
 
 /**
- * Remove a silo's BYOK key for a provider: delete the Secret, the LiteLLM credential, and the row.
+ * Remove a silo's BYOK key for a provider: clear the fixed custody Secret, then remove the LiteLLM
+ * credential and row. The placeholder Secret remains so the restricted server Role can re-add a key.
  *
  * @param opts.prisma            - Prisma client.
  * @param opts.coreApi           - Kubernetes Core V1 API.
@@ -119,7 +162,7 @@ export async function _ProvisionByokKey(opts: ProvisionByokKeyOptions): Promise<
  */
 export async function _DeprovisionByokKey(opts: DeprovisionByokKeyOptions): Promise<void>
 {
-  await _deleteProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
+  await _clearProviderKeySecret(opts.coreApi, opts.operatorNamespace, opts.provider);
   await _DeleteLiteLlmCredential(_byokCredentialName(opts.provider));
   await opts.prisma.providerCredential.deleteMany({ where: { scope: "Global", clusterTenant: null, provider: opts.provider } });
 }
@@ -163,19 +206,26 @@ async function _applyProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string
   }
 }
 
-/** Best-effort delete of the provider's key Secret, treating 404 (already gone) as success. */
-async function _deleteProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
+/** Clear one pre-created provider custody Secret without deleting the name guarded by RBAC. */
+async function _clearProviderKeySecret(coreApi: k8s.CoreV1Api, namespace: string, provider: string): Promise<void>
 {
   try
   {
-    await coreApi.deleteNamespacedSecret({ name: _byokSecretName(provider), namespace });
+    const name = _byokSecretName(provider);
+    const existing = await coreApi.readNamespacedSecret({ name, namespace });
+    await coreApi.replaceNamespacedSecret({
+      name,
+      namespace,
+      body: { ...existing, data: { apiKey: Buffer.from("").toString("base64") } },
+    });
   }
   catch (err)
   {
-    if (_k8sStatus(err) !== 404)
+    if (_k8sStatus(err) === 404)
     {
-      throw err;
+      throw new Error(`Provider custody Secret '${_byokSecretName(provider)}' is missing; deployment must pre-create the fixed provider catalogue`);
     }
+    throw err;
   }
 }
 
@@ -228,55 +278,39 @@ async function _upsertCredentialRow(prisma: PrismaClient, provider: string, secr
 }
 
 /**
- * Best-effort: register EVERY model class in a provider's catalog, all Global-scoped and bound to
- * the provider's SINGLE credential, so the pod's `main` agent resolves to a `litellm-proxy` model
- * and LiteLLM can switch across the provider's tiers on the one key. The rows are surfaced by the
- * target model registry into the workload configuration.
- *
- * Non-destructive: an existing Global row for a slug is reused (re-bound to this credential rather
- * than duplicated). The silo default is claimed by the catalog's `defaultClass` model only when no
- * Global model is default yet — the first provider configured wins, and an existing default (here
- * or a higher-precedence routing default) is never stolen.
- *
- * @param prisma                - Prisma client.
- * @param catalog               - The provider's catalog, or undefined (provider not catalogued ⇒ no-op).
- * @param providerCredentialId  - The single ProviderCredential id every class binds to.
- * @param litellmCredentialName - The LiteLLM credential name (null ⇒ Secret-only; models register
- *                                without a key binding and reconcile when LiteLLM is reachable).
+ * Converge one provider catalogue into global ModelDefinition rows and live LiteLLM deployments.
+ * Strict startup records every deployment identifier returned by LiteLLM so subsequent restarts
+ * converge rather than retaining a placeholder or stale deployment id.
  */
-async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null): Promise<void>
+async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProviderCatalog | undefined, providerCredentialId: string, litellmCredentialName: string | null, requireLiveModels: boolean): Promise<void>
 {
   if (!catalog)
   {
     return;
   }
 
-  // 1. Find or register each class's Global model deployment, all bound to the ONE credential.
+  // 1. Reconcile each provider class to one Global model row and, at startup, its live deployment.
   let defaultModelId: string | null = null;
   for (const entry of catalog.models)
   {
     let model = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: entry.slug } });
     if (model)
     {
-      if (model.providerCredentialId !== providerCredentialId)
+      const liveModelId = requireLiveModels
+        ? await _RegisterLiteLlmModel({ publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: true })
+        : null;
+      if (model.providerCredentialId !== providerCredentialId || liveModelId !== null)
       {
-        model = await prisma.modelDefinition.update({ where: { id: model.id }, data: { providerCredentialId } });
+        model = await _updateModelDefinition(prisma, model.id, {
+            ...(model.providerCredentialId !== providerCredentialId ? { providerCredentialId } : {}),
+            ...(liveModelId !== null ? { litellmModelId: liveModelId } : {}),
+        });
       }
     }
     else
     {
-      const litellmModelId = await _RegisterLiteLlmModel({
-        publicModelName: entry.slug,
-        upstreamModel: entry.slug,
-        scope: ModelRoutingScope.Global,
-        clusterTenant: null,
-        apiBase: null,
-        apiKeyEnvRef: null,
-        litellmCredentialName,
-      });
-      model = await prisma.modelDefinition.create({
-        data: { scope: "Global", clusterTenant: null, publicModelName: entry.slug, litellmModelId, upstreamModel: entry.slug, apiBase: null, isDefault: false, providerCredentialId },
-      });
+      const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: entry.slug, upstreamModel: entry.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
+      model = await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: entry.slug, litellmModelId, upstreamModel: entry.slug, apiBase: null, isDefault: false, providerCredentialId } });
     }
     if (entry.className === catalog.defaultClass)
     {
@@ -284,44 +318,40 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
     }
   }
 
-  // 2. Claim the silo default with the provider's default-class model, only when nothing is default
-  //    yet — first provider configured wins; never steal an existing default.
+  // 2. Preserve the first selected default; a newly provisioned provider never steals it.
   if (defaultModelId)
   {
     const hasDefault = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, isDefault: true } });
     if (!hasDefault)
     {
-      await prisma.modelDefinition.update({ where: { id: defaultModelId }, data: { isDefault: true } });
+      await _updateModelDefinition(prisma, defaultModelId, { isDefault: true });
     }
   }
 
-  // 3. Register the "auto" model — a STABLE selection id, so a caller/skill can pick "auto" once
-  //    and its backing model can improve later without re-selecting. Backed today by the provider's
-  //    CHEAPEST (`fast`-class) model: LiteLLM has no capability-aware routing (it is static/reactive
-  //    — cost/latency/shuffle only), so native "auto" deterministically resolves to the cheapest
-  //    deployment. The intelligent cost/quality router (RouteLLM + measurement, AIR track) can later
-  //    re-point this same "auto" id without any caller change. Registered ONCE (first provider wins).
-  //    @todo - Replace the static choice only after vendor-neutral routing measurements qualify it.
-  const cheapest = catalog.models.find((m) => m.className === "fast") ?? catalog.models[catalog.models.length - 1];
-  if (cheapest)
+  // 3. Reconcile the stable auto alias to the cheapest provider class without changing caller input.
+  const cheapest = catalog.models.find((model) => model.className === "fast") ?? catalog.models[catalog.models.length - 1];
+  if (!cheapest)
   {
-    const existingAuto = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME } });
-    if (!existingAuto)
-    {
-      const litellmModelId = await _RegisterLiteLlmModel({
-        publicModelName: _AUTO_MODEL_NAME,
-        upstreamModel: cheapest.slug,
-        scope: ModelRoutingScope.Global,
-        clusterTenant: null,
-        apiBase: null,
-        apiKeyEnvRef: null,
-        litellmCredentialName,
-      });
-      await prisma.modelDefinition.create({
-        data: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME, litellmModelId, upstreamModel: cheapest.slug, apiBase: null, isDefault: false, providerCredentialId },
-      });
-    }
+    return;
   }
+  const existingAuto = await prisma.modelDefinition.findFirst({ where: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME } });
+  if (!existingAuto)
+  {
+    const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: _AUTO_MODEL_NAME, upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: requireLiveModels });
+    await prisma.modelDefinition.create({ data: { scope: "Global", clusterTenant: null, publicModelName: _AUTO_MODEL_NAME, litellmModelId, upstreamModel: cheapest.slug, apiBase: null, isDefault: false, providerCredentialId } });
+    return;
+  }
+  if (requireLiveModels)
+  {
+    const litellmModelId = await _RegisterLiteLlmModel({ publicModelName: _AUTO_MODEL_NAME, upstreamModel: cheapest.slug, scope: ModelRoutingScope.Global, clusterTenant: null, apiBase: null, apiKeyEnvRef: null, litellmCredentialName, requireLiveRegistration: true });
+    await _updateModelDefinition(prisma, existingAuto.id, { litellmModelId });
+  }
+}
+
+/** Apply a narrow ModelDefinition reconciliation patch through the existing Prisma authority. */
+async function _updateModelDefinition(prisma: PrismaClient, id: string, data: { providerCredentialId?: string; litellmModelId?: string; isDefault?: boolean })
+{
+  return prisma.modelDefinition.update({ where: { id }, data });
 }
 
 /**
@@ -341,7 +371,7 @@ async function _ensureProviderModels(prisma: PrismaClient, catalog: ByokProvider
  * @param litellmCredentialName - The LiteLLM credential name (null ⇒ Secret-only baseline).
  * @param log                   - Scoped logger for the registration outcome.
  */
-async function _ensureProviderEmbeddingModel(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, log: Logger): Promise<void>
+async function _ensureProviderEmbeddingModel(catalog: ByokProviderCatalog | undefined, litellmCredentialName: string | null, log: Logger, requireLiveModels: boolean): Promise<void>
 {
   if (!catalog?.embeddingModel)
   {
@@ -380,7 +410,7 @@ async function _ensureProviderEmbeddingModel(catalog: ByokProviderCatalog | unde
 
   for (const deployment of deployments)
   {
-    if (registered.has(deployment.publicModelName))
+    if (registered.has(deployment.publicModelName) && !requireLiveModels)
     {
       log.debug({ publicModelName: deployment.publicModelName }, "embedding model already registered with litellm");
       continue;
@@ -395,6 +425,7 @@ async function _ensureProviderEmbeddingModel(catalog: ByokProviderCatalog | unde
       apiKeyEnvRef: null,
       litellmCredentialName,
       mode: "embedding",
+      requireLiveRegistration: requireLiveModels,
     });
     log.info({ publicModelName: deployment.publicModelName, upstreamModel: deployment.upstreamModel }, "embedding model registered with litellm");
   }

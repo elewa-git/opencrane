@@ -29,21 +29,20 @@ enum OrgMemberStatus {
 // read-model; its `clusterTenant` is now a soft string ref (no cross-DB FK to the relocated
 // ClusterTenant).
 //
-// CURRENTLY UNPOPULATED (Stage 4): the fleet-manager owns the authoritative OrgMembership; the
-// silo no longer writes this table (org create/seed moved to the fleet). Org-admin ENFORCEMENT
-// on the silo is therefore group-based — `_RequireOrgAdmin` reads the OIDC-derived
-// `session.authUser.isOrgAdmin`, NOT this table — so an empty read-model never grants access.
-// The table is read only by `/auth/me` membership enrichment (returns empty ownedOrgs until a
-// fleet→silo OrgMembership projection is wired — deferred). Because it is never written here,
-// there are no orphaned rows to reconcile when the fleet deletes an org.
+// Fleet remains the authoritative multi-silo membership issuer and projects memberships here when
+// that path is configured. A standalone silo has one explicit local exception: its deploy contract
+// names a verified OIDC bootstrap email, and the identity authority may atomically create exactly
+// one subject-bound active Owner row on first login. It never imports users by email, creates
+// members, or accepts unsigned runtime membership evidence. `/auth/me` reads this local projection
+// while runtime admission remains bound to independently signed membership evidence.
 
 /// Binds a subject to an organisation (ClusterTenant) with a role. Authority is
 /// DERIVED from these rows, never from a global flag: a subject who owns/administers
 /// ≥1 org is an org admin, scoped to exactly the orgs they hold owner/admin on.
 ///
 /// One membership per (clusterTenant, subject). At most ONE `owner` per org is
-/// enforced by a partial unique index — written by the fleet-manager (the authoritative
-/// registry), not the silo.
+/// enforced by a partial unique index — written by the Fleet projection or the one-time standalone
+/// bootstrap authority, never by request payloads or Helm data.
 model OrgMembership {
   /// Surrogate key.
   id            String        @id @default(cuid())

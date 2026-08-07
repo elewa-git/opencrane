@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { appendFileSync } from "node:fs";
 
-import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
+import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectForcedContainerProjects, selectGuardInputsChanged } from "./affected-deployables.core.mjs";
 
 /** Run a command and return trimmed stdout. */
 function _run(command, args)
@@ -16,6 +16,13 @@ function _AffectedProjects(target)
 {
   const targetArguments = target ? [`--withTarget=${target}`] : [];
   return JSON.parse(_run("npx", ["nx", "show", "projects", "--affected", ...targetArguments, "--json"]));
+}
+
+function _ContainerProjects()
+{
+  const forced = selectForcedContainerProjects(process.env.FORCE_DEPLOYABLES);
+  if (forced !== null) return forced;
+  return _AffectedProjects("container");
 }
 
 /** Reads the complete app-owned project configuration from the NX graph. */
@@ -46,7 +53,7 @@ if (!base || !head)
 }
 
 const affectedProjects = _AffectedProjects();
-const affectedContainerProjects = _AffectedProjects("container");
+const affectedContainerProjects = _ContainerProjects();
 const deployables = selectAffectedDeployables(affectedContainerProjects.map(function _Config(project) { return _Project(project); }));
 const changedFiles = _run("git", ["diff", "--name-only", base, head]).split("\n").filter(Boolean);
 

@@ -3,7 +3,7 @@ import { existsSync, lstatSync, readFileSync, readdirSync } from "node:fs";
 import { basename, dirname, extname, join, relative, resolve, sep } from "node:path";
 import ts from "typescript";
 
-const [, , root, workloadRegistryPath, appSourceRegistryPath] = process.argv;
+const [, , root, workloadRegistryPath, appSourceRegistryPath, chartDirectory] = process.argv;
 const errors = [];
 const info = [];
 const appSourceExtensions = new Set([
@@ -125,6 +125,11 @@ function objectProperty(object, name, sourceFile)
 
 const workloadRegistry = readJson(workloadRegistryPath);
 const appSourceRegistry = readJson(appSourceRegistryPath);
+const renderedChartDirectory = chartDirectory ? resolve(chartDirectory) : workspacePath("apps/_infra/deploy-k8s");
+if (!existsSync(renderedChartDirectory) || !lstatSync(renderedChartDirectory).isDirectory())
+{
+  throw new Error(`Rendered chart directory does not exist: ${renderedChartDirectory}`);
+}
 if (workloadRegistry.version !== 2) fail("workload registry version must be 2");
 if (appSourceRegistry.version !== 2) fail("app-source registry version must be 2");
 
@@ -187,7 +192,7 @@ for (const profile of workloadRegistry.renderProfiles ?? [])
 {
   const context = `render profile '${profile.id ?? "<missing>"}'`;
   if (!profile.id) fail(`${context}: id is required`);
-  const args = ["template", "opencrane", workspacePath("apps/_infra/deploy-k8s"), "--namespace", "opencrane-system"];
+  const args = ["template", "opencrane", renderedChartDirectory, "--namespace", "opencrane-system"];
   for (const value of profile.setValues ?? []) args.push("--set", value);
   let manifest = "";
   try

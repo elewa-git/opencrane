@@ -31,4 +31,6 @@ export interface LiteLlmModelRegistration
    * model-name inference.
    */
   mode?: "chat" | "embedding";
+  /** When true, refuse placeholder fallback because a deployment startup needs a live LiteLLM model. */
+  requireLiveRegistration?: boolean;
 }

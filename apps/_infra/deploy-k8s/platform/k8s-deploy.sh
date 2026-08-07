@@ -16,11 +16,14 @@
 #   apps/_infra/deploy-k8s/platform/k8s-deploy.sh [--base-domain DOMAIN] [--namespace NS] [--release NAME]
 #                            [--image-tag TAG] [--storage-class SC]
 #                            [--opencrane-server-tag TAG]
+#                            [--registry-pull-secret NAME --registry-pull-config-file FILE]
 #                            [--oidc-issuer-url URL] [--oidc-client-id ID]
 #                            [--oidc-redirect-uri URI] [--oidc-client-secret SECRET]
 #                            [--oidc-session-secret SECRET]
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
+#                            [--first-user-email EMAIL]
+#                            [--initial-model-provider PROVIDER]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
 #                            [--postgres-owner OWNER]
@@ -64,6 +67,11 @@
 # nobody (fail-closed). Also accepted via the OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL
 # env var. Never commit a real owner email into the repo.
 #
+# `--initial-model-provider` pairs with the required environment-only
+# OPENCRANE_INITIAL_MODEL_API_KEY. The installer writes that raw key directly to the release-local
+# provider-custody Secret; the server then registers it with LiteLLM's encrypted credentials API
+# and seeds the provider model catalogue before it becomes ready. Never pass the API key as a flag.
+#
 # --image-tag pins the OpenCrane server image. To roll it to a different build,
 # pass --opencrane-server-tag (for example, sha-abc123); it overrides --image-tag.
 # Always bump component images this way —
@@ -85,16 +93,18 @@ if [[ ! -f "$POST_DEPLOY_VERIFY" ]]; then
 fi
 source "$POST_DEPLOY_VERIFY"
 source "$SCRIPT_DIR/kubernetes-api-helm-args.sh"
-# The Helm chart no longer sits beside this engine — it is per-role and lives in the calling
-# app (the fleet chart, now in the WeOwnAI repo per elewa-git/opencrane#150; apps/_infra/deploy-k8s
-# = the silo chart, still here). Each app's deploy.sh wrapper exports OPENCRANE_CHART_DIR to its
-# own chart dir before exec'ing this engine; running k8s-deploy.sh directly without it fails loud
-# rather than guessing.
+source "$SCRIPT_DIR/postgres-connection.sh"
+source "$SCRIPT_DIR/registry-pull-secret.sh"
+source "$SCRIPT_DIR/current-chart-sources.sh"
+source "$SCRIPT_DIR/initial-model-provider.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
   exit 1
 fi
+prepare_current_chart_sources
+CHART_DIR="$(current_chart_sources_dir)"
+trap cleanup_current_chart_sources EXIT
 POSTGRES_CHART_DIR="${OPENCRANE_POSTGRES_CHART_DIR:-$SCRIPT_DIR/../../../postgres/helm}"
 if [[ ! -f "$POSTGRES_CHART_DIR/Chart.yaml" ]]; then
   echo "[k8s-deploy] PostgreSQL chart not found at '$POSTGRES_CHART_DIR'." >&2
@@ -111,11 +121,12 @@ if [[ ! -f "$POSTGRES_BASELINE_PUBLISHER" || ! -s "$POSTGRES_BASELINE_FILE" ]]; 
   echo "[k8s-deploy] OpenCrane database baseline publisher or target SQL is missing." >&2
   exit 1
 fi
-
 NAMESPACE="opencrane-system"
 RELEASE="opencrane"
 IMAGE_TAG="latest"
 CONTROL_PLANE_TAG=""    # empty → falls back to IMAGE_TAG
+REGISTRY_PULL_SECRET=""
+REGISTRY_PULL_CONFIG_FILE=""
 # --base-domain is the platform BASE domain for this install (e.g. dev.opencrane.ai).
 # It drives the chart's ingress.domain and derived release hosts. OPENCRANE_BASE_DOMAIN
 # lets the wizard or CI supply it off the command line.
@@ -133,7 +144,6 @@ if [[ -n "${OPENCRANE_HELM_EXTRA_ARGS:-}" ]]; then
   EXTRA_HELM_ARGS+=("${_env_helm_args[@]}")
 fi
 ALLOW_TAG_FLOAT="${OPENCRANE_ALLOW_TAG_FLOAT:-0}"  # allow component images to float to chart-default
-
 # OIDC + per-cluster operator bootstrap. All default empty (OIDC stays disabled and the
 # seed grants operator to nobody — fail-closed). The seed also accepts an env var so a
 # secret manager / CI can supply it without it appearing on the command line.
@@ -150,10 +160,14 @@ OIDC_CLIENT_SECRET="${OPENCRANE_OIDC_CLIENT_SECRET:-${OIDC_CLIENT_SECRET:-}}"
 OIDC_SESSION_SECRET="${OPENCRANE_OIDC_SESSION_SECRET:-${OIDC_SESSION_SECRET:-}}"
 OIDC_SECRET_NAME="opencrane-oidc"
 PLATFORM_OPERATOR_SEED_EMAIL="${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}"
+# One verified OIDC email eligible to claim a standalone silo's durable first-owner membership.
+# This is separate from platform-operator seeding, which grants broader installation privilege.
+FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
-
+INITIAL_MODEL_PROVIDER="${OPENCRANE_INITIAL_MODEL_PROVIDER:-}"
+INITIAL_MODEL_API_KEY="${OPENCRANE_INITIAL_MODEL_API_KEY:-}"
 # CloudNativePG is an external cluster prerequisite. OpenCrane never installs or upgrades
 # the operator. The credentials Secret is also external: this deploy flow only validates and
 # references it, so database passwords never pass through shell generation or repair paths.
@@ -204,6 +218,8 @@ while [[ $# -gt 0 ]]; do
     --release)       RELEASE="$2"; shift 2 ;;
     --image-tag)        IMAGE_TAG="$2"; shift 2 ;;
     --opencrane-server-tag) CONTROL_PLANE_TAG="$2"; shift 2 ;;
+    --registry-pull-secret) REGISTRY_PULL_SECRET="$2"; shift 2 ;;
+    --registry-pull-config-file) REGISTRY_PULL_CONFIG_FILE="$2"; shift 2 ;;
     --storage-class) STORAGE_CLASS="$2"; shift 2 ;;
     --oidc-issuer-url)     OIDC_ISSUER_URL="$2"; shift 2 ;;
     --oidc-client-id)      OIDC_CLIENT_ID="$2"; shift 2 ;;
@@ -212,6 +228,8 @@ while [[ $# -gt 0 ]]; do
     --oidc-session-secret) OIDC_SESSION_SECRET="$2"; shift 2 ;;
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
+    --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
+    --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
     --verify)           VERIFY="1"; shift ;;
@@ -229,15 +247,14 @@ while [[ $# -gt 0 ]]; do
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
     --set)           EXTRA_SET+=(--set "$2"); shift 2 ;;
+    --set-string)    EXTRA_SET+=(--set-string "$2"); shift 2 ;;
     --helm-arg)      EXTRA_HELM_ARGS+=("$2"); shift 2 ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
   esac
 done
-
 for c in kubectl helm; do command -v "$c" >/dev/null 2>&1 || { err "Missing required command: $c"; exit 1; }; done
 kubectl cluster-info >/dev/null 2>&1 || { err "kubectl can't reach a cluster. Point your context at the target cluster first."; exit 1; }
-
 # --base-domain validation. When supplied it must be a syntactically valid, lowercase
 # FQDN (≥2 labels, no scheme/port/path, no trailing dot) so it can stand in for
 # release hosts.
@@ -252,7 +269,6 @@ _validate_base_domain() {
 if [[ -n "$BASE_DOMAIN" ]]; then
   _validate_base_domain "$BASE_DOMAIN"
 fi
-
 # --preflight: fail-FAST environment validation, run BEFORE any cluster mutation. Each
 # check appends to PF_FAILS; a non-empty list at the end exits 1 with every remediation,
 # so the operator fixes the cluster ONCE rather than chasing one half-broken install at a
@@ -323,7 +339,7 @@ _run_preflight() {
   # 3. First-party images pullable — catch a private/typo'd registry before the rollout
   #    sits in ImagePullBackOff. A best-effort manifest check (skopeo/crane/docker) that
   #    only WARNS if no inspector is available (we never block on a missing local tool).
-  local _img="ghcr.io/elewa-git/opencrane-clustertenant-manager:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
+  local _img="ghcr.io/elewa-git/opencrane-server:${CONTROL_PLANE_TAG:-$IMAGE_TAG}"
   if command -v skopeo >/dev/null 2>&1; then
     skopeo inspect "docker://$_img" >/dev/null 2>&1 || PF_FAILS+=("First-party image not pullable: $_img (skopeo inspect failed). Check the registry/tag and your pull credentials.")
   elif command -v crane >/dev/null 2>&1; then
@@ -334,14 +350,14 @@ _run_preflight() {
     warn "Preflight: no image inspector (skopeo/crane/docker) — skipping the image-pull check."
   fi
 
-  # 4. Registrar NS-delegation for --base-domain. The public host cannot resolve if the
-  #    domain's authoritative name servers are not delegated to the DNS zone. We
-  #    only assert it resolves to SOME name servers (an undelegated domain returns none).
+  # 4. DNS authority for --base-domain. The base can be either a delegated zone or a
+  #    record subtree served by a parent zone, so an NS RRset on the base itself is not
+  #    required. Its SOA lookup must nevertheless reach an authoritative serving zone.
   if [[ -n "$BASE_DOMAIN" ]]; then
     if command -v dig >/dev/null 2>&1; then
-      [[ -n "$(dig +short NS "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar (see Terraform output dns_name_servers).")
+      [[ -n "$(dig +noall +authority SOA "$BASE_DOMAIN" 2>/dev/null)" ]] || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     elif command -v host >/dev/null 2>&1; then
-      host -t NS "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No NS delegation resolves for '$BASE_DOMAIN'. Delegate it to your DNS zone's name servers at your registrar.")
+      host -t SOA "$BASE_DOMAIN" >/dev/null 2>&1 || PF_FAILS+=("No authoritative DNS service resolves for '$BASE_DOMAIN'. Delegate its zone or create the base-domain record under an existing served parent zone.")
     else
       warn "Preflight: no dig/host — skipping the NS-delegation check for '$BASE_DOMAIN'."
     fi
@@ -381,6 +397,8 @@ _require_expandable_artifact_storage() {
   fi
 }
 _require_expandable_artifact_storage
+
+validate_initial_model_provider "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY" || exit 1
 
 _gen_secret() { openssl rand -hex 16 2>/dev/null || head -c 24 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 32; }
 _read_secret() { kubectl get secret "$1" -n "$NAMESPACE" -o jsonpath="{.data.$2}" 2>/dev/null | base64 -d || true; }
@@ -496,21 +514,6 @@ _install_postgres_server() {
   done
   kubectl wait --for=condition=complete "job/${POSTGRES_RELEASE}-database-privileges" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
 }
-
-_publish_database_connection() {
-  local credentials_secret="$1"
-  local app_secret="$2"
-  local host="$3"
-  local database_name="$4"
-  local connection_options="${5:-}"
-  local publisher_args=("$NAMESPACE" "$credentials_secret" "$app_secret" "$host" "$database_name")
-  if [[ -n "$connection_options" ]]; then
-    publisher_args+=("$connection_options")
-  fi
-  bash "$POSTGRES_CONNECTION_PUBLISHER" \
-    "${publisher_args[@]}"
-}
-
 _copy_cnpg_uri_secret() {
   local source_secret="$1"
   local target_secret="$2"
@@ -523,20 +526,17 @@ _copy_cnpg_uri_secret() {
         --from-file="${target_key}=/dev/stdin" --dry-run=client -o yaml \
     | kubectl apply -f -
 }
-
 _install_postgres_server
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
 LITELLM_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-litellm-app"
 POSTGRES_ADMIN_APP_SECRET="${POSTGRES_RELEASE}-admin"
 POSTGRES_POOLER_HOST="${POSTGRES_RELEASE}-pooler"
-# The one replica of the OpenCrane server gets five Prisma connections at most.
-# This leaves 75 of the 80 physical-server connections outside Prisma's process
-# pool and keeps the 30-connection PgBouncer database budget authoritative.
-_publish_database_connection "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
-_publish_database_connection "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
-_publish_database_connection "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
-_publish_database_connection "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
+# Five Prisma connections keep PgBouncer's thirty-connection logical-database budget authoritative.
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_CREDENTIALS_SECRET" "$POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane "sslmode=disable&connection_limit=5&pool_timeout=5"
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$OBOT_POSTGRES_CREDENTIALS_SECRET" "$OBOT_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" obot
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LITELLM_POSTGRES_APP_SECRET" "$POSTGRES_POOLER_HOST" litellm
+publish_postgres_database_connection "$POSTGRES_CONNECTION_PUBLISHER" "$NAMESPACE" "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_APP_SECRET" "$POSTGRES_POOLER_HOST" opencrane
 
 _assert_distinct_cnpg_app_credentials() {
   local app_secrets=("$@")
@@ -614,33 +614,124 @@ kubectl create secret generic opencrane-litellm -n "$NAMESPACE" \
   --from-literal=LITELLM_MASTER_KEY="$LITELLM_MASTER_KEY" \
   --from-literal=LITELLM_SALT_KEY="$LITELLM_SALT_KEY" \
   --dry-run=client -o yaml | kubectl apply -f -
-
-
+ensure_provider_key_secrets "$NAMESPACE"
+publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
-# Secret already existed, so a fresh OIDC install crash-looped on a missing Secret. Create it
-# here when OIDC is configured: the client secret is required (a confidential client can't
-# authenticate without it); the session secret signs login cookies and is auto-generated when
-# not supplied. Idempotent (dry-run | apply), so re-runs converge.
+# Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
+# Secret. A fresh install still requires a confidential-client secret. An upgrade may retain an
+# already valid Secret, so routine image/config rollouts neither require re-supplying an IdP
+# secret nor rotate the session-signing key.
 if [[ -n "$OIDC_ISSUER_URL" ]]; then
   if [[ -z "$OIDC_CLIENT_SECRET" ]]; then
-    err "OIDC is configured (--oidc-issuer-url set) but no client secret was provided. Pass --oidc-client-secret (or OPENCRANE_OIDC_CLIENT_SECRET) — a confidential client cannot authenticate without it."
-    exit 1
+    if kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1 \
+      && kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | grep -q . \
+      && kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.data.OIDC_SESSION_SECRET}' | grep -q .; then
+      log "Retaining existing OIDC secret '$OIDC_SECRET_NAME' (no client-secret input supplied)."
+    else
+      err "OIDC is configured (--oidc-issuer-url set) but no client secret was provided and no complete '$OIDC_SECRET_NAME' exists. Pass --oidc-client-secret (or OPENCRANE_OIDC_CLIENT_SECRET)."
+      exit 1
+    fi
+  else
+    OIDC_SESSION_SECRET="${OIDC_SESSION_SECRET:-$(_gen_secret)}"
+    log "Creating the OIDC secret '$OIDC_SECRET_NAME' (client + session secret)…"
+    kubectl create secret generic "$OIDC_SECRET_NAME" -n "$NAMESPACE" \
+      --from-literal=OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
+      --from-literal=OIDC_SESSION_SECRET="$OIDC_SESSION_SECRET" \
+      --dry-run=client -o yaml | kubectl apply -f -
   fi
-  OIDC_SESSION_SECRET="${OIDC_SESSION_SECRET:-$(_gen_secret)}"
-  log "Creating the OIDC secret '$OIDC_SECRET_NAME' (client + session secret)…"
-  kubectl create secret generic "$OIDC_SECRET_NAME" -n "$NAMESPACE" \
-    --from-literal=OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
-    --from-literal=OIDC_SESSION_SECRET="$OIDC_SESSION_SECRET" \
-    --dry-run=client -o yaml | kubectl apply -f -
 fi
 
+# A standalone owner row is keyed by OIDC subject, whose namespace is its issuer. Once a silo
+# has an eligible first-user contract, changing the issuer through this deployment engine would
+# make that durable subject ambiguous. Create a new silo for an IdP migration instead.
+_guard_standalone_first_user_issuer() {
+  local prior_values
+  local prior_issuer=""
+  local prior_first_user_email=""
+  local prior_first_user_cluster_tenant=""
+  local requested_issuer="$OIDC_ISSUER_URL"
+  local extra_set_index
+  local extra_set_flag
+  local extra_set_value
+  local extra_helm_arg
+  local prior_first_user_values
+  if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+    return
+  fi
+  prior_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
+  if command -v jq >/dev/null 2>&1; then
+    prior_issuer="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.oidc.issuerUrl // empty')"
+    prior_first_user_email="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.firstUser.email // empty')"
+    prior_first_user_cluster_tenant="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.firstUser.clusterTenant // empty')"
+  else
+    prior_issuer="$(printf '%s' "$prior_values" | grep -o '"issuerUrl":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
+    prior_first_user_values="$(printf '%s' "$prior_values" | grep -o '"firstUser":{[^}]*}' | head -1 || true)"
+    prior_first_user_email="$(printf '%s' "$prior_first_user_values" | grep -o '"email":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
+    prior_first_user_cluster_tenant="$(printf '%s' "$prior_first_user_values" | grep -o '"clusterTenant":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
+  fi
+
+  # The initial first-owner issuer is a durable subject namespace. For its later upgrades,
+  # require the normal issuer flag and retain only the engine's value-preserving mode. This
+  # prevents `--values` and `--reset-values` from silently replacing or erasing the binding.
+  if [[ -n "$prior_first_user_email" ]]; then
+    if [[ -z "$requested_issuer" ]]; then
+      err "An existing standalone first-owner contract requires --oidc-issuer-url on every upgrade so its immutable issuer can be verified."
+      exit 1
+    fi
+    if [[ -n "$FIRST_USER_EMAIL" && "$FIRST_USER_EMAIL" != "$prior_first_user_email" ]]; then
+      err "Standalone first-owner email is immutable after deployment ('$prior_first_user_email' -> '$FIRST_USER_EMAIL'). Create a new silo to change the eligible first user."
+      exit 1
+    fi
+    if [[ -n "$VALUES_FILE" || -n "$RESET_VALUES" ]]; then
+      err "Do not use --values or --reset-values after a standalone first owner is configured; they can replace or erase its immutable issuer binding."
+      exit 1
+    fi
+  fi
+
+  # `--set` is applied after normal flags. Treat it as the requested issuer so the
+  # immutable first-owner binding cannot be bypassed by omitting --first-user-email.
+  for ((extra_set_index = 1; extra_set_index < ${#EXTRA_SET[@]}; extra_set_index += 2)); do
+    extra_set_flag="${EXTRA_SET[$((extra_set_index - 1))]}"
+    extra_set_value="${EXTRA_SET[$extra_set_index]}"
+    if [[ "$extra_set_value" == clustertenantManager.oidc.issuerUrl=* ]]; then
+      requested_issuer="${extra_set_value#clustertenantManager.oidc.issuerUrl=}"
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_set_flag" == "--set-string" && "$extra_set_value" == "clustertenantManager.firstUser.clusterTenant=$prior_first_user_cluster_tenant" ]]; then
+      # The standalone profile forwards its fixed ClusterTenant through --set-string
+      # on every invocation. It is safe only when it is exactly the persisted binding.
+      continue
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_set_value" == clustertenantManager.firstUser.* ]]; then
+      err "Do not override clustertenantManager.firstUser through --set after a standalone first owner is configured."
+      exit 1
+    fi
+  done
+  # With `set -u`, Bash treats an initialized-but-empty array as unset when it
+  # is expanded inside a `for` list. Keep the immutable-binding guard usable
+  # for normal deployments that do not pass any raw Helm arguments.
+  for extra_helm_arg in "${EXTRA_HELM_ARGS[@]-}"; do
+    if [[ -n "$prior_first_user_email" && "$extra_helm_arg" == *clustertenantManager.oidc.issuerUrl* ]]; then
+      err "Do not override clustertenantManager.oidc.issuerUrl through --helm-arg after a standalone first owner is configured. Pass --oidc-issuer-url so the immutable issuer guard can validate it."
+      exit 1
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_helm_arg" == *clustertenantManager.firstUser* ]]; then
+      err "Do not override clustertenantManager.firstUser through --helm-arg after a standalone first owner is configured."
+      exit 1
+    fi
+  done
+
+  if [[ -n "$prior_first_user_email" && -n "$prior_issuer" && "$prior_issuer" != "$requested_issuer" ]]; then
+    err "Standalone first-owner issuer is immutable after deployment ('$prior_issuer' -> '$requested_issuer'). Create a new silo for an IdP migration."
+    exit 1
+  fi
+}
+_guard_standalone_first_user_issuer
+
+ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
+
 # 3. The OpenCrane chart.
-# Rebuild local chart dependencies from the committed lock without re-resolving
-# versions. This does not rewrite Chart.lock, so deploys use the same app-owned
-# chart versions that CI validated.
-log "Fetching chart dependencies (from Chart.lock)…"
-helm dep build "$CHART_DIR"
+log "Using current app-owned chart sources from the committed dependency lock…"
 
 log "Installing the OpenCrane Helm release '$RELEASE'…"
 # --force-conflicts: Helm 4 applies server-side, so any out-of-band actor that has
@@ -659,12 +750,18 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"
   --set-string "litellm.databaseSecretKey=DATABASE_URL"
+  # The server registers provider models through LiteLLM's admin API. That API is only
+  # available when LiteLLM persists models in its configured PostgreSQL database.
+  --set "litellm.storeModelInDb=true"
+  --set-string "litellm.existingSaltSecret=opencrane-litellm"
+  --set-string "litellm.saltSecretKey=LITELLM_SALT_KEY"
   --set-string "artifactService.persistence.storageClass=$ARTIFACT_STORAGE_CLASS"
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
   --set-string "artifactService.keys.serviceExistingSecret=$ARTIFACT_SERVICE_KEY_SECRET"
   --set "litellm.existingSecret=opencrane-litellm"
   "${MEMORY_GATEWAY_KUBERNETES_API_ARGS[@]}")
+[[ -n "$REGISTRY_PULL_SECRET" ]] && helm_args+=(--set-string "global.imagePullSecret=$REGISTRY_PULL_SECRET")
 # Pinned-tag float guard: detect if the prior release pinned component images to a specific
 # tag. If this invocation does not restate it (no --opencrane-server-tag),
 # re-pin from the prior release so they don't silently float to chart-default (a 2026-07-12 live gotcha).
@@ -731,6 +828,11 @@ fi
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorGroups=$PLATFORM_OPERATOR_GROUPS")
 fi
+if [[ -n "$FIRST_USER_EMAIL" ]]; then
+  helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
+fi
+build_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
+helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")
 [[ -n "$VALUES_FILE" ]] && helm_args+=(--values "$VALUES_FILE")
 helm_args+=("${EXTRA_SET[@]}")
 # Raw helm-arg passthrough for sanctioned one-time fixes (e.g. --take-ownership).
@@ -755,6 +857,7 @@ elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
   helm_args+=(--reset-then-reuse-values)
 fi
 helm "${helm_args[@]}"
+restart_postgres_connection_consumers "$NAMESPACE" "$TIMEOUT" "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway"
 
 # 4. Wait for the core workloads. The database schema was fixed during CNPG initdb;
 # application startup never mutates it. A changed baseline requires a clean database.
@@ -767,6 +870,8 @@ for _comp in fleet-manager clustertenant-manager; do
     kubectl rollout status "deployment/${RELEASE}-${_comp}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
   fi
 done
+
+_wait_for_release_certificate
 
 _post_deploy_verify
 

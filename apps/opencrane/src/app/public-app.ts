@@ -8,13 +8,20 @@ import { pinoHttp } from "pino-http";
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
-import { ___AuthRouter, ___CreateOidcAuthService } from "@opencrane/backend/server/iam/identity";
+import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
+import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/_server/http";
 
 import { _log } from "./log.js";
 import { _RegisterRoutes } from "./routes.js";
+
+/** Composes the audit-owned adapter only when the standalone owner claim is enabled. */
+function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionConfig | null): StandaloneFirstUserAdmissionAuditPort | null
+{
+  return config === null ? null : __CreateStandaloneFirstUserAdmissionAuditAppender();
+}
 
 /**
  * Build the ingress-facing Express application.
@@ -29,12 +36,13 @@ import { _RegisterRoutes } from "./routes.js";
  * @param authWatchNamespace - Namespace in which OIDC authentication resources are watched.
  * @param serverNamespace - Namespace in which provider credentials are managed.
  * @param obotCustody - Composed Obot custody authority; fail-closed when the transport is disabled.
+ * @param standaloneFirstUserAdmission - Optional verified-email first-owner admission for a standalone silo.
  * @returns The public Express listener before the lifecycle starts it.
  */
-export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, authWatchNamespace: string, serverNamespace: string, obotCustody: ObotCustodyPort): Express
+export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, _authWatchNamespace: string, serverNamespace: string, obotCustody: ObotCustodyPort, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null): Express
 {
 	const app = express();
-	const authService = ___CreateOidcAuthService(_log, prisma, customApi, authWatchNamespace);
+	const authService = ___CreateOidcAuthService(_log, prisma, customApi, standaloneFirstUserAdmission, _CreateStandaloneFirstUserAudit(standaloneFirstUserAdmission));
 
 	// 1. Establish transport and parsing limits before a request reaches identity or product state.
 	app.set("trust proxy", 1);

@@ -98,9 +98,9 @@ custody/credential/discovery slices from `main` per
 Exit: a fresh environment is created from reviewed target artifacts alone; IAM and network negative
 tests fail closed; backup/restore reconstructs target-owned stores; no legacy contract is reachable.
 
-### Phase E — personal runtime and AgentService plane (implementation complete; live qualification next)
+### Phase E — personal runtime and AgentService plane (core runtime built; phase incomplete)
 
-**Implementation complete offline:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
+**Core runtime built and CI-qualified:** the dependent PR stack now defines immutable run input, the fenced runtime protocol,
 the outbound-only runtime process, the suspended one-Job-per-attempt resource contract, and a
 crash-safe controller boundary that exactly creates/adopts suspended Jobs before persisting their
 Kubernetes UID as the pending assignment. This dependent slice adds a durable release claim,
@@ -181,6 +181,64 @@ custody + direct attempt-key data plane validates Obot responses defensively unt
 qualification pins the exact shapes. The repository
 does not retain an unqualified offline definition alongside that live acceptance gate.
 
+Here, **built and CI-qualified** means the source, contracts, fault tests, and rendered deployment
+artifacts pass without depending on a live external environment. It does not mean PostgreSQL,
+Kubernetes Jobs, LiteLLM, Obot, Zitadel login, TLS, recovery, or isolation have passed together on a
+real cluster.
+
+**Live qualification status (2026-08-06):** the app-owned Terraform path created the regional
+Autopilot cluster `opencrane-dev` wholly in `europe-west1`; ingress-nginx, cert-manager, and
+CloudNativePG are live and Ready through the locked prerequisite bootstrap. The dedicated
+`testv2.dev.opencrane.ai` record resolves publicly to the reserved ingress address, the confidential
+Zitadel OIDC application and client Secret are configured, and the namespace now has four distinct
+PostgreSQL bootstrap Secrets. The corrected deploy preflight accepts `dev.opencrane.ai` as the
+authoritative record subtree (not a separately delegated child zone), and `standard-rwo` is the
+default expandable class. GKE reports regional SSD quota at `230/500 GiB` (270 GiB free); the
+project has no default Compute Engine KMS key, so this deployment cannot qualify the CMEK
+durable-storage gate.
+
+The first real `testv2` release created and kept its namespace, CNPG Cluster/PgBouncer, ingress,
+certificate, UI, Cognee, LiteLLM, and Obot gateway. PostgreSQL and its original privileges hook
+completed. The release exposed an invalid architecture assumption: its server treated every silo as
+Fleet-attached and required an external `public-key.pem`, despite this test being a standalone
+ClusterTenant. The deployment contract now has explicit `standalone` and `fleet` membership modes;
+`standalone` removes the Fleet Secret/key mount and starts without converting an OIDC session into
+membership, so runtime admission remains fail-closed until a local issuer is built. The initial
+channel-proxy and memory-gateway image references did not exist. CI now publishes both from `d2f26df0` under immutable
+`sha-d2f26df0` tags, and the complete CI run is green, including Terraform's read-only provider
+lock validation.
+
+The server-image CI is now green and published immutable `sha-ffc4dfc`. The live single-silo
+deployment is healthy: the app-owned deploy script uses current chart sources rather than stale
+local archives; all server database clients use the CNPG Pooler ClusterIP; GKE Dataplane V2 admits
+that Service and DNS through port-limited egress while the Pooler ingress policy names its three
+approved clients. The server is Ready with a healthy Prisma query, public `/healthz` returns
+`{"status":"ok","db":true}`, and its liveness no longer restarts an otherwise recoverable database
+path. `testv2.dev.opencrane.ai` now has a browser-trusted Let's Encrypt HTTP-01 certificate and the
+login endpoint redirects to the configured Zitadel confidential client. The privileges proof remains
+intact: Autopilot provisions its isolated ComputeClass node and the three-container Job completes;
+this cold-node/image-pull delay is operational friction, not an application memory leak. The final
+monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callback, runtime-job
+execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
+the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
+
+**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 32 and PostgreSQL
+revision 49. The CI-published server image `sha-fc53af6` and artifact-service image `sha-7ebcfa8`
+are Ready; every deployment is Available, and public `/healthz` returns
+`{"status":"ok","db":true}` and `/api/v1/auth/login` redirects to the configured Zitadel confidential
+client. The immutable standalone first-owner contract is live: only the verified
+`jente@elewa.ke` subject from `https://weownai-oidc-8dwlat.eu1.zitadel.cloud/` may create the local
+Owner membership for ClusterTenant `testv2`; it creates the membership and its audit record in one
+transaction. A real callback exposed and the regression test now prevents a Prisma selector from
+including the in-memory `mayCreateOwner` authorization flag; the corrected image is live. The
+deployment also retains the existing OIDC Secret and seeds OpenAI through LiteLLM.
+This clears the single-silo deployment, TLS, OIDC configuration, database-privileges, initial-provider,
+local first-owner admission, and full workload-health gates. A real callback returned successfully and
+created the active `testv2` Owner row. Its first rendered `/no-tenant` page was a separately stale SPA
+(`latest`) calling a removed endpoint; CI now publishes the UI on demand and Helm revision 33 pins
+`opencrane-ui:sha-6a09541`. Personal-agent/workspace creation and Phase E runtime qualification remain
+open live gates.
+
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
 
@@ -191,6 +249,13 @@ schedules and runs, approvals, assets, skills, membership, effective-access expl
 health, model/cost/budget, and runtime versions
 ([#224](https://github.com/elewa-git/opencrane/issues/224),
 [#226](https://github.com/elewa-git/opencrane/issues/226)). Upstream consoles remain diagnostic.
+
+**Current implementation status:** the Angular shell has same-origin OIDC/session guards and early
+operator screens for catalogue, access policy, and model keys. It does not yet expose the Phase F
+conversation, thread, prompt/stream, approval, persona, memory, run-history, schedule, membership,
+audit, asset, or skill journeys. Onboarding currently returns to the welcome flow, tool/OAuth success
+is not backed by the real exchange, and there is no route-level end-to-end suite. The production
+Angular build is green, but that build proves packaging rather than the missing product journeys.
 
 Exit: named end-to-end user and operator journeys work only through the target APIs and UI;
 parallel legacy product surfaces are deleted.
@@ -216,31 +281,32 @@ runbooks, generated clients, and CI forbidden-reference checks.
 Exit: a fresh checkout builds and deploys only the target product. Operators have one supported path
 to create, share, schedule, observe, revoke, and delete agents and assets.
 
-## Issue disposition
+## Open issue disposition
 
 | Issue | Target-state action |
 |---|---|
 | [#127](https://github.com/elewa-git/opencrane/issues/127) | Keep enforcing CNI, per-silo routing, encrypted-storage preflights, and live probes |
 | [#128](https://github.com/elewa-git/opencrane/issues/128) | Build app-owned Obot custody, grants, and runtime-neutral MCP invocation; delete fake-success paths |
-| [#129](https://github.com/elewa-git/opencrane/issues/129) | AgentService/Revision/Run/schedule epic with strict personal→managed boundary |
-| [#133](https://github.com/elewa-git/opencrane/issues/133) | Supersede Zot-only skills with ArtifactStore-backed SkillRevision |
-| [#353](https://github.com/elewa-git/opencrane/issues/353) | Remove provider-secret broadcast and obsolete plaintext provider-key paths |
 | [#136](https://github.com/elewa-git/opencrane/issues/136) | Defer compute tiers and pooling until measured target workload evidence exists |
-| [#150](https://github.com/elewa-git/opencrane/issues/150) | Retain only target fleet/silo lifecycle and OIDC contract work |
 | [#154](https://github.com/elewa-git/opencrane/issues/154) | Replace generic plugin-kernel work with concrete app/module contracts |
 | [#162](https://github.com/elewa-git/opencrane/issues/162) | Retain target chart-native UI deployment work |
-| [#174](https://github.com/elewa-git/opencrane/issues/174) | Fix bounded LiteLLM provisioning/reconcile behavior if it remains in the target adapter |
 | [#220](https://github.com/elewa-git/opencrane/issues/220) | Delete OpenClaw-specific scope; carry least privilege into target workload profiles |
-| [#221](https://github.com/elewa-git/opencrane/issues/221) | Generalize canonical KSA identity and repair into the target identity matrix |
 | [#222](https://github.com/elewa-git/opencrane/issues/222) | Build artifact-backed, scanned, signed, revocable skills and isolated Python execution |
 | [#224](https://github.com/elewa-git/opencrane/issues/224) | Build the target model/cost/provider/budget console |
-| [#225](https://github.com/elewa-git/opencrane/issues/225) | Retain runtime-neutral stream/render/artifact/security work; delete OpenClaw gateway scope |
 | [#226](https://github.com/elewa-git/opencrane/issues/226) | Build membership management over authoritative target APIs |
 | [#227](https://github.com/elewa-git/opencrane/issues/227) | Delete packages and images when their replacement slice lands |
 | [#231](https://github.com/elewa-git/opencrane/issues/231) | Introduce final target names directly; do not preserve legacy DNS or aliases |
-| [#255](https://github.com/elewa-git/opencrane/issues/255) | Close pre-pivot PRs #247 (superseded by this plan) and #241; port #241's Obot custody/credential/discovery slices at Phase D |
 | [#318](https://github.com/elewa-git/opencrane/issues/318) | Conversation-initiated config changes: always-granted `upgrade_session` tool, logged persona refresh, user-editable params in the product UI |
 | [#513](https://github.com/elewa-git/opencrane/issues/513) | Low priority: evaluate LiteLLM-native OTLP GenAI spans through an operator-supplied collector, with message content disabled by default |
+
+Closed issues are intentionally absent from the active list: [#129](https://github.com/elewa-git/opencrane/issues/129),
+[#133](https://github.com/elewa-git/opencrane/issues/133),
+[#150](https://github.com/elewa-git/opencrane/issues/150),
+[#174](https://github.com/elewa-git/opencrane/issues/174),
+[#221](https://github.com/elewa-git/opencrane/issues/221),
+[#225](https://github.com/elewa-git/opencrane/issues/225),
+[#255](https://github.com/elewa-git/opencrane/issues/255), and
+[#353](https://github.com/elewa-git/opencrane/issues/353).
 
 ## Deferred research
 

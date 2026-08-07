@@ -1,0 +1,56 @@
+crds:
+  enabled: true
+  keep: true
+
+global:
+  leaderElection:
+    # GKE Autopilot denies third-party writes in its managed kube-system namespace.
+    namespace: cert-manager
+
+replicaCount: 1
+resources:
+  requests:
+    cpu: 10m
+    memory: 32Mi
+  limits:
+    memory: 128Mi
+
+extraArgs:
+  - --acme-http01-solver-resource-request-cpu=10m
+  - --acme-http01-solver-resource-request-memory=32Mi
+  - --acme-http01-solver-resource-limits-memory=64Mi
+
+webhook:
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+cainjector:
+  enabled: true
+  replicaCount: 1
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+startupapicheck:
+  enabled: true
+  resources:
+    requests:
+      cpu: 10m
+      memory: 32Mi
+    limits:
+      memory: 64Mi
+
+prometheus:
+  enabled: false
+  servicemonitor:
+    enabled: false
+  podmonitor:
+    enabled: false

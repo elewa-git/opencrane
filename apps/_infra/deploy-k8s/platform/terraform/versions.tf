@@ -1,28 +1,27 @@
 terraform {
   required_version = ">= 1.5.0"
 
-  required_providers
-  {
-    google =
-    {
+  # The provisioner supplies the regional bucket and per-cluster prefix after it has
+  # idempotently bootstrapped the private, versioned GCS bucket.
+  backend "gcs" {}
+
+  required_providers {
+    google = {
       source  = "hashicorp/google"
       version = "~> 5.0"
     }
 
-    google-beta =
-    {
+    google-beta = {
       source  = "hashicorp/google-beta"
       version = "~> 5.0"
     }
 
-    helm =
-    {
+    helm = {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
 
-    kubernetes =
-    {
+    kubernetes = {
       source  = "hashicorp/kubernetes"
       version = "~> 2.25"
     }
@@ -30,14 +29,12 @@ terraform {
   }
 }
 
-provider "google"
-{
+provider "google" {
   project = var.project_id
   region  = var.region
 }
 
-provider "google-beta"
-{
+provider "google-beta" {
   project = var.project_id
   region  = var.region
 }

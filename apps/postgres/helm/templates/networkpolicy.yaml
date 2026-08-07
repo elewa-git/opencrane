@@ -53,7 +53,10 @@ spec:
   ingress:
     - from:
         {{- range .Values.pooler.clientPodSelectors }}
-        - podSelector:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
+          podSelector:
             {{- toYaml . | nindent 12 }}
         {{- end }}
       ports:

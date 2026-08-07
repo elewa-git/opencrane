@@ -66,6 +66,10 @@ spec:
         app.kubernetes.io/component: memory-gateway
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-memory-gateway
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+      {{- end }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true

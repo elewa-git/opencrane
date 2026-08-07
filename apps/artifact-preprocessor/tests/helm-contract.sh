@@ -2,16 +2,11 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-CHART_ROOT="${OPENCRANE_HELM_CHART_ROOT:-$ROOT/apps/_infra/deploy-k8s}"
-SOURCE_CHART_ROOT="$(mktemp -d)"
+source "$ROOT/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 MANIFEST="$(mktemp)"
-trap 'rm -rf "$SOURCE_CHART_ROOT"; rm -f "$MANIFEST"' EXIT
-
-# The umbrella vendors app-owned chart archives. Replace only this worker archive in a disposable
-# copy so the contract always renders source without refreshing unrelated remote dependencies.
-cp -R "$CHART_ROOT/." "$SOURCE_CHART_ROOT"
-helm package "$ROOT/apps/artifact-preprocessor/helm" --destination "$SOURCE_CHART_ROOT/charts" >/dev/null
-CHART_ROOT="$SOURCE_CHART_ROOT"
+prepare_current_chart_sources
+trap 'cleanup_current_chart_sources; rm -f "$MANIFEST"' EXIT
+CHART_ROOT="$(current_chart_sources_dir)"
 
 render_enabled() {
   helm template oc "$CHART_ROOT" \

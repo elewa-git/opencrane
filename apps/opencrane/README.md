@@ -39,14 +39,16 @@ their concrete adapters, mounts their routers, and starts and stops them in the 
 [agent-runtime](../agent-runtime/README.md) ·
 [backend capabilities](../../libs/backend/README.md)
 
-Startup proceeds in five visible stages:
+Startup proceeds in six visible stages:
 
 1. initialise telemetry before any instrumented dependency loads;
 2. freeze process configuration and construct Prisma and Kubernetes clients;
-3. compose one shared-capacity managed admission port and one session-derived personal admission
-   port, both over the same signed fleet-membership trust configuration;
-4. build the public and internal Express applications; and
-5. start both listeners and bounded workers under one coordinated shutdown path.
+3. when configured, seed the initial provider credential through LiteLLM before serving any agent;
+4. compose one shared-capacity managed admission port and one session-derived personal admission
+   port, both over the same signed membership configuration. A standalone deployment has no Fleet
+   key but deliberately denies run admission until it has a local signed-membership issuer;
+5. build the public and internal Express applications; and
+6. start both listeners and bounded workers under one coordinated shutdown path.
 
 The route registry is deliberately a catalogue rather than a second application layer:
 
@@ -71,7 +73,10 @@ evidence produces a refusal, never partial authority.
 `Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
 its resources to the lifecycle owner.
 
-- `src/app/config.ts` reads one startup snapshot for listener and worker configuration.
+- `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
+  the all-or-nothing standalone first-owner contract when a silo deploy supplies it.
+- `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
+  the existing provider-custody and LiteLLM-registration authority before the listeners start.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
 - `src/app/public-app.ts` builds the browser-session-authenticated API.
 - The neutral [membership](../../libs/backend/server/iam/membership/main/README.md) package owns
@@ -144,8 +149,9 @@ conversation, approval, or artifact records.
 
 ## Runtime & config
 
-The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, mounted
-verification and signing keys, internal service endpoints, and listener settings. Important groups
+The Helm unit supplies the database, OpenID Connect (OIDC) sign-in settings, namespaces, membership
+issuer configuration (a Fleet verification key only in Fleet mode), artifact signing keys, internal
+service endpoints, and listener settings. Important groups
 are:
 
 | Configuration | Purpose | Default |
@@ -153,11 +159,13 @@ are:
 | `PORT` / `INTERNAL_PORT` | Public and workload-facing listeners | `8080` / `8081` |
 | `DATABASE_URL` | PostgreSQL connection string | required |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
+| `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |
 | `AGENT_RUNTIME_MANAGED_NAMESPACE` | Managed runtime Job boundary | required |
 | `AGENT_RUN_ADMISSION_*` | Active and queued personal-and-managed admission limits | bounded defaults |
-| `OPENCRANE_FLEET_MEMBERSHIP_*` | Signed fleet-membership trust for personal and managed admission | required for admission |
+| `OPENCRANE_MEMBERSHIP_*` | Explicit issuer model; `fleet` mounts its verifier, `standalone` starts without a Fleet key and denies run admission | required |
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |

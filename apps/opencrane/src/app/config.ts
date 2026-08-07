@@ -1,6 +1,10 @@
 import { isAbsolute } from "node:path";
 
-import type { OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
+import { ByokProvider } from "@opencrane/contracts";
+import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
+
+import type { InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
+import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
 const _MINIMUM_ARTIFACT_OUTPUT_BYTES = 1_024;
@@ -59,6 +63,55 @@ function _readArtifactPreprocessorBodyLimit(): number
 }
 
 /**
+ * Read the optional initial provider credential injected only by the silo deployment contract.
+ * The pair is all-or-nothing so an operator cannot accidentally start with a provider name but no
+ * key (or expose a key without a declared LiteLLM provider).
+ */
+function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
+{
+	const provider = process.env.OPENCRANE_INITIAL_MODEL_PROVIDER?.trim().toLowerCase() ?? "";
+	const apiKey = process.env.OPENCRANE_INITIAL_MODEL_API_KEY?.trim() ?? "";
+	if (!provider && !apiKey)
+	{
+		return null;
+	}
+	if (!provider || !apiKey)
+	{
+		throw new Error("OPENCRANE_INITIAL_MODEL_PROVIDER and OPENCRANE_INITIAL_MODEL_API_KEY must be configured together");
+	}
+	if (!Object.values(ByokProvider).includes(provider as ByokProvider))
+	{
+		throw new Error(`OPENCRANE_INITIAL_MODEL_PROVIDER '${provider}' is unsupported`);
+	}
+	return { provider, apiKey };
+}
+
+/** Read the all-or-nothing verified-email admission contract for one standalone silo owner. */
+function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
+{
+	const email = process.env.OPENCRANE_STANDALONE_FIRST_USER_EMAIL?.trim().toLowerCase() ?? "";
+	const clusterTenant = process.env.OPENCRANE_STANDALONE_CLUSTER_TENANT?.trim() ?? "";
+	const issuer = process.env.OIDC_ISSUER_URL?.trim() ?? "";
+	if (!email && !clusterTenant)
+	{
+		return null;
+	}
+	if (!email || !clusterTenant)
+	{
+		throw new Error("OPENCRANE_STANDALONE_FIRST_USER_EMAIL and OPENCRANE_STANDALONE_CLUSTER_TENANT must be configured together");
+	}
+	if (process.env.OPENCRANE_MEMBERSHIP_MODE !== FleetMembershipDeploymentModes.Standalone)
+	{
+		throw new Error("standalone first-user admission requires OPENCRANE_MEMBERSHIP_MODE=standalone");
+	}
+	if (!issuer)
+	{
+		throw new Error("standalone first-user admission requires OIDC_ISSUER_URL");
+	}
+	return { email, clusterTenant, issuer };
+}
+
+/**
  * Read the optional Obot management-transport block from the startup environment.
  *
  * Both coordinates present composes the authenticated transport; both absent leaves the feature off
@@ -91,6 +144,7 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 {
 	return {
 		authWatchNamespace: process.env.WATCH_NAMESPACE ?? process.env.NAMESPACE ?? "default",
+		initialModelBootstrap: _readInitialModelBootstrap(),
 		internalPort: Number(process.env.INTERNAL_PORT ?? "8081"),
 		obot: _readObotConfig(),
 		publicPort: Number(process.env.PORT ?? "8080"),
@@ -114,5 +168,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		},
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
+		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
 	};
 }

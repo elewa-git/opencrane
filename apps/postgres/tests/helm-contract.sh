@@ -10,6 +10,7 @@ DATABASES_JSON='[{"name":"opencrane","owner":"opencrane","credentialsSecret":"po
 BASE_VALUES=(--set-json "databases=$DATABASES_JSON" --set-string databaseAdmin.name=opencrane_database_admin --set-string databaseAdmin.credentialsSecret=postgres-admin-bootstrap --set-string bootstrap.targetBaseline.sha256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].name=opencrane-database-baseline-deadbeef --set-string bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs[0].key=target-baseline.sql)
 API_VALUES=(--set-string networkPolicy.kubernetesApiServerCidrs[0]=10.43.0.1/32 --set-string networkPolicy.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32 --set networkPolicy.kubernetesApiServerEndpointPort=6443)
 COMMON_VALUES=("${BASE_VALUES[@]}" "${API_VALUES[@]}")
+GKE_AUTOPILOT_VALUES="$ROOT_DIR/apps/_infra/deploy-k8s/platform/values/postgres-gke-autopilot.yaml"
 
 helm lint "$CHART" "${COMMON_VALUES[@]}" >/dev/null
 bash "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/pooler-deploy-contract.sh"
@@ -31,6 +32,7 @@ grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$INSTANCE_POLICY"
 grep -q 'app.kubernetes.io/component: opencrane-server' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: mcp-gateway' <<<"$POOLER_POLICY"
 grep -q 'app.kubernetes.io/component: litellm' <<<"$POOLER_POLICY"
+grep -q 'kubernetes.io/metadata.name: "opencrane"' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/poolerName: opencrane-postgres-pooler' <<<"$POOLER_POLICY"
 grep -q 'cnpg.io/cluster: opencrane-postgres' <<<"$POOLER_POLICY"
 grep -q '    - Egress' <<<"$POOLER_POLICY"
@@ -40,10 +42,6 @@ grep -q '            cidr: "10.43.0.1/32"' <<<"$POOLER_POLICY"
 grep -q '            cidr: "172.18.0.2/32"' <<<"$POOLER_POLICY"
 grep -q '          port: 443' <<<"$POOLER_POLICY"
 grep -q '          port: 6443' <<<"$POOLER_POLICY"
-if grep -q 'namespaceSelector' <<<"$POOLER_POLICY"; then
-  echo "postgres pooler boundary must not admit cross-namespace clients or destinations" >&2
-  exit 1
-fi
 if grep -Eq 'app.kubernetes.io/component: (opencrane-server|mcp-gateway|litellm)' <<<"$INSTANCE_POLICY"; then
   echo "postgres instance policy allows an application to bypass the pooler" >&2
   exit 1
@@ -59,6 +57,15 @@ grep -q '^kind: Pooler$' "$OUTPUT"
 test "$(grep -c '^kind: Pooler$' "$OUTPUT")" -eq 1
 grep -q 'name: opencrane-postgres-pooler' "$OUTPUT"
 grep -q 'image: "ghcr.io/cloudnative-pg/pgbouncer:1.25.1"' "$OUTPUT"
+POOLER_RESOURCE_BLOCK="$(awk 'BEGIN { RS="---" } /kind: Pooler/ { print }' "$OUTPUT")"
+if grep -q 'name: opencrane-postgres-pooler-client' "$OUTPUT"; then
+  echo "postgres chart must not create a headless Pooler client Service; consumers use CNPG's stable Pooler Service" >&2
+  exit 1
+fi
+grep -q 'cpu: 250m' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'memory: 256Mi' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'cpu: 100m' <<<"$POOLER_RESOURCE_BLOCK"
+grep -q 'memory: 128Mi' <<<"$POOLER_RESOURCE_BLOCK"
 grep -q 'poolMode: "session"' "$OUTPUT"
 grep -q 'max_client_conn: "50"' "$OUTPUT"
 grep -q 'max_db_connections: "10"' "$OUTPUT"
@@ -73,6 +80,8 @@ grep -q 'REVOKE CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q 'GRANT CONNECT, TEMPORARY ON DATABASE' "$OUTPUT"
 grep -q -- '--single-transaction' "$OUTPUT"
 test "$(grep -c 'until psql' "$OUTPUT")" -eq 3
+test "$(grep -c 'cpu: 50m' "$OUTPUT")" -eq 3
+test "$(grep -c 'memory: 64Mi' "$OUTPUT")" -eq 3
 grep -q 'until recorded_baseline=' "$OUTPUT"
 grep -q "Timed out reading the target baseline from logical database" "$OUTPUT"
 grep -q "Timed out applying privileges for logical database" "$OUTPUT"
@@ -87,6 +96,14 @@ grep -q 'helm.sh/resource-policy: keep' "$OUTPUT"
 grep -q 'opencrane.ai/cnpg-service-account: "opencrane-postgres"' "$OUTPUT"
 grep -q 'size: "20Gi"' "$OUTPUT"
 grep -q 'resizeInUseVolumes: true' "$OUTPUT"
+
+GKE_PRIVILEGES_JOB="$(helm template opencrane-postgres "$CHART" \
+  --namespace opencrane \
+  "${COMMON_VALUES[@]}" \
+  --values "$GKE_AUTOPILOT_VALUES" \
+  | awk 'BEGIN { RS="---" } /kind: Job/ && /name: opencrane-postgres-database-privileges/ { print }')"
+[[ -n "$GKE_PRIVILEGES_JOB" ]]
+grep -Fq 'cloud.google.com/compute-class: opencrane-database-proof' <<<"$GKE_PRIVILEGES_JOB"
 grep -q -- '- ReadWriteOnce' "$OUTPUT"
 grep -q 'storageClass: "expandable-rwo"' "$OUTPUT"
 grep -q 'name: "postgres-opencrane-bootstrap"' "$OUTPUT"

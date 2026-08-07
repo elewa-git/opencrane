@@ -62,7 +62,17 @@ databases) while PostgreSQL permits eighty. The OpenCrane server's one replica i
 five Prisma connections with a five-second acquisition timeout. That means a burst waits at PgBouncer
 instead of holding every PostgreSQL connection while a run-admission transaction waits on a service
 lock. If replica counts or database count change, change these numbers together and keep the summed
-pooler budget below `postgresql.maxConnections`.
+pooler budget below `postgresql.maxConnections`. The pooler and the one-shot privilege containers
+also declare small CPU and memory requests explicitly. This prevents managed Kubernetes platforms
+from replacing an omitted request with a much larger provider default; raise those requests only from
+observed utilisation. The portable chart leaves the proof Job's node selector empty. The GKE
+Autopilot profile selects the bootstrap-owned `opencrane-database-proof` ComputeClass, whose
+scale-up policy gives this bounded proof Job a real placement when system capacity-reservation Pods
+fill otherwise idle nodes.
+
+Applications connect through the chart's `-pooler-client` headless Service. It keeps one stable DNS
+name while resolving only the CNPG-managed PgBouncer Pods, so a GKE NetworkPolicy can admit that
+exact data path without permitting a direct connection to a PostgreSQL instance or pinning a Pod IP.
 
 **Invariant.** One CNPG Cluster hosts many databases (not one cluster per authority — that wastes idle
 pods and volumes). Because CNPG (as the database-pod controller) generates the instance-manager

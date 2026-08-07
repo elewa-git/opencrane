@@ -123,6 +123,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-repository.ts",
+        "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
+        "contract": "StandaloneFirstUserOwnerClaimRepository",
+        "contractImportPath": "./standalone-first-user-admission.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts",
         "adapter": "PrismaSkillWorkloadAssignmentRepository",
         "contract": "SkillWorkloadAssignmentRepository",
@@ -271,6 +278,18 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-unit-of-work.ts",
+        "adapter": "PrismaStandaloneFirstUserAdmissionUnitOfWork",
+        "contract": "StandaloneFirstUserAdmissionUnitOfWork",
+        "contractImportPath": "./standalone-first-user-admission.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
+            "importPath": "./prisma-standalone-first-user-admission-repository.js"
+          }
+        ]
+      },
       {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization-unit-of-work.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationUnitOfWork",
@@ -459,6 +478,15 @@
     ]
   },
   "exemptions": [
+    {
+      "path": "libs/backend/server/gateways/model-routing/main/src/core/provision-byok-key.ts",
+      "owner": "model-routing",
+      "operations": [
+        "delegate"
+      ],
+      "reason": "The existing provider-custody core must atomically reconcile its Global ProviderCredential and ModelDefinition projections while boot-time LiteLLM registration is made fail-closed; split this legacy mixed adapter into declared repositories with its next provider-custody authority change.",
+      "expiresOn": "2026-09-30"
+    },
     {
       "path": "libs/backend/agents/execution/inputs/main/src/personal-memory-scope-source.ts",
       "owner": "PersonalMemoryScopeSource",

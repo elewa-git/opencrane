@@ -2,7 +2,9 @@
 # Copy this file and set your project — that's the only required value:
 #
 #   cp terraform.tfvars.example terraform.tfvars
-#   terraform -chdir=../.. init
+#   terraform -chdir=../.. init \
+#     -backend-config="bucket=YOUR_PROJECT-YOUR_CLUSTER-tfstate" \
+#     -backend-config="prefix=clusters/YOUR_CLUSTER"
 #   terraform -chdir=../.. apply -var-file=environments/dev/terraform.tfvars
 #
 # A bare apply provisions a GKE cluster on the project's default VPC. Install

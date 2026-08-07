@@ -1,0 +1,13 @@
+# GKE Autopilot profile for the one-shot database privilege proof.
+#
+# The cluster bootstrap owns this ComputeClass. Its ScaleUpAnyway policy prevents GKE's
+# system-node-critical balloon Pods from leaving the post-upgrade proof Pending on a fully
+# reserved but otherwise idle node. The Job remains small and keeps its privilege checks intact.
+privileges:
+  nodeSelector:
+    cloud.google.com/compute-class: opencrane-database-proof
+
+# A prior one-run NetworkPolicy diagnostic must never persist through Helm's
+# reset-then-reuse-values upgrade path. This profile is the normal GKE posture.
+networkPolicy:
+  enabled: true

@@ -13,6 +13,8 @@ ARTIFACT_NAMESPACE="${RELEASE_NAME}-artifacts"
 BASE_DOMAIN="${BASE_DOMAIN:-develop-smoke.opencrane.test}"
 CLUSTER_TENANT="${CLUSTER_TENANT:-smoke}"
 CONTROL_PLANE_HOST="${CLUSTER_TENANT}.${BASE_DOMAIN}"
+SMOKE_ACME_EMAIL="${SMOKE_ACME_EMAIL:-develop-smoke@opencrane.test}"
+SMOKE_FIRST_USER_EMAIL="${SMOKE_FIRST_USER_EMAIL:-owner@develop-smoke.opencrane.test}"
 KEEP_CLUSTER="${KEEP_CLUSTER:-0}"
 TIMEOUT_SECONDS="${TIMEOUT_SECONDS:-300}"
 K3S_IMAGE="${K3S_IMAGE:-rancher/k3s:v1.30.10-k3s1}"
@@ -322,9 +324,13 @@ export OIDC_CLIENT_ID="develop-smoke"
 export OPENCRANE_OIDC_CLIENT_SECRET="$(_random_secret)"
 export OPENCRANE_OIDC_SESSION_SECRET="$(_random_secret)"
 export TIMEOUT_SECONDS
+# Exercise the production wrapper's required contact and first-owner inputs. The disposable `.test`
+# host cannot complete public ACME, so the final --set flags deliberately restore its local issuer.
 "$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh" \
   --base-domain "$BASE_DOMAIN" \
   --cluster-tenant "$CLUSTER_TENANT" \
+  --acme-email "$SMOKE_ACME_EMAIL" \
+  --first-user-email "$SMOKE_FIRST_USER_EMAIL" \
   --namespace "$NAMESPACE" \
   --release "$RELEASE_NAME" \
   --image-tag develop-smoke \
@@ -334,7 +340,9 @@ export TIMEOUT_SECONDS
   --litellm-postgres-credentials-secret "$LITELLM_POSTGRES_CREDENTIALS_SECRET" \
   --postgres-admin-credentials-secret "$POSTGRES_ADMIN_CREDENTIALS_SECRET" \
   --postgres-values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-postgres-values.yaml" \
-  --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml"
+  --values "$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke-values.yaml" \
+  --set "certManager.mode=selfSigned" \
+  --set "certManager.issuerName=opencrane-develop-smoke-issuer"
 
 echo "[develop-smoke] Waiting for every enabled workload and certificate"
 kubectl wait --for=condition=available deployment --all -n "$NAMESPACE" --timeout="${TIMEOUT_SECONDS}s"

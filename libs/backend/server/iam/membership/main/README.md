@@ -59,9 +59,10 @@ expired, is not stale, and is the newest accepted. If any check is uncertain, th
   public-key files. A stored assertion cannot change independently of its signature.
 - `__DigestFleetMembershipSignedPayload` — the shared issuer/verifier contract that canonicalizes
   every issuer, time, silo, subject, assertion, and scope field before signing.
-- `_CreateFleetMembershipEvidenceConfig(environment?)` — reads the bounded, mounted-key trust
-  configuration once for app composition and returns a verifier that reloads its projected Ed25519
-  public key before every membership decision. It is neutral to personal and managed agents.
+- `_CreateFleetMembershipEvidenceConfig(environment?)` — reads the explicitly selected issuer
+  model. `fleet` reloads an independent projected Ed25519 public key. `standalone` requires no
+  Fleet key and denies every presented revision until a local issuer exists; an OIDC session is
+  never treated as membership. It is neutral to personal and managed agents.
 - Contract types: `VerifyFleetMembershipCommand`/`Result`, `FleetMembershipAuthorityRepository`,
   `FleetMembershipSignatureVerifier`, `FleetMembershipAcceptance`/`Result`,
   `FleetMembershipEvidenceConfig`, and `TrustedFleetMembershipEvidence`.

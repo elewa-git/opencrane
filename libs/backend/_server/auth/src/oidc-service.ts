@@ -250,16 +250,19 @@ export abstract class OidcAuthServiceBase
     }
     await _saveSession(req);
 
-    // 4. Post-login extension point (e.g. adopt the verified user into their org + seed
-    //    their workspace on first login). Best-effort: a hook failure must never break the
-    //    login — adoption self-heals via the periodic membership reconcile — so it is caught
-    //    and logged here rather than propagated.
+    // 4. Run the deployment-selected post-login admission seam. Optional projection work remains
+    //    best-effort, while an identity domain can make a one-time durable admission visible.
     try
     {
       await this.onLoginEstablished(req, authUser);
     }
     catch (err)
     {
+      if (this.isPostLoginFailureFatal())
+      {
+        await _destroySession(req);
+        throw err;
+      }
       this.log.warn({ err }, "post-login hook failed (non-fatal)");
     }
 
@@ -304,16 +307,20 @@ export abstract class OidcAuthServiceBase
   /**
    * Extension point invoked exactly once per login, right after a fresh session is
    * established (post token-exchange, claim validation, and session persistence). The base
-   * does nothing; the identity domain overrides it to adopt the verified user into the
-   * organization proven by the per-org login and seed their workspace. Invoked best-effort:
-   * {@link completeLogin} catches and logs any throw so
-   * a side-effect failure can never break the login.
+   * does nothing; identity domains may project optional facts or establish a required local
+   * admission record. {@link isPostLoginFailureFatal} controls whether a failure is surfaced.
    *
    * @param _req      - The completed callback request (unused by the base).
    * @param _authUser - The freshly established session identity (unused by the base).
    */
   protected async onLoginEstablished(_req: Request, _authUser: AuthUser): Promise<void>
   {
+  }
+
+  /** Whether a post-login extension failure must be returned to the browser rather than logged. */
+  protected isPostLoginFailureFatal(): boolean
+  {
+    return false;
   }
 
   /** Discover and memoize the provider metadata and client configuration (masters client). */

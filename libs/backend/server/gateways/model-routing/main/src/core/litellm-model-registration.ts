@@ -29,6 +29,10 @@ export async function _RegisterLiteLlmModel(input: LiteLlmModelRegistration): Pr
   //    so creates succeed and are reproducible without a live LiteLLM.
   if (!configured)
   {
+    if (input.requireLiveRegistration)
+    {
+      throw new Error(`LiteLLM is not configured to register required model '${input.publicModelName}'`);
+    }
     const placeholder = _placeholderModelId(input);
     _log.debug({ publicModelName: input.publicModelName, configured: false, litellmModelId: placeholder }, "litellm model registration skipped (unconfigured)");
     return placeholder;
@@ -84,22 +88,37 @@ async function _registerLive(endpoint: string, masterKey: string, input: LiteLlm
         // inference — omitted (LiteLLM defaults to chat) for the ordinary catalog models.
         ...(input.mode ? { model_info: { mode: input.mode } } : {}),
       }),
+      // Startup readiness must bound each upstream registration, just as inventory checks do.
+      // Otherwise a stalled LiteLLM socket prevents Kubernetes from ever observing failure.
+      signal: AbortSignal.timeout(10_000),
     });
 
     // 3. On any non-OK upstream response fall back to the placeholder — the row still persists,
     //    and the deployment can be reconciled later; the create must not fail on a flaky LiteLLM.
     if (!response.ok)
     {
+      if (input.requireLiveRegistration)
+      {
+        throw new Error(`LiteLLM model registration for '${input.publicModelName}' returned HTTP ${response.status}`);
+      }
       _log.warn({ publicModelName: input.publicModelName, status: response.status }, "litellm model registration failed; using placeholder id");
       return _placeholderModelId(input);
     }
 
     const litellmModelId = ___ParseAndValidateJson(await response.text(), "LiteLLM model registration response", _RegisteredModelId, input);
+    if (input.requireLiveRegistration && litellmModelId.startsWith("placeholder:"))
+    {
+      throw new Error(`LiteLLM did not return a deployment id for required model '${input.publicModelName}'`);
+    }
     _log.info({ publicModelName: input.publicModelName, litellmModelId }, "litellm model registered");
     return litellmModelId;
   }
   catch (err)
   {
+    if (input.requireLiveRegistration)
+    {
+      throw err;
+    }
     // 4. Network / parse failure is non-fatal — keep the create working with a placeholder.
     _log.warn({ publicModelName: input.publicModelName, err }, "litellm model registration errored; using placeholder id");
     return _placeholderModelId(input);

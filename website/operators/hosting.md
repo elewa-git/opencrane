@@ -39,6 +39,17 @@ only after OpenCrane has durably admitted the run, then releases that exact Kube
 - PostgreSQL credentials supplied through Kubernetes Secrets.
 - Immutable image digests for the controller and runtime.
 
+## Minimal operator handoff
+
+Provide the target Kubernetes context, ClusterTenant and base domain; OIDC issuer, client ID and
+confidential-client secret; the first operator email or IdP group mapping; and three distinct
+PostgreSQL bootstrap credential Secrets. Add a namespace-local registry pull Secret only for private
+images. The script derives the namespace and default OIDC callback, and creates the OIDC Secret.
+
+::: warning
+Do not put OIDC or registry secret bytes in Helm values, committed files, or shell history.
+:::
+
 ## Install
 
 Use the app-owned entrypoint:
@@ -46,19 +57,26 @@ Use the app-owned entrypoint:
 ```bash
 export OIDC_ISSUER_URL=https://identity.example.com
 export OIDC_CLIENT_ID=<organisation-client-id>
+export OPENCRANE_OIDC_CLIENT_SECRET=<secret-manager-value>
+export OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL=operator@example.com
 
 apps/_infra/deploy-k8s/deploy.sh \
   --base-domain opencrane.example.com \
   --cluster-tenant acme \
+  --acme-email operator@example.com \
   --postgres-credentials-secret opencrane-postgres-bootstrap \
   --obot-postgres-credentials-secret opencrane-obot-postgres-bootstrap \
   --litellm-postgres-credentials-secret opencrane-litellm-postgres-bootstrap
+# Add --registry-pull-secret opencrane-ghcr-pull for private images.
 ```
 
 The script delegates to `apps/_infra/deploy-k8s/platform/k8s-deploy.sh` and installs the
 `opencrane-silo` umbrella chart. It does not install a second management plane. The three
 PostgreSQL bootstrap Secrets must already exist in the target namespace and use distinct
 credentials.
+
+The public host must already resolve to the ingress address. The entrypoint uses Let's Encrypt
+HTTP-01 and needs `--acme-email`; it fails before applying a self-signed certificate.
 
 ::: warning
 Do not deploy the personal and managed runtimes into the trusted server namespace. The server

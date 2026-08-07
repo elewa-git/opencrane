@@ -2,6 +2,12 @@
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
+# Prisma selects its native query engine during generation. Keep OpenSSL available in
+# this stage as well as the runtime so it generates the Bookworm/OpenSSL 3 engine.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json tsconfig.json nx.json ./
 # All workspace libs (shared libs + libs/backend/*/main) come in wholesale so the image never
 # needs editing when a backend package is added; the root .dockerignore keeps
@@ -24,6 +30,10 @@ RUN find /app -path '*/node_modules/.prisma/client' -type d | head -1 | \
 FROM node:22-bookworm-slim
 
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 # The runtime image receives only the application manifest. Prisma generation and the target
 # database baseline are build/provisioning inputs; server startup never mutates schema.

@@ -9,9 +9,10 @@ trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
 MEMORY_GATEWAY_API_ARGS=(--set-string 'memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32' --set-string 'memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32')
 
-rendered="$(helm template opencrane-silo "$CHART_DIR" \
+rendered="$(helm template opencrane-silo "$CHART_DIR" --namespace pooler-ns \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
-  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler)"
+  --set-string networkPolicy.postgresPoolerName=opencrane-postgres-restored-pooler \
+  --set-string networkPolicy.postgresPoolerServiceIp=10.96.42.17)"
 runtime_rendered="$(helm template opencrane-silo "$CHART_DIR" \
   "${MEMORY_GATEWAY_API_ARGS[@]}" \
   --set agentController.enabled=true \
@@ -81,11 +82,16 @@ runtime_server_policy="$(printf '%s\n' "$runtime_rendered" | awk '
 ')"
 
 [[ -n "$server_policy" ]]
-grep -Fq '              cnpg.io/poolerName: opencrane-postgres-restored-pooler' <<<"$server_policy"
+if grep -Fq 'cnpg.io/poolerName:' <<<"$server_policy"; then
+  echo "GKE ClusterIP Pooler traffic must use the port-limited egress rule; Pod selection happens at Pooler ingress" >&2
+  exit 1
+fi
+if grep -Fq 'cidr: "10.96.42.17/32"' <<<"$server_policy"; then
+  echo "opencrane-server policy must not target the Pooler ClusterIP by IP" >&2
+  exit 1
+fi
 grep -Fq '          port: 5432' <<<"$server_policy"
 grep -Fq '          port: 443' <<<"$server_policy"
-grep -Fq '              kubernetes.io/metadata.name: kube-system' <<<"$server_policy"
-grep -Fq '              k8s-app: kube-dns' <<<"$server_policy"
 grep -Fq '          port: 53' <<<"$server_policy"
 grep -Fq '              app.kubernetes.io/component: litellm' <<<"$server_policy"
 grep -Fq '          port: 4000' <<<"$server_policy"
@@ -107,6 +113,10 @@ grep -Fq '          port: 8080' <<<"$server_policy"
 
 if grep -Fq 'cnpg.io/cluster' <<<"$server_policy"; then
   echo "opencrane-server policy bypasses the PostgreSQL pooler" >&2
+  exit 1
+fi
+if grep -Fq 'k8s-app: kube-dns' <<<"$server_policy"; then
+  echo "GKE ClusterIP DNS traffic must use the port-limited egress rule" >&2
   exit 1
 fi
 

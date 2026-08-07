@@ -32,6 +32,10 @@ spec:
         app.kubernetes.io/component: channel-proxy
     spec:
       serviceAccountName: {{ include "opencrane.fullname" . }}-channel-proxy
+      {{- with .Values.global.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ . | quote }}
+      {{- end }}
       automountServiceAccountToken: false
       securityContext:
         runAsNonRoot: true
