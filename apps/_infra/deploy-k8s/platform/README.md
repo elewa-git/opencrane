@@ -31,6 +31,11 @@ contains both the client and session keys. The engine retains the existing Secre
 ordinary image or configuration rollouts do not rotate login sessions or require an IdP secret to
 be supplied again. A missing or incomplete existing Secret still fails closed.
 
+The engine always enables LiteLLM's database-backed model store for a managed silo. It supplies
+the release-local LiteLLM database and stable encryption salt, then OpenCrane registers provider
+models through LiteLLM's admin API. Leaving that store disabled would retain a provider credential
+but make model registration fail at server startup.
+
 ## Shared controller bootstrap
 
 Cluster-wide controllers remain outside the organisation release boundary. A cluster operator may

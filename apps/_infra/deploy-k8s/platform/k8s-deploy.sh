@@ -658,6 +658,11 @@ helm_args=(upgrade --install "$RELEASE" "$CHART_DIR" --namespace "$NAMESPACE" --
   --set-string "clustertenantManager.database.secretKey=uri"
   --set-string "litellm.existingDatabaseSecret=$LITELLM_DATABASE_SECRET"
   --set-string "litellm.databaseSecretKey=DATABASE_URL"
+  # The server registers provider models through LiteLLM's admin API. That API is only
+  # available when LiteLLM persists models in its configured PostgreSQL database.
+  --set "litellm.storeModelInDb=true"
+  --set-string "litellm.existingSaltSecret=opencrane-litellm"
+  --set-string "litellm.saltSecretKey=LITELLM_SALT_KEY"
   --set-string "artifactService.persistence.storageClass=$ARTIFACT_STORAGE_CLASS"
   --set-string "artifactService.namespace=$ARTIFACT_NAMESPACE"
   --set-string "artifactService.keys.catalogExistingSecret=$ARTIFACT_CATALOG_KEY_SECRET"
