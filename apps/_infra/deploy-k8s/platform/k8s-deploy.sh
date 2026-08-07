@@ -612,21 +612,28 @@ ensure_provider_key_secrets "$NAMESPACE"
 publish_initial_model_provider_secret "$NAMESPACE" "$INITIAL_MODEL_PROVIDER" "$INITIAL_MODEL_API_KEY"
 # OIDC secret. The chart references clustertenantManager.oidc.existingSecret for the client + session
 # secrets; previously this installer set only the issuer/clientId/redirect and ASSUMED the
-# Secret already existed, so a fresh OIDC install crash-looped on a missing Secret. Create it
-# here when OIDC is configured: the client secret is required (a confidential client can't
-# authenticate without it); the session secret signs login cookies and is auto-generated when
-# not supplied. Idempotent (dry-run | apply), so re-runs converge.
+# Secret already existed, so a fresh OIDC install rendered a UI that crash-looped on a missing
+# Secret. A fresh install still requires a confidential-client secret. An upgrade may retain an
+# already valid Secret, so routine image/config rollouts neither require re-supplying an IdP
+# secret nor rotate the session-signing key.
 if [[ -n "$OIDC_ISSUER_URL" ]]; then
   if [[ -z "$OIDC_CLIENT_SECRET" ]]; then
-    err "OIDC is configured (--oidc-issuer-url set) but no client secret was provided. Pass --oidc-client-secret (or OPENCRANE_OIDC_CLIENT_SECRET) — a confidential client cannot authenticate without it."
-    exit 1
+    if kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" >/dev/null 2>&1 \
+      && kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.data.OIDC_CLIENT_SECRET}' | grep -q . \
+      && kubectl get secret "$OIDC_SECRET_NAME" -n "$NAMESPACE" -o jsonpath='{.data.OIDC_SESSION_SECRET}' | grep -q .; then
+      log "Retaining existing OIDC secret '$OIDC_SECRET_NAME' (no client-secret input supplied)."
+    else
+      err "OIDC is configured (--oidc-issuer-url set) but no client secret was provided and no complete '$OIDC_SECRET_NAME' exists. Pass --oidc-client-secret (or OPENCRANE_OIDC_CLIENT_SECRET)."
+      exit 1
+    fi
+  else
+    OIDC_SESSION_SECRET="${OIDC_SESSION_SECRET:-$(_gen_secret)}"
+    log "Creating the OIDC secret '$OIDC_SECRET_NAME' (client + session secret)…"
+    kubectl create secret generic "$OIDC_SECRET_NAME" -n "$NAMESPACE" \
+      --from-literal=OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
+      --from-literal=OIDC_SESSION_SECRET="$OIDC_SESSION_SECRET" \
+      --dry-run=client -o yaml | kubectl apply -f -
   fi
-  OIDC_SESSION_SECRET="${OIDC_SESSION_SECRET:-$(_gen_secret)}"
-  log "Creating the OIDC secret '$OIDC_SECRET_NAME' (client + session secret)…"
-  kubectl create secret generic "$OIDC_SECRET_NAME" -n "$NAMESPACE" \
-    --from-literal=OIDC_CLIENT_SECRET="$OIDC_CLIENT_SECRET" \
-    --from-literal=OIDC_SESSION_SECRET="$OIDC_SESSION_SECRET" \
-    --dry-run=client -o yaml | kubectl apply -f -
 fi
 
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"

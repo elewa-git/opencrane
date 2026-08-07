@@ -22,6 +22,15 @@ Business logic does not belong here. Server-process infrastructure belongs in `l
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads
 belong in sibling `apps/_infra/<service>` projects.
 
+## OIDC upgrades
+
+A fresh OIDC deployment must provide its confidential-client secret through
+`OPENCRANE_OIDC_CLIENT_SECRET` or `--oidc-client-secret`; the engine creates the release-local
+`opencrane-oidc` Secret only from that input. Later upgrades may omit it when that Secret already
+contains both the client and session keys. The engine retains the existing Secret in that case, so
+ordinary image or configuration rollouts do not rotate login sessions or require an IdP secret to
+be supplied again. A missing or incomplete existing Secret still fails closed.
+
 ## Shared controller bootstrap
 
 Cluster-wide controllers remain outside the organisation release boundary. A cluster operator may
