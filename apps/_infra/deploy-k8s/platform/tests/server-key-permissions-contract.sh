@@ -4,6 +4,14 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 source "$ROOT_DIR/apps/_infra/deploy-k8s/platform/current-chart-sources.sh"
 
+_report_contract_failure()
+{
+  local line_number="$1"
+  printf 'opencrane-server key permissions contract failed at line %s.\n' "$line_number" >&2
+}
+
+trap '_report_contract_failure "$LINENO"' ERR
+
 prepare_current_chart_sources
 trap cleanup_current_chart_sources EXIT
 CHART_DIR="$(current_chart_sources_dir)"
