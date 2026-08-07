@@ -14,6 +14,10 @@
       "executor": "nx:run-commands",
       "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/helm-lint-current-sources.sh" }
     },
+    "develop-smoke": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh" }
+    },
     "dependency-status": {
       "executor": "nx:run-commands",
       "options": { "command": "helm dependency list apps/_infra/deploy-k8s" }

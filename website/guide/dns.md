@@ -33,4 +33,4 @@ For operator details, see [DNS configuration](/operators/dns-config).
 
 ## Next
 
-→ [Create your first agent](/guide/first-agent)
+→ [Set up your personal assistant](/guide/persona)

@@ -71,6 +71,6 @@ governed external actions subject to the same approval, receipt and audit bounda
 - An unavailable memory transport does not fabricate a result.
 - Runtime-local scratch is never promoted to durable memory implicitly.
 
-Source: [`libs/backend/agents/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/memory/main/README.md),
-[`libs/backend/agents/personal/memory/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md),
-and [`libs/backend/_server/memory-gateway-client`](https://github.com/italanta/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).
+Source: [`libs/backend/agents/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/memory/main/README.md),
+[`libs/backend/agents/personal/memory/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/personal/memory/main/README.md),
+and [`libs/backend/_server/memory-gateway-client`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/_server/memory-gateway-client/README.md).

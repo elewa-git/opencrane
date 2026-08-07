@@ -88,5 +88,5 @@ Restart trusted long-lived deployments with the app-owned deploy script or a nor
 upgrade. Runtime Jobs are bounded attempts; do not convert them into Deployments or preserve
 their local scratch between attempts.
 
-Source: [`libs/backend/agents/execution/runs/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/execution/runs/main/README.md)
-and [`apps/opencrane/src/index.ts`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/src/index.ts).
+Source: [`libs/backend/agents/execution/runs/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/runs/main/README.md)
+and [`apps/opencrane/src/index.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/index.ts).

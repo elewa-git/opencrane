@@ -58,5 +58,5 @@ Membership authority is checked before a run is admitted and uncertainty fails c
 Direct shares and group grants change future authorisation decisions. They do not rewrite
 snapshots or events belonging to already accepted runs.
 
-Source: [`libs/backend/server/iam/authorization/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
-and [`libs/backend/agents/execution/inputs/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/execution/inputs/main/README.md).
+Source: [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
+and [`libs/backend/agents/execution/inputs/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/inputs/main/README.md).

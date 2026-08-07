@@ -54,4 +54,4 @@ Keep provider-specific identity and storage configuration outside the runtime au
 
 ## Next
 
-→ [Set up your domain](/guide/dns) → [Create your first agent](/guide/first-agent)
+→ [Set up your domain](/guide/dns) → [Set up your personal assistant](/guide/persona)

@@ -1,0 +1,43 @@
+# Disposable k3d overrides for develop-smoke.sh. OpenCrane-owned workloads use images built from
+# the checked-out commit; third-party planes stay on the pinned chart defaults.
+clustertenantManager:
+  image:
+    repository: opencrane/opencrane-server
+    tag: develop-smoke
+    pullPolicy: IfNotPresent
+  cognee:
+    persistence:
+      size: 1Gi
+
+controlPlaneSpa:
+  image:
+    repository: opencrane/opencrane-ui
+    tag: develop-smoke
+    pullPolicy: IfNotPresent
+
+channelProxy:
+  image:
+    repository: opencrane/channel-proxy
+    tag: develop-smoke
+    pullPolicy: IfNotPresent
+  ingressNamespace: kube-system
+
+memoryGateway:
+  image:
+    repository: opencrane/memory-gateway
+    tag: develop-smoke
+    pullPolicy: IfNotPresent
+
+artifactService:
+  image:
+    repository: opencrane/artifact-service
+    tag: develop-smoke
+    pullPolicy: IfNotPresent
+  persistence:
+    size: 1Gi
+
+ingress:
+  className: traefik
+
+networkPolicy:
+  ingressNamespace: kube-system
