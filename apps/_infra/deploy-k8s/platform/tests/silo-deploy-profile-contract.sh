@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/deploy.sh"
+DEVELOP_SMOKE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh"
 MODEL_HELPER="$ROOT_DIR/apps/_infra/deploy-k8s/platform/initial-model-provider.sh"
 
 grep -Fq -- '--acme-email' "$DEPLOY_SCRIPT"
@@ -26,6 +27,10 @@ grep -Fq -- '--set "certManager.mode=acme"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--set "certManager.issuerName=opencrane-acme-issuer"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--set "certManager.acme.email=${ACME_EMAIL}"' "$DEPLOY_SCRIPT"
 grep -Fq -- '--set-string "clustertenantManager.firstUser.clusterTenant=${CLUSTER_TENANT}"' "$DEPLOY_SCRIPT"
+grep -Fq -- '--acme-email "$SMOKE_ACME_EMAIL"' "$DEVELOP_SMOKE"
+grep -Fq -- '--first-user-email "$SMOKE_FIRST_USER_EMAIL"' "$DEVELOP_SMOKE"
+grep -Fq -- '--set "certManager.mode=selfSigned"' "$DEVELOP_SMOKE"
+grep -Fq -- '--set "certManager.issuerName=opencrane-develop-smoke-issuer"' "$DEVELOP_SMOKE"
 DEPLOY_CORE="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 grep -Fq -- "Retaining existing OIDC secret '\$OIDC_SECRET_NAME'" "$DEPLOY_CORE"
 grep -Fq -- "no complete '\$OIDC_SECRET_NAME' exists" "$DEPLOY_CORE"
