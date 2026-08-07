@@ -59,6 +59,27 @@ describe("opencrane process config", function _ProcessConfigSuite()
 		expect(_ReadProcessConfig().initialModelBootstrap).toEqual({ provider: "openai", apiKey: "sk-test" });
 	});
 
+	it("reads the all-or-nothing standalone first-owner admission contract", function _ReadStandaloneFirstUserAdmission()
+	{
+		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toBeNull();
+
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "standalone");
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "JENTE@ELEWA.KE");
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
+		vi.stubEnv("OIDC_ISSUER_URL", "https://issuer.example");
+		expect(_ReadProcessConfig().standaloneFirstUserAdmission).toEqual({ email: "jente@elewa.ke", clusterTenant: "testv2", issuer: "https://issuer.example" });
+	});
+
+	it("rejects a partial or non-standalone first-owner admission contract", function _RejectInvalidStandaloneFirstUserAdmission()
+	{
+		vi.stubEnv("OPENCRANE_STANDALONE_FIRST_USER_EMAIL", "jente@elewa.ke");
+		expect(function _readPartialStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/configured together/);
+
+		vi.stubEnv("OPENCRANE_STANDALONE_CLUSTER_TENANT", "testv2");
+		vi.stubEnv("OPENCRANE_MEMBERSHIP_MODE", "fleet");
+		expect(function _readFleetStandaloneFirstUserAdmission() { _ReadProcessConfig(); }).toThrow(/MEMBERSHIP_MODE=standalone/);
+	});
+
 	it("rejects a partial or unsupported initial model credential", function _RejectInvalidInitialModelBootstrap()
 	{
 		vi.stubEnv("OPENCRANE_INITIAL_MODEL_PROVIDER", "openai");

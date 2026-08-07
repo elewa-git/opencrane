@@ -440,6 +440,11 @@ clustertenantManager:
     provider: ""
     existingSecret: ""
     apiKeySecretKey: apiKey
+  # -- One verified OIDC email may claim this standalone silo's first active Owner membership.
+  # The deploy profile supplies both values; Helm never writes database membership data itself.
+  firstUser:
+    email: ""
+    clusterTenant: ""
   # -- Explicit membership issuer model. A standalone silo has no Fleet prerequisite and starts
   # without a verification-key mount. It deliberately denies run admission until a local issuer
   # produces signed revisions; it never treats an unsigned OIDC session as membership.

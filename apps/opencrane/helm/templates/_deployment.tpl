@@ -3,6 +3,7 @@
 {{- $managedRuntimeNamespace := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $managedPlane.namespace -}}
 {{- $membership := .Values.clustertenantManager.membership -}}
 {{- $initialModel := .Values.clustertenantManager.initialModel -}}
+{{- $firstUser := .Values.clustertenantManager.firstUser -}}
 {{- if not (or (eq $membership.mode "standalone") (eq $membership.mode "fleet")) -}}
 {{- fail "clustertenantManager.membership.mode must be standalone or fleet" -}}
 {{- end -}}
@@ -11,6 +12,12 @@
 {{- end -}}
 {{- if and $initialModel.provider (empty $initialModel.apiKeySecretKey) -}}
 {{- fail "clustertenantManager.initialModel.apiKeySecretKey is required when an initial model is configured" -}}
+{{- end -}}
+{{- if ne (empty $firstUser.email) (empty $firstUser.clusterTenant) -}}
+{{- fail "clustertenantManager.firstUser.email and clusterTenant must be configured together" -}}
+{{- end -}}
+{{- if and $firstUser.email (ne $membership.mode "standalone") -}}
+{{- fail "clustertenantManager.firstUser requires membership.mode=standalone" -}}
 {{- end -}}
 apiVersion: apps/v1
 kind: Deployment
@@ -76,6 +83,14 @@ spec:
               value: {{ $membership.mode | quote }}
             - name: OPENCRANE_MEMBERSHIP_MAX_STALENESS_MS
               value: {{ $membership.maximumStalenessMs | quote }}
+            {{- if $firstUser.email }}
+            # One-time standalone owner admission stays subject-bound: email merely selects the
+            # verified OIDC identity that may claim this release's local owner slot.
+            - name: OPENCRANE_STANDALONE_FIRST_USER_EMAIL
+              value: {{ $firstUser.email | quote }}
+            - name: OPENCRANE_STANDALONE_CLUSTER_TENANT
+              value: {{ $firstUser.clusterTenant | quote }}
+            {{- end }}
             {{- if eq $membership.mode "fleet" }}
             - name: OPENCRANE_MEMBERSHIP_ISSUER_ID
               value: {{ required "clustertenantManager.membership.fleet.trustedIssuerId is required in fleet mode" $membership.fleet.trustedIssuerId | quote }}

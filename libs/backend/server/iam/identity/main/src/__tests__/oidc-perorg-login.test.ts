@@ -76,6 +76,27 @@ function _prismaStub(): PrismaClient
   return { orgMembership: { findMany: vi.fn().mockResolvedValue([]) } } as unknown as PrismaClient;
 }
 
+/** Prisma stub that persists the exact one-time owner claim made by a standalone callback. */
+function _standaloneAdmissionPrisma(): { prisma: PrismaClient; created: Array<{ clusterTenant: string; subject: string }> }
+{
+  const created: Array<{ clusterTenant: string; subject: string }> = [];
+  const prisma = {
+    $transaction: vi.fn(async function _transaction(callback: (transaction: unknown) => Promise<unknown>) { return callback(prisma); }),
+    group: { findMany: vi.fn().mockResolvedValue([]) },
+    orgMembership: {
+      findMany: vi.fn().mockResolvedValue([]),
+      findUnique: vi.fn().mockResolvedValue(null),
+      findFirst: vi.fn().mockResolvedValue(null),
+      create: vi.fn(async function _create(args: { data: { clusterTenant: string; subject: string } })
+      {
+        created.push({ clusterTenant: args.data.clusterTenant, subject: args.data.subject });
+      }),
+    },
+    auditDecision: { create: vi.fn().mockResolvedValue(undefined) },
+  } as unknown as PrismaClient;
+  return { prisma, created };
+}
+
 /**
  * CustomObjectsApi stub returning the ClusterTenant CR for `name` (a `get` for any other name
  * 404s). Pass `null` zitadel ids to model an unprovisioned org. `null` → no cluster wired.
@@ -153,6 +174,7 @@ function _callbackReq(flowClientId: string | undefined): Request
     oidcFlow: { codeVerifier: "verifier", state: "state", nonce: "nonce", returnTo: "/", ...(flowClientId ? { clientId: flowClientId } : {}) },
     regenerate(cb: (err?: Error) => void) { cb(); },
     save(cb: (err?: Error) => void) { cb(); },
+    destroy(cb: (err?: Error) => void) { cb(); },
   };
   return { headers: { "x-forwarded-host": "acme.dev.opencrane.ai" }, originalUrl: "/api/v1/auth/callback?code=c&state=state", protocol: "https", session } as unknown as Request;
 }
@@ -180,5 +202,30 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
     await service.completeLogin(_callbackReq(undefined));
 
     expect(_grantClientId).toBe("cid");
+  });
+
+  it("claims the configured verified standalone owner and saves org-admin session state", async function _claimsStandaloneOwner()
+  {
+    const { prisma, created } = _standaloneAdmissionPrisma();
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "u@acme.io", issuer: "https://idp.test" });
+    const req = _callbackReq("client-acme");
+
+    await service.completeLogin(req);
+
+    expect(created).toEqual([{ clusterTenant: "acme", subject: "user-1" }]);
+    expect((req.session as { authUser?: { isOrgAdmin?: boolean } }).authUser?.isOrgAdmin).toBe(true);
+  });
+
+  it("destroys the regenerated session when configured first-owner admission is denied", async function _destroysDeniedAdmissionSession()
+  {
+    const { prisma } = _standaloneAdmissionPrisma();
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "different@acme.io", issuer: "https://idp.test" });
+    const req = _callbackReq("client-acme");
+    const destroy = vi.fn(function _destroy(callback: (error?: Error) => void) { callback(); });
+    (req.session as unknown as { destroy: typeof destroy }).destroy = destroy;
+
+    await expect(service.completeLogin(req)).rejects.toThrow(/standalone first-user admission denied/);
+
+    expect(destroy).toHaveBeenCalledTimes(1);
   });
 });

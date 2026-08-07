@@ -42,6 +42,9 @@ typed everywhere. Invariant: **fail-closed** — anything missing, malformed, or
 - `___AuthMiddleware`, `AccessTokenReader` — the request authentication middleware and its token-reader port.
 - `___LoadOidcAuthConfig`, `OidcAuthConfig`, `_IsDevAuthMode` — OIDC configuration.
 - `OidcAuthServiceBase`, `LoginClient`, `AuthStatus` — the login-flow service and per-org login seam.
+  Subclasses may declare a post-login admission failure fatal when silently continuing would present
+  a signed-in user with false onboarding state. Fatal failures destroy the freshly regenerated
+  session before returning the callback error; optional projection work remains best-effort.
 - Session helpers + `AuthUser`; `_ResolveIdentityClaims`; `_ResolveOrgMembershipFacts`,
   `OrgMembershipFacts`, `OrgMembershipRepository`, and `PrismaOrgMembershipRepository`.
 - `_ResolveRequestPrincipal`, `RequestPrincipal` — derive one authenticated subject, host-selected

@@ -1,8 +1,10 @@
 import { isAbsolute } from "node:path";
 
 import { ByokProvider } from "@opencrane/contracts";
+import { FleetMembershipDeploymentModes } from "@opencrane/backend/server/iam/membership";
 
 import type { InitialModelBootstrapConfig, OpenCraneObotConfig, OpenCraneProcessConfig } from "./config.types.js";
+import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
 
 /** Smallest accepted artifact-preprocessor output body. */
 const _MINIMUM_ARTIFACT_OUTPUT_BYTES = 1_024;
@@ -84,6 +86,31 @@ function _readInitialModelBootstrap(): InitialModelBootstrapConfig | null
 	return { provider, apiKey };
 }
 
+/** Read the all-or-nothing verified-email admission contract for one standalone silo owner. */
+function _readStandaloneFirstUserAdmission(): StandaloneFirstUserAdmissionConfig | null
+{
+	const email = process.env.OPENCRANE_STANDALONE_FIRST_USER_EMAIL?.trim().toLowerCase() ?? "";
+	const clusterTenant = process.env.OPENCRANE_STANDALONE_CLUSTER_TENANT?.trim() ?? "";
+	const issuer = process.env.OIDC_ISSUER_URL?.trim() ?? "";
+	if (!email && !clusterTenant)
+	{
+		return null;
+	}
+	if (!email || !clusterTenant)
+	{
+		throw new Error("OPENCRANE_STANDALONE_FIRST_USER_EMAIL and OPENCRANE_STANDALONE_CLUSTER_TENANT must be configured together");
+	}
+	if (process.env.OPENCRANE_MEMBERSHIP_MODE !== FleetMembershipDeploymentModes.Standalone)
+	{
+		throw new Error("standalone first-user admission requires OPENCRANE_MEMBERSHIP_MODE=standalone");
+	}
+	if (!issuer)
+	{
+		throw new Error("standalone first-user admission requires OIDC_ISSUER_URL");
+	}
+	return { email, clusterTenant, issuer };
+}
+
 /**
  * Read the optional Obot management-transport block from the startup environment.
  *
@@ -141,5 +168,6 @@ export function _ReadProcessConfig(): OpenCraneProcessConfig
 		},
 		schedulerEnabled: process.env.OPENCRANE_SCHEDULER_ENABLED === "true",
 		schedulerIntervalMilliseconds: _readBoundedInteger("OPENCRANE_SCHEDULER_INTERVAL_MS", 60_000, 1_000, 3_600_000),
+		standaloneFirstUserAdmission: _readStandaloneFirstUserAdmission(),
 	};
 }

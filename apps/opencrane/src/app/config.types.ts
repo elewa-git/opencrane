@@ -1,3 +1,5 @@
+import type { StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
+
 /** Startup snapshot used to compose workload identity, dispatch, and worker routes. */
 export interface InternalRuntimeConfig
 {
@@ -77,4 +79,6 @@ export interface OpenCraneProcessConfig
 	readonly schedulerEnabled: boolean;
 	/** Delay between managed-agent schedule passes. */
 	readonly schedulerIntervalMilliseconds: number;
+	/** Optional verified-email contract that can claim exactly one standalone-silo owner. */
+	readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
 }

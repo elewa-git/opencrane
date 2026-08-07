@@ -50,7 +50,7 @@ async function _Main(): Promise<void>
 	const obot = _CreateObotAdapters(config.obot);
 
 	// 5. Build separate transport surfaces; only the internal app receives workload-only routes.
-	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody);
+	const publicApp = _CreatePublicApp(prisma, kubernetes.customApi, kubernetes.coreApi, managedRunAdmission, personalRunAdmission, config.authWatchNamespace, config.runtime.serverNamespace, obot.custody, config.standaloneFirstUserAdmission);
 	publicApp.locals.artifactUploadGateway = _CreateArtifactUploadGateway(prisma);
 	const internalApp = _CreateInternalApp(prisma, kubernetes.authApi, config.runtime, memoryGateway, obot.attemptKeys);
 

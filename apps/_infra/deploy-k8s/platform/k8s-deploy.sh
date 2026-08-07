@@ -22,6 +22,7 @@
 #                            [--oidc-session-secret SECRET]
 #                            [--platform-operator-seed-email EMAIL]
 #                            [--platform-operator-groups CSV]
+#                            [--first-user-email EMAIL]
 #                            [--initial-model-provider PROVIDER]
 #                            [--preflight] [--multi-ct] [--verify] [--verify-insecure]
 #                            --postgres-credentials-secret NAME
@@ -159,6 +160,9 @@ OIDC_CLIENT_SECRET="${OPENCRANE_OIDC_CLIENT_SECRET:-${OIDC_CLIENT_SECRET:-}}"
 OIDC_SESSION_SECRET="${OPENCRANE_OIDC_SESSION_SECRET:-${OIDC_SESSION_SECRET:-}}"
 OIDC_SECRET_NAME="opencrane-oidc"
 PLATFORM_OPERATOR_SEED_EMAIL="${OPENCRANE_PLATFORM_OPERATOR_SEED_EMAIL:-}"
+# One verified OIDC email eligible to claim a standalone silo's durable first-owner membership.
+# This is separate from platform-operator seeding, which grants broader installation privilege.
+FIRST_USER_EMAIL="${OPENCRANE_FIRST_USER_EMAIL:-}"
 # Platform-operator GROUP mapping (CSV of IdP groups). OR-ed with the seed email; the
 # durable bootstrap once an IdP group exists. Empty → unset (fail-closed).
 PLATFORM_OPERATOR_GROUPS="${OPENCRANE_PLATFORM_OPERATOR_GROUPS:-}"
@@ -224,6 +228,7 @@ while [[ $# -gt 0 ]]; do
     --oidc-session-secret) OIDC_SESSION_SECRET="$2"; shift 2 ;;
     --platform-operator-seed-email) PLATFORM_OPERATOR_SEED_EMAIL="$2"; shift 2 ;;
     --platform-operator-groups)     PLATFORM_OPERATOR_GROUPS="$2"; shift 2 ;;
+    --first-user-email)             FIRST_USER_EMAIL="$2"; shift 2 ;;
     --initial-model-provider)       INITIAL_MODEL_PROVIDER="$2"; shift 2 ;;
     --preflight)        PREFLIGHT="1"; shift ;;
     --multi-ct)         MULTI_CT="1"; shift ;;
@@ -636,6 +641,73 @@ if [[ -n "$OIDC_ISSUER_URL" ]]; then
   fi
 fi
 
+# A standalone owner row is keyed by OIDC subject, whose namespace is its issuer. Once a silo
+# has an eligible first-user contract, changing the issuer through this deployment engine would
+# make that durable subject ambiguous. Create a new silo for an IdP migration instead.
+_guard_standalone_first_user_issuer() {
+  local prior_values
+  local prior_issuer=""
+  local prior_first_user_email=""
+  local requested_issuer="$OIDC_ISSUER_URL"
+  local extra_set_index
+  local extra_set_value
+  local extra_helm_arg
+  if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+    return
+  fi
+  prior_values="$(helm get values "$RELEASE" -n "$NAMESPACE" -o json 2>/dev/null || echo '{}')"
+  if command -v jq >/dev/null 2>&1; then
+    prior_issuer="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.oidc.issuerUrl // empty')"
+    prior_first_user_email="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.firstUser.email // empty')"
+  else
+    prior_issuer="$(printf '%s' "$prior_values" | grep -o '"issuerUrl":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
+    prior_first_user_email="$(printf '%s' "$prior_values" | grep -o '"firstUser":[^}]*"email":"[^"]*' | head -1 | cut -d'"' -f6 || true)"
+  fi
+
+  # The initial first-owner issuer is a durable subject namespace. For its later upgrades,
+  # require the normal issuer flag and retain only the engine's value-preserving mode. This
+  # prevents `--values` and `--reset-values` from silently replacing or erasing the binding.
+  if [[ -n "$prior_first_user_email" ]]; then
+    if [[ -z "$requested_issuer" ]]; then
+      err "An existing standalone first-owner contract requires --oidc-issuer-url on every upgrade so its immutable issuer can be verified."
+      exit 1
+    fi
+    if [[ -n "$VALUES_FILE" || -n "$RESET_VALUES" ]]; then
+      err "Do not use --values or --reset-values after a standalone first owner is configured; they can replace or erase its immutable issuer binding."
+      exit 1
+    fi
+  fi
+
+  # `--set` is applied after normal flags. Treat it as the requested issuer so the
+  # immutable first-owner binding cannot be bypassed by omitting --first-user-email.
+  for ((extra_set_index = 1; extra_set_index < ${#EXTRA_SET[@]}; extra_set_index += 2)); do
+    extra_set_value="${EXTRA_SET[$extra_set_index]}"
+    if [[ "$extra_set_value" == clustertenantManager.oidc.issuerUrl=* ]]; then
+      requested_issuer="${extra_set_value#clustertenantManager.oidc.issuerUrl=}"
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_set_value" == clustertenantManager.firstUser.* ]]; then
+      err "Do not override clustertenantManager.firstUser through --set after a standalone first owner is configured."
+      exit 1
+    fi
+  done
+  for extra_helm_arg in "${EXTRA_HELM_ARGS[@]}"; do
+    if [[ -n "$prior_first_user_email" && "$extra_helm_arg" == *clustertenantManager.oidc.issuerUrl* ]]; then
+      err "Do not override clustertenantManager.oidc.issuerUrl through --helm-arg after a standalone first owner is configured. Pass --oidc-issuer-url so the immutable issuer guard can validate it."
+      exit 1
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_helm_arg" == *clustertenantManager.firstUser* ]]; then
+      err "Do not override clustertenantManager.firstUser through --helm-arg after a standalone first owner is configured."
+      exit 1
+    fi
+  done
+
+  if [[ -n "$prior_first_user_email" && -n "$prior_issuer" && "$prior_issuer" != "$requested_issuer" ]]; then
+    err "Standalone first-owner issuer is immutable after deployment ('$prior_issuer' -> '$requested_issuer'). Create a new silo for an IdP migration."
+    exit 1
+  fi
+}
+_guard_standalone_first_user_issuer
+
 ensure_registry_pull_secret "$NAMESPACE" "$REGISTRY_PULL_SECRET" "$REGISTRY_PULL_CONFIG_FILE"
 
 # 3. The OpenCrane chart.
@@ -735,6 +807,9 @@ if [[ -n "$PLATFORM_OPERATOR_SEED_EMAIL" ]]; then
 fi
 if [[ -n "$PLATFORM_OPERATOR_GROUPS" ]]; then
   helm_args+=(--set-string "clustertenantManager.oidc.platformOperatorGroups=$PLATFORM_OPERATOR_GROUPS")
+fi
+if [[ -n "$FIRST_USER_EMAIL" ]]; then
+  helm_args+=(--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAIL")
 fi
 build_initial_model_provider_helm_args "$INITIAL_MODEL_PROVIDER"
 helm_args+=("${INITIAL_MODEL_PROVIDER_HELM_ARGS[@]}")

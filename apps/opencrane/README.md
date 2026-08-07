@@ -73,7 +73,8 @@ evidence produces a refusal, never partial authority.
 `Entrypoint: src/index.ts` — a short, telemetry-first `_Main()` that composes the process and hands
 its resources to the lifecycle owner.
 
-- `src/app/config.ts` reads one startup snapshot for listener and worker configuration.
+- `src/app/config.ts` reads one startup snapshot for listener and worker configuration, including
+  the all-or-nothing standalone first-owner contract when a silo deploy supplies it.
 - `src/app/initial-model-bootstrap.ts` makes the deployment-supplied provider key available through
   the existing provider-custody and LiteLLM-registration authority before the listeners start.
 - `src/app/kubernetes-clients.ts` constructs the exact Kubernetes clients the process needs.
@@ -158,6 +159,7 @@ are:
 | `PORT` / `INTERNAL_PORT` | Public and workload-facing listeners | `8080` / `8081` |
 | `DATABASE_URL` | PostgreSQL connection string | required |
 | `OIDC_*` | Organisation sign-in, callbacks, and server-side session protection | required |
+| `OPENCRANE_STANDALONE_FIRST_USER_*` | Optional one-time standalone Owner admission: a configured verified email may claim the host-selected silo under its stable OIDC subject | disabled |
 | `OPENCRANE_INITIAL_MODEL_*` | Optional first provider key; the server persists its custody reference and requires LiteLLM registration before readiness | disabled |
 | `POD_NAMESPACE` | Trusted namespace of this server and controller identity | `default` |
 | `AGENT_RUNTIME_PERSONAL_NAMESPACE` | Personal runtime Job boundary | required |

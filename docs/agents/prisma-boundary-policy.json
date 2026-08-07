@@ -123,6 +123,13 @@
         "constructs": []
       },
       {
+        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-repository.ts",
+        "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
+        "contract": "StandaloneFirstUserOwnerClaimRepository",
+        "contractImportPath": "./standalone-first-user-admission.types.js",
+        "constructs": []
+      },
+      {
         "path": "libs/backend/agents/skills/execution/main/src/prisma-skill-workload-assignment-repository.ts",
         "adapter": "PrismaSkillWorkloadAssignmentRepository",
         "contract": "SkillWorkloadAssignmentRepository",
@@ -271,6 +278,18 @@
       }
     ],
     "unitsOfWork": [
+      {
+        "path": "libs/backend/server/iam/identity/main/src/prisma-standalone-first-user-admission-unit-of-work.ts",
+        "adapter": "PrismaStandaloneFirstUserAdmissionUnitOfWork",
+        "contract": "StandaloneFirstUserAdmissionUnitOfWork",
+        "contractImportPath": "./standalone-first-user-admission.types.js",
+        "constructs": [
+          {
+            "adapter": "PrismaStandaloneFirstUserAdmissionRepository",
+            "importPath": "./prisma-standalone-first-user-admission-repository.js"
+          }
+        ]
+      },
       {
         "path": "libs/backend/agents/personal/configuration/main/src/materialization/prisma-personal-configuration-materialization-unit-of-work.ts",
         "adapter": "PrismaPersonalConfigurationMaterializationUnitOfWork",
