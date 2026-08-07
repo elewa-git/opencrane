@@ -44,9 +44,9 @@ files, and permitted access to organisation knowledge.
 
 Each organisation is one isolated boundary. Inside it, a control plane holds the durable record of
 everything — who the agents are, what they may do, and everything they have done. When an agent
-needs to act, OpenCrane starts a short-lived, isolated run for that single attempt, gives it one
-frozen snapshot of its input, and removes it when the attempt finishes. The run reports its progress
-back as an ordered stream of events but holds no authority of its own, so an assistant survives
+needs to act, OpenCrane spins up a short-lived, isolated agent runtime for that single task, hands it
+one frozen snapshot of its input, and removes it when the task finishes. The runtime streams its
+progress back to the control plane but holds no authority of its own, so an assistant survives
 restarts, scaling, and a closed browser tab without ever becoming the source of truth.
 
 ```text
@@ -67,16 +67,16 @@ restarts, scaling, and a closed browser tab without ever becoming the source of 
 ║                                  ▼                                                                ║
 ║           ┌─────────────────────────────────────────────┐    ┌─────────────────────────────────┐  ║
 ║           │           OpenCrane control plane           │    │ Shared organisation services    │  ║
-║           │       identity · conversations · runs       │    │ maintained centrally,           │  ║
+║           │       identity · conversations · tasks      │    │ maintained centrally,           │  ║
 ║           │     approvals · budgets · access · audit    │    │ outside the agents              │  ║
 ║           └─────────────────────────────────────────────┘    │                                 │  ║
-║              starts a          │   ▲  ordered                │  • Models                       │  ║
-║             governed run       │   │   events                │  • Tools                        │  ║
+║               runs a           │   ▲   progress              │  • Models                       │  ║
+║                task            │   │                         │  • Tools                        │  ║
 ║                                ▼   │                         │  • Memory & knowledge           │  ║
 ║           ┌─────────────────────────────────────────────┐    │  • Files & artifacts            │  ║
-║           │                 Isolated run                │uses│                                 │  ║
-║           │         short-lived · one attempt ·         │───▶│                                 │  ║
-║           │            no standing authority            │    │                                 │  ║
+║           │                Agent runtime                │uses│                                 │  ║
+║           │     isolated & short-lived · one task ·     │───▶│                                 │  ║
+║           │           keeps no standing access          │    │                                 │  ║
 ║           └─────────────────────────────────────────────┘    └─────────────────────────────────┘  ║
 ║                                                                                                   ║
 ║                                                                                                   ║
@@ -89,7 +89,7 @@ The control plane governs the parts that must be consistent across every agent:
   trusting the browser or the runtime to remember.
 - **Governed actions** pause for approval when a step needs it, and record the exact action taken and
   its outcome.
-- **Versioned skills and files** preserve which capability or input a run actually used, even after a
+- **Versioned skills and files** preserve which capability or input a task actually used, even after a
   newer version is published.
 - **Organisation memory** makes permitted company knowledge available to an agent without granting it
   broad access to any employee's private data.
