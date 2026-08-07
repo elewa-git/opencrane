@@ -222,6 +222,15 @@ monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callb
 execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
 the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
 
+**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 26 and PostgreSQL
+revision 39. The deployment retains its existing confidential Zitadel OIDC Secret on normal upgrades,
+and a release-local OpenAI credential has been seeded through LiteLLM. The running server registered
+the OpenAI chat, lightweight, and embedding catalogue, and public `/healthz` returned `{"status":"ok","db":true}`
+over the browser-trusted `https://testv2.dev.opencrane.ai` host. This clears the single-silo live
+deployment, TLS, OIDC configuration, database-privileges, and initial-provider gates. It does **not**
+clear browser callback/onboarding or standalone subject-bound membership and personal-workspace
+creation; those product authorities remain required before Jente can be admitted as a runnable user.
+
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
 

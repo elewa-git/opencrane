@@ -113,3 +113,16 @@ Full run reports belong in the corresponding pull request or issue.
 - findings: CI: the full manual workflow, including `ghcr.io/elewa-git/opencrane-server:sha-16572286`, completed successfully. infra: the app-owned deploy script reconciled PostgreSQL but its required three-container database-privileges Job remains Pending; all three Autopilot nodes report 99% requested memory because GKE-managed `gke-system-balloon-pod` workloads reserve the remaining capacity. config: the tenant Helm release was not upgraded, so the old Fleet-key server mount remains live and has not yet exercised standalone mode.
 - friction: Autopilot provisioned a new node for the pending Job, then a system-node-critical balloon Pod consumed its free allocation; low measured memory usage therefore does not imply schedulable capacity.
 - lesson: do not bypass database privilege proof or mutate GKE-managed balloon Pods. Qualify and implement a low-cost Autopilot placement/resource design that schedules the proof Job before retrying the release; the standalone membership mode is ready to validate once that gate passes.
+
+## 2026-08-07 · dev · testv2 single-silo OpenAI bootstrap · ab4c3614 · LIVE
+
+- findings: config: the first model registration exposed that LiteLLM model persistence was disabled;
+  the deploy engine now enables the database-backed model store and explicitly references its stable
+  salt Secret. script: normal OIDC upgrades now retain a complete release-local Secret rather than
+  requiring the confidential client secret to be re-supplied.
+- friction: a cold GKE Autopilot ComputeClass node takes several minutes to schedule and pull the
+  three-container database-privileges proof; keep the proof intact and run the app-owned deployer in
+  a persistent terminal session.
+- lesson: accept a single-silo model-provider gate only after the server logs successful LiteLLM
+  credential and model registrations, every workload is Ready, and public `/healthz` reports a
+  database-backed healthy response.
