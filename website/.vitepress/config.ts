@@ -32,7 +32,8 @@ export default defineConfig({
       {
         text: 'Guides',
         items: [
-          { text: 'Create an agent', link: '/guide/first-agent' },
+          { text: 'Set up your personal assistant', link: '/guide/persona' },
+          { text: 'Create a managed agent', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
           { text: 'Agent skills', link: '/guide/skills' },
           { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },
@@ -73,13 +74,14 @@ export default defineConfig({
             ],
           },
           { text: '2. Set up your domain', link: '/guide/dns' },
-          { text: '3. Create your first agent', link: '/guide/first-agent' },
+          { text: '3. Set up your personal assistant', link: '/guide/persona' },
         ],
       },
       {
         text: 'Guides',
         items: [
-          { text: 'Create an agent', link: '/guide/first-agent' },
+          { text: 'Set up your personal assistant', link: '/guide/persona' },
+          { text: 'Create a managed agent', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
           { text: 'Agent skills', link: '/guide/skills' },
           { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },

@@ -1,7 +1,9 @@
 # Manage cost
 
-OpenCrane applies **budget policy at run admission and model-key issuance**. A runtime
-attempt receives only a short-lived model key bounded to its allowed model and spend.
+Set a spending ceiling once, and OpenCrane enforces it at the moment a run starts — not after the
+fact. Every run, whether it's your personal assistant answering a question or a managed agent
+processing a nightly batch, is checked against budget before it's allowed to call a model, and it
+receives a spending credential that simply cannot exceed what was approved.
 
 ## Set limits
 

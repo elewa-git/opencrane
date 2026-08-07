@@ -12,6 +12,13 @@ Management UI calls use the same-origin session cookie.
 Current organisation membership is checked before a run is admitted. Accepted membership,
 delegated subject and scope evidence are frozen into the run input snapshot.
 
+A **personal** run always resolves to that one authenticated person — it can never be admitted as
+someone else, and it can never pick up a group's or another user's grants. A **managed** agent
+never resolves to a human at all: it runs as its own `agent-service:<id>` principal, verified
+against a separately signed fleet-membership assertion, with no path back to the administrator who
+published or triggered it. See
+[the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+
 ## Workload identity
 
 ```text
@@ -54,5 +61,5 @@ Session revocation stops new human requests. Run cancellation is a durable state
 OpenCrane fences the exact attempt, sends a positive cancel command when possible and authorises
 cleanup of only the assigned Job. Late candidates are rejected.
 
-Source: [`libs/backend/server/iam/authorization/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
-and [`apps/opencrane/prisma/schema/runs.prisma`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/prisma/schema/runs.prisma).
+Source: [`libs/backend/server/iam/authorization/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/iam/authorization/main/README.md)
+and [`apps/opencrane/prisma/schema/runs.prisma`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/runs.prisma).

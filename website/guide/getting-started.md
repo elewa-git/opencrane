@@ -24,5 +24,7 @@ For TypeScript integrations, use the generated client described in the
 ## Then
 
 1. **[Set up your domain](/guide/dns)** — point DNS at OpenCrane and turn on HTTPS.
-2. **[Create your first agent](/guide/first-agent)**.
-3. Start a governed run through the agent-services API and inspect its durable status.
+2. **[Set up your personal assistant](/guide/persona)** — the interview every person completes
+   before their assistant can run.
+3. **[Create a managed agent](/guide/first-agent)** for shared, scheduled or triggered work, once
+   you're ready to go beyond your own assistant.

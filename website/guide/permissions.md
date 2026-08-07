@@ -1,7 +1,10 @@
 # Control who can access what
 
-OpenCrane resolves **current organisation membership and explicit grants** before it admits
-work. Agent services start with no capabilities.
+Every agent — personal or managed — starts with **nothing**: no skills, no tools, no knowledge,
+no model. Before OpenCrane admits any run, it checks that the person and, separately, the agent
+itself both currently have the access being used. Granting access to a person doesn't
+automatically hand it to their assistant, and configuring an agent with a capability doesn't
+automatically extend it to everyone who can talk to that agent — both sides have to line up.
 
 ## Grant a capability
 

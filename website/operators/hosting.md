@@ -75,5 +75,5 @@ validates that all three namespaces are distinct and refuses to start on a colla
 | Run authority | PostgreSQL-backed OpenCrane server |
 | Cluster-wide controllers | External prerequisites, not installed as silo business workloads |
 
-Source: [`apps/_infra/deploy-k8s`](https://github.com/italanta/opencrane/blob/main/apps/_infra/deploy-k8s/README.md)
-and [`apps/agent-controller`](https://github.com/italanta/opencrane/blob/main/apps/agent-controller/README.md).
+Source: [`apps/_infra/deploy-k8s`](https://github.com/elewa-git/opencrane/blob/main/apps/_infra/deploy-k8s/README.md)
+and [`apps/agent-controller`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/README.md).
