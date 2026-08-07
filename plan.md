@@ -222,17 +222,19 @@ monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callb
 execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
 the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
 
-**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 30 and PostgreSQL
-revision 48. The CI-published server image `sha-685fb4e` and artifact-service image `sha-7ebcfa8`
+**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 32 and PostgreSQL
+revision 49. The CI-published server image `sha-fc53af6` and artifact-service image `sha-7ebcfa8`
 are Ready; every deployment is Available, and public `/healthz` returns
 `{"status":"ok","db":true}` and `/api/v1/auth/login` redirects to the configured Zitadel confidential
 client. The immutable standalone first-owner contract is live: only the verified
 `jente@elewa.ke` subject from `https://weownai-oidc-8dwlat.eu1.zitadel.cloud/` may create the local
 Owner membership for ClusterTenant `testv2`; it creates the membership and its audit record in one
-transaction. The deployment also retains the existing OIDC Secret and seeds OpenAI through LiteLLM.
+transaction. A real callback exposed and the regression test now prevents a Prisma selector from
+including the in-memory `mayCreateOwner` authorization flag; the corrected image is live. The
+deployment also retains the existing OIDC Secret and seeds OpenAI through LiteLLM.
 This clears the single-silo deployment, TLS, OIDC configuration, database-privileges, initial-provider,
 local first-owner **configuration**, and full workload-health gates. It does **not** clear the browser
-callback/onboarding gate until Jente logs out and back in to run this new admission once, nor the
+callback/onboarding gate until Jente logs in again to run the corrected admission once, nor the
 personal-agent/workspace creation or Phase E runtime qualification gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,

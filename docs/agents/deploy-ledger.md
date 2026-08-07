@@ -164,3 +164,21 @@ Full run reports belong in the corresponding pull request or issue.
   That callback creates the local `testv2` Owner membership and removes the existing session's
   `/no-tenant` result. Personal-agent/workspace creation and Phase E runtime qualification remain
   separate live gates.
+
+## 2026-08-07 · dev · testv2 first-owner callback selector repair · fc53af6d · PARTIAL
+
+- findings: the first real Zitadel callback reached the server and exposed a Prisma validation error:
+  the compound `(clusterTenant, subject)` selector incorrectly included the in-memory
+  `mayCreateOwner` authorization flag. CI run `31175039722` passed build, test, lint, and published
+  server image `sha-fc53af6`; its exact selector regression test passes. The app-owned deployer
+  applied OpenCrane revision 32 and PostgreSQL revision 49. Server, LiteLLM, and MCP gateway are
+  `1/1 Ready`; public `/healthz` returns database-backed 200 and the login endpoint redirects to
+  the configured Zitadel client.
+- friction: the database privileges Job was pending only while Autopilot created its isolated
+  ComputeClass node and pulled its three PostgreSQL containers. It then completed and did not cause
+  application downtime.
+- lesson: first-owner admission values contain both durable lookup fields and in-memory authority;
+  repositories must select only durable model fields. A configured callback redirect is not callback
+  qualification: the first real OIDC return must exercise the admission transaction.
+- open: Jente must run the login once more to create and confirm the local `testv2` Owner row.
+  Personal-agent/workspace creation and Phase E runtime qualification remain separate live gates.
