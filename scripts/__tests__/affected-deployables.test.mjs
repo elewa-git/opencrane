@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import test from "node:test";
 
 import { selectAffectedDeployables, selectApiContractChanged, selectDevelopSmokeRequired, selectForcedContainerProjects, selectGuardInputsChanged } from "../affected-deployables.core.mjs";
+import { hasSuccessfulDevelopValidation, selectGuardComparisonBase, selectPromotionSource } from "../promotion-guard-base.core.mjs";
 
 /** Reads the stable selector fixture. */
 function _Fixture()
@@ -74,4 +75,94 @@ test("keeps the blocking smoke on develop and ahead of image publication", funct
 	assert.match(workflow, /needs\.develop_smoke\.result == 'success'/u);
 	assert.match(workflow, /K3D_LINUX_AMD64_SHA256: [0-9a-f]{64}/u);
 	assert.match(workflow, /sha256sum --check/u);
+});
+
+test("trusts only an exact develop-to-main promotion source", function _SelectsPromotionSource()
+{
+	const pullRequest = selectPromotionSource({
+		eventName: "pull_request",
+		baseRef: "main",
+		headRef: "develop",
+		pullRequestHeadSha: "develop-head",
+		pushParentShas: [],
+	});
+	assert.equal(pullRequest, "develop-head");
+	assert.equal(selectPromotionSource({
+		eventName: "pull_request",
+		baseRef: "main",
+		headRef: "feat/untrusted",
+		pullRequestHeadSha: "feature-head",
+		pushParentShas: [],
+	}), null);
+
+	const push = selectPromotionSource({
+		eventName: "push",
+		ref: "refs/heads/main",
+		pushParentShas: ["old-main", "develop-head"],
+		pushSourceInDevelop: true,
+		pushHeadTree: "release-tree",
+		pushSourceTree: "release-tree",
+	});
+	assert.equal(push, "develop-head");
+	assert.equal(selectPromotionSource({
+		eventName: "push",
+		ref: "refs/heads/main",
+		pushParentShas: ["old-main", "feature-head"],
+		pushSourceInDevelop: false,
+		pushHeadTree: "release-tree",
+		pushSourceTree: "release-tree",
+	}), null);
+	assert.equal(selectPromotionSource({
+		eventName: "push",
+		ref: "refs/heads/main",
+		pushParentShas: ["old-main", "develop-head"],
+		pushSourceInDevelop: true,
+		pushHeadTree: "merge-adjusted-tree",
+		pushSourceTree: "release-tree",
+	}), null);
+});
+
+test("requires a successful exact-SHA develop push before narrowing policy guards", function _RequiresValidatedPromotion()
+{
+	const sourceSha = "develop-head";
+	const successfulRun = {
+		path: ".github/workflows/docker.yml",
+		head_branch: "develop",
+		head_sha: sourceSha,
+		event: "push",
+		status: "completed",
+		conclusion: "success",
+	};
+	assert.equal(hasSuccessfulDevelopValidation([successfulRun], sourceSha), true);
+	assert.equal(selectGuardComparisonBase({
+		nxBase: "old-main",
+		promotionSourceSha: sourceSha,
+		validationRuns: [successfulRun],
+	}), sourceSha);
+	assert.equal(selectGuardComparisonBase({
+		nxBase: "ordinary-base",
+		promotionSourceSha: null,
+		validationRuns: [],
+	}), "ordinary-base");
+	assert.throws(function _PendingSource() {
+		selectGuardComparisonBase({
+			nxBase: "old-main",
+			promotionSourceSha: sourceSha,
+			validationRuns: [{ ...successfulRun, conclusion: null, status: "pending" }],
+		});
+	}, /PROMOTION_SOURCE_UNVALIDATED/u);
+	assert.equal(hasSuccessfulDevelopValidation([{ ...successfulRun, event: "pull_request" }], sourceSha), false);
+	assert.equal(hasSuccessfulDevelopValidation([{ ...successfulRun, head_sha: "other-head" }], sourceSha), false);
+});
+
+test("uses the validated promotion base only for diff-scoped policy guards", function _ProtectsPromotionWiring()
+{
+	const workflow = _Workflow();
+	assert.match(workflow, /guard_base: \$\{\{ steps\.guard-base\.outputs\.guard_base \}\}/u);
+	assert.match(workflow, /run: node scripts\/promotion-guard-base\.mjs/u);
+	assert.match(workflow, /GUARD_BASE: \$\{\{ needs\.prepare\.outputs\.guard_base \}\}/u);
+	assert.match(workflow, /agent-style-check\.sh --diff "\$GUARD_BASE"/u);
+	assert.match(workflow, /check:module-growth -- --diff "\$GUARD_BASE"/u);
+	assert.match(workflow, /check:prisma-boundaries -- --diff "\$GUARD_BASE"/u);
+	assert.match(workflow, /npx nx affected -t build test lint/u);
 });
