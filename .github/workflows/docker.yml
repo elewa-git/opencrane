@@ -19,6 +19,7 @@ on:
         options:
           - none
           - bootstrap
+          - artifact
           - server
 
 # One live run per ref: a new push supersedes the in-flight PR validation of the stale commit.
