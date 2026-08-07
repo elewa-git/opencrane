@@ -271,7 +271,7 @@ describe("providerByokRouter", function _suite()
     expect(JSON.stringify(res.body)).not.toContain("apiKey");
   });
 
-  it("removes a key: deletes the Secret and the record, idempotent 204", async function _delete()
+  it("removes a key: clears the fixed Secret and record, idempotent 204", async function _delete()
   {
     const store = new Map<string, Row>([
       ["cred-1", { id: "cred-1", scope: "Global", clusterTenant: null, provider: "deepseek", secretRef: "byok-provider-key-deepseek", litellmCredentialName: null, updatedAt: new Date() }],
@@ -281,7 +281,8 @@ describe("providerByokRouter", function _suite()
 
     const res = await request(app).delete("/api/v1/providers/byok/deepseek");
     expect(res.status).toBe(204);
-    expect(secrets.has("byok-provider-key-deepseek")).toBe(false);
+    expect(secrets.has("byok-provider-key-deepseek")).toBe(true);
+    expect(Buffer.from(secrets.get("byok-provider-key-deepseek")!.data!.apiKey, "base64").toString("utf8")).toBe("");
     expect(Array.from(store.values())).toHaveLength(0);
 
     // Idempotent: deleting again still returns 204.
