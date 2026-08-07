@@ -98,6 +98,50 @@ The control plane governs the parts that must be consistent across every agent:
 See the illustrated [architecture overview](https://opencrane.ai/advanced/architecture) for the
 full reader-facing system view.
 
+## What an organisation admin configures
+
+An agent's reach is set once, centrally, by an organisation admin — never by the agent or the
+person using it. Each setting becomes part of the effective contract OpenCrane freezes into a task
+before its agent runtime starts, so changing a policy shapes future tasks and never rewrites one
+already running.
+
+```text
+                                       ┌───────────────────┐
+                                       │ Organisation admin│
+                                       │                   │
+                                       └───────────────────┘
+                                                 ▼
+╔═══ OpenCrane control plane — what an organisation admin configures ═════════════════════════════╗
+║                                                                                                 ║
+║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
+║  │ People & access                           │   │ Agents & skills                           │  ║
+║  │ employees · departments · teams ·         │   │ managed agent definitions & revisions     │  ║
+║  │ projects · who may use what (grants)      │   │ schedules · triggers · published skills   │  ║
+║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
+║                                                                                                 ║
+║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
+║  │ Tools & integrations                      │   │ Models & providers                        │  ║
+║  │ MCP tool servers · tool grants            │   │ provider keys (BYOK) · enabled models     │  ║
+║  │ external integrations & approvals         │   │ model routing defaults                    │  ║
+║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
+║                                                                                                 ║
+║  ┌───────────────────────────────────────────┐   ┌───────────────────────────────────────────┐  ║
+║  │ Knowledge                                 │   │ Budgets & audit                           │  ║
+║  │ organisation retrieval sources            │   │ spend caps · usage quotas                 │  ║
+║  │ what agents may retrieve                  │   │ audit log (view decisions & activity)     │  ║
+║  └───────────────────────────────────────────┘   └───────────────────────────────────────────┘  ║
+║                                                                                                 ║
+║                                                                                                 ║
+╚═════════════════════════════════════════════════════════════════════════════════════════════════╝
+                    compiled into the frozen contract for every task
+                                                 ▼
+              ┌─────────────────────────────────────────────────────────────────────┐
+              │ Effective contract for one task                                     │
+              │ the frozen snapshot each Agent runtime receives — no setting        │
+              │ can change once the task has started                                │
+              └─────────────────────────────────────────────────────────────────────┘
+```
+
 ## Documentation
 
 The complete documentation is at [opencrane.ai](https://opencrane.ai), including:
