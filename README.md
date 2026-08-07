@@ -164,4 +164,4 @@ Repository contributors should start with [`AGENTS.md`](AGENTS.md). Capability h
 
 ## Licence
 
-OpenCrane is available under the [MIT licence](LICENSE).
+OpenCrane is available under the [GNU Affero General Public License v3.0 or later](LICENSE).
