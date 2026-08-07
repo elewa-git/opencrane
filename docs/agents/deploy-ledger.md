@@ -126,3 +126,21 @@ Full run reports belong in the corresponding pull request or issue.
 - lesson: accept a single-silo model-provider gate only after the server logs successful LiteLLM
   credential and model registrations, every workload is Ready, and public `/healthz` reports a
   database-backed healthy response.
+
+## 2026-08-07 · dev · testv2 standalone first-owner deployment · 52726181 · PARTIAL
+
+- findings: chart/script: OpenCrane revision 28 and PostgreSQL revision 45 deployed through the
+  app-owned deployer. The ready server runs CI image `sha-685fb4e`; public `/healthz` returns 200
+  with `{"status":"ok","db":true}`, and the login route returns a Zitadel authorization redirect.
+  The release binds `testv2`, `jente@elewa.ke`, the Zitadel issuer/client, and an OpenAI LiteLLM
+  provider secret. The first login may atomically create only that verified subject's Owner membership.
+- friction: three deployer defects surfaced before the release could roll: `--set-string` forwarding,
+  strict-mode expansion of an empty raw-Helm-argument array, and preserving the profile's immutable
+  ClusterTenant binding on later upgrades. CI's `type=sha` tag is seven characters; deploying an
+  invented eight-character tag causes an explicit GHCR NotFound pull failure.
+- lesson: deploy profiles must carry the immutable first-owner binding on every rerun, and the core
+  guard must allow only its identical `--set-string` ClusterTenant while rejecting issuer, email, and
+  all other first-user mutation. Read the exact published image tag from CI before a live pin.
+- open: Jente must log out and back in to exercise the first callback and create the local Owner row.
+  The pre-existing `artifact-service` ImagePullBackOff also keeps the namespace short of full
+  workload health; it is unrelated to the first-owner path.

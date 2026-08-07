@@ -222,14 +222,18 @@ monthly cost, CMEK durable-storage gate, browser completion of the Zitadel callb
 execution/isolation, local standalone membership issuer for runnable personal/managed agents, and
 the wider Phase E live-LiteLLM/Obot/recovery qualification remain open live gates.
 
-**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 26 and PostgreSQL
-revision 39. The deployment retains its existing confidential Zitadel OIDC Secret on normal upgrades,
-and a release-local OpenAI credential has been seeded through LiteLLM. The running server registered
-the OpenAI chat, lightweight, and embedding catalogue, and public `/healthz` returned `{"status":"ok","db":true}`
-over the browser-trusted `https://testv2.dev.opencrane.ai` host. This clears the single-silo live
-deployment, TLS, OIDC configuration, database-privileges, and initial-provider gates. It does **not**
-clear browser callback/onboarding or standalone subject-bound membership and personal-workspace
-creation; those product authorities remain required before Jente can be admitted as a runnable user.
+**Live single-silo update (2026-08-07):** `testv2` now runs OpenCrane Helm revision 28 and PostgreSQL
+revision 45. The CI-published server image `sha-685fb4e` is Ready; public `/healthz` returns
+`{"status":"ok","db":true}` and `/api/v1/auth/login` redirects to the configured Zitadel confidential
+client. The immutable standalone first-owner contract is live: only the verified
+`jente@elewa.ke` subject from `https://weownai-oidc-8dwlat.eu1.zitadel.cloud/` may create the local
+Owner membership for ClusterTenant `testv2`; it creates the membership and its audit record in one
+transaction. The deployment also retains the existing OIDC Secret and seeds OpenAI through LiteLLM.
+This clears the single-silo deployment, TLS, OIDC configuration, database-privileges, initial-provider,
+and local first-owner **configuration** gates. It does **not** clear the browser callback/onboarding
+gate until Jente logs out and back in to run this new admission once, nor the personal-agent/workspace
+creation or Phase E runtime qualification gates. `artifact-service` remains separately ImagePullBackOff,
+so the namespace is not yet fully workload-healthy.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.
