@@ -40,10 +40,14 @@ grep -Fq -- '--set-string "clustertenantManager.firstUser.email=$FIRST_USER_EMAI
 grep -Fq -- '_guard_standalone_first_user_issuer' "$DEPLOY_CORE"
 grep -Fq -- 'Standalone first-owner issuer is immutable after deployment' "$DEPLOY_CORE"
 grep -Fq -- 'prior_first_user_email' "$DEPLOY_CORE"
+grep -Fq -- 'prior_first_user_cluster_tenant' "$DEPLOY_CORE"
+grep -Fq -- 'Standalone first-owner email is immutable after deployment' "$DEPLOY_CORE"
 grep -Fq -- 'omitting --first-user-email' "$DEPLOY_CORE"
 grep -Fq -- 'requires --oidc-issuer-url on every upgrade' "$DEPLOY_CORE"
 grep -Fq -- 'Do not use --values or --reset-values' "$DEPLOY_CORE"
 grep -Fq -- 'Do not override clustertenantManager.firstUser through --helm-arg' "$DEPLOY_CORE"
+grep -Fq -- 'clustertenantManager.firstUser.clusterTenant=$prior_first_user_cluster_tenant' "$DEPLOY_CORE"
+grep -Fq -- '"$extra_set_flag" == "--set-string"' "$DEPLOY_CORE"
 grep -Fq -- '"${EXTRA_HELM_ARGS[@]-}"' "$DEPLOY_CORE"
 
 # Strict mode must not abort the immutable issuer guard when the normal

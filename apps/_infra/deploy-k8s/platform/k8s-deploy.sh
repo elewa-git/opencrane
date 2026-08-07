@@ -649,10 +649,13 @@ _guard_standalone_first_user_issuer() {
   local prior_values
   local prior_issuer=""
   local prior_first_user_email=""
+  local prior_first_user_cluster_tenant=""
   local requested_issuer="$OIDC_ISSUER_URL"
   local extra_set_index
+  local extra_set_flag
   local extra_set_value
   local extra_helm_arg
+  local prior_first_user_values
   if ! helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
     return
   fi
@@ -660,9 +663,12 @@ _guard_standalone_first_user_issuer() {
   if command -v jq >/dev/null 2>&1; then
     prior_issuer="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.oidc.issuerUrl // empty')"
     prior_first_user_email="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.firstUser.email // empty')"
+    prior_first_user_cluster_tenant="$(printf '%s' "$prior_values" | jq -r '.clustertenantManager.firstUser.clusterTenant // empty')"
   else
     prior_issuer="$(printf '%s' "$prior_values" | grep -o '"issuerUrl":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
-    prior_first_user_email="$(printf '%s' "$prior_values" | grep -o '"firstUser":[^}]*"email":"[^"]*' | head -1 | cut -d'"' -f6 || true)"
+    prior_first_user_values="$(printf '%s' "$prior_values" | grep -o '"firstUser":{[^}]*}' | head -1 || true)"
+    prior_first_user_email="$(printf '%s' "$prior_first_user_values" | grep -o '"email":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
+    prior_first_user_cluster_tenant="$(printf '%s' "$prior_first_user_values" | grep -o '"clusterTenant":"[^"]*' | head -1 | cut -d'"' -f4 || true)"
   fi
 
   # The initial first-owner issuer is a durable subject namespace. For its later upgrades,
@@ -671,6 +677,10 @@ _guard_standalone_first_user_issuer() {
   if [[ -n "$prior_first_user_email" ]]; then
     if [[ -z "$requested_issuer" ]]; then
       err "An existing standalone first-owner contract requires --oidc-issuer-url on every upgrade so its immutable issuer can be verified."
+      exit 1
+    fi
+    if [[ -n "$FIRST_USER_EMAIL" && "$FIRST_USER_EMAIL" != "$prior_first_user_email" ]]; then
+      err "Standalone first-owner email is immutable after deployment ('$prior_first_user_email' -> '$FIRST_USER_EMAIL'). Create a new silo to change the eligible first user."
       exit 1
     fi
     if [[ -n "$VALUES_FILE" || -n "$RESET_VALUES" ]]; then
@@ -682,9 +692,15 @@ _guard_standalone_first_user_issuer() {
   # `--set` is applied after normal flags. Treat it as the requested issuer so the
   # immutable first-owner binding cannot be bypassed by omitting --first-user-email.
   for ((extra_set_index = 1; extra_set_index < ${#EXTRA_SET[@]}; extra_set_index += 2)); do
+    extra_set_flag="${EXTRA_SET[$((extra_set_index - 1))]}"
     extra_set_value="${EXTRA_SET[$extra_set_index]}"
     if [[ "$extra_set_value" == clustertenantManager.oidc.issuerUrl=* ]]; then
       requested_issuer="${extra_set_value#clustertenantManager.oidc.issuerUrl=}"
+    fi
+    if [[ -n "$prior_first_user_email" && "$extra_set_flag" == "--set-string" && "$extra_set_value" == "clustertenantManager.firstUser.clusterTenant=$prior_first_user_cluster_tenant" ]]; then
+      # The standalone profile forwards its fixed ClusterTenant through --set-string
+      # on every invocation. It is safe only when it is exactly the persisted binding.
+      continue
     fi
     if [[ -n "$prior_first_user_email" && "$extra_set_value" == clustertenantManager.firstUser.* ]]; then
       err "Do not override clustertenantManager.firstUser through --set after a standalone first owner is configured."
