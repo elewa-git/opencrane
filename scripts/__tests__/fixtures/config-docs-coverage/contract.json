@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "charts": [
+    {
+      "path": "scripts/__tests__/fixtures/config-docs-coverage/chart",
+      "operatorInputs": [
+        { "path": "operator", "documentation": "scripts/__tests__/fixtures/config-docs-coverage/docs/operator.md" }
+      ],
+      "forwardedKeys": [
+        { "path": "forwarded", "owner": "scripts/__tests__/fixtures/config-docs-coverage/chart" }
+      ],
+      "internalKeys": [
+        { "path": "internal", "reason": "fixture implementation detail" }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,78 @@
+import { Router, type Request, type Response } from "express";
+
+import { __HashSkillWorkloadBootstrapReference, __IsSkillWorkloadBootstrapReference } from "@opencrane/contracts";
+
+import type { SkillWorkloadBootstrapRouterDependencies } from "./skill-workload-bootstrap.types.js";
+
+/**
+ * Build the one-use worker bootstrap acknowledgement boundary.
+ *
+ * **This router is NOT behind `___AuthMiddleware`.** A worker presents its rotating projected
+ * ServiceAccount token; TokenReview and the durable Pod fence provide authorisation, while Helm
+ * limits the worker namespaces to this internal listener and DNS.
+ *
+ * @see apps/opencrane/helm/templates/_networkpolicy.tpl — server ingress and worker egress floor.
+ * @see apps/agent-controller/helm/templates/_resources.tpl — projected worker-token audiences.
+ */
+export function __CreateSkillWorkloadBootstrapRouter(dependencies: SkillWorkloadBootstrapRouterDependencies): Router
+{
+	const router = Router();
+	router.post("/skill-workloads:bootstrap", async function _Bootstrap(request: Request, response: Response): Promise<void>
+	{
+		const reference = _Reference(request.body);
+		const token = _Bearer(request.header("authorization"));
+		if (reference === null || token === null)
+		{
+			response.status(401).json({ error: "worker_identity_denied" });
+			return;
+		}
+		try
+		{
+			// 1. Load only hash-addressed authority to select the exact audience before TokenReview.
+			const hash = await __HashSkillWorkloadBootstrapReference(reference);
+			const record = await dependencies.authority.loadUnconsumedByReferenceHash(hash);
+			if (record === null)
+			{
+				response.status(409).json({ error: "bootstrap_unavailable" });
+				return;
+			}
+
+			// 2. Review the short-lived projected token for the authority-selected audience and identity.
+			const identity = await dependencies.tokenReviewer.__Review(token, record.audience);
+			if (identity === null || identity.namespace !== record.namespace || identity.serviceAccountName !== record.serviceAccountName || identity.podUid !== record.podUid)
+			{
+				response.status(401).json({ error: "worker_identity_denied" });
+				return;
+			}
+
+			// 3. Consume under the same reviewed identity; return only the already-bound completion coordinate.
+			const outcome = await dependencies.authority.consumeAtomically(hash, identity);
+			if (outcome !== "consumed")
+			{
+				response.status(409).json({ error: "bootstrap_unavailable" });
+				return;
+			}
+			response.status(200).json({ acknowledged: true, workloadId: record.workloadId });
+		}
+		catch (err)
+		{
+			dependencies.logger.error({ err, operation: "skill_workload.bootstrap" }, "Skill workload bootstrap acknowledgement failed");
+			response.status(503).json({ error: "bootstrap_authority_unavailable" });
+		}
+	});
+	return router;
+}
+
+/** Parse the sole opaque reference field without accepting caller-selected identity or policy. */
+function _Reference(value: unknown): string | null
+{
+	if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+	const body = value as Record<string, unknown>;
+	return Object.keys(body).length === 1 && __IsSkillWorkloadBootstrapReference(body["bootstrapReference"]) ? body["bootstrapReference"] : null;
+}
+
+/** Parse one unambiguous standard bearer credential. */
+function _Bearer(value: string | undefined): string | null
+{
+	return value && /^Bearer ([^\s,]+)$/u.test(value) ? /^Bearer ([^\s,]+)$/u.exec(value)?.[1] ?? null : null;
+}

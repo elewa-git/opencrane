@@ -1,64 +1,91 @@
 # How OpenCrane works
 
-A five-minute, plain-English tour of the main ideas. Once these click, the rest of
-the docs are easy.
+Every time an agent does something in OpenCrane — answers you, drafts a document, calls a tool —
+that work happens as a **run**: a tracked, disposable unit of execution that OpenCrane admits,
+watches and records from start to finish. This page is a short tour of what that means in
+practice, for both kinds of agent.
 
-## The big picture
+## Personal and managed runs, side by side
 
-You run one **control plane** — the place you manage everything from (through the
-`oc` command-line tool or the API). From there you hand out assistants to people and
-decide what each one can do.
+| | Your personal assistant | A managed agent |
+|---|---|---|
+| Who it acts as | You | Its own service identity |
+| What it can see | Only what's been granted to *you* | Only what its published revision was configured with |
+| How it starts | You talking to it | A schedule, a trigger, or another authorised caller |
+| Persona | Built through your [interview](/guide/persona) | None — its published configuration *is* its complete instruction set |
+| Typical use | Drafting, research, day-to-day work for one person | Triaging tickets, nightly reports, org-wide or team-wide jobs |
 
+Both kinds go through the same admission and execution machinery below — that's what makes every
+run auditable the same way, no matter who or what started it.
+
+## What happens when work starts
+
+```text
+you, or a schedule/trigger
+       │
+       ▼
+OpenCrane checks who's asking and what they're allowed to do
+       │
+       ▼
+OpenCrane freezes exactly what this run may use — before anything executes
+       │
+       ▼
+a fresh, disposable Kubernetes Job carries out the work
+       │
+       ▼
+you see the ordered events, any actions taken, and the final outcome
 ```
-        You ──▶  Control plane  ──▶  an assistant for each person
-                 (manage it all)      Alice · Bob · Carla · …
-```
+
+1. OpenCrane authenticates the caller and resolves the organisation.
+2. It checks membership, grants, model access and budget.
+3. It **freezes** the accepted inputs — which tools, skills, knowledge and model this exact run may
+   use — before any container starts. Nothing can widen its own access mid-run.
+4. A fresh, bounded Job carries out the work and streams results back.
+5. Every tool call OpenCrane executes on the agent's behalf is recorded, and any that needs a human
+   decision pauses for [approval](/guide/audit).
+6. The run reaches a final outcome. The Job that executed it can disappear — the durable record of
+   what ran, what it used and what happened does not.
+
+::: tip Why "disposable execution, durable record" matters
+The container is a detail; it can crash, get rescheduled, or simply finish and vanish. What you
+audit, retry or investigate later is the run record — never a Pod name.
+:::
 
 ## The words you'll see
 
-### Employee assistant
-A private AI coworker for **one person**. It has its own secure storage and its own
-web address, and it acts on that person's behalf. (In the API and CLI this is called
-a *tenant* — same thing.) → [Create one](/guide/first-tenant)
+### Agent (personal or managed)
+
+The thing that does the work. A personal assistant is yours alone; a managed agent is a shared,
+narrowly scoped worker your organisation configures. See
+[the distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+
+### Run
+
+One tracked execution of an agent — a single conversation turn, a scheduled job, a triggered task.
+A run keeps its state, how many attempts it's had, exactly what it was allowed to use, and how it
+ended. Retrying creates another attempt on the same run rather than a disconnected new one.
 
 ### Skill
-A **reusable ability** you can give to assistants — like installing an app. A skill
-might be "write a sales follow-up" or "review a pull request." You build a skill
-once and share it with whoever should have it. → [Share skills](/guide/skills)
 
-### Tool (MCP)
-A **connection to another system** — Slack, Jira, your CRM — so an assistant can
-actually do things there, not just talk about them. These connections use a standard
-called **MCP** (Model Context Protocol), so "an MCP server" just means "one connected
-tool." → [Manage tools](/guide/tools)
+A reusable ability you give an agent — drafting a follow-up, reviewing a document, summarising a
+ticket — published as a versioned, reviewed artifact rather than a loose snippet.
+→ [Manage skills](/guide/skills)
 
-### Organizational knowledge
-Your company's information — from Slack, email, documents, tickets — gathered into a
-searchable index so assistants can answer with real, cited facts instead of guessing.
+### Tool
+
+An action an agent can ask OpenCrane to take in another system. The agent proposes it; OpenCrane
+authorises, executes and records it. → [Manage tools](/guide/tools)
+
+### Organisational knowledge
+
+Facts and documents an agent can recall — personal notes for your assistant, shared knowledge for
+a managed agent — always filtered through who's allowed to see what.
 → [Connect knowledge](/guide/knowledge)
 
-### Scopes: how sharing works
-Everything you share has a **reach**: just one person, a project, a department, or
-the whole organization.
+### Organisation (silo)
 
-```
-personal  ▸  project  ▸  department  ▸  org
- (just me)   (a team)    (a division)   (everyone)
-```
+Your company's isolated slice of OpenCrane. Every agent, run, grant and piece of knowledge lives
+inside your organisation's boundary and never crosses into another customer's.
+→ [Organisation boundary](/operators/organisation-boundary)
 
-You don't "create" a department like a folder — a scope is simply a label you attach
-to people, skills, and knowledge to decide how widely something is shared.
-→ [Organize your company](/guide/organize)
-
-### Access
-Nothing is shared by default. You **grant** access — per person, project, department,
-or org — to decide who can use which skills, tools, and knowledge.
-→ [Control access](/guide/permissions)
-
-## How it fits together
-
-> You create an **assistant** for someone → grant it **access** to the **skills**,
-> **tools**, and **knowledge** appropriate for their **scope** → they sign in and get
-> to work. You set **budgets** and can review everything in the **audit log**.
-
-Ready? → **[Get OpenCrane running](/guide/getting-started)**
+Ready? → [Install OpenCrane](/guide/getting-started)

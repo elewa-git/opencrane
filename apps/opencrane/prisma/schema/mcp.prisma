@@ -46,6 +46,7 @@ model McpServer {
   scope              GrantScope
   transport          McpServerTransport
   status             McpServerStatus        @default(Draft)
+  requiresApproval   Boolean                @default(false) @map("requires_approval")
   capabilities       String[]               @default([])
   publisher          String?
   glyph              String?
@@ -57,8 +58,6 @@ model McpServer {
   lastSyncedAt       DateTime?              @map("last_synced_at")
   createdAt          DateTime               @default(now()) @map("created_at")
   updatedAt          DateTime               @updatedAt @map("updated_at")
-  grants             Grant[]
-  scopedGrants       McpServerGrant[]
   credentials        McpServerCredential[]
   installs           McpServerInstall[]
   accessPolicy       McpServerAccessPolicy?
@@ -119,41 +118,13 @@ model McpServerAccessUser {
   @@map("mcp_server_access_users")
 }
 
-model McpServerGrant {
-  id          String           @id @default(cuid())
-  mcpServerId String           @map("mcp_server_id")
-  grantId     String           @unique @map("grant_id")
-  scope       GrantScope
-  subjectType GrantSubjectType @map("subject_type")
-  subjectId   String           @map("subject_id")
-  access      GrantAccess
-  priority    Int              @default(0)
-  note        String?
-  groupId     String?          @map("group_id")
-  createdAt   DateTime         @default(now()) @map("created_at")
-  updatedAt   DateTime         @updatedAt @map("updated_at")
-  mcpServer   McpServer        @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
-  grant       Grant            @relation(fields: [grantId], references: [id], onDelete: Cascade)
-  group       Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
-
-  @@index([mcpServerId])
-  @@map("mcp_server_grants")
-}
-
-enum McpCredentialBrokeringMode {
-  StaticFallback @map("static_fallback")
-  PerUserObo     @map("per_user_obo")
-}
-
 model McpServerCredential {
-  id            String                     @id @default(cuid())
-  mcpServerId   String                     @map("mcp_server_id")
-  displayName   String                     @map("display_name")
-  brokeringMode McpCredentialBrokeringMode @default(StaticFallback) @map("brokering_mode")
-  secretRef     String?                    @map("secret_ref")
-  createdAt     DateTime                   @default(now()) @map("created_at")
-  updatedAt     DateTime                   @updatedAt @map("updated_at")
-  mcpServer     McpServer                  @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
+  id          String    @id @default(cuid())
+  mcpServerId String    @map("mcp_server_id")
+  displayName String    @map("display_name")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+  mcpServer   McpServer @relation(fields: [mcpServerId], references: [id], onDelete: Cascade)
 
   @@index([mcpServerId])
   @@map("mcp_server_credentials")

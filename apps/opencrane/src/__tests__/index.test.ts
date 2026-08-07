@@ -1,35 +1,18 @@
 import type { PrismaClient } from "@prisma/client";
+import type { AuthenticationV1Api } from "@kubernetes/client-node";
 import express from "express";
 import type { Express } from "express";
-import { describe, expect, it, beforeEach, afterEach, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import request from "supertest";
 
-import { ___AuthMiddleware } from "@opencrane/infra/auth";
-import { _CheckDbHealth, _RateLimit } from "@opencrane/infra/http";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, type RuntimeCandidate } from "@opencrane/contracts";
+import { ___AuthMiddleware } from "@opencrane/backend/_server/auth";
+import { _RateLimit } from "@opencrane/backend/_server/http";
+import { __UnavailableMemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+import { _ReadProcessConfig } from "../app/config.js";
 
 /**
- * Build a minimal Express app with a mocked database health handler.
- * @param dbHealthy - Whether the mock DB query should succeed
- * @returns An Express app wired for health-check testing
- */
-function _buildHealthApp(dbHealthy: boolean): Express
-{
-  const prisma = {
-    $queryRaw: dbHealthy ? vi.fn().mockResolvedValue([{ 1: 1 }]) : vi.fn().mockRejectedValue(new Error("db unavailable")),
-  } as unknown as PrismaClient;
-
-  const app = express();
-  app.use(express.json());
-  app.get("/healthz", _CheckDbHealth(prisma));
-
-  return app;
-}
-
-/**
- * Build a minimal Express app with the auth middleware constructed after env setup —
- * the factory snapshots OPENCRANE_API_TOKEN when called, so each test gets a fresh read.
- * No Prisma client is passed so DB-token validation is skipped; these tests
- * only exercise the env-var token and dev-mode bypass paths.
+ * Build a minimal Express app that exercises OIDC/session authentication.
  * @returns An Express app wired for auth testing
  */
 function _buildAuthApp(): Express
@@ -38,7 +21,6 @@ function _buildAuthApp(): Express
   app.use(express.json());
   // Mirror production middleware order: the per-IP limiter is mounted before auth + routes.
   app.use(_RateLimit());
-  // Prisma omitted intentionally — tests target the env-var and dev-mode paths.
   app.use(___AuthMiddleware());
 
   app.get("/healthz", function _healthz(req, res)
@@ -54,94 +36,85 @@ function _buildAuthApp(): Express
   return app;
 }
 
+/** Build the internal runtime candidate route around one mocked TokenReview identity. */
+async function _BuildRuntimeCandidateApp(username: string, audiences: string[] = [AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]): Promise<Express>
+{
+  const { _RegisterInternalRoutes } = await import("../app/routes.js");
+  // The real Prisma dispatch authority runs inside a transaction and loads the live assignment for
+  // the reviewed Pod. Returning no assignment lets an authenticated runtime reach the authority and
+  // receive its real fail-closed candidate denial instead of a hardcoded stub reason.
+  const prisma = {
+    $transaction: vi.fn(async function _transaction(run: (tx: unknown) => Promise<unknown>)
+    {
+      return run({
+        $queryRaw: vi.fn().mockResolvedValue([]),
+        workloadAssignment: { findUnique: vi.fn().mockResolvedValue(null) },
+      });
+    }),
+  } as unknown as PrismaClient;
+  const authApi = {
+    createTokenReview: vi.fn().mockResolvedValue({
+      status: {
+        authenticated: true,
+        audiences,
+        user: {
+          username,
+          extra: { "authentication.kubernetes.io/pod-uid": ["11111111-1111-4111-8111-111111111111"] },
+        },
+      },
+    }),
+  } as unknown as AuthenticationV1Api;
+  const app = express();
+  app.use(express.json());
+  _RegisterInternalRoutes(app, prisma, authApi, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient());
+  return app;
+}
+
+/** Create a syntactically valid runtime event candidate for identity-bound route tests. */
+function _RuntimeCandidate(): RuntimeCandidate
+{
+  return {
+    protocolVersion: AGENT_RUNTIME_PROTOCOL_V1,
+    runtimeInstanceId: "runtime-1",
+    commandId: "command-1",
+    candidateId: "candidate-1",
+    runId: "run-1",
+    attempt: 1,
+    fence: 1,
+    kind: "event",
+    eventType: "run.started",
+    payload: {},
+  };
+}
+
 describe("Control Plane", () =>
 {
-  it("healthz endpoint returns ok", async () =>
+  beforeEach(function _RuntimeNamespaceBoundary()
   {
-    const app = _buildHealthApp(true);
-    const res = await request(app).get("/healthz");
-
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ status: "ok", db: true });
+    vi.stubEnv("POD_NAMESPACE", "opencrane-silo");
+    vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo-runtime");
+    vi.stubEnv("AGENT_RUNTIME_MANAGED_NAMESPACE", "opencrane-silo-managed-runtime");
+    vi.stubEnv("MEMORY_GATEWAY_URL", "http://opencrane-memory-gateway.opencrane-silo.svc.cluster.local:8080");
+    vi.stubEnv("MEMORY_GATEWAY_TOKEN_PATH", "/var/run/opencrane/memory-gateway/token");
   });
 
-  it("healthz endpoint returns degraded when DB is unavailable", async () =>
+  afterEach(function _RestoreEnvironment()
   {
-    const app = _buildHealthApp(false);
-    const res = await request(app).get("/healthz");
-
-    expect(res.status).toBe(503);
-    expect(res.body).toEqual({ status: "degraded", db: false });
+    vi.unstubAllEnvs();
   });
 
   describe("auth middleware", () =>
   {
-    let originalToken: string | undefined;
-
-    beforeEach(() =>
+    it("fails closed when OIDC is not configured", async () =>
     {
-      originalToken = process.env.OPENCRANE_API_TOKEN;
-    });
-
-    afterEach(() =>
-    {
-      if (originalToken)
-      {
-        process.env.OPENCRANE_API_TOKEN = originalToken;
-      }
-      else
-      {
-        delete process.env.OPENCRANE_API_TOKEN;
-      }
-    });
-
-    it("rejects requests without Authorization header when token is configured", async () =>
-    {
-      process.env.OPENCRANE_API_TOKEN = "test-secret";
       const app = _buildAuthApp();
 
       const res = await request(app).get("/api/test");
       expect(res.status).toBe(401);
-      expect(res.body).toEqual({ error: "Missing Authorization header" });
     });
 
-    it("rejects requests with wrong token", async () =>
+    it("healthz bypasses auth", async () =>
     {
-      process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = _buildAuthApp();
-
-      const res = await request(app)
-        .get("/api/test")
-        .set("Authorization", "Bearer wrong-token");
-
-      expect(res.status).toBe(403);
-      expect(res.body).toEqual({ error: "Invalid token" });
-    });
-
-    it("allows requests with correct token", async () =>
-    {
-      process.env.OPENCRANE_API_TOKEN = "test-secret";
-      const app = _buildAuthApp();
-
-      const res = await request(app)
-        .get("/api/test")
-        .set("Authorization", "Bearer test-secret");
-
-      expect(res.status).toBe(200);
-    });
-
-    it("allows all requests when no token is configured (dev mode)", async () =>
-    {
-      delete process.env.OPENCRANE_API_TOKEN;
-      const app = _buildAuthApp();
-
-      const res = await request(app).get("/api/test");
-      expect(res.status).toBe(200);
-    });
-
-    it("healthz bypasses auth even with token configured", async () =>
-    {
-      process.env.OPENCRANE_API_TOKEN = "test-secret";
       const app = _buildAuthApp();
 
       const res = await request(app).get("/healthz");
@@ -149,33 +122,53 @@ describe("Control Plane", () =>
       expect(res.body.status).toBe("ok");
     });
 
-    it("serves /api/internal tokenless on the internal listener, and never mounts a session gate there", async () =>
+    it("accepts only the bounded runtime-profile ServiceAccount naming contract", async function _RuntimeServiceAccountIdentity()
     {
-      // The internal API lives on its OWN listener (createInternalApp) with NO session/token
-      // auth — the NetworkPolicy-only routes authenticate at the network layer, kept off the
-      // public ingress-facing listener so they can't be reached from the internet. We mirror
-      // createInternalApp's wiring here (importing ../index.js would boot the real servers) and
-      // assert /api/internal is reachable tokenless AND that a would-be auth gate never runs.
+      const acceptedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:agent-runtime-personal");
+      const rejectedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo:agent-runtime-personal");
+
+      const accepted = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const rejected = await request(rejectedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+
+      // A reviewed runtime SA reaches the real dispatch authority, which fails closed with a
+      // contract reason (no live assignment for this Pod) rather than a stubbed placeholder string.
+      expect(accepted.status).toBe(409);
+      expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
+      // A subject outside the bounded runtime namespace/SA grammar never reaches the authority.
+      expect(rejected.status).toBe(401);
+    });
+
+    it("accepts the managed audience only in the dedicated managed runtime plane", async function _ManagedRuntimeServiceAccountIdentity()
+    {
+      const acceptedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-managed-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+      const crossedApp = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:managed-agent-runtime-default", [MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE]);
+
+      const accepted = await request(acceptedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+      const crossed = await request(crossedApp).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+
+      expect(accepted.status).toBe(409);
+      expect(accepted.body).toEqual({ accepted: false, reason: "unknown_workload" });
+      expect(crossed.status).toBe(401);
+    });
+
+    it("requires one explicit runtime namespace separate from the server", async function _RuntimeNamespaceSeparation()
+    {
       const { _RegisterInternalRoutes } = await import("../app/routes.js");
-
-      const prisma = {
-        tenant: { findUnique: vi.fn().mockResolvedValue(null) },
-        modelDefinition: { findMany: vi.fn().mockResolvedValue([]) },
-        modelRoutingDefault: { findFirst: vi.fn().mockResolvedValue(null) },
-      } as unknown as PrismaClient;
-
-      let gateRan = false;
       const app = express();
-      app.use(express.json());
-      _RegisterInternalRoutes(app, prisma, {} as never);
-      // A stand-in for any auth middleware: on the internal listener it must NEVER run for
-      // /api/internal (those routes handle the request first and end it).
-      app.use(function _wouldBeGate(req, res, next) { gateRan = true; next(); });
+      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "");
+      expect(function _MissingRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
 
-      const internal = await request(app).get("/api/internal/tenant-models/some-tenant");
-      expect(internal.status).toBe(200);
-      expect(internal.body).toEqual({ models: [], defaultModel: null });
-      expect(gateRan).toBe(false);
+      vi.stubEnv("AGENT_RUNTIME_PERSONAL_NAMESPACE", "opencrane-silo");
+      expect(function _SameRuntimeNamespace() { _RegisterInternalRoutes(app, {} as PrismaClient, {} as AuthenticationV1Api, _ReadProcessConfig().runtime, new __UnavailableMemoryGatewayClient()); }).toThrow(/different from POD_NAMESPACE/);
+    });
+
+    it("rejects a reviewed token when Kubernetes omits the runtime audience", async function _RuntimeAudienceMismatch()
+    {
+      const app = await _BuildRuntimeCandidateApp("system:serviceaccount:opencrane-silo-runtime:agent-runtime-personal", ["opencrane"]);
+
+      const response = await request(app).post("/api/internal/agent-runtime/candidates").set("authorization", "Bearer projected-token").send(_RuntimeCandidate());
+
+      expect(response.status).toBe(401);
     });
   });
 });

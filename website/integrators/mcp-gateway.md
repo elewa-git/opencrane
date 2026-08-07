@@ -1,108 +1,95 @@
-# Obot MCP Gateway
+# MCP gateway
 
-How OpenCrane runs and governs **MCP (Model Context Protocol) servers** for tenant
-agents. Obot is the in-cluster **runtime gateway**; the control plane is the
-**source of truth** for the catalog and per-tenant entitlements.
+OpenCrane keeps **MCP registration, authorisation, approvals and receipts** in the control plane
+while Obot keeps custody of integration credentials and serves the invocation data plane: after an
+approval, the runtime calls Obot's MCP proxy directly with a short-lived, attempt-scoped key, so
+tool payloads never transit the OpenCrane server.
 
-> See also: [skills-registry.md](/integrators/skill-registry) (the sibling delivery plane),
-> [agent-workspace.md](/integrators/agent-workspace) (how the agent learns and is governed),
-> [auth.md](/security/identity) (token audiences), and [hosting-architecture.md](/operators/hosting).
+> See also: [Governed agent runtime](/integrators/agent-runtime) (external-action flow),
+> [Control access](/guide/permissions) (grants), and
+> [Identity and runtime authentication](/security/identity) (run proof).
 
-## What Obot is
+## Responsibility split
 
-Obot is the upstream [`obot-platform/obot`](https://github.com/obot-platform/obot)
-MCP gateway, deployed as a managed in-cluster plane. Tenant agents (OpenClaw) reach
-their MCP tools *through* Obot rather than connecting to each MCP server directly;
-Obot holds the live server connections and routes calls.
+| Component | Responsibility |
+|---|---|
+| OpenCrane MCP registry | Definitions, revisions and organisation-scoped publication |
+| Custody provisioning route | Hands an integration credential to Obot; stores only the opaque reference |
+| Run input compiler | Freezes the allowed tool revisions and their Obot MCP server addressing for one run |
+| OpenCrane action executor | Re-derives arguments, reserves the invocation and gates the approval |
+| Attempt key mint | Issues one Obot API key per run attempt, scoped to the assigned MCP server ids |
+| Runtime Job | Emits an action candidate, executes the approved call against Obot, reports a digest |
 
-Crucially, Obot does **not** own the list of servers. It is **config-slaved** to the
-control plane: it polls the opencrane-api registry and serves whatever the control
-plane has published. The direction of truth is always **control plane → Obot**.
+An MCP registration does not by itself grant an agent access. The acting subject and agent
+service must both pass membership and grant resolution before the tool revision enters the
+run's compiled capability set.
 
+## Control plane and data plane
+
+Two planes with different traffic:
+
+- **Control plane (server → Obot, service credential):** custody provisioning creates and
+  configures an MCP server in Obot (the credential travels write-only and only here), and each
+  claimed run attempt mints one Obot API key scoped to the exact MCP server ids of the run's
+  integration assignments, expiring with the assignment lease. The key rides the claim into a
+  per-attempt Kubernetes Secret; it is never persisted or logged.
+- **Data plane (runtime → Obot, attempt key):** after an approval the runtime performs the MCP
+  `initialize` + `tools/call` exchange against `/mcp-connect/<serverId>/mcp` itself. The compiled
+  tool definition carries the `obotMcpServerId` as non-secret addressing; the allow-list plus the
+  key's server scoping remain the authority.
+
+## Invocation flow
+
+```text
+runtime emits external_action candidate
+       │
+       ▼
+OpenCrane verifies run proof and arguments digest
+       │
+       ▼
+reserve one tool invocation ──► durable approval request
+       │
+       ▼
+owner approves ──► resume names the approved toolInvocationId
+       │
+       ▼
+runtime calls Obot MCP proxy directly (attempt-scoped key)
+       │
+       ▼
+runtime reports tool.completed { resultDigest }
+       │
+       ▼
+reservation marked Succeeded with the digest-only receipt
 ```
-oc CLI / API ──▶ Control plane (McpServer rows + grants)
-                      │  GET /api/internal/obot-registry   ◀── Obot polls (OBOT_SERVER_PROVIDER_REGISTRIES)
-                      ▼
-                 Obot MCP Gateway ──routes──▶ MCP servers
-                      ▲
-   tenant pod (OpenClaw) ──aud=obot-gateway projected token──┘   (in-cluster only)
-```
 
-## Deployment & network posture
+OpenCrane reserves the invocation before any external I/O, and the durable receipt records only a
+SHA-256 digest of the canonical result — never the tool content. A duplicate completion for the
+same invocation is refused rather than rewriting the receipt.
 
-- **Workload:** `apps/opencrane-infra/templates/obot-mcp-gateway-deployment.yaml` +
-  `mcp-gateway-service.yaml`; configured by the `mcpGateway` block in
-  `apps/opencrane-infra/values.yaml` (image `ghcr.io/obot-platform/obot`, 1 replica, port
-  8080). Requires a per-instance, release-prefixed `<release>-obot` Secret (resolved by
-  the `opencrane.obotSecretName` Helm helper) with key `dsn` for Obot's own Postgres.
-- **Auth disabled, network-gated.** `OBOT_SERVER_ENABLE_AUTHENTICATION=false` — Obot
-  itself runs no auth. Access is enforced at the network layer: the
-  `mcp-gateway-ingress` policy in `apps/opencrane-infra/templates/networkpolicy-planes.yaml`
-  admits port 8080 **only** from tenant, opencrane-api, and operator pods. There is
-  no external ingress; the browser never reaches Obot.
-- **Kubernetes runtime backend.** `OBOT_SERVER_MCPRUNTIME_BACKEND=kubernetes` — Obot
-  spawns MCP servers as in-cluster pods.
+::: info Current transport status
+The custody, attempt-key and direct-invocation transports are composed when the deployment mounts
+the Obot service credential (`mcpGateway.serviceTokenExistingSecret`); without it the server
+composes fail-closed unavailable adapters. Qualification against a live Obot deployment remains
+gated on issue #337, so the exact Obot response shapes are validated defensively rather than
+contract-pinned.
+:::
 
-## Catalog sync (control plane → Obot)
+::: warning
+Integration credentials never leave Obot. The runtime holds only an attempt-scoped Obot key —
+scoped to the exact MCP server ids of its integration assignments and expiring with the assignment
+lease — never the Obot service credential or any provider secret. Approvals, allow-lists and
+digest-only receipts stay server-side; a model response cannot widen its own reach.
+:::
 
-- The control plane owns the `McpServer` table (Prisma model in
-  `apps/opencrane-api/prisma/schema.prisma`): `id`, `name` (unique), `description`,
-  `endpoint`, `transport`, `scope`, `status`, `capabilities`, plus optional
-  `sourceId` linking to a `ThirdPartySource` (MCP registry / git / manual upload).
-- It exposes the Obot-wire catalog at **`GET /api/internal/obot-registry`**
-  (serves only `status = Active` servers, ordered by name). The endpoint is **not**
-  behind `___AuthMiddleware`; NetworkPolicy is its access control.
-- Obot is pointed at it via `OBOT_SERVER_PROVIDER_REGISTRIES` and polls to sync.
-- **Management surface:** CRUD lives at `/api/v1/mcp-servers`
-  ([mcp-servers.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/mcp/main/src/routes/mcp-servers.ts)) and via
-  `oc mcp …`. Third-party sources are ingested through the
-  fetch → scan → validate → register → entitle pipeline.
+## Failure posture
 
-## How a tenant pod reaches Obot
+- An unregistered or ungranted tool revision is denied.
+- An arguments-digest mismatch is denied.
+- A required approval pauses the run at the durable reservation.
+- Without the Obot mount, custody provisioning and key minting fail closed and an approved
+  integration tool ends in a typed loop error.
+- An unknown or duplicate `tool.completed` report is refused; receipts are digest-only.
+- A late result from a cancelled or replaced attempt is not accepted.
 
-The operator injects a **projected ServiceAccount token with audience
-`obot-gateway`** into every tenant pod at
-`/var/run/opencrane/tokens/obot-gateway.token`, alongside `OPENCRANE_MCP_GATEWAY_URL`
-([3-deployment.ts](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/tenants/deploy/3-deployment.ts)). The pod
-(OpenClaw) calls Obot server-side with that token. This token is **workload
-identity** — it is never handed to a browser. (The browser's path to the pod is the
-identity-routing proxy, which replays the OIDC session and holds no browser token; see
-[Identity & connection auth](/security/identity).)
-
-## MCP policy: three enforcement points, one decision
-
-A grant decision in the control plane fans out to three consumers, all derived from
-the same grant-compiler output — so they cannot disagree by construction:
-
-1. **Obot catalog** — synced from the registry; determines which servers the gateway
-   will route at all.
-2. **Runtime contract policy** — `policy.mcpServers.allow/deny` in the effective
-   contract, re-pulled by the pod
-   ([tenant-contract.ts](https://github.com/italanta/opencrane/blob/main/libs/backend/contract/main/src/routes/internal/tenant-contract.ts)).
-3. **In-pod enforcement** — `entrypoint.sh` `_load_mcp_policy` / `_mcp_server_is_enabled`
-   evaluate, in precedence order: tenant-CRD `mcpPolicy.deny` (always wins) → tenant-CRD
-   `mcpPolicy.allow` → AccessPolicy deny → AccessPolicy allow.
-
-The agent's **awareness** of its tools (`TOOLS.md`, see
-[skills-registry.md](/integrators/skill-registry) and the contract's `workspace` block) is
-derived from the same allow-set — so what the agent *thinks* it can use stays aligned
-with what IAM *lets* it use. Awareness is descriptive; Obot + the runtime policy are
-the enforcement boundary.
-
-## Keeping Obot from drifting
-
-The operator's runtime-plane drift repairer
-([drift-repairer.ts](https://github.com/italanta/opencrane/blob/main/apps/fleet-operator/src/runtime-planes/drift-repairer.ts)) runs on a
-~60s interval and re-patches Obot's critical env (`OBOT_SERVER_PROVIDER_REGISTRIES`,
-`OBOT_SERVER_ENABLE_AUTHENTICATION`, `OBOT_SERVER_MCPRUNTIME_BACKEND`) in place if it
-drifts from opencrane-api intent — without a pod restart, preserving `valueFrom`
-references. Image/replica/resource changes are **not** reconciled here; use Helm.
-
-## Current state & gaps
-
-- ✅ Obot deployed as a config-slaved plane; catalog sync + drift repair live.
-- ✅ Control-plane `McpServer` CRUD + grants; per-tenant allow/deny compiled into the
-  contract and enforced in-pod.
-- 🔶 Credential brokering for downstream MCP auth (per-user creds, encryption at rest)
-  is **not** in this phase — `OBOT_SERVER_ENCRYPTION_PROVIDER=none`. The earlier
-  "RFC 8693 credential shim" remains a target, not current behaviour.
+Source: [`libs/backend/_server/obot-custody`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/_server/obot-custody/README.md)
+and [`libs/backend/agents/execution/protocol`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md).

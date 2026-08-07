@@ -1,0 +1,156 @@
+{{- $v := .Values.managedAgentRuntime -}}
+{{- $ns := default (printf "%s-managed-runtime" .Release.Name | trunc 63 | trimSuffix "-") $v.namespace -}}
+{{- $serverNs := default .Release.Namespace $v.serverNamespace -}}
+{{- $artifactNs := default (printf "%s-artifacts" $serverNs | trunc 63 | trimSuffix "-") $v.egress.artifactNamespace -}}
+{{- $sa := $v.serviceAccountName -}}
+{{- if or (gt (len $ns) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $ns)) -}}
+{{- fail "managedAgentRuntime.namespace must be a valid DNS-label namespace of at most 63 characters" -}}
+{{- end -}}
+{{- if or (gt (len $artifactNs) 63) (not (regexMatch "^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $artifactNs)) -}}
+{{- fail "managedAgentRuntime.egress.artifactNamespace must be a valid DNS-label namespace of at most 63 characters" -}}
+{{- end -}}
+{{- if eq $ns $serverNs -}}
+{{- fail "managedAgentRuntime.namespace must differ from the server namespace" -}}
+{{- end -}}
+{{- if or (gt (len $sa) 63) (not (regexMatch "^managed-agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" $sa)) -}}
+{{- fail "managedAgentRuntime.serviceAccountName must be a bounded managed-agent-runtime-* identity, never the personal agent-runtime-* class" -}}
+{{- end -}}
+# The managed-agent runtime plane lives in its own restricted namespace, distinct from both the
+# server namespace and the personal-runtime namespace.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Connector-scoped identity for managed-agent runtime Pods. It carries no RoleBinding, and its token
+# is never auto-mounted; the launcher projects a managed-audience token explicitly per attempt.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ $sa }}
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+automountServiceAccountToken: false
+---
+# Aggregate namespace ceiling: the controller may request only admission-fixed Jobs, and this quota
+# bounds how many otherwise conforming managed workloads can consume cluster resources at once.
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: managed-agent-runtime
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+spec:
+  hard:
+    pods: {{ $v.quota.pods | quote }}
+    count/jobs.batch: {{ $v.quota.jobs | quote }}
+    count/secrets: {{ $v.quota.secrets | quote }}
+    requests.cpu: {{ $v.quota.requests.cpu | quote }}
+    requests.memory: {{ $v.quota.requests.memory | quote }}
+    limits.cpu: {{ $v.quota.limits.cpu | quote }}
+    limits.memory: {{ $v.quota.limits.memory | quote }}
+---
+# Namespace-wide default deny. Only the explicit egress policy below admits any traffic.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: managed-agent-runtime-default-deny
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+  ingress: []
+  egress: []
+---
+# The managed runtime's only permitted egress: DNS, the control-plane internal stream, and the
+# channel-proxy / artifact / memory-gateway / LiteLLM / Obot services it needs. Nothing else.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: managed-agent-runtime-egress
+  namespace: {{ $ns }}
+  labels:
+    app.kubernetes.io/part-of: opencrane
+    app.kubernetes.io/component: managed-agent-runtime
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/component: {{ $v.egress.runtimePodComponent }}
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $serverNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.memoryGatewayComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.serverInternalPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $serverNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.channelProxyComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.channelProxyPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $artifactNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.artifactServiceComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.artifactServicePort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $serverNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.litellmComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.litellmPort }}
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $serverNs }}
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/component: {{ $v.egress.obotComponent }}
+      ports:
+        - protocol: TCP
+          port: {{ $v.egress.obotPort }}

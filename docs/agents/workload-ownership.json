@@ -1,0 +1,270 @@
+{
+  "version": 2,
+  "policy": "Every current workload class has one exact app owner, one current source anchor, and a complete rendered or runtime-created inventory. Paths slated for direct removal use classification delete; compatibility and time-boxed ownership exceptions are forbidden.",
+  "requiredWorkloadIds": [
+    "opencrane-server",
+    "opencrane-ui",
+    "channel-proxy",
+    "memory-gateway",
+    "artifact-service",
+    "artifact-preprocessor",
+    "agent-controller",
+    "agent-runtime",
+    "skill-authoring",
+    "tool-runner",
+    "cognee",
+    "litellm",
+    "obot-gateway-controller",
+    "obot-dynamic-mcp-child",
+    "postgres-database",
+    "postgres-pooler",
+    "postgres-database-privileges"
+  ],
+  "renderProfiles": [
+    {
+      "id": "default",
+      "setValues": [
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
+        "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "Deployment/opencrane-mcp-gateway"
+      ]
+    },
+    {
+      "id": "all-supported-pod-profiles",
+      "setValues": [
+        "channelProxy.enabled=true",
+        "memoryGateway.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "memoryGateway.kubernetesApiServerPort=443",
+        "memoryGateway.kubernetesApiServerEndpointCidrs[0]=172.18.0.2/32",
+        "memoryGateway.kubernetesApiServerEndpointPort=443",
+        "artifactPreprocessor.enabled=true",
+        "artifactPreprocessor.image.digest=sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "agentController.enabled=true",
+        "agentController.kubernetesApiServerCidrs[0]=10.43.0.1/32",
+        "agentController.image.digest=sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "agentController.runtimeProfile.image.digest=sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "agentController.skillWorkloadProfiles.authoring.image.digest=sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "agentController.skillWorkloadProfiles.toolRunner.image.digest=sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      ],
+      "expectedRenderedPodClasses": [
+        "Deployment/opencrane-opencrane-server",
+        "Deployment/opencrane-opencrane-ui-spa",
+        "Deployment/opencrane-channel-proxy",
+        "Deployment/opencrane-memory-gateway",
+        "Deployment/opencrane-artifact-service",
+        "Deployment/opencrane-artifact-preprocessor",
+        "Deployment/opencrane-agent-controller",
+        "Deployment/opencrane-cognee",
+        "Deployment/opencrane-litellm",
+        "Deployment/opencrane-mcp-gateway"
+      ]
+    }
+  ],
+  "dynamicWorkloads": [
+    {
+      "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["agent-runtime"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["skill-authoring"]
+    },
+    {
+      "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts",
+      "anchor": "kind: \"Job\"",
+      "workloadIds": ["tool-runner"]
+    },
+    {
+      "path": "libs/backend/agents/runtime/controller/src/kubernetes-agent-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _KubernetesRequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
+      "workloadIds": ["agent-runtime"]
+    },
+    {
+      "path": "libs/backend/agents/skills/controller/src/kubernetes-skill-workload-controller-store.ts",
+      "anchor": "options.batchApi.createNamespacedJob({ namespace, body: expected }, _RequestOptions(options.shutdownSignal, options.requestTimeoutMilliseconds))",
+      "workloadIds": ["skill-authoring", "tool-runner"]
+    }
+  ],
+  "nonProducingRuntimeMatches": [
+    {
+      "path": "libs/backend/agents/runtime/controller/src/agent-runtime-attempt-key.ts",
+      "anchor": "kind: \"Job\"",
+      "context": "secret-owner-reference",
+      "reason": "This is a Secret owner reference to an already-created attempt Job; it cannot create a pod."
+    }
+  ],
+  "nonWorkloadDynamicKinds": [],
+  "forbiddenPaths": [
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-certificate.yaml",
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-deployment.yaml",
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-ingress.yaml",
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-migration-job.yaml",
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-rbac.yaml",
+    "apps/_infra/deploy-k8s/templates/clustertenant-manager-service.yaml",
+    "apps/_infra/deploy-k8s/templates/cognee-deployment.yaml",
+    "apps/_infra/deploy-k8s/templates/gateway-proxy-service.yaml",
+    "apps/_infra/deploy-k8s/templates/litellm-deployment.yaml",
+    "apps/_infra/deploy-k8s/templates/litellm-secret.yaml",
+    "apps/_infra/deploy-k8s/templates/litellm-service.yaml",
+    "apps/_infra/deploy-k8s/templates/mcp-gateway-rbac.yaml",
+    "apps/_infra/deploy-k8s/templates/mcp-gateway-service.yaml",
+    "apps/_infra/deploy-k8s/templates/obot-mcp-gateway-deployment.yaml",
+    "apps/_infra/deploy-k8s/templates/opencrane-ui-spa-deployment.yaml",
+    "apps/_infra/deploy-k8s/templates/opencrane-ui-spa-service.yaml"
+  ],
+  "workloads": [
+    {
+      "id": "opencrane-server",
+      "podClass": "Deployment/opencrane-server",
+      "renderedPodClass": "Deployment/opencrane-opencrane-server",
+      "image": "ghcr.io/elewa-git/opencrane-server:<release-tag>",
+      "owner": "apps/opencrane",
+      "source": { "type": "file", "path": "apps/opencrane/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.server.deployment\"" }
+    },
+    {
+      "id": "opencrane-ui",
+      "podClass": "Deployment/opencrane-ui-spa",
+      "renderedPodClass": "Deployment/opencrane-opencrane-ui-spa",
+      "image": "ghcr.io/elewa-git/opencrane-ui:<release-tag>",
+      "owner": "apps/opencrane-ui",
+      "source": { "type": "file", "path": "apps/opencrane-ui/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.ui.deployment\"" }
+    },
+    {
+      "id": "channel-proxy",
+      "podClass": "Deployment/channel-proxy",
+      "renderedPodClass": "Deployment/opencrane-channel-proxy",
+      "image": "ghcr.io/elewa-git/opencrane-channel-proxy:<release-tag>",
+      "owner": "apps/channel-proxy",
+      "source": { "type": "file", "path": "apps/channel-proxy/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.channelProxy.resources\"" }
+    },
+    {
+      "id": "memory-gateway",
+      "podClass": "Deployment/memory-gateway",
+      "renderedPodClass": "Deployment/opencrane-memory-gateway",
+      "image": "ghcr.io/elewa-git/opencrane-memory-gateway:<release-tag>",
+      "owner": "apps/memory-gateway",
+      "localOwner": true,
+      "source": { "type": "file", "path": "apps/memory-gateway/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.memoryGateway.resources\"" }
+    },
+    {
+      "id": "artifact-service",
+      "podClass": "Deployment/artifact-service",
+      "renderedPodClass": "Deployment/opencrane-artifact-service",
+      "image": "ghcr.io/elewa-git/opencrane-artifact-service:<release-tag>",
+      "owner": "apps/artifact-service",
+      "source": { "type": "file", "path": "apps/artifact-service/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactService.resources\"" }
+    },
+    {
+      "id": "artifact-preprocessor",
+      "podClass": "Deployment/artifact-preprocessor",
+      "renderedPodClass": "Deployment/opencrane-artifact-preprocessor",
+      "image": "ghcr.io/elewa-git/opencrane-artifact-preprocessor@sha256:<release-digest>",
+      "owner": "apps/artifact-preprocessor",
+      "source": { "type": "file", "path": "apps/artifact-preprocessor/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.artifactPreprocessor.resources\"" }
+    },
+    {
+      "id": "agent-controller",
+      "podClass": "Deployment/agent-controller",
+      "renderedPodClass": "Deployment/opencrane-agent-controller",
+      "image": "ghcr.io/elewa-git/opencrane-agent-controller@sha256:<release-digest>",
+      "owner": "apps/agent-controller",
+      "source": { "type": "file", "path": "apps/agent-controller/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.agentController.resources\"" }
+    },
+    {
+      "id": "agent-runtime",
+      "podClass": "Job/agent-runtime-attempt",
+      "image": "ghcr.io/elewa-git/opencrane-agent-runtime@sha256:<release-digest>",
+      "owner": "apps/agent-runtime",
+      "source": { "type": "file", "path": "libs/backend/agents/runtime/k8s-launcher/src/agent-runtime-job.ts", "anchor": "kind: \"Job\"" }
+    },
+    {
+      "id": "skill-authoring",
+      "podClass": "Job/skill-authoring-attempt",
+      "image": "ghcr.io/elewa-git/opencrane-skill-authoring@sha256:<release-digest>",
+      "owner": "apps/skill-authoring",
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/skill-authoring-workload-job.ts", "anchor": "kind: \"Job\"" }
+    },
+    {
+      "id": "tool-runner",
+      "podClass": "Job/tool-runner-invocation",
+      "image": "ghcr.io/elewa-git/opencrane-tool-runner@sha256:<release-digest>",
+      "owner": "apps/tool-runner",
+      "source": { "type": "file", "path": "libs/backend/agents/skills/k8s-launcher/src/tool-runner-workload-job.ts", "anchor": "kind: \"Job\"" }
+    },
+    {
+      "id": "cognee",
+      "podClass": "Deployment/cognee",
+      "renderedPodClass": "Deployment/opencrane-cognee",
+      "image": "cognee/cognee:1.2.1",
+      "owner": "apps/_infra/cognee",
+      "source": { "type": "file", "path": "apps/_infra/cognee/helm/templates/_resources.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.cognee.resources\"" }
+    },
+    {
+      "id": "litellm",
+      "podClass": "Deployment/litellm",
+      "renderedPodClass": "Deployment/opencrane-litellm",
+      "image": "ghcr.io/berriai/litellm-non_root:main-v1.81.0-stable",
+      "owner": "apps/_infra/litellm",
+      "source": { "type": "file", "path": "apps/_infra/litellm/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.litellm.deployment\"" }
+    },
+    {
+      "id": "obot-gateway-controller",
+      "podClass": "Deployment/mcp-gateway",
+      "renderedPodClass": "Deployment/opencrane-mcp-gateway",
+      "image": "ghcr.io/obot-platform/obot:v0.23.1",
+      "owner": "apps/_infra/obot",
+      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_deployment.tpl", "anchor": "kind: Deployment", "coversLocalTemplate": true },
+      "composition": { "path": "apps/_infra/deploy-k8s/templates/app-rollups.yaml", "anchor": "include \"opencrane.obot.deployment\"" }
+    },
+    {
+      "id": "obot-dynamic-mcp-child",
+      "podClass": "Obot-created Pod-or-Deployment/MCP-server",
+      "image": "Obot catalog selected image",
+      "owner": "apps/_infra/obot",
+      "source": { "type": "file", "path": "apps/_infra/obot/helm/templates/_rbac.tpl", "anchor": "resources: [\"deployments\", \"replicasets\"]" }
+    },
+    {
+      "id": "postgres-database",
+      "podClass": "Pod/CNPG-postgresql-instance",
+      "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
+      "owner": "apps/postgres",
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/cluster.yaml", "anchor": "kind: Cluster" }
+    },
+    {
+      "id": "postgres-database-privileges",
+      "podClass": "Job/postgres-database-privileges",
+      "image": "ghcr.io/cloudnative-pg/postgresql:17.5",
+      "owner": "apps/postgres",
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/database-privileges-job.yaml", "anchor": "kind: Job", "coversLocalTemplate": true }
+    },
+    {
+      "id": "postgres-pooler",
+      "podClass": "Deployment/CNPG-pgbouncer-pooler",
+      "image": "ghcr.io/cloudnative-pg/pgbouncer:1.25.1",
+      "owner": "apps/postgres",
+      "source": { "type": "file", "path": "apps/postgres/helm/templates/pooler.yaml", "anchor": "kind: Pooler" }
+    }
+  ]
+}

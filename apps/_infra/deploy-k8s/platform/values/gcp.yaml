@@ -1,0 +1,41 @@
+# GCP / GKE values for OpenCrane — PLAIN-KUBERNETES baseline.
+#
+# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
+# usage below assumes a checked-out copy of it.
+# Usage: helm install opencrane apps/fleet-platform -f apps/_infra/deploy-k8s/platform/values/gcp.yaml
+#
+# This file deliberately keeps a GKE deploy identical to a plain Kubernetes
+# cluster: standard PVC storage (GKE default StorageClass), in-cluster
+# PostgreSQL, k8s Secrets, and standard ingress. GCP-specific External Secrets
+# and Cloud DNS integration remain opt-in.
+#
+# To opt in to the GCP-native extras, layer the optional overlay ON TOP:
+#   helm install opencrane apps/fleet-platform \
+#     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
+#     -f apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml \
+#     --set externalSecrets.gcp.projectId=YOUR_PROJECT_ID
+
+global:
+  environment: prod
+
+clustertenantManager:
+  database:
+    existingSecret: opencrane-db
+    secretKey: DATABASE_URL
+
+litellm:
+  enabled: true
+  # endpoint is derived by opencrane.litellmEndpoint (see values.yaml in the fleet-platform
+  # chart, now in the WeOwnAI repo per elewa-git/opencrane#150).
+  existingSecret: opencrane-litellm
+  generateMasterKey: false
+  existingDatabaseSecret: opencrane-litellm-db
+  databaseSecretKey: DATABASE_URL
+  # DB-backed model store — GCP profile provisions Postgres (existingDatabaseSecret
+  # above), so manage models/keys at runtime via the LiteLLM admin API.
+  storeModelInDb: true
+  # Salt key comes from the same operator-managed Secret as the master key (the
+  # chart-managed Secret is not rendered when existingSecret is set). Provision
+  # LITELLM_SALT_KEY in opencrane-litellm and keep it stable.
+  existingSaltSecret: opencrane-litellm
+  saltSecretKey: LITELLM_SALT_KEY

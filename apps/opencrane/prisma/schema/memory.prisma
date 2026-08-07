@@ -1,0 +1,89 @@
+enum MemoryDatasetState {
+  Active  @map("active")
+  Retired @map("retired")
+}
+
+enum MemoryFactState {
+  Active        @map("active")
+  Corrected     @map("corrected")
+  ForgetPending @map("forget_pending")
+  Forgotten     @map("forgotten")
+}
+
+enum MemoryConsentState {
+  Explicit  @map("explicit")
+  Confirmed @map("confirmed")
+}
+
+enum MemoryOutboxEventKind {
+  FactRecorded   @map("memory.fact_recorded")
+  FactCorrected  @map("memory.fact_corrected")
+  ForgetRequested @map("memory.forget_requested")
+}
+
+model MemoryDataset {
+  id              String              @id @default(cuid())
+  siloId          String              @map("silo_id")
+  scopeKind       AuthorizationScopeKind @map("scope_kind")
+  organizationId  String              @map("organization_id")
+  scopeResourceId String?             @map("scope_resource_id")
+  cogneeDatasetId String              @map("cognee_dataset_id")
+  state           MemoryDatasetState  @default(Active)
+  createdBy       String              @map("created_by")
+  createdAt       DateTime            @default(now()) @map("created_at")
+  retiredAt       DateTime?           @map("retired_at")
+  facts           MemoryFactCatalog[]
+
+  @@unique([siloId, cogneeDatasetId])
+  @@unique([siloId, scopeKind, organizationId, scopeResourceId])
+  @@index([siloId, state])
+  @@map("memory_datasets")
+}
+
+model MemoryFactCatalog {
+  id                       String             @id @default(cuid())
+  datasetId                String             @map("dataset_id")
+  cogneeExternalId         String             @map("cognee_external_id")
+  contentDigest            String             @map("content_digest")
+  state                    MemoryFactState    @default(Active)
+  consentState             MemoryConsentState @map("consent_state")
+  sensitivity              String
+  provenance               Json
+  sourceArtifactRevisionId String?            @map("source_artifact_revision_id")
+  sourceMessageId          String?            @map("source_message_id")
+  supersedesFactId         String?            @map("supersedes_fact_id")
+  recordedBy               String             @map("recorded_by")
+  recordedAt               DateTime           @default(now()) @map("recorded_at")
+  correctedAt              DateTime?          @map("corrected_at")
+  forgetRequestedAt        DateTime?          @map("forget_requested_at")
+  forgottenAt              DateTime?          @map("forgotten_at")
+  dataset                  MemoryDataset      @relation(fields: [datasetId], references: [id], onDelete: Restrict)
+  supersedes               MemoryFactCatalog? @relation("MemoryFactCorrections", fields: [supersedesFactId], references: [id], onDelete: Restrict)
+  corrections              MemoryFactCatalog[] @relation("MemoryFactCorrections")
+  outboxEvents             MemoryOutboxEvent[]
+
+  @@unique([datasetId, cogneeExternalId])
+  @@unique([id, datasetId])
+  @@index([sourceArtifactRevisionId])
+  @@index([sourceMessageId])
+  @@index([datasetId, state])
+  @@map("memory_fact_catalog")
+}
+
+model MemoryOutboxEvent {
+  id             String                @id @default(cuid())
+  datasetId      String                @map("dataset_id")
+  factId         String                @map("fact_id")
+  kind           MemoryOutboxEventKind
+  idempotencyKey String                @unique @map("idempotency_key")
+  payload        Json
+  availableAt    DateTime              @default(now()) @map("available_at")
+  claimedAt      DateTime?             @map("claimed_at")
+  publishedAt    DateTime?             @map("published_at")
+  deliveryCount  Int                   @default(0) @map("delivery_count")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  fact           MemoryFactCatalog     @relation(fields: [factId, datasetId], references: [id, datasetId], onDelete: Restrict)
+
+  @@index([publishedAt, availableAt])
+  @@map("memory_outbox_events")
+}

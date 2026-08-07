@@ -1,0 +1,27 @@
+# Dev GKE overlay — layer on top of gcp.yaml.
+#
+# Usage:
+#   helm upgrade --install opencrane apps/_infra/deploy-k8s -n opencrane-system \
+#     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
+#     -f apps/_infra/deploy-k8s/platform/values/gke-dev.yaml
+
+global:
+  environment: dev
+
+ingress:
+  domain: dev.weownai.eu
+
+clustertenantManager:
+  image:
+    tag: latest
+
+mcpGateway:
+  image:
+    # Pinned to the audited stable tag. Bump deliberately.
+    tag: v0.23.1
+
+litellm:
+  # Disabled in dev: the container has an npm cache permission bug that causes
+  # CrashLoopBackOff. The operator degrades gracefully (unrestricted model
+  # access, no budget enforcement). Re-enable once the LiteLLM image is fixed.
+  enabled: false

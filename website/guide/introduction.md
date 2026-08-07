@@ -1,32 +1,52 @@
 # What is OpenCrane?
 
-OpenCrane gives **every person in your company their own AI assistant** — and gives
-you one place to manage them all.
+OpenCrane is a **self-hosted platform for AI agents your organisation actually controls.** You
+run it on your own Kubernetes cluster, so your conversations, documents and credentials never
+leave infrastructure you operate. Every agent starts with no access at all — you decide exactly
+what it can see, use and do, and every action it takes is recorded.
 
-Think of it like this: instead of one shared chatbot, each employee gets their own
-private AI coworker. It knows who they are, helps with their work, and can tap into
-company knowledge, tools, and skills — but only the things you allow. Everything
-runs on **your** infrastructure, so your data and conversations never leave.
+## Two kinds of agent, and why the difference matters
+
+OpenCrane draws one hard line through everything it does: the line between **personal** and
+**managed**.
+
+- **Your personal assistant** belongs to you. It only ever uses the tools, files and knowledge
+  you've been granted, it only ever acts as you, and no one else's assistant can read your
+  conversations or your files. → [Set up your personal assistant](/guide/persona)
+- **A managed agent** is a shared worker your organisation configures — think "the agent that
+  triages support tickets" or "the agent that compiles the weekly sales digest." It runs bounded
+  work on a schedule or a trigger, under its own narrow identity, and it never inherits anyone's
+  personal access. → [Create a managed agent](/guide/first-agent)
+
+Neither kind can quietly become the other. A managed agent can never read your personal
+conversation, memory or files; it only ever sees what it was explicitly configured to see. Your
+personal assistant can hand a task to a managed agent, but the managed agent still runs under its
+own, smaller identity — see [Agent delegation](/guide/child-runs).
 
 ## Why teams choose OpenCrane
 
-- **Private by design** — conversations and company data stay on your network.
-- **You're in control** — decide what every assistant can see and do.
-- **No vendor lock-in** — use Claude, GPT, or open-source models, and switch anytime.
-- **Built to scale** — from 10 people to 10,000, managed from one place.
+- **Private by design** — your data and every agent run stay on infrastructure you operate.
+- **Nothing by default** — an agent (personal or managed) starts with zero tools, skills,
+  knowledge or model access until you grant it.
+- **Every run is a record** — what ran, under what identity, with what inputs and what it did is
+  kept, not just the final answer.
+- **Execution is disposable, decisions aren't** — the container that ran your request can be
+  thrown away; the record of what it was allowed to do and what happened cannot be quietly changed
+  after the fact.
+- **One boundary per organisation** — your organisation's agents, data and identities are isolated
+  from every other organisation on the same OpenCrane installation.
 
 ## What you'll do here
 
-A quick tour of the journey:
+1. [Install OpenCrane](/guide/getting-started).
+2. [Set up your organisation's domain](/guide/dns).
+3. [Set up your personal assistant](/guide/persona) — or
+   [create a managed agent](/guide/first-agent) for shared, scheduled work.
+4. Give it [skills](/guide/skills), [tools](/guide/tools) and
+   [organisational knowledge](/guide/knowledge).
+5. Apply [access rules](/guide/permissions) and [budgets](/guide/budgets).
 
-1. **[Get OpenCrane running](/guide/getting-started)** and point your domain at it.
-2. **[Create an employee assistant](/guide/first-tenant)** for someone.
-3. **[Let them sign in](/guide/connect)** and start using it.
-4. Then make it powerful: [share skills](/guide/skills), [connect tools](/guide/tools),
-   [add company knowledge](/guide/knowledge), and [set the rules](/guide/permissions).
-
-::: tip New here?
-Start with **[How OpenCrane works](/guide/how-it-works)** — a five-minute, plain-English
-tour of the main ideas (assistants, skills, tools, knowledge). Everything else builds
-on it.
+::: tip
+Read [How OpenCrane works](/guide/how-it-works) next for a short tour of what happens every time an
+agent runs.
 :::

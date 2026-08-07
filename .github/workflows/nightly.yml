@@ -1,0 +1,129 @@
+name: Nightly full validation
+
+# The safety net behind PR-level affected validation: once a day, run the
+# complete static battery (guards + negative tests, full build/test/lint) on each integration
+# branch — but only when the branch actually received commits in the last 24 hours.
+#
+# GitHub runs scheduled workflows from the default branch, so this activates once it reaches
+# main; use workflow_dispatch to run it manually before then.
+
+on:
+  schedule:
+    - cron: "20 2 * * *"
+  workflow_dispatch: {}
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  nightly:
+    name: Full validation (${{ matrix.branch }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: [main, develop, own-personal-ai-agent-setup]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: opencrane
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d opencrane"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/opencrane
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ matrix.branch }}
+          fetch-depth: 0
+
+      - name: Select whether this run needs validation
+        id: fresh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "base=$(git rev-parse HEAD^)" >> "$GITHUB_OUTPUT"
+            echo "Manual dispatch requested — running the full validation battery."
+          elif [ -n "$(git log -1 --since='24 hours ago' --format=%H)" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            base="$(git rev-list -1 --before='24 hours ago' HEAD)"
+            echo "base=${base:-$(git rev-list --max-parents=0 HEAD)}" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No commits on ${{ matrix.branch }} in the last 24 hours — nothing to validate."
+          fi
+
+      - uses: actions/setup-node@v6
+        if: steps.fresh.outputs.changed == 'true'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        if: steps.fresh.outputs.changed == 'true'
+        run: npm ci
+
+      - name: Generate the database client
+        if: steps.fresh.outputs.changed == 'true'
+        run: npm run db:generate -w @opencrane/server
+
+      - name: Install validation clients
+        if: steps.fresh.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes postgresql-client ripgrep
+
+      - name: Verify the reviewed target authority baseline is intact
+        if: steps.fresh.outputs.changed == 'true'
+        run: npm run test:authority-baseline -w @opencrane/server
+
+      - name: Apply the fresh target database baseline
+        if: steps.fresh.outputs.changed == 'true'
+        run: psql "$DATABASE_URL" -X --set=ON_ERROR_STOP=1 --file=apps/opencrane/prisma/bootstrap/target-baseline.sql
+
+      - name: Run every PostgreSQL authority suite
+        if: steps.fresh.outputs.changed == 'true'
+        run: npx nx run-many -t test:sql --parallel=1
+
+      - name: Install Helm
+        if: steps.fresh.outputs.changed == 'true'
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.1.4
+
+      - name: Run every repository guard and its negative tests
+        if: steps.fresh.outputs.changed == 'true'
+        # --if-present keeps this branch-agnostic: guard suites differ between main and the
+        # program branches, and each branch runs exactly the suites it ships.
+        run: |
+          npm run --if-present check:workload-ownership-app-composition
+          npm run --if-present test:workload-ownership-app-composition
+          npm run --if-present check:agent-domain-boundary
+          npm run --if-present test:agent-domain-boundary
+          scripts/agent-style-check.sh --diff "${{ steps.fresh.outputs.base }}"
+          npm run --if-present test:agent-style
+          npm run --if-present check:module-growth -- --diff "${{ steps.fresh.outputs.base }}"
+          npm run --if-present test:module-growth
+          npm run --if-present check:prisma-boundaries -- --diff "${{ steps.fresh.outputs.base }}"
+          npm run --if-present test:prisma-boundaries
+          npm run --if-present lint:boundaries
+
+      - name: Build, test, and lint every project
+        if: steps.fresh.outputs.changed == 'true'
+        run: npx nx run-many -t build test lint

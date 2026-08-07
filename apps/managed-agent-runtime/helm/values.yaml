@@ -1,0 +1,36 @@
+# Managed (central) agent runtime plane — deployment-only values.
+managedAgentRuntime:
+  # Dedicated namespace that holds ONLY managed-agent runtime workloads and their identity.
+  namespace: ""
+  # Server (control-plane) namespace the runtime reaches for its stream + reachable services.
+  serverNamespace: ""
+  # Connector-scoped ServiceAccount. MUST match the bounded managed-agent-runtime-* identity class
+  # (___IsManagedAgentRuntimeServiceAccountName) and NEVER the personal agent-runtime-* class.
+  serviceAccountName: managed-agent-runtime-default
+  # Namespace-wide ceiling applied in addition to each admission-fixed Job shape.
+  quota:
+    pods: "20"
+    jobs: "20"
+    secrets: "20"
+    requests:
+      cpu: "2"
+      memory: 4Gi
+    limits:
+      cpu: "20"
+      memory: 20Gi
+  # In-cluster egress destinations the managed runtime is allowed to reach. Runtime Pod selection is
+  # namespace-local; destination services may live in the server namespace or their own app namespace.
+  egress:
+    runtimePodComponent: agent-runtime
+    channelProxyComponent: channel-proxy
+    artifactNamespace: ""
+    artifactServiceComponent: artifact-service
+    memoryGatewayComponent: opencrane-server
+    litellmComponent: litellm
+    obotComponent: mcp-gateway
+    # Port the managed runtime uses to reach the control-plane internal stream + in-cluster services.
+    serverInternalPort: 8081
+    channelProxyPort: 8080
+    artifactServicePort: 8080
+    litellmPort: 4000
+    obotPort: 8080

@@ -1,0 +1,2 @@
+export { ___IsArtifact, ___IsArtifactContentReference, ___IsArtifactRevision, ___IsArtifactRevisionReference, ___IsSha256ContentAddress, ___IsSkillRevision, ___SHA256_CONTENT_ADDRESS_PATTERN, ___SkillRevisionMatchesArtifactRevision } from "./artifact-invariants.js";
+export type { Artifact, ArtifactContentReference, ArtifactId, ArtifactKind, ArtifactRevision, ArtifactRevisionId, ArtifactRevisionReference, SkillRevision, SkillRevisionId } from "./artifact.types.js";

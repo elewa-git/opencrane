@@ -1,133 +1,34 @@
 #!/usr/bin/env bash
 #
-# Stop-hook PRE-FILTER for the policy-driven review gate.
+# Codex entrypoint for the shared review pre-filter.
 #
-# This runs IN PARALLEL with the Haiku agent hook (Claude Code runs all hooks in a
-# matcher array concurrently). It does the cheap, deterministic work so the Haiku
-# judge barely runs on the obvious cases:
-#
-#   - Computes the TypeScript change set (tracked diff vs HEAD + untracked .ts bodies).
-#   - Writes .claude/.review-context.md (VERDICT + diff + policy) for the Haiku hook to read.
-#   - Resolves SKIP cases (no code / trivial / already-reviewed / loop-guard) so the
-#     agent can short-circuit to ok:true after a single read.
-#
-# It never calls a model and (intentionally) never blocks: the Haiku agent hook is the
-# sole blocker. If you want a free deterministic floor instead, see the git history of
-# this file for the exit-2 variant.
-#
-# Policy lives in .claude/review-policy.md (the single tunable surface).
-# State files (.claude/.review-context.md, .claude/.last-review-hash) are git-ignored.
+# The deterministic implementation lives under .claude/hooks because Claude Code
+# invokes that path directly. This wrapper gives Codex the same classification,
+# then translates its JUDGE/SKIP result into the documented Codex Stop-hook JSON
+# contract. JUDGE continues the turn with an independent-review instruction;
+# stop_hook_active makes the shared pre-filter return SKIP on the second stop.
 
 set -uo pipefail
 
-# 1. Read the hook input JSON so we can honour the loop-prevention flag.
+repo="${CODEX_PROJECT_DIR:-${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}}"
+context="$repo/.claude/.review-context.md"
 input="$(cat)"
 
-# 2. Resolve repo root from the harness-provided dir, falling back to git.
-repo="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
-cd "$repo" 2>/dev/null || exit 0
-
-policy="$repo/.claude/review-policy.md"
-marker="$repo/.claude/.last-review-hash"
-context="$repo/.claude/.review-context.md"
-
-# Helper: write the context file the agent hook reads, then exit 0.
-# $1 = verdict (SKIP|JUDGE); remaining args ignored — body assembled from globals.
-_write_context_and_exit() {
-  local verdict="$1"
-  {
-    echo "VERDICT=$verdict"
-    echo "CHANGED_LINES=${total_lines:-0}"
-    echo "---"
-    echo "CHANGED_FILES:"
-    printf '%s\n' "${changed_files:-}"
-    echo "---"
-    echo "DIFF:"
-    printf '%s\n' "${ts_diff:-}"
-  } > "$context" 2>/dev/null || true
-  exit 0
-}
-
-# 3. Loop guard: if we are here because a prior block already fired this stop sequence,
-#    record the current state as reviewed and let the stop proceed. Prevents loops.
-stop_active="$(printf '%s' "$input" | jq -r '.stop_hook_active // false' 2>/dev/null || echo false)"
-
-# 4. Build the TypeScript change set.
-ts_diff="$(git diff HEAD -- '*.ts' 2>/dev/null || true)"
-changed_files="$(git diff HEAD --name-only -- '*.ts' 2>/dev/null || true)"
-untracked_files="$(git ls-files --others --exclude-standard -- '*.ts' 2>/dev/null || true)"
-untracked_body=""
-if [ -n "$untracked_files" ]; then
-  changed_files="$(printf '%s\n%s' "$changed_files" "$untracked_files" | sed '/^$/d')"
-  # shellcheck disable=SC2086
-  untracked_body="$(printf '%s\n' "$untracked_files" | xargs cat 2>/dev/null || true)"
+prefilter_status=1
+if : > "$context" 2>/dev/null; then
+	printf '%s' "$input" \
+		| CLAUDE_PROJECT_DIR="$repo" bash "$repo/.claude/hooks/require-review.sh"
+	prefilter_status=$?
 fi
 
-# 5. Measure size and hash the change set (used for the trivial check and the marker).
-tracked_lines="$(git diff HEAD --numstat -- '*.ts' 2>/dev/null | awk '{a+=$1; r+=$2} END {print a+r+0}')"
-untracked_lines="0"
-if [ -n "$untracked_body" ]; then
-  untracked_lines="$(printf '%s\n' "$untracked_body" | wc -l | tr -d ' ')"
-fi
-total_lines=$(( ${tracked_lines:-0} + ${untracked_lines:-0} ))
-current_hash="$(printf '%s\n%s' "$ts_diff" "$untracked_body" | shasum -a 256 | awk '{print $1}')"
-
-# 6. Loop guard resolved here (needs current_hash): record reviewed state, allow stop.
-if [ "$stop_active" = "true" ]; then
-  printf '%s\n' "$current_hash" > "$marker" 2>/dev/null || true
-  _write_context_and_exit "SKIP"
-fi
-
-# 7. No TypeScript changes at all -> nothing to judge.
-if [ -z "$ts_diff" ] && [ -z "$untracked_files" ]; then
-  _write_context_and_exit "SKIP"
-fi
-
-# 8. Already reviewed this exact change set (marker matches) -> skip.
-if [ -f "$marker" ] && [ "$(cat "$marker" 2>/dev/null)" = "$current_hash" ]; then
-  _write_context_and_exit "SKIP"
-fi
-
-# 9. Load policy config. Extract the machine-config block, then the individual keys.
-cfg=""
-if [ -f "$policy" ]; then
-  cfg="$(awk '/GATE-CONFIG-START/{f=1;next} /GATE-CONFIG-END/{f=0} f' "$policy" 2>/dev/null || true)"
-fi
-threshold="$(printf '%s\n' "$cfg" | sed -n 's/^threshold=//p' | head -1)"
-threshold="${threshold:-10}"
-always="$(printf '%s\n' "$cfg" | sed -n 's/^always-review=//p' | head -1)"
-never="$(printf '%s\n' "$cfg" | sed -n 's/^never-review-paths=//p' | head -1)"
-
-# 10. Critical-keyword check: does any always-review keyword appear in the paths or diff?
-critical="no"
-haystack="$(printf '%s\n%s' "$changed_files" "$ts_diff" | tr '[:upper:]' '[:lower:]')"
-for kw in $always; do
-  if printf '%s' "$haystack" | grep -qF "$(printf '%s' "$kw" | tr '[:upper:]' '[:lower:]')"; then
-    critical="yes"
-    break
-  fi
-done
-
-# 11. All-excluded check: does EVERY changed file match a never-review path substring?
-all_excluded="yes"
-while IFS= read -r f; do
-  [ -z "$f" ] && continue
-  matched="no"
-  for pat in $never; do
-    case "$f" in *"$pat"*) matched="yes"; break;; esac
-  done
-  if [ "$matched" = "no" ]; then
-    all_excluded="no"
-    break
-  fi
-done <<EOF
-$changed_files
-EOF
-
-# 12. Cheap SKIP: not critical, and either fully excluded or under the line threshold.
-if [ "$critical" = "no" ] && { [ "$all_excluded" = "yes" ] || [ "$total_lines" -le "$threshold" ]; }; then
-  _write_context_and_exit "SKIP"
-fi
-
-# 13. Otherwise the Haiku judge must decide — hand it the full context.
-_write_context_and_exit "JUDGE"
+verdict="$(sed -n 's/^VERDICT=//p' "$context" 2>/dev/null | head -1)"
+case "$prefilter_status:$verdict" in
+	"0:SKIP")
+		printf '%s\n' '{"continue":true}'
+		;;
+	*)
+		# JUDGE is the expected blocking result. A crash, missing context, or unknown verdict also
+		# blocks: only a fresh, explicit SKIP is authoritative enough to let the turn end.
+		printf '%s\n' '{"decision":"block","reason":"Run the repository independent review gate now: read .claude/.review-context.md, invoke the review agent for all required dimensions, fix every verified finding, rerun validation, and then stop again. If the context is missing, diagnose the deterministic pre-filter before proceeding."}'
+		;;
+esac

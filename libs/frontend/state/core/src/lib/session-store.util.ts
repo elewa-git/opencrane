@@ -1,4 +1,4 @@
-import { Capabilities, SessionTenant } from "./session-store.types";
+import { Capabilities } from "./session-store.types";
 import { PlatformSurface } from "./platform-surface";
 
 /**
@@ -32,53 +32,8 @@ export function _DeriveCapabilities(authenticated: boolean, isPlatformOperator: 
 		isOperator: operator,
 		isPlatformOperator: platformOperator,
 		customerAdmin,
-		manageTenants: operator,
 		manageCustomers: platformOperator,
 		managePolicies: operator,
 		manageBudgets: operator
 	};
-}
-
-/**
- * Pure resolution rule for the session's active tenant, factored out so the
- * selection-versus-fallback logic is unit-testable without Angular DI or driving
- * the `tenants` resource. The store calls this from its `currentTenant` computed.
- *
- * A user-chosen selection wins when it names a tenant the caller can see;
- * otherwise the caller's own tenant is resolved by email (the interim default,
- * pending a `/tenants/me` endpoint — see docs/architecture.md §3.1). An unknown
- * or stale selection falls back to the email match rather than resolving to
- * nothing. When the email matches no visible tenant either (e.g. an operator
- * session whose identity maps to no pod), the first visible tenant is used so a
- * single-pod session still resolves a pod — a dropped or unmatched tenant never
- * leaves the session pointing at an empty pod. Only an empty tenant list
- * resolves to `undefined`.
- *
- * @param selectedName - The tenant name the user switched to, or null when none.
- * @param tenants      - All tenants visible to the caller.
- * @param email        - The caller's own email, used for the default resolution.
- */
-export function _ResolveCurrentTenant(selectedName: string | null, tenants: readonly SessionTenant[], email: string | undefined): SessionTenant | undefined
-{
-	if (selectedName)
-	{
-		const selected = tenants.find(function byName(t: SessionTenant): boolean
-		{
-			return t.name === selectedName;
-		});
-		if (selected)
-		{
-			return selected;
-		}
-	}
-	const normalised = email?.toLowerCase();
-	const byEmail = normalised
-		? tenants.find(function byEmail(t: SessionTenant): boolean
-		{
-			return t.email.toLowerCase() === normalised;
-		})
-		: undefined;
-	// Email match wins; otherwise default to the first visible pod (interim — an
-	// operator whose email maps to no pod still gets an active tenant to act on).
-	return byEmail ?? tenants[0];
 }

@@ -1,16 +1,23 @@
 # Review activity
 
-::: tip What's in the audit log?
-A record of every **administrative action** — who created or paused an assistant,
-changed a policy, shared a skill, connected a tool, or adjusted a budget. It does
-**not** record anyone's conversations with their assistant.
+Every run — your personal assistant's or a managed agent's — leaves a full trail: who or what
+triggered it, exactly what it was allowed to use, every action it took along the way, and how it
+ended. You can always answer "what did this agent do, and who let it" without guessing.
+
+## What to inspect
+
+- agent service and immutable revision;
+- organisation and delegated subject;
+- run state, attempt and terminal reason;
+- frozen input and capability digests;
+- approval requests and action receipts;
+- token use, cost and cancellation evidence; and
+- ordered conversation events where the caller is authorised to replay them.
+
+Use the authenticated `/api/v1/audit` surface. Retrieve current filters and pagination from
+the [API reference](/reference/api); the current UI does not expose an audit view.
+
+::: tip
+Search by run id first. Pod names are replaceable execution details and do not identify the
+durable product record.
 :::
-
-## Look it up
-
-Look up the most recent activity across your company, or everything about one
-assistant, and feed the results into another tool if you like. Manage this from the
-command line — see [CLI reference → `oc audit`](/reference/cli#oc-audit).
-
-The log is kept accurate even if part of the system is briefly unavailable, so it's a
-reliable record for reviews and compliance.

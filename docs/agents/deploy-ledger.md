@@ -1,172 +1,200 @@
-# Deploy ledger — the fleet's memory
+# Deploy ledger
 
-Append-only log of deploy runs and what they taught us. The `deploy` agent reads this
-**before every run** (so no lesson is rediscovered) and appends after every run. The
-`/deploy-loop` skill mines it for configuration-simplification candidates: any friction
-item seen in **2+ runs** graduates to a fix PR or an issue.
+Append-only log for deployment runs against the current OpenCrane architecture. The `deploy` agent
+reads this file before every run and appends one concise evidence block afterwards.
 
-Keep entries terse — this file is loaded into agent context every run. When a lesson is
-fixed at the source (chart/script/docs), rewrite its line to a one-line pointer
-(`fixed → PR #NNN`) instead of letting dead advice accumulate. Full run reports do NOT
-belong here; they live in the run's PR/issue.
+Historical deployment evidence for removed product paths remains available in Git history and must
+not be reused as current operational guidance.
 
-## Format (append one block per run)
+## Format
 
-```
-## <date> · <env> · <profile> · <sha> · <LIVE|PARTIAL|FAILED>
-- findings: <class>: one line each, with PR/issue link once filed
-- friction: one line each (these accumulate into simplification counters)
-- lesson: what the next run must know (flags, ordering, gotchas)
+```text
+## <date> · <environment> · <profile> · <sha> · <LIVE|PARTIAL|FAILED>
+- findings: <class>: one evidence-backed line per finding
+- friction: repeated configuration or script difficulty
+- lesson: what the next run must verify
 ```
 
-## Simplification counters
+When a lesson is fixed at its source, replace it with a one-line pointer to the fixing pull request.
+Full run reports belong in the corresponding pull request or issue.
 
-Friction items seen across runs; bump the count, and when it hits 2, file the fix.
+## Standing lessons
 
-| Friction item | Seen | Status |
-|---|---|---|
-| No raw-helm-flag passthrough in `k8s-deploy.sh` (blocks sanctioned `--take-ownership` / one-time field-clear recoveries) | 3 (07-09, 07-11, 07-12) | **fix in flight** — `--helm-arg` passthrough in the script-hardening PR |
-| `--preflight` NS-delegation check false-positives on `dev.opencrane.ai` every run (A-record in parent zone, not a delegated subzone) | 3+ (07-10..07-12) | **graduated** — scope the check to only fire when ACME/DNS-01 issuance is requested |
-| `--set` numeric-string coercion breaks string values (annotations) — needs `--set-string`/`--values` | 2 (07-10, 07-11) | fixed-forward in usage; consider a script guard |
-
-## Standing lessons (read these first)
-
-- Dependencies resolve from `Chart.lock` via `helm dep build` — never `dep update`
-  during a deploy (reproducibility; see PR #97).
-- Values presets live in `libs/k8s-platform/values/` (`opencrane-dev.yaml` is the dev
-  cluster). New env knobs belong in a preset, not in one-off `--set` flags.
-- Known dev-cluster history (see auto-memory / plan.md): migrate-on-deploy
-  initContainer, tenant-pod `trustNothing` config crash, `trustedProxies: []`
-  fail-closed — check whether a "new" failure is one of these before diagnosing fresh.
-- **In-place upgrade ≠ fresh render.** A chart change to an immutable/API-defaulted
-  field (Deployment `strategy`/`selector`, PVC spec, Service `clusterIP`) or a resource's
-  Helm-ownership metadata can be rejected by `helm upgrade` on an already-live object even
-  when `helm template`/CI are green. Diff `helm get manifest` / the live object before
-  applying. Two burns: RollingUpdate→Recreate needing `rollingUpdate: null` then
-  ultimately `maxSurge:0` (PRs #187→#188→#189, 3 revisions); Certificate created
-  out-of-band failing "cannot be imported into the current release" (2026-07-09).
-- `--set` coerces a numeric-looking string to a number (e.g. a `restartedAt` epoch
-  annotation → `expected string, got 1783…`). Use `--set-string` or a `--values` file
-  with a quoted value for annotation/string values.
-- A service that stores state (Cognee: identity DB + graph + vector) needs a PVC, or it
-  wipes on every restart — and any operator-registered state inside it (per-tenant logins)
-  is orphaned with it. Boot-time provisioning of such state must reconcile on a loop, not
-  one-shot; and a tenant pod that reads its credentials via `secretKeyRef` needs a
-  pod-template stamp to roll when that state is re-provisioned (PR #187→#190).
+- Resolve chart dependencies from `Chart.lock` with `helm dep build`.
+- Put repeatable environment configuration in a checked-in values profile.
+- A passing render does not prove an in-place upgrade will accept immutable-field changes; inspect
+  the live object and release manifest before applying.
+- Verify the running image digest and application health after rollout.
+- Mutate clusters only through the app-owned deployment scripts.
+- The minimal single-silo handoff is context, tenant/domain, OIDC issuer/client/secret, first
+  operator, three distinct external database bootstrap Secrets, and a pull Secret only for private images.
+- On GKE Autopilot, prove the database-privileges Job schedules; requested capacity, not observed
+  workload use, decides admission.
 
 ## Runs
 
-## 2026-07-08 · dev · deploy-org-frontend (control-plane SPA) · fff20c16c3f3 · LIVE
-- findings: none — clean rollout, all 3 orgs (elewa, northwind, elewa-be) healthy
-- friction: deploy-org-frontend.sh is not one of the two mandated profile scripts
-  (apps/fleet-platform|clustertenant-platform/deploy.sh) but is the repo's dedicated,
-  ledger-documented path for this exact surface — mandate doc should list it explicitly
-  alongside the two profile scripts to avoid re-litigating this each run
-- lesson: all 3 orgs already had ingress.sameOrigin chart-owned rules (no legacy
-  out-of-band ingress patch needed) — confirms the migration from optimalisation-plan.md
-  §5 is complete in dev; script's legacy-patch fallback branch is now dead code for
-  these orgs and can likely be dropped/flagged once confirmed elsewhere too
+## 2026-08-05 · dev · GKE cluster-only · fba5e7ae1f7fa110be7a921a5ae4a2a69927d5a2 · LIVE
 
-## 2026-07-09 · dev · clustertenant-platform (silo: elewa/elewa-be/northwind) · 7a61226 · PARTIAL
-- findings: infra: elewa-be + northwind upgrades FAIL outright — `Certificate
-  opencrane-clustertenant-tls` in both namespaces exists without Helm ownership
-  metadata (created out-of-band 2026-06-29, same minute as elewa's own Helm-owned
-  copy); every `helm upgrade` since errors "cannot be imported into the current
-  release". Last successful upgrade for both was 2026-07-02 — this has silently
-  blocked ~a week of deploys. Fix needs adoption (label/annotate to match elewa's
-  metadata, or `helm upgrade --take-ownership` — client is v4.1.4, supports it) but
-  k8s-deploy.sh has no raw-helm-flag passthrough to do this through the script.
-- findings: codebase: `apps/tenant/deploy/entrypoint.sh` only checks whether the
-  OpenClaw binary EXISTS on the PVC before installing — never compares the installed
-  `package.json` version to `$OPENCLAW_VERSION`. Result: bumping the pin (2026.6.9 →
-  2026.6.11) does NOT upgrade an already-provisioned tenant; elewa's tenant pod
-  restarted with `OPENCLAW_VERSION=2026.6.11` in env but is still running openclaw
-  2026.6.9 (`cat .../node_modules/openclaw/package.json` confirms). `gateway.reload:
-  hot` IS correctly rendered into the ConfigMap by the new control-plane, but its
-  effect on an unsupported old binary is unverified.
-- findings: script: `--tenant-tag` sets `tenant.image.tag`, a Helm value NO template
-  reads. The tenant image is actually pinned via `tenant.defaultImage.tag` (read into
-  `TENANT_DEFAULT_IMAGE`), which has no deploy flag and stays on floating `latest`.
-  Worked out this run only because `latest` and `sha-7a61226` happen to share a
-  digest (docker.yml pushes both on main-merge) + tenant pods use
-  `imagePullPolicy: Always`.
-- findings: codebase: elewa's `clustertenant-manager` fell into a tight, unthrottled
-  reconcile loop after the rolling restart — "reconciling tenant" → "litellm key
-  update failed ... Team=elewa" (404) → repeat every ~0.6–1.3s, sustained 10+ min,
-  ~282m CPU. Tenant CR settles at `phase=Running` (litellm-key failure is caught and
-  tolerated), so the generation/checksum skip-guard in `operator.ts` should apply but
-  visibly isn't stopping the loop — needs an operator-side trace with debug logging.
-  Likely related to the documented degraded-retry self-heal path having no backoff.
-- findings: codebase (minor): tenant pod's 30s contract-re-pull loop
-  (`entrypoint.sh:386`) shells out to `curl`, which isn't installed in the
-  `node:22-bookworm-slim` runtime stage — every cycle fails
-  "curl: command not found"; the contract re-pull feature is a no-op fleet-wide.
-- friction: no raw-helm-flag passthrough in k8s-deploy.sh — a sanctioned, non-destructive
-  recovery (`--take-ownership`) exists in the installed Helm client but the script can't
-  reach it, so an out-of-band-drifted resource permanently blocks scripted deploys.
-- friction: `--tenant-tag` is a documented, plausible-looking flag that is dead code
-  (2nd distinct "flag looks wired but isn't" finding after the deploy-org-frontend
-  mandate-doc gap on 2026-07-08 — different flags, same pattern: worth a lint/test that
-  every declared `--set` target actually resolves against `helm template`).
-- lesson: before touching elewa-be/northwind again, check every CR the silo chart
-  renders (`Certificate`, `Issuer`, etc.) for `app.kubernetes.io/managed-by: Helm` +
-  `meta.helm.sh/release-name`/`release-namespace` annotations matching this release —
-  a mismatch fails the upgrade before anything else runs, and looks nothing like the
-  documented NS-delegation preflight false positive.
-- lesson: a successful `helm upgrade` + "successfully rolled out" is NOT proof the
-  intended runtime change took effect inside the tenant pod — verify the actual
-  installed package version on the PVC, not just the pod's env vars/ConfigMap.
+- findings: none; the remote-backend Terraform plan reports no changes and all live regional GKE,
+  CMEK/IAM, state, context, and API checks pass.
+- friction: earlier HCL syntax, Bash 3.2 portability, and CMEK read-back drift required repair
+  iterations before final qualification.
+- lesson: gate future GKE provisioning on Terraform formatting and validation, Bash 3.2 contract
+  coverage, an unlocked regional backend, and a post-create no-op plan; zero nodes are expected for
+  an empty Autopilot cluster.
 
-## 2026-07-10 · dev · clustertenant-platform (silo: elewa) · e974df3 → 014250f → 1418d70 · LIVE
-- context: Cognee org-memory fix chain (issues behind PRs #178/#182/#183/#184). Multiple
-  same-day silo redeploys as each layer landed.
-- findings: infra: opencrane-dev has NO NetworkPolicy-enforcing CNI (standard GKE, no
-  Dataplane V2, `networkPolicy: null`, no calico/cilium DaemonSet) — every silo/Cognee
-  NetworkPolicy is declared-but-INERT, incl. the #178 Cognee egress exclusion. Filed #180.
-- findings: codebase: Cognee had no LLM/embedding creds, then no registered embedding
-  model, then a shared-`default_user` login — fixed across #182/#183/#184 (per-tenant
-  Cognee logins keyed to the IdP email + a shared silo Cognee tenant + an `auto-embedding`
-  alias). Verified live: `/v1/embeddings` model=auto-embedding → 200, no more
-  `Invalid model name` / `EmbeddingException`.
-- lesson: LiteLLM `/model/new` is not idempotent by name — guard with a `/model/info`
-  check (the embedding path does; chat guards via the ModelDefinition row). Registry
-  stayed duplicate-free across many redeploys.
+## 2026-08-05 · dev · GKE shared prerequisites · 97bbdfa2afeb613ac29ccdbbf64249689a3c7762 · FAILED
 
-## 2026-07-11 · dev · clustertenant-platform (silo: elewa) · 8905cdc / 53a64f9 · FAILED ×2
-- findings: chart: Cognee had NO persistent storage — identity DB + graph + vector on the
-  pod's ephemeral fs, wiped every restart (the #184 restart orphaned the per-tenant login →
-  `qa store failed: 401`). Fixed by a PVC (#187). BUT #187/#188 used `type: Recreate`, which
-  the API server rejected on the already-live Deployment (`spec.strategy.rollingUpdate:
-  Forbidden`) — `helm upgrade` aborted at rev 32 AND rev 33, so Cognee never got the PVC. A
-  template `rollingUpdate: null` (#188) did not clear the field via Helm's 3-way merge.
-- lesson: see standing lesson "in-place upgrade ≠ fresh render". Superseded by #189's
-  `RollingUpdate maxSurge:0` (RWO-safe, no strategy-type transition).
+- findings: script: Helm 4 rejected the removed `helm list --all` flag before any namespace,
+  release, or cluster-scoped resource was changed.
+- friction: the contract suite covered Helm 3 release discovery but not Helm 4's explicit status
+  union.
+- lesson: keep release discovery compatible with both supported Helm major versions and fail before
+  mutation when the local client contract is unsupported.
 
-## 2026-07-12 · dev · clustertenant-platform (silo: elewa) · 584bd3c → 830f42e · LIVE
-- findings: chart: #189 (`RollingUpdate maxSurge:0`) applies cleanly on the live Deployment;
-  Cognee PVC Bound, and data VERIFIED to survive a forced restart (same PVC re-attached,
-  db mtimes pre-date the restart; transient Multi-Attach self-resolves in ~15s — the
-  RWO-safe handoff working as designed).
-- findings: codebase: the silo-owner self-heal (`ensureSiloTenant`) was one-shot at operator
-  boot with no retry — it missed the Cognee readiness window on a deploy, so the persistent
-  Cognee stayed owner-less and every per-tenant join looped on owner-login 400s. And the
-  running tenant pod (secretKeyRef creds, no re-login on 401) never picked up a healed
-  identity. Both fixed in #190: periodic 60s silo heal + an `opencrane.io/cognee-identity`
-  pod-template stamp that rolls the tenant pod when its Cognee tenant id changes. Verified
-  live: owner re-provisioned within 14s of boot, tenant pod rolled, no 401 in the post-roll
-  window, embedding 200.
-- friction: `--preflight` NS-delegation check false-positives on dev.opencrane.ai (A-record
-  in the parent zone, not a delegated subzone) on every run — candidate to scope the check
-  to only fire when ACME/DNS-01 issuance is actually requested.
-- lesson: org-memory is only "working" when the tenant pod can invoke it — a green rollout +
-  healed server-side identity is necessary but not sufficient; confirm from the tenant pod's
-  own logs (fresh login, no 401) after it rolls.
+## 2026-08-05 · dev · GKE shared prerequisites · f49d8e6459ae2c4f4bdea02361fd17ba27a1a3d1 · PARTIAL
 
-## 2026-07-12 · dev · fleet-platform + clustertenant-platform (elewa/elewa-be/northwind/tarv-org) · e149924 · PARTIAL
-- findings: chart: `.Values.multiCt.enabled` (networkpolicy-main-network-baseline.yaml) nil-pointer-panics under `--reuse-values` — the key is a chart default added after the fleet's last release and `--reuse-values` doesn't re-merge new chart defaults; fix PR uses the nil-safe `(.Values.multiCt).enabled` idiom + drops `--reuse-values` from the dev preset header.
-- findings: script: default `--reset-then-reuse-values` silently floated the pinned per-component image tag back to chart-default `latest` (digest-equal this run, no content risk) — re-pin explicitly every run until the tag-float guard PR lands.
-- findings: chart/config: fresh silo (tarv-org) deterministically collides on the legacy cluster-wide wildcard gateway-ingress (`ingress.sameOrigin.enabled` defaulted false) → fixed → PR #199 removes the legacy wildcard entirely and makes same-origin the ONLY ingress mode (toggle deleted); re-deploy proves it + prunes the stale elewa-be/northwind wildcards once #201's --take-ownership lands.
-- findings: infra: external-dns `--domain-filter=dev.opencrane.ai` never matches the actual zone (`opencrane.ai.`) — ALL org A-record writes silently dropped ≥2 days; tarv-org's DNSEndpoint never written → issue #198.
-- findings: infra (bump): elewa-be + northwind Certificate-ownership block unchanged since 2026-07-02 (recovery unblocks once --helm-arg passthrough PR lands); codebase (bump): #174 litellm-key reconcile loop still reproducing on elewa.
-- friction: fleet profile REQUIRES undocumented `OPENCRANE_SKIP_PREFLIGHT=1` on this cluster (header docs in the script-hardening PR); `--platform-operator-seed-email` must be restated every invocation (fail-closed gate — header callout in same PR).
-- lesson: do NOT use `--reuse-values` on the fleet profile; use the script default AND restate `--control-plane-tag`/`--operator-tag` explicitly. npm/NX repo conversion (PR #196) is deploy-neutral: scripts build nothing; charts render identically.
+- findings: config: ingress-nginx reached Ready on reserved address `35.205.225.244`; cert-manager's
+  cainjector could not acquire its lease in Autopilot-managed `kube-system`, so the atomic release
+  rolled back while its established retained custom resource definitions remained; CloudNativePG
+  was not attempted.
+- friction: cert-manager's upstream default election namespace crossed GKE Autopilot's managed
+  namespace boundary.
+- lesson: pin third-party leader election to the controller's own namespace and accept only the
+  bootstrap-owned retained-resource retry shape.
+
+## 2026-08-05 · dev · GKE shared prerequisites · 6da7110f063b9b08efcb02bf14a040a3462a083e · LIVE
+
+- findings: infra: ingress-nginx `4.15.1`, cert-manager `v1.21.1`, and CloudNativePG `0.29.0` are
+  deployed and Ready with the locked chart digests; all required webhooks, ingress class, and
+  certificate/database custom resource definitions are present. `europe-west1` SSD quota is
+  `475/500 GiB`, so a 50 GiB OpenCrane silo cannot be admitted yet.
+- friction: GKE Autopilot raised sub-minimum requests to `50m/52Mi` or `100m/103Mi`; recursive DNS
+  continued to serve the prior wildcard address after the dedicated authoritative record changed.
+- lesson: render and cost the admitted request floor, free at least 25 GiB more SSD quota without
+  deleting unverified data, and wait for public DNS convergence before requesting the silo's ACME
+  certificate.
+
+## 2026-08-05 · dev · testv2 single-silo preflight · 0a526d8df3f7676b7e50f3a1445806680d3484ad · FAILED
+
+- findings: config: the executor has no OIDC issuer/client/client-secret inputs; `opencrane-testv2`
+  and its four required external PostgreSQL basic-auth Secrets do not exist; `dev.opencrane.ai` has
+  no delegated NS record although `testv2.dev.opencrane.ai` resolves to the ingress.
+- friction: the silo deployer intentionally validates external database credentials but the repository
+  has no app-owned credential-provisioning entrypoint for a fresh namespace under the script-only rule.
+- lesson: supply the secure OIDC source and pre-provisioned credential Secret names, select an explicit
+  expandable StorageClass, and restore base-domain delegation before retrying the silo deploy.
+
+## 2026-08-05 · dev · testv2 single-silo preflight correction · 0a526d8df3f7676b7e50f3a1445806680d3484ad · PARTIAL
+
+- findings: script: later direct inspection proves `standard-rwo` is the default expandable class;
+  the previous default-StorageClass finding was incorrect. The preflight's child-NS test is instead
+  too strict for `dev.opencrane.ai`, which is served by the `opencrane.ai` zone and need not be a
+  delegated zone itself.
+- lesson: validate that the supplied base domain has authoritative DNS service, not that it is a
+  separately delegated zone; retain the missing external credential and OIDC-input findings.
+
+## 2026-08-05 · dev · testv2 single-silo namespace deploy · d2f26df0bf257c00be4aea3892174b016e0c057c · PARTIAL
+
+- findings: infra: PostgreSQL and its pooler are Ready, but a later database-privileges hook cannot
+  schedule on the three-node Autopilot fleet (`Insufficient memory` / pod-capacity events), so the
+  app-owned deployment stops before changing the tenant Helm release. config: the server remains
+  fail-closed on the absent Fleet-owned membership-verification public-key Secret. CI: the manual
+  bootstrap-image workflow is green and published immutable `sha-d2f26df0` channel-proxy and
+  memory-gateway images after recording Linux Terraform-provider checksums.
+- friction: image-only recovery still reconciles PostgreSQL first; a shortcut that skipped the hook
+  was rejected in independent review because it could bypass unproven database grants.
+- lesson: keep the database privilege proof intact; qualify a low-cost, schedulable retry design or
+  obtain stable Autopilot capacity before retrying the tenant Helm release, and source the Fleet
+  verification key from its owning authority before attempting server readiness.
+
+## 2026-08-06 · dev · testv2 standalone server-image retry · 165722867925aee88394dd7cda08d4468879e958 · PARTIAL
+
+- findings: CI: the full manual workflow, including `ghcr.io/elewa-git/opencrane-server:sha-16572286`, completed successfully. infra: the app-owned deploy script reconciled PostgreSQL but its required three-container database-privileges Job remains Pending; all three Autopilot nodes report 99% requested memory because GKE-managed `gke-system-balloon-pod` workloads reserve the remaining capacity. config: the tenant Helm release was not upgraded, so the old Fleet-key server mount remains live and has not yet exercised standalone mode.
+- friction: Autopilot provisioned a new node for the pending Job, then a system-node-critical balloon Pod consumed its free allocation; low measured memory usage therefore does not imply schedulable capacity.
+- lesson: do not bypass database privilege proof or mutate GKE-managed balloon Pods. Qualify and implement a low-cost Autopilot placement/resource design that schedules the proof Job before retrying the release; the standalone membership mode is ready to validate once that gate passes.
+
+## 2026-08-07 · dev · testv2 single-silo OpenAI bootstrap · ab4c3614 · LIVE
+
+- findings: config: the first model registration exposed that LiteLLM model persistence was disabled;
+  the deploy engine now enables the database-backed model store and explicitly references its stable
+  salt Secret. script: normal OIDC upgrades now retain a complete release-local Secret rather than
+  requiring the confidential client secret to be re-supplied.
+- friction: a cold GKE Autopilot ComputeClass node takes several minutes to schedule and pull the
+  three-container database-privileges proof; keep the proof intact and run the app-owned deployer in
+  a persistent terminal session.
+- lesson: accept a single-silo model-provider gate only after the server logs successful LiteLLM
+  credential and model registrations, every workload is Ready, and public `/healthz` reports a
+  database-backed healthy response.
+
+## 2026-08-07 · dev · testv2 standalone first-owner deployment · 52726181 · PARTIAL
+
+- findings: chart/script: OpenCrane revision 28 and PostgreSQL revision 45 deployed through the
+  app-owned deployer. The ready server runs CI image `sha-685fb4e`; public `/healthz` returns 200
+  with `{"status":"ok","db":true}`, and the login route returns a Zitadel authorization redirect.
+  The release binds `testv2`, `jente@elewa.ke`, the Zitadel issuer/client, and an OpenAI LiteLLM
+  provider secret. The first login may atomically create only that verified subject's Owner membership.
+- friction: three deployer defects surfaced before the release could roll: `--set-string` forwarding,
+  strict-mode expansion of an empty raw-Helm-argument array, and preserving the profile's immutable
+  ClusterTenant binding on later upgrades. CI's `type=sha` tag is seven characters; deploying an
+  invented eight-character tag causes an explicit GHCR NotFound pull failure.
+- lesson: deploy profiles must carry the immutable first-owner binding on every rerun, and the core
+  guard must allow only its identical `--set-string` ClusterTenant while rejecting issuer, email, and
+  all other first-user mutation. Read the exact published image tag from CI before a live pin.
+- open: Jente must log out and back in to exercise the first callback and create the local Owner row.
+  The pre-existing `artifact-service` ImagePullBackOff also keeps the namespace short of full
+  workload health; it is unrelated to the first-owner path.
+
+## 2026-08-07 · dev · testv2 artifact recovery and workload qualification · 7ebcfa89 · PARTIAL
+
+- findings: CI run `31173602224` passed its build, test, lint, and artifact-image publication gates.
+  The app-owned deployer applied OpenCrane revision 30 and PostgreSQL revision 48 with
+  `opencrane-artifact-service:sha-7ebcfa8`. The artifact deployment is `1/1 Available`, every main
+  namespace deployment is Ready, the database-privileges Job completed, public `/healthz` returns 200
+  with `{"status":"ok","db":true}`, and `/api/v1/auth/login` redirects to Zitadel client
+  `384935596856002567` with the exact configured callback.
+- friction: artifact-service had no CI-published image, then exposed an undeclared runtime
+  `@noble/hashes` dependency. CI gained explicit artifact publication, and the artifact workspace now
+  declares its emitted runtime dependency. The live validation also exposed a Helm-contract parser
+  that ignored a final YAML `Role` document; it now flushes at EOF and asserts that the role exists.
+- lesson: deployment qualification must include every enabled workload's Ready state, not only the
+  main namespace. Pin the seven-character CI SHA tag and run the app-owned deployer through its
+  completion; GKE Autopilot may reschedule a newly updated pod while it preserves availability.
+- open: Jente must still log out and log back in to invoke the proof-bearing Zitadel callback once.
+  That callback creates the local `testv2` Owner membership and removes the existing session's
+  `/no-tenant` result. Personal-agent/workspace creation and Phase E runtime qualification remain
+  separate live gates.
+
+## 2026-08-07 · dev · testv2 first-owner callback selector repair · fc53af6d · PARTIAL
+
+- findings: the first real Zitadel callback reached the server and exposed a Prisma validation error:
+  the compound `(clusterTenant, subject)` selector incorrectly included the in-memory
+  `mayCreateOwner` authorization flag. CI run `31175039722` passed build, test, lint, and published
+  server image `sha-fc53af6`; its exact selector regression test passes. The app-owned deployer
+  applied OpenCrane revision 32 and PostgreSQL revision 49. Server, LiteLLM, and MCP gateway are
+  `1/1 Ready`; public `/healthz` returns database-backed 200 and the login endpoint redirects to
+  the configured Zitadel client.
+- friction: the database privileges Job was pending only while Autopilot created its isolated
+  ComputeClass node and pulled its three PostgreSQL containers. It then completed and did not cause
+  application downtime.
+- lesson: first-owner admission values contain both durable lookup fields and in-memory authority;
+  repositories must select only durable model fields. A configured callback redirect is not callback
+  qualification: the first real OIDC return must exercise the admission transaction.
+- open: Jente must run the login once more to create and confirm the local `testv2` Owner row.
+  Personal-agent/workspace creation and Phase E runtime qualification remain separate live gates.
+
+## 2026-08-07 · dev · testv2 current-UI tenant rendering repair · 6a09541a · COMPLETE
+
+- findings: the corrected Zitadel callback returned `302 /` and created the active `testv2` Owner
+  membership. The old `opencrane-ui:latest` bundle then requested the removed `/api/v1/tenants`
+  endpoint and rendered `/no-tenant`, despite `/auth/me` resolving the membership. CI run
+  `31176563689` passed and published `opencrane-ui:sha-6a09541`; it adds the explicit, app-owned
+  `ui` publication selection. The app-owned deployer applied OpenCrane revision 33 and PostgreSQL
+  revision 50, pinning UI `sha-6a09541`, server `sha-fc53af6`, and artifact service `sha-7ebcfa8`.
+  UI is `1/1 Ready` and public health remains database-backed 200.
+- lesson: a single-silo qualification must pin every workload image to CI evidence. A healthy
+  callback and a correct server `/auth/me` response do not validate the customer journey when the
+  SPA can remain at an unrelated `latest` image.
+- open: refresh an already-open browser tab to load the pinned UI bundle. The first-user
+  callback/membership gate is complete; personal-agent/workspace creation and Phase E runtime
+  qualification remain separate live gates.

@@ -1,0 +1,12 @@
+apiVersion: v2
+name: k8s-platform
+description: >-
+  Internal OpenCrane Kubernetes platform substrate for apps/_infra/deploy-k8s — a Helm library
+  chart of named templates (labels, fullname, RBAC rule sets, and environment helpers). Holds no
+  installable resources of its own. The deployment engine, cluster provisioning, Terraform, value
+  profiles, and conformance tests live alongside it under the same deployment owner.
+type: library
+version: 0.1.0
+appVersion: "0.1.0"
+maintainers:
+  - name: OpenCrane

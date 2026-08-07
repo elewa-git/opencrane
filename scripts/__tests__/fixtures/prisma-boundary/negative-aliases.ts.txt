@@ -1,0 +1,24 @@
+import { Prisma as Orm, type PrismaClient as Database } from "@prisma/client";
+
+export class AliasedService
+{
+	private readonly database: Database;
+	private readonly transaction: Orm.TransactionClient;
+
+	constructor(database: Database, transaction: Orm.TransactionClient)
+	{
+		this.database = database;
+		this.transaction = transaction;
+	}
+
+	async execute(): Promise<unknown>
+	{
+		const store: Orm.WidgetDelegate = this.transaction.widget;
+		const { widget: otherStore, gadget } = this.database;
+		const transact = this.database.$transaction.bind(this.database);
+		await store.findFirst({});
+		await otherStore.create({ data: {} });
+		await gadget.deleteMany({});
+		return transact(async function _Run(value) { return value; });
+	}
+}

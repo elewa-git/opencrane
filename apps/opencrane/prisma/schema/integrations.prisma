@@ -1,0 +1,49 @@
+/// Lifecycle of a silo-scoped integration catalogue entry.
+enum IntegrationState {
+  Active  @map("active")
+  Retired @map("retired")
+}
+
+/// Lifecycle of one opaque Obot custody reference.
+enum IntegrationCustodyState {
+  Ready   @map("ready")
+  Revoked @map("revoked")
+  Expired @map("expired")
+}
+
+/// Silo-scoped catalogue record for one integration whose credentials remain with Obot.
+model Integration {
+  id                  String                              @id @default(cuid())
+  siloId              String                              @map("silo_id")
+  obotCatalogEntryId  String                              @map("obot_catalog_entry_id")
+  displayName         String                              @map("display_name")
+  state               IntegrationState                    @default(Active)
+  createdAt           DateTime                            @default(now()) @map("created_at")
+  updatedAt           DateTime                            @updatedAt @map("updated_at")
+  custodyReferences   IntegrationCustodyReference[]
+  assignments         AgentRevisionIntegrationAssignment[]
+
+  @@unique([id, siloId])
+  @@unique([siloId, obotCatalogEntryId])
+  @@index([siloId, state])
+  @@map("integrations")
+}
+
+/// Opaque Obot-issued custody handle. This database never stores the underlying credential.
+model IntegrationCustodyReference {
+  id                    String                  @id @default(cuid())
+  integrationId         String                  @map("integration_id")
+  siloId                String                  @map("silo_id")
+  obotCustodyReference  String                  @map("obot_custody_reference")
+  state                 IntegrationCustodyState @default(Ready)
+  expiresAt             DateTime                @map("expires_at")
+  revokedAt             DateTime?               @map("revoked_at")
+  createdAt             DateTime                @default(now()) @map("created_at")
+  integration           Integration             @relation(fields: [integrationId, siloId], references: [id, siloId], onDelete: Restrict)
+  assignments           AgentRevisionIntegrationAssignment[]
+
+  @@unique([id, integrationId, siloId])
+  @@unique([obotCustodyReference])
+  @@index([integrationId, state, expiresAt])
+  @@map("integration_custody_references")
+}

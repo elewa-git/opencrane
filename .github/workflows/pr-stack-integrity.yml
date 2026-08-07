@@ -1,0 +1,88 @@
+name: Enforce pull-request stack integrity
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize, edited, ready_for_review, closed]
+  workflow_dispatch:
+
+# Every PR mutation can change another PR's ancestry. Serialize the repository-wide snapshot so a
+# later event replaces evidence from an older graph.
+concurrency:
+  group: pr-stack-integrity-${{ github.repository }}
+  cancel-in-progress: true
+
+permissions:
+  checks: write
+  contents: read
+  pull-requests: read
+
+jobs:
+  integrity:
+    name: Prove review topology and ancestry
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out trusted repository tooling
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+      - name: Validate the live PR graph
+        id: validate
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          node scripts/pr-stack-integrity.mjs \
+            --event-pr "${{ github.event.pull_request.number }}" \
+            --event-action "${{ github.event.action }}" \
+            --event-head "${{ github.event.pull_request.head.sha }}" \
+            --evidence pr-stack-integrity-evidence.json \
+            --summary "$GITHUB_STEP_SUMMARY"
+          status=$?
+          echo "status=$status" >> "$GITHUB_OUTPUT"
+          exit 0
+
+      # pull_request_target runs trusted default-branch tooling, but its workflow SHA is not any
+      # candidate SHA. The graph is repository-wide, so refresh the same required check on every
+      # currently open PR head; a parent-close failure must invalidate its orphaned child too.
+      - name: Publish repository-wide PR-head checks
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONCLUSION: ${{ steps.validate.outputs.status == '0' && 'success' || 'failure' }}
+        run: |
+          set -euo pipefail
+          if [[ "$CONCLUSION" == "success" ]]; then
+            jq -r '.pullRequests[].head.sha' pr-stack-integrity-evidence.json > pr-stack-check-heads.txt
+          else
+            gh api \
+              --paginate \
+              "repos/${{ github.repository }}/pulls?state=open&per_page=100" \
+              --jq '.[] | .head.sha' > pr-stack-check-heads.txt
+            printf '%s\n' "${{ github.event.pull_request.head.sha }}" >> pr-stack-check-heads.txt
+          fi
+          sed '/^$/d' pr-stack-check-heads.txt | sort -u > pr-stack-check-heads-unique.txt
+          while IFS= read -r head_sha; do
+            gh api --method POST "repos/${{ github.repository }}/check-runs" \
+              -f name="PR stack integrity" \
+              -f head_sha="$head_sha" \
+              -f status=completed \
+              -f conclusion="$CONCLUSION"
+          done < pr-stack-check-heads-unique.txt
+
+      - name: Enforce the result
+        if: steps.validate.outputs.status != '0'
+        run: exit 1
+
+      - name: Upload SHA-bound evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: pr-stack-integrity-${{ github.event.pull_request.head.sha || github.sha }}
+          path: pr-stack-integrity-evidence.json
+          if-no-files-found: error
+          retention-days: 30

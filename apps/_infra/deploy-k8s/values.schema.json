@@ -1,0 +1,280 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "OpenCrane Helm values coherence guards",
+  "description": "Fail-fast guards for the clean OpenCrane target. Only selected values are constrained; Helm validates merged values on every install, template, and lint.",
+  "type": "object",
+  "properties": {
+    "channelProxy": {
+      "type": "object",
+      "required": ["enabled", "image", "service", "targetHostSuffixes", "projectedTokenTtlSeconds"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "service": {
+          "type": "object",
+          "required": ["port"],
+          "properties": {
+            "port": { "type": "integer", "minimum": 1, "maximum": 65535 }
+          }
+        },
+        "allowedOrigins": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^https://[^/]+$" },
+          "uniqueItems": true
+        },
+        "targetHostSuffixes": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^\\.[a-z0-9.-]+$" },
+          "uniqueItems": true
+        },
+        "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 }
+      }
+    },
+    "memoryGateway": {
+      "type": "object",
+      "required": ["image", "replicas", "service", "projectedTokenTtlSeconds", "httpTimeoutSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort"],
+      "properties": {
+        "image": {
+          "type": "object",
+          "required": ["repository", "tag", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "tag": { "type": "string", "minLength": 1 },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "replicas": { "type": "integer", "minimum": 1, "maximum": 3 },
+        "service": {
+          "type": "object",
+          "required": ["port"],
+          "properties": { "port": { "type": "integer", "minimum": 1, "maximum": 65535 } }
+        },
+        "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 },
+        "httpTimeoutSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "kubernetesApiServerCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "kubernetesApiServerEndpointCidrs": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      }
+    },
+    "agentController": {
+      "type": "object",
+      "required": ["enabled", "image", "claimLeaseSeconds", "assignmentTtlSeconds", "kubernetesApiServerCidrs", "kubernetesApiServerPort", "kubernetesApiServerEndpointCidrs", "kubernetesApiServerEndpointPort", "runtimeQuota", "runtimeProfile"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "runtimeNamespace": { "type": "string", "maxLength": 63, "pattern": "^$|^[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+        "claimLeaseSeconds": { "type": "integer", "minimum": 1, "maximum": 300 },
+        "assignmentTtlSeconds": { "type": "integer", "minimum": 60, "maximum": 86400 },
+        "image": {
+          "type": "object",
+          "required": ["repository", "digest", "pullPolicy"],
+          "properties": {
+            "repository": { "type": "string", "minLength": 1 },
+            "digest": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
+        },
+        "kubernetesApiServerCidrs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "kubernetesApiServerEndpointCidrs": {
+          "type": "array",
+          "items": { "type": "string", "pattern": "^[0-9a-fA-F:.]+/(32|128)$" },
+          "uniqueItems": true
+        },
+        "kubernetesApiServerEndpointPort": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "runtimeQuota": {
+          "type": "object",
+          "required": ["pods", "jobs", "requests", "limits"],
+          "properties": {
+            "pods": { "type": "integer", "minimum": 1 },
+            "jobs": { "type": "integer", "minimum": 1 },
+            "requests": {
+              "type": "object",
+              "required": ["cpu", "memory"],
+              "properties": {
+                "cpu": { "type": "string", "minLength": 1 },
+                "memory": { "type": "string", "minLength": 1 }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "required": ["cpu", "memory"],
+              "properties": {
+                "cpu": { "type": "string", "minLength": 1 },
+                "memory": { "type": "string", "minLength": 1 }
+              }
+            }
+          }
+        },
+        "runtimeProfile": {
+          "type": "object",
+          "required": ["name", "image", "serviceAccountName", "projectedTokenTtlSeconds", "scratchSize", "resources"],
+          "properties": {
+            "name": { "type": "string", "minLength": 1 },
+            "serviceAccountName": { "type": "string", "pattern": "^agent-runtime-[a-z0-9]([-a-z0-9]*[a-z0-9])?$" },
+            "projectedTokenTtlSeconds": { "type": "integer", "minimum": 600, "maximum": 3600 },
+            "scratchSize": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" },
+            "image": {
+              "type": "object",
+              "required": ["repository", "digest", "pullPolicy"],
+              "properties": {
+                "repository": { "type": "string", "minLength": 1 },
+                "digest": { "type": "string" },
+                "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+              }
+            },
+            "resources": {
+              "type": "object",
+              "required": ["requests", "limits"],
+              "properties": {
+                "requests": {
+                  "type": "object",
+                  "required": ["cpu", "memory"],
+                  "properties": {
+                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                  }
+                },
+                "limits": {
+                  "type": "object",
+                  "required": ["cpu", "memory"],
+                  "properties": {
+                    "cpu": { "type": "string", "pattern": "^[1-9][0-9]*m?$" },
+                    "memory": { "type": "string", "pattern": "^[1-9][0-9]*(Ki|Mi|Gi)$" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "crds": {
+      "type": "object",
+      "description": "Install the ClusterTenant CRD via templates/crds/. Default true; set false only when a shared CRD bundle owns it.",
+      "properties": {
+        "install": {
+          "type": "boolean",
+          "description": "Render templates/crds/*.yaml (each carries helm.sh/resource-policy: keep so helm uninstall never deletes a CRD other silos still depend on)."
+        }
+      }
+    },
+    "externalSecrets": {
+      "type": "object",
+      "description": "External Secrets Operator integration. Off by default; when enabled, templates/external-secrets-store.yaml renders the (Cluster)SecretStore + its ServiceAccount for a standalone silo.",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "provider": {
+          "type": "string",
+          "description": "Only gcp-secret-manager has a provider block implemented today; azure-key-vault/aws-secrets-manager fail fast at render time until their provider block is added."
+        },
+        "serviceAccountAnnotations": { "type": "object" },
+        "gcp": {
+          "type": "object",
+          "properties": {
+            "projectId": { "type": "string" },
+            "clusterLocation": { "type": "string" }
+          }
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "properties": {
+        "mainNetworkDefaultDeny": {
+          "type": "object",
+          "description": "Platform-namespace default-deny floor (templates/networkpolicy-main-default-deny.yaml). Off by default; validate plane-to-plane connectivity before enabling in production. Mandatory (enforced by a Helm fail guard) when multiCt.enabled=true.",
+          "properties": {
+            "enabled": { "type": "boolean" }
+          }
+        }
+      }
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "required": ["agentController"],
+        "properties": {
+          "agentController": {
+            "required": ["enabled"],
+            "properties": { "enabled": { "const": true } }
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "agentController": {
+            "properties": {
+              "kubernetesApiServerCidrs": { "minItems": 1 },
+              "image": {
+                "properties": {
+                  "digest": { "pattern": "^sha256:[a-f0-9]{64}$" }
+                }
+              },
+              "runtimeProfile": {
+                "properties": {
+                  "image": {
+                    "properties": {
+                      "digest": { "pattern": "^sha256:[a-f0-9]{64}$" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["externalSecrets"],
+        "properties": {
+          "externalSecrets": {
+            "required": ["enabled"],
+            "properties": {
+              "enabled": { "const": true }
+            }
+          }
+        }
+      },
+      "then": {
+        "description": "When externalSecrets.enabled=true, a provider must be named — otherwise the (Cluster)SecretStore this chart renders has no backend to bind to and fails fast at apply time instead of install time.",
+        "properties": {
+          "externalSecrets": {
+            "required": ["provider"],
+            "properties": {
+              "provider": {
+                "type": "string",
+                "minLength": 1
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

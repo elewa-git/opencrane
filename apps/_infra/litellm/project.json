@@ -1,0 +1,12 @@
+{
+  "name": "litellm",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["type:app", "layer:entrypoint", "scope:litellm"],
+  "targets": {
+    "helm-lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "helm lint apps/_infra/litellm/helm" }
+    }
+  }
+}

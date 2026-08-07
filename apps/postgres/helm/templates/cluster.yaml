@@ -1,0 +1,212 @@
+{{- if eq (len .Values.databases) 0 -}}
+{{- fail "databases must contain at least the initdb database" -}}
+{{- end -}}
+{{- $primary := index .Values.databases 0 -}}
+{{- $databaseNames := dict -}}
+{{- $databaseOwners := dict -}}
+{{- $credentialSecrets := dict -}}
+{{- if or (not .Values.databaseAdmin.name) (not .Values.databaseAdmin.credentialsSecret) -}}
+{{- fail "databaseAdmin.name and databaseAdmin.credentialsSecret are required; OpenCrane never generates database credentials" -}}
+{{- end -}}
+{{- if lt (int .Values.privileges.timeoutSeconds) 1 -}}
+{{- fail "privileges.timeoutSeconds must be at least 1" -}}
+{{- end -}}
+{{- if lt (int .Values.privileges.jobDeadlineGraceSeconds) 10 -}}
+{{- fail "privileges.jobDeadlineGraceSeconds must be at least 10 so the Job can emit terminal diagnostics" -}}
+{{- end -}}
+{{- range $database := .Values.databases }}
+{{- if or (not .name) (not .owner) (not .credentialsSecret) -}}
+{{- fail "every databases entry requires name, owner, and credentialsSecret; OpenCrane never generates database credentials" -}}
+{{- end -}}
+{{- if hasKey $databaseNames $database.name -}}
+{{- fail (printf "databases entries must have unique names; duplicate %q" $database.name) -}}
+{{- end -}}
+{{- if hasKey $databaseOwners $database.owner -}}
+{{- fail (printf "databases entries must have unique owners; duplicate %q" $database.owner) -}}
+{{- end -}}
+{{- if hasKey $credentialSecrets $database.credentialsSecret -}}
+{{- fail (printf "databases entries must have unique credentialsSecret values; duplicate %q" $database.credentialsSecret) -}}
+{{- end -}}
+{{- $_ := set $databaseNames $database.name true -}}
+{{- $_ := set $databaseOwners $database.owner true -}}
+{{- $_ := set $credentialSecrets $database.credentialsSecret true -}}
+{{- end -}}
+{{- if hasKey $databaseOwners .Values.databaseAdmin.name -}}
+{{- fail (printf "databaseAdmin.name must not equal a database owner; duplicate %q" .Values.databaseAdmin.name) -}}
+{{- end -}}
+{{- if hasKey $credentialSecrets .Values.databaseAdmin.credentialsSecret -}}
+{{- fail (printf "databaseAdmin.credentialsSecret must be distinct from database credentials; duplicate %q" .Values.databaseAdmin.credentialsSecret) -}}
+{{- end -}}
+{{- if and .Values.backup.enabled (not .Values.backup.plugin.name) -}}
+{{- fail "backup.plugin.name is required when backup.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.restore.enabled (not .Values.restore.plugin.name) -}}
+{{- fail "restore.plugin.name is required when restore.enabled=true" -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.clientPodSelectors) -}}
+{{- fail "networkPolicy.clientPodSelectors must not be empty when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (not .Values.networkPolicy.operatorNamespace) -}}
+{{- fail "networkPolicy.operatorNamespace is required when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.operatorPodLabels) -}}
+{{- fail "networkPolicy.operatorPodLabels must not be empty when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.kubernetesApiServerCidrs) -}}
+{{- fail "networkPolicy.kubernetesApiServerCidrs must contain the exact Kubernetes API Service address when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- if and .Values.networkPolicy.enabled (empty .Values.networkPolicy.kubernetesApiServerEndpointCidrs) -}}
+{{- fail "networkPolicy.kubernetesApiServerEndpointCidrs must contain the exact Kubernetes API backing endpoints when NetworkPolicy is enabled" -}}
+{{- end -}}
+{{- if .Values.networkPolicy.enabled -}}
+{{- range $cidr := concat .Values.networkPolicy.kubernetesApiServerCidrs .Values.networkPolicy.kubernetesApiServerEndpointCidrs -}}
+{{- $ipv4Host := regexMatch "^((25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])\\.){3}(25[0-5]|2[0-4][0-9]|1[0-9]{2}|[1-9]?[0-9])/32$" $cidr -}}
+{{- $ipv6Host := regexMatch "^(([0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,7}:|([0-9A-Fa-f]{1,4}:){1,6}:[0-9A-Fa-f]{1,4}|([0-9A-Fa-f]{1,4}:){1,5}(:[0-9A-Fa-f]{1,4}){1,2}|([0-9A-Fa-f]{1,4}:){1,4}(:[0-9A-Fa-f]{1,4}){1,3}|([0-9A-Fa-f]{1,4}:){1,3}(:[0-9A-Fa-f]{1,4}){1,4}|([0-9A-Fa-f]{1,4}:){1,2}(:[0-9A-Fa-f]{1,4}){1,5}|[0-9A-Fa-f]{1,4}:((:[0-9A-Fa-f]{1,4}){1,6})|:((:[0-9A-Fa-f]{1,4}){1,7}|:))/128$" $cidr -}}
+{{- if not (or $ipv4Host $ipv6Host) -}}
+{{- fail (printf "Kubernetes API egress CIDR %q must identify exactly one host with /32 or /128" $cidr) -}}
+{{- end -}}
+{{- end -}}
+{{- if or (lt (int .Values.networkPolicy.kubernetesApiServerPort) 1) (gt (int .Values.networkPolicy.kubernetesApiServerPort) 65535) -}}
+{{- fail "networkPolicy.kubernetesApiServerPort must be from 1 through 65535" -}}
+{{- end -}}
+{{- if or (lt (int .Values.networkPolicy.kubernetesApiServerEndpointPort) 1) (gt (int .Values.networkPolicy.kubernetesApiServerEndpointPort) 65535) -}}
+{{- fail "networkPolicy.kubernetesApiServerEndpointPort must be from 1 through 65535" -}}
+{{- end -}}
+{{- end -}}
+{{- if not (regexMatch "^[0-9a-f]{64}$" .Values.bootstrap.targetBaseline.sha256) -}}
+{{- fail "bootstrap.targetBaseline.sha256 must be the full lowercase SHA-256 identity of the app-owned target baseline" -}}
+{{- end -}}
+{{- $baselineConfigMapRefs := .Values.bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs -}}
+{{- if and (not .Values.restore.enabled) (ne (len $baselineConfigMapRefs) 1) -}}
+{{- fail "bootstrap.initdb.postInitApplicationSQLRefs.configMapRefs must contain exactly one app-owned target baseline for a fresh database" -}}
+{{- end -}}
+{{- $baselineConfigMapRef := dict -}}
+{{- if gt (len $baselineConfigMapRefs) 0 -}}
+{{- $baselineConfigMapRef = index $baselineConfigMapRefs 0 -}}
+{{- if or (not $baselineConfigMapRef.name) (not $baselineConfigMapRef.key) -}}
+{{- fail "the initdb target baseline ConfigMap reference requires name and key" -}}
+{{- end -}}
+{{- end -}}
+{{- if lt (int .Values.postgresql.maxConnections) 1 -}}
+{{- fail "postgresql.maxConnections must be positive" -}}
+{{- end -}}
+{{- if lt (int .Values.pooler.instances) 1 -}}
+{{- fail "pooler.instances must be positive" -}}
+{{- end -}}
+{{- if empty .Values.pooler.image -}}
+{{- fail "pooler.image must name an immutable PgBouncer image" -}}
+{{- end -}}
+{{- if lt (int .Values.pooler.maxClientConnections) 1 -}}
+{{- fail "pooler.maxClientConnections must be positive" -}}
+{{- end -}}
+{{- if lt (int .Values.pooler.maxDbConnections) 1 -}}
+{{- fail "pooler.maxDbConnections must be positive" -}}
+{{- end -}}
+{{- if gt (mul (len .Values.databases) (int .Values.pooler.maxDbConnections)) (int .Values.postgresql.maxConnections) -}}
+{{- fail "pooler maxDbConnections across logical databases must not exceed postgresql.maxConnections" -}}
+{{- end -}}
+{{- if empty .Values.pooler.clientPodSelectors -}}
+{{- fail "pooler.clientPodSelectors must not be empty" -}}
+{{- end -}}
+apiVersion: postgresql.cnpg.io/v1
+kind: Cluster
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}
+  annotations:
+    helm.sh/resource-policy: keep
+    # CloudNativePG creates the instance-manager ServiceAccount and names it after
+    # this Cluster. Publishing the expected name makes that external-controller
+    # identity contract deterministic and auditable without pretending Helm owns it.
+    opencrane.ai/cnpg-service-account: {{ include "opencrane.postgres.fullname" . | quote }}
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  instances: {{ .Values.instances }}
+  imageName: {{ .Values.image | quote }}
+  enableSuperuserAccess: false
+  postgresql:
+    parameters:
+      max_connections: {{ .Values.postgresql.maxConnections | quote }}
+  inheritedMetadata:
+    labels:
+      {{- include "opencrane.postgres.labels" . | nindent 6 }}
+  storage:
+    size: {{ .Values.storage.size | quote }}
+    resizeInUseVolumes: {{ .Values.storage.resizeInUseVolumes }}
+    pvcTemplate:
+      accessModes:
+        - ReadWriteOnce
+    {{- with .Values.storage.storageClass }}
+    storageClass: {{ . | quote }}
+    {{- end }}
+  resources:
+    {{- toYaml .Values.resources | nindent 4 }}
+  {{- if .Values.restore.enabled }}
+  bootstrap:
+    recovery:
+      source: {{ .Values.restore.sourceName | quote }}
+      database: {{ $primary.name | quote }}
+      owner: {{ $primary.owner | quote }}
+      secret:
+        name: {{ $primary.credentialsSecret | quote }}
+      {{- with .Values.restore.targetTime }}
+      recoveryTarget:
+        targetTime: {{ . | quote }}
+      {{- end }}
+  externalClusters:
+    - name: {{ .Values.restore.sourceName | quote }}
+      plugin:
+        name: {{ .Values.restore.plugin.name | quote }}
+        {{- with .Values.restore.plugin.parameters }}
+        parameters:
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+  {{- else }}
+  bootstrap:
+    initdb:
+      database: {{ $primary.name | quote }}
+      owner: {{ $primary.owner | quote }}
+      secret:
+        name: {{ $primary.credentialsSecret | quote }}
+      postInitApplicationSQLRefs:
+        configMapRefs:
+          {{- toYaml $baselineConfigMapRefs | nindent 10 }}
+  {{- end }}
+  managed:
+    roles:
+      - name: {{ .Values.databaseAdmin.name | quote }}
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        replication: false
+        bypassrls: false
+        inRoles:
+          - pg_monitor
+          - pg_read_all_data
+        passwordSecret:
+          name: {{ .Values.databaseAdmin.credentialsSecret | quote }}
+      {{- range $index, $database := .Values.databases }}
+      {{- if gt $index 0 }}
+      - name: {{ $database.owner | quote }}
+        ensure: present
+        login: true
+        superuser: false
+        createdb: false
+        createrole: false
+        replication: false
+        bypassrls: false
+        passwordSecret:
+          name: {{ $database.credentialsSecret | quote }}
+      {{- end }}
+      {{- end }}
+  {{- if .Values.backup.enabled }}
+  plugins:
+    - name: {{ .Values.backup.plugin.name | quote }}
+      isWALArchiver: true
+      {{- with .Values.backup.plugin.parameters }}
+      parameters:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+  {{- end }}

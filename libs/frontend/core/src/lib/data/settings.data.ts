@@ -6,7 +6,6 @@ export const SETTINGS_NAV: SettingsNavItem[] =
 	{ id: SettingsSection.Pod, label: "Pod & Session", icon: "pi pi-user" },
 	{ id: SettingsSection.Model, label: "Model & Budget", icon: "pi pi-bolt", badge: "82%" },
 	{ id: SettingsSection.Awareness, label: "Awareness Contract", icon: "pi pi-book" },
-	{ id: SettingsSection.Skills, label: "Skills", icon: "pi pi-bolt" },
 	{ id: SettingsSection.Channels, label: "Harvest Channels", icon: "pi pi-wifi" },
 	{ id: SettingsSection.Access, label: "Access & Datasets", icon: "pi pi-shield" },
 	{ id: SettingsSection.Network, label: "Network & Egress", icon: "pi pi-shield" },

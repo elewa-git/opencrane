@@ -1,0 +1,140 @@
+instances: 1
+image: ghcr.io/cloudnative-pg/postgresql:17.5
+
+# This is the physical-server budget, not an application default. The pooler below
+# reserves only 30 server connections across the logical databases, leaving 50
+# for CNPG's management/replication work and controlled operator access.
+postgresql:
+  maxConnections: 80
+
+# One physical CNPG Cluster hosts these isolated logical databases. The first item is
+# bootstrapped by CNPG initdb; each later item becomes a CNPG Database CR and a managed
+# PostgreSQL role. Every item must use its own basic-auth Secret (username/password).
+databases:
+  - name: opencrane
+    owner: opencrane
+    credentialsSecret: ""
+  - name: obot
+    owner: obot
+    credentialsSecret: ""
+  - name: litellm
+    owner: litellm
+    credentialsSecret: ""
+
+# A separate operational role may inspect every logical database in this one tenant
+# server. It is not an application credential and never receives superuser, DDL, or
+# RLS-bypass power; owners retain write/schema authority for their own database.
+databaseAdmin:
+  name: opencrane_database_admin
+  credentialsSecret: ""
+
+# A fresh Cluster receives exactly one app-owned target baseline during CNPG initdb.
+# The referenced ConfigMap is created before Helm installation and is content-addressed
+# and immutable. Recovery never attaches this input because the physical backup already
+# contains the authoritative schema.
+bootstrap:
+  # Full identity embedded by the superuser-owned baseline envelope. The privileges
+  # hook compares this value with the protected row inside fresh and restored databases.
+  targetBaseline:
+    sha256: ""
+  initdb:
+    postInitApplicationSQLRefs:
+      configMapRefs: []
+
+storage:
+  size: 20Gi
+  storageClass: ""
+  resizeInUseVolumes: true
+
+resources:
+  requests:
+    cpu: 250m
+    memory: 512Mi
+  limits:
+    memory: 2Gi
+
+# Every application connection goes through this CNPG-managed PgBouncer Pooler.
+# `maxDbConnections` is per logical database; with the three deployed databases,
+# 3 × 10 = 30 server connections stay below `postgresql.maxConnections` (80).
+# `maxClientConnections` bounds queued
+# client connections at the pooler instead of consuming PostgreSQL connections.
+pooler:
+  image: ghcr.io/cloudnative-pg/pgbouncer:1.25.1
+  instances: 1
+  # Explicit requests keep managed Kubernetes platforms from applying oversized defaults to the
+  # operator-generated PgBouncer Pod. Raise these from live utilisation evidence, not node size.
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+  poolMode: session
+  maxClientConnections: 50
+  maxDbConnections: 10
+  defaultPoolSize: 10
+  reservePoolSize: 0
+  clientPodSelectors:
+    - matchLabels:
+        app.kubernetes.io/component: opencrane-server
+    - matchLabels:
+        app.kubernetes.io/component: mcp-gateway
+    - matchLabels:
+        app.kubernetes.io/component: litellm
+
+networkPolicy:
+  enabled: true
+  # CloudNativePG's operator must reach the instance-manager status endpoint on port 8000.
+  operatorNamespace: cnpg-system
+  operatorPodLabels:
+    app.kubernetes.io/name: cloudnative-pg
+  # The CNPG-managed PgBouncer pod runs a manager that reads and watches Pooler and
+  # Secret objects. Admit only the exact Kubernetes API Service and backing endpoint
+  # addresses so the rule works with CNIs enforcing before or after Service translation.
+  kubernetesApiServerCidrs: []
+  kubernetesApiServerPort: 443
+  kubernetesApiServerEndpointCidrs: []
+  kubernetesApiServerEndpointPort: 443
+  # Direct instance clients required for database reconciliation. Applications use
+  # pooler.clientPodSelectors and cannot bypass the PgBouncer connection budget.
+  clientPodSelectors:
+    - matchLabels:
+        app.kubernetes.io/component: postgres-database-privileges
+
+privileges:
+  # A bounded in-cluster psql Job runs after each Cluster/Database reconciliation to
+  # remove PostgreSQL's default PUBLIC CONNECT/TEMPORARY grants from every logical DB.
+  timeoutSeconds: 300
+  # Leave Kubernetes enough time to surface the shell's final PostgreSQL diagnostic
+  # after its retry budget expires instead of terminating the Job first.
+  jobDeadlineGraceSeconds: 30
+  # Optional scheduler constraints for the one-shot proof Job. Keep this empty for portable
+  # Kubernetes installs; the GKE Autopilot profile selects an owned ComputeClass that can scale
+  # when otherwise-idle node capacity is held by GKE system Pods.
+  nodeSelector: {}
+  # The hook starts one small psql container per logical database. Explicit requests avoid a
+  # provider default for every container during fresh provisioning and upgrades.
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 250m
+      memory: 256Mi
+
+backup:
+  enabled: false
+  schedule: "0 0 2 * * *"
+  immediate: false
+  plugin:
+    name: ""
+    parameters: {}
+
+restore:
+  enabled: false
+  sourceName: source
+  targetTime: ""
+  plugin:
+    name: ""
+    parameters: {}

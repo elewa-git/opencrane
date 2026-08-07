@@ -3,7 +3,7 @@
   "info": {
     "title": "OpenCrane Control Plane API",
     "version": "1.0.0",
-    "description": "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- *CLI operators* — Device authorization grant via `POST /auth/device`. The CLI opens the returned `verificationUri` in the operator's browser, polls `GET /auth/device/token`, and persists the issued token in `~/.config/opencrane/credentials.json`.\n- *Automation / CI* — Bearer token via the `OPENCRANE_TOKEN` environment variable, validated against the `OPENCRANE_API_TOKEN` server-side env var.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials."
+    "description": "Multi-tenant AI agent platform management API.\n\n**Authentication**\n\n- *Human operators* — OIDC browser flow via `GET /auth/login` → `/auth/callback`. Session cookie is set server-side.\n- In-cluster workloads use short-lived, audience-bound projected service-account tokens at their dedicated internal trust boundaries.\n- Endpoints tagged *Auth* and *Meta* (`/auth/*`, `/openapi.json`) require no credentials."
   },
   "servers": [
     {
@@ -22,15 +22,65 @@
         "properties": {
           "error": {
             "type": "string",
+            "maxLength": 500,
             "description": "Human-readable error description."
           },
           "code": {
             "type": "string",
+            "maxLength": 100,
             "description": "Machine-readable error code."
           },
           "detail": {
             "type": "string",
+            "maxLength": 2000,
             "description": "Optional extra context."
+          },
+          "issues": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/ValidationIssue"
+            },
+            "description": "Field diagnostics returned only for public request validation failures."
+          }
+        }
+      },
+      "ValidationIssue": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "location",
+          "path",
+          "message"
+        ],
+        "properties": {
+          "location": {
+            "type": "string",
+            "enum": [
+              "body"
+            ],
+            "description": "Request coordinate that contains the invalid field."
+          },
+          "path": {
+            "type": "array",
+            "maxItems": 16,
+            "items": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "maxLength": 120
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "description": "Field path segments suitable for direct form-control mapping."
+          },
+          "message": {
+            "type": "string",
+            "maxLength": 240,
+            "description": "Safe validation message that never includes the rejected value."
           }
         }
       },
@@ -52,75 +102,6 @@
           },
           "hasMore": {
             "type": "boolean"
-          }
-        }
-      },
-      "Tenant": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "email": {
-            "type": "string",
-            "format": "email"
-          },
-          "subject": {
-            "type": "string",
-            "description": "IdP-verified subject (OIDC `sub`) this workspace is bound to; the contract compiler inherits the user's rights over {tenant, subject, groups}. Absent only on legacy/imported tenants."
-          },
-          "team": {
-            "type": "string"
-          },
-          "clusterTenantRef": {
-            "type": "string",
-            "description": "Parent ClusterTenant (customer) this tenant attaches to; absent on the single-instance path."
-          },
-          "phase": {
-            "type": "string"
-          },
-          "ingressHost": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "Policy": {
-        "type": "object",
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "namespace": {
-            "type": "string"
-          },
-          "tenantSelector": {
-            "type": "object"
-          },
-          "domains": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "egressRules": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "mcpServers": {
-            "type": "object"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },
@@ -168,21 +149,6 @@
           "displayName": {
             "type": "string",
             "description": "Operator-facing label."
-          },
-          "brokeringMode": {
-            "type": "string",
-            "enum": [
-              "static",
-              "obo"
-            ],
-            "description": "Brokering strategy: 'static' (per-tenant/per-server secret fallback) or 'obo' (per-user RFC 8693 exchange brokered server-side; no static secret)."
-          },
-          "secretRef": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "description": "Secret reference for 'static' brokering; null for 'obo'."
           }
         }
       },
@@ -690,14 +656,13 @@
           "payloadType": {
             "type": "string",
             "enum": [
-              "mcp-server",
-              "skill-bundle"
+              "mcp-server"
             ],
-            "description": "The entitlement family shared."
+            "description": "The MCP entitlement family shared."
           },
           "payloadId": {
             "type": "string",
-            "description": "Id of the shared MCP server or skill bundle."
+            "description": "Id of the shared MCP server."
           },
           "recipientType": {
             "type": "string",
@@ -776,68 +741,6 @@
           "members"
         ]
       },
-      "SkillBundle": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "version": {
-            "type": "string"
-          },
-          "digest": {
-            "type": "string"
-          },
-          "scope": {
-            "type": "string",
-            "enum": [
-              "org",
-              "team",
-              "project",
-              "personal"
-            ]
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "draft",
-              "published",
-              "deprecated"
-            ]
-          },
-          "tags": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "sourceName": {
-            "type": "string"
-          },
-          "publishedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "grants": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          },
-          "promotions": {
-            "type": "array",
-            "items": {
-              "type": "object"
-            }
-          }
-        }
-      },
       "AuditEntry": {
         "type": "object",
         "properties": {
@@ -856,47 +759,6 @@
           },
           "message": {
             "type": "string"
-          }
-        }
-      },
-      "AccessToken": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "owner": {
-            "type": "string"
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "expiresAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "lastUsedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "ProviderKey": {
-        "type": "object",
-        "properties": {
-          "provider": {
-            "type": "string"
-          },
-          "configured": {
-            "type": "boolean"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },
@@ -1155,6 +1017,8 @@
           },
           "costQualitySlider": {
             "type": "number",
+            "minimum": 0,
+            "maximum": 10,
             "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
           },
           "qualityFloor": {
@@ -1163,6 +1027,7 @@
           },
           "maxBudgetUsd": {
             "type": "number",
+            "minimum": 0,
             "description": "Hard per-decision spend ceiling in USD."
           },
           "allowedModels": {
@@ -1174,6 +1039,7 @@
           },
           "latencyCeilingMs": {
             "type": "number",
+            "minimum": 0,
             "description": "Reject/penalize models slower than this many milliseconds."
           },
           "fallbacks": {
@@ -1244,6 +1110,8 @@
               },
               "costQualitySlider": {
                 "type": "number",
+                "minimum": 0,
+                "maximum": 10,
                 "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
               },
               "qualityFloor": {
@@ -1252,6 +1120,7 @@
               },
               "maxBudgetUsd": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Hard per-decision spend ceiling in USD."
               },
               "allowedModels": {
@@ -1263,6 +1132,7 @@
               },
               "latencyCeilingMs": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Reject/penalize models slower than this many milliseconds."
               },
               "fallbacks": {
@@ -1297,6 +1167,7 @@
       },
       "ModelRoutingDefaultWrite": {
         "type": "object",
+        "additionalProperties": false,
         "description": "Upsert body for a scope-level model-routing default. At least one of defaultModel or autoConfig is required.",
         "properties": {
           "scope": {
@@ -1322,7 +1193,7 @@
               "sessionPin",
               "explorationRate"
             ],
-            "description": "Default auto-routing config.",
+            "description": "Default auto-routing config; null clears it.",
             "properties": {
               "objective": {
                 "type": "string",
@@ -1334,108 +1205,9 @@
                 "description": "The optimization objective."
               },
               "costQualitySlider": {
-                "type": "number",
-                "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
-              },
-              "qualityFloor": {
-                "type": "number",
-                "description": "Minimum eval score a model must clear; defaults to the skill's own bar when omitted."
-              },
-              "maxBudgetUsd": {
-                "type": "number",
-                "description": "Hard per-decision spend ceiling in USD."
-              },
-              "allowedModels": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Restrict auto to this subset of publicModelNames; must stay within the key's allowlist."
-              },
-              "latencyCeilingMs": {
-                "type": "number",
-                "description": "Reject/penalize models slower than this many milliseconds."
-              },
-              "fallbacks": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Ordered fallback publicModelNames on failure/unavailability."
-              },
-              "sessionPin": {
-                "type": "boolean",
-                "description": "Keep the chosen model stable within a conversation to preserve prompt caches."
-              },
-              "explorationRate": {
                 "type": "number",
                 "minimum": 0,
-                "maximum": 1,
-                "description": "Fraction of traffic to explore alternatives on (0 = pure exploit)."
-              }
-            }
-          }
-        }
-      },
-      "SkillModelPosture": {
-        "type": "object",
-        "required": [
-          "name",
-          "scope",
-          "team",
-          "path"
-        ],
-        "properties": {
-          "name": {
-            "type": "string",
-            "description": "Skill name (part of the compound key)."
-          },
-          "scope": {
-            "type": "string",
-            "description": "Skill scope, e.g. org/team/personal (part of the compound key)."
-          },
-          "team": {
-            "type": "string",
-            "description": "Owning team for team-scoped skills; empty string when not team-scoped (part of the compound key)."
-          },
-          "path": {
-            "type": "string",
-            "description": "Workspace-relative path the skill is delivered to."
-          },
-          "modelMode": {
-            "type": "string",
-            "enum": [
-              "pinned",
-              "auto"
-            ],
-            "nullable": true,
-            "description": "pinned (use pinnedModel), auto (route within autoConfig), or null (inherit the scope default)."
-          },
-          "pinnedModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "The pinned model's publicModelName, when modelMode is pinned."
-          },
-          "autoConfig": {
-            "type": "object",
-            "required": [
-              "objective",
-              "sessionPin",
-              "explorationRate"
-            ],
-            "description": "The skill's auto-routing config, when modelMode is auto.",
-            "properties": {
-              "objective": {
-                "type": "string",
-                "enum": [
-                  "cheapest-passing-bar",
-                  "best-quality-within-budget",
-                  "balanced"
-                ],
-                "description": "The optimization objective."
-              },
-              "costQualitySlider": {
-                "type": "number",
+                "maximum": 10,
                 "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
               },
               "qualityFloor": {
@@ -1444,6 +1216,7 @@
               },
               "maxBudgetUsd": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Hard per-decision spend ceiling in USD."
               },
               "allowedModels": {
@@ -1455,6 +1228,7 @@
               },
               "latencyCeilingMs": {
                 "type": "number",
+                "minimum": 0,
                 "description": "Reject/penalize models slower than this many milliseconds."
               },
               "fallbacks": {
@@ -1476,617 +1250,6 @@
               }
             },
             "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "SkillModelPostureWrite": {
-        "type": "object",
-        "required": [
-          "modelMode"
-        ],
-        "description": "Set a skill's model posture. pinned requires pinnedModel; auto validates autoConfig; null clears the posture (inherit the scope default).",
-        "properties": {
-          "modelMode": {
-            "type": "string",
-            "enum": [
-              "pinned",
-              "auto"
-            ],
-            "nullable": true,
-            "description": "pinned, auto, or null to clear the posture."
-          },
-          "pinnedModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "Required when modelMode is pinned."
-          },
-          "autoConfig": {
-            "type": "object",
-            "required": [
-              "objective",
-              "sessionPin",
-              "explorationRate"
-            ],
-            "description": "Provided when modelMode is auto.",
-            "properties": {
-              "objective": {
-                "type": "string",
-                "enum": [
-                  "cheapest-passing-bar",
-                  "best-quality-within-budget",
-                  "balanced"
-                ],
-                "description": "The optimization objective."
-              },
-              "costQualitySlider": {
-                "type": "number",
-                "description": "Cost↔quality dial for the balanced objective: 0 = cheapest … 10 = best."
-              },
-              "qualityFloor": {
-                "type": "number",
-                "description": "Minimum eval score a model must clear; defaults to the skill's own bar when omitted."
-              },
-              "maxBudgetUsd": {
-                "type": "number",
-                "description": "Hard per-decision spend ceiling in USD."
-              },
-              "allowedModels": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Restrict auto to this subset of publicModelNames; must stay within the key's allowlist."
-              },
-              "latencyCeilingMs": {
-                "type": "number",
-                "description": "Reject/penalize models slower than this many milliseconds."
-              },
-              "fallbacks": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                },
-                "description": "Ordered fallback publicModelNames on failure/unavailability."
-              },
-              "sessionPin": {
-                "type": "boolean",
-                "description": "Keep the chosen model stable within a conversation to preserve prompt caches."
-              },
-              "explorationRate": {
-                "type": "number",
-                "minimum": 0,
-                "maximum": 1,
-                "description": "Fraction of traffic to explore alternatives on (0 = pure exploit)."
-              }
-            },
-            "nullable": true
-          }
-        }
-      },
-      "RoutingEvalCase": {
-        "type": "object",
-        "required": [
-          "id",
-          "skillName",
-          "skillScope",
-          "skillTeam",
-          "qualityBar"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable identifier."
-          },
-          "skillName": {
-            "type": "string",
-            "description": "Owning skill name."
-          },
-          "skillScope": {
-            "type": "string",
-            "description": "Owning skill scope."
-          },
-          "skillTeam": {
-            "type": "string",
-            "description": "Owning skill team (empty for org/global)."
-          },
-          "input": {
-            "description": "The prompt/inputs for this case."
-          },
-          "expected": {
-            "nullable": true,
-            "description": "Optional golden answer or grader rubric."
-          },
-          "qualityBar": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Minimum judge score (0..1) a model must clear on this case."
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "RoutingEvalCaseWrite": {
-        "type": "object",
-        "required": [
-          "skillName",
-          "skillScope",
-          "input"
-        ],
-        "description": "Create/update body for a routing eval case (AIR.6).",
-        "properties": {
-          "skillName": {
-            "type": "string",
-            "description": "Owning skill name."
-          },
-          "skillScope": {
-            "type": "string",
-            "description": "Owning skill scope."
-          },
-          "skillTeam": {
-            "type": "string",
-            "description": "Owning skill team (defaults to empty)."
-          },
-          "input": {
-            "description": "The prompt/inputs for this case."
-          },
-          "expected": {
-            "nullable": true,
-            "description": "Optional golden answer or grader rubric."
-          },
-          "qualityBar": {
-            "type": "number",
-            "minimum": 0,
-            "maximum": 1,
-            "description": "Minimum judge score (0..1); defaults to 0.8."
-          }
-        }
-      },
-      "RoutingMeasurement": {
-        "type": "object",
-        "required": [
-          "id",
-          "skillName",
-          "skillScope",
-          "skillTeam",
-          "sampledCalls",
-          "atBarCheapFraction",
-          "projectedSavingsPct",
-          "ciLowPct",
-          "ciHighPct",
-          "overheadPct"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable identifier."
-          },
-          "skillName": {
-            "type": "string",
-            "description": "Owning skill name."
-          },
-          "skillScope": {
-            "type": "string",
-            "description": "Owning skill scope."
-          },
-          "skillTeam": {
-            "type": "string",
-            "description": "Owning skill team."
-          },
-          "candidateModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "The cheaper candidate model evaluated against the current default."
-          },
-          "sampledCalls": {
-            "type": "integer",
-            "description": "Number of logged calls sampled + shadow-graded."
-          },
-          "atBarCheapFraction": {
-            "type": "number",
-            "description": "Fraction of sampled traffic the candidate served at-or-above the skill's bar."
-          },
-          "projectedSavingsPct": {
-            "type": "number",
-            "description": "Point estimate of % spend saved at equal quality."
-          },
-          "ciLowPct": {
-            "type": "number",
-            "description": "Lower bound of the bootstrap 95% CI on projected savings."
-          },
-          "ciHighPct": {
-            "type": "number",
-            "description": "Upper bound of the bootstrap 95% CI on projected savings."
-          },
-          "overheadPct": {
-            "type": "number",
-            "description": "Token overhead of running the measurement, as % of the skill's serve spend."
-          },
-          "skillContentHash": {
-            "type": "string",
-            "nullable": true,
-            "description": "Skill content version coordinate: the Skill.contentHash at run time (best-effort; null if unresolved)."
-          },
-          "skillDigest": {
-            "type": "string",
-            "nullable": true,
-            "description": "Skill content version coordinate: the live published SkillBundle.digest at run time (best-effort; null when no published bundle)."
-          },
-          "candidateModelId": {
-            "type": "string",
-            "nullable": true,
-            "description": "Model deployment coordinate: the candidate's stable litellmModelId (best-effort; null if unresolved)."
-          },
-          "candidateUpstreamModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "Model deployment coordinate: the candidate's upstreamModel (best-effort; null if unresolved)."
-          },
-          "runAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "RoutingProposal": {
-        "type": "object",
-        "required": [
-          "id",
-          "skillName",
-          "skillScope",
-          "skillTeam",
-          "proposedModel",
-          "projectedSavingsPct",
-          "ciLowPct",
-          "ciHighPct",
-          "status"
-        ],
-        "properties": {
-          "id": {
-            "type": "string",
-            "description": "Stable identifier."
-          },
-          "skillName": {
-            "type": "string",
-            "description": "Owning skill name."
-          },
-          "skillScope": {
-            "type": "string",
-            "description": "Owning skill scope."
-          },
-          "skillTeam": {
-            "type": "string",
-            "description": "Owning skill team."
-          },
-          "fromModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "The model the skill resolves to today (null when unset)."
-          },
-          "proposedModel": {
-            "type": "string",
-            "description": "The cheaper model the loop proposes switching to."
-          },
-          "projectedSavingsPct": {
-            "type": "number",
-            "description": "Point estimate of % spend saved at equal quality."
-          },
-          "ciLowPct": {
-            "type": "number",
-            "description": "Lower bound of the bootstrap 95% CI (must exclude zero to propose)."
-          },
-          "ciHighPct": {
-            "type": "number",
-            "description": "Upper bound of the bootstrap 95% CI."
-          },
-          "skillContentHash": {
-            "type": "string",
-            "nullable": true,
-            "description": "Skill content version coordinate: the Skill.contentHash at proposal time (best-effort; null if unresolved)."
-          },
-          "skillDigest": {
-            "type": "string",
-            "nullable": true,
-            "description": "Skill content version coordinate: the live published SkillBundle.digest at proposal time (best-effort; null when none)."
-          },
-          "proposedModelId": {
-            "type": "string",
-            "nullable": true,
-            "description": "Model deployment coordinate: the proposed model's stable litellmModelId (best-effort; null if unresolved)."
-          },
-          "measurementId": {
-            "type": "string",
-            "nullable": true,
-            "description": "The measurement that produced this proposal."
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "pending",
-              "approved",
-              "rejected",
-              "applied"
-            ],
-            "description": "Lifecycle status."
-          },
-          "decidedBy": {
-            "type": "string",
-            "nullable": true,
-            "description": "Principal who approved/rejected, when decided."
-          },
-          "decidedAt": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "SavingsRecommendation": {
-        "type": "object",
-        "required": [
-          "skillName",
-          "skillScope",
-          "skillTeam",
-          "projectedSavingsPct",
-          "ciLowPct",
-          "ciHighPct",
-          "hasOpenProposal",
-          "measurementId",
-          "runAt"
-        ],
-        "properties": {
-          "skillName": {
-            "type": "string",
-            "description": "Owning skill name."
-          },
-          "skillScope": {
-            "type": "string",
-            "description": "Owning skill scope."
-          },
-          "skillTeam": {
-            "type": "string",
-            "description": "Owning skill team (empty for org/global)."
-          },
-          "modelMode": {
-            "type": "string",
-            "enum": [
-              "pinned",
-              "auto"
-            ],
-            "nullable": true,
-            "description": "The skill's posture: pinned, auto, or null (inherits the scope default) — lets the UI flag a fixed-model advisory distinctly."
-          },
-          "currentModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "The model the skill resolves to today — proposal fromModel, else the skill's pin, else null."
-          },
-          "recommendedModel": {
-            "type": "string",
-            "nullable": true,
-            "description": "The cheaper model recommended — proposal proposedModel, else the measurement candidate, else null."
-          },
-          "recommendedModelId": {
-            "type": "string",
-            "nullable": true,
-            "description": "Stable deployment id of the recommended model — proposal proposedModelId, else the measurement's candidateModelId, else null."
-          },
-          "skillContentHash": {
-            "type": "string",
-            "nullable": true,
-            "description": "Skill content version coordinate the evidence was gathered at — lets the console flag stale evidence; null if unresolved."
-          },
-          "skillDigest": {
-            "type": "string",
-            "nullable": true,
-            "description": "Live published SkillBundle.digest the evidence was gathered at; null when none."
-          },
-          "projectedSavingsPct": {
-            "type": "number",
-            "description": "Point estimate of % spend saved at equal quality (from the latest measurement)."
-          },
-          "ciLowPct": {
-            "type": "number",
-            "description": "Lower bound of the bootstrap 95% CI on projected savings."
-          },
-          "ciHighPct": {
-            "type": "number",
-            "description": "Upper bound of the bootstrap 95% CI on projected savings."
-          },
-          "hasOpenProposal": {
-            "type": "boolean",
-            "description": "True when an open Pending proposal exists for this skill."
-          },
-          "proposalId": {
-            "type": "string",
-            "nullable": true,
-            "description": "Id of the open Pending proposal, when one exists; null otherwise."
-          },
-          "measurementId": {
-            "type": "string",
-            "description": "Id of the latest measurement this recommendation is derived from."
-          },
-          "runAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "When the latest measurement ran (ISO-8601)."
-          }
-        }
-      },
-      "AwarenessRollout": {
-        "type": "object",
-        "properties": {
-          "targetVersion": {
-            "type": "string"
-          },
-          "stableVersion": {
-            "type": "string"
-          },
-          "waves": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "promotedWaves": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "shadowMode": {
-            "type": "boolean"
-          },
-          "nextWave": {
-            "type": "string",
-            "nullable": true
-          }
-        }
-      },
-      "ScopeSelector": {
-        "type": "object",
-        "required": [
-          "scope",
-          "payloadId"
-        ],
-        "properties": {
-          "scope": {
-            "type": "string",
-            "enum": [
-              "org",
-              "department",
-              "project",
-              "personal"
-            ]
-          },
-          "payloadId": {
-            "type": "string"
-          }
-        }
-      },
-      "SessionScope": {
-        "type": "object",
-        "properties": {
-          "sessionKey": {
-            "type": "string"
-          },
-          "principal": {
-            "type": "string"
-          },
-          "scopes": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/ScopeSelector"
-            }
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "DatasetMembership": {
-        "type": "object",
-        "required": [
-          "org",
-          "team",
-          "department",
-          "project",
-          "personal"
-        ],
-        "properties": {
-          "org": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "team": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "department": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "project": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "personal": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        }
-      },
-      "EffectiveContract": {
-        "type": "object",
-        "properties": {
-          "contractId": {
-            "type": "string"
-          },
-          "contractVersion": {
-            "type": "string"
-          },
-          "tenant": {
-            "type": "object"
-          },
-          "awareness": {
-            "type": "object"
-          },
-          "mcp": {
-            "type": "object"
-          },
-          "skills": {
-            "type": "object"
-          }
-        }
-      },
-      "ProjectionDrift": {
-        "type": "object",
-        "properties": {
-          "tenant": {
-            "type": "object"
-          },
-          "accessPolicy": {
-            "type": "object"
-          },
-          "evaluatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "alertFired": {
-            "type": "boolean"
           }
         }
       },
@@ -2157,35 +1320,225 @@
           }
         }
       },
-      "DeviceGrant": {
+      "SelfRunStatus": {
         "type": "object",
         "required": [
-          "deviceCode",
-          "userCode",
-          "verificationUri",
-          "expiresIn",
-          "interval"
+          "runId",
+          "attempt",
+          "state",
+          "threadId",
+          "agentRevisionId",
+          "acceptedAt",
+          "finishedAt"
         ],
         "properties": {
-          "deviceCode": {
-            "type": "string",
-            "description": "Secret code used by the CLI to poll for the token."
+          "runId": {
+            "type": "string"
           },
-          "userCode": {
-            "type": "string",
-            "description": "Short code (XXXX-XXXX) the operator sees."
-          },
-          "verificationUri": {
-            "type": "string",
-            "description": "Relative URL the operator should open in a browser."
-          },
-          "expiresIn": {
+          "attempt": {
             "type": "integer",
-            "description": "Seconds until the grant expires (300)."
+            "minimum": 1
           },
-          "interval": {
+          "state": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "queued",
+              "assigned",
+              "running",
+              "waiting_for_approval",
+              "cancelling",
+              "completed",
+              "failed",
+              "cancelled"
+            ]
+          },
+          "threadId": {
+            "type": "string",
+            "nullable": true
+          },
+          "agentRevisionId": {
+            "type": "string"
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      },
+      "SelfDeferredToolApproval": {
+        "type": "object",
+        "required": [
+          "approvalRequestId",
+          "runId",
+          "attempt",
+          "toolRevisionId",
+          "expiresAt",
+          "createdAt"
+        ],
+        "properties": {
+          "approvalRequestId": {
+            "type": "string"
+          },
+          "runId": {
+            "type": "string"
+          },
+          "attempt": {
             "type": "integer",
-            "description": "Minimum polling interval in seconds (5)."
+            "minimum": 1
+          },
+          "toolRevisionId": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "AgentService": {
+        "type": "object",
+        "required": [
+          "id",
+          "siloId",
+          "kind",
+          "name",
+          "state",
+          "activeRevisionId",
+          "workloadProfile",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "siloId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "managed"
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "draft",
+              "active",
+              "paused",
+              "retired"
+            ]
+          },
+          "activeRevisionId": {
+            "type": "string",
+            "nullable": true
+          },
+          "workloadProfile": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PersonalConfigurationChange": {
+        "type": "object",
+        "required": [
+          "changeId",
+          "requestedPatch",
+          "state",
+          "sourceThreadId",
+          "sourceRunId",
+          "proposedAt",
+          "decidedAt",
+          "rejectionReason"
+        ],
+        "properties": {
+          "changeId": {
+            "type": "string"
+          },
+          "requestedPatch": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": [
+                  "kind"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "persona_refresh"
+                  }
+                }
+              },
+              {
+                "type": "object",
+                "required": [
+                  "kind",
+                  "modelAlias"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "kind": {
+                    "const": "model_alias"
+                  },
+                  "modelAlias": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "pattern": ".*\\S.*"
+                  }
+                }
+              }
+            ]
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "proposed",
+              "accepted",
+              "applied",
+              "rejected",
+              "superseded"
+            ]
+          },
+          "sourceThreadId": {
+            "type": "string"
+          },
+          "sourceRunId": {
+            "type": "string"
+          },
+          "proposedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "decidedAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "rejectionReason": {
+            "type": "string",
+            "nullable": true
           }
         }
       },
@@ -2329,1320 +1682,9 @@
           }
         }
       }
-    },
-    "securitySchemes": {
-      "bearerAuth": {
-        "type": "http",
-        "scheme": "bearer",
-        "description": "Static bearer token. Pass as Authorization: Bearer <token>."
-      }
     }
   },
-  "security": [
-    {
-      "bearerAuth": []
-    }
-  ],
   "paths": {
-    "/awareness/rollout": {
-      "get": {
-        "operationId": "getAwarenessRollout",
-        "summary": "Show the fleet awareness contract rollout state",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "responses": {
-          "200": {
-            "description": "Current rollout state.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setAwarenessRollout",
-        "summary": "Define (or redefine) the awareness rollout; resets the frontier",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "targetVersion"
-                ],
-                "properties": {
-                  "targetVersion": {
-                    "type": "string"
-                  },
-                  "stableVersion": {
-                    "type": "string"
-                  },
-                  "waves": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "shadowMode": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Rollout defined.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/promote": {
-      "post": {
-        "operationId": "promoteAwarenessRollout",
-        "summary": "Advance the rollout frontier (one wave, or up to a named wave)",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "requestBody": {
-          "required": false,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "wave": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Frontier advanced.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/rollback": {
-      "post": {
-        "operationId": "rollbackAwarenessRollout",
-        "summary": "One-step rollback: return every wave to the stable version",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "responses": {
-          "200": {
-            "description": "Rolled back.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/AwarenessRollout"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/rollout/resolve/{tenant}": {
-      "get": {
-        "operationId": "resolveAwarenessVersion",
-        "summary": "Resolve the awareness contract version a tenant runs",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "parameters": [
-          {
-            "name": "tenant",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Resolved version.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "tenant": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "promoted": {
-                      "type": "boolean"
-                    },
-                    "shadow": {
-                      "type": "boolean"
-                    },
-                    "wave": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/awareness/participation": {
-      "get": {
-        "operationId": "getFleetParticipation",
-        "summary": "Fleet participation, drift, and policy-violation monitoring",
-        "tags": [
-          "Awareness Rollout"
-        ],
-        "parameters": [
-          {
-            "name": "severity",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "critical",
-                "warning"
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Fleet participation report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "total": {
-                      "type": "integer"
-                    },
-                    "participating": {
-                      "type": "integer"
-                    },
-                    "drifted": {
-                      "type": "integer"
-                    },
-                    "critical": {
-                      "type": "integer"
-                    },
-                    "warning": {
-                      "type": "integer"
-                    },
-                    "tenants": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "tenant": {
-                            "type": "string"
-                          },
-                          "lastSeenAt": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "runningContractVersion": {
-                            "type": "string",
-                            "nullable": true
-                          },
-                          "expectedContractVersion": {
-                            "type": "string"
-                          },
-                          "participating": {
-                            "type": "boolean"
-                          },
-                          "drifted": {
-                            "type": "boolean"
-                          },
-                          "policyViolations": {
-                            "type": "integer"
-                          },
-                          "severity": {
-                            "type": "string",
-                            "enum": [
-                              "ok",
-                              "warning",
-                              "critical"
-                            ]
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/sessions/{sessionKey}/scope": {
-      "get": {
-        "operationId": "getSessionScope",
-        "summary": "Inspect a chat-window session's awareness scope binding",
-        "tags": [
-          "Sessions"
-        ],
-        "parameters": [
-          {
-            "name": "sessionKey",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Current session scope binding.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionScope"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session scope not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setSessionScope",
-        "summary": "Bind a session scope (CP intersects with the principal's entitlements)",
-        "tags": [
-          "Sessions"
-        ],
-        "parameters": [
-          {
-            "name": "sessionKey",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "principal",
-                  "scopes"
-                ],
-                "properties": {
-                  "principal": {
-                    "type": "string"
-                  },
-                  "scopes": {
-                    "type": "array",
-                    "items": {
-                      "$ref": "#/components/schemas/ScopeSelector"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Authorised binding; `rejected` lists any over-scope dropped.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/SessionScope"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "rejected": {
-                          "type": "array",
-                          "items": {
-                            "$ref": "#/components/schemas/ScopeSelector"
-                          }
-                        }
-                      }
-                    }
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing principal or empty scopes.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "None of the requested scopes are entitled (over-scope).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "clearSessionScope",
-        "summary": "Clear a session's scope binding",
-        "tags": [
-          "Sessions"
-        ],
-        "parameters": [
-          {
-            "name": "sessionKey",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Binding cleared.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "sessionKey": {
-                      "type": "string"
-                    },
-                    "cleared": {
-                      "type": "boolean"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Session scope not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants": {
-      "get": {
-        "operationId": "listTenants",
-        "summary": "List all tenants",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "clusterTenantRef",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Return only tenants attached to this parent ClusterTenant (customer)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Tenant"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createTenant",
-        "summary": "Create a new tenant (admin/import path; dual-write: K8s CRD + database)",
-        "description": "Internal seeding (owner-default on org create; member workspace on first login) is the production funnel — this route is the admin/import path. Every workspace it creates must be routable (email) and subject-bound; when a parent clusterTenantRef is given the subject must be a member of that org.",
-        "tags": [
-          "Tenants"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "name",
-                  "displayName",
-                  "email",
-                  "subject"
-                ],
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "displayName": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "subject": {
-                    "type": "string",
-                    "description": "IdP-verified subject (OIDC `sub`) to bind the workspace to. Required — subject-less pods degrade the compiled contract to {tenant} only."
-                  },
-                  "team": {
-                    "type": "string"
-                  },
-                  "clusterTenantRef": {
-                    "type": "string",
-                    "description": "Parent ClusterTenant (customer) to attach this tenant to."
-                  },
-                  "monthlyBudgetUsd": {
-                    "type": "number"
-                  },
-                  "resources": {
-                    "type": "object"
-                  },
-                  "policyRef": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Tenant created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Missing email or subject.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "No models registered for this scope (NO_MODELS_REGISTERED) — the same ≥1-model onboarding gate the internal seed funnel enforces.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "504": {
-            "description": "Tenant CR did not appear in Kubernetes within the SLO window.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}": {
-      "get": {
-        "operationId": "getTenant",
-        "summary": "Get a single tenant by name",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Tenant"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateTenant",
-        "summary": "Update a tenant (dual-write: K8s CRD + database)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "displayName": {
-                    "type": "string"
-                  },
-                  "email": {
-                    "type": "string",
-                    "format": "email"
-                  },
-                  "subject": {
-                    "type": "string",
-                    "description": "Re-bind the workspace to this IdP subject; must be a member of the (new or existing) parent org."
-                  },
-                  "team": {
-                    "type": "string"
-                  },
-                  "clusterTenantRef": {
-                    "type": "string",
-                    "description": "Parent ClusterTenant (customer) to attach this tenant to."
-                  },
-                  "monthlyBudgetUsd": {
-                    "type": "number"
-                  },
-                  "resources": {
-                    "type": "object"
-                  },
-                  "policyRef": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Tenant updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Subject is not a member of the parent organisation (FORBIDDEN_ORG_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteTenant",
-        "summary": "Delete a tenant (offboarding teardown: cut sessions/devices, delete the LiteLLM key, remove CRD + DB row — retains Cognee datasets)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/suspend": {
-      "post": {
-        "operationId": "suspendTenant",
-        "summary": "Suspend a tenant (scale deployment to zero)",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant suspended.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/resume": {
-      "post": {
-        "operationId": "resumeTenant",
-        "summary": "Resume a suspended tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Tenant resumed.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/datasets": {
-      "get": {
-        "operationId": "getTenantDatasets",
-        "summary": "Get dataset memberships for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Dataset memberships.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetMembership"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateTenantDatasets",
-        "summary": "Update dataset memberships for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DatasetMembership"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Dataset memberships updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DatasetMembership"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Invalid membership payload.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/{name}/effective-contract": {
-      "get": {
-        "operationId": "getTenantEffectiveContract",
-        "summary": "Compile the effective awareness, MCP, and skill contract for a tenant",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Effective contract.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/EffectiveContract"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Tenant not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/drift": {
-      "get": {
-        "operationId": "getTenantProjectionDrift",
-        "summary": "Detect drift between Tenant CRDs and PostgreSQL projection rows",
-        "tags": [
-          "Tenants"
-        ],
-        "responses": {
-          "200": {
-            "description": "Drift report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tenants/repair": {
-      "post": {
-        "operationId": "repairTenantProjection",
-        "summary": "Repair Tenant projection rows from CRD source of truth",
-        "tags": [
-          "Tenants"
-        ],
-        "parameters": [
-          {
-            "name": "dryRun",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            },
-            "description": "When true (default), report planned changes without applying them."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Repair report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/drift": {
-      "get": {
-        "operationId": "getPolicyProjectionDrift",
-        "summary": "Detect drift between AccessPolicy CRDs and PostgreSQL projection rows",
-        "tags": [
-          "Policies"
-        ],
-        "responses": {
-          "200": {
-            "description": "Drift report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/repair": {
-      "post": {
-        "operationId": "repairPolicyProjection",
-        "summary": "Repair AccessPolicy projection rows from CRD source of truth",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "dryRun",
-            "in": "query",
-            "schema": {
-              "type": "boolean",
-              "default": true
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Repair report.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies": {
-      "get": {
-        "operationId": "listPolicies",
-        "summary": "List all access policies",
-        "tags": [
-          "Policies"
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/Policy"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createPolicy",
-        "summary": "Create an access policy (dual-write: K8s CRD + database)",
-        "tags": [
-          "Policies"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Policy created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/policies/{name}": {
-      "get": {
-        "operationId": "getPolicy",
-        "summary": "Get a single access policy by name",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Policy"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Policy not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updatePolicy",
-        "summary": "Update an access policy",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Policy updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deletePolicy",
-        "summary": "Delete an access policy",
-        "tags": [
-          "Policies"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Policy deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "name": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/mcp-servers": {
       "get": {
         "operationId": "listMcpServers",
@@ -3913,18 +1955,6 @@
                   "displayName": {
                     "type": "string",
                     "description": "Operator-facing label."
-                  },
-                  "brokeringMode": {
-                    "type": "string",
-                    "enum": [
-                      "static",
-                      "obo"
-                    ],
-                    "description": "Defaults to 'static'. 'static' requires secretRef; 'obo' must omit it."
-                  },
-                  "secretRef": {
-                    "type": "string",
-                    "description": "Required for 'static' brokering; omit for 'obo'."
                   }
                 }
               }
@@ -5023,8 +3053,7 @@
                   "payloadType": {
                     "type": "string",
                     "enum": [
-                      "mcp-server",
-                      "skill-bundle"
+                      "mcp-server"
                     ]
                   },
                   "payloadId": {
@@ -5362,471 +3391,6 @@
         }
       }
     },
-    "/skills/catalog": {
-      "get": {
-        "operationId": "listSkillBundles",
-        "summary": "List all skill bundles with entitlements and promotion history",
-        "tags": [
-          "Skills"
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill bundle list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SkillBundle"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createSkillBundle",
-        "summary": "Create a new skill bundle",
-        "tags": [
-          "Skills"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "name",
-                  "version",
-                  "digest",
-                  "scope"
-                ]
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Skill bundle created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/skills/catalog/backfill": {
-      "post": {
-        "operationId": "backfillSkillBundlesToOci",
-        "summary": "Backfill all published bundles' content into the OCI store (P4D.2)",
-        "tags": [
-          "Skills"
-        ],
-        "responses": {
-          "200": {
-            "description": "Backfill summary with per-bundle outcomes.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "total",
-                    "pushed",
-                    "skipped",
-                    "failed",
-                    "results"
-                  ],
-                  "properties": {
-                    "total": {
-                      "type": "integer",
-                      "description": "Published bundles considered."
-                    },
-                    "pushed": {
-                      "type": "integer",
-                      "description": "Count pushed to the registry."
-                    },
-                    "skipped": {
-                      "type": "integer",
-                      "description": "Count skipped (no DB content)."
-                    },
-                    "failed": {
-                      "type": "integer",
-                      "description": "Count failed (push error or digest mismatch)."
-                    },
-                    "results": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "required": [
-                          "id",
-                          "name",
-                          "digest",
-                          "outcome"
-                        ],
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "digest": {
-                            "type": "string"
-                          },
-                          "outcome": {
-                            "type": "string",
-                            "enum": [
-                              "pushed",
-                              "skipped",
-                              "failed"
-                            ]
-                          },
-                          "reason": {
-                            "type": "string",
-                            "description": "Failure detail when outcome is failed."
-                          }
-                        }
-                      }
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "OCI store not configured (SKILL_OCI_REGISTRY_URL unset).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/skills/catalog/{id}": {
-      "get": {
-        "operationId": "getSkillBundle",
-        "summary": "Get a single skill bundle by identifier",
-        "tags": [
-          "Skills"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill bundle detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillBundle"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Skill bundle not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateSkillBundle",
-        "summary": "Update a skill bundle and fully replace entitlements and promotions",
-        "tags": [
-          "Skills"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Skill bundle updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteSkillBundle",
-        "summary": "Delete a skill bundle and its linked entitlement grants",
-        "tags": [
-          "Skills"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill bundle deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/skills/posture": {
-      "get": {
-        "operationId": "listSkillModelPostures",
-        "summary": "List all skills with their model posture",
-        "tags": [
-          "Skills"
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill posture list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SkillModelPosture"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/skills/posture/skill": {
-      "get": {
-        "operationId": "getSkillModelPosture",
-        "summary": "Get a single skill's model posture by its compound key",
-        "tags": [
-          "Skills"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Skill name."
-          },
-          {
-            "name": "scope",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Skill scope."
-          },
-          {
-            "name": "team",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Owning team; empty string when not team-scoped."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Skill posture detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillModelPosture"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "name and scope query params are required (code VALIDATION_ERROR).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Skill not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "setSkillModelPosture",
-        "summary": "Set (or clear) a skill's model posture",
-        "tags": [
-          "Skills"
-        ],
-        "parameters": [
-          {
-            "name": "name",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Skill name."
-          },
-          {
-            "name": "scope",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Skill scope."
-          },
-          {
-            "name": "team",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Owning team; empty string when not team-scoped."
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/SkillModelPostureWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Skill posture updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SkillModelPosture"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body or query failed validation (code VALIDATION_ERROR).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the resource scope (code FORBIDDEN_SCOPE). Org/global skills are operator-only.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Skill not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/third-party-sources": {
       "get": {
         "operationId": "listThirdPartySources",
@@ -5987,222 +3551,6 @@
               "application/json": {
                 "schema": {
                   "type": "object"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access-tokens": {
-      "get": {
-        "operationId": "listAccessTokens",
-        "summary": "List all issued access tokens (hashes only, never plaintext)",
-        "tags": [
-          "Access Tokens"
-        ],
-        "responses": {
-          "200": {
-            "description": "Token list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/AccessToken"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createAccessToken",
-        "summary": "Create a new access token. Returns plaintext token once — store it securely.",
-        "tags": [
-          "Access Tokens"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "owner": {
-                    "type": "string"
-                  },
-                  "expiresAt": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Token created. The plainTextToken field will not be returned again.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "id",
-                    "plainTextToken"
-                  ],
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "plainTextToken": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/access-tokens/{id}": {
-      "delete": {
-        "operationId": "deleteAccessToken",
-        "summary": "Revoke and delete an access token",
-        "tags": [
-          "Access Tokens"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Token deleted."
-          },
-          "404": {
-            "description": "Token not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/keys": {
-      "get": {
-        "operationId": "listProviderKeys",
-        "summary": "List configured provider API keys (configured status only, never the key value)",
-        "tags": [
-          "Provider Keys"
-        ],
-        "responses": {
-          "200": {
-            "description": "Provider key status list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/ProviderKey"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/providers/keys/{provider}": {
-      "put": {
-        "operationId": "upsertProviderKey",
-        "summary": "Create or update a provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "apiKey"
-                ],
-                "properties": {
-                  "apiKey": {
-                    "type": "string"
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Key updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProviderKey"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteProviderKey",
-        "summary": "Delete a configured provider API key",
-        "tags": [
-          "Provider Keys"
-        ],
-        "parameters": [
-          {
-            "name": "provider",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "204": {
-            "description": "Key deleted."
-          },
-          "404": {
-            "description": "Provider key not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -6897,7 +4245,7 @@
             }
           },
           "400": {
-            "description": "Request body failed validation (code VALIDATION_ERROR).",
+            "description": "Request body failed validation (code VALIDATION_ERROR with form-mappable field issues), or contained malformed JSON (code MALFORMED_JSON).",
             "content": {
               "application/json": {
                 "schema": {
@@ -7010,836 +4358,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/eval-cases": {
-      "get": {
-        "operationId": "listRoutingEvalCases",
-        "summary": "List routing eval cases",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "skillName",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill name."
-          },
-          {
-            "name": "skillScope",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill scope."
-          },
-          {
-            "name": "skillTeam",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill team."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Routing eval-case list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RoutingEvalCase"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "operationId": "createRoutingEvalCase",
-        "summary": "Create a routing eval case for a skill",
-        "tags": [
-          "Model Registry"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoutingEvalCaseWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "201": {
-            "description": "Eval case created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoutingEvalCase"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body failed validation (code VALIDATION_ERROR).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the owning skill's scope (code FORBIDDEN_SCOPE). Org/global cases are operator-only.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/eval-cases/{id}": {
-      "get": {
-        "operationId": "getRoutingEvalCase",
-        "summary": "Get a single routing eval case by id",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Eval case detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoutingEvalCase"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Eval case not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "operationId": "updateRoutingEvalCase",
-        "summary": "Update a routing eval case by id",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/RoutingEvalCaseWrite"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Eval case updated.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoutingEvalCase"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body failed validation (code VALIDATION_ERROR).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the owning skill's scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Eval case not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      },
-      "delete": {
-        "operationId": "deleteRoutingEvalCase",
-        "summary": "Delete a routing eval case by id",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Eval case deleted.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the owning skill's scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Eval case not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/measurements": {
-      "get": {
-        "operationId": "listRoutingMeasurements",
-        "summary": "List shadow-savings measurements",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "skillName",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill name."
-          },
-          {
-            "name": "skillScope",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill scope."
-          },
-          {
-            "name": "skillTeam",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill team."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Measurement list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RoutingMeasurement"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/measurements/run": {
-      "post": {
-        "operationId": "runRoutingMeasurement",
-        "summary": "Trigger a shadow-savings measurement for a skill + candidate (operator-gated, best-effort)",
-        "tags": [
-          "Model Registry"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "required": [
-                  "skillName",
-                  "skillScope",
-                  "candidateModel"
-                ],
-                "properties": {
-                  "skillName": {
-                    "type": "string"
-                  },
-                  "skillScope": {
-                    "type": "string"
-                  },
-                  "skillTeam": {
-                    "type": "string",
-                    "description": "Defaults to empty."
-                  },
-                  "candidateModel": {
-                    "type": "string",
-                    "description": "The cheaper candidate model to evaluate."
-                  },
-                  "currentModel": {
-                    "type": "string",
-                    "nullable": true,
-                    "description": "Baseline model; resolved from the skill's pin when omitted."
-                  }
-                }
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Seams unconfigured — no-op; nothing recorded.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    },
-                    "note": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "202": {
-            "description": "Measurement run completed; the persisted measurement (and proposalId when the savings CI excluded zero).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    },
-                    "measurement": {
-                      "$ref": "#/components/schemas/RoutingMeasurement"
-                    },
-                    "proposalId": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Request body failed validation (code VALIDATION_ERROR).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not a platform operator (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/measurements/{id}": {
-      "get": {
-        "operationId": "getRoutingMeasurement",
-        "summary": "Get a single measurement by id",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Measurement detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoutingMeasurement"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Measurement not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/proposals": {
-      "get": {
-        "operationId": "listRoutingProposals",
-        "summary": "List routing-change proposals",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "status",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "pending",
-                "approved",
-                "rejected",
-                "applied"
-              ]
-            },
-            "description": "Filter by lifecycle status."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Proposal list.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/RoutingProposal"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/proposals/{id}": {
-      "get": {
-        "operationId": "getRoutingProposal",
-        "summary": "Get a single proposal by id",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Proposal detail.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoutingProposal"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Proposal not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/proposals/{id}/approve": {
-      "post": {
-        "operationId": "approveRoutingProposal",
-        "summary": "Approve a proposal — pin the skill to the proposed model and mark it Applied",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Proposal applied.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "appliedModel": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the owning skill's scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Proposal or target skill not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Proposal is no longer pending (code PROPOSAL_ALREADY_DECIDED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/proposals/{id}/reject": {
-      "post": {
-        "operationId": "rejectRoutingProposal",
-        "summary": "Reject a proposal — flip status to Rejected; the skill posture is untouched",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Proposal rejected.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "string"
-                    },
-                    "appliedModel": {
-                      "type": "string",
-                      "nullable": true
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Caller is not authorized for the owning skill's scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Proposal not found.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "Proposal is no longer pending (code PROPOSAL_ALREADY_DECIDED).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/recommendations": {
-      "get": {
-        "operationId": "listSavingsRecommendations",
-        "summary": "List savings recommendations (latest measurement + any open proposal, per skill)",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "clusterTenant",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to skills owned by this ClusterTenant (the skill's team)."
-          },
-          {
-            "name": "skillScope",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to one owning skill scope."
-          },
-          {
-            "name": "onlyOpen",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "enum": [
-                "true"
-              ]
-            },
-            "description": "When 'true', return only skills with an open Pending proposal."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Recommendations sorted by projected savings desc; scope-filtered to the caller's ClusterTenant for non-operators.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/SavingsRecommendation"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/model-routing/metrics": {
-      "get": {
-        "operationId": "getRoutingMetrics",
-        "summary": "Proxy a metrics query to the self-hosted Langfuse backend (server-side auth; non-operators scoped to their tenant)",
-        "tags": [
-          "Model Registry"
-        ],
-        "parameters": [
-          {
-            "name": "query",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Langfuse v1 metrics `query` JSON, forwarded verbatim (a tenant filter is injected for non-operators)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Upstream Langfuse metrics JSON (loosely-typed passthrough).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "A non-operator caller with no resolved ClusterTenant has no metrics scope (code FORBIDDEN_SCOPE).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "The Langfuse backend was unreachable or returned a non-2xx status.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    },
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "The Langfuse backend is not configured (host/keys missing).",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "status": {
-                      "type": "string"
-                    }
-                  }
                 }
               }
             }
@@ -8007,145 +4525,14 @@
         }
       }
     },
-    "/ai-budget/{tenantName}/spend": {
-      "get": {
-        "operationId": "getTenantSpend",
-        "summary": "Get current spend and budget state for a tenant",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Spend data.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Budget"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai-budget/{tenantName}/litellm-key": {
-      "get": {
-        "operationId": "getTenantLiteLlmKey",
-        "summary": "Get LiteLLM virtual key metadata for a tenant (never the key value)",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "LiteLLM key metadata.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No LiteLLM key for this tenant.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/ai-budget/{tenantName}/litellm-key/revoke": {
-      "post": {
-        "operationId": "revokeTenantLiteLlmKey",
-        "summary": "Revoke the LiteLLM virtual key for a tenant",
-        "tags": [
-          "AI Budget"
-        ],
-        "parameters": [
-          {
-            "name": "tenantName",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Key revoked.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object"
-                }
-              }
-            }
-          },
-          "502": {
-            "description": "Upstream dependency (Kubernetes, database, Cognee, LiteLLM) returned an error.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/audit": {
       "get": {
         "operationId": "listAuditEntries",
-        "summary": "Query audit log entries with optional tenant filter and cursor pagination",
+        "summary": "Query audit log entries with cursor pagination",
         "tags": [
           "Audit"
         ],
         "parameters": [
-          {
-            "name": "tenant",
-            "in": "query",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter to a specific tenant."
-          },
           {
             "name": "limit",
             "in": "query",
@@ -8195,79 +4582,52 @@
         }
       }
     },
-    "/metrics/server": {
+    "/me/approvals": {
       "get": {
-        "operationId": "getServerMetrics",
-        "summary": "Get latest server utilisation snapshot (CPU, memory, storage, active tenants)",
+        "operationId": "listMyPendingToolApprovals",
+        "summary": "List the signed-in owner's pending tool approvals",
+        "description": "The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.",
         "tags": [
-          "Metrics"
+          "Approvals"
         ],
         "responses": {
           "200": {
-            "description": "Server utilisation snapshot.",
+            "description": "Pending owner-bound tool approvals.",
             "content": {
               "application/json": {
                 "schema": {
                   "type": "object",
                   "required": [
-                    "cpuPercent",
-                    "memoryUsedBytes",
-                    "memoryTotalBytes",
-                    "storageUsedBytes",
-                    "storageTotalBytes",
-                    "activeTenants",
-                    "sampledAt"
+                    "approvals"
                   ],
                   "properties": {
-                    "cpuPercent": {
-                      "type": "number",
-                      "description": "CPU utilisation percentage (0–100)."
-                    },
-                    "memoryUsedBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "memoryTotalBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "storageUsedBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "storageTotalBytes": {
-                      "type": "integer",
-                      "format": "int64"
-                    },
-                    "activeTenants": {
-                      "type": "integer"
-                    },
-                    "sampledAt": {
-                      "type": "string",
-                      "format": "date-time"
+                    "approvals": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfDeferredToolApproval"
+                      }
                     }
                   }
                 }
               }
             }
-          }
-        }
-      }
-    },
-    "/metrics/projection-drift": {
-      "get": {
-        "operationId": "getProjectionDriftMetrics",
-        "summary": "Get projection drift metrics with threshold evaluation and alert state",
-        "tags": [
-          "Metrics"
-        ],
-        "responses": {
-          "200": {
-            "description": "Projection drift metrics.",
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ProjectionDrift"
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not read pending approvals.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -8275,40 +4635,1263 @@
         }
       }
     },
-    "/token-usage": {
-      "get": {
-        "operationId": "listTokenUsage",
-        "summary": "List token usage records",
+    "/me/approvals/{approvalRequestId}/decision": {
+      "post": {
+        "operationId": "decideDeferredToolApproval",
+        "summary": "Approve or deny one pending tool action owned by the signed-in user",
+        "description": "The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.",
         "tags": [
-          "Token Usage"
+          "Approvals"
         ],
         "parameters": [
           {
-            "name": "tenant",
-            "in": "query",
+            "name": "approvalRequestId",
+            "in": "path",
+            "required": true,
             "schema": {
               "type": "string"
+            },
+            "description": "Opaque identifier for the pending approval."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "decision"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approved",
+                      "denied"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decision recorded or identical terminal decision replayed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "approvalRequestId",
+                    "state"
+                  ],
+                  "properties": {
+                    "approvalRequestId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "approved",
+                        "denied"
+                      ]
+                    }
+                  }
+                }
+              }
             }
           },
-          {
-            "name": "limit",
-            "in": "query",
-            "schema": {
-              "type": "integer",
-              "default": 100
+          "400": {
+            "description": "The request body is not the exact decision shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
             }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The approval is absent, terminal in another way, or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The approval expired before the decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not persist the decision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs/{runId}/steering": {
+      "post": {
+        "operationId": "submitRuntimeSteering",
+        "summary": "Queue one signed-in owner's instruction for a running agent",
+        "description": "The server derives the owner, silo, and current attempt. The instruction is queued durably and is consumed only at the runtime's fenced safe boundary.",
+        "tags": [
+          "Runs"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque run identifier."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "text"
+                ],
+                "additionalProperties": false,
+                "properties": {
+                  "text": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 4000
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Steering request queued for the current run attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "steeringRequestId",
+                    "attempt",
+                    "state"
+                  ],
+                  "properties": {
+                    "steeringRequestId": {
+                      "type": "string"
+                    },
+                    "attempt": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "pending"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body is not one bounded text instruction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The owned run has no steerable live attempt.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The product authority could not persist the instruction.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs": {
+      "get": {
+        "operationId": "listMyRuns",
+        "summary": "List a signed-in owner's fifty most recent personal runs",
+        "description": "The server derives the owner and silo from session and host, then returns at most fifty canonical lifecycle summaries ordered newest first.",
+        "tags": [
+          "Runs"
+        ],
+        "responses": {
+          "200": {
+            "description": "Recent canonical lifecycle views for the owned runs.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runs"
+                  ],
+                  "properties": {
+                    "runs": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/SelfRunStatus"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Run status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "startMyRun",
+        "summary": "Start a signed-in user's personal run from an existing conversation",
+        "description": "The body may name only a thread and idempotency key. The server derives the session subject, host silo, personal AgentService, signed personal membership assertion, organization, scope, dataset, and immutable run input snapshot.",
+        "tags": [
+          "Runs"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "threadId",
+                  "requestIdempotencyKey"
+                ],
+                "properties": {
+                  "threadId": {
+                    "type": "string",
+                    "description": "Existing conversation thread the signed-in user participates in."
+                  },
+                  "requestIdempotencyKey": {
+                    "type": "string",
+                    "description": "Caller-generated key for safe transport retries."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "A duplicate idempotency key returned the already-admitted run.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runId"
+                  ],
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "A new immutable run snapshot was accepted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "runId"
+                  ],
+                  "properties": {
+                    "runId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body omitted a required field or attempted to supply server-owned coordinates.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "The thread, current personal persona, membership, dataset, or other admission evidence was unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The shared managed-and-personal admission capacity is full.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The run admission authority was unavailable.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/runs/{runId}": {
+      "get": {
+        "operationId": "getMyRunStatus",
+        "summary": "Return one signed-in owner's personal run status",
+        "description": "The server derives the owner and silo from session and host. It never accepts owner coordinates from the request.",
+        "tags": [
+          "Runs"
+        ],
+        "parameters": [
+          {
+            "name": "runId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque run identifier."
           }
         ],
         "responses": {
           "200": {
-            "description": "Token usage records.",
+            "description": "Current canonical lifecycle view for the owned run.",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TokenUsage"
+                  "$ref": "#/components/schemas/SelfRunStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The run identifier is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The run is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Run status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/persona": {
+      "get": {
+        "operationId": "getMyPersonaOnboarding",
+        "summary": "Return the signed-in owner's resumable persona onboarding state",
+        "tags": [
+          "Persona"
+        ],
+        "responses": {
+          "200": {
+            "description": "Durable onboarding progress without compiled persona instructions.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "state",
+                    "interviewId",
+                    "answeredQuestionCount",
+                    "questionCount",
+                    "personaRevisionId"
+                  ],
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "interview",
+                        "review",
+                        "ready"
+                      ]
+                    },
+                    "interviewId": {
+                      "type": "string",
+                      "nullable": true
+                    },
+                    "answeredQuestionCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "questionCount": {
+                      "type": "integer",
+                      "minimum": 0
+                    },
+                    "personaRevisionId": {
+                      "type": "string",
+                      "nullable": true
+                    }
                   }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Onboarding status could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/conversations/{threadId}/events": {
+      "get": {
+        "operationId": "replayMyConversationEvents",
+        "summary": "Replay the signed-in participant's canonical conversation events",
+        "description": "The server derives the participant and silo from the browser session. It streams display-safe canonical events only when that participant belongs to the selected thread.",
+        "tags": [
+          "Conversations"
+        ],
+        "parameters": [
+          {
+            "name": "threadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque conversation-thread identifier."
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque canonical event cursor. The Last-Event-ID header is an equivalent resume mechanism."
+          },
+          {
+            "name": "Last-Event-ID",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque canonical event cursor. It must match cursor when both are supplied."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "A bounded text/event-stream replay. An empty stream does not disclose whether the thread exists or belongs to another participant.",
+            "content": {
+              "text/event-stream": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The thread identifier or replay cursor is malformed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Canonical history could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/agent-services": {
+      "get": {
+        "operationId": "listManagedAgentServices",
+        "summary": "List managed agent services in the signed-in caller's silo",
+        "description": "The server derives the silo from the browser session and request host. It returns at most two hundred managed-service summaries, ordered by most recently updated first.",
+        "tags": [
+          "Agent services"
+        ],
+        "responses": {
+          "200": {
+            "description": "Managed agent services in the selected silo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "services"
+                  ],
+                  "properties": {
+                    "services": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/AgentService"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "The management authority could not read the catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes/{changeId}/materialize": {
+      "post": {
+        "operationId": "materializeMyPersonalConfigurationChange",
+        "summary": "Apply one accepted personal model selection to future runs",
+        "description": "The server derives the owner, silo, trusted time, active personal revision, and registered model definition. It creates and activates a new immutable AgentRevision; it never rewrites an active run snapshot. Accepted persona refreshes remain in their proposal-bound interview flow.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "parameters": [
+          {
+            "name": "changeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "maxProperties": 0
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Model selection applied, or the accepted proposal belongs to the persona-refresh workflow.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "changeId",
+                        "state",
+                        "agentRevisionId"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "changeId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "applied"
+                        },
+                        "agentRevisionId": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "changeId",
+                        "state",
+                        "materialized"
+                      ],
+                      "additionalProperties": false,
+                      "properties": {
+                        "changeId": {
+                          "type": "string"
+                        },
+                        "state": {
+                          "const": "accepted"
+                        },
+                        "materialized": {
+                          "const": false
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The materialization request was not the exact empty-object shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The proposal is absent or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The proposal is not accepted or no longer matches the active revision.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "The selected model alias is not available in the caller's silo.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The accepted model selection could not be applied.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes/{changeId}/decision": {
+      "post": {
+        "operationId": "decideMyPersonalConfigurationChange",
+        "summary": "Accept or reject one signed-in owner's configuration proposal",
+        "description": "The server derives the owner, silo, and decision time. A decision records consent only; it never applies a patch to an existing run snapshot.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "parameters": [
+          {
+            "name": "changeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": [
+                      "decision"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "decision": {
+                        "const": "accepted"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "decision",
+                      "rejectionReason"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "decision": {
+                        "const": "rejected"
+                      },
+                      "rejectionReason": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 200,
+                        "pattern": ".*\\S.*"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Owner decision recorded.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changeId",
+                    "state"
+                  ],
+                  "properties": {
+                    "changeId": {
+                      "type": "string"
+                    },
+                    "state": {
+                      "type": "string",
+                      "enum": [
+                        "accepted",
+                        "rejected"
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Decision body is not the exact accepted or rejected shape.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Proposal is absent, terminal, or not owned by the caller.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Decision could not be persisted.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/configuration/changes": {
+      "get": {
+        "operationId": "listMyPersonalConfigurationChanges",
+        "summary": "List the signed-in owner's personal configuration proposals",
+        "description": "The server derives the owner and silo from session and host. It returns at most fifty durable future-session proposals, never a mutable run snapshot.",
+        "tags": [
+          "Personal configuration"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-bound configuration proposal history.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "changes"
+                  ],
+                  "properties": {
+                    "changes": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/PersonalConfigurationChange"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Configuration proposal history could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/skills": {
+      "get": {
+        "operationId": "listSkills",
+        "summary": "List governed skills in the signed-in caller's silo",
+        "description": "The server derives the silo from the browser session and request host. It returns at most two hundred catalogue summaries, never skill bundles, artifact addresses, manifests, review evidence, signatures, or workload coordinates.",
+        "tags": [
+          "Skills"
+        ],
+        "responses": {
+          "200": {
+            "description": "Browser-safe governed skill catalogue.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "skills"
+                  ],
+                  "properties": {
+                    "skills": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "name",
+                          "description",
+                          "state",
+                          "currentRevisionId",
+                          "currentRevisionState",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "description": {
+                            "type": "string"
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "retired"
+                            ]
+                          },
+                          "currentRevisionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "currentRevisionState": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "draft",
+                              "review",
+                              "published",
+                              "rejected",
+                              "revoked",
+                              null
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No authenticated browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The skill catalogue could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/assets": {
+      "get": {
+        "operationId": "listMyAssets",
+        "summary": "List the signed-in owner's assets",
+        "description": "The server derives the owner and silo from the browser session and request host. It returns at most fifty non-deleted asset metadata records, never bytes, content addresses, provenance, leases, receipts, or outbox data.",
+        "tags": [
+          "Personal assets"
+        ],
+        "responses": {
+          "200": {
+            "description": "Owner-bound personal asset metadata.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "assets"
+                  ],
+                  "properties": {
+                    "assets": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "required": [
+                          "id",
+                          "kind",
+                          "state",
+                          "currentRevisionId",
+                          "mediaType",
+                          "byteLength",
+                          "indexState",
+                          "createdAt",
+                          "updatedAt"
+                        ],
+                        "properties": {
+                          "id": {
+                            "type": "string"
+                          },
+                          "kind": {
+                            "type": "string",
+                            "enum": [
+                              "document",
+                              "generated",
+                              "skill",
+                              "upload"
+                            ]
+                          },
+                          "state": {
+                            "type": "string",
+                            "enum": [
+                              "active",
+                              "deletion_pending"
+                            ]
+                          },
+                          "currentRevisionId": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "mediaType": {
+                            "type": [
+                              "string",
+                              "null"
+                            ]
+                          },
+                          "byteLength": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "pattern": "^(0|[1-9][0-9]*)$"
+                          },
+                          "indexState": {
+                            "type": [
+                              "string",
+                              "null"
+                            ],
+                            "enum": [
+                              "pending",
+                              "indexed",
+                              "failed",
+                              "removal_pending",
+                              "removed",
+                              null
+                            ]
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "updatedAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No browser session owns the request.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Personal asset metadata could not be read.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -8341,8 +5924,7 @@
                       "type": "string",
                       "enum": [
                         "development",
-                        "oidc",
-                        "token"
+                        "oidc"
                       ],
                       "description": "Active authentication mode for this instance."
                     },
@@ -8431,101 +6013,6 @@
                           "format": "date-time"
                         }
                       }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/pod-token": {
-      "post": {
-        "operationId": "getPodConnection",
-        "summary": "Resolve the caller's OpenClaw pod gateway connection coordinates from their OIDC session",
-        "description": "Single sign-on across the control plane and the tenant pod: requires an established OIDC session (cookie) and returns the `wss://` gateway URL for the caller's own pod. Under trusted-proxy gateway auth the browser holds no credential — the gateway socket is authorised at the ingress against the live session (`/auth/gateway-verify`), so no token is returned. The tenant is resolved solely from the session's verified email, so a caller cannot obtain another user's pod connection. Returns 401 without a session, 403 when no tenant matches the session email, 409 when the pod has no gateway URL / ingress host yet or when the email maps to more than one tenant.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "The caller's OpenClaw pod gateway connection coordinates.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "gatewayUrl",
-                    "tenant"
-                  ],
-                  "properties": {
-                    "gatewayUrl": {
-                      "type": "string",
-                      "description": "The `wss://` OpenClaw gateway URL to open."
-                    },
-                    "tenant": {
-                      "type": "string",
-                      "description": "Resolved tenant (pod) name."
-                    },
-                    "ingressHost": {
-                      "type": "string",
-                      "description": "Host the tenant's OpenClaw pod is reachable at, when known."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No authenticated session.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "Session has no email claim, or no tenant is provisioned for it.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The tenant pod has no gateway URL / ingress host yet.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string"
                     }
                   }
                 }
@@ -8639,160 +6126,6 @@
                       "description": "Absolute URL the browser should navigate to in order to terminate the upstream IdP session. Null when no upstream logout is configured or possible."
                     }
                   }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/device": {
-      "post": {
-        "operationId": "requestDeviceCode",
-        "summary": "Initiate a CLI device authorization grant",
-        "description": "Returns a device code and short user code. The CLI prints the verificationUri for the operator to open in a browser. No credentials required.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "responses": {
-          "200": {
-            "description": "Device grant created.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DeviceGrant"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/device/activate": {
-      "get": {
-        "operationId": "activateDeviceCode",
-        "summary": "Activate a device grant in the browser (requires OIDC session)",
-        "description": "The operator opens this URL after a CLI login prompt. If no OIDC session is present the user is redirected to the identity provider first. On success an access token is created and the CLI poll endpoint unblocks.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "parameters": [
-          {
-            "name": "userCode",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Short user code from the CLI prompt (e.g. ABCD-1234)."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Grant activated. HTML confirmation page returned."
-          },
-          "302": {
-            "description": "Redirect to OIDC login (no active session)."
-          },
-          "404": {
-            "description": "User code not found or expired.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "503": {
-            "description": "OIDC not configured.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/auth/device/token": {
-      "get": {
-        "operationId": "pollDeviceToken",
-        "summary": "Poll for the access token after browser activation",
-        "description": "Returns 202 while pending, 200 with token when authorized, 410 when the grant has expired. The token is delivered exactly once.",
-        "tags": [
-          "Auth"
-        ],
-        "security": [],
-        "parameters": [
-          {
-            "name": "deviceCode",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Secret device code returned by POST /auth/device."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Grant authorized — token ready.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "status",
-                    "token"
-                  ],
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "authorized"
-                      ]
-                    },
-                    "token": {
-                      "type": "string",
-                      "description": "Plain-text access token. Store in ~/.config/opencrane/credentials.json."
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "202": {
-            "description": "Grant still pending — continue polling.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "required": [
-                    "status"
-                  ],
-                  "properties": {
-                    "status": {
-                      "type": "string",
-                      "enum": [
-                        "pending"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          },
-          "410": {
-            "description": "Grant expired. Run `oc auth login` again.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
                 }
               }
             }

@@ -7,7 +7,7 @@ import { GatewayMode } from "@opencrane/state/gateways";
  * replaces this file with `environment.prod.ts` (see `fileReplacements` in
  * `apps/opencrane-ui/project.json`).
  */
-export const environment: { gatewayMode: GatewayMode; liveConversation?: boolean } =
+export const environment: { gatewayMode: GatewayMode } =
 {
 	/** Bind every swappable gateway to its mock implementation. */
 	gatewayMode: "mock"

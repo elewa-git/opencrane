@@ -1,0 +1,15 @@
+# Reference values — OpenCrane instance "globex" (native multi-instance, single cluster).
+#
+# Install the app-owned chart into an isolated namespace:
+#   helm install oc-globex apps/_infra/deploy-k8s -n oc-globex --create-namespace \
+#     -f apps/_infra/deploy-k8s/platform/values/multi-instance/oc-globex.yaml
+#
+# Pairs with oc-acme.yaml to document two isolated release namespaces in one cluster.
+
+multiInstance:
+  enabled: true
+  instanceNamespaces: [oc-globex]
+  rbac: namespaced
+
+ingress:
+  domain: globex.example.com

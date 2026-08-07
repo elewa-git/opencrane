@@ -1260,3 +1260,118 @@ standing per-frame audit choke point are **not** in scope → that is the proxy
 - [x] **Per-org OIDC hardened at deploy time.** When `OIDC_ISSUER_URL` is set, deploy requires this
   org's `OIDC_CLIENT_ID` and derives the per-org callback `https://<org>.<base>/api/v1/auth/callback`
   when unset. Commit `54e80a7` (`apps/clustertenant-platform/deploy.sh`).
+
+## Personal-agent program Phase A — deletion debt (complete 2026-07-17)
+
+Phase A closed [#245](https://github.com/elewa-git/opencrane/issues/245)'s rewrite-residue runway
+and [#248](https://github.com/elewa-git/opencrane/issues/248)'s command-line client retirement before
+the blue runtime freeze. The resulting blue surface is smaller, deterministic, and explicitly
+bounded for later per-silo replacement.
+
+- [x] **Tenant runtime code is image-owned and immutable.** OpenClaw and the Cognee memory plugin
+  are exact build-time inputs; startup no longer installs or updates executable code on tenant
+  state volumes. Static cold-start and previous-image rollback gates protect the contract.
+- [x] **Shadow runtime configuration is gone.** Shared-skill mounts, Tenant-CRD MCP/channel
+  controls, free-form config overrides, runtime version selection, and canary self-update were
+  deleted. AccessPolicy plus the rendered effective contract remains the MCP authority.
+- [x] **Legacy connection and session state is no longer live.** Pairing/BrokeredDevice storage,
+  gateway-admin revocation, and SessionScope API/client/runtime code were removed. SessionScope
+  database rows remain read-only migration input for R3; the no-token pod connection preflight
+  remains a named R9-expiring blue boundary.
+- [x] **The dead Obot registry path and duplicate checker are gone.** The supported local MCP
+  catalogue input remains; documentation no longer describes the upstream no-op polling route.
+- [x] **The frozen blue identity seam is auditable.** Existing service-mesh references are captured in
+  an exact inventory and CI rejects new ones while ADR 0003 records Cilium plus SPIFFE as green's
+  target. ADR 0005 records OpenCrane runtime ownership; ADR 0006 records whole-silo cutover.
+- [x] **The repository has no bundled command-line product.** `apps/cli`, its generated/package
+  wiring, and active command documentation were removed. Reader-facing workflows now use the
+  authenticated REST API, generated clients, or product UI.
+- [x] **Deletion remains deleted.** `scripts/phase-a-forbidden-references.sh`, wired into CI,
+  rejects the retired runtime, session, pairing, Obot-poll, and command-line surfaces while
+  allowing only exact decision history, migration evidence, tests, and named R9 blue contracts.
+
+## Personal-agent program Phase B — lightweight app rollups (complete 2026-07-17)
+
+Phase B completed [#249](https://github.com/elewa-git/opencrane/issues/249) before the rewrite
+freeze. Deployable ownership now lives under `apps/*`, reusable implementation lives under
+`libs/*`, and the frozen blue behaviour remains render-compatible while later green phases get a
+clean import seam.
+
+- [x] **Every rendered workload has an explicit app owner.** OpenCrane server, UI, migration,
+  Cognee, LiteLLM, Obot, and Langfuse workloads were owned by their app packages. The
+  `apps/opencrane-infra` chart is an umbrella composition layer instead of the implementation home
+  for those workloads. **Superseded note (2026-07-29):** the Langfuse workload was later removed;
+  this item preserves the Phase B completion evidence.
+- [x] **The server app is composition and process lifecycle.** Tenant/OpenClaw reconciliation,
+  policy reconciliation, identity, projection, connection auth, channel proxying, tenant hosting,
+  transport security, and OpenAPI ownership moved to canonical backend and infrastructure
+  libraries with their tests. Prisma composition stays app-owned by an explicit exception.
+- [x] **The reusable seam is mechanically enforced.** All Phase B packages carry the exact
+  `scope:*`, `type:*`, and `layer:*` Nx tags; ESLint enforces dependency direction; the topology
+  guard rejects unregistered app implementation, workload constructors, Helm templates, upstream
+  archive workloads, duplicate ownership, stale anchors, expired exceptions, and generated-output
+  false positives.
+- [x] **Blue deployment output remains stable.** App-owned Helm libraries preserve the existing
+  normalized render, apart from the migration Job disabling ServiceAccount token automount. The
+  shared profile removes only its six registered orphans, and the full standalone/shared pod-class
+  inventories are exact.
+- [x] **The complete workspace remains healthy.** All 119 affected build, test, and lint tasks
+  passed across 59 projects; 447 targeted moved-library tests passed; Helm lint/render checks,
+  OpenAPI and contract regeneration, Phase A guards, the VitePress build, style checks, and 14
+  adversarial topology mutations passed.
+
+## Personal-agent program Phase C — target contracts and app ownership (complete 2026-07-18)
+
+Phase C completed [#245](https://github.com/elewa-git/opencrane/issues/245) by defining the target
+product vocabulary and workload boundaries needed to implement Phase D without consulting obsolete
+runtime behavior.
+
+- [x] **Agent and transcript state has one canonical model.** AgentService, immutable AgentRevision,
+  AgentRun, Thread, Message, and ordered RunEvent types and legal transitions live in the pure
+  `models-agents` package and are re-exported through the public contracts barrel.
+- [x] **Authorization is deterministic and fail closed.** Organization, department, team, project,
+  personal, and direct-user scopes are independent; project membership can span departments and
+  teams; higher grant priority wins and deny wins at equal priority. Missing or invalid grants deny.
+- [x] **A silo can bound trust in fleet membership.** The pure membership evaluator verifies
+  explicit signature evidence, issuer/key, silo, subject, assertion, monotonic revision, issuance,
+  maximum staleness, and hard expiry; replayed, stale, mismatched, or expired evidence denies.
+- [x] **A user's first personal-agent session is gated by reviewed persona onboarding.** A versioned
+  interview selects a reviewed `SOUL.md` template, infuses exactly three to five provenance-linked
+  insights, and requires preview plus explicit approval. Runtime receives compiled revision input
+  and cannot mutate durable persona content.
+- [x] **Artifacts, persistence, scratch, and future updates have executable invariants.** Artifact
+  and SkillRevision models use storage-neutral SHA-256 references behind ArtifactStore. Durable
+  state remains on mounted, online-expandable, alerted, backed-up storage until authorized deletion;
+  runtime scratch is lease-scoped and non-authoritative; application updates must reach ready target
+  Pods in strictly less than five minutes while remounting canonical volumes.
+- [x] **Every target workload has a named owner and trust boundary.** ADR 0008 records the capability
+  catalog, critical journeys, API/Postgres authorities, and app→KSA→Role→network matrix, including
+  explicit owners for skill-authoring, tool-runner, and fresh-provisioning Jobs.
+- [x] **The contracts are independently executable and guarded.** Fifty-five model/contract tests,
+  TypeScript lint, NX scope/layer/type boundaries, a deliberate rejected cross-capability import,
+  style checks, Phase A/B guards, architecture/reaper gates, and severity-first review passed. The
+  independent review's duplicate-identifier finding was fixed before completion.
+
+## Repository cohesion — deployment and backend ownership (complete 2026-07-18)
+
+This follow-up made the repository layout match its ownership model without changing rendered
+workloads or runtime behaviour.
+
+- [x] **Deployment-only owners are visibly separated.** Cognee, Langfuse, LiteLLM, and Obot moved
+  under `apps/_infra`; `apps/_infra/deploy-k8s` owns the installation chart and its database
+  schema deployment component. **Superseded note (2026-07-29):** Langfuse was subsequently removed;
+  this statement records the repository layout at completion.
+- [x] **Database schema deployment has one owner.** The former `opencrane-migrate` app is gone;
+  OpenCrane owns the Prisma schema and server image, while the install chart owns the pre-install
+  and pre-upgrade Job that runs `prisma migrate deploy`.
+- [x] **Backend code is grouped by responsibility.** Reusable OpenCrane server domains live under
+  `libs/backend/server`; Kubernetes API access, authentication, HTTP, channel proxy, and tenant
+  hosting support live under `libs/server/_infra`. **Superseded note (2026-08-01):** the server
+  support libraries now live under `libs/backend/_server`, alongside their backend consumers.
+- [x] **The move is direct.** Imports, Nx project roots and names, TypeScript aliases, tests,
+  deployment scripts, guards, and reader-facing documentation point only at the new locations;
+  no compatibility exports or duplicate project owners remain.
+- [x] **Behaviour and topology remain guarded.** Nx discovery, targeted typechecks and tests,
+  module-boundary lint, Phase A/B positive and adversarial guards, Helm dependency/lint/render
+  checks, documentation build, residue searches, and independent architecture/reaper reviews cover
+  the new layout.

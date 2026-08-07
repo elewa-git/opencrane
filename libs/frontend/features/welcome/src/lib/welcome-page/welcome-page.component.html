@@ -24,19 +24,13 @@
 
 			@case (steps.Workspace) {
 				<h2 class="wo-welcome__panel-title wo-serif">Your AI workspace</h2>
-				@if (tenant(); as workspace) {
-					<p-message severity="success" [closable]="false" class="wo-welcome__notice">Your private OpenClaw workspace is ready.</p-message>
+				@if (clusterTenant(); as workspace) {
+					<p-message severity="success" [closable]="false" class="wo-welcome__notice">Your governed agent workspace is ready.</p-message>
 					<div class="wo-welcome__summary">
 						<div class="wo-welcome__summary-row">
 							<span>Workspace</span>
-							<strong class="wo-mono">{{ workspace.name }}</strong>
+							<strong class="wo-mono">{{ workspace }}</strong>
 						</div>
-						@if (workspace.ingressHost) {
-							<div class="wo-welcome__summary-row">
-								<span>Address</span>
-								<strong class="wo-mono">{{ workspace.ingressHost }}</strong>
-							</div>
-						}
 					</div>
 				} @else {
 					<p-message severity="info" [closable]="false" class="wo-welcome__notice">Your workspace is still provisioning.</p-message>

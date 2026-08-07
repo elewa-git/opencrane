@@ -1,0 +1,136 @@
+{{- define "opencrane.litellm.deployment" -}}
+{{- /* Render the release-local LiteLLM only when enabled AND instance-scoped.
+       When sharedPlatform.litellm.mode=shared, callers use opencrane.litellmEndpoint
+       (the external endpoint) and no in-release LiteLLM workload is created. */ -}}
+{{- if and .Values.litellm.enabled (ne (include "opencrane.litellmShared" .) "true") }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "opencrane.fullname" . }}-litellm
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "opencrane.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: litellm
+  template:
+    metadata:
+      labels:
+        {{- include "opencrane.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: litellm
+      {{- with .Values.litellm.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      securityContext:
+        {{- toYaml .Values.litellm.podSecurityContext | nindent 8 }}
+      containers:
+        - name: litellm
+          image: "{{ .Values.litellm.image.repository }}:{{ .Values.litellm.image.tag }}"
+          imagePullPolicy: {{ .Values.litellm.image.pullPolicy }}
+          securityContext:
+            {{- toYaml .Values.litellm.securityContext | nindent 12 }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.litellm.service.port }}
+          env:
+            - name: PORT
+              value: {{ .Values.litellm.service.port | quote }}
+            {{- if .Values.litellm.existingSecret }}
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.litellm.existingSecret }}
+                  key: {{ .Values.litellm.secretKey }}
+            {{- else if .Values.litellm.masterKey }}
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opencrane.fullname" . }}-litellm
+                  key: {{ .Values.litellm.secretKey }}
+            {{- end }}
+            {{- if .Values.litellm.existingDatabaseSecret }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.litellm.existingDatabaseSecret }}
+                  key: {{ .Values.litellm.databaseSecretKey }}
+            {{- else if .Values.litellm.databaseUrl }}
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opencrane.fullname" . }}-litellm
+                  key: {{ .Values.litellm.databaseSecretKey }}
+            {{- end }}
+            {{- /* DB-backed model store (STORE_MODEL_IN_DB). Requires Postgres
+                   (DATABASE_URL above), so it is values-driven and OFF unless a DB
+                   profile turns it on. LITELLM_SALT_KEY encrypts provider keys
+                   persisted in the DB — set it once and never rotate, or stored
+                   keys become unreadable. Sourced from existingSaltSecret or the
+                   chart-managed litellm Secret. */ -}}
+            {{- if .Values.litellm.storeModelInDb }}
+            - name: STORE_MODEL_IN_DB
+              value: "True"
+            {{- if .Values.litellm.existingSaltSecret }}
+            - name: LITELLM_SALT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.litellm.existingSaltSecret }}
+                  key: {{ .Values.litellm.saltSecretKey }}
+            {{- else }}
+            - name: LITELLM_SALT_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "opencrane.fullname" . }}-litellm
+                  key: {{ .Values.litellm.saltSecretKey }}
+            {{- end }}
+            {{- end }}
+            {{- /* Redis backs cross-replica budget + rate-limit consistency.
+                   Required for HA/multi-replica installs so spend and limits are
+                   shared across pods rather than per-replica. Default OFF. */ -}}
+            {{- if .Values.litellm.redis.enabled }}
+            - name: REDIS_HOST
+              value: {{ .Values.litellm.redis.host | quote }}
+            - name: REDIS_PORT
+              value: {{ .Values.litellm.redis.port | quote }}
+            {{- end }}
+            - name: LITELLM_MIGRATION_DIR
+              value: "/tmp/litellm/migrations"
+            - name: LITELLM_NON_ROOT
+              value: "true"
+            - name: PRISMA_BINARY_CACHE_DIR
+              value: "/tmp/prisma-engines"
+            - name: XDG_CACHE_HOME
+              value: "/tmp"
+            - name: NPM_CONFIG_CACHE
+              value: "/tmp/.npm"
+          volumeMounts:
+            - name: temp-dir
+              mountPath: /tmp
+            - name: var-lib-litellm
+              mountPath: /var/lib/litellm
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 120
+            periodSeconds: 15
+            failureThreshold: 4
+          readinessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          resources:
+            {{- toYaml .Values.litellm.resources | nindent 12 }}
+      volumes:
+        - name: temp-dir
+          emptyDir: {}
+        - name: var-lib-litellm
+          emptyDir: {}
+{{- end }}
+{{- end }}

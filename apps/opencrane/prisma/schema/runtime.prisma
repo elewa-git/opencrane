@@ -1,0 +1,130 @@
+/// Command kind durably minted onto one runtime command stream. The dispatch authority mints
+/// `start_attempt` to begin an attempt, `resume_attempt` to feed control-plane-authorized deferred
+/// tool results back into a paused attempt (carrying the current input generation), and
+/// `cancel_attempt` as a positive stop signal the runtime acts on immediately.
+enum RuntimeCommandKind {
+  StartAttempt  @map("start_attempt")
+  ResumeAttempt @map("resume_attempt")
+  CancelAttempt @map("cancel_attempt")
+}
+
+/// Disposition of one ordered steering boundary claim. Exactly one disposition is recorded per
+/// boundary and survives process death, so a reconnecting runtime never double-absorbs steering.
+enum RuntimeSteeringDisposition {
+  Absorbed @map("absorbed")
+  Deferred @map("deferred")
+}
+
+/// Lifecycle of one owner-submitted steering instruction. A request becomes consumable only after
+/// the server has bound it to the current run attempt. The server marks it consumed atomically with
+/// the persisted resume command that carries the instruction to the runtime's fenced safe boundary.
+enum RuntimeSteeringRequestState {
+  Pending  @map("pending")
+  Consumed @map("consumed")
+}
+
+/// Per-attempt durable authority for the runtime command stream. It owns the monotonic command
+/// sequence, the server-owned lease fence, the runtime instance bound to the current stream, and
+/// the accepted candidate ids. It is created lazily the first time a registered runtime Pod polls
+/// its stream and is never edited from a non-owning domain; the dispatch adapter reloads and locks
+/// the live WorkloadAssignment on every call rather than trusting a foreign-key snapshot.
+model RuntimeCommandStream {
+  runId                String                     @map("run_id")
+  attempt              Int
+  fence                Int                        @default(1)
+  inputGeneration      Int                        @default(0) @map("input_generation")
+  runtimeInstanceId    String?                    @map("runtime_instance_id")
+  nextCommandSequence  Int                        @default(1) @map("next_command_sequence")
+  acceptedCandidateIds String[]                   @default([]) @map("accepted_candidate_ids")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt           DateTime                    @updatedAt @map("updated_at")
+  commands             RuntimeDispatchedCommand[]
+  externalActionRetries RuntimeExternalActionRetry[]
+
+  @@id([runId, attempt])
+  @@map("runtime_command_streams")
+}
+
+/// Server-owned retry budget for an admitted action that proved it failed before reservation. One
+/// row survives runtime reconnects, so a restarted or malicious client cannot reset the bounded
+/// retry window by resubmitting the same candidate id.
+model RuntimeExternalActionRetry {
+  runId           String               @map("run_id")
+  attempt         Int
+  candidateId     String               @map("candidate_id")
+  retryCount      Int                  @default(0) @map("retry_count")
+  retryDeadlineAt DateTime             @map("retry_deadline_at")
+  createdAt       DateTime             @default(now()) @map("created_at")
+  updatedAt       DateTime             @updatedAt @map("updated_at")
+  stream          RuntimeCommandStream @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict)
+
+  @@id([runId, attempt, candidateId])
+  @@index([runId, attempt, retryDeadlineAt])
+  @@map("runtime_external_action_retries")
+}
+
+/// Ordered steering-boundary ledger for one attempt. The runtime claims a boundary only at a safe
+/// pre-model position, identified by a deterministic `boundaryId` derived from the run, attempt, and
+/// the input generation it is advancing from. Recording is exactly-once: the primary key blocks a
+/// second claim for the same boundary across process death, so on reconnect the prior disposition
+/// (Absorbed or Deferred) is replayed rather than recomputed. Absorbing steering advances the input
+/// generation; a model terminal tagged with a superseded generation is rejected as stale.
+model RuntimeSteeringBoundary {
+  runId               String                     @map("run_id")
+  attempt             Int
+  boundaryId          String                     @map("boundary_id")
+  fromInputGeneration Int                        @map("from_input_generation")
+  toInputGeneration   Int                        @map("to_input_generation")
+  disposition         RuntimeSteeringDisposition
+  steeringDigest      String?                    @map("steering_digest")
+  claimedAt           DateTime                   @default(now()) @map("claimed_at")
+  ackedAt             DateTime?                  @map("acked_at")
+
+  @@id([runId, attempt, boundaryId])
+  @@unique([runId, attempt, toInputGeneration])
+  @@index([runId, attempt])
+  @@map("runtime_steering_boundaries")
+}
+
+/// Durable owner-authored instruction for a running attempt. The public API stores it here before
+/// the runtime observes it, so a disconnect cannot lose a user instruction and the request body is
+/// never trusted as a direct mutation of the stream input generation.
+model RuntimeSteeringRequest {
+  id          String                      @id @default(cuid())
+  runId       String                      @map("run_id")
+  attempt     Int
+  siloId      String                      @map("silo_id")
+  subjectId   String                      @map("subject_id")
+  content     Json
+  digest      String
+  state       RuntimeSteeringRequestState @default(Pending)
+  submittedAt DateTime                    @default(now()) @map("submitted_at")
+  consumedAt  DateTime?                   @map("consumed_at")
+  run         AgentRun                    @relation(fields: [runId], references: [id], onDelete: Restrict)
+
+  @@index([runId, attempt, state, submittedAt])
+  @@index([siloId, subjectId, submittedAt])
+  @@map("runtime_steering_requests")
+}
+
+/// One durably minted command dispatched to the runtime. The rows for an attempt are exactly the
+/// authority's accepted command-id set, and `(runId, attempt, sequence)` is strictly monotonic so a
+/// reconnecting runtime can be re-sent an already-accepted command without the sequence advancing.
+model RuntimeDispatchedCommand {
+  id        String               @id @default(cuid())
+  runId     String               @map("run_id")
+  attempt   Int
+  sequence  Int
+  commandId String               @unique @map("command_id")
+  kind      RuntimeCommandKind
+  fence     Int
+  payload   Json?
+  issuedAt  DateTime             @map("issued_at")
+  expiresAt DateTime             @map("expires_at")
+  createdAt DateTime             @default(now()) @map("created_at")
+  stream    RuntimeCommandStream @relation(fields: [runId, attempt], references: [runId, attempt], onDelete: Restrict)
+
+  @@unique([runId, attempt, sequence])
+  @@index([runId, attempt])
+  @@map("runtime_dispatched_commands")
+}

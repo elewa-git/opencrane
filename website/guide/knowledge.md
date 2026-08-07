@@ -1,37 +1,48 @@
-# Connect organizational knowledge
+# Connect organisational knowledge
 
-::: tip What's organizational knowledge?
-Your company's own information — from Slack, email, documents, tickets — gathered
-into a searchable index. With it, an assistant answers from **real company facts,
-with citations**, instead of guessing.
+Give agents something worth remembering. OpenCrane keeps a durable memory store (backed by
+Cognee) behind its own access control, so what an agent can recall always matches what its owner
+is allowed to see — never a raw, ungoverned document dump.
+
+::: tip Personal memory vs shared knowledge
+Your [personal assistant](/guide/persona) recalls from **your own** personal dataset — no one
+else's assistant can read it, and it can't read anyone else's. A managed agent recalls only from
+the **shared** organisation, department or project knowledge it was explicitly configured with.
+Neither kind can wander into the other's memory.
 :::
 
-## How it works
+## Register sources and datasets
 
-- OpenCrane runs **collectors** that continuously pull in knowledge from your systems
-  and organize it by [scope](/guide/organize) (personal, project, department, org).
-- During a conversation, an assistant **looks things up directly** and answers with
-  citations. OpenCrane never reads the conversation — it only decides which knowledge
-  an assistant is allowed to see.
-- What an assistant can reach is set by [access](/guide/permissions): a department's
-  documents only reach that department.
+Register the organisation's supported sources through the current API. The current UI does not
+expose knowledge management. Place content in datasets whose scope matches the intended
+audience: personal, project, department or organisation.
 
-## Keep every assistant consistent
+## Grant access
 
-So every assistant behaves the same way when it looks things up — same rules for
-which sources to use, when to cite, and how fresh information must be — OpenCrane
-applies a shared set of rules across the fleet. You roll changes out gradually (to a
-few assistants first, then everyone) and can undo in one step. Manage this from the
-command line — see [CLI reference → `oc awareness`](/reference/cli#oc-awareness).
+Grant both the acting subject and the agent service the required dataset capability. OpenCrane
+resolves those grants before admission and freezes the selected memory policy in the
+`RunInputSnapshot`.
 
-## Keep contexts from bleeding together
+## During a run
 
-To stop one project's context from leaking into an unrelated chat, you can pin a
-conversation to a scope. Manage this from the command line — see
-[CLI reference → `oc sessions`](/reference/cli#oc-sessions).
+The runtime cannot select an arbitrary dataset. Memory actions pass through OpenCrane, which
+derives personal dataset identity from the verified silo, organisation and subject, then
+records provenance for durable facts.
+
+::: info
+Reads are live: run admission freezes gateway-selected fact references (id and content digest only)
+into the `RunInputSnapshot`, and prompt compilation inlines each statement only after verifying it
+against the frozen digest. Mid-run memory actions and every write remain fail closed — recalled
+text still has no safe, attempt-fenced ephemeral result channel, and no durable write lifecycle
+exists yet.
+:::
+
+::: warning
+Do not use dataset names as the security boundary. Membership and grants decide access; a
+caller-provided dataset parameter cannot widen it.
+:::
 
 ## Going deeper
 
-How collection, datasets, and freshness work under the hood is in the
-[Retrieval & memory deep dive](/integrators/retrieval-memory). Health dashboards are
-in [Awareness SLOs](/operators/awareness-slos).
+See [Retrieval and memory](/integrators/retrieval-memory) for fact provenance, personal
+dataset binding and failure behaviour.

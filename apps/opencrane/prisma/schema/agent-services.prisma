@@ -1,0 +1,154 @@
+enum AgentServiceKind {
+  Personal @map("personal")
+  Managed  @map("managed")
+}
+
+enum AgentServiceState {
+  Draft   @map("draft")
+  Active  @map("active")
+  Paused  @map("paused")
+  Retired @map("retired")
+}
+
+enum AgentRevisionState {
+  Draft     @map("draft")
+  Published @map("published")
+  Rejected  @map("rejected")
+  Retired   @map("retired")
+}
+
+/// How a scheduled run behaves when a prior scheduled run of the same service is still active.
+enum AgentScheduleOverlapPolicy {
+  /// Do not admit the new scheduled slot while a prior scheduled run is still active.
+  Skip  @map("skip")
+  /// Admit every due scheduled slot regardless of any in-flight scheduled run.
+  Allow @map("allow")
+}
+
+model AgentService {
+  id               String            @id @default(cuid())
+  siloId           String            @map("silo_id")
+  kind             AgentServiceKind
+  name             String
+  state            AgentServiceState @default(Draft)
+  activeRevisionId String?           @map("active_revision_id")
+  workloadProfile  String            @map("workload_profile")
+  createdAt        DateTime          @default(now()) @map("created_at")
+  updatedAt        DateTime          @updatedAt @map("updated_at")
+  revisions        AgentRevision[]   @relation("AgentServiceRevisions")
+  runs             AgentRun[]
+  schedules        AgentServiceSchedule[]
+  activeRevision   AgentRevision?    @relation("ActiveAgentRevision", fields: [id, activeRevisionId], references: [agentServiceId, id], onDelete: Restrict)
+
+  @@unique([id, activeRevisionId])
+  @@unique([id, siloId])
+  @@index([siloId, kind, state])
+  @@map("agent_services")
+}
+
+/// Executable revision fields are immutable. Publication metadata may move through the closed
+/// lifecycle, but changing executable content always creates the next revision.
+model AgentRevision {
+  id                  String                         @id @default(cuid())
+  agentServiceId      String                         @map("agent_service_id")
+  revision            Int
+  parentRevisionId    String?                        @map("parent_revision_id")
+  sourceRevisionId    String?                        @map("source_revision_id")
+  changeMessage       String                         @default("") @map("change_message")
+  state               AgentRevisionState             @default(Draft)
+  digest              String
+  promptPolicyVersion String                         @map("prompt_policy_version")
+  personaRevisionId   String?                        @map("persona_revision_id")
+  modelDefinitionId   String                         @map("model_definition_id")
+  budget              Json
+  authoredBy          String                         @map("authored_by")
+  createdAt           DateTime                       @default(now()) @map("created_at")
+  publishedAt         DateTime?                      @map("published_at")
+  agentService        AgentService                   @relation("AgentServiceRevisions", fields: [agentServiceId], references: [id], onDelete: Restrict)
+  modelDefinition     ModelDefinition                @relation(fields: [modelDefinitionId], references: [id], onDelete: Restrict)
+  activeFor           AgentService[]                 @relation("ActiveAgentRevision")
+  parentRevision      AgentRevision?                 @relation("AgentRevisionLineage", fields: [parentRevisionId], references: [id], onDelete: Restrict)
+  childRevisions      AgentRevision[]                @relation("AgentRevisionLineage")
+  sourceRevision      AgentRevision?                 @relation("AgentRevisionRestoreSource", fields: [sourceRevisionId], references: [id], onDelete: Restrict)
+  restoredRevisions   AgentRevision[]                @relation("AgentRevisionRestoreSource")
+  skillAssignments    AgentRevisionSkillAssignment[]
+  integrationAssignments AgentRevisionIntegrationAssignment[]
+  scopeAttachments    AgentRevisionScopeAttachment[]
+  runs                AgentRun[]
+
+  @@unique([agentServiceId, revision])
+  @@unique([agentServiceId, id])
+  @@unique([agentServiceId, digest])
+  @@index([digest])
+  @@index([parentRevisionId])
+  @@index([sourceRevisionId])
+  @@map("agent_revisions")
+}
+
+/// Revision-scoped knowledge scope attachment. Reuses the canonical GrantScope/GrantSubjectType
+/// vocabulary; each row authorises scoped knowledge read/recall and inject/write for that exact
+/// scope only, never skills, MCP tools, models, credentials, or a neighbouring scope.
+model AgentRevisionScopeAttachment {
+  agentRevisionId String           @map("agent_revision_id")
+  scope           GrantScope
+  subjectType     GrantSubjectType @map("subject_type")
+  subjectId       String           @map("subject_id")
+  agentRevision   AgentRevision    @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+
+  @@id([agentRevisionId, scope, subjectType, subjectId])
+  @@index([scope, subjectType, subjectId])
+  @@map("agent_revision_scope_attachments")
+}
+
+model AgentRevisionSkillAssignment {
+  agentRevisionId String        @map("agent_revision_id")
+  skillId         String        @map("skill_id")
+  skillRevisionId String        @map("skill_revision_id")
+  agentRevision   AgentRevision @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+
+  @@id([agentRevisionId, skillId])
+  @@unique([agentRevisionId, skillRevisionId])
+  @@map("agent_revision_skill_assignments")
+}
+
+/// Immutable tool allow-list for one integration on one draft AgentRevision.
+model AgentRevisionIntegrationAssignment {
+  agentRevisionId      String                       @map("agent_revision_id")
+  integrationId        String                       @map("integration_id")
+  siloId               String                       @map("silo_id")
+  custodyReferenceId   String                       @map("custody_reference_id")
+  allowedTools         String[]                     @map("allowed_tools")
+  agentRevision        AgentRevision                @relation(fields: [agentRevisionId], references: [id], onDelete: Restrict)
+  integration          Integration                  @relation(fields: [integrationId, siloId], references: [id, siloId], onDelete: Restrict)
+  custodyReference     IntegrationCustodyReference  @relation(fields: [custodyReferenceId, integrationId, siloId], references: [id, integrationId, siloId], onDelete: Restrict)
+
+  @@id([agentRevisionId, integrationId])
+  @@index([integrationId, siloId])
+  @@map("agent_revision_integration_assignments")
+}
+
+/// A recurring schedule that admits managed runs of one AgentService's active revision. The
+/// scheduler (composed inside the control API) evaluates `cron` in `timezone`, catches up missed
+/// slots within a bounded lookback, applies the `overlapPolicy`, and admits each due slot through
+/// the existing run-admission path with a deterministic idempotency key — it never dispatches or
+/// executes anything itself. `enabled=false` suspends evaluation without deleting the schedule.
+model AgentServiceSchedule {
+  id                   String                     @id @default(cuid())
+  siloId               String                     @map("silo_id")
+  agentServiceId       String                     @map("agent_service_id")
+  cron                 String
+  timezone             String
+  overlapPolicy        AgentScheduleOverlapPolicy  @default(Skip) @map("overlap_policy")
+  enabled              Boolean                    @default(true)
+  /// Bounded catch-up horizon in seconds; a missed slot older than this is not admitted.
+  catchupWindowSeconds Int                        @default(3600) @map("catchup_window_seconds")
+  /// Wall-clock instant of the newest slot already admitted, advanced after each successful tick.
+  lastScheduledAt      DateTime?                  @map("last_scheduled_at")
+  createdAt            DateTime                   @default(now()) @map("created_at")
+  updatedAt            DateTime                   @updatedAt @map("updated_at")
+  service              AgentService               @relation(fields: [agentServiceId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@index([siloId, agentServiceId])
+  @@index([enabled])
+  @@map("agent_service_schedules")
+}

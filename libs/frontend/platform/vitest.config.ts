@@ -1,5 +1,6 @@
 import { defineConfig } from "vitest/config";
 import tsconfigPaths from "vite-tsconfig-paths";
+import { _PackageCacheDir } from "../../../vitest.cache.js";
 
 /**
  * Vitest resolves the `@opencrane/*` workspace aliases straight from
@@ -9,6 +10,7 @@ import tsconfigPaths from "vite-tsconfig-paths";
  * that reach into Angular DI (TestBed, router, etc.) working without jsdom.
  */
 export default defineConfig({
+	cacheDir: _PackageCacheDir(import.meta.url),
 	plugins: [tsconfigPaths({ projects: ["../../../tsconfig.vitest.json"] })],
 	test: {
 		globals: true,

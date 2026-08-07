@@ -1,106 +1,159 @@
-/// Deprecated Phase 1 filesystem skill index retained only for migration seeding.
-model Skill {
-  name        String
-  scope       String
-  team        String   @default("")
-  path        String
-  author      String?
-  contentHash String?  @map("content_hash")
-  /// Model posture (Track AIR): `pinned` (use pinnedModel), `auto` (route within autoConfig), or null (inherit the scope default).
-  modelMode   SkillModelMode? @map("model_mode")
-  /// The pinned model's publicModelName, when modelMode is `pinned`.
-  pinnedModel String?  @map("pinned_model")
-  /// Per-skill AutoRoutingConfig, when modelMode is `auto`.
-  autoConfig  Json?    @map("auto_config")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+enum SkillState {
+  Active  @map("active")
+  Retired @map("retired")
+}
 
-  @@id([name, scope, team])
+enum SkillRevisionState {
+  Draft     @map("draft")
+  Review    @map("review")
+  Published @map("published")
+  Rejected  @map("rejected")
+  Revoked   @map("revoked")
+}
+
+enum SkillTrustClass {
+  ReviewedInstructions @map("reviewed_instructions")
+  SandboxedPython      @map("sandboxed_python")
+}
+
+/// Isolated Job class selected by the durable skill-work authority.
+enum SkillWorkloadKind {
+  Authoring  @map("authoring")
+  ToolRunner @map("tool_runner")
+}
+
+/// Durable lifecycle of one governed worker request; Kubernetes reports identity, never terminal state.
+enum SkillWorkloadState {
+  Pending    @map("pending")
+  Assigned   @map("assigned")
+  Succeeded  @map("succeeded")
+  Failed     @map("failed")
+  Cancelled  @map("cancelled")
+}
+
+model Skill {
+  id                String       @id @default(cuid())
+  siloId            String       @map("silo_id")
+  ownerPrincipalId  String       @map("owner_principal_id")
+  name              String
+  description       String       @default("")
+  state             SkillState   @default(Active)
+  currentRevisionId String?      @map("current_revision_id")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  revisions         SkillRevision[] @relation("SkillRevisions")
+  currentRevision   SkillRevision?  @relation("CurrentSkillRevision", fields: [id, currentRevisionId], references: [skillId, id], onDelete: Restrict)
+
+  @@unique([id, currentRevisionId])
+  @@unique([siloId, ownerPrincipalId, name])
+  @@index([siloId, state])
   @@map("skills")
 }
 
-enum SkillBundleStatus {
-  Published @map("published")
-  Review    @map("review")
-  Draft     @map("draft")
+model SkillRevision {
+  id                     String             @id @default(cuid())
+  skillId                String             @map("skill_id")
+  revision               Int
+  state                  SkillRevisionState @default(Draft)
+  artifactId             String             @map("artifact_id")
+  artifactRevisionId     String             @map("artifact_revision_id")
+  artifactContentAddress String             @map("artifact_content_address")
+  manifest               Json
+  requirements           Json
+  testReport             Json?              @map("test_report")
+  scanResult             Json?              @map("scan_result")
+  trustClass             SkillTrustClass    @map("trust_class")
+  signature              String?
+  signerKeyId            String?            @map("signer_key_id")
+  authoredBy             String             @map("authored_by")
+  reviewedBy             String?            @map("reviewed_by")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  publishedAt            DateTime?          @map("published_at")
+  revokedAt              DateTime?          @map("revoked_at")
+  skill                  Skill              @relation("SkillRevisions", fields: [skillId], references: [id], onDelete: Restrict)
+  currentFor             Skill[]            @relation("CurrentSkillRevision")
+  workloads              SkillWorkload[]
+
+  @@unique([skillId, revision])
+  @@unique([skillId, id])
+  @@unique([id, artifactRevisionId, artifactContentAddress])
+  @@index([artifactRevisionId])
+  @@index([state, trustClass])
+  @@map("skill_revisions")
 }
 
-enum SkillBundleScanStatus {
-  Pending  @map("pending")
-  Scanning @map("scanning")
-  Passed   @map("passed")
-  Failed   @map("failed")
-  Skipped  @map("skipped")
+/// One canonical future Job request, never a Kubernetes queue or worker-owned receipt.
+model SkillWorkload {
+  id               String             @id @default(cuid())
+  siloId           String             @map("silo_id")
+  kind             SkillWorkloadKind
+  state            SkillWorkloadState @default(Pending)
+  skillRevisionId  String             @map("skill_revision_id")
+  toolInvocationId String?            @unique @map("tool_invocation_id")
+  claimedAt        DateTime?          @map("claimed_at")
+  claimExpiresAt   DateTime?          @map("claim_expires_at")
+  deliveryCount    Int                @default(0) @map("delivery_count")
+  workloadUid      String?            @unique @map("workload_uid")
+  workerPodUid     String?            @unique @map("worker_pod_uid")
+  releaseClaimedAt DateTime?          @map("release_claimed_at")
+  releaseDeliveryCount Int             @default(0) @map("release_delivery_count")
+  releaseExpiresAt DateTime?           @map("release_expires_at")
+  releasedAt        DateTime?          @map("released_at")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  completedAt      DateTime?          @map("completed_at")
+  failureCode      String?            @map("failure_code")
+  cancelledAt      DateTime?          @map("cancelled_at")
+  skillRevision    SkillRevision      @relation(fields: [skillRevisionId], references: [id], onDelete: Restrict)
+  toolInvocation   ToolInvocation?    @relation(fields: [toolInvocationId], references: [id], onDelete: Restrict)
+  bootstrap        SkillWorkloadBootstrap?
+
+  @@index([siloId, state, createdAt])
+  @@index([state, claimExpiresAt])
+  @@index([state, releaseExpiresAt])
+  @@map("skill_workloads")
 }
 
-enum SkillPromotionStatus {
-  Proposed @map("proposed")
-  Approved @map("approved")
-  Rejected @map("rejected")
+/// One hashed, one-use worker bootstrap bound to an assigned governed skill Job.
+model SkillWorkloadBootstrap {
+  id                 String        @id @default(cuid())
+  skillWorkloadId    String        @unique @map("skill_workload_id")
+  referenceHash      String        @unique @map("reference_hash")
+  audience           String
+  serviceAccountName String        @map("service_account_name")
+  namespace          String
+  workloadUid        String        @map("workload_uid")
+  expiresAt          DateTime      @default(dbgenerated("(clock_timestamp() + '00:15:00'::interval)")) @map("expires_at")
+  consumedAt         DateTime?     @map("consumed_at")
+  consumedByPodUid   String?       @map("consumed_by_pod_uid")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  skillWorkload      SkillWorkload @relation(fields: [skillWorkloadId], references: [id], onDelete: Restrict)
+
+  @@index([expiresAt])
+  @@map("skill_workload_bootstraps")
 }
 
-model SkillBundle {
-  id           String                  @id @default(cuid())
-  name         String
-  description  String                  @default("")
-  version      String
-  digest       String
-  content      String?                 @map("content")
-  contentType  String                  @default("text/markdown") @map("content_type")
-  scope        GrantScope
-  status       SkillBundleStatus       @default(Draft)
-  tags         String[]                @default([])
-  sourceId     String?                 @map("source_id")
-  publishedAt  DateTime?               @map("published_at")
-  scanStatus   SkillBundleScanStatus   @default(Pending) @map("scan_status")
-  scanFindings Json?                   @map("scan_findings")
-  scannedAt    DateTime?               @map("scanned_at")
-  createdAt    DateTime                @default(now()) @map("created_at")
-  updatedAt    DateTime                @updatedAt @map("updated_at")
-  grants       Grant[]
-  entitlements SkillEntitlement[]
-  promotions   SkillPromotion[]
-  source       ThirdPartySource?    @relation(fields: [sourceId], references: [id], onDelete: SetNull)
+/// One database-owned timestamp for typed delegate expiry decisions.
+view SkillAuthorityClock {
+  singleton Int      @unique
+  now       DateTime
 
-  @@unique([name, version, digest])
-  @@index([scope])
-  @@index([digest])
-  @@map("skill_bundles")
+  @@map("skill_authority_clock")
 }
 
-model SkillEntitlement {
-  id            String           @id @default(cuid())
-  skillBundleId String           @map("skill_bundle_id")
-  grantId       String           @unique @map("grant_id")
-  scope         GrantScope
-  subjectType   GrantSubjectType @map("subject_type")
-  subjectId     String           @map("subject_id")
-  access        GrantAccess
-  priority      Int              @default(0)
-  note          String?
-  groupId       String?          @map("group_id")
-  createdAt     DateTime         @default(now()) @map("created_at")
-  updatedAt     DateTime         @updatedAt @map("updated_at")
-  skillBundle   SkillBundle      @relation(fields: [skillBundleId], references: [id], onDelete: Cascade)
-  grant         Grant            @relation(fields: [grantId], references: [id], onDelete: Cascade)
-  group         Group?           @relation(fields: [groupId], references: [id], onDelete: SetNull)
+/// One locked eligible workload selected without blocking a peer dispatcher.
+view SkillWorkloadClaimCandidate {
+  id              String             @unique
+  siloId          String             @map("silo_id")
+  kind            SkillWorkloadKind
+  skillRevisionId String             @map("skill_revision_id")
+  revisionState   SkillRevisionState @map("revision_state")
 
-  @@index([skillBundleId])
-  @@map("skill_entitlements")
+  @@map("skill_workload_claim_candidates")
 }
 
-model SkillPromotion {
-  id           String               @id @default(cuid())
-  skillBundleId String              @map("skill_bundle_id")
-  fromScope    GrantScope           @map("from_scope")
-  toScope      GrantScope           @map("to_scope")
-  promotedBy   String               @map("promoted_by")
-  status       SkillPromotionStatus @default(Proposed)
-  notes        String?
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @updatedAt @map("updated_at")
-  skillBundle  SkillBundle          @relation(fields: [skillBundleId], references: [id], onDelete: Cascade)
+/// One locked eligible assigned workload selected without blocking a peer releaser.
+view SkillWorkloadReleaseClaimCandidate {
+  id String @unique
 
-  @@index([skillBundleId])
-  @@map("skill_promotions")
+  @@map("skill_workload_release_claim_candidates")
 }

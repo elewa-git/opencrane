@@ -1,0 +1,6 @@
+apiVersion: v2
+name: opencrane-cognee
+description: App-owned named-template library for the release-local Cognee plane.
+type: library
+version: 0.1.0
+appVersion: "0.1.0"

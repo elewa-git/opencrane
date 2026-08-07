@@ -1,14 +1,64 @@
 model AuditEntry {
   id        Int      @id @default(autoincrement())
   timestamp DateTime @default(now())
-  tenant    String?
   action    String
   resource  String
   message   String
   metadata  Json?
-  tenantRef Tenant?  @relation(fields: [tenant], references: [name])
-
-  @@index([tenant])
   @@index([timestamp])
   @@map("audit_log")
+}
+
+enum AuditDecisionOutcome {
+  Allow @map("allow")
+  Deny  @map("deny")
+  Error @map("error")
+}
+
+enum AuditDecisionActorKind {
+  User         @map("user")
+  AgentService @map("agent-service")
+  Workload     @map("workload")
+  System       @map("system")
+}
+
+/// Append-only target authorization evidence. Soft identifiers intentionally survive product-row
+/// deletion so an authorized deletion cannot erase the fact that a decision was made.
+model AuditDecision {
+  id                           String                 @id @default(cuid())
+  decisionDigest               String                 @unique @map("decision_digest")
+  siloId                       String                 @map("silo_id")
+  actorKind                    AuditDecisionActorKind @map("actor_kind")
+  actorId                      String                 @map("actor_id")
+  audience                     String?
+  namespace                    String?
+  serviceAccountName           String?                @map("service_account_name")
+  workloadKind                 WorkloadKind?          @map("workload_kind")
+  workloadUid                  String?                @map("workload_uid")
+  podUid                       String?                @map("pod_uid")
+  runId                        String?                @map("run_id")
+  attempt                      Int?
+  agentServiceId               String?                @map("agent_service_id")
+  agentRevisionId              String?                @map("agent_revision_id")
+  proofKeyId                   String?                @map("proof_key_id")
+  proofKeyThumbprint           String?                @map("proof_key_thumbprint")
+  resourceKind                 String                 @map("resource_kind")
+  resourceId                   String                 @map("resource_id")
+  action                       String
+  catalogId                    String                 @map("catalog_id")
+  catalogRevision              Int                    @map("catalog_revision")
+  catalogDigest                String                 @map("catalog_digest")
+  argumentsDigest              String                 @map("arguments_digest")
+  policyRevisionHash           String                 @map("policy_revision_hash")
+  effectiveAuthorizationDigest String                 @map("effective_authorization_digest")
+  membershipRevision           Int?                   @map("membership_revision")
+  outcome                      AuditDecisionOutcome
+  reasonCode                   String                 @map("reason_code")
+  decidedAt                    DateTime               @default(now()) @map("decided_at")
+
+  @@index([siloId, decidedAt])
+  @@index([runId, attempt, decidedAt])
+  @@index([resourceKind, resourceId, decidedAt])
+  @@index([actorKind, actorId, decidedAt])
+  @@map("audit_decisions")
 }

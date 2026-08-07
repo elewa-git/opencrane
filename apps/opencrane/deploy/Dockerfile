@@ -2,6 +2,12 @@
 FROM node:22-bookworm-slim AS build
 
 WORKDIR /app
+# Prisma selects its native query engine during generation. Keep OpenSSL available in
+# this stage as well as the runtime so it generates the Bookworm/OpenSSL 3 engine.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json tsconfig.json nx.json ./
 # All workspace libs (shared libs + libs/backend/*/main) come in wholesale so the image never
 # needs editing when a backend package is added; the root .dockerignore keeps
@@ -24,12 +30,14 @@ RUN find /app -path '*/node_modules/.prisma/client' -type d | head -1 | \
 FROM node:22-bookworm-slim
 
 WORKDIR /app
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends openssl && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
-# Copy app package.json, Prisma config and prisma directory for runtime installation + migrations.
-# prisma.config.ts is required at runtime: the db-migrate init container runs `prisma migrate deploy`
-# from this package root, and the config declares the schema folder + migrations path.
-COPY apps/opencrane/package.json apps/opencrane/prisma.config.ts apps/opencrane/
-COPY apps/opencrane/prisma apps/opencrane/prisma
+# The runtime image receives only the application manifest. Prisma generation and the target
+# database baseline are build/provisioning inputs; server startup never mutates schema.
+COPY apps/opencrane/package.json apps/opencrane/
 # Install only the app workspace's runtime dependencies
 RUN npm ci --omit=dev --workspace=apps/opencrane
 
@@ -40,10 +48,10 @@ RUN target=$(find /app -path '*/node_modules/.prisma/client' -type d | head -1) 
     cp -r /tmp/generated-prisma "$target" && \
     rm -rf /tmp/generated-prisma
 
-COPY --from=build /app/apps/opencrane/dist apps/opencrane/dist
+COPY --from=build /app/dist/apps/opencrane dist/apps/opencrane
 
 USER node
 
 EXPOSE 8080
 
-CMD ["node", "apps/opencrane/dist/index.js"]
+CMD ["node", "dist/apps/opencrane/index.js"]

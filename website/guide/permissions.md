@@ -1,35 +1,37 @@
 # Control who can access what
 
-::: tip The golden rule
-Assistants start with **no access**. Nothing — no skill, tool, or knowledge — is
-available until you allow it. You open things up deliberately.
+Every agent — personal or managed — starts with **nothing**: no skills, no tools, no knowledge,
+no model. Before OpenCrane admits any run, it checks that the person and, separately, the agent
+itself both currently have the access being used. Granting access to a person doesn't
+automatically hand it to their assistant, and configuring an agent with a capability doesn't
+automatically extend it to everyone who can talk to that agent — both sides have to line up.
+
+## Grant a capability
+
+Grant a skill, tool, model or dataset at the narrowest useful scope: personal, project,
+department or organisation. Both the acting subject and the agent service must remain inside
+the resulting effective access boundary.
+
+## What a run freezes
+
+At admission OpenCrane records:
+
+- the accepted membership revision;
+- subject and agent-service grant evidence;
+- resolved tool and skill revisions;
+- model and memory policy; and
+- the capability-set digest.
+
+The runtime receives compiled inputs. It cannot re-evaluate grants or add a capability.
+
+## Change access
+
+Revocation affects new decisions and pending external actions. It does not erase the audit
+record or mutate an immutable snapshot belonging to an accepted run.
+
+::: warning
+Do not infer access from a Kubernetes namespace, group label or network path. Membership and
+grant authority must resolve successfully; uncertainty denies the request.
 :::
 
-There are two ways you control access, and they work together.
-
-## 1. Grant skills, tools, and knowledge
-
-When you [share a skill](/guide/skills), [connect a tool](/guide/tools), or
-[add knowledge](/guide/knowledge), you decide **who gets it** — a single person, a
-team, a department, or the whole org (the [scopes](/guide/organize) again).
-
-A grant is just "allow *this* for *these* people." Grant the Sales department your CRM
-tool; grant Engineering the code-review skill; keep a finance dataset to the finance
-team. Widen or revoke at any time, and changes take effect almost immediately.
-
-## 2. Set guardrails with an access policy
-
-An **access policy** draws a boundary around what an assistant may reach on the
-network — which external sites it can call, and which connected tools are off-limits.
-It's your safety net, and its safest starting point is "block everything except what's
-explicitly listed."
-
-Manage this from the command line — see [CLI reference → `oc policies`](/reference/cli#oc-policies).
-
-## Putting it together
-
-> **Grants** decide *what an assistant can use*. **Policies** decide *where it's
-> allowed to reach*. Together they keep every assistant scoped to exactly what its
-> owner needs — and nothing more.
-
-Every change here is recorded in the [audit log](/guide/audit).
+→ [Organise scopes](/guide/organize) · [Silo IAM](/integrators/silo-iam)

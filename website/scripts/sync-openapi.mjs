@@ -1,5 +1,5 @@
 /**
- * Copies the opencrane-ui's emitted OpenAPI 3.1 spec into the site's public
+ * Copies the opencrane-server's emitted OpenAPI 3.1 spec into the site's public
  * directory so VitePress can serve it and `vitepress-openapi` can render the
  * interactive API reference from it.
  *

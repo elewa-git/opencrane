@@ -1,0 +1,90 @@
+{{- if and (.Values.multiCt).enabled (not (.Values.multiInstance).enabled) }}
+{{- fail "multiCt.enabled=true requires multiInstance.enabled=true: the cross-instance default-deny is mandatory for a multi-ClusterTenant install and derives its namespace allow-list from multiInstance.instanceNamespaces. Set multiInstance.enabled=true (and instanceNamespaces), or drop the --multi-ct profile for a single-tenant box." }}
+{{- end }}
+{{- if and (.Values.networkPolicy).enabled (or (.Values.multiInstance).enabled (.Values.multiCt).enabled) }}
+{{- /*
+  Cross-instance default-deny NetworkPolicy (brief B6, MI.6).
+
+  Multi-instance mode runs N strictly-isolated OpenCrane instances in one cluster.
+  The per-tenant policies (networkpolicy.yaml / networkpolicy-planes.yaml) only
+  scope traffic *within* a single install; on their own they do NOT stop a pod in
+  instance A's namespace from reaching a service in instance B's namespace. This
+  template adds that missing boundary: a deny-by-default ingress posture across
+  every namespace this instance owns, with explicit allows only for same-instance
+  traffic plus the egress every pod needs (cluster DNS + intra-instance).
+
+  Namespace selection: source namespaces are matched on the built-in
+  `kubernetes.io/metadata.name` label, which Kubernetes (>= 1.21) sets and keeps in
+  sync on every Namespace automatically. The allow-list is exactly the namespaces in
+  `multiInstance.instanceNamespaces` (via the `opencrane.instanceNamespaces` helper),
+  so no manual labelling of instance namespaces is required. See docs note in MI.7.
+
+  Rendered when `networkPolicy.enabled` AND (`multiInstance.enabled` OR the
+  `--multi-ct` profile `multiCt.enabled`) are true. Under multi-CT this
+  cross-instance deny is MANDATORY: a
+  multi-CT install with `multiInstance.enabled=false` is REJECTED at render time
+  (see the `fail` above) rather than silently shipping without cross-instance
+  isolation — fail-closed, never fail-open on a defaulted value (issue #127).
+*/}}
+{{- $namespaces := include "opencrane.instanceNamespaces" . | fromJsonArray }}
+{{- range $ns := $namespaces }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.fullname" $ }}-cross-instance-deny
+  namespace: {{ $ns }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: cross-instance-isolation
+spec:
+  # ArtifactStore, agent-controller, and the PostgreSQL pooler have stricter app policies; each
+  # agent-runtime Job has a controller-built policy. Exclude them because this additive
+  # same-instance allowance would widen their deliberately tiny ingress/egress surfaces. CNPG
+  # identifies generated pooler pods with cnpg.io/poolerName.
+  podSelector:
+    matchExpressions:
+      - key: app.kubernetes.io/component
+        operator: NotIn
+        values: [artifact-service, agent-controller, agent-runtime, cognee, memory-gateway]
+      - key: cnpg.io/poolerName
+        operator: DoesNotExist
+  policyTypes:
+    - Ingress
+    - Egress
+  # Default-deny ingress, then re-allow only same-instance sources. Any namespace
+  # NOT in this instance's namespace list (i.e. another instance) is denied because
+  # it never appears in an allow rule.
+  ingress:
+    # Allow ingress from any namespace this instance owns (same-instance only).
+    - from:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- range $allowed := $namespaces }}
+                  - {{ $allowed }}
+                  {{- end }}
+  egress:
+    {{- if $.Values.networkPolicy.allowDNS }}
+    # Allow DNS resolution (cluster DNS lives outside the instance namespaces).
+    - ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    {{- end }}
+    # Allow egress to any namespace this instance owns (intra-instance traffic),
+    # so same-instance services stay reachable under the default-deny posture.
+    - to:
+        - namespaceSelector:
+            matchExpressions:
+              - key: kubernetes.io/metadata.name
+                operator: In
+                values:
+                  {{- range $allowed := $namespaces }}
+                  - {{ $allowed }}
+                  {{- end }}
+{{- end }}
+{{- end }}

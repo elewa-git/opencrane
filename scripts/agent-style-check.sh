@@ -18,11 +18,19 @@
 #   MIDFILE-IMPORT    import below the first non-import statement
 #   REL-IMPORT-EXT    relative import missing the .js extension (NodeNext)
 #   PKG-IMPORT-EXT    package specifier wrongly carrying .js
-#   CONSOLE           raw console.* outside the CLI (use @opencrane/observability)
+#   CONSOLE           raw console.* in shipped code (use @opencrane/backend/observability)
+#   INLINE-CONDITIONAL more than one ternary conditional on one physical source line
+#   CATEGORICAL-LITERAL direct string comparison on a categorical property (heuristic)
 #   TYPES-IN-IMPL     exported interface/type outside a *.types.ts file
 #   JSDOC             exported declaration with no JSDoc directly above (heuristic)
 #   BRACE             opening { not on its own line for a multi-line fn/class (heuristic)
 #   TEST-LOCATION     *.test.ts file not placed under a __tests__ directory
+#   MISSING-README    new/changed package (project.json) with no sibling README.md
+#   README-SECTIONS   leaf package README missing a mandatory package-docs section
+#
+# The Prisma repository/unit-of-work boundary is also enforced for the same scope by
+# scripts/prisma-boundary-check.mjs. It is architectural rather than stylistic, but shares this
+# deterministic pre-review entrypoint so service-layer ORM bypasses cannot escape review.
 
 set -euo pipefail
 
@@ -33,9 +41,11 @@ cd "$REPO_ROOT"
 #    scopes to what the current change actually touched.
 FILES=()
 if [[ $# -eq 0 ]]; then
-	while IFS= read -r f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR HEAD -- '*.ts' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- '*.ts' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 elif [[ "${1:-}" == "--diff" ]]; then
-	while IFS= read -r f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR "${2:?--diff needs a ref}" -- '*.ts')
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "${2:?--diff needs a ref}" -- '*.ts')
+	while IFS= read -r -d '' f; do FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- '*.ts' 2>/dev/null || true)
 else
 	FILES=("$@")
 fi
@@ -43,10 +53,15 @@ fi
 # 2. Exclusions — tests, declarations, generated output, vendored code. Test
 #    files follow looser rules; generated files are not hand-maintained.
 CHECKABLE=()
-for f in "${FILES[@]:-}"; do
+INLINE_CHECKABLE=()
+for f in ${FILES[@]+"${FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
-		*.d.ts|*.spec.ts|*.test.ts|*__tests__*|*node_modules*|*dist/*|*generated*) continue ;;
+		*.d.ts|*node_modules*|*dist/*|*generated*) continue ;;
+	esac
+	INLINE_CHECKABLE+=("$f")
+	case "$f" in
+		*.spec.ts|*.test.ts|*__tests__*) continue ;;
 	esac
 	CHECKABLE+=("$f")
 done
@@ -64,7 +79,7 @@ _report()
 # TEST-LOCATION — every *.test.ts must live under a __tests__ directory,
 # never co-located next to the source file it tests. Runs against the raw
 # FILES list since test files are otherwise excluded from CHECKABLE below.
-for f in "${FILES[@]:-}"; do
+for f in ${FILES[@]+"${FILES[@]}"}; do
 	[[ -z "$f" || ! -f "$f" ]] && continue
 	case "$f" in
 		*.test.ts)
@@ -75,6 +90,56 @@ for f in "${FILES[@]:-}"; do
 			;;
 	esac
 done
+
+# INLINE-CONDITIONAL — unlike the looser declaration/style rules below, conditional density applies
+# to production and test TypeScript alike. One physical line may contain at most one ternary.
+for f in ${INLINE_CHECKABLE[@]+"${INLINE_CHECKABLE[@]}"}; do
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" ERROR INLINE-CONDITIONAL "more than one ternary conditional on one line — use an exhaustive lookup, switch, or helper"
+	done < <(node scripts/inline-conditional-check.mjs "$f")
+done
+
+# MISSING-README / README-SECTIONS — package docs (docs/agents/package-docs.md).
+# A changed package must ship a README, and a changed leaf-package README must
+# carry the mandatory sections. Diff-scoped like the .ts checks; skipped when
+# explicit files were passed.
+DOC_FILES=()
+if [[ $# -eq 0 ]]; then
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z HEAD -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+elif [[ "${1:-}" == "--diff" ]]; then
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git diff --name-only --diff-filter=ACMR -z "$2" -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+	while IFS= read -r -d '' f; do DOC_FILES+=("$f"); done < <(git ls-files --others --exclude-standard -z -- 'libs/**/README.md' 'apps/**/README.md' 'libs/**/project.json' 'apps/**/project.json' 2>/dev/null || true)
+fi
+for f in ${DOC_FILES[@]+"${DOC_FILES[@]}"}; do
+	[[ -z "$f" || ! -f "$f" ]] && continue
+	dir="$(dirname "$f")"
+	case "$f" in
+		*/project.json)
+			if [[ ! -f "$dir/README.md" ]]; then
+				_report "$f" 1 ERROR MISSING-README "package has no README.md — create it from docs/agents/README-TEMPLATE.md"
+			fi
+			;;
+		*/README.md)
+			# Only leaf packages (the directory owning project.json) follow the
+			# fixed section order; group/area index READMEs have their own shape.
+			[[ -f "$dir/project.json" ]] || continue
+			if ! head -5 "$f" | grep -q '^> '; then
+				_report "$f" 1 ERROR README-SECTIONS "missing breadcrumb line ('> area > group > package') — see docs/agents/package-docs.md"
+			fi
+			for section in "## What it owns" "## Public surface" "## See also"; do
+				if ! grep -q "^${section}" "$f"; then
+					_report "$f" 1 ERROR README-SECTIONS "missing mandatory section '${section}' — see docs/agents/package-docs.md"
+				fi
+			done
+			;;
+	esac
+done
+
+# PRISMA-BOUNDARY — changed production TypeScript may call Prisma delegates only from a class that
+# implements an imported Repository contract, and may open transactions only from an imported
+# UnitOfWork owner. The checker owns exact exemption validation and fails closed on malformed policy.
+node scripts/prisma-boundary-check.mjs "$@"
 
 if [[ ${#CHECKABLE[@]} -eq 0 ]]; then
 	echo "agent-style-check: no checkable TypeScript files in scope."
@@ -134,11 +199,16 @@ for f in "${CHECKABLE[@]}"; do
 		}
 	' "$f")
 
-	# REL-IMPORT-EXT — NodeNext: relative imports MUST end in .js (the most
-	# common mistake per docs/agents/typescript.md).
-	while IFS=: read -r ln _; do
-		_report "$f" "$ln" ERROR REL-IMPORT-EXT "relative import must end in .js (NodeNext)"
-	done < <(grep -nE 'from[[:space:]]+"(\.\.?/[^"]*)"' "$f" | grep -vE '\.(js|json)"' || true)
+	# REL-IMPORT-EXT — NodeNext services require .js. Angular's bundler resolves
+	# extensionless workspace imports, which is the established frontend convention.
+	case "$f" in
+		apps/opencrane-ui/*|libs/frontend/*) : ;;
+		*)
+			while IFS=: read -r ln _; do
+				_report "$f" "$ln" ERROR REL-IMPORT-EXT "relative import must end in .js (NodeNext)"
+			done < <(grep -nE 'from[[:space:]]+"(\.\.?/[^"]*)"' "$f" | grep -vE '\.(js|json)"' || true)
+			;;
+	esac
 
 	# PKG-IMPORT-EXT — @opencrane barrel specifiers must NOT carry .js. (Deep
 	# subpath imports of third-party packages, e.g. the MCP SDK, genuinely end
@@ -147,16 +217,22 @@ for f in "${CHECKABLE[@]}"; do
 		_report "$f" "$ln" ERROR PKG-IMPORT-EXT "@opencrane package specifier must not end in .js"
 	done < <(grep -nE 'from[[:space:]]+"@opencrane/[^"]+\.js"' "$f" || true)
 
-	# CONSOLE — shipped code logs via @opencrane/observability. The CLI is
-	# exempt: its console.log IS the --output json channel.
+	# CONSOLE — shipped code logs via @opencrane/backend/observability.
 	case "$f" in
-		apps/cli/*) : ;;
 		*)
 			while IFS=: read -r ln _; do
-				_report "$f" "$ln" ERROR CONSOLE "raw console.* — use the structured logger (@opencrane/observability)"
+				_report "$f" "$ln" ERROR CONSOLE "raw console.* — use the structured logger (@opencrane/backend/observability)"
 			done < <(grep -nE '(^|[^.[:alnum:]_])console\.(log|warn|error|info|debug)\(' "$f" || true)
 			;;
 	esac
+
+	# CATEGORICAL-LITERAL — an OpenCrane-owned kind/type/status/state/reason/mode/action/
+	# outcome/decision branch should compare against a documented string-backed enum.
+	# External protocols and schema/data literals can look identical, so this remains a
+	# WARN for the reviewer to confirm rather than an automatic failure.
+	while IFS=: read -r ln _; do
+		_report "$f" "$ln" WARN CATEGORICAL-LITERAL "categorical property compared with a raw string — use the owning string-backed enum or verify an external/schema/data exemption"
+	done < <(grep -nE '(\.(kind|type|status|state|reason|mode|action|outcome|decision)[[:space:]]*(===|!==)[[:space:]]*"[^"]+"|"[^"]+"[[:space:]]*(===|!==)[[:space:]]*[^[:space:]]+\.(kind|type|status|state|reason|mode|action|outcome|decision))' "$f" || true)
 
 	# TYPES-IN-IMPL — exported interfaces/type aliases belong in *.types.ts.
 	# (A bare `types.ts` is a types file by intent — exempt.)
@@ -166,6 +242,16 @@ for f in "${CHECKABLE[@]}"; do
 			while IFS=: read -r ln _; do
 				_report "$f" "$ln" ERROR TYPES-IN-IMPL "exported interface/type outside *.types.ts — move to the paired types file"
 			done < <(grep -nE '^[[:space:]]*export[[:space:]]+(interface|type)[[:space:]]+[A-Za-z_$]' "$f" || true)
+			;;
+	esac
+
+	# ROOT-CACHE — every vitest config must anchor its Vite cache at the repo root,
+	# or the dep optimizer spawns a stray node_modules/.vite inside the package.
+	case "$f" in
+		*vitest.config.ts)
+			if ! grep -q '_PackageCacheDir' "$f"; then
+				_report "$f" 1 ERROR ROOT-CACHE "vitest config without _PackageCacheDir cacheDir — caches must live under the root node_modules (see vitest.cache.ts)"
+			fi
 			;;
 	esac
 

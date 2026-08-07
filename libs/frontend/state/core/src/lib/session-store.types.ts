@@ -1,20 +1,7 @@
-/** Tenant fields the session needs to resolve and switch the caller's pod. */
-export interface SessionTenant
-{
-	/** Tenant (pod) name, e.g. `alex.oc`. */
-	name: string;
-
-	/** Owner email the tenant is keyed by. */
-	email: string;
-
-	/** Host the tenant's OpenClaw pod is reachable at. */
-	ingressHost?: string | null;
-}
-
 /** Coarse capability flags the UI uses to show/hide management controls. */
 export interface Capabilities
 {
-	/** May reach the operator console (tenant/policy/budget management). */
+	/** May reach the operator console for policy and budget management. */
 	isOperator: boolean;
 
 	/**
@@ -26,14 +13,10 @@ export interface Capabilities
 
 	/**
 	 * Whether the session is a **customer admin** — a customer's own
-	 * administrator who manages the UserTenants inside their single ClusterTenant
-	 * (account-scoped), as opposed to {@link isPlatformOperator} who manages
-	 * customers across the whole fleet.
+	 * administrator who manages agents and governed capabilities inside their
+	 * ClusterTenant, as opposed to {@link isPlatformOperator}.
 	 */
 	customerAdmin: boolean;
-
-	/** May create, suspend, or delete tenants. */
-	manageTenants: boolean;
 
 	/** May onboard, configure, suspend, or delete customers (ClusterTenants). */
 	manageCustomers: boolean;

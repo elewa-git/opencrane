@@ -5,15 +5,16 @@
   "license": "AGPL-3.0-or-later",
   "type": "module",
   "scripts": {
-    "build": "rm -rf dist && prisma generate && esbuild src/index.ts src/scripts/migrate.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outdir=dist && cp -r src/reconcilers/tenants/deploy/workspace dist/workspace && tsx scripts/emit-openapi.mts",
+    "build": "npm run db:generate && npm run build:bundle",
+    "build:bundle": "rm -rf ../../dist/apps/opencrane && esbuild src/index.ts --bundle --platform=node --format=esm --packages=external --sourcemap --outdir=../../dist/apps/opencrane && tsx scripts/emit-openapi.mts",
     "emit-openapi": "tsx scripts/emit-openapi.mts",
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
+    "start": "node ../../dist/apps/opencrane/index.js",
     "test": "vitest run",
     "lint": "tsc --noEmit",
-    "db:migrate": "prisma migrate deploy",
     "db:generate": "prisma generate",
-    "db:push": "prisma db push"
+    "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs",
+    "test:authority-baseline": "node prisma/bootstrap/verify-authority-baseline.mjs"
   },
   "dependencies": {
     "@kubernetes/client-node": "^1.0.0",
@@ -29,11 +30,7 @@
     "openapi-fetch": "^0.17.0",
     "pino": "^9.6.0",
     "pino-http": "^10.0.0",
-    "prisma": "^6.0.0",
     "zod": "^3.25.0"
-  },
-  "optionalDependencies": {
-    "@google-cloud/storage": "^7.0.0"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
@@ -42,6 +39,7 @@
     "@types/node": "^22.0.0",
     "@types/supertest": "^6.0.0",
     "openid-client": "^6.8.4",
+    "prisma": "^6.0.0",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.7.0",
@@ -51,20 +49,55 @@
     "name": "opencrane",
     "projectType": "application",
     "tags": [
-      "scope:app",
-      "type:app"
+      "type:app",
+      "layer:entrypoint",
+      "scope:opencrane"
     ],
     "targets": {
       "container": {
         "executor": "nx:run-commands",
-        "options": {
+      "metadata": {
+        "release": {
+          "image": "opencrane-server",
+          "dockerfile": "apps/opencrane/deploy/Dockerfile"
+        }
+      },
+      "options": {
           "command": "docker build -f apps/opencrane/deploy/Dockerfile ."
         }
       },
       "build": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "db:generate",
+          "^build"
+        ],
+        "options": {
+          "command": "npm run build:bundle",
+          "cwd": "apps/opencrane"
+        },
         "outputs": [
-          "{projectRoot}/dist",
-          "{workspaceRoot}/dist/apps/opencrane/openapi.json"
+          "{workspaceRoot}/dist/apps/opencrane"
+        ]
+      },
+      "db:generate": {
+        "executor": "nx:run-commands",
+        "cache": false,
+        "options": {
+          "command": "npm run db:generate",
+          "cwd": "apps/opencrane"
+        }
+      },
+      "lint": {
+        "dependsOn": [
+          "db:generate",
+          "^build"
+        ]
+      },
+      "test": {
+        "dependsOn": [
+          "db:generate",
+          "^build"
         ]
       },
       "emit-openapi": {

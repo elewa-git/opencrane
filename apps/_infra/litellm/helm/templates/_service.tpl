@@ -1,0 +1,24 @@
+{{- define "opencrane.litellm.service" -}}
+{{- /* Service only exists for the release-local (instance-scoped) LiteLLM. A shared
+       LiteLLM lives outside this release, reached via opencrane.litellmEndpoint. The
+       name is release-prefixed (B5) so it never collides with another instance and
+       matches the endpoint opencrane.litellmEndpoint resolves to in instance mode. */ -}}
+{{- if and .Values.litellm.enabled (ne (include "opencrane.litellmShared" .) "true") }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "opencrane.fullname" . }}-litellm
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "opencrane.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: litellm
+  ports:
+    - name: http
+      port: {{ .Values.litellm.service.port }}
+      targetPort: http
+{{- end }}
+{{- end }}

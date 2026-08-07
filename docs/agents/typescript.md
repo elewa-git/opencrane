@@ -7,12 +7,12 @@
 
 Facts that make these rules concrete (verified against the tree, June 2026):
 
-- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: NodeNext`, `target: es2023`, `strict`. Source-only libs (no package.json); apps in `apps/*` with their own package.json; shared infra/util libs and domain packages under `libs/`, compiled to dist/ via esbuild. NX coordinates task dependencies and caching via `nx.json`. There are 5 apps (`apps/*`), domain packages (`libs/backend/*/main`), shared infra/util libs (`libs/contracts`, `libs/infra-*`, `libs/k8s-platform`, `libs/observability`, `libs/util`); see [`app-specific.md`](./app-specific.md) for the map.
+- **npm workspaces with integrated NX, pure ESM.** Every package is `"type": "module"`; `tsconfig.json` is `module: NodeNext`, `target: es2023`, `strict`. Source-only libs use `project.json`; process/browser apps and deployment-only Helm rollups live in `apps/*`. Shared infra/util libs and backend capabilities live under `libs/`, compiled to `dist/` via esbuild where applicable. NX coordinates task dependencies and caching via `nx.json`; see [`app-specific.md`](./app-specific.md) for the live map.
 - **Import extensions follow NodeNext, and this is the most common mistake:** *relative* imports MUST end in `.js` (`import { x } from "./config.js"`), but *package* specifiers MUST NOT (`import { ClusterTenant } from "@opencrane/contracts"` — never `@opencrane/contracts.js`).
-- **`@opencrane/contracts` is the keystone.** All cross-package types, enums, CRD DTOs, and the generated typed API client (`___CreateControlPlaneClient`, plus the `paths` map emitted from the opencrane-api OpenAPI spec) live there and are re-exported from one barrel (`libs/contracts/src/index.ts`). New shared types go in a domain `*.types.ts` there, not duplicated per app.
+- **`@opencrane/contracts` is the keystone.** All cross-package types, enums, CRD DTOs, and the generated typed API client (`___CreateControlPlaneClient`, plus the `paths` map emitted from the opencrane-server OpenAPI spec) live there and are re-exported from one barrel (`libs/contracts/src/index.ts`). New shared types go in a domain `*.types.ts` there, not duplicated per app.
 - **The underscore naming convention is real and enforced repo-wide** — `___CreateControlPlaneClient`, `___AuthMiddleware`, `_RegisterTenants`, `_NamespaceFor` are all live examples. Match it; the [self-review table](#self-review-before-finishing) checks it.
-- **Frameworks in use** (so the import-order example below reflects reality): opencrane-api is **Express 5** + Prisma + `@kubernetes/client-node`; the operator is `@kubernetes/client-node` + a custom watch loop; the CLI is a thin typed wrapper over the contracts client. Logging is `pino` everywhere.
-- **Types-in-`*.types.ts` is observed with zero known deviations** — e.g. every opencrane-api route is a `route.ts` + `route.types.ts` pair. Keep it that way.
+- **Frameworks in use** (so the import-order example below reflects reality): opencrane-server is **Express 5** + Prisma + `@kubernetes/client-node`; the operator is `@kubernetes/client-node` + a custom watch loop; browser and external clients use the generated contracts client. Logging is `pino` everywhere.
+- **Types-in-`*.types.ts` is observed with zero known deviations** — e.g. every opencrane-server route is a `route.ts` + `route.types.ts` pair. Keep it that way.
 
 ## Bracket Placement
 
@@ -61,6 +61,20 @@ const names = users.map(user => user.name);
 const total = items.reduce((sum, item) => sum + item.price, 0);
 ```
 
+## Inline Conditionals
+
+A physical source line may contain at most one ternary conditional. When a line needs multiple
+choices, expand each decision onto its own line or use an exhaustive lookup, a `switch`, or an
+intention-revealing helper so every outcome remains independently reviewable.
+
+```typescript
+// WRONG — three decisions are compressed into one line.
+return reason === FailureReason.Unavailable ? 503 : reason === FailureReason.NotFound ? 404 : 400;
+
+// CORRECT — the enum-keyed table makes the mapping exhaustive and reviewable.
+return _STATUS_BY_REASON[reason];
+```
+
 ## Self-Review Before Finishing
 
 After writing or editing any TypeScript file, run `scripts/agent-style-check.sh` — it checks
@@ -69,9 +83,9 @@ line). Use its output to populate the table; do **not** rely on "it feels right"
 
 When a coding turn writes or edits `.ts` files, include a compact compliance table in the response:
 
-| File | No standalone `=>` | Imports single-line at top | All declarations JSDoc (incl. properties) | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
-|---|---|---|---|---|---|---|
-| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
+| File | No standalone `=>` | Max one ternary/line | Imports single-line at top | All declarations JSDoc (incl. properties) | Types in `*.types.ts` | Naming convention | New test under `__tests__/` |
+|---|---|---|---|---|---|---|---|
+| `example.ts` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
 Rules to check:
 
@@ -81,10 +95,60 @@ Rules to check:
 4. **Exported interfaces and type aliases in `*.types.ts`** — not in the implementation file.
 5. **Function naming** — file-private: `_camelCase`; same-package export: `_PascalCase`; same-domain: `__PascalCase`; wide/global: `___PascalCase`.
 6. **New tests under `__tests__/`** — a `*.test.ts` co-located next to the source file it tests, instead of under a `__tests__` directory, is a violation. See [Test File Location](#test-file-location).
+7. **Categorical branches use documented string-backed enums** — confirm every
+   `CATEGORICAL-LITERAL` warning is either replaced with the owning enum or is an explicit external
+   protocol/schema/data exemption.
+8. **At most one ternary conditional per physical line** — `INLINE-CONDITIONAL` is an error; expand
+   each decision onto its own line or use an exhaustive lookup, `switch`, or named helper.
 
 The compliance table is **not** optional when TypeScript files were modified. If the table would be incomplete, fix the violations first.
 
 The self-review table is a self-check and is **not** sufficient on its own — an independent review gate may still fire. See [Mandatory Independent Review](./workflow.md#mandatory-independent-review-policy-driven-gate) in `workflow.md`.
+
+## String-Backed Enums For Categorical Control Flow
+
+OpenCrane-owned categorical values must use a documented string-backed enum when they select a
+control-flow branch, define a durable discriminated union, or cross a package, persistence, or API
+boundary. Do not repeat serialized values in comparisons, `switch` cases, validators, schema
+builders, or persistence filters.
+
+The enum is the canonical vocabulary; its string values preserve readable JSON and existing wire or
+database compatibility. Put a cross-package vocabulary in the lowest dependency-neutral model or
+`@opencrane/contracts` package, then import it through that package's barrel. Keep adapter-only
+Prisma enums at the persistence edge and map them explicitly.
+
+Every enum needs JSDoc that explains its authority boundary, serialization commitments, and why the
+categories exist. Every member also needs JSDoc that explains the domain meaning and any authority
+it does or does not grant.
+
+```typescript
+// WRONG — the union and branch can silently drift from schemas and persistence filters.
+export type AgentConfigPatch = { readonly kind: "persona_refresh" } | { readonly kind: "model_alias" };
+if (patch.kind === "persona_refresh") return _StartInterview();
+
+// CORRECT — one documented vocabulary retains the same serialized strings everywhere.
+/**
+ * Stable discriminants persisted with every personal configuration proposal.
+ *
+ * These values are shared by validation, storage filters, and public schemas.
+ */
+export enum AgentConfigPatchKinds
+{
+	/** Starts reviewed persona onboarding; it never carries replacement persona text. */
+	PersonaRefresh = "persona_refresh",
+	/** Selects a registered model alias for a future immutable agent revision. */
+	ModelAlias = "model_alias",
+}
+
+export type AgentConfigPatch = { readonly kind: AgentConfigPatchKinds.PersonaRefresh } | { readonly kind: AgentConfigPatchKinds.ModelAlias };
+if (patch.kind === AgentConfigPatchKinds.PersonaRefresh) return _StartInterview();
+```
+
+Do not manufacture enums for data that OpenCrane does not own: HTTP methods, MIME types, OpenAPI or
+JSON-Schema keywords, Kubernetes kinds, third-party protocol constants, Prisma's generated enum
+values, deliberate invalid-input fixtures, and one-off static identifiers remain strings. The
+reviewer must confirm ownership and categorical reuse before reporting the style check's
+`CATEGORICAL-LITERAL` warning.
 
 ## Inline Step Comments
 
@@ -112,7 +176,7 @@ async function provision(tenant: Tenant): Promise<void>
 	// 2. BucketClaim — requests a per-tenant GCS bucket via Crossplane.
 	await createBucket(tenant);
 
-	// 3. Deployment — runs the tenant gateway; mounts GCS volume and shared skills.
+	// 3. Deployment — runs the tenant gateway with its durable state volume.
 	await createDeployment(tenant);
 }
 ```
@@ -207,6 +271,33 @@ export function _Resolve(): ResolveResult
 {
 	return { status: "ok" };
 }
+```
+
+## Runtime Validators Stay Beside Their Models
+
+When untrusted runtime data is expected to become a TypeScript model, keep its Zod validator in the
+same folder and package as that model. Pair `example.types.ts` with `example.validator.ts`; export
+the validator through the model package instead of rebuilding the accepted fields in an HTTP
+adapter, router, repository, or generic utility.
+
+The validator module starts with a clarifying comment that names the trust boundary and why the
+model and validator must change together. Type each Zod schema against its TypeScript interface so
+drift fails compilation. Choose `.strict()` or `.strip()` deliberately from the protocol contract,
+and keep cross-field invariants in the model-adjacent validator. Transport code may bound and decode
+JSON, authenticate, and interpret protocol status, but it delegates domain-shape validation.
+
+```typescript
+// WRONG — the transport owns a second, hand-written copy of the model.
+function _ParseClaim(value: unknown): WorkloadClaim
+{
+	if (!value || typeof value !== "object" || /* many inline field checks */) throw new Error("invalid claim");
+	return value as WorkloadClaim;
+}
+
+// CORRECT
+// workload.types.ts exports WorkloadClaim.
+// workload.validator.ts owns a ZodType<WorkloadClaim> and exports _ParseWorkloadClaim.
+// http-workload-authority.ts only bounds JSON and delegates to _ParseWorkloadClaim.
 ```
 
 ## Test File Location
@@ -329,7 +420,7 @@ import type { CreateTenantRequest } from "../types.js";
 | 1 | Node builtins | `node:fs`, `node:path`, `node:crypto` |
 | 2 | External - Utils | `date-fns`, `lodash` |
 | 3 | External - Framework | `express`, `@kubernetes/client-node`, `pino`, `@prisma/client` |
-| 4 | Local packages | `@opencrane/contracts`, `@opencrane/observability` |
+| 4 | Local packages | `@opencrane/contracts`, `@opencrane/backend/observability` |
 | 5 | Local file imports | `./reconciler.js`, `../types.js` |
 
 ## Single-Line Imports
@@ -360,8 +451,8 @@ Each workspace package should have a single barrel export file at the package ro
 
 ```typescript
 // CORRECT
-import { TenantOperator } from "@opencrane/fleet-operator";
+import { __CreateRuntimeController } from "@opencrane/backend/agents/runtime/controller";
 
 // WRONG
-import { TenantOperator } from "@opencrane/fleet-operator/src/tenant-operator";
+import { __CreateRuntimeController } from "../../../libs/backend/agents/runtime/controller/src/core/runtime-controller";
 ```

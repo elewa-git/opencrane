@@ -8,17 +8,13 @@ import { SessionStore } from "@opencrane/state/core";
 /**
  * Gate for every authenticated operator route.
  *
- * Resolves async so the navigation waits for `/auth/me` (and, when the session
- * is authenticated, `GET /tenants`) to settle before deciding — otherwise a
+ * Resolves async so navigation waits for `/auth/me` to settle before deciding; otherwise a
  * cold guard would see `hasValue() === false` and either flash the wrong
  * destination or loop the redirects. The decision matrix once both resources
  * settle:
  *
  * - anonymous session → redirect to `/login`
- * - authenticated session with no UserTenant resolvable in this org →
- *   redirect to `/no-tenant` (the operator app is one-org-per-host, so an
- *   empty `currentTenant` is the "no tenant for the user in this org" state)
- * - authenticated session with a tenant → allow activation
+ * - authenticated session → allow activation
  *
  * Wide-scope (`___`) prefix because feature/app libs consume it directly.
  */
@@ -41,20 +37,6 @@ export const ___OperatorAccessGuard: CanActivateFn = async function ___OperatorA
 	if (!session.authenticated())
 	{
 		return router.parseUrl("/login");
-	}
-
-	// Authenticated — wait for the tenants list before deciding whether the
-	// user has a workspace in this org. The resource gates its own fetch on
-	// authentication, so this only ever runs against a real session.
-	const tenantsSettled = computed(function _tenantsSettled(): boolean
-	{
-		return !session.tenants.isLoading();
-	});
-	await firstValueFrom(toObservable(tenantsSettled, { injector }).pipe(filter(Boolean)));
-
-	if (!session.currentTenant())
-	{
-		return router.parseUrl("/no-tenant");
 	}
 
 	return true;

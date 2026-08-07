@@ -1,0 +1,21 @@
+{{- if .Values.backup.enabled }}
+apiVersion: postgresql.cnpg.io/v1
+kind: ScheduledBackup
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  cluster:
+    name: {{ include "opencrane.postgres.fullname" . }}
+  schedule: {{ .Values.backup.schedule | quote }}
+  immediate: {{ .Values.backup.immediate }}
+  backupOwnerReference: cluster
+  method: plugin
+  pluginConfiguration:
+    name: {{ .Values.backup.plugin.name | quote }}
+    {{- with .Values.backup.plugin.parameters }}
+    parameters:
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+{{- end }}

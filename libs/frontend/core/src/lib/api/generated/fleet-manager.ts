@@ -358,13 +358,6 @@ export interface components {
             id?: string;
             /** @description Operator-facing label. */
             displayName?: string;
-            /**
-             * @description Brokering strategy: 'static' (per-tenant/per-server secret fallback) or 'obo' (per-user RFC 8693 exchange brokered server-side; no static secret).
-             * @enum {string}
-             */
-            brokeringMode?: "static" | "obo";
-            /** @description Secret reference for 'static' brokering; null for 'obo'. */
-            secretRef?: string | null;
         };
         /** @description A catalogue server as exposed by the operator API (distinct from the registry McpServer). Every field beyond id is optional so the same shape serves the entitled user catalogue and the admin governance view. */
         McpCatalogServer: {
@@ -622,17 +615,6 @@ export interface components {
             action?: string;
             resource?: string;
             message?: string;
-        };
-        AccessToken: {
-            id?: string;
-            name?: string;
-            owner?: string;
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            expiresAt?: string;
-            /** Format: date-time */
-            lastUsedAt?: string;
         };
         ProviderKey: {
             provider?: string;
@@ -1058,20 +1040,6 @@ export interface components {
             shadowMode?: boolean;
             nextWave?: string | null;
         };
-        ScopeSelector: {
-            /** @enum {string} */
-            scope: "org" | "department" | "project" | "personal";
-            payloadId: string;
-        };
-        SessionScope: {
-            sessionKey?: string;
-            principal?: string;
-            scopes?: components["schemas"]["ScopeSelector"][];
-            /** Format: date-time */
-            createdAt?: string;
-            /** Format: date-time */
-            updatedAt?: string;
-        };
         DatasetMembership: {
             org: string[];
             team: string[];
@@ -1117,18 +1085,6 @@ export interface components {
             totalCostUsd?: number;
             /** Format: date-time */
             recordedAt?: string;
-        };
-        DeviceGrant: {
-            /** @description Secret code used by the CLI to poll for the token. */
-            deviceCode: string;
-            /** @description Short code (XXXX-XXXX) the operator sees. */
-            userCode: string;
-            /** @description Relative URL the operator should open in a browser. */
-            verificationUri: string;
-            /** @description Seconds until the grant expires (300). */
-            expiresIn: number;
-            /** @description Minimum polling interval in seconds (5). */
-            interval: number;
         };
         ZitadelCandidateKeyValidation: {
             /** @description Whether the candidate key's jwt-bearer token exchange succeeded. */

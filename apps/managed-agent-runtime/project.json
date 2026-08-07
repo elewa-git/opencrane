@@ -1,0 +1,11 @@
+{
+  "name": "managed-agent-runtime",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "sourceRoot": "apps/managed-agent-runtime",
+  "tags": ["type:app", "layer:entrypoint", "scope:agent-runtime"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "helm template mar apps/managed-agent-runtime/helm >/dev/null", "cwd": "." } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "bash apps/managed-agent-runtime/tests/helm-contract.sh", "cwd": "." } }
+  }
+}

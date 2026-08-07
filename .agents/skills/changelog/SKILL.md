@@ -23,8 +23,8 @@ into the functional value it delivers.
 - ❌ "Added `multiInstance` Helm values block and namespaced operator RBAC (MI.1)."
 
 The second is the *mechanism*; the first is the *capability*. Write the capability. Name a
-mechanism (file, flag, endpoint, CLI command) only when it helps the reader **use** the
-feature — e.g. "drivable from `oc awareness rollout`".
+mechanism (file, flag, endpoint, UI surface) only when it helps the reader **use** the
+feature — e.g. "drivable from `POST /api/v1/awareness/rollout/promote`".
 
 ## What to read before writing (ground every claim)
 

@@ -1,5 +1,5 @@
 ---
-description: Cost-tiered independent review — free style script, parallel single-dimension haiku finders, adversarial verification of every candidate, merged severity-first report.
+description: Cost-tiered independent review — free mechanical gates, parallel single-dimension haiku finders, adversarial verification of every candidate, merged severity-first report.
 argument-hint: "[files / git range — default: working tree vs HEAD]"
 ---
 
@@ -15,32 +15,42 @@ Scope from the caller: **$ARGUMENTS** (if empty, review the working tree vs `HEA
 
 1. Determine the diff: `git diff --stat HEAD` (or the caller's range/files). If there
    are no reviewable changes, say so and stop.
-2. Run `scripts/agent-style-check.sh` (pass the same range/files if the caller named
-   any). Keep its output verbatim — it goes in the final report as-is. Do NOT spend
-   any agent time on style beyond this.
+2. Run `scripts/agent-style-check.sh` and `npm run check:module-growth` (pass the same
+   range/files if the caller named any). Keep their output verbatim. Do NOT spend agent
+   time rediscovering mechanics. Module-growth warnings route the cited files into the
+   maintainability finder; they are not findings without modeled verification.
 
 ## Tier 1 — cheap finders (haiku)
 
 **Small-diff short-circuit:** if the diff is under ~80 changed lines, spawn ONE
 `review` agent covering all dimensions (no `DIMENSION:` line) and skip to Tier 2.
 
-Otherwise fan out THREE `review` agents **in a single message** (they are independent),
+Otherwise fan out FOUR `review` agents **in a single message** (they are independent),
 each prompt containing:
 
-- `DIMENSION: correctness` / `DIMENSION: security` / `DIMENSION: residue`
+- `DIMENSION: correctness` / `DIMENSION: security` / `DIMENSION: maintainability` /
+  `DIMENSION: residue`
 - The scope (files or git range) and any context you have (what the change is meant to
   do, what is intentionally gated off or mock-only — this prevents false positives).
-- "Skip step 3 of your procedure (the style script) — the orchestrator already ran it."
+- "Skip step 3 of your procedure (the mechanical scripts) — the orchestrator already ran them."
 
 Skip the `security` finder when the diff plainly touches no auth/route/token/secret/
 RBAC/network surface, and the `residue` finder when the change adds no replacement for
 an existing mechanism (pure addition). Say in the report which finders you skipped and
 why — never skip silently.
 
-**Rewrite-freeze override:** never skip the residue finder for R0-R10 green, migration, or
-decommission work, even when the diff looks purely additive. New green code must be checked for
-legacy imports/compatibility/fallback residue, and migration code must be checked for runtime reach
-and expiry. The dedicated `reaper` gate remains mandatory; this finder does not replace it.
+Run the `maintainability` finder for every non-trivial production-code diff, especially
+transactions, repository adapters, domain construction, persistence writes, and
+orchestration changes. It may be skipped for documentation-only, generated, type-only,
+test-only, or demonstrably mechanical diffs; record that reason. Maintainability
+findings must cite a concrete cohesion, ownership, duplication, invariant-documentation,
+or core-path test problem. Function length or line length alone is not a finding.
+Never skip it for a file reported by the language-neutral module-growth checker.
+
+**Direct-replacement override:** never skip the residue finder for replacement or deletion work,
+even when the diff looks purely additive. New code must be checked for superseded imports,
+compatibility/fallback residue, and old wiring that should have been removed in the same slice. The
+dedicated `reaper` gate remains mandatory; this finder does not replace it.
 
 ## Tier 2 — adversarial verification
 

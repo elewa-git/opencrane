@@ -1,0 +1,94 @@
+{{- if .Values.networkPolicy.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}-ingress
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/cluster: {{ include "opencrane.postgres.fullname" . }}
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        {{- range .Values.networkPolicy.clientPodSelectors }}
+        - podSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/poolerName: {{ printf "%s-pooler" (include "opencrane.postgres.fullname" .) | trunc 63 | trimSuffix "-" }}
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "opencrane.postgres.fullname" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.networkPolicy.operatorNamespace | quote }}
+          podSelector:
+            matchLabels:
+              {{- toYaml .Values.networkPolicy.operatorPodLabels | nindent 14 }}
+      ports:
+        - protocol: TCP
+          port: 8000
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}-pooler-boundary
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      cnpg.io/poolerName: {{ printf "%s-pooler" (include "opencrane.postgres.fullname" .) | trunc 63 | trimSuffix "-" }}
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        {{- range .Values.pooler.clientPodSelectors }}
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ $.Release.Namespace | quote }}
+          podSelector:
+            {{- toYaml . | nindent 12 }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: 5432
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              cnpg.io/cluster: {{ include "opencrane.postgres.fullname" . }}
+      ports:
+        - protocol: TCP
+          port: 5432
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        {{- range .Values.networkPolicy.kubernetesApiServerCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.kubernetesApiServerPort }}
+    - to:
+        {{- range .Values.networkPolicy.kubernetesApiServerEndpointCidrs }}
+        - ipBlock:
+            cidr: {{ . | quote }}
+        {{- end }}
+      ports:
+        - protocol: TCP
+          port: {{ .Values.networkPolicy.kubernetesApiServerEndpointPort }}
+{{- end }}

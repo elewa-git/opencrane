@@ -1,19 +1,16 @@
 import { describe, expect, it } from "vitest";
 import { ClassProvider, InjectionToken, Provider, ValueProvider } from "@angular/core";
 
-import { CONVERSATION_GATEWAY } from "@opencrane/state/core";
-import { OpenClawConversationGateway } from "@opencrane/state/conversation/adapter";
-import { OpenCraneSettingsGateway, SETTINGS_GATEWAY } from "@opencrane/state/settings/adapter";
-import { OpenCraneUserTenantGateway, USER_TENANT_GATEWAY } from "@opencrane/state/tenant/adapter";
 import { MCP_GATEWAY, OpenCraneMcpGateway } from "@opencrane/state/mcp/adapter";
+import { OpenCranePersonalAssetsGateway, PERSONAL_ASSETS_GATEWAY } from "@opencrane/state/assets/adapter";
+import { OpenCraneSkillCatalogueGateway, SKILL_CATALOGUE_GATEWAY } from "@opencrane/state/skills/adapter";
 
 import { GATEWAY_MODE } from "../gateway-mode.types";
 import { provideControlPlaneGateways } from "../control-plane-gateways.provider";
 import {
-	MockConversationGateway,
 	MockMcpGateway,
-	MockSettingsGateway,
-	MockUserTenantGateway,
+	MockPersonalAssetsGateway,
+	MockSkillCatalogueGateway,
 	provideTestGateways
 } from "../__test__/test-gateways.provider";
 
@@ -57,10 +54,9 @@ describe("provideControlPlaneGateways", () =>
 	{
 		const providers = provideControlPlaneGateways();
 
-		expect(classFor(providers, CONVERSATION_GATEWAY)).toBe(OpenClawConversationGateway);
-		expect(classFor(providers, SETTINGS_GATEWAY)).toBe(OpenCraneSettingsGateway);
-		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(OpenCraneUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(OpenCraneMcpGateway);
+		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(OpenCranePersonalAssetsGateway);
+		expect(classFor(providers, SKILL_CATALOGUE_GATEWAY)).toBe(OpenCraneSkillCatalogueGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("live");
 	});
 });
@@ -71,10 +67,9 @@ describe("provideTestGateways", () =>
 	{
 		const providers = provideTestGateways();
 
-		expect(classFor(providers, CONVERSATION_GATEWAY)).toBe(MockConversationGateway);
-		expect(classFor(providers, SETTINGS_GATEWAY)).toBe(MockSettingsGateway);
-		expect(classFor(providers, USER_TENANT_GATEWAY)).toBe(MockUserTenantGateway);
 		expect(classFor(providers, MCP_GATEWAY)).toBe(MockMcpGateway);
+		expect(classFor(providers, PERSONAL_ASSETS_GATEWAY)).toBe(MockPersonalAssetsGateway);
+		expect(classFor(providers, SKILL_CATALOGUE_GATEWAY)).toBe(MockSkillCatalogueGateway);
 		expect(valueFor(providers, GATEWAY_MODE)).toBe("mock");
 	});
 });

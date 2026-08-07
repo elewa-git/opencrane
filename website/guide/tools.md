@@ -1,34 +1,43 @@
-# Manage tools (MCP)
+# Manage tools with MCP
 
-::: tip What's a tool? What's MCP?
-A **tool** lets an assistant *do* something in another system — send a Slack message,
-file a Jira ticket, look up a customer in your CRM — instead of just talking about it.
+A **tool** lets an agent reach into another system — send a message, update a record, search a
+calendar. OpenCrane uses the Model Context Protocol (MCP) to register those integrations, and
+keeps the credentials, the approval decision and the record of every call outside the runtime
+that executes it: a compromised or misbehaving agent run can't walk off with a live integration
+credential.
 
-Tools connect using a standard called **MCP** (Model Context Protocol). So when you
-see "an MCP server," read it as "one connected tool."
+Both kinds of agent use the same tool machinery — your personal assistant can only use the tools
+granted to *you*; a managed agent can only use the tools its published revision was configured
+with.
+
+## Register a tool
+
+Use the authenticated `/api/v1/mcp-servers` surface to register and review MCP definitions.
+Retrieve current payloads through the [API reference](/reference/api).
+
+## Grant it
+
+A registration is not a grant. Allow the required tool revision for both the acting subject
+and the agent service. New runs freeze the resulting capability set.
+
+## Execute safely
+
+The runtime proposes a tool call. OpenCrane validates the run proof and arguments, opens an
+approval when required and reserves the invocation. After approval the runtime executes the call
+directly against Obot with a short-lived attempt-scoped key and reports back only a result digest.
+Integration credentials stay with Obot; they never enter the runtime or browser.
+
+::: info
+The registration, grant, approval, receipt, custody and direct-invocation authorities are present.
+The Obot transports compose only when the deployment mounts the Obot service credential; without
+it execution fails closed after reservation. Live-Obot qualification remains gated on issue #337.
 :::
 
-## Connect a tool
-
-Register the tool once, by name and address. Manage this from the command line —
-see [CLI reference → `oc mcp`](/reference/cli#oc-mcp).
-
-## Give it credentials (safely)
-
-A tool usually needs to authenticate to the system it talks to. OpenCrane stores and
-brokers those credentials **for** the assistant — they're never handed to the
-assistant or the browser. Two modes are available:
-
-- **Per-user sign-in** — each person authorises with their own account, so the
-  assistant acts as *them*.
-- **Shared credential** — one credential used on behalf of everyone.
-
-## Decide who can use it
-
-A connected tool isn't available to anyone until you grant it. Allow it for a person,
-team, or whole department — see [Control access](/guide/permissions).
+::: tip
+Revoking a grant changes future decisions. It does not rewrite the evidence of an action that
+an earlier run already completed.
+:::
 
 ## Going deeper
 
-How tool calls are routed, scoped, and audited is covered in the
-[MCP gateway deep dive](/integrators/mcp-gateway).
+See the [MCP gateway deep dive](/integrators/mcp-gateway).

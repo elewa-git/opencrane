@@ -1,0 +1,32 @@
+{
+  "affectedProjects": ["contracts", "skill-authoring", "opencrane-ui"],
+  "containerProjects": [
+    {
+      "name": "skill-authoring",
+      "targets": {
+        "container": {
+          "metadata": {
+            "release": {
+              "image": "opencrane-skill-authoring",
+              "dockerfile": "apps/skill-authoring/deploy/Dockerfile"
+            }
+          }
+        }
+      }
+    },
+    {
+      "name": "opencrane-ui",
+      "targets": {
+        "container": {
+          "metadata": {
+            "release": {
+              "image": "opencrane-ui",
+              "dockerfile": "apps/opencrane-ui/deploy/Dockerfile"
+            }
+          }
+        }
+      }
+    }
+  ],
+  "changedFiles": ["apps/skill-authoring/src/authoring_worker.py", "apps/skill-authoring/helm/templates/job.yaml"]
+}

@@ -4,8 +4,8 @@
 control plane: a typed TypeScript client (`openapi-fetch`) plus DTOs generated
 from the OpenCrane OpenAPI 3.1 specification emitted during the build.
 
-It is the same contract the `oc` CLI consumes — and the recommended way for any
-external surface to talk to OpenCrane.
+It is the contract used by the OpenCrane UI and the recommended way for any external
+surface to talk to OpenCrane.
 
 ## Licensing — MIT, deliberately
 
@@ -30,19 +30,18 @@ code:
 ```bash
 # Pin a specific OpenCrane release, then generate a typed client locally.
 curl -fsSL -o openapi/opencrane.json \
-  https://github.com/italanta/opencrane/releases/download/<tag>/openapi.json
-pnpm exec openapi-typescript openapi/opencrane.json -o src/api/generated.ts
+  https://github.com/elewa-git/opencrane/releases/download/<tag>/openapi.json
+npx openapi-typescript openapi/opencrane.json -o src/api/generated.ts
 ```
 
 ## The spec is the source of truth
 
-The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**, so
-the SDK, the CLI, and the [interactive API reference](/reference/api) on this site
-never drift from the implementation.
+The OpenAPI spec is emitted at build time and guarded by a **CI drift gate**. Retrieve the
+deployed contract through the [API reference](/reference/api) before generating a client.
 
 ## Related
 
-- [API reference (interactive)](/reference/api)
+- [API reference](/reference/api)
 - [API overview](/reference/api-overview)
 - Full package README:
-  [`libs/contracts/README.md`](https://github.com/italanta/opencrane/blob/main/libs/contracts/README.md)
+  [`libs/contracts/README.md`](https://github.com/elewa-git/opencrane/blob/main/libs/contracts/README.md)

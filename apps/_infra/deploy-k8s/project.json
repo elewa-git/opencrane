@@ -1,0 +1,26 @@
+{
+  "name": "deploy-k8s",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "application",
+  "tags": ["type:app", "layer:entrypoint", "scope:deployment"],
+  "targets": {
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "bash apps/_infra/deploy-k8s/platform/tests/run-helm-contracts.sh"
+      }
+    },
+    "helm-lint": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/helm-lint-current-sources.sh" }
+    },
+    "develop-smoke": {
+      "executor": "nx:run-commands",
+      "options": { "command": "bash apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh" }
+    },
+    "dependency-status": {
+      "executor": "nx:run-commands",
+      "options": { "command": "helm dependency list apps/_infra/deploy-k8s" }
+    }
+  }
+}

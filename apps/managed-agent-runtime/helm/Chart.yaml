@@ -1,0 +1,9 @@
+apiVersion: v2
+name: opencrane-managed-agent-runtime
+description: >-
+  Deployment-only chart for the managed (central) agent runtime plane: a dedicated namespace, its
+  bounded connector-scoped ServiceAccount, and default-deny + explicit-egress NetworkPolicies. It
+  reuses the shared agent-runtime image (see apps/agent-runtime); it ships no application source.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"

@@ -1,0 +1,25 @@
+# opencrane-dev GKE overlay — layer on top of gcp.yaml.
+#
+# Cluster: gke_weownai-proto_europe-west1-b_opencrane-dev  (project weownai-proto)
+# Base domain: dev.opencrane.ai
+#
+# Usage (via the multi-tenant profile). The deploy script uses --reset-then-reuse-values:
+# it merges chart defaults (new keys like multiCt) with the prior release values, so the
+# overlay only needs to override non-default keys. Since reset re-applies chart defaults
+# for all keys the invocation doesn't supply, the OpenCrane server image tag must be restated
+# explicitly with --opencrane-server-tag (it is not carried
+# from --values files).
+#
+# NOTE: the fleet-platform chart moved to the WeOwnAI repo (elewa-git/opencrane#150); the
+# deploy.sh below is a checked-out copy of it.
+#   apps/fleet-platform/deploy.sh \
+#     --base-domain dev.opencrane.ai \
+#     --ingress-ip 34.22.213.142 \
+#     --opencrane-server-tag <new-server-image-tag> \
+#     --values apps/_infra/deploy-k8s/platform/values/opencrane-dev.yaml
+
+global:
+  environment: dev
+
+ingress:
+  domain: dev.opencrane.ai

@@ -14,19 +14,16 @@
   ],
   "references": [
     {
-      "path": "../conversation/adapter/tsconfig.lib.json"
-    },
-    {
-      "path": "../tenant/adapter/tsconfig.lib.json"
-    },
-    {
-      "path": "../settings/adapter/tsconfig.lib.json"
-    },
-    {
       "path": "../provider-key/adapter/tsconfig.lib.json"
     },
     {
       "path": "../mcp/adapter/tsconfig.lib.json"
+    },
+    {
+      "path": "../assets/adapter/tsconfig.lib.json"
+    },
+    {
+      "path": "../skills/adapter/tsconfig.lib.json"
     },
     {
       "path": "../core"

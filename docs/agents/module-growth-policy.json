@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "warningLines": 350,
+  "maximumLines": 500,
+  "largeAdditionLines": 150,
+  "sourceExtensions": [
+    ".c",
+    ".cc",
+    ".cpp",
+    ".cs",
+    ".go",
+    ".h",
+    ".hpp",
+    ".java",
+    ".js",
+    ".jsx",
+    ".kt",
+    ".kts",
+    ".mjs",
+    ".php",
+    ".prisma",
+    ".py",
+    ".rb",
+    ".rs",
+    ".sh",
+    ".swift",
+    ".tf",
+    ".ts",
+    ".tsx"
+  ],
+  "exceptions": [
+    {
+      "path": "apps/_infra/deploy-k8s/platform/k8s-deploy.sh",
+      "owner": "platform",
+      "reason": "Legacy installation engine remains above the size limit while responsibilities are extracted incrementally; initial model-provider custody now lives in initial-model-provider.sh.",
+      "expiresOn": "2026-10-01"
+    }
+  ]
+}

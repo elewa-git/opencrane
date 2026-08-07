@@ -1,0 +1,17 @@
+import type { Prisma } from "@prisma/client";
+import type { WidgetRepository } from "./widget.types.js";
+
+export class PrismaWidgetStore
+{
+	private readonly transaction: Prisma.TransactionClient;
+
+	constructor(transaction: Prisma.TransactionClient)
+	{
+		this.transaction = transaction;
+	}
+
+	async find(): Promise<unknown>
+	{
+		return this.transaction.widget.findFirst({});
+	}
+}

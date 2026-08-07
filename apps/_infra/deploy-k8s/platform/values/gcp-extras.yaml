@@ -1,0 +1,31 @@
+# GCP-native EXTRAS overlay (OPT-IN) for OpenCrane on GKE.
+#
+# Layer this ON TOP of values/gcp.yaml to enable GCP-specific features that go
+# beyond a plain-Kubernetes deploy. None of these are required for a working
+# GKE install — the baseline in values/gcp.yaml runs as standard k8s.
+#
+# Usage (assumes a checked-out copy of the fleet-platform chart, which moved to the
+# WeOwnAI repo per elewa-git/opencrane#150):
+#   helm install opencrane apps/fleet-platform \
+#     -f apps/_infra/deploy-k8s/platform/values/gcp.yaml \
+#     -f apps/_infra/deploy-k8s/platform/values/gcp-extras.yaml \
+#     --set externalSecrets.gcp.projectId=YOUR_PROJECT_ID
+#
+# This overlay enables:
+#   - GCE ingress (Google Cloud Load Balancer) instead of the default ingress
+#   - External Secrets backed by GCP Secret Manager
+
+# Google Cloud Load Balancer ingress.
+ingress:
+  className: gce
+
+# External Secrets Operator backed by GCP Secret Manager. Requires the
+# External Secrets Operator CRDs installed in-cluster.
+externalSecrets:
+  enabled: true
+  provider: gcp-secret-manager
+  gcp:
+    # projectId MUST be supplied for the Secret Manager store.
+    projectId: "replace-with-gcp-project-id"
+    # Optional GKE region or zone; empty lets External Secrets discover it.
+    clusterLocation: ""

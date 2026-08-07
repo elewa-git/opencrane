@@ -1,0 +1,44 @@
+{{- /*
+#151 item 2 — release-owned cert-manager Issuer.
+
+certManagerIssuerName is provisioned by this chart. It is the cert-manager analogue of
+`crds.install`: `certManager.selfManagedIssuer` defaults true for a self-contained install;
+set it false only when a separately managed issuer already owns the required resource.
+
+Every Certificate that will reference this Issuer in THIS chart is a SINGLE, non-wildcard
+hostname (see docs/agents/cluster-architecture.md → "Tenancy Model"): the opencrane-ui's own
+host (rendered by the app-owned OpenCrane Helm unit). It does not need a wildcard SAN, so
+HTTP-01 through the ingress is sufficient on its own and is the default solver; DNS-01
+is layered in ADDITIONALLY (scoped to `ingress.domain`) only when `certManager.acme.dns01.provider`
+is set, for installs that prefer it or need to solve challenges before the ingress is reachable.
+
+- mode=selfSigned : dev/local — issues instantly, no ACME challenge, not browser-trusted.
+- mode=acme       : production — public CA (Let's Encrypt by default).
+
+The chart renders a namespaced Issuer in every namespace owned by this release. There is no
+cluster-wide issuer mode or cross-release ownership seam.
+
+Requires cert-manager (cert-manager.io/v1) installed in-cluster.
+*/ -}}
+{{- if and .Values.certManager.enabled .Values.certManager.selfManagedIssuer }}
+{{- $cm := .Values.certManager }}
+{{- if and (eq $cm.mode "acme") (empty $cm.acme.email) }}
+{{- fail "certManager.mode=acme requires certManager.acme.email to be set." }}
+{{- end }}
+{{- if not (or (eq $cm.mode "selfSigned") (eq $cm.mode "acme")) }}
+{{- fail (printf "certManager.mode must be 'selfSigned' or 'acme', got %q" $cm.mode) }}
+{{- end }}
+{{- $namespaces := include "opencrane.instanceNamespaces" . | fromJsonArray }}
+{{- range $ns := $namespaces }}
+---
+apiVersion: cert-manager.io/v1
+kind: Issuer
+metadata:
+  name: {{ $cm.issuerName | quote }}
+  namespace: {{ $ns | quote }}
+  labels:
+    {{- include "opencrane.labels" $ | nindent 4 }}
+spec:
+  {{- include "opencrane.certIssuerSpec" (dict "cm" $cm "ingress" $.Values.ingress) | nindent 2 }}
+{{- end }}
+{{- end }}

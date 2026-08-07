@@ -9,7 +9,7 @@ import { OpenCraneApiClientBase } from "./api-client.base";
  * surface: `/cluster-tenants`, `/billing-accounts`, `/platform/dns`, …).
  *
  * Generated from the pinned OpenAPI contract in
- * `openapi/opencrane-fleet-manager.json` (see `pnpm sync-spec`). This surface
+ * `openapi/opencrane-fleet-manager.json` (see `npm run sync-spec`). This surface
  * owns its **own** platform-operator OIDC session: auth helpers and the
  * 401→login redirect (inherited from {@link OpenCraneApiClientBase}) target the
  * Fleet Manager API's own `/auth/login` — it does not borrow the Control Plane's.

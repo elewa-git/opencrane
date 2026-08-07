@@ -9,8 +9,6 @@ export enum SettingsSection
 	Model = "model",
 	/** Awareness contract settings. */
 	Awareness = "awareness",
-	/** Skills management. */
-	Skills = "skills",
 	/** Harvest channel connectors. */
 	Channels = "channels",
 	/** Access & dataset memberships. */
@@ -125,21 +123,6 @@ export interface CogneeDataset
 	citationCoverage: number;
 	/** Connected source labels. */
 	sources: string[];
-}
-
-/** A skill row in the skills table. */
-export interface SkillRow
-{
-	/** Skill name. */
-	name: string;
-	/** Scope level. */
-	scope: ScopeLevel;
-	/** Version string. */
-	version: string;
-	/** OCI digest (or "—" for local). */
-	digest: string;
-	/** Status ("active" | "pending-promotion"). */
-	status: string;
 }
 
 /** A harvest channel connector row. */

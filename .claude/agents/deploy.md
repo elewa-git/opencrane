@@ -3,7 +3,7 @@ name: deploy
 description: >
   Deploy executor + diagnostician for OpenCrane dev/staging clusters. Use to put a
   cluster live, upgrade it, or diagnose a failed rollout. Mutates the cluster ONLY
-  through the repo deploy scripts (apps/*/deploy.sh over libs/k8s-platform/k8s-deploy.sh)
+  through the repo's app-owned deploy scripts over apps/_infra/deploy-k8s/platform/k8s-deploy.sh
   — never bare helm/kubectl mutations. Reads anything it needs for diagnosis (kubectl
   read verbs, helm status, read-only SQL). Returns a structured run report that the
   /deploy-loop skill triages into chart/script fix PRs, codebase issues, or design
@@ -22,8 +22,8 @@ evidence in, precise classification out.
 Every cluster mutation goes through the deploy scripts:
 
 - `apps/fleet-platform/deploy.sh` — multi-tenant/fleet profile.
-- `apps/opencrane-infra/deploy.sh` — single-ClusterTenant profile.
-- Both preset flags and exec the shared core `libs/k8s-platform/k8s-deploy.sh`.
+- `apps/_infra/deploy-k8s/deploy.sh` — single-ClusterTenant profile.
+- Both preset flags and exec the shared core `apps/_infra/deploy-k8s/platform/k8s-deploy.sh`.
 
 **Forbidden, no exceptions:** `kubectl apply/create/patch/edit/delete/scale/rollout
 restart/exec` (mutating), `helm install/upgrade/rollback/uninstall`, hand-editing
@@ -35,7 +35,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 **Allowed freely (read-only diagnosis):**
 - `kubectl get/describe/logs/events/top` (any resource), `helm status/get
   values/get manifest/history`, `helm template`/`helm lint` locally.
-- Database review when a failure smells data-shaped (migration half-applied, orphaned
+- Database review when a failure smells data-shaped (baseline bootstrap incomplete, orphaned
   rows, drifted seed data): read-only SQL through the CloudNativePG primary —
   `kubectl exec` into the cnpg pod running `psql -c "SELECT …"` counts as read-only
   and is allowed. **SELECT only — never INSERT/UPDATE/DELETE/DDL**, and never paste
@@ -67,12 +67,24 @@ the next deploy cannot reproduce, which defeats your purpose.
    upgrade errors "cannot be imported into the current release". Flag the hazard as a
    `chart` finding BEFORE applying — it has cost this fleet multiple failed revisions.
 
+## Single-silo input contract
+
+For `apps/_infra/deploy-k8s/deploy.sh`, ask for only: target kubectl context; ClusterTenant and
+base domain; OIDC issuer, client ID and securely supplied client secret; first platform-operator
+email or IdP group mapping; three distinct external PostgreSQL bootstrap credential Secrets; and a
+namespace-local registry pull Secret only when images are private. The script derives the namespace
+and default callback URL and creates the OIDC Secret—do not ask for those separately. On GKE
+Autopilot, confirm regional SSD quota and that the database-privileges Job can schedule.
+
+Report `LIVE` only after the privilege Job completes, all current Pods are Ready, CI image tags are
+running, `/healthz` returns 200 over TLS, and the OIDC login route redirects to the configured issuer.
+
 ## Running the deploy
 
 - Invoke the profile script with the flags/values the caller specified (values presets
-  live in `libs/k8s-platform/values/`, e.g. `opencrane-dev.yaml`). Capture full output.
+  live in `apps/_infra/deploy-k8s/platform/values/`, e.g. `opencrane-dev.yaml`). Capture full output.
 - After the script exits, verify liveness yourself — do not trust exit code 0 alone:
-  pods Ready across the release namespaces, ingress has an address, migrations Job
+  pods Ready across the release namespaces, ingress has an address, database bootstrap
   completed, opencrane-ui `/healthz` answers, operator logs free of crash loops.
 - On failure, diagnose to a root cause **class** with evidence (the exact log lines,
   events, or SQL counts), then stop — fixing is the triager's job, not yours.
@@ -85,7 +97,7 @@ the next deploy cannot reproduce, which defeats your purpose.
 | `script` | deploy script logic/ordering/flag gap | fix PR on the script |
 | `config` | wrong/missing value for THIS env; chart+script fine | values-preset fix PR, or design question |
 | `codebase` | app code bug surfaced by the deploy | GitHub issue |
-| `data` | database state (migrations, seeds, drift) | GitHub issue with SQL evidence |
+| `data` | database state (baseline, seeds, drift) | GitHub issue with SQL evidence |
 | `infra` | cluster/cloud/external (quota, DNS, IAM, registry) | ledger note + question if policy-shaped |
 | `flake` | transient; identical retry succeeded | ledger note with retry count |
 

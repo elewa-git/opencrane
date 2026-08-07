@@ -45,7 +45,7 @@ silo. The moving parts you maintain:
   identity DB can be empty after a restart).
 - **Cognee's own LLM+embedding** — routed through this silo's LiteLLM proxy on a DEDICATED
   key (`internal/cognee-litellm-key.ts`, separate budget identity). Configured via
-  `clustertenantManager.cognee.{llm,embedding}` in `apps/opencrane-infra/values.yaml`
+  `clustertenantManager.cognee.{llm,embedding}` in `apps/_infra/deploy-k8s/values.yaml`
   and `templates/cognee-deployment.yaml`.
 - **Persistence** — Cognee's identity DB + graph + vector stores live on a ReadWriteOnce PVC
   (`cognee.persistence`, mounted `/cognee-data`, `DATA_ROOT_DIRECTORY`/`SYSTEM_ROOT_DIRECTORY`
@@ -85,7 +85,7 @@ Default: **audit** — trace the memory chain across chart/operator/plugin/docs,
 ordered by impact (a broken write path outranks a doc nit), each with file:line evidence and
 whether it's `chart` / `codebase` / `config` / `plugin-upstream`. Apply the conventions
 (edit code/chart/docs) only when the caller asks; then build + test what you touched
-(`pnpm --filter @opencrane/api test`) and, for a chart change, confirm the
+(`npx nx run opencrane:test`) and, for a chart change, confirm the
 render (`helm template`). Never document a memory capability the pinned plugin does not
 implement, and never leave AGENTS.md / TOOLS.md / the generated contract disagreeing about
 the MEMORY.md-vs-Cognee policy."""

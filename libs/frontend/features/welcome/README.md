@@ -1,45 +1,50 @@
-# @opencrane/features/welcome
+# @opencrane/features/welcome — first-run onboarding
 
-First-run onboarding for the **operator** app — a guided welcome shown the first
-time an authenticated end user / customer admin lands in the workspace.
+> [frontend](../../README.md) › [features](../README.md) › welcome
 
-Distinct from `@weownai/features/onboarding`, the fleet app's self-serve
-customer **signup** funnel (fleet-only, stays in the WeOwnAI repo — not
-ported here). This flow writes nothing to the control plane.
+## What it owns
 
-## Import
+This is a frontend **feature** package (a lazy-loaded route plus its components — the browser only
+downloads its code when the route is first opened). It owns first-run onboarding: the guided welcome
+shown the first time an authenticated user or organisation admin lands in the workspace. This flow
+writes nothing to the server.
 
-```ts
-import { WELCOME_ROUTES, WelcomePageComponent, WelcomeOnboardingService } from "@opencrane/features/welcome";
+It drives a short funnel, a PrimeNG Stepper stepped by a `WelcomeStep` enum:
+
+```
+ workspace entry, welcome not yet completed
+        │  1. greet + show the user's resolved workspace
+        ▼  2. capture light, local-only personalisation
+ three-card tour
+        ▼  3. Finish → markComplete() → navigate to "/"
+ workspace
 ```
 
-## Contents
+The completed flag is stored in the browser's `localStorage`, so the funnel does not reappear; it
+degrades gracefully when storage is unavailable.
 
-- `welcome-page` — greets the user, surfaces their resolved workspace, captures
-  light local-only personalisation, runs a three-card tour, and hands off to the
-  workspace. A PrimeNG Stepper driven by a `WelcomeStep` enum (`@switch`).
-- `welcome.util` — pure step machine (`_NextStep`/`_PreviousStep`/…) and the
-  first-run flag logic (`_HasCompletedWelcome`, `_WelcomeCompletedValue`).
-- `welcome-onboarding.service` — thin `localStorage`-backed gate exposing a
-  `completed` signal; degrades gracefully when storage is unavailable.
-- `welcome.routes` — `WELCOME_ROUTES`, the funnel mounted at `""`.
+## Public surface
 
-## First-run redirect (host wiring)
+- `WELCOME_ROUTES` — the lazy route table (funnel mounted at `""`).
+- `WelcomePageComponent` — the stepped page.
+- `WelcomeOnboardingService` — the `localStorage`-backed gate exposing a `completed` signal and
+  `markComplete()`.
+- `welcome.util` — the pure step machine (`_NextStep`/`_PreviousStep`) and first-run flag helpers.
 
-The lib does not self-mount. The host app:
+## Boundary
 
-1. mounts `WELCOME_ROUTES` under a path (e.g. `/welcome`);
-2. on the workspace entry, injects `WelcomeOnboardingService` and redirects to
-   `/welcome` when `completed()` is `false` (a `CanActivate`/`CanMatch` guard or
-   a redirect in the shell);
-3. the Finish step calls `markComplete()` and navigates to `"/"`.
+The host app mounts `WELCOME_ROUTES` (at `/welcome`) and redirects newcomers there while
+`completed()` is `false`; the library does not self-mount. It must not import other feature
+packages. Personalisation is local-only today — there is no preferences endpoint behind it yet.
 
-## Dependencies
+## Dependency direction
 
-`@opencrane/state/core` (read-only `SessionStore` signals: `displayName`,
-`currentTenant`) and PrimeNG. Must not import other feature libs.
+Tagged `scope:web` (the frontend dependency tier): it may import only other `scope:web` packages
+and `scope:shared` contracts. It depends on `@opencrane/state/core` for read-only `SessionStore`
+signals (`displayName`, `currentTenant`) and on PrimeNG.
 
-## Note
+## See also
 
-Personalisation is local-only today; wire `personalization` to a `core/api`
-preferences service when the backend supports it.
+- Parent index: [features](../README.md)
+- Session store: [state/core](../../state/core/README.md)
+- Next screen: future workspace surface

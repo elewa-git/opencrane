@@ -10,6 +10,7 @@ export * from "./lib/models/plan.util";
 export * from "./lib/data/settings.data";
 export * from "./lib/data/plans.data";
 export * from "./lib/api/api-client.types";
+export { OpenCraneApiError } from "./lib/api/api-error";
 export * from "./lib/api/control-plane-api.service";
 export * from "./lib/api/fleet-manager-api.service";
 export * from "./lib/theme/weownai-preset";

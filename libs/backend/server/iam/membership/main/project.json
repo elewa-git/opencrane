@@ -1,0 +1,11 @@
+{
+  "name": "backend-server-membership",
+  "$schema": "../../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/server/iam/membership/main/src",
+  "tags": ["type:lib", "layer:backend", "scope:membership"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/server/iam/membership/main" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run", "cwd": "libs/backend/server/iam/membership/main" } }
+  }
+}

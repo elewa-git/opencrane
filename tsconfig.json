@@ -10,65 +10,104 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "paths": {
-      "@opencrane/backend/access-tokens": [
-        "./libs/backend/access-tokens/main/src/index.ts"
+      "@opencrane/backend/server/agents/agent-services": [
+        "./libs/backend/server/agents/agent-services/main/src/index.ts"
       ],
-      "@opencrane/backend/audit": [
-        "./libs/backend/audit/main/src/index.ts"
+      "@opencrane/backend/server/agents/scheduling": [
+        "./libs/backend/server/agents/scheduling/main/src/index.ts"
       ],
-      "@opencrane/backend/awareness": [
-        "./libs/backend/awareness/main/src/index.ts"
+      "@opencrane/backend/server/agents/channel-targets": [
+        "./libs/backend/server/agents/channel-targets/main/src/index.ts"
       ],
-      "@opencrane/backend/cluster-tenants": [
-        "./libs/backend/cluster-tenants/main/src/index.ts"
+      "@opencrane/backend/server/agents/conversation-replay": [
+        "./libs/backend/server/agents/conversation-replay/main/src/index.ts"
       ],
-      "@opencrane/backend/company-docs": [
-        "./libs/backend/company-docs/main/src/index.ts"
+      "@opencrane/backend/server/agents/artifacts": [
+        "./libs/backend/server/agents/artifacts/main/src/index.ts"
       ],
-      "@opencrane/backend/connections": [
-        "./libs/backend/connections/main/src/index.ts"
+      "@opencrane/backend/artifacts/store": [
+        "./libs/backend/artifacts/store/main/src/index.ts"
       ],
-      "@opencrane/backend/contract": [
-        "./libs/backend/contract/main/src/index.ts"
+      "@opencrane/backend/artifacts/filesystem": [
+        "./libs/backend/artifacts/filesystem/main/src/index.ts"
       ],
-      "@opencrane/backend/grants": [
-        "./libs/backend/grants/main/src/index.ts"
+      "@opencrane/backend/artifacts/authorization": [
+        "./libs/backend/artifacts/authorization/main/src/index.ts"
       ],
-      "@opencrane/backend/groups": [
-        "./libs/backend/groups/main/src/index.ts"
+      "@opencrane/backend/artifacts/preprocessor": [
+        "./libs/backend/artifacts/preprocessor/main/src/index.ts"
       ],
-      "@opencrane/backend/mcp": [
-        "./libs/backend/mcp/main/src/index.ts"
+      "@opencrane/backend/server/api-spec": [
+        "./libs/backend/server/api-spec/main/src/index.ts"
       ],
-      "@opencrane/backend/metrics": [
-        "./libs/backend/metrics/main/src/index.ts"
+      "@opencrane/backend/server/iam/audit": [
+        "./libs/backend/server/iam/audit/main/src/index.ts"
       ],
-      "@opencrane/backend/model-routing": [
-        "./libs/backend/model-routing/main/src/index.ts"
+      "@opencrane/backend/server/iam/authorization": [
+        "./libs/backend/server/iam/authorization/main/src/index.ts"
       ],
-      "@opencrane/backend/policies": [
-        "./libs/backend/policies/main/src/index.ts"
+      "@opencrane/backend/server/tenancy/cluster-tenants": [
+        "./libs/backend/server/tenancy/cluster-tenants/main/src/index.ts"
       ],
-      "@opencrane/backend/projection": [
-        "./libs/backend/projection/main/src/index.ts"
+      "@opencrane/backend/agents/personal/configuration": [
+        "./libs/backend/agents/personal/configuration/main/src/index.ts"
       ],
-      "@opencrane/backend/providers": [
-        "./libs/backend/providers/main/src/index.ts"
+      "@opencrane/backend/server/iam/grants": [
+        "./libs/backend/server/iam/grants/main/src/index.ts"
       ],
-      "@opencrane/backend/retrieval": [
-        "./libs/backend/retrieval/main/src/index.ts"
+      "@opencrane/backend/server/iam/groups": [
+        "./libs/backend/server/iam/groups/main/src/index.ts"
       ],
-      "@opencrane/backend/sessions": [
-        "./libs/backend/sessions/main/src/index.ts"
+      "@opencrane/backend/server/gateways/mcp": [
+        "./libs/backend/server/gateways/mcp/main/src/index.ts"
       ],
-      "@opencrane/backend/skills": [
-        "./libs/backend/skills/main/src/index.ts"
+      "@opencrane/backend/server/iam/identity": [
+        "./libs/backend/server/iam/identity/main/src/index.ts"
       ],
-      "@opencrane/backend/spend": [
-        "./libs/backend/spend/main/src/index.ts"
+      "@opencrane/backend/server/gateways/integrations": [
+        "./libs/backend/server/gateways/integrations/main/src/index.ts"
       ],
-      "@opencrane/backend/tenants": [
-        "./libs/backend/tenants/main/src/index.ts"
+      "@opencrane/backend/server/iam/membership": [
+        "./libs/backend/server/iam/membership/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/personal/memory": [
+        "./libs/backend/agents/personal/memory/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/memory": [
+        "./libs/backend/agents/memory/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/gateways/model-routing": [
+        "./libs/backend/server/gateways/model-routing/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/personal/personas": [
+        "./libs/backend/agents/personal/personas/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/gateways/providers": [
+        "./libs/backend/server/gateways/providers/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/knowledge/retrieval": [
+        "./libs/backend/server/knowledge/retrieval/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/runs": [
+        "./libs/backend/agents/execution/runs/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/admission": [
+        "./libs/backend/agents/execution/admission/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/protocol": [
+        "./libs/backend/agents/execution/protocol/src/index.ts"
+      ],
+      "@opencrane/backend/server/agents/skills": [
+        "./libs/backend/server/agents/skills/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/execution/inputs": [
+        "./libs/backend/agents/execution/inputs/main/src/index.ts"
+      ],
+      "@opencrane/backend/server/reporting/spend": [
+        "./libs/backend/server/reporting/spend/main/src/index.ts"
+      ],
+      "@opencrane/backend/channel-proxy": [
+        "./libs/backend/channel-proxy/main/src/index.ts"
       ],
       "@opencrane/util": [
         "./libs/util/src/index.ts"
@@ -76,20 +115,62 @@
       "@opencrane/contracts": [
         "./libs/contracts/src/index.ts"
       ],
-      "@opencrane/observability": [
-        "./libs/observability/src/index.ts"
+      "@opencrane/models/agents": [
+        "./libs/models/agents/main/src/index.ts"
       ],
-      "@opencrane/infra/api": [
-        "./libs/infra/api/src/index.ts"
+      "@opencrane/models/artifacts": [
+        "./libs/models/artifacts/main/src/index.ts"
       ],
-      "@opencrane/infra/auth": [
-        "./libs/infra/auth/src/index.ts"
+      "@opencrane/models/authorization": [
+        "./libs/models/authorization/main/src/index.ts"
       ],
-      "@opencrane/infra/http": [
-        "./libs/infra/http/src/index.ts"
+      "@opencrane/backend/observability": [
+        "./libs/backend/observability/src/index.ts"
       ],
-      "@opencrane/observability/telemetry": [
-        "./libs/observability/src/telemetry.ts"
+      "@opencrane/backend/_server/api": [
+        "./libs/backend/_server/api/src/index.ts"
+      ],
+      "@opencrane/backend/_server/auth": [
+        "./libs/backend/_server/auth/src/index.ts"
+      ],
+      "@opencrane/backend/_server/agent-runtime-stream": [
+        "./libs/backend/_server/agent-runtime-stream/src/index.ts"
+      ],
+      "@opencrane/backend/_server/workload-identity": [
+        "./libs/backend/_server/workload-identity/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/k8s-launcher": [
+        "./libs/backend/agents/runtime/k8s-launcher/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/cleanup": [
+        "./libs/backend/agents/runtime/cleanup/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/k8s-launcher": [
+        "./libs/backend/agents/skills/k8s-launcher/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/execution": [
+        "./libs/backend/agents/skills/execution/main/src/index.ts"
+      ],
+      "@opencrane/backend/agents/skills/controller": [
+        "./libs/backend/agents/skills/controller/src/index.ts"
+      ],
+      "@opencrane/backend/agents/runtime/controller": [
+        "./libs/backend/agents/runtime/controller/src/index.ts"
+      ],
+      "@opencrane/backend/_server/http": [
+        "./libs/backend/_server/http/src/index.ts"
+      ],
+      "@opencrane/backend/_server/obot-custody": [
+        "./libs/backend/_server/obot-custody/src/index.ts"
+      ],
+      "@opencrane/backend/_server/sandbox-execution": [
+        "./libs/backend/_server/sandbox-execution/src/index.ts"
+      ],
+      "@opencrane/backend/_server/memory-gateway-client": [
+        "./libs/backend/_server/memory-gateway-client/src/index.ts"
+      ],
+      "@opencrane/backend/observability/telemetry": [
+        "./libs/backend/observability/src/telemetry.ts"
       ],
       "@opencrane/core": [
         "./libs/frontend/core/src/index.ts"
@@ -109,29 +190,14 @@
       "@opencrane/features/welcome": [
         "./libs/frontend/features/welcome/src/index.ts"
       ],
-      "@opencrane/features/customer-admin": [
-        "./libs/frontend/features/customer-admin/src/index.ts"
-      ],
       "@opencrane/features/tools": [
         "./libs/frontend/features/tools/src/index.ts"
-      ],
-      "@opencrane/features/workspace": [
-        "./libs/frontend/features/workspace/src/index.ts"
-      ],
-      "@opencrane/features/settings": [
-        "./libs/frontend/features/settings/src/index.ts"
-      ],
-      "@opencrane/features/conversation": [
-        "./libs/frontend/features/conversation/src/index.ts"
       ],
       "@opencrane/features/context": [
         "./libs/frontend/features/context/src/index.ts"
       ],
       "@opencrane/features/notifications": [
         "./libs/frontend/features/notifications/src/index.ts"
-      ],
-      "@opencrane/features/metrics": [
-        "./libs/frontend/features/metrics/src/index.ts"
       ],
       "@opencrane/state/core": [
         "./libs/frontend/state/core/src/index.ts"
@@ -142,14 +208,11 @@
       "@opencrane/state/conversation/adapter": [
         "./libs/frontend/state/conversation/adapter/src/index.ts"
       ],
-      "@opencrane/state/conversation/cache": [
-        "./libs/frontend/state/conversation/cache/src/index.ts"
-      ],
       "@opencrane/state/conversation/render": [
         "./libs/frontend/state/conversation/render/src/index.ts"
       ],
-      "@opencrane/state/settings/adapter": [
-        "./libs/frontend/state/settings/adapter/src/index.ts"
+      "@opencrane/state/conversation/ag-ui": [
+        "./libs/frontend/state/conversation/ag-ui/src/index.ts"
       ],
       "@opencrane/state/mcp/adapter": [
         "./libs/frontend/state/mcp/adapter/src/index.ts"
@@ -157,9 +220,8 @@
       "@opencrane/state/provider-key/adapter": [
         "./libs/frontend/state/provider-key/adapter/src/index.ts"
       ],
-      "@opencrane/state/tenant/adapter": [
-        "./libs/frontend/state/tenant/adapter/src/index.ts"
-      ],
+		"@opencrane/state/assets/adapter": ["./libs/frontend/state/assets/adapter/src/index.ts"],
+		"@opencrane/state/skills/adapter": ["./libs/frontend/state/skills/adapter/src/index.ts"],
       "@opencrane/state/onboarding": [
         "./libs/frontend/state/onboarding/src/index.ts"
       ],
@@ -171,25 +233,10 @@
   "files": [],
   "references": [
     {
-      "path": "./libs/frontend/features/customer-admin"
-    },
-    {
       "path": "./libs/frontend/features/notifications"
     },
     {
-      "path": "./libs/frontend/features/conversation"
-    },
-    {
-      "path": "./libs/frontend/features/workspace"
-    },
-    {
-      "path": "./libs/frontend/features/settings"
-    },
-    {
       "path": "./libs/frontend/features/context"
-    },
-    {
-      "path": "./libs/frontend/features/metrics"
     },
     {
       "path": "./libs/frontend/features/welcome"

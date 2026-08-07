@@ -1,132 +1,164 @@
-import type { Express } from "express";
-import * as k8s from "@kubernetes/client-node";
+import { Router, type Express } from "express";
 import type { PrismaClient } from "@prisma/client";
+import type * as k8s from "@kubernetes/client-node";
 
-import { accessTokensRouter } from "@opencrane/backend/access-tokens";
-import { aiBudgetRouter, tokenUsageRouter, spendRouter } from "@opencrane/backend/spend";
-import { auditRouter } from "@opencrane/backend/audit";
-import { groupsRouter } from "@opencrane/backend/groups";
-import { _RegisterInternalBundles, skillCatalogRouter, skillModelPostureRouter, OciBundleStore } from "@opencrane/backend/skills";
-import { _RegisterInternalTenantContract } from "@opencrane/backend/contract";
-import { _RegisterInternalTenantModels, modelRoutingDefaultsRouter, modelRoutingRecommendationsRouter, modelRoutingMetricsRouter, routingEvalCasesRouter, routingMeasurementsRouter, routingProposalsRouter, _BuildShadowSeams } from "@opencrane/backend/model-routing";
-import { _RegisterInternalParticipation, awarenessRolloutRouter, awarenessParticipationRouter } from "@opencrane/backend/awareness";
-import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/mcp";
-import { metricsRouter, prometheusMetricsRouter } from "@opencrane/backend/metrics";
-import { policiesRouter } from "@opencrane/backend/policies";
-import { providerKeysRouter, providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/providers";
-import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/grants";
-import { tenantsRouter } from "@opencrane/backend/tenants";
-import { thirdPartySourcesRouter } from "@opencrane/backend/retrieval";
-import { _BuildGatewayAdmin } from "@opencrane/backend/connections";
-import { _BuildDocMergeReconciler, companyDocsRouter } from "@opencrane/backend/company-docs";
-import { sessionsRouter } from "@opencrane/backend/sessions";
-import { _CheckDbHealth, _OpenapiRouter } from "@opencrane/infra/http";
-import { spec } from "../openapi/spec.js";
+import { aiBudgetRouter, tokenUsageRouter } from "@opencrane/backend/server/reporting/spend";
+import { auditRouter } from "@opencrane/backend/server/iam/audit";
+import { groupsRouter } from "@opencrane/backend/server/iam/groups";
+import { _IssueAttemptLiteLlmKey, modelRoutingDefaultsRouter } from "@opencrane/backend/server/gateways/model-routing";
+import { mcpOperatorRouter, mcpServersRouter } from "@opencrane/backend/server/gateways/mcp";
+import { _CreateIntegrationCustodyRouter } from "@opencrane/backend/server/gateways/integrations";
+import type { ObotAttemptKeyIssuer, ObotCustodyPort } from "@opencrane/backend/_server/obot-custody";
+import { providerCredentialsRouter, providerByokRouter, modelRegistryRouter } from "@opencrane/backend/server/gateways/providers";
+import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/iam/grants";
+import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
+import { spec } from "@opencrane/backend/server/api-spec";
+import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
+import { _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
+import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
+import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
+import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
+import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
+import { _CreateSelfRunStatusRouter } from "@opencrane/backend/agents/execution/runs";
+import { __CreatePersonalRunAdmissionRouter, type PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
+import { _CreateSkillCatalogueRouter } from "@opencrane/backend/server/agents/skills";
+import { _CreateSteeringIngestRouter } from "@opencrane/backend/agents/execution/protocol";
+import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
+import { _CheckDbHealth, _OpenapiRouter, _RateLimit } from "@opencrane/backend/_server/http";
+import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gateway-client";
+
+import type { InternalRuntimeConfig } from "./config.types.js";
+import { _log } from "./log.js";
+import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
+import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
 
 /**
- * Build the optional OCI (Zot) skill-bundle store from the environment.
+ * Register the authenticated product API from functional route lists.
  *
- * Returns null when `SKILL_OCI_REGISTRY_URL` is unset, in which case skill delivery
- * serves DB `content` only (today's behaviour). When set, publish dual-writes to the
- * store and delivery reads from it first, falling back to DB content (P4D.2 cutover).
+ * @param app - Public Express listener, already protected by browser-session authentication.
+ * @param prisma - Canonical product-authority database client.
+ * @param coreApi - Kubernetes client used only by the provider bring-your-own-key capability.
+ * @param runAdmission - Shared managed run-now and scheduler admission port.
+ * @param personalRunAdmission - Shared personal browser-run admission port.
+ * @param serverNamespace - Namespace in which provider Secrets are managed.
+ * @param obotCustody - Composed Obot custody authority (fail-closed adapter when Obot is off).
+ * @returns The configured public listener.
  */
-function _BuildOciBundleStore(): OciBundleStore | null
+export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
-  const registryUrl = process.env.SKILL_OCI_REGISTRY_URL?.trim();
-  if (!registryUrl)
-  {
-    return null;
-  }
-  return new OciBundleStore({ registryUrl, repository: process.env.SKILL_OCI_REPOSITORY?.trim() || "skills" });
+	const identityAndAccessRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
+		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
+		{ method: "use", path: "/api/v1/shares", handler: _CreateRateLimitedSharesRouter(prisma) },
+		{ method: "use", path: "/api/v1/resource-shares", handler: resourceSharesRouter(prisma) },
+	];
+	const agentRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/agent-services", handler: _CreateAgentServicesRouter(prisma, runAdmission, _log) },
+		{ method: "use", path: "/api/v1/skills", handler: _CreateSkillCatalogueRouter(prisma, _log) },
+	];
+	const personalWorkspaceRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/me/assets", handler: _CreatePersonalArtifactCatalogueRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/persona", handler: _CreatePersonaOnboardingRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/approvals", handler: _CreateDeferredToolApprovalRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: __CreatePersonalRunAdmissionRouter({ resolveCaller: _ResolveRequestPrincipal, admission: personalRunAdmission, logger: _log }) },
+		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSteeringIngestRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log) },
+	];
+	const gatewayRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },
+		{ method: "use", path: "/api/v1/mcp", handler: mcpOperatorRouter(prisma) },
+		{ method: "use", path: "/api/v1/integrations", handler: _CreateIntegrationCustodyRouter(prisma, obotCustody, _log) },
+		{ method: "use", path: "/api/v1/model-routing/defaults", handler: modelRoutingDefaultsRouter(prisma) },
+		{ method: "use", path: "/api/v1/providers/credentials", handler: providerCredentialsRouter(prisma) },
+		{ method: "use", path: "/api/v1/providers/byok", handler: providerByokRouter(prisma, coreApi, serverNamespace) },
+		{ method: "use", path: "/api/v1/models", handler: modelRegistryRouter(prisma) },
+	];
+	const knowledgeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/third-party-sources", handler: thirdPartySourcesRouter(prisma) },
+	];
+	const reportingRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/ai-budget", handler: aiBudgetRouter(prisma) },
+		{ method: "use", path: "/api/v1/token-usage", handler: tokenUsageRouter(prisma) },
+	];
+	const infrastructureRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/v1/openapi.json", handler: _OpenapiRouter(spec) },
+		{ method: "get", path: "/healthz", handler: _CheckDbHealth(prisma) },
+	];
+	_MountRouteAreas(app, [
+		identityAndAccessRoutes,
+		agentRoutes,
+		personalWorkspaceRoutes,
+		gatewayRoutes,
+		knowledgeRoutes,
+		reportingRoutes,
+		infrastructureRoutes,
+	]);
+	return app;
 }
 
 /**
- * Registers all API routes on the given Express application instance.
- * All business routes are namespaced under /api/v1/.
- * Infrastructure routes (/healthz, /prom) remain at the root.
+ * Composes the share authority behind the shared per-IP limiter before identity or database work.
  *
- * @param app       - Express application to register routes on.
- * @param prisma    - Prisma ORM client for database access in route handlers.
- * @param customApi - Kubernetes Custom Objects API client for tenant and policy management.
- * @param coreApi   - Kubernetes Core V1 API client for AI budget management.
- * @param authApi   - Kubernetes Authentication API for tenant contract TokenReview validation.
- * @returns The Express application instance with registered routes.
+ * The grants domain stays transport-agnostic; the OpenCrane app owns HTTP abuse protection.
+ *
+ * @param prisma - Canonical product-authority database client.
+ * @param options - Optional bounded limiter tuning for an isolated application test.
+ * @returns The protected sharing router.
  */
-/**
- * Mount the internal (`/api/internal/*`) routers. These MUST be registered BEFORE the
- * session `___AuthMiddleware` (see index.ts) — mounting them after it 401s every caller:
- *   - NetworkPolicy-only routes (`bundles`, `tenant-models`) take NO token; access is
- *     enforced at the network layer. The operator fetches `tenant-models` on its own
- *     reconcile hot path with no credential, so behind session auth it 401s → the model
- *     set is always null → replace-mode pods brick with an empty allowlist.
- *   - pod-identity routes (`contract`, `participation`) run their OWN TokenReview over a
- *     projected pod token, which the browser-session middleware cannot satisfy.
- * @see apps/opencrane-infra/templates/networkpolicy-planes.yaml — the runtime-plane policies.
- */
-export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api): void
+export function _CreateRateLimitedSharesRouter(prisma: PrismaClient, options?: SharesRouteOptions): Router
 {
-  // Optional OCI store for skill-bundle content (P4D.2); null → DB-only delivery.
-  const ociBundleStore = _BuildOciBundleStore();
-  app.use("/api/internal/bundles", _RegisterInternalBundles(prisma, ociBundleStore));
-  // NetworkPolicy-only (no auth/TokenReview): the operator fetches a tenant's
-  // allowed model set + effective default at reconcile. Best-effort — never 404/500.
-  app.use("/api/internal/tenant-models", _RegisterInternalTenantModels(prisma));
-  // Note: /api/internal/contract enforces per-tenant identity via TokenReview — not NetworkPolicy-only.
-  app.use("/api/internal/contract", _RegisterInternalTenantContract(prisma, authApi));
-  app.use("/api/internal/awareness/participation", _RegisterInternalParticipation(prisma, authApi));
+	const router = Router();
+	router.use(_RateLimit(options?.rateLimit));
+	router.use(sharesRouter(prisma));
+	return router;
 }
 
-export function _RegisterRoutes(app: Express, prisma: PrismaClient, customApi: k8s.CustomObjectsApi, coreApi: k8s.CoreV1Api, authApi: k8s.AuthenticationV1Api): Express
+/**
+ * Register the workload-facing API from explicit controller, runtime, worker, and replay lists.
+ *
+ * @param app - Internal Express listener, unreachable from the public ingress.
+ * @param prisma - Canonical product-authority database client.
+ * @param authApi - Kubernetes TokenReview client for workload identity.
+ * @param config - Frozen workload-facing configuration shared with workers and body parsing.
+ * @param memoryGateway - Process-wide authenticated memory-gateway client.
+ * @param obotAttemptKeys - Optional Obot attempt-key issuer composed by the app root; null disables direct invocation.
+ */
+export function _RegisterInternalRoutes(app: Express, prisma: PrismaClient, authApi: k8s.AuthenticationV1Api, config: InternalRuntimeConfig, memoryGateway: MemoryGatewayClient, obotAttemptKeys: ObotAttemptKeyIssuer | null = null): void
 {
-  // NOTE: the internal (`/api/internal/*`) routers are mounted separately by
-  // `_RegisterInternalRoutes`, which index.ts calls BEFORE `___AuthMiddleware` so the
-  // operator's tokenless reconcile fetch + the pod-identity TokenReview routes are not
-  // gated by the browser-session auth. Do NOT re-mount them here.
-  // Optional OCI store for skill-bundle content (P4D.2); null → DB-only delivery.
-  const ociBundleStore = _BuildOciBundleStore();
+	const runtime = _CreateInternalRuntimeComposition(prisma, authApi, config, memoryGateway, obotAttemptKeys);
+	const internalControllerRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.agentControllerRunDispatch },
+		{ method: "use", path: "/api/internal/agent-controller", handler: runtime.skillWorkloadDispatch },
+	];
+	const internalRuntimeRoutes: readonly RouteMount[] = [
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillWorkloadBootstrap },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringInput },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.skillAuthoringCompletion },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeBootstrap },
+		{ method: "use", path: "/api/internal/agent-runtime", handler: runtime.runtimeStream },
+	];
+	const internalWorkerRoutes = _OptionalRoute("/api/internal/artifact-preprocessor", runtime.artifactPreprocessor);
+	const internalReplayRoutes = _OptionalRoute("/api/internal/conversation-replay", runtime.conversationReplay);
+	_MountRouteAreas(app, [internalControllerRoutes, internalRuntimeRoutes, internalWorkerRoutes, internalReplayRoutes]);
+}
 
-  // Gateway admin for the connection kill-switch (CONN.5); no-op until a
-  // opencrane-ui operator device is paired (CONN.4 — needs live infra).
-  const gatewayAdmin = _BuildGatewayAdmin();
+/** Convert an optional capability router into a zero-or-one entry route list. */
+function _OptionalRoute(path: string, handler: Router | null): readonly RouteMount[]
+{
+	return handler === null ? [] : [{ method: "use", path, handler }];
+}
 
-  app.use("/api/v1/metrics", metricsRouter(customApi, prisma));
-  app.use("/api/v1/audit", auditRouter(prisma));
-  app.use("/api/v1/tenants", tenantsRouter(customApi, prisma, coreApi, gatewayAdmin));
-  app.use("/api/v1/policies", policiesRouter(customApi, prisma));
-  app.use("/api/v1/ai-budget", aiBudgetRouter(coreApi, prisma));
-  app.use("/api/v1/token-usage", tokenUsageRouter(prisma));
-  app.use("/api/v1/groups", groupsRouter(prisma));
-  app.use("/api/v1/mcp-servers", mcpServersRouter(prisma));
-  app.use("/api/v1/mcp", mcpOperatorRouter(prisma));
-  app.use("/api/v1/shares", sharesRouter(prisma));
-  app.use("/api/v1/resource-shares", resourceSharesRouter(prisma));
-  app.use("/api/v1/skills/catalog", skillCatalogRouter(prisma, ociBundleStore));
-  app.use("/api/v1/skills/posture", skillModelPostureRouter(prisma));
-  app.use("/api/v1/model-routing/defaults", modelRoutingDefaultsRouter(prisma));
-  app.use("/api/v1/model-routing/eval-cases", routingEvalCasesRouter(prisma));
-  app.use("/api/v1/model-routing/measurements", routingMeasurementsRouter(prisma, _BuildShadowSeams));
-  app.use("/api/v1/model-routing/proposals", routingProposalsRouter(prisma));
-  app.use("/api/v1/model-routing/recommendations", modelRoutingRecommendationsRouter(prisma));
-  app.use("/api/v1/model-routing/metrics", modelRoutingMetricsRouter(prisma));
-  app.use("/api/v1/third-party-sources", thirdPartySourcesRouter(prisma));
-  app.use("/api/v1/org/workspace-docs", companyDocsRouter(prisma, _BuildDocMergeReconciler()));
-  // NOTE: the fleet / super-admin surfaces — ClusterTenant lifecycle, billing accounts, org
-  // membership, platform DNS, and Zitadel administration — have moved to the cluster-wide
-  // fleet-manager (Stage 4). The silo keeps ClusterTenant + OrgMembership as local READ-MODELS
-  // (for per-org login + the org-admin gate) but no longer SERVES their management API.
-  app.use("/api/v1/awareness/rollout", awarenessRolloutRouter(prisma));
-  app.use("/api/v1/awareness/participation", awarenessParticipationRouter(prisma));
-  app.use("/api/v1/sessions", sessionsRouter(prisma));
-  app.use("/api/v1/spend", spendRouter(prisma));
-  app.use("/api/v1/access-tokens", accessTokensRouter(prisma));
-  app.use("/api/v1/providers/keys", providerKeysRouter(prisma));
-  app.use("/api/v1/providers/credentials", providerCredentialsRouter(prisma));
-  // BYOK raw-key path — writes the silo's provider key Secret in the operator's own namespace
-  // (POD_NAMESPACE, downward-API populated; "default" fallback mirrors config._readOwnNamespace).
-  app.use("/api/v1/providers/byok", providerByokRouter(prisma, coreApi, process.env.POD_NAMESPACE?.trim() || "default"));
-  app.use("/api/v1/models", modelRegistryRouter(prisma));
-  app.use("/api/v1/openapi.json", _OpenapiRouter(spec));
-  app.get("/healthz", _CheckDbHealth(prisma));
-  app.use("/prom", prometheusMetricsRouter(prisma, customApi));
-  return app;
+/** Mount route areas in declaration order so neighbouring routers can intentionally share a path. */
+function _MountRouteAreas(app: Express, areas: readonly (readonly RouteMount[])[]): void
+{
+	for (const area of areas)
+	{
+		for (const route of area)
+		{
+			if (route.method === "get") app.get(route.path, route.handler);
+			else app.use(route.path, route.handler);
+		}
+	}
 }

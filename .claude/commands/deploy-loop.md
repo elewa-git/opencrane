@@ -10,7 +10,7 @@ knowledge.** Each phase spends the cheapest resource that can do the job.
 
 Target from the caller: **$ARGUMENTS** (env defaults to `dev`, profile to `fleet` —
 `apps/fleet-platform/deploy.sh`; `clustertenant` means
-`apps/opencrane-infra/deploy.sh`).
+`apps/_infra/deploy-k8s/deploy.sh`).
 
 ## Phase 0 — preflight (main session, no subagents)
 
@@ -25,7 +25,7 @@ Target from the caller: **$ARGUMENTS** (env defaults to `dev`, profile to `fleet
 ## Phase 1 — deploy run (the `deploy` agent)
 
 Spawn ONE `deploy` agent with: env, profile, extra flags, the relevant ledger
-lessons, and the values preset to use (`libs/k8s-platform/values/opencrane-dev.yaml`
+lessons, and the values preset to use (`apps/_infra/deploy-k8s/platform/values/opencrane-dev.yaml`
 for dev unless the caller said otherwise). It deploys via the scripts, verifies
 liveness, and returns the structured run report (RUN/OUTCOME/TIMELINE/FINDINGS/
 FRICTION/LEDGER).
@@ -76,14 +76,14 @@ already answers.
 
 ## Phase 4 — docs run (script finds gaps, `website` agent closes them)
 
-1. Run `scripts/config-docs-coverage.sh` (zero-token gap list: every values key vs
-   the website docs corpus).
+1. Run `scripts/config-docs-coverage.sh --strict`. It checks the explicit contract of public
+   umbrella inputs: every top-level values key is classified as an operator input, an app-forwarded
+   value, or an internal chart value, and each operator input names its documentation.
 2. If gaps exist, delegate to the `website` agent: document the **top-level section
-   with the most undocumented keys** (one coherent batch per run, not all 500 —
-   sustainable beats heroic), in the operators section — fleet-profile keys on the
-   fleet/silo pages, single-cluster keys on the silo-deployment page, shared-core
-   keys in a configuration reference both link to. The website agent builds to
-   validate links as usual.
+   with the missing operator inputs** (one coherent batch per run, not all 500 —
+   sustainable beats heroic), in the operators section. Do not document forwarded or internal keys
+   merely to silence the check: classify them with their owning app or chart instead. The website
+   agent builds to validate links as usual.
 3. Anything the deploy run itself proved about configuration behaviour (a flag's real
    default, an ordering constraint) goes to the website agent as ground truth to
    include — deploy evidence is the best documentation source there is.
@@ -97,6 +97,6 @@ already answers.
 3. Final report to the user: outcome, findings table (class → destination link),
    simplification counters that moved, docs coverage delta, and open design questions.
 
-Recurring use: run `/deploy-loop` after merges that touch `apps/*/deploy.sh`,
-`libs/k8s-platform/`, or either chart — or on a cadence via `/loop`. The ledger makes
+Recurring use: run `/deploy-loop` after merges that touch an app-owned `deploy.sh`,
+`apps/_infra/deploy-k8s/platform/`, or either chart — or on a cadence via `/loop`. The ledger makes
 each run start smarter than the last; keep it terse so that stays cheap.

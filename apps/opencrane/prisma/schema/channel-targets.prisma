@@ -1,0 +1,49 @@
+enum ChannelInvocationAction {
+  CommandForward @map("command.forward")
+  EventsRead     @map("events.read")
+}
+
+/// Controller-registered exact endpoint for one AgentService channel operation. The
+/// resolver never derives a Service DNS name or path from identifiers.
+model ChannelRuntimeRoute {
+  id                 String                  @id @default(cuid())
+  siloId             String                  @map("silo_id")
+  agentServiceId     String                  @map("agent_service_id")
+  action             ChannelInvocationAction
+  endpoint           String
+  isCurrent          Boolean                 @default(true) @map("is_current")
+  registeredAt       DateTime                @default(now()) @map("registered_at")
+  expiresAt          DateTime                @map("expires_at")
+  revokedAt          DateTime?               @map("revoked_at")
+  invocationContexts ChannelInvocationContext[]
+
+  @@unique([id, siloId, agentServiceId, action], map: "channel_runtime_routes_exact_target_key")
+  @@index([siloId, agentServiceId, action, isCurrent, expiresAt], map: "channel_runtime_routes_current_lookup_idx")
+  @@map("channel_runtime_routes")
+}
+
+/// Digest-only one-time authorization context. The opaque bearer value is returned once
+/// to channel-proxy and is never stored; the runtime PEP consumes it online by digest.
+model ChannelInvocationContext {
+  id                  String                  @id @default(cuid())
+  digest              String                  @unique
+  subjectId           String                  @map("subject_id")
+  siloId              String                  @map("silo_id")
+  threadId            String                  @map("thread_id")
+  agentServiceId      String                  @map("agent_service_id")
+  action              ChannelInvocationAction
+  routeId             String                  @map("route_id")
+  runId               String?                 @map("run_id")
+  membershipRevision  Int                     @map("membership_revision")
+  authorizationDigest String                  @map("authorization_digest")
+  expiresAt           DateTime                @map("expires_at")
+  consumedAt          DateTime?               @map("consumed_at")
+  revokedAt           DateTime?               @map("revoked_at")
+  createdAt           DateTime                @default(now()) @map("created_at")
+  route               ChannelRuntimeRoute     @relation(fields: [routeId, siloId, agentServiceId, action], references: [id, siloId, agentServiceId, action], onDelete: Restrict)
+
+  @@index([digest, expiresAt], map: "channel_invocation_contexts_digest_expiry_idx")
+  @@index([routeId, expiresAt], map: "channel_invocation_contexts_route_expiry_idx")
+  @@index([subjectId, siloId, threadId, createdAt], map: "channel_invocation_contexts_subject_thread_idx")
+  @@map("channel_invocation_contexts")
+}

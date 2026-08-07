@@ -1,0 +1,19 @@
+import type { PrismaClient } from "@prisma/client";
+
+export class WidgetService
+{
+	private readonly prisma: PrismaClient;
+
+	constructor(prisma: PrismaClient)
+	{
+		this.prisma = prisma;
+	}
+
+	async execute(): Promise<unknown>
+	{
+		return this.prisma.$transaction(async function _Run(transaction)
+		{
+			return transaction.widget.findFirst({});
+		});
+	}
+}

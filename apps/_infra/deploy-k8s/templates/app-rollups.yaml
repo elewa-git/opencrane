@@ -1,0 +1,55 @@
+{{- $skillAuthoring := index .Values "opencrane-skill-authoring" -}}
+{{- $toolRunner := index .Values "opencrane-tool-runner" -}}
+{{- if eq $skillAuthoring.skillAuthoring.namespace $toolRunner.toolRunner.namespace -}}
+{{- fail "skill-authoring and tool-runner namespaces must remain distinct" -}}
+{{- end -}}
+{{- if .Values.agentController.enabled -}}
+{{- $managedEgress := .Values.managedAgentRuntimePlane.managedAgentRuntime.egress -}}
+{{- if ne (int $managedEgress.channelProxyPort) (int .Values.channelProxy.service.port) -}}
+{{- fail "managed runtime channelProxyPort must match channelProxy.service.port" -}}
+{{- end -}}
+{{- if ne (int $managedEgress.artifactServicePort) (int .Values.artifactService.service.port) -}}
+{{- fail "managed runtime artifactServicePort must match artifactService.service.port" -}}
+{{- end -}}
+{{- end -}}
+{{ include "opencrane.server.certificate" . }}
+---
+{{ include "opencrane.server.deployment" . }}
+---
+{{ include "opencrane.server.ingress" . }}
+---
+{{ include "opencrane.server.rbac" . }}
+---
+{{ include "opencrane.server.service" . }}
+---
+{{ include "opencrane.server.networkPolicy" . }}
+---
+{{ include "opencrane.ui.deployment" . }}
+---
+{{ include "opencrane.ui.service" . }}
+---
+{{ include "opencrane.channelProxy.resources" . }}
+---
+{{ include "opencrane.memoryGateway.resources" . }}
+---
+{{ include "opencrane.artifactService.resources" . }}
+---
+{{ include "opencrane.artifactPreprocessor.resources" . }}
+---
+{{ include "opencrane.agentController.resources" . }}
+---
+{{ include "opencrane.cognee.resources" . }}
+---
+{{ include "opencrane.litellm.secret" . }}
+---
+{{ include "opencrane.litellm.deployment" . }}
+---
+{{ include "opencrane.litellm.service" . }}
+---
+{{ include "opencrane.obot.rbac" . }}
+---
+{{ include "opencrane.obot.deployment" . }}
+---
+{{ include "opencrane.obot.service" . }}
+---
+{{ include "opencrane.obot.networkPolicy" . }}

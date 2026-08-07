@@ -1,35 +1,49 @@
-# @opencrane/platform
+# @opencrane/platform — the web/desktop runtime seam
 
-The **web/desktop seam**. Defines an abstract `PlatformBridge` for capabilities
-that differ by runtime, so features stay platform-agnostic.
+> [frontend](../README.md) › platform
 
-## Import
+## What it owns
 
-```ts
-import { PLATFORM_BRIDGE, PlatformBridge, provideWebPlatform } from "@opencrane/platform";
+This is a frontend **platform** package: the seam that isolates the one difference between running
+in a browser and running in a future desktop shell. Some capabilities only exist on the desktop —
+for example, picking a local folder from the native filesystem. Rather than let feature code branch
+on "am I on desktop?", this package defines an abstract `PlatformBridge` interface, and features
+program against that. Each app supplies the concrete implementation.
+
+That indirection is the whole point: the web app binds the browser implementation, where
+desktop-only methods report as unsupported; a future desktop app binds an Electron- or Tauri-backed
+one — and **no feature code changes** either way.
+
+```
+ feature  ──inject(PLATFORM_BRIDGE)──►  PlatformBridge (interface)  ◄── HERE
+                                              ▲
+                        ┌─────────────────────┴─────────────────────┐
+                  WebPlatformBridge                      (future) DesktopBridge
+                  provideWebPlatform()  ← apps/opencrane-ui           Electron/Tauri
 ```
 
-## Contents
+Invariant: this is the **only** place native or runtime APIs (Electron, Tauri, Node `fs`, `window`)
+may appear. Keep them out of features, and the frontend stays portable across shells.
 
-- `platform-bridge.types.ts` — `PlatformBridge` interface (`isDesktop`,
-  `bindFolder(projectId)`, …) and `BoundFolder`.
-- `platform-bridge.token.ts` — `PLATFORM_BRIDGE` injection token.
-- `web-platform-bridge.ts` — `WebPlatformBridge` + `provideWebPlatform()`.
-  Desktop-only methods reject as unsupported on the web.
+## Public surface
 
-## Usage
+- `PlatformBridge` — the runtime-capability interface (`isDesktop`, `bindFolder(projectId)`) and its
+  `BoundFolder` result type.
+- `PLATFORM_BRIDGE` — the injection token features depend on.
+- `provideWebPlatform()` — binds `WebPlatformBridge` (desktop-only methods reject as unsupported).
 
-Features inject the token and program against the interface:
+## Boundary
 
-```ts
-private readonly platform = inject(PLATFORM_BRIDGE);
-// this.platform.isDesktop, await this.platform.bindFolder(projectId)
-```
+Consumed by feature packages (which inject the token) and by `apps/opencrane-ui` (which provides the
+web implementation). It holds only the seam — no domain logic, no UI.
 
-`apps/web` provides `provideWebPlatform()`. A future `apps/desktop` provides an
-Electron/Tauri-backed implementation — **no feature code changes.**
+## Dependency direction
 
-## Dependencies
+Tagged `scope:web` (the frontend dependency tier): it may import only other `scope:web` packages
+and `scope:shared` contracts. In practice it depends on `@angular/core` alone and no other
+`@opencrane` package.
 
-`@angular/core` only. Depends on no other `@opencrane` lib. This is the **only**
-place native/runtime APIs (Electron, Tauri, Node `fs`, `window`) may appear.
+## See also
+
+- Parent index: [frontend](../README.md)
+- Foundation: [core](../core/README.md)

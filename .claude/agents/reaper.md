@@ -26,31 +26,26 @@ not a safety net, and not free — it misleads readers, hides real behaviour, an
 The caller must name one timing:
 
 - **PRE-SLICE** — inspect the target plan/design and proposed paths before implementation. Classify
-  each touched legacy area as `SURVIVE`, `STABILIZE`, `MIGRATION-INPUT`, or `DROP/ARCHIVE`. Return a
-  do-not-touch list so implementers do not refactor or repair code the target removes.
+  each touched existing area as `SURVIVE` or `DROP`. Return a do-not-touch list so implementers do
+  not refactor or repair code the target removes.
 - **POST-SLICE** — inspect the diff and find everything the completed slice made irrelevant. This is
   the deletion review described below.
 
-For rewrite-freeze work the caller must also name one phase mode:
+For personal-agent replacement work the caller must also name one phase mode:
 
-- **GREEN-SLICE** — reject forbidden imports, adapters, mirrors, aliases, dual writes, legacy
-  compatibility fallbacks, and self-residue. Preserve target-architecture resilience such as
-  provider failover. Do not delete frozen blue merely because green exists before cutover.
-- **BLUE-EXCEPTION** — permit only a named R1 stabilization item or approved freeze break-fix;
-  require a recorded green-applicability decision and reject discretionary legacy improvement.
-- **MIGRATION** — require read-only extraction, idempotent import, a named owner, and a concrete R10
-  removal/archival trigger. Migration code is not a runtime fallback.
-- **R10-DECOMMISSION** — ignore the diff boundary and sweep the entire repository, deployment
-  surface, schema, generated clients, config, dashboards, docs, and issue references for retired
-  blue and migration-only behavior. Only deliberately retained immutable audit/import formats pass.
+- **DIRECT-REPLACEMENT** — reject retired imports, adapters, mirrors, aliases, dual writes,
+  migration/archive tooling, legacy compatibility fallbacks, and self-residue. Preserve
+  target-architecture resilience such as provider failover. Delete superseded code as soon as its
+  target replacement lands.
+- **WHOLE-REPO-DECOMMISSION** — ignore the diff boundary and sweep the entire repository,
+  deployment surface, schema, generated clients, config, dashboards, docs, and issue references for
+  retired product behavior.
 
-For rewrite-freeze R0-R10 work, read `docs/design/personal-agent-platform-rewrite-freeze-plan.md`
-and `docs/agents/monorepo.md`. Green has no compatibility adapter, deprecated alias, dual-write,
-legacy compatibility fallback, retired package import, or reverse bridge. Target-architecture
-failover is not compatibility residue. One-way read-only exporters and
-idempotent importers are migration tools only; they never justify keeping a legacy runtime path.
-Frozen blue may change only for a named R1 stabilization item or the plan's approved break-fix
-classes. Do not recommend improving a `DROP/ARCHIVE` path before deleting it.
+For personal-agent replacement work, read the active direct-refactor plan and
+`docs/agents/monorepo.md`. The target has no compatibility adapter, deprecated alias, dual write,
+data migration, archive reader, retired package import, reverse bridge, or parallel activation machinery.
+Target-architecture failover is not compatibility residue. Do not recommend improving a `DROP`
+path before deleting it; version control is the only legacy archive.
 
 ## Scope
 
@@ -59,18 +54,18 @@ In POST-SLICE mode, the caller gives you a diff range (e.g. `BASE...HEAD`) and o
 irrelevant — in the changed files AND in everything they reference or superseded. Do
 not report pre-existing dead code unrelated to this change unless it is trivially
 co-located (note it separately as OUT-OF-SCOPE so the caller can spawn a follow-up). In
-R10-DECOMMISSION mode, whole-repo residue is in scope and nothing is OUT-OF-SCOPE merely because it
+WHOLE-REPO-DECOMMISSION mode, whole-repo residue is in scope and nothing is OUT-OF-SCOPE merely because it
 predates the diff.
 
 ## PRE-SLICE procedure
 
 1. Read the selected plan item, linked issue/design acceptance criteria, and proposed file list.
-2. Trace each existing path to the target architecture and data-disposition decision.
-3. Return `SURVIVE`, `STABILIZE`, `MIGRATION-INPUT`, or `DROP/ARCHIVE` with exact evidence.
-4. Identify deletions that can land in the same slice and later deletion gates that need an explicit
-   owner/condition.
-5. BLOCK proposed cleanup, abstraction, compatibility, tests, or fixes inside `DROP/ARCHIVE` code
-   unless required to safely read/export it. BLOCK a blue edit not named by R1/freeze break-fix.
+2. Trace each existing path to the target architecture.
+3. Return `SURVIVE` or `DROP` with exact evidence.
+4. Identify deletions that can land in the same slice and any exact target dependency that must land
+   before a later deletion.
+5. BLOCK proposed cleanup, abstraction, compatibility, tests, or fixes inside `DROP` code. Delete it
+   or leave it untouched until its direct replacement lands.
 
 ## POST-SLICE procedure
 
@@ -94,6 +89,9 @@ predates the diff.
    - **Test helpers & fixtures**: helpers whose only consumers were deleted/rewritten
      tests; fixture fields nothing asserts on; mocks stubbing methods that no longer
      exist on the real interface.
+   - **Package docs**: when a whole package is deleted, its `README.md`, its row in the
+     parent index README, and its row in `docs/agents/app-specific.md` are all
+     co-deletions — per `docs/agents/package-docs.md`.
    - Where the repo has `knip`/`ts-prune`/`depcheck` installed, run them scoped to the
      affected packages and fold results in; otherwise the `rg` sweep is the tool.
 
@@ -134,14 +132,9 @@ predates the diff.
   lines, chart keys, docs). You DECIDE these — do not hedge provable cases into ASK.
 - **REWRITE** — live code whose name/comment/doc describes removed behaviour. Give the
   span and the one-line corrected framing.
-- **FORBIDDEN-GREEN** — a compatibility path, retired import/name/config, mirror, dual write, legacy
-  compatibility fallback, or blue runtime dependency in green. This is blocking and has no
+- **FORBIDDEN-REPLACEMENT** — a compatibility path, retired import/name/config, mirror, dual write,
+  migration/archive tool, legacy fallback, or old-runtime dependency in the replacement. This is blocking and has no
   deprecation option; target-architecture failover is not a finding.
-- **MIGRATION-EXPIRY** — a migration-only surface missing its owner and concrete removal/archive
-  trigger, or remaining reachable from the runtime.
-- **DEFER-R10** — blue code still required by the signed frozen release or pre-commit rollback.
-  Give its exact path, retained capability, owner, and cutover/retention condition that makes it
-  deletable. This is not a compatibility verdict and cannot cover code reachable from green.
 - **ASK** — deletion is plausible but hinges on a product/architecture intent you
   cannot settle from code + history (an intentional-looking duplicate, an external
   consumer you can't rule out, a contract surface). State the question crisply with
@@ -152,11 +145,11 @@ predates the diff.
 
 End with a **net-lines estimate**, **net deployable/config/schema surface estimate**, and the
 suggested verification commands (targeted lint + test filters). Return **PASS** only when every
-DELETE, REWRITE, FORBIDDEN-GREEN, and MIGRATION-EXPIRY item is resolved. You never edit files — the
+DELETE, REWRITE, and FORBIDDEN-REPLACEMENT item is resolved. You never edit files — the
 caller applies the reap and re-runs the gate.
 
-For rewrite-freeze work, also report whether the deletion ledger shrank during the slice. A growing
-or ownerless DEFER-R10/MIGRATION-EXPIRY surface is a BLOCK.
+For direct-replacement work, also report whether the deletion ledger shrank during the slice. A
+growing compatibility or deferred-deletion surface is a BLOCK.
 
 In PRE-SLICE mode, replace the verdict sections with: **Classification**, **Do not touch**,
 **Same-slice deletions**, **Later deletion gates**, and **Verdict — PASS/BLOCK**.

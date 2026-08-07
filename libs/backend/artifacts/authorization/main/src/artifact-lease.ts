@@ -1,0 +1,124 @@
+import { createPrivateKey, createPublicKey, sign, verify } from "node:crypto";
+
+import { ___CanonicalizeJson, ___ParseAndValidateJson } from "@opencrane/util";
+
+import { __IsSafeArtifactMediaType } from "./artifact-media-type.js";
+import type { ArtifactPromotionReceiptClaims, ArtifactReadLeaseClaims, ArtifactWriteLeaseClaims } from "./artifact-lease.types.js";
+
+const _LEASE_AUDIENCE = "artifact-service";
+const _LEASE_TYPE = "opencrane.artifact-write-lease";
+const _READ_LEASE_TYPE = "opencrane.artifact-read-lease";
+const _RECEIPT_AUDIENCE = "opencrane";
+const _RECEIPT_TYPE = "opencrane.artifact-promotion-receipt";
+
+/** Sign one exact short-lived artifact write lease with an OpenCrane Ed25519 private key. */
+export function __SignArtifactWriteLease(claims: ArtifactWriteLeaseClaims, privateKeyPem: string, nowEpochSeconds: number): string
+{
+	if (!_isLease(claims, nowEpochSeconds)) throw new Error("invalid artifact write lease claims");
+	return _sign({ typ: _LEASE_TYPE, aud: _LEASE_AUDIENCE, iat: nowEpochSeconds, ...claims }, privateKeyPem);
+}
+
+/** Verify an artifact-service lease before any byte staging begins. */
+export function __VerifyArtifactWriteLease(compact: string, publicKeyPem: string, nowEpochSeconds: number): ArtifactWriteLeaseClaims | null
+{
+	const payload = _verify(compact, publicKeyPem);
+	const issuedAt = payload?.iat;
+	if (payload === null || payload.typ !== _LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds + 300) return null;
+	const claims = _leaseFromPayload(payload);
+	return claims !== null && _isLease(claims, nowEpochSeconds) ? claims : null;
+}
+
+/** Sign one exact short-lived immutable artifact read lease with an OpenCrane Ed25519 private key. */
+export function __SignArtifactReadLease(claims: ArtifactReadLeaseClaims, privateKeyPem: string, nowEpochSeconds: number): string
+{
+	if (!_isReadLease(claims, nowEpochSeconds)) throw new Error("invalid artifact read lease claims");
+	return _sign({ typ: _READ_LEASE_TYPE, aud: _LEASE_AUDIENCE, iat: nowEpochSeconds, ...claims }, privateKeyPem);
+}
+
+/** Verify an artifact-service read lease before canonical bytes leave its mounted store. */
+export function __VerifyArtifactReadLease(compact: string, publicKeyPem: string, nowEpochSeconds: number): ArtifactReadLeaseClaims | null
+{
+	const payload = _verify(compact, publicKeyPem);
+	const issuedAt = payload?.iat;
+	if (payload === null || payload.typ !== _READ_LEASE_TYPE || payload.aud !== _LEASE_AUDIENCE || typeof issuedAt !== "number" || !Number.isSafeInteger(issuedAt) || issuedAt < nowEpochSeconds - 300 || issuedAt > nowEpochSeconds) return null;
+	const claims = _readLeaseFromPayload(payload);
+	return claims !== null && _isReadLease(claims, issuedAt) && claims.expiresAtEpochSeconds > nowEpochSeconds ? claims : null;
+}
+
+/** Sign promotion facts with the service's distinct Ed25519 receipt key. */
+export function __SignArtifactPromotionReceipt(claims: ArtifactPromotionReceiptClaims, privateKeyPem: string): string
+{
+	if (!_isReceipt(claims)) throw new Error("invalid artifact promotion receipt claims");
+	return _sign({ typ: _RECEIPT_TYPE, aud: _RECEIPT_AUDIENCE, ...claims }, privateKeyPem);
+}
+
+/** Verify a receipt before OpenCrane consumes its durable promotion digest. */
+export function __VerifyArtifactPromotionReceipt(compact: string, publicKeyPem: string): ArtifactPromotionReceiptClaims | null
+{
+	const payload = _verify(compact, publicKeyPem);
+	if (payload === null || payload.typ !== _RECEIPT_TYPE || payload.aud !== _RECEIPT_AUDIENCE) return null;
+	const claims = _receiptFromPayload(payload);
+	return claims !== null && _isReceipt(claims) ? claims : null;
+}
+
+/** Build and sign strict compact JWS JSON without accepting arbitrary algorithms. */
+function _sign(payload: Record<string, unknown>, privateKeyPem: string): string
+{
+	const header = Buffer.from(___CanonicalizeJson({ alg: "EdDSA", typ: "JWT" } as never)).toString("base64url");
+	const body = Buffer.from(___CanonicalizeJson(payload as never)).toString("base64url");
+	const signingInput = `${header}.${body}`;
+	return `${signingInput}.${sign(null, Buffer.from(signingInput), createPrivateKey(privateKeyPem)).toString("base64url")}`;
+}
+
+/** Verify Ed25519 JWS signatures and parse only object payloads. */
+function _verify(compact: string, publicKeyPem: string): Record<string, unknown> | null
+{
+	const parts = compact.split(".");
+	if (parts.length !== 3 || parts.some(part => !/^[A-Za-z0-9_-]+$/u.test(part))) return null;
+	try
+	{
+		const header = ___ParseAndValidateJson(Buffer.from(parts[0], "base64url").toString("utf8"), "artifact JWS protected header", _ObjectPayload);
+		if (header.alg !== "EdDSA" || header.typ !== "JWT" || !verify(null, Buffer.from(`${parts[0]}.${parts[1]}`), createPublicKey(publicKeyPem), Buffer.from(parts[2], "base64url"))) return null;
+		return ___ParseAndValidateJson(Buffer.from(parts[1], "base64url").toString("utf8"), "artifact JWS payload", _ObjectPayload);
+	}
+	catch { return null; }
+}
+
+/** Require one decoded JWS component to be a non-array object. */
+function _ObjectPayload(value: unknown): Record<string, unknown>
+{
+	if (typeof value !== "object" || value === null || Array.isArray(value)) throw new Error("artifact JWS component must be an object");
+	return value as Record<string, unknown>;
+}
+
+function _leaseFromPayload(value: Record<string, unknown>): ArtifactWriteLeaseClaims | null
+{
+	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.artifactId === "string" && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && (typeof value.expectedContentAddress === "string" || value.expectedContentAddress === null) && (Number.isSafeInteger(value.expectedByteLength) || value.expectedByteLength === null) && typeof value.mediaType === "string" ? value as unknown as ArtifactWriteLeaseClaims : null;
+}
+
+/** Parse only the exact immutable-read claim shape from a verified JWS payload. */
+function _readLeaseFromPayload(value: Record<string, unknown>): ArtifactReadLeaseClaims | null
+{
+	return typeof value.leaseId === "string" && typeof value.siloId === "string" && typeof value.artifactId === "string" && typeof value.artifactRevisionId === "string" && typeof value.contentAddress === "string" && Number.isSafeInteger(value.byteLength) && typeof value.mediaType === "string" && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) ? value as unknown as ArtifactReadLeaseClaims : null;
+}
+
+function _receiptFromPayload(value: Record<string, unknown>): ArtifactPromotionReceiptClaims | null
+{
+	return typeof value.leaseId === "string" && typeof value.contentAddress === "string" && Number.isSafeInteger(value.byteLength) && typeof value.mediaType === "string" && Number.isSafeInteger(value.issuedAtEpochSeconds) ? value as unknown as ArtifactPromotionReceiptClaims : null;
+}
+
+function _isLease(value: ArtifactWriteLeaseClaims, now: number): boolean
+{
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.action === "artifact.write" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && (value.expectedContentAddress === null || /^sha256:[0-9a-f]{64}$/u.test(value.expectedContentAddress)) && (value.expectedByteLength === null || (Number.isSafeInteger(value.expectedByteLength) && value.expectedByteLength >= 0)) && __IsSafeArtifactMediaType(value.mediaType);
+}
+
+/** Validate every immutable coordinate before an artifact read lease can be signed or accepted. */
+function _isReadLease(value: ArtifactReadLeaseClaims, now: number): boolean
+{
+	return value.leaseId.trim().length > 0 && value.siloId.trim().length > 0 && value.artifactId.trim().length > 0 && value.artifactRevisionId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && __IsSafeArtifactMediaType(value.mediaType) && value.action === "artifact.read" && Number.isSafeInteger(value.expiresAtEpochSeconds) && value.expiresAtEpochSeconds > now && value.expiresAtEpochSeconds <= now + 300;
+}
+
+function _isReceipt(value: ArtifactPromotionReceiptClaims): boolean
+{
+	return value.leaseId.trim().length > 0 && /^sha256:[0-9a-f]{64}$/u.test(value.contentAddress) && Number.isSafeInteger(value.byteLength) && value.byteLength >= 0 && __IsSafeArtifactMediaType(value.mediaType) && Number.isSafeInteger(value.issuedAtEpochSeconds) && value.issuedAtEpochSeconds >= 0;
+}

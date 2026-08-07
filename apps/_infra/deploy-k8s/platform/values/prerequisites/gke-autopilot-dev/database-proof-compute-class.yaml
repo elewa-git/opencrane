@@ -1,0 +1,24 @@
+apiVersion: cloud.google.com/v1
+kind: ComputeClass
+metadata:
+  name: opencrane-database-proof
+  labels:
+    app.kubernetes.io/managed-by: opencrane-prerequisite-bootstrap
+    app.kubernetes.io/part-of: opencrane
+  annotations:
+    opencrane.ai/prerequisite-profile: gke-autopilot-dev
+spec:
+  autopilot:
+    enabled: true
+  priorities:
+    - machineType: e2-small
+      # The proof Job requests 3 GiB total ephemeral storage. Ten GiB is GKE's supported
+      # minimum boot disk and fits this short-lived node within the small dev SSD quota. A
+      # podFamily is intentionally not used: GKE permits boot-disk tuning only for a concrete
+      # machine type or family.
+      storage:
+        bootDiskType: pd-balanced
+        bootDiskSize: 10
+  # Unlike GKE's built-in autopilot ComputeClass, scale when the proof Job has no existing
+  # placement. This class is selected only by that bounded, one-shot Job.
+  whenUnsatisfiable: ScaleUpAnyway

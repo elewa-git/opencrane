@@ -1,0 +1,11 @@
+{
+  "name": "backend-agents-runtime-k8s-launcher",
+  "$schema": "../../../../../node_modules/nx/schemas/project-schema.json",
+  "projectType": "library",
+  "sourceRoot": "libs/backend/agents/runtime/k8s-launcher/src",
+  "tags": ["type:lib", "layer:infra", "scope:agent-runtime-launcher"],
+  "targets": {
+    "lint": { "executor": "nx:run-commands", "options": { "command": "tsc -p tsconfig.json --noEmit", "cwd": "libs/backend/agents/runtime/k8s-launcher" } },
+    "test": { "executor": "nx:run-commands", "options": { "command": "vitest run --passWithNoTests", "cwd": "libs/backend/agents/runtime/k8s-launcher" } }
+  }
+}

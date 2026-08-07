@@ -7,8 +7,10 @@ not team ownership or implementation history.
 
 ## Deployables live in `apps/`
 
-Every independently deployed workload in the OpenCrane release has one root under `apps/<name>` and
-is registered as an NX project. A workload counts as independently deployed when it produces or owns
+Every independently deployed workload in the OpenCrane release has one registered NX project.
+OpenCrane product entrypoints live under `apps/<name>`; deployment-only upstream products and the
+Kubernetes release composer live under the reserved `apps/_infra/<name>` group. A workload counts
+as independently deployed when it produces or owns
 one or more cluster Pods, Deployments, StatefulSets, DaemonSets, CronJobs, or Jobs. This includes
 deployment-only wrappers for upstream products such as Cognee, Obot, or LiteLLM: the app root may
 contain no product source, but it still owns the pinned dependency, configuration, identity, state,
@@ -29,24 +31,26 @@ and make the app compose them. Keep an app-local implementation only when it is 
 that process boundary and has no useful independent contract.
 
 Charts may aggregate deployables, but aggregation does not erase app ownership: every rendered
-workload must map back to its own `apps/<name>` root. An umbrella such as `apps/opencrane-infra`
-composes app-owned deployment units and release values; it does not become the anonymous owner of
-their Pods. A distinct image or process role always gets a distinct app root. A Job using the exact
-same image, entrypoint, trust boundary, and lifecycle as an existing app may remain owned by it.
+workload must map back to its own `apps/<name>` or `apps/_infra/<name>` root. An umbrella such as
+`apps/_infra/deploy-k8s` composes app-owned deployment units and release values; it does not become
+the anonymous owner of their Pods. A deploy-only component explicitly registered to the composer
+remains visible as that app's owned component. A distinct image or
+process role otherwise gets a distinct app root. A Job using the exact same image, entrypoint, trust
+boundary, and lifecycle as an existing app may remain owned by it.
 
-CLI packages and browser applications also live in `apps/` even though they do not create cluster
-Pods, because they are independently built/shipped entrypoints.
+Browser applications also live in `apps/` even though they do not create cluster Pods, because
+they are independently built/shipped entrypoints.
 
 ## Reuse before creation
 
 Before creating an app, library, route, event/topic, chart template, or adapter, search the live NX
-graph and public entrypoints in `apps/`, `libs/`, `libs/k8s-platform/`, `prisma/`, and generated or
+graph and public entrypoints in `apps/`, `libs/`, `apps/_infra/deploy-k8s/platform/`, `prisma/`, and generated or
 runtime contracts. Inspect existing charts, Services, NetworkPolicies, CRDs, and OpenAPI/contracts.
 Record the search terms, candidate paths, and one decision: **reuse**, **extend**, or **new**. Prefer
 the existing owner when a small coherent extension preserves one authority for the capability.
 
-Do not count frozen-blue or drop/archive code as reusable green functionality. Reusing a retired
-mechanism through an adapter recreates the compatibility layer this rewrite removes.
+Do not count code classified for deletion as reusable functionality. Reusing a retired mechanism
+through an adapter recreates the compatibility layer this refactor removes.
 
 ## Libraries use a functional first pass
 
@@ -60,11 +64,11 @@ add a new one only when its dependency policy is meaningfully different.
 | `libs/utils/` or `libs/util/` | Small dependency-light helpers with no domain authority | Models/other dependency-light shared code only |
 | `libs/backend/` | Server-side domain capabilities, use cases, ports, and adapters | Models, utils, infra abstractions, and explicit backend peers allowed by tags |
 | `libs/frontend/` | UI elements, features, state, and gateways | Models/contracts, utils, and frontend peers; never backend implementations |
-| `libs/infra/` | Reusable external-I/O and platform adapters | Models/contracts and utils; no app imports |
+| `libs/backend/_server/` | Runtime, transport, auth, and external-I/O adapters owned by the OpenCrane server | Infra/runtime peers, models/contracts, and utils; no backend-domain or app imports |
 
 Within the functional root, group by bounded capability and then by technical role only when needed,
 for example `libs/backend/agents/main`, `libs/frontend/features/agents`, or
-`libs/infra/artifacts/filesystem`. Do not create a broad `shared`, `common`, or `core` dumping ground.
+`libs/backend/_server/http`. Do not create a broad `shared`, `common`, or `core` dumping ground.
 Promote code to a wider library only when at least two consumers need the same contract or the code
 is independently coherent and testable.
 
@@ -78,7 +82,7 @@ create `libs/utils/` beside it just to satisfy this document.
   path.
 - Prevent cycles. If two libraries need each other, move the shared contract downward or merge the
   libraries when they are actually one capability.
-- Keep dependency-light models/contracts usable by backend, frontend, migrations, and tests without
+- Keep dependency-light models/contracts usable by backend, frontend, target-baseline tooling, and tests without
   pulling runtime frameworks or external-I/O clients.
 - Tag every project on three distinct dimensions: project type (`type:app|lib`), functional layer
   (`layer:entrypoint|model|contract|util|backend|frontend|infra`), and bounded-capability ownership
@@ -87,16 +91,17 @@ create `libs/utils/` beside it just to satisfy this document.
   not enforcement. Apps cannot depend on apps. `layer:model` is the bottom layer; every other layer
   lists its allowed lower/peer layers explicitly. A capability may use its own scope and explicitly
   approved shared/cross-capability contracts, not every project that happens to share a layer.
-- Migrate the current layer-shaped `scope:backend|web|shared|app` tags in the first R2 structure gate;
-  they are not evidence of bounded-capability ownership.
+- Replace the current layer-shaped `scope:backend|web|shared|app` tags as the relevant packages are
+  refactored; they are not evidence of bounded-capability ownership.
 - Register build, test, lint, and deploy-relevant targets per project so `nx affected` can validate
   only the impacted graph without losing isolation.
-- CI now selects affected `container` targets from the NX graph and publishes their immutable SHA
-  artifacts. The frozen-blue estate may retain `latest` as a non-deployment alias. Each green
-  independently deployable app must then gain an app-owned semantic version and a promotion step that
-  selects an explicit version from that immutable artifact. Helm values must resolve a digest or
-  immutable version tag, never a moving `latest` tag. Do not retrofit semantic release machinery into
-  frozen-blue/drop apps: establish this metadata with each green deployment root in R2.
+- CI selects affected `container` targets from the NX graph and publishes immutable SHA artifacts.
+  Every publishable target owns `targets.container.metadata.release.image` and `.dockerfile`; the
+  selector reads those fields directly and fails closed when one is absent. Each independently
+  deployable target app must have an app-owned semantic version and a promotion step that selects
+  an explicit version from that immutable artifact. Helm values must resolve a digest or immutable
+  version tag, never a moving `latest` tag. Do not retrofit release machinery into apps being
+  deleted; establish it on their direct replacements.
 - Delete replaced projects with their exports, tags, path aliases, targets, chart values, tests, and
   docs. Git history is the compatibility archive.
 
@@ -109,24 +114,21 @@ npx nx affected -t build test lint --base="$WAVE_BASE"
 ```
 
 Use targeted project tasks during a slice; use the affected graph at a wave gate.
-The first R2 foundation slice must add a deterministic workload-ownership check that renders the
-green manifests and verifies every workload's owning app root. Until that check exists, the
-architecture agent's explicit deployable inventory is a blocking gate, not optional documentation.
+`npm run check:workload-ownership-app-composition` is the deterministic ownership gate: it renders
+every supported Helm profile, verifies the exact app root for every rendered workload and
+runtime-created Job, and keeps app implementation source explicitly allowlisted.
 
-## Rewrite-freeze rule
+## Direct-replacement rule
 
-Green is a clean target, not a migration layer. It must not import blue/OpenClaw packages, add
-compatibility shims, dual-write, retain deprecated aliases, or repair a blue component that the
-accepted data disposition says will be dropped. One-way read-only exporters and idempotent green
-importers are migration tools, not runtime compatibility. Frozen-blue changes are limited to the
-approved stabilization or break-fix contract in the rewrite-freeze plan.
+The target is a clean product, not a compatibility layer. Do not add compatibility shims, dual-write,
+retain deprecated aliases, copy superseded data, or repair a component being removed. Git history is
+sufficient historical evidence.
 
-Before editing a legacy path, classify it as one of:
+Before editing an existing path, classify it as one of:
 
-- **green survivor** — refactor directly into the target package boundary;
-- **blue stabilization** — make only the minimum R1/freeze-contract change;
-- **migration input** — observe/export read-only; do not improve its product design;
-- **drop/archive** — do not fix or port it; schedule its complete removal.
+- **survivor** — refactor the capability directly into the target package boundary;
+- **delete** — do not fix or port it; remove it, its callers, and its wiring in the replacement
+  slice.
 
 ## Research basis
 

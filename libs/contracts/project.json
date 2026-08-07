@@ -4,6 +4,8 @@
   "projectType": "library",
   "sourceRoot": "libs/contracts/src",
   "tags": [
+    "type:lib",
+    "layer:contract",
     "scope:shared"
   ],
   "targets": {
@@ -26,9 +28,8 @@
       "options": {
         "commands": [
           "npm run emit-openapi -w @opencrane/server",
-          "openapi-typescript ../../dist/apps/opencrane/openapi.json -o src/generated/api.ts"
+          "openapi-typescript dist/apps/opencrane/openapi.json -o libs/contracts/src/generated/api.ts"
         ],
-        "cwd": "libs/contracts",
         "parallel": false
       }
     }

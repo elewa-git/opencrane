@@ -1,0 +1,193 @@
+{{- /*
+  Chart self-sufficiency (#151 item 3): the ClusterTenant CRD.
+
+  Cluster-scoped, read-only from the silo's perspective (per-org-client.ts resolves the
+  per-org Zitadel client off this CR; RBAC grant: opencrane-server-ct-read). In the
+  The chart installs this CRD once, cluster-wide. Per-instance releases can set
+  `crds.install=false` after a shared CRD bundle has been installed, avoiding Helm ownership
+  contention for the same cluster-scoped object.
+
+  `helm.sh/resource-policy: keep` means `helm uninstall` never deletes this CRD — deleting a
+  cluster-scoped CRD wipes every ClusterTenant CR cluster-wide, including ones owned by other
+  silo releases. Body copied verbatim from
+  `git show main:apps/fleet-platform/crds/opencrane.io_clustertenants.yaml`.
+*/ -}}
+{{- if .Values.crds.install }}
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: clustertenants.opencrane.io
+  annotations:
+    helm.sh/resource-policy: keep
+  labels:
+    {{- include "opencrane.labels" . | nindent 4 }}
+spec:
+  group: opencrane.io
+  names:
+    kind: ClusterTenant
+    listKind: ClusterTenantList
+    plural: clustertenants
+    singular: clustertenant
+    shortNames:
+      - ct
+  scope: Cluster
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [displayName, isolationTier]
+              properties:
+                displayName:
+                  type: string
+                  minLength: 1
+                  description: Human-readable customer name.
+                vanityDomain:
+                  type: string
+                  maxLength: 253
+                  pattern: '^([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,}$'
+                  description: >-
+                    Optional customer-vanity domain CNAMEd onto this org's canonical apex
+                    <name>.<platformBaseDomain> (e.g. ai.client-company.com). An OVERLAY, not the
+                    org identity: the org is always served at its derived <name>.<base> apex (and
+                    users at <user>.<name>.<base>); a vanity domain is an additional name pointed at
+                    that apex. When unset, only the derived apex serves the org.
+                isolationTier:
+                  type: string
+                  enum: [shared, dedicatedNodes, dedicatedCluster]
+                  default: shared
+                  description: >-
+                    Isolation strength for this customer. shared = namespace on bin-packed
+                    nodes; dedicatedNodes = namespace + tainted node pool; dedicatedCluster =
+                    own kube-apiserver (external provisioner only).
+                compute:
+                  type: object
+                  properties:
+                    mode:
+                      type: string
+                      enum: [shared, dedicated]
+                      default: shared
+                      description: Whether pods bin-pack on shared nodes or pin to a dedicated pool.
+                    nodePool:
+                      type: string
+                      description: Dedicated node pool name; required when mode is dedicated.
+                resources:
+                  type: object
+                  properties:
+                    quota:
+                      type: object
+                      description: Aggregate resource ceiling enforced over the customer's namespace.
+                      properties:
+                        cpu:
+                          type: string
+                          description: Total CPU the customer may request (e.g. "4", "500m").
+                        memory:
+                          type: string
+                          description: Total memory the customer may request (e.g. "8Gi").
+                        pods:
+                          type: integer
+                          minimum: 0
+                          description: Maximum number of pods the customer may run.
+                        storage:
+                          type: string
+                          description: Total persistent storage the customer may claim (e.g. "100Gi").
+                        gpu:
+                          type: integer
+                          minimum: 0
+                          description: Total GPUs the customer may request.
+                zitadel:
+                  type: object
+                  description: >-
+                    Public per-org Zitadel OIDC identifiers, projected onto the CR by the fleet
+                    manager after the org is provisioned so the silo resolves per-org login
+                    straight from the CR (the single source of truth). These are PUBLIC OIDC
+                    ids (client_id, org id, redirect URI), NOT secrets, so carrying them on a
+                    cluster-scoped CR is safe. Absent until the org is provisioned in Zitadel.
+                    MUST be present in the schema or the API server prunes it from spec writes,
+                    silently degrading per-org login to the shared masters client.
+                  properties:
+                    clientId:
+                      type: string
+                      description: The org's OIDC client_id login authorizes with (the per-org public credential).
+                    orgId:
+                      type: string
+                      description: >-
+                        The org's Zitadel Organization id, added as the
+                        urn:zitadel:iam:org:id:{orgId} login scope to restrict login to the org's user pool.
+                    redirectUri:
+                      type: string
+                      description: The redirect URI registered on the org's OIDC app, when known.
+                owner:
+                  type: object
+                  required: [subject]
+                  description: >-
+                    Identity of the org's root owner, resolved by the control plane (the
+                    IAM authority) at create time and projected here as first-class desired
+                    state. The operator attributes the org's auto-seeded default Tenant to
+                    this owner; it has no database access, so the CR spec is the only channel
+                    for the owner identity. Presence is enforced by the control plane (which
+                    rejects an org create with no resolvable subject), not by CRD admission,
+                    so status writes on pre-existing CRs are never blocked by this field.
+                  x-kubernetes-validations:
+                    - rule: self == oldSelf
+                      message: ClusterTenant owner identity is immutable after creation.
+                  properties:
+                    subject:
+                      type: string
+                      minLength: 1
+                      description: The owner's OIDC subject (`sub`).
+                    email:
+                      type: string
+                      description: >-
+                        The owner's IdP-verified email; becomes the default Tenant's contact
+                        email. Absent on the dev-auth path, where only the synthetic subject
+                        is carried (the default-Tenant seed is then skipped).
+            status:
+              type: object
+              properties:
+                phase:
+                  type: string
+                  enum: [pending, provisioning, ready, failed]
+                message:
+                  type: string
+                boundNamespace:
+                  type: string
+                provisioner:
+                  type: string
+                lastReconciled:
+                  type: string
+                  format: date-time
+                observedGeneration:
+                  type: integer
+                  format: int64
+                  description: >-
+                    metadata.generation the operator last drove to ready. The reconcile-skip
+                    guard compares this against metadata.generation so an unchanged, already-
+                    ready CR is not re-provisioned on every watch replay. MUST be present in
+                    the schema or the API server prunes it from status writes, defeating the
+                    guard and re-provisioning every org on each watch reconnect.
+      additionalPrinterColumns:
+        - name: Display Name
+          type: string
+          jsonPath: .spec.displayName
+        - name: Tier
+          type: string
+          jsonPath: .spec.isolationTier
+        - name: Phase
+          type: string
+          jsonPath: .status.phase
+        - name: Namespace
+          type: string
+          jsonPath: .status.boundNamespace
+        - name: Age
+          type: date
+          jsonPath: .metadata.creationTimestamp
+{{- end }}

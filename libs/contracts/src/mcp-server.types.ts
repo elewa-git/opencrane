@@ -29,33 +29,7 @@ export enum McpServerStatus
 }
 
 /**
- * Brokering strategy the runtime gateway plane uses to satisfy a downstream
- * MCP credential on behalf of a tenant (P4D.1).
- *
- * Custody is unchanged in either mode: the secret material is held by the
- * gateway plane (Obot), never injected into the tenant pod. The mode selects
- * *how* the downstream call is authenticated.
- */
-export enum McpCredentialBrokeringMode
-{
-  /**
-   * Static per-tenant/per-server secret fallback. Required for upstreams that
-   * do not support OAuth token exchange / OBO. The secret is referenced by
-   * {@link McpServerCredential.secretRef} and resolved server-side in the
-   * gateway plane.
-   */
-  StaticFallback = "static",
-  /**
-   * Per-user RFC 8693 token exchange (OBO). Obot exchanges the caller identity
-   * for a short-lived, user-delegated downstream token per call — no static
-   * secret is authored centrally, so {@link McpServerCredential.secretRef} is
-   * absent in this mode.
-   */
-  PerUserObo = "obo",
-}
-
-/**
- * Credential metadata linked to an MCP server.
+ * OBO credential metadata linked to an MCP server.
  *
  * The opencrane-ui owns this inventory record; the runtime gateway plane may
  * be implemented by Obot, but it consumes the rendered catalog rather than
@@ -67,14 +41,6 @@ export interface McpServerCredential
   id: string;
   /** Operator-facing label for the credential. */
   displayName: string;
-  /** Brokering strategy used to satisfy this credential server-side. */
-  brokeringMode: McpCredentialBrokeringMode;
-  /**
-   * Secret or reference key resolved by the runtime plane. Present only for
-   * {@link McpCredentialBrokeringMode.StaticFallback}; null for OBO, where the
-   * gateway brokers a per-user token and no static secret is authored.
-   */
-  secretRef: string | null;
 }
 
 /**

@@ -1,0 +1,86 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: {{ include "opencrane.postgres.fullname" . }}-database-privileges
+  annotations:
+    helm.sh/hook: post-install,post-upgrade
+    helm.sh/hook-delete-policy: before-hook-creation
+  labels:
+    {{- include "opencrane.postgres.labels" . | nindent 4 }}
+spec:
+  backoffLimit: 0
+  activeDeadlineSeconds: {{ add .Values.privileges.timeoutSeconds .Values.privileges.jobDeadlineGraceSeconds }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "opencrane.postgres.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/managed-by: {{ .Release.Service }}
+        app.kubernetes.io/part-of: opencrane
+        app.kubernetes.io/component: postgres-database-privileges
+    spec:
+      automountServiceAccountToken: false
+      restartPolicy: Never
+      {{- with .Values.privileges.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        {{- range $databaseIndex, $database := .Values.databases }}
+        - name: {{ printf "%s-privileges" $database.name | trunc 63 | trimSuffix "-" }}
+          image: {{ $.Values.image | quote }}
+          resources:
+            {{- toYaml $.Values.privileges.resources | nindent 12 }}
+          command: ["/bin/sh", "-ceu"]
+          args:
+            - |
+              deadline="$(( $(date +%s) + {{ $.Values.privileges.timeoutSeconds }} ))"
+              {{- if eq $databaseIndex 0 }}
+              baseline_log="/tmp/${PGDATABASE}-baseline.log"
+              until recorded_baseline="$(psql --no-psqlrc -v ON_ERROR_STOP=1 -d "$PGDATABASE" -tA -c 'SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE' 2>"$baseline_log")"; do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  cat "$baseline_log" >&2
+                  echo "Timed out reading the target baseline from logical database '$PGDATABASE'" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+              if [ "$recorded_baseline" != "$EXPECTED_BASELINE_SHA256" ]; then
+                echo "Database '$PGDATABASE' records baseline '$recorded_baseline', but '$EXPECTED_BASELINE_SHA256' is required" >&2
+                exit 1
+              fi
+              {{- end }}
+              privileges_log="/tmp/${PGDATABASE}-privileges.log"
+              until psql --single-transaction -v ON_ERROR_STOP=1 -d "$PGDATABASE" -v database="$PGDATABASE" -v owner="$PGUSER" -v database_admin="{{ $.Values.databaseAdmin.name }}" >"$privileges_log" 2>&1 <<'SQL'
+              REVOKE CONNECT, TEMPORARY ON DATABASE :"database" FROM PUBLIC;
+              GRANT CONNECT, TEMPORARY ON DATABASE :"database" TO :"owner";
+              GRANT CONNECT, TEMPORARY ON DATABASE :"database" TO :"database_admin";
+              SQL
+              do
+                if [ "$(date +%s)" -ge "$deadline" ]; then
+                  cat "$privileges_log" >&2
+                  echo "Timed out applying privileges for logical database '$PGDATABASE'" >&2
+                  exit 1
+                fi
+                sleep 2
+              done
+          env:
+            - name: PGUSER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $database.credentialsSecret | quote }}
+                  key: username
+            - name: PGPASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $database.credentialsSecret | quote }}
+                  key: password
+            - name: PGHOST
+              value: {{ printf "%s-rw" (include "opencrane.postgres.fullname" $) | quote }}
+            - name: PGDATABASE
+              value: {{ $database.name | quote }}
+            {{- if eq $databaseIndex 0 }}
+            - name: EXPECTED_BASELINE_SHA256
+              value: {{ $.Values.bootstrap.targetBaseline.sha256 | quote }}
+            {{- end }}
+        {{- end }}

@@ -1,0 +1,208 @@
+enum AuthorizationScopeKind {
+  Organization @map("organization")
+  Department   @map("department")
+  Team         @map("team")
+  Project      @map("project")
+  Personal     @map("personal")
+  DirectUser   @map("direct-user")
+}
+
+enum AuthorizationEffect {
+  Allow @map("allow")
+  Deny  @map("deny")
+}
+
+enum ApprovalRequestState {
+  Pending   @map("pending")
+  Approved  @map("approved")
+  Denied    @map("denied")
+  Expired   @map("expired")
+  Cancelled @map("cancelled")
+}
+
+enum ActionExecutionState {
+  Reserved  @map("reserved")
+  Succeeded @map("succeeded")
+  Failed    @map("failed")
+}
+
+enum ActionReplayMode {
+  OneShot    @map("one_shot")
+  Idempotent @map("idempotent")
+}
+
+model AuthorizationGrant {
+  id              String                    @id @default(cuid())
+  siloId          String                    @map("silo_id")
+  subjectId       String                    @map("subject_id")
+  scopeKind       AuthorizationScopeKind    @map("scope_kind")
+  organizationId  String                    @map("organization_id")
+  /// Null only for scope kinds without a resource dimension. The reviewed target baseline adds a
+  /// partial unique index for those rows because PostgreSQL treats NULL values as distinct in the
+  /// ordinary exact-authority key.
+  scopeResourceId String?                   @map("scope_resource_id")
+  catalogId       String                    @map("catalog_id")
+  catalogRevision Int                       @map("catalog_revision")
+  catalogDigest   String                    @map("catalog_digest")
+  capabilityId    String                    @map("capability_id")
+  resourceKind    String                    @map("resource_kind")
+  resourceId      String                    @map("resource_id")
+  effect          AuthorizationEffect
+  priority        Int
+  validFrom       DateTime                  @default(now()) @map("valid_from")
+  expiresAt       DateTime?                 @map("expires_at")
+  revokedAt       DateTime?                 @map("revoked_at")
+  requireApproval Boolean                   @default(false) @map("require_approval")
+  createdBy       String                    @map("created_by")
+  createdAt       DateTime                  @default(now()) @map("created_at")
+  catalog         CapabilityCatalogRevision @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+
+  @@unique([siloId, subjectId, scopeKind, organizationId, scopeResourceId, catalogId, catalogRevision, capabilityId, resourceKind, resourceId, effect, priority], map: "authorization_grant_exact_authority_key")
+  @@index([siloId, subjectId, scopeKind, organizationId, scopeResourceId])
+  @@index([siloId, resourceKind, resourceId, priority])
+  @@index([catalogId, catalogRevision, capabilityId])
+  @@map("authorization_grants")
+}
+
+model CapabilityCatalogRevision {
+  id           String                   @id @default(cuid())
+  catalogId    String                   @map("catalog_id")
+  revision     Int
+  digest       String
+  capabilities Json
+  createdBy    String                   @map("created_by")
+  createdAt    DateTime                 @default(now()) @map("created_at")
+  grants       AuthorizationGrant[]
+  approvals    ApprovalRequest[]
+  receipts     ActionExecutionReceipt[]
+
+  @@unique([catalogId, revision])
+  @@unique([catalogId, digest])
+  @@unique([catalogId, revision, digest])
+  @@map("capability_catalog_revisions")
+}
+
+model ApprovalRequest {
+  id                     String                    @id @default(cuid())
+  runId                  String                    @map("run_id")
+  attempt                Int
+  agentRevisionId        String                    @map("agent_revision_id")
+  agentServiceId         String                    @map("agent_service_id")
+  siloId                 String                    @map("silo_id")
+  proofKeyId             String                    @map("proof_key_id")
+  proofKeyThumbprint     String                    @map("proof_key_thumbprint")
+  subjectId              String                    @map("subject_id")
+  workloadAudience       String                    @map("workload_audience")
+  serviceAccountName     String                    @map("service_account_name")
+  namespace              String
+  workloadKind           WorkloadKind              @map("workload_kind")
+  workloadUid            String                    @map("workload_uid")
+  podUid                 String                    @map("pod_uid")
+  catalogId              String?                   @map("catalog_id")
+  catalogRevision        Int?                      @map("catalog_revision")
+  catalogDigest          String?                   @map("catalog_digest")
+  capabilityId           String?                   @map("capability_id")
+  resourceKind           String                    @map("resource_kind")
+  resourceId             String                    @map("resource_id")
+  action                 String
+  argumentsDigest        String                    @map("arguments_digest")
+  actionDigest           String                    @map("action_digest")
+  approverPolicyRevision String                    @map("approver_policy_revision")
+  effectivePolicyDigest  String                    @map("effective_policy_digest")
+  state                  ApprovalRequestState      @default(Pending)
+  expiresAt              DateTime                  @map("expires_at")
+  decidedAt              DateTime?                 @map("decided_at")
+  decidedBy              String?                   @map("decided_by")
+  resumeTokenHash        String?                   @unique @map("resume_token_hash")
+  toolInvocationRowId    String?                   @map("tool_invocation_row_id")
+  deferredToolResult     Json?                     @map("deferred_tool_result")
+  createdAt              DateTime                  @default(now()) @map("created_at")
+  run                    AgentRun                  @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  toolInvocation         ToolInvocation?           @relation(fields: [toolInvocationRowId], references: [id], onDelete: Restrict)
+  proofKey               RunProofKey               @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
+  assignment             WorkloadAssignment        @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, workloadAudience, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, audience, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
+  catalog                CapabilityCatalogRevision? @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+
+  @@unique([runId, attempt, actionDigest])
+  @@index([state, expiresAt])
+  @@index([subjectId])
+  @@map("approval_requests")
+}
+
+/// One external tool invocation reserved by the runtime external-action authority before dispatch.
+/// It mirrors ActionExecutionReceipt's reserve/execute/complete lifecycle: the row is created
+/// (Reserved) BEFORE any external tool I/O so a crash leaves durable evidence that blocks a retry,
+/// then compare-and-set to Succeeded (with the canonical result) or Failed (with a stable code). The
+/// runtime-supplied `toolInvocationId` is the caller idempotency key; `requestFingerprint` binds the
+/// exact validated tool revision and canonical argument digest so a mutated replay can never reuse a
+/// receipt. Unlike a capability-proof action, authority comes from the immutable RunInputSnapshot's
+/// tool grants (revalidated by the external-action authority), not a signed capability catalog entry.
+model ToolInvocation {
+  id                 String               @id @default(cuid())
+  siloId             String               @map("silo_id")
+  runId              String               @map("run_id")
+  attempt            Int
+  agentServiceId     String               @map("agent_service_id")
+  agentRevisionId    String               @map("agent_revision_id")
+  subjectId          String               @map("subject_id")
+  toolRevisionId     String               @map("tool_revision_id")
+  toolInvocationId   String               @map("tool_invocation_id")
+  argumentsDigest    String               @map("arguments_digest")
+  requestFingerprint String               @unique @map("request_fingerprint")
+  approvalRequired   Boolean              @default(false) @map("approval_required")
+  state              ActionExecutionState @default(Reserved)
+  result             Json?
+  failureCode        String?              @map("failure_code")
+  reservedAt         DateTime             @default(now()) @map("reserved_at")
+  completedAt        DateTime?            @map("completed_at")
+  run                AgentRun             @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  approvalRequests   ApprovalRequest[]
+  skillWorkload      SkillWorkload?
+
+  @@unique([runId, attempt, toolInvocationId])
+  @@index([runId, attempt, state])
+  @@map("tool_invocations")
+}
+
+model ActionExecutionReceipt {
+  id                    String                    @id @default(cuid())
+  siloId                String                    @map("silo_id")
+  subjectId             String                    @map("subject_id")
+  audience              String
+  serviceAccountName    String                    @map("service_account_name")
+  namespace             String
+  workloadKind          WorkloadKind              @map("workload_kind")
+  workloadUid           String                    @map("workload_uid")
+  podUid                String                    @map("pod_uid")
+  runId                 String                    @map("run_id")
+  attempt               Int
+  agentServiceId        String                    @map("agent_service_id")
+  agentRevisionId       String                    @map("agent_revision_id")
+  proofKeyId            String                    @map("proof_key_id")
+  proofKeyThumbprint    String                    @map("proof_key_thumbprint")
+  catalogId             String                    @map("catalog_id")
+  catalogRevision       Int                       @map("catalog_revision")
+  catalogDigest         String                    @map("catalog_digest")
+  capabilityId          String                    @map("capability_id")
+  effectivePolicyDigest String                    @map("effective_policy_digest")
+  resourceKind          String                    @map("resource_kind")
+  resourceId            String                    @map("resource_id")
+  action                String
+  argumentsDigest       String                    @map("arguments_digest")
+  jti                   String                    @unique
+  replayMode            ActionReplayMode          @map("replay_mode")
+  requestFingerprint    String                    @unique @map("request_fingerprint")
+  state                 ActionExecutionState      @default(Reserved)
+  result                Json?
+  failureCode           String?                   @map("failure_code")
+  reservedAt            DateTime                  @default(now()) @map("reserved_at")
+  completedAt           DateTime?                 @map("completed_at")
+  run                   AgentRun                  @relation(fields: [runId, agentServiceId, agentRevisionId], references: [id, agentServiceId, agentRevisionId], onDelete: Restrict)
+  proofKey              RunProofKey               @relation(fields: [proofKeyId, runId, attempt, workloadKind, workloadUid, proofKeyThumbprint, podUid], references: [id, runId, attempt, workloadKind, workloadUid, keyThumbprint, podUid], onDelete: Restrict)
+  catalog               CapabilityCatalogRevision @relation(fields: [catalogId, catalogRevision, catalogDigest], references: [catalogId, revision, digest], onDelete: Restrict)
+  assignment            WorkloadAssignment        @relation(fields: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, serviceAccountName, namespace, workloadKind, workloadUid], references: [runId, attempt, agentServiceId, agentRevisionId, siloId, subjectId, serviceAccountName, namespace, workloadKind, workloadUid], onDelete: Restrict)
+
+  @@index([runId, attempt, state])
+  @@index([replayMode, state])
+  @@map("action_execution_receipts")
+}

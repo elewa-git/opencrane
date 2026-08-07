@@ -1,0 +1,60 @@
+enum FleetMembershipScopeKind {
+  Organization @map("organization")
+  Department   @map("department")
+  Team         @map("team")
+  Project      @map("project")
+  Personal     @map("personal")
+  DirectUser   @map("direct-user")
+}
+
+model VerifiedFleetMembershipRevision {
+  id             String                             @id @default(cuid())
+  revision       Int
+  issuerId       String                             @map("issuer_id")
+  issuerKeyId    String                             @map("issuer_key_id")
+  siloId         String                             @map("silo_id")
+  issuedAt       DateTime                           @map("issued_at")
+  expiresAt      DateTime                           @map("expires_at")
+  payloadDigest  String                             @map("payload_digest")
+  signature      String
+  verifiedAt     DateTime                           @default(now()) @map("verified_at")
+  assertions     VerifiedFleetMembershipAssertion[]
+  acceptedAsHigh HighestAcceptedFleetMembership?    @relation("HighestAcceptedFleetMembership")
+
+  @@unique([issuerId, siloId, revision])
+  @@unique([issuerId, siloId, payloadDigest])
+  @@unique([id, issuerId, siloId, revision], map: "verified_membership_identity_key")
+  @@unique([id, siloId])
+  @@index([siloId, expiresAt])
+  @@map("verified_fleet_membership_revisions")
+}
+
+model VerifiedFleetMembershipAssertion {
+  id              String                          @id @default(cuid())
+  revisionId      String                          @map("revision_id")
+  assertionId     String                          @map("assertion_id")
+  siloId          String                          @map("silo_id")
+  subjectId       String                          @map("subject_id")
+  scopeKind       FleetMembershipScopeKind        @map("scope_kind")
+  organizationId  String                          @map("organization_id")
+  scopeResourceId String?                         @map("scope_resource_id")
+  revision        VerifiedFleetMembershipRevision @relation(fields: [revisionId, siloId], references: [id, siloId], onDelete: Restrict)
+
+  @@unique([revisionId, assertionId])
+  @@index([siloId, subjectId, scopeKind, organizationId, scopeResourceId])
+  @@map("verified_fleet_membership_assertions")
+}
+
+/// The only membership projection head trusted by authorization; updates must increase revision.
+model HighestAcceptedFleetMembership {
+  issuerId   String                          @map("issuer_id")
+  siloId     String                          @map("silo_id")
+  revisionId String                          @unique @map("revision_id")
+  revision   Int
+  acceptedAt DateTime                        @default(now()) @map("accepted_at")
+  verified   VerifiedFleetMembershipRevision @relation("HighestAcceptedFleetMembership", fields: [revisionId, issuerId, siloId, revision], references: [id, issuerId, siloId, revision], onDelete: Restrict)
+
+  @@id([issuerId, siloId])
+  @@unique([revisionId, issuerId, siloId, revision], map: "highest_membership_identity_key")
+  @@map("highest_accepted_fleet_memberships")
+}

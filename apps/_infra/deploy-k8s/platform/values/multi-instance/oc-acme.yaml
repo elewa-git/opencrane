@@ -1,0 +1,18 @@
+# Reference values — OpenCrane instance "acme" (native multi-instance, single cluster).
+#
+# Install the app-owned chart into an isolated namespace:
+#   helm install oc-acme apps/_infra/deploy-k8s -n oc-acme --create-namespace \
+#     -f apps/_infra/deploy-k8s/platform/values/multi-instance/oc-acme.yaml
+#
+# Pairs with oc-globex.yaml to document two isolated release namespaces in one cluster.
+
+multiInstance:
+  enabled: true
+  # This instance owns exactly its own namespace; namespaced RBAC + the
+  # cross-instance default-deny NetworkPolicy are rendered for it.
+  instanceNamespaces: [oc-acme]
+  rbac: namespaced
+  # Per-instance cert Issuer + SecretStore (no shared cluster-singleton).
+
+ingress:
+  domain: acme.example.com

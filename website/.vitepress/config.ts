@@ -4,14 +4,14 @@ import { defineConfig } from 'vitepress'
 // stays '/'. DOCS_BASE can override it (e.g. '/opencrane/') for project-pages hosting.
 const base = process.env.DOCS_BASE ?? '/'
 
-const REPO = 'https://github.com/italanta/opencrane'
+const REPO = 'https://github.com/elewa-git/opencrane'
 
 export default defineConfig({
   base,
   lang: 'en-GB',
   title: 'OpenCrane',
   description:
-    'Self-hosted, Kubernetes-native control plane for organizational AI — a private AI assistant for every employee, on your own infrastructure.',
+    'Self-hosted, Kubernetes-native control plane for governed organisational AI agents.',
   cleanUrls: true,
   lastUpdated: true,
   // Architecture diagrams in the docs use Unicode box-drawing; keep them intact.
@@ -32,9 +32,11 @@ export default defineConfig({
       {
         text: 'Guides',
         items: [
-          { text: 'Employee assistants', link: '/guide/first-tenant' },
+          { text: 'Set up your personal assistant', link: '/guide/persona' },
+          { text: 'Create a managed agent', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
-          { text: 'Share skills', link: '/guide/skills' },
+          { text: 'Agent skills', link: '/guide/skills' },
+          { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },
           { text: 'Manage tools (MCP)', link: '/guide/tools' },
           { text: 'Organizational knowledge', link: '/guide/knowledge' },
           { text: 'Control access', link: '/guide/permissions' },
@@ -45,8 +47,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'CLI', link: '/reference/cli' },
-          { text: 'API (interactive)', link: '/reference/api' },
+          { text: 'API reference', link: '/reference/api' },
           { text: 'API overview', link: '/reference/api-overview' },
         ],
       },
@@ -73,16 +74,17 @@ export default defineConfig({
             ],
           },
           { text: '2. Set up your domain', link: '/guide/dns' },
-          { text: '3. Create your first assistant', link: '/guide/first-tenant' },
-          { text: '4. Connect to OpenClaw', link: '/guide/connect' },
+          { text: '3. Set up your personal assistant', link: '/guide/persona' },
         ],
       },
       {
         text: 'Guides',
         items: [
-          { text: 'Employee assistants', link: '/guide/first-tenant' },
+          { text: 'Set up your personal assistant', link: '/guide/persona' },
+          { text: 'Create a managed agent', link: '/guide/first-agent' },
           { text: 'Organize your company', link: '/guide/organize' },
-          { text: 'Share skills across teams', link: '/guide/skills' },
+          { text: 'Agent skills', link: '/guide/skills' },
+          { text: 'Agent delegation (child runs)', link: '/guide/child-runs' },
           { text: 'Manage tools (MCP)', link: '/guide/tools' },
           { text: 'Organizational knowledge', link: '/guide/knowledge' },
           { text: 'Control who can access what', link: '/guide/permissions' },
@@ -94,8 +96,7 @@ export default defineConfig({
       {
         text: 'Reference',
         items: [
-          { text: 'CLI reference', link: '/reference/cli' },
-          { text: 'API reference (interactive)', link: '/reference/api' },
+          { text: 'API reference', link: '/reference/api' },
           { text: 'API overview', link: '/reference/api-overview' },
           { text: 'Contracts SDK', link: '/integrators/contracts-sdk' },
         ],
@@ -105,28 +106,22 @@ export default defineConfig({
         collapsed: true,
         items: [
           { text: 'Hosting & deployment', link: '/operators/hosting' },
-          { text: 'Fleet and silo operating model', link: '/operators/fleet-silo-model' },
-          { text: 'Silo deployment model', link: '/operators/silo-deployment' },
-          { text: 'ClusterTenant manager configuration', link: '/operators/clustertenantmanager-config' },
+          { text: 'Deployment configuration', link: '/operators/deployment-configuration' },
+          { text: 'Organisation boundary', link: '/operators/organisation-boundary' },
           { text: 'DNS configuration', link: '/operators/dns-config' },
           { text: 'Networking & isolation', link: '/operators/networking' },
           { text: 'Identity & network isolation (Cilium + SPIFFE)', link: '/operators/cilium-spiffe-identity' },
-          { text: 'ClusterTenant members', link: '/operators/cluster-tenant-members' },
-          { text: 'Identity & connection auth', link: '/security/identity' },
-          { text: 'Connection security', link: '/security/connection-security' },
-          { text: 'Zitadel key rotation', link: '/security/zitadel-key-rotation' },
+          { text: 'Identity & runtime auth', link: '/security/identity' },
           { text: 'Runbook', link: '/operators/runbook' },
           { text: 'Telemetry & logging', link: '/operators/telemetry-logging' },
-          { text: 'Awareness SLOs', link: '/operators/awareness-slos' },
         ],
       },
       {
         text: 'Deep dives',
         collapsed: true,
         items: [
-          { text: 'Agent workspace & control', link: '/integrators/agent-workspace' },
+          { text: 'Governed agent runtime', link: '/integrators/agent-runtime' },
           { text: 'MCP gateway (Obot)', link: '/integrators/mcp-gateway' },
-          { text: 'Skill registry & delivery', link: '/integrators/skill-registry' },
           { text: 'Retrieval & memory (Cognee)', link: '/integrators/retrieval-memory' },
           { text: 'Silo IAM: inheritance & sharing', link: '/integrators/silo-iam' },
         ],

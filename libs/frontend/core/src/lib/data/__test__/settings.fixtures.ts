@@ -1,4 +1,4 @@
-import { CogneeDataset, DatasetAccess, EgressDomain, HarvestChannel, SkillRow, SpendSlice } from "../../models/settings.types";
+import { CogneeDataset, DatasetAccess, EgressDomain, HarvestChannel, SpendSlice } from "../../models/settings.types";
 import { ScopeLevel } from "../../models/scope.types";
 
 /** Monthly spend breakdown slices. */
@@ -18,16 +18,6 @@ export const COGNEE_DATASETS: CogneeDataset[] =
 	{ id: "ds-dept", scope: ScopeLevel.Dept, name: "Product", datasetId: "ds_product_dept_v2", enabled: true, entities: 3204, chunks: 18900, summaries: 440, relationships: 9800, lastCognify: "12m ago", cognifyDuration: "2m 51s", cognifyStatus: "completed", searchModes: ["vector", "hybrid", "graph_completion", "cypher"], freshnessMinutes: 20, citationCoverage: 88, sources: ["Slack #product-leadership", "Jira (Product board)", "Notion (Product wiki)"] },
 	{ id: "ds-project", scope: ScopeLevel.Project, name: "platform-v2", datasetId: "ds_platform_v2", enabled: true, entities: 622, chunks: 4100, summaries: 98, relationships: 1930, lastCognify: "1h ago", cognifyDuration: "48s", cognifyStatus: "completed", searchModes: ["vector", "hybrid"], freshnessMinutes: 60, citationCoverage: 82, sources: ["GitHub (platform-v2 repo)", "Linear (platform-v2 project)"] },
 	{ id: "ds-personal", scope: ScopeLevel.Personal, name: "alex.oc", datasetId: "ds_alex_personal", enabled: true, entities: 210, chunks: 880, summaries: 34, relationships: 390, lastCognify: "live", cognifyDuration: "—", cognifyStatus: "completed", searchModes: ["vector"], freshnessMinutes: 5, citationCoverage: 95, sources: ["Pod private storage", "Personal notes"] }
-];
-
-/** Skill registry rows. */
-export const SKILLS: SkillRow[] =
-[
-	{ name: "document-writer", scope: ScopeLevel.Org, version: "1.4.2", digest: "sha256:a3f9", status: "active" },
-	{ name: "strategy-analyst", scope: ScopeLevel.Dept, version: "0.9.1", digest: "sha256:b71c", status: "active" },
-	{ name: "jira-sync", scope: ScopeLevel.Project, version: "2.0.0", digest: "sha256:c55e", status: "active" },
-	{ name: "personal-notes", scope: ScopeLevel.Personal, version: "local", digest: "—", status: "active" },
-	{ name: "data-summariser", scope: ScopeLevel.Personal, version: "local", digest: "—", status: "pending-promotion" }
 ];
 
 /** Harvest channel connectors. */

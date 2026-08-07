@@ -1,8 +1,7 @@
 /**
  * Source kind supported by the third-party discovery surface.
  *
- * These values describe where MCP servers or skills originated before being
- * reviewed and promoted into OpenCrane-managed inventory.
+ * These values describe upstream discovery sources retained by the retrieval inventory.
  */
 export enum ThirdPartySourceKind
 {
@@ -32,14 +31,13 @@ export enum ThirdPartySourceSyncMode
 export enum ThirdPartySourceItemKind
 {
   McpServer = "mcp-server",
-  SkillBundle = "skill-bundle",
 }
 
 /**
  * Shared contract for a discovered source item.
  *
  * Items describe candidates found upstream before they are installed into the
- * first-party MCP or skill catalogs.
+ * first-party MCP catalog.
  */
 export interface ThirdPartySourceItem
 {
@@ -53,7 +51,7 @@ export interface ThirdPartySourceItem
   upstreamId: string;
   /** Optional upstream version label. */
   version?: string;
-  /** Optional OCI digest or content digest. */
+  /** Optional content digest supplied by the upstream registry. */
   digest?: string;
   /** Optional raw metadata preserved for later install steps. */
   metadata?: Record<string, unknown>;

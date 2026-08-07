@@ -6,9 +6,6 @@ model Group {
   members     Json            @default("[]")
   createdAt   DateTime        @default(now()) @map("created_at")
   updatedAt   DateTime        @updatedAt @map("updated_at")
-  grants      Grant[]
-  mcpGrants   McpServerGrant[]
-  entitlements SkillEntitlement[]
 
   @@index([scope])
   @@map("groups")

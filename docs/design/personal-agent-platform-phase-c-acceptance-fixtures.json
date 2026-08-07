@@ -1,0 +1,78 @@
+{
+  "schemaVersion": 1,
+  "source": "target-product-intent",
+  "cases": [
+    {
+      "id": "persona-first-session-approved",
+      "given": ["all-required-interview-answers", "reviewed-soul-template", "three-provenance-linked-insights", "user-approval"],
+      "when": "first-personal-session-starts",
+      "expect": ["approved-persona-revision-compiled", "runtime-cannot-mutate-durable-soul"]
+    },
+    {
+      "id": "persona-first-session-denied-without-approval",
+      "given": ["complete-interview", "unapproved-persona-draft"],
+      "when": "first-personal-session-starts",
+      "expect": ["deny"]
+    },
+    {
+      "id": "cross-functional-project-membership",
+      "given": ["user-a-department-sales", "user-b-department-engineering", "both-project-launch"],
+      "when": "project-scoped-managed-agent-is-requested",
+      "expect": ["both-authorized-by-project", "department-memberships-unchanged"]
+    },
+    {
+      "id": "equal-priority-deny-wins",
+      "given": ["allow-priority-50", "deny-priority-50"],
+      "when": "effective-capability-is-compiled",
+      "expect": ["deny"]
+    },
+    {
+      "id": "higher-priority-allow-wins",
+      "given": ["deny-priority-50", "allow-priority-60"],
+      "when": "effective-capability-is-compiled",
+      "expect": ["allow"]
+    },
+    {
+      "id": "signed-membership-last-fresh-revision",
+      "given": ["trusted-issuer-signature", "matching-silo-subject", "revision-42", "within-freshness-and-expiry"],
+      "when": "membership-is-evaluated",
+      "expect": ["trust-revision-42"]
+    },
+    {
+      "id": "signed-membership-replay-rejected",
+      "given": ["trusted-revision-42-cached", "signed-revision-41-presented"],
+      "when": "membership-is-evaluated",
+      "expect": ["deny"]
+    },
+    {
+      "id": "signed-membership-expiry-fails-closed",
+      "given": ["trusted-revision-42-cached", "hard-expiry-passed"],
+      "when": "membership-is-evaluated",
+      "expect": ["deny"]
+    },
+    {
+      "id": "managed-agent-personal-boundary",
+      "given": ["declared-shared-artifact", "private-thread", "private-memory"],
+      "when": "managed-agent-runs",
+      "expect": ["shared-artifact-readable", "private-thread-denied", "private-memory-denied", "personal-workspace-denied"]
+    },
+    {
+      "id": "durable-storage-contract",
+      "given": ["authoritative-store"],
+      "when": "deployment-is-rendered",
+      "expect": ["explicit-persistent-mount", "online-expansion", "capacity-alert", "backup", "indefinite-retention"]
+    },
+    {
+      "id": "runtime-scratch-contract",
+      "given": ["agent-runtime-workspace"],
+      "when": "pod-is-replaced-or-scaled-to-zero-or-lease-expires",
+      "expect": ["mounted-scratch-cleared", "not-authoritative", "not-backed-up"]
+    },
+    {
+      "id": "future-update-readiness",
+      "given": ["existing-target-volumes", "new-supported-target-image"],
+      "when": "application-update-runs",
+      "expect": ["ready-in-less-than-300-seconds", "existing-volumes-remounted", "canonical-state-resumed"]
+    }
+  ]
+}

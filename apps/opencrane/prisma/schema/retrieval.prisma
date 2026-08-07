@@ -1,24 +1,3 @@
-model TenantDatasetMembership {
-  tenant    String
-  scope     DatasetScope
-  subject   String
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  tenantRef Tenant   @relation(fields: [tenant], references: [name], onDelete: Cascade)
-
-  @@id([tenant, scope, subject])
-  @@index([tenant, scope])
-  @@map("tenant_dataset_memberships")
-}
-
-enum DatasetScope {
-  Org        @map("org")
-  Team       @map("team")
-  Department @map("department")
-  Project    @map("project")
-  Personal   @map("personal")
-}
-
 enum ThirdPartySourceKind {
   McpRegistry      @map("mcp-registry")
   AnthropicSkills  @map("anthropic-skills")
@@ -35,7 +14,6 @@ enum ThirdPartySourceStatus {
 
 enum ThirdPartySourceItemKind {
   McpServer   @map("mcp-server")
-  SkillBundle @map("skill-bundle")
 }
 
 model ThirdPartySource {
@@ -52,7 +30,6 @@ model ThirdPartySource {
   updatedAt   DateTime               @updatedAt @map("updated_at")
   items       ThirdPartySourceItem[]
   mcpServers  McpServer[]
-  skillBundles SkillBundle[]
 
   @@map("third_party_sources")
 }
