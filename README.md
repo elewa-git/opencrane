@@ -49,37 +49,38 @@ frozen snapshot of its input, and removes it when the attempt finishes. The run 
 back as an ordered stream of events but holds no authority of its own, so an assistant survives
 restarts, scaling, and a closed browser tab without ever becoming the source of truth.
 
-```mermaid
-flowchart TB
-    emp["Employees"]
-    trig["Schedules &amp; triggers"]
-
-    subgraph org["Your organisation — one isolated boundary"]
-        direction TB
-
-        pa["Personal assistants<br/>private to one employee"]
-        ma["Managed agents<br/>bounded, scoped work"]
-
-        cp["OpenCrane control plane<br/>identity · conversations · runs<br/>approvals · budgets · access · audit"]
-
-        run(["Isolated run<br/>short-lived · one attempt · no standing authority"])
-
-        subgraph shared["Shared organisation services"]
-            direction LR
-            models["Models"]
-            tools["Tools"]
-            mem["Memory &amp;<br/>knowledge"]
-            files["Files &amp;<br/>artifacts"]
-        end
-    end
-
-    emp --> pa
-    trig --> ma
-    pa --> cp
-    ma --> cp
-    cp -- "starts a governed run" --> run
-    run -- "ordered events" --> cp
-    run --> shared
+```text
+        Employees                                              Schedules & triggers
+            │                                                           │
+            │                                                           │
+╔═══ YOUR ORGANISATION — one isolated boundary ═════════════════════════════════════════════════════╗
+║           │                                                           │                           ║
+║           │                                                           │                           ║
+║           ▼                                                           ▼                           ║
+║   ┌─────────────────────────┐  ┌─────────────────────────┐   ┌───────────────────────────────┐    ║
+║   │ Personal assistant      │  │ identity adjusted       │   │ Managed agent                 │    ║
+║   │ private to one          │╌╌│ to the employee         │   │ bounded, scoped work          │    ║
+║   │ employee                │  │ (per-person sidecar)    │   │ own scoped identity           │    ║
+║   └─────────────────────────┘  └─────────────────────────┘   └───────────────────────────────┘    ║
+║                │                                                             │                    ║
+║                └─────────────────┬───────────────────────────────────────────┘                    ║
+║                                  ▼                                                                ║
+║           ┌─────────────────────────────────────────────┐    ┌─────────────────────────────────┐  ║
+║           │           OpenCrane control plane           │    │ Shared organisation services    │  ║
+║           │       identity · conversations · runs       │    │ maintained centrally,           │  ║
+║           │     approvals · budgets · access · audit    │    │ outside the agents              │  ║
+║           └─────────────────────────────────────────────┘    │                                 │  ║
+║              starts a          │   ▲  ordered                │  • Models                       │  ║
+║             governed run       │   │   events                │  • Tools                        │  ║
+║                                ▼   │                         │  • Memory & knowledge           │  ║
+║           ┌─────────────────────────────────────────────┐    │  • Files & artifacts            │  ║
+║           │                 Isolated run                │uses│                                 │  ║
+║           │         short-lived · one attempt ·         │───▶│                                 │  ║
+║           │            no standing authority            │    │                                 │  ║
+║           └─────────────────────────────────────────────┘    └─────────────────────────────────┘  ║
+║                                                                                                   ║
+║                                                                                                   ║
+╚═══════════════════════════════════════════════════════════════════════════════════════════════════╝
 ```
 
 The control plane governs the parts that must be consistent across every agent:
