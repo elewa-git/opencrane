@@ -30,7 +30,7 @@ export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneF
   async findMembership(claim: StandaloneFirstUserOwnerClaim): Promise<StandaloneFirstUserStoredMembership | null>
   {
     const membership = await this.prisma.orgMembership.findUnique({
-      where: { clusterTenant_subject: claim },
+      where: { clusterTenant_subject: { clusterTenant: claim.clusterTenant, subject: claim.subject } },
       select: { subject: true, role: true, status: true },
     });
     return membership === null ? null : _storedMembership(membership);

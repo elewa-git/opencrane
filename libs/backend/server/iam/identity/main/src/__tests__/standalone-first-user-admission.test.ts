@@ -2,7 +2,7 @@ import { OrgMemberStatus, OrgRole, Prisma, type PrismaClient } from "@prisma/cli
 import { describe, expect, it, vi } from "vitest";
 
 import { _AdmitStandaloneFirstUser } from "../standalone-first-user-admission.js";
-import { _ClaimStandaloneFirstUserOwner } from "../prisma-standalone-first-user-admission-repository.js";
+import { _ClaimStandaloneFirstUserOwner, PrismaStandaloneFirstUserAdmissionRepository } from "../prisma-standalone-first-user-admission-repository.js";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../prisma-standalone-first-user-admission-unit-of-work.js";
 import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserOwnerClaimRepository } from "../standalone-first-user-admission.types.js";
 
@@ -120,6 +120,22 @@ describe("_ClaimStandaloneFirstUserOwner", function _claimSuite()
     await expect(_ClaimStandaloneFirstUserOwner(store, { clusterTenant: "testv2", subject: "subject-jente", mayCreateOwner: false })).resolves.toEqual({ outcome: StandaloneFirstUserAdmissionOutcomes.AlreadyClaimed });
 
     expect(store.createOwner).not.toHaveBeenCalled();
+  });
+});
+
+describe("PrismaStandaloneFirstUserAdmissionRepository", function _repositorySuite()
+{
+  it("uses only durable membership fields in the compound Prisma selector", async function _findsMembership()
+  {
+    const findUnique = vi.fn().mockResolvedValue(null);
+    const repository = new PrismaStandaloneFirstUserAdmissionRepository({ orgMembership: { findUnique } } as never, _auditPort());
+
+    await expect(repository.findMembership({ clusterTenant: "testv2", subject: "subject-jente", mayCreateOwner: true })).resolves.toBeNull();
+
+    expect(findUnique).toHaveBeenCalledWith({
+      where: { clusterTenant_subject: { clusterTenant: "testv2", subject: "subject-jente" } },
+      select: { subject: true, role: true, status: true },
+    });
   });
 });
 
