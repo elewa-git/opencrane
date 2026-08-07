@@ -60,5 +60,5 @@ boundary. Both must pass.
 4. Verify runtime Jobs have no Service, Ingress, role binding or persistent volume.
 5. Verify only the ingress controller can reach the public API port.
 
-Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl)
-and [`libs/backend/agents/runtime/k8s-launcher`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/runtime/k8s-launcher/README.md).
+Source: [`apps/opencrane/helm/templates/_networkpolicy.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_networkpolicy.tpl)
+and [`libs/backend/agents/runtime/k8s-launcher`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/runtime/k8s-launcher/README.md).

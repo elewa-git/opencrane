@@ -46,6 +46,7 @@ jobs:
       deployables: ${{ steps.affected.outputs.deployables }}
       has_deployables: ${{ steps.affected.outputs.has_deployables }}
       api_contract_changed: ${{ steps.affected.outputs.api_contract_changed }}
+      develop_smoke_required: ${{ steps.affected.outputs.develop_smoke_required }}
       guard_inputs_changed: ${{ steps.affected.outputs.guard_inputs_changed }}
     steps:
       - uses: actions/checkout@v6
@@ -232,15 +233,52 @@ jobs:
           npx nx run contracts:generate
           git diff --exit-code -- libs/contracts/src/generated/api.ts
 
+  develop_smoke:
+    name: k3d current-silo smoke test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    needs: [prepare, test]
+    # Every accepted develop commit proves the current deployment path. Pull requests pay for the
+    # live cluster only when they move that surface, so the smoke implementation proves itself.
+    if: >-
+      ${{
+        (github.event_name == 'push' && github.ref == 'refs/heads/develop') ||
+        (github.event_name == 'pull_request' && needs.prepare.outputs.develop_smoke_required == 'true')
+      }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install k3d
+        env:
+          K3D_VERSION: v5.8.3
+          K3D_LINUX_AMD64_SHA256: dbaa79a76ace7f4ca230a1ff41dc7d8a5036a8ad0309e9c54f9bf3836dbe853e
+        run: |
+          curl --location --fail --silent --show-error \
+            --output /tmp/k3d "https://github.com/k3d-io/k3d/releases/download/${K3D_VERSION}/k3d-linux-amd64"
+          echo "${K3D_LINUX_AMD64_SHA256}  /tmp/k3d" | sha256sum --check
+          sudo install --mode 0755 /tmp/k3d /usr/local/bin/k3d
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+        with:
+          version: v4.1.4
+
+      - name: Run the current-silo smoke
+        run: ./apps/_infra/deploy-k8s/platform/tests/develop-smoke.sh
+        env:
+          KEEP_CLUSTER: "0"
+          TIMEOUT_SECONDS: "300"
+
   build-and-push:
     name: Build and publish affected images
     runs-on: ubuntu-latest
-    needs: [prepare, test]
+    needs: [prepare, test, develop_smoke]
     if: >-
       ${{
         always() &&
         needs.prepare.outputs.has_deployables == 'true' &&
-        needs.test.result == 'success'
+        needs.test.result == 'success' &&
+        (needs.develop_smoke.result == 'success' || needs.develop_smoke.result == 'skipped')
       }}
     permissions:
       contents: read

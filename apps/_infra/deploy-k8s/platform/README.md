@@ -16,7 +16,14 @@ local source consumer.
 | `provision.sh` | Optional local, GKE Autopilot, or VPS cluster provisioning invoked before deployment. The GKE path bootstraps a private, versioned Terraform-state bucket in the cluster region; set `OPENCRANE_TERRAFORM_STATE_BUCKET` only when the deterministic `<project>-<cluster>-tfstate` name cannot be used. |
 | `terraform/` | GKE Autopilot with regional CMEK, plus opt-in networking, DNS, and Artifact Registry resources. Application charts remain owned by `deploy.sh`. |
 | `values/` | Reusable environment and multi-instance deployment profiles. |
-| `tests/` | Rendered network, pooler, key-permission, post-deploy health, and skill-workload contract checks. |
+| `tests/` | Rendered contract checks plus the blocking disposable-k3d current-silo smoke used on `develop`. |
+
+`tests/develop-smoke.sh` exercises the real silo deploy entrypoint with images built from the checked
+out commit. It supplies only disposable OIDC and database credentials, installs pinned cert-manager,
+CloudNativePG, and the CI-only expandable hostpath CSI driver, then fails on any enabled workload,
+database-isolation, Certificate, or TLS `/healthz` failure. Set `KEEP_CLUSTER=1` for local diagnosis.
+It is intentionally a smoke gate: backup/restore and production storage, DNS, and transport remain
+separate live qualifications.
 
 Business logic does not belong here. Server-process infrastructure belongs in `libs/backend/_server`;
 backend capabilities belong in `libs/backend/server`; independently owned third-party workloads

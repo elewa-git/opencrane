@@ -1,25 +1,33 @@
 # Governed AI agents on your infrastructure
 
-OpenCrane is a **self-hosted Kubernetes control plane** for defining agents, admitting
-their work and keeping identity, tools, approvals, cost and evidence under your authority.
+OpenCrane is a **self-hosted platform for AI agents**, running on your own Kubernetes cluster, that
+keeps identity, tools, approvals, cost and evidence under your authority — not a vendor's.
 
-## Durable control, bounded execution
+## Personal assistants and managed agents
+
+- **Your personal assistant** works for you alone — only your granted tools, files and knowledge,
+  only acting as you. → [Set up your personal assistant](/guide/persona)
+- **A managed agent** is a shared worker your organisation configures for bounded, scheduled or
+  triggered work, under its own narrow identity — never inheriting anyone's personal access.
+  → [Create a managed agent](/guide/first-agent)
+
+## Disposable execution, durable record
 
 ```text
-define an agent
+define an agent (personal or managed)
       │
       ▼
-admit an AgentRun
+admit a run — freeze exactly what it may use
       │
       ▼
-execute one bounded Job attempt
+execute in one disposable, bounded Job
       │
       ▼
-inspect ordered events, actions and outcome
+inspect the ordered events, actions and outcome
 ```
 
-OpenCrane keeps the durable run record in the control plane. Runtime Jobs are isolated,
-short-lived execution details with no direct tool credentials or persistent user volume.
+The container that runs your agent's work can be replaced or disappear; the record of what it was
+allowed to use and what it did stays with OpenCrane.
 
 ## Build useful agents
 
@@ -33,4 +41,4 @@ short-lived execution details with no direct tool credentials or persistent user
 
 → [See how OpenCrane works](/guide/how-it-works) ·
 [Install OpenCrane](/guide/getting-started) ·
-[Create your first agent](/guide/first-agent)
+[Set up your personal assistant](/guide/persona)

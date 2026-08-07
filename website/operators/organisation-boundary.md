@@ -39,5 +39,5 @@ Confirm that the release, public host and runtime profiles all resolve to the sa
 Then verify that the personal and managed runtime namespaces are separate from the server
 namespace and from each other.
 
-Source: [`libs/backend/server/tenancy/cluster-tenants/main`](https://github.com/italanta/opencrane/blob/main/libs/backend/server/tenancy/cluster-tenants/main/README.md)
-and [`apps/opencrane/src/app/routes.ts`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/src/app/routes.ts).
+Source: [`libs/backend/server/tenancy/cluster-tenants/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/tenancy/cluster-tenants/main/README.md)
+and [`apps/opencrane/src/app/routes.ts`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/src/app/routes.ts).

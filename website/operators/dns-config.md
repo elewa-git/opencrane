@@ -50,5 +50,5 @@ kubectl get ingress,certificate -n <server-namespace>
 Then verify the certificate chain and that `/api/v1/openapi.json` is served by the expected
 silo. Internal `/api/internal` routes must not be exposed by the Ingress.
 
-Source: [`apps/opencrane/helm/templates/_ingress.tpl`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/helm/templates/_ingress.tpl)
-and [`apps/opencrane/helm/templates/_certificate.tpl`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/helm/templates/_certificate.tpl).
+Source: [`apps/opencrane/helm/templates/_ingress.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_ingress.tpl)
+and [`apps/opencrane/helm/templates/_certificate.tpl`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/helm/templates/_certificate.tpl).

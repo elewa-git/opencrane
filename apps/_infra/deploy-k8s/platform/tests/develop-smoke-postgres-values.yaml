@@ -1,0 +1,3 @@
+# Keep the disposable database small; production storage defaults remain unchanged.
+storage:
+  size: 1Gi
