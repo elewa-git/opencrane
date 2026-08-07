@@ -233,9 +233,11 @@ transaction. A real callback exposed and the regression test now prevents a Pris
 including the in-memory `mayCreateOwner` authorization flag; the corrected image is live. The
 deployment also retains the existing OIDC Secret and seeds OpenAI through LiteLLM.
 This clears the single-silo deployment, TLS, OIDC configuration, database-privileges, initial-provider,
-local first-owner **configuration**, and full workload-health gates. It does **not** clear the browser
-callback/onboarding gate until Jente logs in again to run the corrected admission once, nor the
-personal-agent/workspace creation or Phase E runtime qualification gates.
+local first-owner admission, and full workload-health gates. A real callback returned successfully and
+created the active `testv2` Owner row. Its first rendered `/no-tenant` page was a separately stale SPA
+(`latest`) calling a removed endpoint; CI now publishes the UI on demand and Helm revision 33 pins
+`opencrane-ui:sha-6a09541`. Personal-agent/workspace creation and Phase E runtime qualification remain
+open live gates.
 
 Exit: the canonical runtime and managed-agent lifecycle pass failure, replay, authorization,
 isolation, cancellation, provider, and artifact tests with no OpenClaw compatibility surface.

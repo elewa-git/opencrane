@@ -182,3 +182,19 @@ Full run reports belong in the corresponding pull request or issue.
   qualification: the first real OIDC return must exercise the admission transaction.
 - open: Jente must run the login once more to create and confirm the local `testv2` Owner row.
   Personal-agent/workspace creation and Phase E runtime qualification remain separate live gates.
+
+## 2026-08-07 · dev · testv2 current-UI tenant rendering repair · 6a09541a · COMPLETE
+
+- findings: the corrected Zitadel callback returned `302 /` and created the active `testv2` Owner
+  membership. The old `opencrane-ui:latest` bundle then requested the removed `/api/v1/tenants`
+  endpoint and rendered `/no-tenant`, despite `/auth/me` resolving the membership. CI run
+  `31176563689` passed and published `opencrane-ui:sha-6a09541`; it adds the explicit, app-owned
+  `ui` publication selection. The app-owned deployer applied OpenCrane revision 33 and PostgreSQL
+  revision 50, pinning UI `sha-6a09541`, server `sha-fc53af6`, and artifact service `sha-7ebcfa8`.
+  UI is `1/1 Ready` and public health remains database-backed 200.
+- lesson: a single-silo qualification must pin every workload image to CI evidence. A healthy
+  callback and a correct server `/auth/me` response do not validate the customer journey when the
+  SPA can remain at an unrelated `latest` image.
+- open: refresh an already-open browser tab to load the pinned UI bundle. The first-user
+  callback/membership gate is complete; personal-agent/workspace creation and Phase E runtime
+  qualification remain separate live gates.
