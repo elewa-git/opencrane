@@ -1,7 +1,14 @@
 # Manage tools with MCP
 
-A **tool** lets an agent request an action in another system. OpenCrane uses MCP for tool
-registration while keeping credentials, approvals and invocation receipts outside the runtime.
+A **tool** lets an agent reach into another system — send a message, update a record, search a
+calendar. OpenCrane uses the Model Context Protocol (MCP) to register those integrations, and
+keeps the credentials, the approval decision and the record of every call outside the runtime
+that executes it: a compromised or misbehaving agent run can't walk off with a live integration
+credential.
+
+Both kinds of agent use the same tool machinery — your personal assistant can only use the tools
+granted to *you*; a managed agent can only use the tools its published revision was configured
+with.
 
 ## Register a tool
 

@@ -31,7 +31,7 @@ The current composition includes:
 
 | Prefix | Purpose |
 |---|---|
-| `/agent-services` | Agent service, revision and run admission |
+| `/agent-services` | Managed agent definition, revision, publication, schedules and run admission |
 | `/me/runs` | Current user's run status, steering and cancellation surfaces |
 | `/me/conversations` | Authorised conversation replay |
 | `/me/approvals` | Deferred action approval decisions |

@@ -1,7 +1,10 @@
 # Model routing
 
-**Model routing** registers the models an organisation may use and resolves the default
-model posture that a run freezes at admission.
+Instead of wiring each agent to one hard-coded model, register the models your organisation is
+allowed to use, and let OpenCrane resolve which one a given run actually calls. Every model call
+goes through **LiteLLM**, a self-hosted proxy that fronts your chosen providers, so a raw provider
+API key never reaches a runtime container — agents only ever hold a short-lived key scoped to one
+model and one spending limit.
 
 ## Register models
 

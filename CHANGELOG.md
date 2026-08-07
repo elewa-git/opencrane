@@ -43,25 +43,24 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   workspaces are mounted non-authoritative scratch; and future application updates must return ready
   target Pods in strictly less than five minutes while remounting existing canonical volumes.
 
-- **Platform developers can now work on one functional domain in isolation, with module boundaries
-  enforced by lint.** Each of 20 functional domains (tenants, policies, grants, skills, model-routing,
-  providers, awareness, spend, groups, MCP, sessions, company-docs, audit, access-tokens, metrics,
-  connections, cluster-tenants, retrieval, contract, projection) is now an NX package at
-  `libs/domain/<domain>/main`, owning its routes, services, types, tests, and Prisma schema slice.
-  A module-boundary lint rule (`npm run lint:boundaries`) enforces that imports flow domain → domain + shared
-  only — no cross-domain hard coupling. The stepping stone for multi-tenant customisation and Wave 5
-  plugin ownership.
+- **Platform developers can now work on one functional capability in isolation, with module
+  boundaries enforced by lint.** The server's capabilities are split into scope-tagged NX libraries
+  grouped by area under `libs/backend/server/` (`agents`, `gateways`, `iam`, `knowledge`,
+  `reporting`, `tenancy`) and the surrounding `libs/backend` seams, each owning its routes, services,
+  types, tests, and Prisma schema slice. A module-boundary lint rule (`npm run lint:boundaries`)
+  enforces that imports flow capability → allowed dependency + shared only — no cross-capability hard
+  coupling. The stepping stone for multi-tenant customisation and plugin ownership.
 
-- **The workspace now builds, tests, and lints with NX caching — `npm run build/test/lint` runs once per
-  input change across all 20 domains.** NX derives the project graph from project metadata and source
-  imports, so a new package or dependency edge updates cache invalidation without manual
-  configuration. The developer experience remains `npm run build && npm test` and the
-  CI cost drops as unchanged domains are skipped.
+- **The workspace now builds, tests, and lints with NX caching — `npm run build/test/lint` runs once
+  per input change across every capability library.** NX derives the project graph from project
+  metadata and source imports, so a new package or dependency edge updates cache invalidation without
+  manual configuration. The developer experience remains `npm run build && npm test`, and CI cost
+  drops as unchanged capabilities are skipped.
 
-- **Adding a new domain package requires no Dockerfile or CI edits — the image builds the app's
+- **Adding a new capability library requires no Dockerfile or CI edits — the image builds the app's
   dependency closure automatically.** The Dockerfile copies `libs` wholesale and runs the
   OpenCrane server's npm workspace build, which lets Nx build the required dependency graph; each
-  new domain is included on the next build without touching the build definition. The `npm ci` →
+  new library is included on the next build without touching the build definition. The `npm ci` →
   `docker build` → app-start pipeline stays identical.
 
 - **Operators can create a silo database directly from one reviewed target definition.** Per-domain
@@ -90,6 +89,48 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   on the pod template, so any config change — including a newly registered BYOK default model —
   triggers a rolling restart automatically. Before this, a BYOK key registration had no effect
   until the pod was manually recycled.
+
+- **Approved agent tool calls now execute directly against Obot, with no server in the data
+  path.** Each run attempt is issued a short-lived Obot API key scoped to exactly that attempt's
+  MCP server ids (minted at dispatch, revoked with the attempt); the runtime pairs it with the
+  tool's Obot MCP server id to call Obot's connection proxy directly, so the underlying
+  integration credential never leaves Obot and never transits OpenCrane. The recorded tool-call
+  receipt carries only a content digest, never the tool payload.
+
+- **Personal-agent runs can recall organisation and personal memory through a locked-down memory
+  gateway.** A dedicated `memory-gateway` app is the only process allowed to reach the silo's
+  Cognee instance: it TokenReviews the server's identity and accepts only a single bounded
+  `CHUNKS` search against one caller-authorised dataset, rejecting anything else before it reaches
+  Cognee. Admission-time recall freezes the selected fact references (an id and content digest,
+  never raw text) into the run's input, and the compiler re-resolves and digest-verifies every
+  reference before it is compiled into the run, so a redelivered run stays byte-identical or fails
+  closed rather than silently drifting. Mid-run recall, writes, and correction remain unavailable
+  pending a durable write lifecycle.
+
+- **Skill authoring and tenant-authored tool execution now run as fully isolated, hardened
+  Kubernetes Jobs.** The agent controller — the only process allowed to create these workloads —
+  projects a suspended, non-privileged, read-only-root-filesystem Job with no embedded source
+  code, bundle bytes, arguments, or credentials; a database-fenced release then permits exactly
+  one conditional unsuspend, and a fail-closed admission policy accepts only that exact pinned Job
+  shape from the controller's identity. Each Job receives its identity through a short-lived,
+  audience-bound projected token and an opaque bootstrap reference in separate read-only files —
+  never inline — so an authoring or tool-runner workload cannot escalate past what it was granted.
+
+- **Every artifact and skill now has a stable, content-addressed, versioned identity, and users
+  can browse their own uploads.** Artifact bytes are stored once, addressed by their SHA-256
+  content hash, and finalised into an immutable revision only after a signed, single-use
+  promotion receipt is verified — a replayed or forged receipt is rejected. Skills carry the same
+  stable-identity/immutable-revision shape, exposed read-only at `GET /api/v1/skills`. Users can
+  list their own non-deleted assets at `GET /api/v1/me/assets`; an uploaded PDF is automatically
+  converted to text by an isolated worker so its content becomes searchable, with the derived text
+  kept as an immutable, lineage-linked revision.
+
+- **API clients now get structured, per-field validation errors instead of an opaque 400.** An
+  invalid request body returns bounded `{ location, path, message }` issues (capped at 20 issues,
+  16 path segments deep, generic messages that never echo the rejected value) generated from the
+  same Zod schema that validates the request — surfaced through `@opencrane/contracts`'s typed
+  error envelope and a browser API-error helper, so a form can map each issue straight to the
+  field that caused it.
 
 ### Changed
 
@@ -154,6 +195,12 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   from the DB and pod-token resolution could fail for tenants that had not gone through a
   post-split reconcile cycle.
 
+- **Listing or resolving a share can no longer widen what a row exposes, or guess at an
+  unrecognised scope.** Share reads now select only the fields declared in the public sharing
+  contract rather than the full underlying row, and mapping a stored scope value that doesn't
+  match one of the four supported kinds (org, department, project, personal) now fails closed
+  instead of silently defaulting to `personal`.
+
 ### Security
 
 - **Tenant pods can no longer self-install or self-update their agent runtime.** Runtime code is
@@ -169,6 +216,13 @@ follows [Keep a Changelog](https://keepachangelog.com/); the project uses
   `allowUsers` pin on the gateway restricts it to the tenant owner's email. Device auth is
   redundant in this topology; the flag makes that explicit rather than leaving it as a silent
   gap.
+
+- **Application code can no longer run raw SQL against the database, anywhere, under any
+  exemption.** `$queryRaw`, `$queryRawUnsafe`, `$executeRaw`, and `$executeRawUnsafe` are now
+  forbidden in production TypeScript — including inside a previously-declared repository adapter —
+  and no temporary policy exemption can reopen them. The invariants those queries used to enforce
+  (skill-workload fencing, artifact-preprocessing claims) now live as reviewed, database-owned
+  functions and triggers in the schema baseline, reached only through typed Prisma delegates.
 
 ### Removed
 

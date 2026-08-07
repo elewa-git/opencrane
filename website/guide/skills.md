@@ -6,8 +6,11 @@ signed artifact**, not an executable snippet appended to someone's workspace: it
 across a team or the whole organisation without trusting mutable runtime-local files.
 
 ::: info Foundation in progress
-The ArtifactStore-backed publication authority is implemented, but the end-user catalogue,
-authoring, and sharing API and UI are not mounted yet.
+`GET /api/v1/skills` serves a live, read-only catalogue of your organisation's skills (name,
+description, lifecycle state) — enough to see what exists. Authoring a new skill from a
+conversation, reviewing and publishing one, and sharing it across scopes are not exposed as
+end-user product surfaces yet; the isolated authoring-job and publication authority described
+below already exist underneath.
 :::
 
 ## What a skill contains
@@ -43,7 +46,7 @@ Skills move from draft to shared ability through a governed pipeline:
    already in review.
 
 The implementation of the publication authority lives in
-[`libs/backend/server/agents/skills/main`](https://github.com/elewa-git/opencrane/blob/own-personal-ai-agent-setup/libs/backend/server/agents/skills/main).
+[`libs/backend/server/agents/skills/main`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/server/agents/skills/main).
 The public product workflow builds on that authority.
 
 Sharing follows the platform's scope model — personal, project, department, organisation — and
@@ -90,10 +93,10 @@ upgrade a checklist into a code-executing specialist.
 
 ## What comes next
 
-The product surface still needs catalogue browsing, isolated authoring jobs mounted end-to-end,
-review and publication workflows, and governed sharing across personal, project, department and
-organisation scopes. Until those surfaces are mounted, there is no supported end-user
-skill-publishing workflow.
+The product surface still needs the conversational "turn this into a skill" tool, review and
+publication workflows exposed to end users, and governed sharing across personal, project,
+department and organisation scopes. Until those surfaces are mounted, there is no supported
+end-user skill-publishing workflow — only the read-only catalogue above.
 
 > See also: [Agent delegation (child runs)](/guide/child-runs) ·
 > [Control access](/guide/permissions) · [Architecture](/advanced/architecture)

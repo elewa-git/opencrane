@@ -91,5 +91,5 @@ digest-only receipts stay server-side; a model response cannot widen its own rea
 - An unknown or duplicate `tool.completed` report is refused; receipts are digest-only.
 - A late result from a cancelled or replaced attempt is not accepted.
 
-Source: [`libs/backend/_server/obot-custody`](https://github.com/italanta/opencrane/blob/main/libs/backend/_server/obot-custody/README.md)
-and [`libs/backend/agents/execution/protocol`](https://github.com/italanta/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md).
+Source: [`libs/backend/_server/obot-custody`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/_server/obot-custody/README.md)
+and [`libs/backend/agents/execution/protocol`](https://github.com/elewa-git/opencrane/blob/main/libs/backend/agents/execution/protocol/README.md).

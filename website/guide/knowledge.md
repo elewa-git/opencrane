@@ -1,7 +1,15 @@
 # Connect organisational knowledge
 
-OpenCrane uses **Cognee-backed datasets** for durable memory and keeps access, provenance
-and dataset identity under control-plane governance.
+Give agents something worth remembering. OpenCrane keeps a durable memory store (backed by
+Cognee) behind its own access control, so what an agent can recall always matches what its owner
+is allowed to see — never a raw, ungoverned document dump.
+
+::: tip Personal memory vs shared knowledge
+Your [personal assistant](/guide/persona) recalls from **your own** personal dataset — no one
+else's assistant can read it, and it can't read anyone else's. A managed agent recalls only from
+the **shared** organisation, department or project knowledge it was explicitly configured with.
+Neither kind can wander into the other's memory.
+:::
 
 ## Register sources and datasets
 

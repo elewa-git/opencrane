@@ -1,7 +1,8 @@
 # Review activity
 
-OpenCrane records **governance decisions and durable run evidence** so operators can explain
-who requested work, which revision ran, what was authorised and how it ended.
+Every run — your personal assistant's or a managed agent's — leaves a full trail: who or what
+triggered it, exactly what it was allowed to use, every action it took along the way, and how it
+ended. You can always answer "what did this agent do, and who let it" without guessing.
 
 ## What to inspect
 

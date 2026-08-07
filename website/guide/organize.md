@@ -23,6 +23,13 @@ shared and with whom.
 That keeps things flexible — your org structure lives in the labels you choose, not
 in a rigid hierarchy you have to maintain.
 
+::: tip Personal scope is your assistant's scope
+*Personal* isn't just the narrowest option on the list — it's the scope your
+[personal assistant](/guide/persona) always operates in. A managed agent, by contrast, is created
+at *project*, *department* or *org* scope on purpose, because it's meant to be shared. See
+[the personal/managed distinction](/guide/introduction#two-kinds-of-agent-and-why-the-difference-matters).
+:::
+
 ## How scopes show up
 
 The same four scopes appear everywhere you share or restrict something:

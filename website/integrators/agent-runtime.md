@@ -7,6 +7,17 @@ The control plane remains authoritative for identity, inputs, events, approvals 
 > [MCP gateway](/integrators/mcp-gateway) (tool custody), and
 > [Identity and runtime authentication](/security/identity) (workload proof).
 
+## One runtime, two admission authorities
+
+Personal and managed runs share every mechanism below, but never share an admission path.
+Personal admission derives its `AgentService` from the caller's own thread and verifies one signed
+personal membership assertion; managed admission derives the `agent-service:<id>` principal,
+verifies its current Ed25519-signed fleet membership, and intersects the active revision's exact
+knowledge/tool attachments with effective grants. A personal run's frozen input always names an
+approved `PersonaRevision`; a managed run's never does, because its published revision is already
+complete. Neither path can produce the other's identity or inherit its grants — see
+[Architecture](/advanced/architecture#personal-and-managed-are-separate-authorities-not-a-flag).
+
 ## Runtime sequence
 
 ```text
@@ -53,6 +64,6 @@ second policy, credential or transcript authority.
 
 ## Source
 
-- [`apps/agent-runtime`](https://github.com/italanta/opencrane/blob/main/apps/agent-runtime/README.md)
-- [`apps/agent-controller`](https://github.com/italanta/opencrane/blob/main/apps/agent-controller/README.md)
-- [`apps/opencrane/prisma/schema/runs.prisma`](https://github.com/italanta/opencrane/blob/main/apps/opencrane/prisma/schema/runs.prisma)
+- [`apps/agent-runtime`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-runtime/README.md)
+- [`apps/agent-controller`](https://github.com/elewa-git/opencrane/blob/main/apps/agent-controller/README.md)
+- [`apps/opencrane/prisma/schema/runs.prisma`](https://github.com/elewa-git/opencrane/blob/main/apps/opencrane/prisma/schema/runs.prisma)
