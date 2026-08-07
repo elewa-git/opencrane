@@ -247,6 +247,7 @@ while [[ $# -gt 0 ]]; do
     --reuse-values)  REUSE_VALUES="1"; shift ;;
     --reset-values)  RESET_VALUES="1"; shift ;;
     --set)           EXTRA_SET+=(--set "$2"); shift 2 ;;
+    --set-string)    EXTRA_SET+=(--set-string "$2"); shift 2 ;;
     --helm-arg)      EXTRA_HELM_ARGS+=("$2"); shift 2 ;;
     -h|--help)       grep '^#' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *)               err "Unknown flag: $1"; exit 1 ;;
