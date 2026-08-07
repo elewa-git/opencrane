@@ -1,9 +1,6 @@
 import { OrgMemberStatus, OrgRole, type Prisma } from "@prisma/client";
 
-import { __AppendAuditDecision } from "@opencrane/backend/server/iam/audit";
-import { ___DigestCanonicalJson, type JsonValue } from "@opencrane/util";
-
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserOwnerClaim, type StandaloneFirstUserOwnerClaimRepository, type StandaloneFirstUserStoredMembership } from "./standalone-first-user-admission.types.js";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserOwnerClaim, type StandaloneFirstUserOwnerClaimRepository, type StandaloneFirstUserStoredMembership } from "./standalone-first-user-admission.types.js";
 
 /** Maps the precise stored fields used by one-time owner admission into the port's vocabulary. */
 function _storedMembership(row: { subject: string; role: OrgRole; status: OrgMemberStatus }): StandaloneFirstUserStoredMembership
@@ -19,11 +16,14 @@ export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneF
 {
   /** Transaction selected by the owning unit of work. */
   private readonly prisma: Prisma.TransactionClient;
+  /** Audit authority supplied by the app composition root. */
+  private readonly audit: StandaloneFirstUserAdmissionAuditPort;
 
-  /** @param prisma - Exact serializable transaction for one owner-slot decision. */
-  constructor(prisma: Prisma.TransactionClient)
+  /** @param prisma - Exact serializable transaction for one owner-slot decision. @param audit - Audit authority bound to this transaction. */
+  constructor(prisma: Prisma.TransactionClient, audit: StandaloneFirstUserAdmissionAuditPort)
   {
     this.prisma = prisma;
+    this.audit = audit;
   }
 
   /** @inheritdoc */
@@ -62,24 +62,7 @@ export class PrismaStandaloneFirstUserAdmissionRepository implements StandaloneF
   /** @inheritdoc */
   async appendOwnerAdmissionAudit(claim: StandaloneFirstUserOwnerClaim): Promise<void>
   {
-    const decisionDigest = ___DigestCanonicalJson({ clusterTenant: claim.clusterTenant, subject: claim.subject, action: "standalone_first_owner_claim" } as JsonValue);
-    await __AppendAuditDecision(this.prisma, {
-      decisionDigest,
-      siloId: claim.clusterTenant,
-      actorKind: "user",
-      actorId: claim.subject,
-      resourceKind: "org-membership",
-      resourceId: `${claim.clusterTenant}:${claim.subject}`,
-      action: "claim-standalone-first-owner",
-      catalogId: "standalone-first-user",
-      catalogRevision: 1,
-      catalogDigest: decisionDigest,
-      argumentsDigest: decisionDigest,
-      policyRevisionHash: decisionDigest,
-      effectiveAuthorizationDigest: decisionDigest,
-      outcome: "allow",
-      reasonCode: "verified_bootstrap_owner_admitted",
-    });
+    await this.audit.append(this.prisma, claim);
   }
 }
 

@@ -42,8 +42,10 @@ org's IdP client, so only its own user pool can sign in there.
 produced a verified session. In a standalone silo, the deploy contract may name one bootstrap email.
 Only that email's explicitly verified OIDC identity can atomically claim the local active Owner row;
 the durable key is the stable `sub`, not the email. The deployment engine pins the silo's OIDC
-issuer once this contract exists, because an OIDC subject is issuer-scoped. A claimed owner does not create a personal
-workspace or relax signed runtime-membership admission — those are separate authorities. The package
+issuer once this contract exists, because an OIDC subject is issuer-scoped. The application supplies
+an audit adapter, which records an accepted claim in that same serializable transaction without making
+identity depend directly on the audit domain. A claimed owner does not create a personal workspace or
+relax signed runtime-membership admission — those are separate authorities. The package
 also mirrors groups from the login token into the silo's stored groups so operator tooling, grants,
 and audit see the same membership.
 

@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from "vitest";
 import { _AdmitStandaloneFirstUser } from "../standalone-first-user-admission.js";
 import { _ClaimStandaloneFirstUserOwner } from "../prisma-standalone-first-user-admission-repository.js";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "../prisma-standalone-first-user-admission-unit-of-work.js";
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserOwnerClaimRepository } from "../standalone-first-user-admission.types.js";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionCommand, type StandaloneFirstUserAdmissionRepository, type StandaloneFirstUserOwnerClaimRepository } from "../standalone-first-user-admission.types.js";
 
 /** Deployment configuration used by first-owner admission tests. */
 const _config = { clusterTenant: "testv2", email: "jente@elewa.ke", issuer: "https://idp.example" };
@@ -20,6 +20,12 @@ function _repository(outcome: StandaloneFirstUserAdmissionOutcomes): StandaloneF
 {
   const claimOwner = vi.fn(async function _claimOwner() { return { outcome }; });
   return { claimOwner } as StandaloneFirstUserAdmissionRepository & { claimOwner: ReturnType<typeof vi.fn> };
+}
+
+/** Audit port fixture for unit-of-work transaction wiring. */
+function _auditPort(): StandaloneFirstUserAdmissionAuditPort
+{
+  return { append: vi.fn().mockResolvedValue(undefined) };
 }
 
 describe("_AdmitStandaloneFirstUser", function _admissionSuite()
@@ -147,7 +153,7 @@ describe("PrismaStandaloneFirstUserAdmissionUnitOfWork", function _unitOfWorkSui
 {
   it("rechecks a serializable owner claim after a concurrent unique collision and denies the newcomer", async function _rejectsConcurrentClaim()
   {
-    const unitOfWork = new PrismaStandaloneFirstUserAdmissionUnitOfWork(_concurrentOwnerPrisma());
+    const unitOfWork = new PrismaStandaloneFirstUserAdmissionUnitOfWork(_concurrentOwnerPrisma(), _auditPort());
 
     await expect(unitOfWork.claimOwner({ clusterTenant: "testv2", subject: "subject-jente", mayCreateOwner: true })).resolves.toEqual({ outcome: StandaloneFirstUserAdmissionOutcomes.AlreadyClaimed });
   });

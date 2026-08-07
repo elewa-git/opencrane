@@ -41,7 +41,7 @@ vi.mock("openid-client", function _mockClient()
   };
 });
 
-import { ___CreateOidcAuthService } from "../index.js";
+import { ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort } from "../index.js";
 
 /** Minimal OIDC env so the service is enabled and uses `cid` as the masters client. */
 function _enableOidc(): void
@@ -95,6 +95,12 @@ function _standaloneAdmissionPrisma(): { prisma: PrismaClient; created: Array<{ 
     auditDecision: { create: vi.fn().mockResolvedValue(undefined) },
   } as unknown as PrismaClient;
   return { prisma, created };
+}
+
+/** Audit adapter fixture; transactional persistence is unit-tested at the audit boundary. */
+function _standaloneFirstUserAudit(): StandaloneFirstUserAdmissionAuditPort
+{
+  return { append: vi.fn().mockResolvedValue(undefined) };
 }
 
 /**
@@ -207,7 +213,7 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
   it("claims the configured verified standalone owner and saves org-admin session state", async function _claimsStandaloneOwner()
   {
     const { prisma, created } = _standaloneAdmissionPrisma();
-    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "u@acme.io", issuer: "https://idp.test" });
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "u@acme.io", issuer: "https://idp.test" }, _standaloneFirstUserAudit());
     const req = _callbackReq("client-acme");
 
     await service.completeLogin(req);
@@ -219,7 +225,7 @@ describe("OidcAuthService.completeLogin — token exchange uses the per-org clie
   it("destroys the regenerated session when configured first-owner admission is denied", async function _destroysDeniedAdmissionSession()
   {
     const { prisma } = _standaloneAdmissionPrisma();
-    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "different@acme.io", issuer: "https://idp.test" });
+    const service = ___CreateOidcAuthService(pino({ enabled: false }), prisma, null, { clusterTenant: "acme", email: "different@acme.io", issuer: "https://idp.test" }, _standaloneFirstUserAudit());
     const req = _callbackReq("client-acme");
     const destroy = vi.fn(function _destroy(callback: (error?: Error) => void) { callback(); });
     (req.session as unknown as { destroy: typeof destroy }).destroy = destroy;

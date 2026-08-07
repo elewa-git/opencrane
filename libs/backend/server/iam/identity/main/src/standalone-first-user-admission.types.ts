@@ -67,6 +67,13 @@ export interface StandaloneFirstUserAdmissionUnitOfWork extends StandaloneFirstU
 {
 }
 
+/** Audit boundary supplied by composition so identity records a claim inside its selected transaction. */
+export interface StandaloneFirstUserAdmissionAuditPort
+{
+  /** Appends immutable first-owner evidence through the exact owner-claim transaction. */
+  append(transaction: unknown, claim: Pick<StandaloneFirstUserOwnerClaim, "clusterTenant" | "subject">): Promise<void>;
+}
+
 /** Transaction-scoped persistence operations needed to inspect and claim one owner slot. */
 export interface StandaloneFirstUserOwnerClaimRepository
 {

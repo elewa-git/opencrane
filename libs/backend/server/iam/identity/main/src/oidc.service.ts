@@ -8,7 +8,7 @@ import { OidcAuthServiceBase, PrismaOrgMembershipRepository, _ClusterTenantFromH
 import { _MirrorGroupsOnLogin } from "./mirror-groups.js";
 import { _AdmitStandaloneFirstUser } from "./standalone-first-user-admission.js";
 import { PrismaStandaloneFirstUserAdmissionUnitOfWork } from "./prisma-standalone-first-user-admission-unit-of-work.js";
-import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionConfig } from "./standalone-first-user-admission.types.js";
+import { StandaloneFirstUserAdmissionOutcomes, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "./standalone-first-user-admission.types.js";
 import { _ResolveCallerClusterTenant } from "@opencrane/backend/server/tenancy/cluster-tenants";
 
 /**
@@ -38,6 +38,8 @@ export class OidcAuthService extends OidcAuthServiceBase
    * a configured standalone silo performs the narrow verified-email admission on every login.
    */
   private readonly standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null;
+  /** App-composed audit boundary retained only for the configured standalone owner claim. */
+  private readonly standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null;
 
   /**
    * @param log            - Parent logger; a child scoped to `oidc-auth` is derived by the base.
@@ -47,13 +49,19 @@ export class OidcAuthService extends OidcAuthServiceBase
    *                         ClusterTenant CR for per-org login resolution; null in dev/test (login
    *                         then always uses the masters client).
    * @param standaloneFirstUserAdmission - Optional standalone-silo first-owner admission contract.
+   * @param standaloneFirstUserAudit - App-composed audit adapter for standalone owner claims.
    */
-  constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null)
+  constructor(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null)
   {
     super(log, new PrismaOrgMembershipRepository(prisma));
+    if (standaloneFirstUserAdmission !== null && standaloneFirstUserAudit === null)
+    {
+      throw new Error("standalone first-user admission requires an audit adapter");
+    }
     this.prisma = prisma;
     this.customApi = customApi;
     this.standaloneFirstUserAdmission = standaloneFirstUserAdmission;
+    this.standaloneFirstUserAudit = standaloneFirstUserAudit;
   }
 
   /**
@@ -105,7 +113,12 @@ export class OidcAuthService extends OidcAuthServiceBase
     }
 
     // 3. Atomically claim only the configured silo owner from verified OIDC and host evidence.
-    const admission = await _AdmitStandaloneFirstUser(this.standaloneFirstUserAdmission, new PrismaStandaloneFirstUserAdmissionUnitOfWork(this.prisma), {
+    const audit = this.standaloneFirstUserAudit;
+    if (audit === null)
+    {
+      throw new Error("standalone first-user admission audit adapter is unavailable");
+    }
+    const admission = await _AdmitStandaloneFirstUser(this.standaloneFirstUserAdmission, new PrismaStandaloneFirstUserAdmissionUnitOfWork(this.prisma, audit), {
       hostClusterTenant: _ClusterTenantFromHost(_RequestHost(req)),
       issuer: authUser.issuer,
       subject: authUser.sub,
@@ -135,8 +148,9 @@ export class OidcAuthService extends OidcAuthServiceBase
  * @param prisma         - Prisma client for the `/auth/me` email→tenant lookup + membership facts.
  * @param customApi      - Kubernetes custom-objects client for per-org login CR reads (null in dev/test).
  * @param standaloneFirstUserAdmission - Optional one-time owner admission for a standalone silo.
+ * @param standaloneFirstUserAudit - App-composed audit adapter for that owner admission.
  */
-export function ___CreateOidcAuthService(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null): OidcAuthService
+export function ___CreateOidcAuthService(log: Logger, prisma: PrismaClient, customApi: k8s.CustomObjectsApi | null = null, standaloneFirstUserAdmission: StandaloneFirstUserAdmissionConfig | null = null, standaloneFirstUserAudit: StandaloneFirstUserAdmissionAuditPort | null = null): OidcAuthService
 {
-  return new OidcAuthService(log, prisma, customApi, standaloneFirstUserAdmission);
+  return new OidcAuthService(log, prisma, customApi, standaloneFirstUserAdmission, standaloneFirstUserAudit);
 }
