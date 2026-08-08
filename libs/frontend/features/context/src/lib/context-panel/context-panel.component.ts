@@ -1,7 +1,7 @@
 import { ChangeDetectionStrategy, Component, output, signal } from "@angular/core";
 
 import { ActiveSkill, LedgerEntry, SCOPE_COLORS, ScopeCitation, ScopeContextEntry, ScopeLevel } from "@opencrane/core";
-import { CollapsibleSectionComponent, LedgerCardComponent } from "@opencrane/elements/ui";
+import { CollapsibleSectionComponent, LedgerCardComponent, LedgerCardKinds } from "@opencrane/elements/ui";
 import { CanvasDocComponent } from "../components/canvas-doc/canvas-doc.component";
 
 /** Right panel: awareness contract, retrieved context, skills, ledger, canvas. */
@@ -15,6 +15,14 @@ import { CanvasDocComponent } from "../components/canvas-doc/canvas-doc.componen
 })
 export class ContextPanelComponent
 {
+	/** UI-owned ledger kind for each domain entry discriminator. */
+	private static readonly _LEDGER_KINDS: Record<string, LedgerCardKinds> =
+	{
+		[LedgerCardKinds.Observation]: LedgerCardKinds.Observation,
+		[LedgerCardKinds.Policy]: LedgerCardKinds.Policy,
+		[LedgerCardKinds.Action]: LedgerCardKinds.Action
+	};
+
 	/** Emits when the panel close button is clicked. */
 	public readonly closed = output<void>();
 
@@ -41,6 +49,12 @@ export class ContextPanelComponent
 
 	/** Scope → colour lookup for templates. */
 	public readonly scopeColors = SCOPE_COLORS;
+
+	/** Resolve an admitted domain entry to a finite shared-card treatment. */
+	public ledgerKind(kind: string): LedgerCardKinds
+	{
+		return ContextPanelComponent._LEDGER_KINDS[kind] ?? LedgerCardKinds.Observation;
+	}
 
 	/** Citations retrieved at a given scope (empty until the live gateway lands). */
 	public citationsFor(level: ScopeLevel): ScopeCitation[]

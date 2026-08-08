@@ -15,7 +15,7 @@
 	}
 
 	&__muted {
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__actions {
@@ -36,7 +36,7 @@
 	&__empty {
 		padding: 24px 0;
 		font-size: 13px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__browse {

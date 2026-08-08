@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
-/** Serif page heading with optional muted subtitle (settings sections). */
+/** Page heading with optional muted subtitle (settings sections). */
 @Component({
 	selector: "wo-section-heading",
 	standalone: true,

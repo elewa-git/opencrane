@@ -10,7 +10,7 @@ import { _ParseA2uiMessages } from "./a2ui-message.util";
  *
  * Each instance owns its own {@link MessageProcessor} (component-scoped provider) so surfaces
  * from one canvas never leak into another. The payload may be JSONL, a JSON array, or already
- * parsed — {@link _ParseA2uiMessages} handles all three. Requires {@link provideWoA2ui} at the
+ * parsed — {@link _ParseA2uiMessages} handles all three. Requires {@link provideOpenCraneA2ui} at the
  * app level (catalog + theme + markdown renderer).
  */
 @Component({

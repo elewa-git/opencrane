@@ -1,8 +1,9 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, input, linkedSignal, output } from "@angular/core";
 import { DrawerModule } from "primeng/drawer";
 
-import { MCP_TYPE_STYLES, McpConnectionStatus, McpCredentialField, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
-import { AvatarCircleComponent } from "@opencrane/elements/ui";
+import { McpConnectionStatus, McpCredentialField, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { AvatarCircleComponent, AvatarSizes, AvatarTones } from "@opencrane/elements/ui";
+import { MCP_TYPE_CHIPS } from "../mcp-chip.constants";
 
 /**
  * Connect / Set-credential drawer — the single secure entry point for binding a
@@ -25,6 +26,12 @@ import { AvatarCircleComponent } from "@opencrane/elements/ui";
 })
 export class ConnectDrawerComponent
 {
+	/** Finite avatar tones exposed for the connected-account identity. */
+	public readonly avatarTones = AvatarTones;
+
+	/** Finite avatar sizes exposed for the connected-account identity. */
+	public readonly avatarSizes = AvatarSizes;
+
 	/** Server to connect, or `null` when the drawer is closed. */
 	public readonly server = input<McpServer | null>(null);
 
@@ -49,8 +56,8 @@ export class ConnectDrawerComponent
 	/** Server-type enum for the template. */
 	public readonly serverType = McpServerType;
 
-	/** Type chip styles for the sub-line label. */
-	public readonly typeStyles = MCP_TYPE_STYLES;
+	/** Feature-owned labels and semantic tones for server types. */
+	public readonly typeChips = MCP_TYPE_CHIPS;
 
 	/** Whether the drawer is open (mirrors a non-null server). */
 	public readonly visible: Signal<boolean> = computed((): boolean => this.server() !== null);

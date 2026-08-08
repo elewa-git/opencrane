@@ -234,6 +234,25 @@ jobs:
       - name: Build, test, and lint affected projects
         run: npx nx affected -t build test lint
 
+      - name: Detect affected Storybook regression coverage
+        id: storybook-regression
+        shell: bash
+        run: |
+          AFFECTED_STORYBOOK_PROJECTS="$(npx nx show projects --affected --with-target=test-storybook-visual --base="$NX_BASE" --head="$NX_HEAD")"
+          if [[ -n "$AFFECTED_STORYBOOK_PROJECTS" ]]; then
+            echo "required=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "required=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Chromium for affected Storybook regressions
+        if: steps.storybook-regression.outputs.required == 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Build and test affected Storybook component contracts
+        if: steps.storybook-regression.outputs.required == 'true'
+        run: npx nx affected -t build-storybook test-storybook test-storybook-visual --base="$NX_BASE" --head="$NX_HEAD" --parallel=1
+
       - name: Enforce monorepo dependency boundaries
         run: npm run lint:boundaries
 

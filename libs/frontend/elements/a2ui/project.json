@@ -6,7 +6,8 @@
 	"prefix": "wo",
 	"tags": [
 		"scope:web",
-		"type:ui"
+		"type:lib",
+		"layer:frontend"
 	],
 	"targets": {
 		"lint": {

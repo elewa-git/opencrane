@@ -26,9 +26,10 @@ lives on the server — this pane only displays it.
 
 ## Dependency direction
 
-Tagged `scope:web` (the frontend dependency tier): it may import only other `scope:web` packages
-and `scope:shared` contracts. It depends on `@opencrane/core` (context models and data) and
-`@opencrane/elements/ui` (collapsible section, ledger card, scope chip).
+Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
+only other `scope:web` packages and `scope:shared` contracts. It depends on `@opencrane/core`
+(context models and data) and `@opencrane/elements/ui` (collapsible section, ledger card, scope
+chip).
 
 ## See also
 

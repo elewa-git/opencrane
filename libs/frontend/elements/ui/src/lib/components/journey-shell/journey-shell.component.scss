@@ -1,0 +1,113 @@
+:host {
+	display: block;
+	min-height: 100%;
+}
+
+.wo-journey {
+	position: relative;
+	display: grid;
+	place-items: center;
+	min-height: 100%;
+	padding: var(--oc-space-8) var(--oc-space-5);
+	background: var(--oc-surface-canvas);
+	overflow: hidden;
+
+	&__paper {
+		position: absolute;
+		inset: 0;
+		background-image: var(--oc-paper-texture);
+		opacity: var(--oc-paper-texture-opacity);
+		pointer-events: none;
+	}
+
+	&__panel {
+		position: relative;
+		width: min(100%, var(--oc-journey-compact-width));
+		padding: var(--oc-space-8);
+		border: 1px solid var(--oc-border-subtle);
+		border-radius: var(--oc-radius-panel);
+		background: color-mix(in srgb, var(--oc-surface-paper) 96%, transparent);
+		box-shadow: var(--oc-shadow-paper);
+	}
+
+	&--wide &__panel {
+		width: min(100%, var(--oc-journey-wide-width));
+	}
+
+	&__header {
+		margin-bottom: var(--oc-space-6);
+	}
+
+	&__brand {
+		display: inline-flex;
+		align-items: center;
+		gap: var(--oc-space-2);
+		margin-bottom: var(--oc-space-6);
+		font-family: var(--oc-font-mono);
+		font-size: var(--oc-text-xs);
+		font-weight: 600;
+		letter-spacing: var(--oc-tracking-label);
+		text-transform: uppercase;
+		color: var(--oc-ink-muted);
+	}
+
+	&__mark {
+		width: var(--oc-space-3);
+		height: var(--oc-space-3);
+		background: var(--oc-accent);
+		clip-path: polygon(50% 0, 100% 100%, 0 100%);
+	}
+
+	&__title {
+		margin: 0;
+		font-size: clamp(var(--oc-text-2xl), 5vw, var(--oc-text-4xl));
+		font-weight: 500;
+		line-height: 1.08;
+		letter-spacing: var(--oc-tracking-title);
+		color: var(--oc-ink-strong);
+	}
+
+	&__description {
+		max-width: var(--oc-reading-width);
+		margin: var(--oc-space-3) 0 0;
+		font-size: var(--oc-text-md);
+		line-height: 1.6;
+		color: var(--oc-ink-muted);
+	}
+
+	&__status:empty,
+	&__actions:empty {
+		display: none;
+	}
+
+	&__status {
+		margin-bottom: var(--oc-space-4);
+	}
+
+	&__content {
+		position: relative;
+	}
+
+	&__actions {
+		display: flex;
+		align-items: center;
+		justify-content: flex-end;
+		gap: var(--oc-space-3);
+		margin-top: var(--oc-space-6);
+	}
+}
+
+@media (max-width: 640px) {
+	.wo-journey {
+		place-items: stretch;
+		padding: 0;
+
+		&__panel {
+			min-height: 100dvh;
+			padding: var(--oc-space-6) var(--oc-space-4);
+			border: 0;
+			border-radius: 0;
+			box-shadow: none;
+		}
+	}
+}

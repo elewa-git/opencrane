@@ -6,7 +6,8 @@
 	"prefix": "wo",
 	"tags": [
 		"scope:web",
-		"type:ui"
+		"type:lib",
+		"layer:frontend"
 	],
 	"targets": {
 		"lint": {
@@ -21,6 +22,114 @@
 			"options": {
 				"command": "vitest run --passWithNoTests",
 				"cwd": "libs/frontend/elements/ui"
+			}
+		},
+		"storybook": {
+			"executor": "@storybook/angular:start-storybook",
+			"inputs": [
+				"default",
+				"^production",
+				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+			],
+			"options": {
+				"browserTarget": "frontend-elements-ui:build-storybook",
+				"configDir": "libs/frontend/elements/ui/.storybook",
+				"tsConfig": "libs/frontend/elements/ui/.storybook/tsconfig.json",
+				"styles": [
+					"libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+				],
+				"port": 4400,
+				"host": "127.0.0.1",
+				"compodoc": false,
+				"experimentalZoneless": true
+			},
+			"configurations": {
+				"ci": {
+					"ci": true,
+					"quiet": true
+				}
+			}
+		},
+		"build-storybook": {
+			"executor": "@storybook/angular:build-storybook",
+			"inputs": [
+				"default",
+				"^production",
+				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+			],
+			"outputs": [
+				"{options.outputDir}"
+			],
+			"options": {
+				"browserTarget": "frontend-elements-ui:build-storybook",
+				"configDir": "libs/frontend/elements/ui/.storybook",
+				"tsConfig": "libs/frontend/elements/ui/.storybook/tsconfig.json",
+				"styles": [
+					"libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+				],
+				"outputDir": "dist/storybook/frontend-elements-ui",
+				"compodoc": false,
+				"experimentalZoneless": true
+			},
+			"configurations": {
+				"ci": {
+					"quiet": true
+				}
+			}
+		},
+		"static-storybook": {
+			"executor": "@nx/web:file-server",
+			"continuous": true,
+			"cache": false,
+			"dependsOn": [
+				"build-storybook"
+			],
+			"options": {
+				"staticFilePath": "dist/storybook/frontend-elements-ui",
+				"port": 4400,
+				"host": "127.0.0.1",
+				"watch": false,
+				"cors": false,
+				"cacheSeconds": -1
+			}
+		},
+		"test-storybook": {
+			"executor": "nx:run-commands",
+			"cache": false,
+			"dependsOn": [
+				"static-storybook"
+			],
+			"options": {
+				"command": "test-storybook --config-dir libs/frontend/elements/ui/.storybook --url http://127.0.0.1:4400 --index-json --ci --failOnConsole --maxWorkers=1 --disable-telemetry"
+			}
+		},
+		"test-storybook-visual": {
+			"executor": "nx:run-commands",
+			"cache": false,
+			"dependsOn": [
+				"static-storybook"
+			],
+			"inputs": [
+				"default",
+				"^production",
+				"{workspaceRoot}/playwright.storybook.config.ts",
+				"{workspaceRoot}/tests/storybook/**/*"
+			],
+			"outputs": [
+				"{workspaceRoot}/.nx/test-results/storybook"
+			],
+			"options": {
+				"command": "playwright test --config playwright.storybook.config.ts"
+			}
+		},
+		"update-storybook-visual": {
+			"executor": "nx:run-commands",
+			"cache": false,
+			"dependsOn": [
+				"static-storybook"
+			],
+			"options": {
+				"command": "playwright test --config playwright.storybook.config.ts --update-snapshots=all"
 			}
 		}
 	}

@@ -13,6 +13,6 @@ export * from "./lib/api/api-client.types";
 export { OpenCraneApiError } from "./lib/api/api-error";
 export * from "./lib/api/control-plane-api.service";
 export * from "./lib/api/fleet-manager-api.service";
-export * from "./lib/theme/weownai-preset";
+export * from "./lib/theme/opencrane-preset";
 export * from "./lib/utils/collection.utils";
 export * from "./lib/utils/id.utils";

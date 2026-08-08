@@ -22,6 +22,8 @@ the authority on what a user may install or govern.
 
 - `TOOLS_ROUTES` — the user-facing route table (My Tools at `""`, catalogue at `"catalogue"`).
 - `MCP_ADMIN_ROUTES` — the admin route table (catalogue-admin, access-policy, model-keys).
+- `theme.scss` — the feature-owned shared presentation for tools/admin layouts, tables, inputs,
+  callouts, actions, and connection-status indicators; the SPA composes this public style entrypoint.
 
 ## Boundary
 
@@ -31,10 +33,10 @@ the real enforcement point.
 
 ## Dependency direction
 
-Tagged `scope:web` (the frontend dependency tier): it may import only other `scope:web` packages
-and `scope:shared` contracts. It depends on `@opencrane/state/core` (session store),
-`@opencrane/state/mcp/adapter` (the MCP gateway), and `@opencrane/state/provider-key/adapter` (the
-provider-key gateway and status).
+Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
+only other `scope:web` packages and `scope:shared` contracts. It depends on `@opencrane/state/core`
+(session store), `@opencrane/state/mcp/adapter` (the MCP gateway), and
+`@opencrane/state/provider-key/adapter` (the provider-key gateway and status).
 
 ## See also
 

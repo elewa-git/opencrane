@@ -35,12 +35,12 @@
 							</td>
 							<td>
 								@if (row.configured) {
-									<wo-scope-chip label="configured" color="#5A8A5A" />
+									<wo-scope-chip label="configured" [tone]="chipTones.Success" />
 								} @else {
-									<wo-scope-chip label="not set" color="#7A766D" />
+									<wo-scope-chip label="not set" [tone]="chipTones.Neutral" />
 								}
 							</td>
-							<td><wo-scope-chip [label]="badgeStyle(row).label" [color]="badgeStyle(row).color" [bordered]="false" /></td>
+							<td><wo-scope-chip [label]="badgeStyle(row).label" [tone]="badgeStyle(row).tone" [appearance]="chipAppearances.Soft" /></td>
 							<td class="wo-admin__muted">{{ row.updatedAtLabel }}</td>
 							<td>
 								<input
@@ -82,7 +82,7 @@
 			<p-confirmDialog />
 		} @else {
 			<div class="wo-admin__denied">
-				<h2 class="wo-serif">Admins only</h2>
+				<h2>Admins only</h2>
 				<p>Model provider keys are managed by your organisation's administrators.</p>
 			</div>
 		}

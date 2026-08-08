@@ -1,6 +1,13 @@
-<div class="wo-section" [class.wo-section--rail]="variant() === 'rail'">
-	<button type="button" class="wo-section__header" (click)="toggle()">
-		@if (variant() === 'rail') {
+<div class="wo-section" [class.wo-section--rail]="variant() === variants.Rail">
+	<button
+		[id]="sectionId() + '-trigger'"
+		type="button"
+		class="wo-section__header"
+		[attr.aria-controls]="sectionId() + '-panel'"
+		[attr.aria-expanded]="open()"
+		(click)="toggle()"
+	>
+		@if (variant() === variants.Rail) {
 			<i class="pi pi-chevron-down wo-section__chevron" [class.wo-section__chevron--closed]="!open()"></i>
 			<span class="wo-section__title">{{ title() }}</span>
 		} @else {
@@ -9,7 +16,12 @@
 		}
 	</button>
 	@if (open()) {
-		<div class="wo-section__body">
+		<div
+			[id]="sectionId() + '-panel'"
+			class="wo-section__body"
+			role="region"
+			[attr.aria-labelledby]="sectionId() + '-trigger'"
+		>
 			<ng-content />
 		</div>
 	}

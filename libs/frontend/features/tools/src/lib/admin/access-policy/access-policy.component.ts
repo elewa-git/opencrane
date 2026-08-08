@@ -3,10 +3,12 @@ import { FormsModule } from "@angular/forms";
 import { RouterLink } from "@angular/router";
 import { ToggleSwitchModule } from "primeng/toggleswitch";
 
-import { MCP_TYPE_STYLES, McpAccessPolicy, McpApprovalStatus, McpDirectory, McpEntitledUser, McpServer } from "@opencrane/core";
+import { McpAccessPolicy, McpApprovalStatus, McpDirectory, McpEntitledUser, McpServer } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
 import { SessionStore } from "@opencrane/state/core";
-import { AvatarCircleComponent, ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+import { AvatarCircleComponent, AvatarSizes, AvatarTones, ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+
+import { MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
 
 /**
  * Access-policy management — maps servers → users / groups.
@@ -27,6 +29,12 @@ import { AvatarCircleComponent, ScopeChipComponent, SectionHeadingComponent } fr
 })
 export class AccessPolicyComponent
 {
+	/** Finite avatar tones exposed for the template's neutral user identity. */
+	public readonly avatarTones = AvatarTones;
+
+	/** Finite avatar sizes exposed for dense entitlement chips. */
+	public readonly avatarSizes = AvatarSizes;
+
 	/** Active MCP data source (live OpenCrane when bound; mock in dev). */
 	private readonly _gateway = inject(MCP_GATEWAY);
 
@@ -49,8 +57,8 @@ export class AccessPolicyComponent
 	/** Whether the session may administer (else a denied state shows). */
 	public readonly canAdminister: Signal<boolean> = computed((): boolean => this._session.capabilities().customerAdmin);
 
-	/** Type chip styles for the template. */
-	public readonly typeStyles = MCP_TYPE_STYLES;
+	/** Feature-owned labels and semantic tones for server-type chips. */
+	public readonly typeChips = MCP_TYPE_CHIPS;
 
 	/** All catalogue servers. */
 	public readonly servers: Signal<McpServer[]> = computed((): McpServer[] => (this._catalogue.hasValue() ? this._catalogue.value() : []));
