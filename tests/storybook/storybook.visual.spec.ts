@@ -113,10 +113,11 @@ async function _LoadVisualStories(request: APIRequestContext): Promise<readonly 
  */
 async function _OpenStableStory(page: Page, storyId: string): Promise<void>
 {
-	// 1. Load the isolated story canvas so Storybook manager chrome cannot affect the baseline.
+	// 1. Load only through DOM readiness; Storybook background requests make network-idle both slow
+	// and unrelated to visual stability. The root and local fonts below are the actual prerequisites.
 	const response = await page.goto(`/iframe.html?id=${encodeURIComponent(storyId)}&viewMode=story`,
 	{
-		waitUntil: "networkidle"
+		waitUntil: "domcontentloaded"
 	});
 	expect(response?.ok(), `Story ${storyId} failed to load`).toBe(true);
 

@@ -6,8 +6,9 @@ import { providePrimeNG } from "primeng/config";
 
 import { OpenCranePreset } from "@opencrane/core";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
-import { LOCAL_STORAGE_GATEWAY, SESSION_STORAGE_GATEWAY, WebLocalStorageAdapter, WebSessionStorageAdapter } from "@opencrane/state/utils/storage";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
+import { PERSONA_GATEWAY } from "@opencrane/state/onboarding";
+import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
 import { APP_ROUTES } from "./app.routes";
@@ -30,8 +31,7 @@ export const appConfig: ApplicationConfig =
 		provideAnimationsAsync(),
 		providePrimeNG({ theme: { preset: OpenCranePreset } }),
 		provideWebPlatform(),
-		{ provide: LOCAL_STORAGE_GATEWAY, useClass: WebLocalStorageAdapter },
-		{ provide: SESSION_STORAGE_GATEWAY, useClass: WebSessionStorageAdapter },
+		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

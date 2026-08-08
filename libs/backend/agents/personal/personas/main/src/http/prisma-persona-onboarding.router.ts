@@ -4,7 +4,7 @@ import type { Logger } from "@opencrane/backend/observability";
 
 import { _ResolveRequestPrincipal } from "@opencrane/backend/_server/auth";
 import { __CreatePersonaOnboardingRouter } from "./persona-onboarding.router.js";
-import type { PersonaOnboardingCaller } from "./persona-onboarding.router.types.js";
+import type { PersonaOnboardingCaller, PersonaOnboardingWorkflowPort } from "./persona-onboarding.router.types.js";
 import { PrismaPersonaPersistenceUnitOfWork } from "../profile/prisma-persona-persistence-unit-of-work.js";
 
 /** Maps authenticated request facts to the caller contract owned by persona onboarding. */
@@ -25,7 +25,7 @@ function _resolveCaller(request: Parameters<typeof _ResolveRequestPrincipal>[0])
  * @param logger - Process logger supplied by the app composition root.
  * @returns The configured persona onboarding router.
  */
-export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger): Router
+export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Logger, workflow: PersonaOnboardingWorkflowPort): Router
 {
 	const persistence = new PrismaPersonaPersistenceUnitOfWork(prisma, logger);
 	return __CreatePersonaOnboardingRouter({
@@ -38,5 +38,6 @@ export function _CreatePersonaOnboardingRouter(prisma: PrismaClient, logger: Log
 		clock: { now(): Date { return new Date(); } },
 		logger,
 		status: persistence,
+		workflow,
 	});
 }

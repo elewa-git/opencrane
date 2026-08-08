@@ -19,11 +19,11 @@ owns the client-side stores and caches that hold fetched data.
 | [`conversation/ag-ui`](./conversation/ag-ui/README.md) | Safe projected-event browser state. |
 | [`assets/adapter`](./assets/adapter/README.md) | Live owner-bound personal-asset catalogue gateway. |
 | [`mcp/adapter`](./mcp/adapter/README.md) | Live MCP gateway. |
-| [`onboarding`](./onboarding/README.md) | Shared onboarding persistence. |
+| [`onboarding`](./onboarding/README.md) | Server-backed persona onboarding orchestration. |
+| [`persona`](./persona/README.md) | Personal-persona browser adapters. |
 | [`provider-key/adapter`](./provider-key/adapter/README.md) | Live BYOK provider-key gateway. |
 | [`settings/adapter`](./settings/adapter/README.md) | Live settings gateway. |
 | [`skills/adapter`](./skills/adapter/README.md) | Live governed-skill catalogue gateway. |
-| [`utils/storage`](./utils/storage/README.md) | Safe browser-storage seam. |
 
 ```
    features
@@ -33,17 +33,18 @@ owns the client-side stores and caches that hold fetched data.
       │
       ├─ conversation/{adapter,ag-ui,cache,render}   assets/adapter   skills/adapter
       ├─ mcp/adapter   provider-key/adapter   settings/adapter
-      └─ onboarding   utils/storage
+      └─ onboarding ── persona/adapter
       ▼ HTTP
    backend API
 ```
 
 ## Dependency rule for this tier
 
-State packages carry `scope:web`, `layer:frontend`, and `type:lib`. They may import shared contracts and each other
-within the state layer (adapters depend on the ports and stores in `core`; `gateways` wires them
-together). They must **not** import a [`feature`](../features/README.md) or a backend package —
-data flows up to features, dependencies point down to the API. Never import an app.
+Legacy state packages carry `scope:web`; new capability slices use a bounded `scope:<capability>`.
+All state packages use `layer:frontend` and `type:lib`. Onboarding additionally uses explicit state
+and adapter role tags so adapters depend inward on ports while state cannot depend back on adapters.
+State must **not** import a [`feature`](../features/README.md) or backend package — data flows up to
+features, dependencies point down to the API. Never import an app.
 
 ## See also
 

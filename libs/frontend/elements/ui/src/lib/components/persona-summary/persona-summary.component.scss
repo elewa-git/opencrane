@@ -1,0 +1,117 @@
+.wo-persona-summary {
+	padding: var(--oc-space-6);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-card);
+	background: var(--oc-surface-raised);
+
+	&__title {
+		margin: var(--oc-space-3) 0 var(--oc-space-2);
+		font-size: var(--oc-text-4xl);
+		font-weight: 500;
+		line-height: 1.1;
+
+		&--commander {
+			color: var(--oc-archetype-commander);
+		}
+
+		&--catalyst {
+			color: var(--oc-archetype-catalyst);
+		}
+
+		&--anchor {
+			color: var(--oc-archetype-anchor);
+		}
+
+		&--analyst {
+			color: var(--oc-archetype-analyst);
+		}
+	}
+
+	&__description {
+		margin: 0;
+		line-height: 1.6;
+		color: var(--oc-ink-muted);
+	}
+
+	&__details {
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--oc-space-3);
+		margin: var(--oc-space-5) 0 0;
+
+		div {
+			padding: var(--oc-space-3);
+			border-radius: var(--oc-radius-chip);
+			background: var(--oc-surface-subtle);
+		}
+
+		dt {
+			font-family: var(--oc-font-mono);
+			font-size: var(--oc-text-2xs);
+			letter-spacing: var(--oc-tracking-label);
+			text-transform: uppercase;
+			color: var(--oc-ink-muted);
+		}
+
+		dd {
+			margin: var(--oc-space-1) 0 0;
+			font-size: var(--oc-text-sm);
+			color: var(--oc-ink-strong);
+		}
+	}
+
+	&__scores {
+		display: grid;
+		gap: var(--oc-space-3);
+		margin-top: var(--oc-space-6);
+	}
+
+	&__score {
+		--oc-persona-score: var(--oc-ink-default);
+
+		&--commander {
+			--oc-persona-score: var(--oc-archetype-commander);
+		}
+
+		&--catalyst {
+			--oc-persona-score: var(--oc-archetype-catalyst);
+		}
+
+		&--anchor {
+			--oc-persona-score: var(--oc-archetype-anchor);
+		}
+
+		&--analyst {
+			--oc-persona-score: var(--oc-archetype-analyst);
+		}
+	}
+
+	&__score-label {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--oc-space-3);
+		font-size: var(--oc-text-sm);
+		color: var(--oc-ink-strong);
+	}
+
+	&__score-track {
+		height: var(--oc-space-2);
+		margin-top: var(--oc-space-1);
+		border-radius: var(--oc-radius-round);
+		background: var(--oc-neutral-soft);
+		overflow: hidden;
+
+		span {
+			display: block;
+			height: 100%;
+			border-radius: inherit;
+			background: var(--oc-persona-score);
+		}
+	}
+}
+
+@media (max-width: 640px) {
+	.wo-persona-summary__details {
+		grid-template-columns: 1fr;
+	}
+}

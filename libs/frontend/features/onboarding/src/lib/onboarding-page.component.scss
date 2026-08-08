@@ -1,0 +1,98 @@
+.wo-onboarding {
+	&__loading {
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: var(--oc-space-3);
+		min-height: 8rem;
+		color: var(--oc-ink-muted);
+	}
+
+	&__eyebrow {
+		margin-bottom: var(--oc-space-3);
+		font: 500 var(--oc-text-xs) var(--oc-font-mono);
+		letter-spacing: var(--oc-tracking-label);
+		text-transform: uppercase;
+		color: var(--oc-accent);
+	}
+
+	&__intro,
+	&__authority-note {
+		padding: var(--oc-space-4);
+		border: 1px solid var(--oc-border-subtle);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-surface-subtle);
+		color: var(--oc-ink-muted);
+		line-height: 1.6;
+	}
+
+	&__intro {
+		display: grid;
+		gap: var(--oc-space-2);
+	}
+
+	&__intro strong {
+		color: var(--oc-ink-strong);
+	}
+
+	&__review-grid {
+		display: grid;
+		grid-template-columns: minmax(0, 1.1fr) minmax(16rem, .9fr);
+		gap: var(--oc-space-6);
+	}
+
+	&__evidence {
+		display: grid;
+		align-content: start;
+		gap: var(--oc-space-4);
+	}
+
+	&__insights {
+		margin: 0;
+		padding: 0 var(--oc-space-6);
+		color: var(--oc-ink-muted);
+		line-height: 1.7;
+	}
+
+	&__instructions {
+		margin: 0;
+		padding: var(--oc-space-4);
+		border: 1px solid var(--oc-border-subtle);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-surface-subtle);
+		color: var(--oc-ink-strong);
+		font: inherit;
+		line-height: 1.6;
+		white-space: pre-wrap;
+		word-break: break-word;
+	}
+
+	&__answers {
+		display: grid;
+		gap: var(--oc-space-3);
+		margin: 0;
+		padding: 0 var(--oc-space-6);
+		color: var(--oc-ink-muted);
+	}
+
+	&__answers li,
+	&__answers span {
+		display: grid;
+		gap: var(--oc-space-1);
+	}
+
+	&__answers strong {
+		color: var(--oc-ink-strong);
+	}
+
+	&__authority-note {
+		margin: 0;
+		font-size: var(--oc-text-sm);
+	}
+}
+
+@media (max-width: 760px) {
+	.wo-onboarding__review-grid {
+		grid-template-columns: 1fr;
+	}
+}

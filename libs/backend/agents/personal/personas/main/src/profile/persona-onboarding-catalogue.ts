@@ -1,11 +1,17 @@
 /** Stable identifier for the product-owned first persona interview. */
 export const PERSONA_ONBOARDING_QUESTION_SET_ID = "personal-agent-onboarding";
 
-/** Immutable initial revision for the product-owned first persona interview. */
+/** Immutable reviewed revision for the product-owned sorting interview. */
 export const PERSONA_ONBOARDING_QUESTION_SET_VERSION = 1;
 
-/** Exact reviewed answer choices that determine the initial SOUL template. */
-export const PERSONA_ONBOARDING_TEMPLATE_ANSWERS = {
-	relationshipRole: "A thoughtful partner",
-	challengeSupport: ["Challenge me directly", "Start supportively, then challenge me"],
-} as const;
+/** Stable reviewed weighted-scoring policy identity. */
+export const PERSONA_SCORING_POLICY_ID = "personal-agent-scoring";
+
+/** Exact reviewed weighted-scoring policy revision. */
+export const PERSONA_SCORING_POLICY_VERSION = 1;
+
+/** Stable reviewed interpolation-map identity. */
+export const PERSONA_INTERPOLATION_MAP_ID = "personal-agent-interpolation";
+
+/** Exact reviewed interpolation-map revision. */
+export const PERSONA_INTERPOLATION_MAP_VERSION = 1;

@@ -5,8 +5,9 @@
 Bring a person from an anonymous browser to a truthful, authority-bound starting point. Identity,
 organisation, and role come from the server session; the browser never chooses its own silo.
 
-Current status: `API partial`, `UI early`, `Design ready` for sign-in and owner admission, and
-`API blocked` for the server-tracked onboarding workflow and workspace provisioning.
+Current status: `API partial`, `UI implemented` through persona approval, and `Design ready` for the
+full journey. Server-tracked survey routing and persona orchestration are implemented; bootstrap
+chat, the main-app API fence, and personal workspace provisioning remain `API blocked`.
 
 ## Product workflow — server-tracked onboarding
 
@@ -154,8 +155,9 @@ Acceptance criteria:
 - The current `Welcome → Workspace → Personalize → Tour → Finish` local-only loop is not retained as
   product authority.
 
-Status: `API blocked`. Persona status exists, but a `UserOnboarding` record, public onboarding-status
-projection, main-app API fence, and personal workspace/AgentService provisioning do not.
+Status: `API partial`. The `UserOnboarding` record, public route-state projection, and exact
+persona-survey orchestration exist. The bootstrap-chat authority, main-app API fence, and personal
+workspace/AgentService provisioning remain blocked.
 
 > See also: [persona sorting quiz](../design/persona-sorting-quiz.md),
 > [persona user stories](persona.md)
@@ -182,8 +184,9 @@ Acceptance criteria:
 
 - The current product workflow uses the governed persona interview as the survey authority rather
   than copying answers into `UserOnboarding`.
-- Starting or answering the survey durably moves onboarding from `survey_pending` to
-  `survey_in_progress`.
+- Starting the survey durably moves onboarding from `survey_pending` to `survey_in_progress`.
+- Choosing “sort again” while the initial survey is still in progress CAS-replaces only the exact
+  pinned interview; after persona approval, later persona refreshes never regress onboarding.
 - The onboarding authority verifies the exact completed and approved persona revision before moving
   to `bootstrap_chat_pending`; the browser cannot assert survey completion.
 - Refresh, logout, duplicate start, validation failure, and unavailable question-set states resume
@@ -192,7 +195,9 @@ Acceptance criteria:
 
 APIs: the persona interview lifecycle plus a new server-owned onboarding transition/projection.
 
-Status: `API partial`. The persona lifecycle exists; its orchestration into `UserOnboarding` does not.
+Status: `API implemented`. Persona start and exact approved revisions advance the
+server-owned `UserOnboarding` record without copying persona evidence. Bootstrap provisioning remains
+outside this survey capability.
 
 ## IDO-08 — Complete the pinned bootstrap chat
 

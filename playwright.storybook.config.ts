@@ -31,6 +31,8 @@ export default defineConfig(
 	{
 		baseURL: STORYBOOK_BASE_URL,
 		colorScheme: "light",
+		// A single broken iframe still fails quickly inside the larger catalogue-wide test budget.
+		navigationTimeout: 15_000,
 		contextOptions:
 		{
 			reducedMotion: "reduce"

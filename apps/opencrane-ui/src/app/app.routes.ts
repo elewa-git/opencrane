@@ -18,14 +18,14 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// First-run onboarding (OPS.1). Reached directly or via the first-run guard.
-		path: "welcome",
+		// Server-authoritative persona survey and review journey.
+		path: "onboarding",
 		canActivate: [___OperatorAccessGuard],
-		loadChildren: function loadWelcomeRoutes()
+		loadChildren: function loadOnboardingRoutes()
 		{
-			return import("@opencrane/features/welcome").then(function pickWelcomeRoutes(m)
+			return import("@opencrane/features/onboarding").then(function pickOnboardingRoutes(m)
 			{
-				return m.WELCOME_ROUTES;
+				return m.ONBOARDING_ROUTES;
 			});
 		}
 	},
@@ -42,7 +42,7 @@ export const APP_ROUTES: Routes =
 			});
 		}
 	},
-	{ path: "", pathMatch: "full", redirectTo: "welcome" },
+	{ path: "", pathMatch: "full", redirectTo: "onboarding/survey" },
 	{
 		path: "**",
 		redirectTo: ""

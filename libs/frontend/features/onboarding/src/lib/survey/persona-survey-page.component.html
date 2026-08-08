@@ -1,0 +1,69 @@
+@if (onboarding.isLoading()) {
+	<wo-journey-shell title="Loading your saved interview" description="OpenCrane is resolving the exact question set and last durable answer." [layout]="layouts.Compact" [busy]="true">
+		<div class="wo-onboarding__loading" role="status">
+			<p-progressspinner ariaLabel="Loading saved persona interview" [style]="{ width: '24px', height: '24px' }" strokeWidth="5" />
+			<span>Checking your onboarding position…</span>
+		</div>
+	</wo-journey-shell>
+} @else if (onboarding.error()) {
+	<wo-journey-shell title="We could not load your persona interview" description="Your saved answers and current persona remain unchanged." [layout]="layouts.Compact">
+		<p-message journey-status severity="error" [closable]="false">The persona authority is unavailable. Retry when the service is ready.</p-message>
+		<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+	</wo-journey-shell>
+} @else if (onboarding.hasValue()) {
+	@let snapshot = onboarding.value();
+	@if (snapshot.state === states.Interview && snapshot.interviewId === null) {
+		<wo-journey-shell title="Shape how your agent works with you" description="Ten short preference questions create a reviewable starting persona. This is collaboration setup, not a personality diagnosis." [layout]="layouts.Compact" [busy]="saving()">
+			<p-message journey-status severity="info" [closable]="false">No answer is right or wrong. Nothing becomes active until you review and approve the result.</p-message>
+			@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
+			<div class="wo-onboarding__intro">
+				<strong>About three minutes</strong>
+				<span>Your choices are saved by OpenCrane so you can resume after a refresh or on another device.</span>
+			</div>
+			<p-button journey-actions label="Start persona sorting" icon="pi pi-arrow-right" iconPos="right" [loading]="saving()" (onClick)="start()" />
+		</wo-journey-shell>
+	} @else if (snapshot.state === states.Interview) {
+		<wo-journey-shell title="How should your agent work with you?" description="Choose the preference that feels most natural. Your result will explain what OpenCrane inferred before anything becomes active." [layout]="layouts.Compact" [busy]="saving()">
+			<div journey-eyebrow class="wo-onboarding__eyebrow">Persona sorting</div>
+			<wo-journey-progress journey-progress label="Persona sorting progress" [statusLabel]="progressLabel()" [completed]="snapshot.answeredQuestionCount" [total]="snapshot.questionCount" />
+			@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
+			@if (currentQuestion(); as question) {
+				<wo-choice-card-group [controlId]="'persona-question-' + question.id" [legend]="question.prompt" [options]="questionOptions()" [selectedId]="selectedId()" [disabled]="saving()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Grid" (selectedIdChange)="select($event)" />
+				@if (snapshot.answeredQuestionCount > 0) {
+					<wo-collapsible-section sectionId="saved-persona-answers" title="Saved answers" [defaultOpen]="false">
+						<ol class="wo-onboarding__answers">
+							@for (savedQuestion of snapshot.questions; track savedQuestion.id) {
+								@if (savedQuestion.selectedChoiceId) {
+									<li><strong>{{ savedQuestion.prompt }}</strong><span>{{ selectedChoiceLabel(savedQuestion) }}</span></li>
+								}
+							}
+						</ol>
+					</wo-collapsible-section>
+				}
+			} @else {
+				<p-message severity="error" [closable]="false">The reviewed question set is unavailable. Your recorded answers have not changed.</p-message>
+			}
+			@if (currentQuestion()) {
+				<p-button journey-actions [label]="snapshot.answeredQuestionCount + 1 >= snapshot.questionCount ? 'Save and review result' : 'Save and continue'" icon="pi pi-arrow-right" iconPos="right" [loading]="saving()" (onClick)="saveAnswer()" />
+			}
+		</wo-journey-shell>
+	} @else if (snapshot.state === states.Resolution) {
+		@if (snapshot.resolution; as resolution) {
+			<wo-journey-shell title="Two working styles fit equally well" description="OpenCrane does not choose a default for a tied score. Select the style that should lead your persona." [layout]="layouts.Compact" [busy]="saving()">
+				<p-message journey-status severity="info" [closable]="false">No persona draft exists yet. Your explicit choice becomes part of the review evidence.</p-message>
+				@if (actionError(); as error) { <p-message journey-status severity="error" [closable]="false">{{ error }}</p-message> }
+				<wo-choice-card-group [controlId]="'persona-resolution-' + resolution.kind" legend="Choose the leading working style" [options]="resolutionOptions()" [selectedId]="selectedId()" [disabled]="saving()" [validationMessage]="validationMessage()" [layout]="choiceLayouts.Stack" (selectedIdChange)="select($event)" />
+				<p-button journey-actions label="Save choice and continue" icon="pi pi-arrow-right" iconPos="right" [loading]="saving()" (onClick)="saveResolution()" />
+			</wo-journey-shell>
+		} @else {
+			<wo-journey-shell title="Tie evidence is unavailable" description="OpenCrane has not created a persona draft or selected a default." [layout]="layouts.Compact">
+				<p-message journey-status severity="error" [closable]="false">Retry loading the exact tie candidates before continuing.</p-message>
+				<p-button journey-actions label="Retry" icon="pi pi-refresh" (onClick)="retry()" />
+			</wo-journey-shell>
+		}
+	} @else {
+		<wo-journey-shell title="Opening your persona review" description="Your durable survey evidence is ready." [layout]="layouts.Compact" [busy]="true">
+			<div class="wo-onboarding__loading" role="status"><p-progressspinner ariaLabel="Opening persona review" /></div>
+		</wo-journey-shell>
+	}
+}

@@ -1,0 +1,46 @@
+<section class="wo-persona-summary" [attr.aria-labelledby]="componentId() + '-title'">
+	<wo-scope-chip label="Primary archetype" [tone]="chipTones.Info" [appearance]="chipAppearances.Soft" />
+	<h2
+		[id]="componentId() + '-title'"
+		class="wo-persona-summary__title"
+		[class.wo-persona-summary__title--commander]="tone() === tones.Commander"
+		[class.wo-persona-summary__title--catalyst]="tone() === tones.Catalyst"
+		[class.wo-persona-summary__title--anchor]="tone() === tones.Anchor"
+		[class.wo-persona-summary__title--analyst]="tone() === tones.Analyst"
+	>{{ archetype() }}</h2>
+	<p class="wo-persona-summary__description">{{ description() }}</p>
+	<dl class="wo-persona-summary__details">
+		<div>
+			<dt>Secondary influence</dt>
+			<dd>{{ secondaryInfluence() }}</dd>
+		</div>
+		<div>
+			<dt>Working-style modifier</dt>
+			<dd>{{ modifier() }}</dd>
+		</div>
+	</dl>
+	<div class="wo-persona-summary__scores" role="group" aria-label="Archetype score breakdown">
+		@for (score of scores(); track score.id) {
+			<div
+				class="wo-persona-summary__score"
+				[class.wo-persona-summary__score--commander]="score.tone === tones.Commander"
+				[class.wo-persona-summary__score--catalyst]="score.tone === tones.Catalyst"
+				[class.wo-persona-summary__score--anchor]="score.tone === tones.Anchor"
+				[class.wo-persona-summary__score--analyst]="score.tone === tones.Analyst"
+				role="meter"
+				[attr.aria-label]="score.label + ' score'"
+				aria-valuemin="0"
+				aria-valuemax="100"
+				[attr.aria-valuenow]="score.percentage"
+			>
+				<div class="wo-persona-summary__score-label">
+					<span>{{ score.label }}</span>
+					<span>{{ score.percentage }}%</span>
+				</div>
+				<div class="wo-persona-summary__score-track" aria-hidden="true">
+					<span [style.width.%]="score.percentage"></span>
+				</div>
+			</div>
+		}
+	</div>
+</section>

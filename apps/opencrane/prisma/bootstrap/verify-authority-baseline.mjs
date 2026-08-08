@@ -16,6 +16,17 @@ const _REQUIRED_AUTHORITY_MARKERS = [
 	'bootstrap_expires_at TIMESTAMP(3); requested_lease INTERVAL;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
 	'DECLARE workload_kind "SkillWorkloadKind"; workload_state "SkillWorkloadState"; assigned_uid TEXT; assigned_pod_uid TEXT;\n        transition_time TIMESTAMP(3) := date_trunc(\'milliseconds\', clock_timestamp())::TIMESTAMP(3);',
 	'INSERT INTO "persona_question_sets" ("question_set_id", "version") VALUES (\'personal-agent-onboarding\', 1);',
+	'(OLD."state" = \'survey_pending\' AND NEW."state" = \'survey_in_progress\')',
+	'OLD."state" = \'survey_in_progress\' AND NEW."state" = \'survey_in_progress\'',
+	'UserOnboarding interview provenance is immutable outside the initial survey',
+	'"completion_provenance" IS NOT DISTINCT FROM \'bootstrap_concluded\'',
+	'"bootstrap_content_digest" IS NOT NULL AND "bootstrap_content_digest" ~ \'^sha256:[0-9a-f]{64}$\'',
+	'"completion_provenance" IS NOT DISTINCT FROM \'existing_user_migration\'',
+	'"completion_migration_revision" IS NOT NULL AND btrim("completion_migration_revision") <> \'\'',
+	'"completion_migration_batch" IS NOT NULL AND btrim("completion_migration_batch") <> \'\'',
+];
+const _FORBIDDEN_AUTHORITY_MARKERS = [
+	'NEW."state" IN (\'survey_in_progress\', \'completed\')',
 ];
 
 /** Counts statements which begin at a SQL line boundary. */
@@ -38,6 +49,10 @@ function _Verify()
 	for (const marker of _REQUIRED_AUTHORITY_MARKERS)
 	{
 		if (!baseline.includes(marker)) throw new Error(`target baseline lost required authority marker: ${marker}`);
+	}
+	for (const marker of _FORBIDDEN_AUTHORITY_MARKERS)
+	{
+		if (baseline.includes(marker)) throw new Error(`target baseline retained forbidden authority marker: ${marker}`);
 	}
 }
 

@@ -7,6 +7,7 @@ import { _AgentServicesOpenapiPaths } from "@opencrane/backend/server/agents/age
 import { _PersonalArtifactsOpenapiPaths } from "@opencrane/backend/server/agents/artifacts";
 import { _SelfConversationReplayOpenapiPaths } from "@opencrane/backend/server/agents/conversation-replay";
 import { _SkillCatalogueOpenapiPaths } from "@opencrane/backend/server/agents/skills";
+import { _UserOnboardingOpenapiPaths } from "@opencrane/backend/server/agents/onboarding";
 import { _McpOpenapiPaths } from "@opencrane/backend/server/gateways/mcp";
 import { _ModelRoutingOpenapiPaths } from "@opencrane/backend/server/gateways/model-routing";
 import { _ProvidersOpenapiPaths } from "@opencrane/backend/server/gateways/providers";
@@ -32,6 +33,7 @@ export const _DomainOpenapiPaths = {
 	..._SelfRunStatusOpenapiPaths,
 	"/me/runs": { ..._SelfRunStatusOpenapiPaths["/me/runs"], ..._PersonalRunAdmissionOpenapiPaths["/me/runs"] },
 	..._PersonaOnboardingOpenapiPaths,
+	..._UserOnboardingOpenapiPaths,
 	..._SelfConversationReplayOpenapiPaths,
 	..._AgentServicesOpenapiPaths,
 	..._PersonalConfigurationOpenapiPaths,

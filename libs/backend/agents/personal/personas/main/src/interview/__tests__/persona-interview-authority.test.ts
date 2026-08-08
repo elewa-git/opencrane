@@ -5,6 +5,10 @@ import { PersonaLifecycleOutcomes } from "../../profile/persona-lifecycle.types.
 import { __CompletePersonaInterview, __RecordPersonaInterviewAnswer, __StartPersonaInterview } from "../persona-interview-authority.js";
 import type { PersonaInterviewRepository } from "../persona-interview-authority.types.js";
 import { PrismaPersonaInterviewRepository } from "../prisma-persona-interview-repository.js";
+import { PersonaColourValues, PersonaModifierValues } from "../../scoring/persona-scorer.types.js";
+
+/** Fully resolved score used by lifecycle fakes. */
+const _SCORE = { orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], colours: { red: 1, yellow: 0, green: 0, blue: 1, total: 2 }, openness: { explorer: 1, guardian: 0, total: 1 }, tieResolutions: [], primary: PersonaColourValues.Red, secondary: PersonaColourValues.Blue, modifier: PersonaModifierValues.Explorer, resolutionRequired: null } as const;
 
 /** Creates a repository that records lifecycle calls without using a database. */
 function _repository(overrides: Partial<PersonaInterviewRepository> = {}): PersonaInterviewRepository
@@ -12,7 +16,8 @@ function _repository(overrides: Partial<PersonaInterviewRepository> = {}): Perso
 	return {
 		startAtomically: async function _start() { return { status: PersonaLifecycleOutcomes.Started, interviewId: "interview-1" } as const; },
 		recordAnswerAtomically: async function _record() { return { status: PersonaLifecycleOutcomes.Recorded, answerId: "answer-1" } as const; },
-		completeAtomically: async function _complete() { return { status: PersonaLifecycleOutcomes.Completed } as const; },
+		completeAtomically: async function _complete() { return { status: PersonaLifecycleOutcomes.Completed, score: _SCORE } as const; },
+		resolveTieAtomically: async function _resolve() { return { status: PersonaLifecycleOutcomes.Recorded, score: _SCORE } as const; },
 		...overrides,
 	};
 }
@@ -20,7 +25,7 @@ function _repository(overrides: Partial<PersonaInterviewRepository> = {}): Perso
 /** Creates the valid exact reviewed-question-set request used by lifecycle tests. */
 function _startCommand()
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
+	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", refreshConfigurationChangeId: null, questionSetId: "onboarding", questionSetVersion: 1, scoringPolicyId: "policy", scoringPolicyVersion: 1, interpolationMapId: "map", interpolationMapVersion: 1, startedAt: "2026-07-23T09:00:00.000Z" } as const;
 }
 
 describe("persona interview authority", function _describePersonaInterviewAuthority()
@@ -37,7 +42,7 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	it("rejects a blank answer before it can reach the append-only repository", async function _rejectsBlankAnswer()
 	{
 		const recordAnswerAtomically = vi.fn();
-		const result = await __RecordPersonaInterviewAnswer(_repository({ recordAnswerAtomically }), { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: " ", answeredAt: "2026-07-23T09:01:00.000Z" });
+		const result = await __RecordPersonaInterviewAnswer(_repository({ recordAnswerAtomically }), { userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: " ", answeredAt: "2026-07-23T09:01:00.000Z" });
 
 		expect(result).toEqual({ outcome: "denied", reason: "invalid_command" });
 		expect(recordAnswerAtomically).not.toHaveBeenCalled();
@@ -58,6 +63,8 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 			personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: null }) },
 			personaInterview: { findFirst: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "interview-created" }) },
 			personaQuestionSet: { findUnique: vi.fn().mockResolvedValue({ state: "Reviewed" }) },
+			personaScoringPolicy: { findUnique: vi.fn().mockResolvedValue({ id: "policy" }) },
+			personaInterpolationMap: { findUnique: vi.fn().mockResolvedValue({ id: "map" }) },
 		};
 		const repository = new PrismaPersonaInterviewRepository(transaction as unknown as Prisma.TransactionClient);
 
@@ -85,12 +92,12 @@ describe("persona interview authority", function _describePersonaInterviewAuthor
 	{
 		const transaction = {
 			personaInterview: { findFirst: vi.fn().mockResolvedValue({ questionSetId: "onboarding", questionSetVersion: 1, state: "InProgress" }) },
-			personaQuestion: { findUnique: vi.fn().mockResolvedValue({ id: "q1" }) },
+			personaQuestionChoice: { findUnique: vi.fn().mockResolvedValue({ id: "a" }) },
 			personaInterviewAnswer: { findUnique: vi.fn().mockResolvedValue(null), create: vi.fn().mockResolvedValue({ id: "answer-created" }) },
 		};
 		const repository = new PrismaPersonaInterviewRepository(transaction as unknown as Prisma.TransactionClient);
 
-		await expect(repository.recordAnswerAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", value: "A considered answer", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
+		await expect(repository.recordAnswerAtomically({ userId: "user-1", personaProfileId: "profile-1", interviewId: "interview-1", questionId: "q1", choiceId: "a", answeredAt: "2026-07-23T09:01:00.000Z" })).resolves.toEqual({ status: "recorded", answerId: "answer-created" });
 		expect(transaction.personaInterviewAnswer.create).toHaveBeenCalledWith({ data: expect.objectContaining({ interviewId: "interview-1", questionSetId: "onboarding", questionSetVersion: 1, questionId: "q1" }), select: { id: true } });
 	});
 

@@ -11,8 +11,9 @@ function _Prisma(overrides: Record<string, unknown> = {}): Prisma.TransactionCli
 		personaRevision: { findFirst: vi.fn().mockResolvedValue(null), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		personaProfile: { findFirst: vi.fn().mockResolvedValue({ siloId: "silo-1", activeRevisionId: null }), updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		personaInsight: { count: vi.fn().mockResolvedValue(3) },
-		personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: null }) },
-		personaSoulTemplate: { findMany: vi.fn().mockResolvedValue([{ id: "template", version: 1, digest: "sha256:template", content: "# Template", selectionRules: [{ id: "rule-1", priority: 1, answers: {} }] }]) },
+		personaInterview: { findUnique: vi.fn().mockResolvedValue({ refreshConfigurationChangeId: null }), findFirst: vi.fn().mockResolvedValue(null) },
+		personaInterviewScore: { findUnique: vi.fn().mockResolvedValue(null) },
+		personaTieResolution: { findMany: vi.fn().mockResolvedValue([]) },
 		personaInterviewAnswer: { findMany: vi.fn().mockResolvedValue([]) },
 		personalConfigurationChange: { updateMany: vi.fn().mockResolvedValue({ count: 1 }) },
 		...overrides,
@@ -36,12 +37,17 @@ describe("PrismaPersonaAuthorityRepository", function _describePrismaPersonaAuth
 {
 	it("returns a complete approval snapshot with the database-selected template check", async function _returnsApprovalSnapshot()
 	{
+		const score = { orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], colours: { red: 2, yellow: 0, green: 0, blue: 1, total: 3 }, openness: { explorer: 1, guardian: 0, total: 1 }, tieResolutions: [], primary: "red", secondary: "blue", modifier: "explorer" };
 		const prisma = _Prisma({
-			personaRevision: { findFirst: vi.fn().mockResolvedValue({ state: "Draft", personaProfileId: "profile-1", soulTemplateId: "template", soulTemplateVersion: 1, selectionRuleId: "rule-1", selectionAnswerIds: [], soulTemplateDigest: "sha256:template", durableSoulMutationPolicy: "forbidden", profile: { userId: "user-1" }, interview: { id: "interview-1", state: "Completed" }, soulTemplate: { digest: "sha256:template" }, _count: { insights: 3 } }), updateMany: vi.fn() },
+			personaRevision: { findFirst: vi.fn().mockResolvedValue({ state: "Draft", personaProfileId: "profile-1", soulTemplateId: "template", soulTemplateVersion: 1, soulTemplateDigest: "sha256:template", durableSoulMutationPolicy: "forbidden", profile: { userId: "user-1", activeRevisionId: null }, interview: { id: "interview-1", state: "Completed", scoringPolicyId: "policy", scoringPolicyVersion: 1, scoringPolicy: { digest: "sha256:policy" }, interpolationMapId: "map", interpolationMapVersion: 1 }, soulTemplate: { digest: "sha256:template", primaryColour: "Red", modifier: "Explorer" }, _count: { insights: 3 }, scoringPolicyId: "policy", scoringPolicyVersion: 1, scoringPolicyDigest: "sha256:policy", interpolationMapId: "map", interpolationMapVersion: 1, interpolationMapDigest: "sha256:map", interpolationMap: { digest: "sha256:map" }, primaryColour: "Red", secondaryColour: "Blue", modifier: "Explorer", scoringEvidence: score }), updateMany: vi.fn() },
+			personaInterview: { findUnique: vi.fn(), findFirst: vi.fn().mockResolvedValue({ scoringPolicyId: "policy", scoringPolicyVersion: 1, scoringPolicy: { digest: "sha256:policy" } }) },
+			personaInterviewAnswer: { findMany: vi.fn().mockResolvedValue([{ id: "answer-1", questionId: "q1", choiceId: "a", choice: { question: { ordinal: 1 }, weights: [{ red: 2, yellow: 0, green: 0, blue: 1, explorer: 1, guardian: 0 }] } }]) },
+			personaInterviewScore: { findUnique: vi.fn().mockResolvedValue({ scoringPolicyId: "policy", scoringPolicyVersion: 1, scoringPolicyDigest: "sha256:policy", orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["q1:a"], red: 2, yellow: 0, green: 0, blue: 1, colourTotal: 3, explorer: 1, guardian: 0, opennessTotal: 1, primaryCandidates: ["Red"] }) },
+			personaTieResolution: { findMany: vi.fn().mockResolvedValue([]) },
 		});
 		const repository = _Repository(prisma);
 
-		await expect(repository.getApprovalSnapshot({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z" })).resolves.toEqual({ profileUserId: "user-1", revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" });
+		await expect(repository.getApprovalSnapshot({ personaProfileId: "profile-1", personaRevisionId: "revision-1", userId: "user-1", approvedAt: "2026-07-23T12:00:00.000Z" })).resolves.toEqual({ profileUserId: "user-1", activeRevisionId: null, revisionState: "draft", revisionProfileId: "profile-1", interviewState: "completed", insightCount: 3, templateDigestMatches: true, templateSelectionMatches: true, durableSoulMutationPolicy: "forbidden" });
 	});
 
 	it("reads the owner profile before approving the draft and advancing its active pointer", async function _readsThenActivates()

@@ -39,6 +39,7 @@ app's source.
 | `libs/backend/artifacts/*` | Artifact authorization, storage, and preprocessing. |
 | [`libs/backend/channel-proxy`](../../libs/backend/channel-proxy/main/README.md) | Reusable inbound-channel trust-boundary logic. |
 | [`libs/backend/server`](../../libs/backend/server/README.md) | API capabilities grouped by agents, IAM, gateways, knowledge, reporting, and organisation scope. |
+| [`libs/backend/server/agents/onboarding`](../../libs/backend/server/agents/onboarding/main/README.md) | Durable, session-owner-bound onboarding route state and exact persona/bootstrap references. |
 | [`libs/backend/_server`](../../libs/backend/_server/README.md) | OpenCrane server runtime, transport, identity, and external-I/O seams. |
 | [`libs/backend/observability`](../../libs/backend/observability/README.md) | Cross-cutting structured logging and execution tracing. |
 
@@ -61,8 +62,19 @@ Angular libraries under `libs/frontend/*` feed `apps/opencrane-ui`:
 - `features/*` contains routed user-interface slices; and
 - `state/*` contains gateway ports, live adapters, caches, and browser state.
 
-Frontend packages use `scope:web` and may depend only on `scope:web` or `scope:shared`. The UI is an
-API client, never a privileged product authority.
+The governed persona onboarding path is split deliberately:
+
+- [`features/onboarding`](../../libs/frontend/features/onboarding/README.md) owns the routed survey,
+  tie-resolution, review, and explicit approval screens;
+- [`state/onboarding`](../../libs/frontend/state/onboarding/README.md) owns the transport-neutral
+  port, validated projection, and resumable orchestration without becoming a persistence authority; and
+- [`state/persona/adapter`](../../libs/frontend/state/persona/adapter/README.md) is the typed adapter
+  over the generated signed-in-owner API.
+
+Legacy frontend packages use `scope:web`; new capability slices use bounded ownership scopes. The
+persona onboarding feature, state port, and adapter use `scope:persona-onboarding` plus role tags
+that enforce feature → state and adapter → state/core direction. Cross-cutting core and UI elements
+use `scope:shared`. The UI is an API client, never a privileged product authority.
 
 ## API-first rule
 
