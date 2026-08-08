@@ -8,6 +8,14 @@ are reviewed, provenance-linked, immutable revisions rather than hidden prompt m
 Current status: `API ready` for the finite backend lifecycle, `UI missing`, `Design ready`. Only the
 status read appears in the generated OpenAPI contract today.
 
+## Onboarding relationship
+
+The initial governed persona interview fulfils the survey phase of the server-tracked onboarding
+workflow in [identity-and-onboarding.md](identity-and-onboarding.md). Persona remains the authority
+for questions, answers, evidence, drafts, and approval. `UserOnboarding` records only the exact
+interview/revision reference and advances routing after the server verifies an approved persona; it
+does not duplicate persona content or let the browser declare survey completion.
+
 ## PER-01 — See persona readiness
 
 **As an** Owner, **I want** to see whether my persona needs an interview, review, or no action **so

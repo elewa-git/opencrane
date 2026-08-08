@@ -9,6 +9,16 @@ the conversation ledger.
 Current status: `API blocked` for the complete journey. Bounded event replay is `API ready`; thread
 discovery, creation, prompt submission, and live tail are missing.
 
+## Onboarding-chat boundary
+
+The `bootstrap.md` onboarding chat is a bounded pre-main-app conversation owned by the onboarding
+workflow, not a browser-local demo thread and not ordinary workspace access. It must create or
+resolve the personal agent/workspace authority needed for that conversation, pin the bootstrap
+workflow revision, and remain resumable while main-app conversation routes and APIs stay fenced.
+Its conclusion advances `UserOnboarding`; ordinary conversation events cannot mark onboarding
+complete by themselves. The canonical workflow and routing states live in
+[identity-and-onboarding.md](identity-and-onboarding.md).
+
 ## CON-01 — See my conversations
 
 **As a** user, **I want** to see my conversations ordered by recent activity **so that** I can resume

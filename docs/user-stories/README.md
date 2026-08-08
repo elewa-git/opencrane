@@ -37,7 +37,7 @@ evidence to the owning file. Do not silently change a blocked story into fronten
 
 | Feature | File | Current headline |
 |---|---|---|
-| Identity and onboarding | [identity-and-onboarding.md](identity-and-onboarding.md) | OIDC and first-owner admission work; workspace onboarding does not. |
+| Identity and onboarding | [identity-and-onboarding.md](identity-and-onboarding.md) | OIDC works; the server-tracked survey and bootstrap-chat workflow is a required API gap. |
 | Persona | [persona.md](persona.md) | Governed interview lifecycle exists; UI and mutation contract generation are missing. |
 | Workspace and conversations | [workspace-and-conversations.md](workspace-and-conversations.md) | Replay exists; thread and prompt creation do not. |
 | Runs and approvals | [runs-and-approvals.md](runs-and-approvals.md) | Admission, status and steering exist; cancellation and production approval resume are incomplete. |
