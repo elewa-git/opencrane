@@ -3,6 +3,9 @@ import { defineConfig, devices } from "@playwright/test";
 /** Fixed Storybook origin shared by the Nx static server and visual tests. */
 const STORYBOOK_BASE_URL = "http://127.0.0.1:4400";
 
+/** Catalogue-wide budget for rendering every tagged visual contract serially. */
+const STORYBOOK_VISUAL_TEST_TIMEOUT_MS = 120_000;
+
 /** Deterministic Chromium configuration for committed component screenshots. */
 export default defineConfig(
 {
@@ -12,6 +15,7 @@ export default defineConfig(
 	fullyParallel: false,
 	forbidOnly: Boolean(process.env.CI),
 	retries: 0,
+	timeout: STORYBOOK_VISUAL_TEST_TIMEOUT_MS,
 	workers: 1,
 	reporter: process.env.CI ? [["github"], ["list"]] : "list",
 	expect:
