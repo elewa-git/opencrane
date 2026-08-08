@@ -1,0 +1,29 @@
+.wo-journey-progress {
+	display: grid;
+	gap: var(--oc-space-2);
+	margin-top: var(--oc-space-5);
+
+	&__summary {
+		display: flex;
+		justify-content: space-between;
+		gap: var(--oc-space-3);
+		font-family: var(--oc-font-mono);
+		font-size: var(--oc-text-xs);
+		color: var(--oc-ink-muted);
+	}
+
+	&__track {
+		height: var(--oc-space-1);
+		border-radius: var(--oc-radius-round);
+		background: var(--oc-neutral-soft);
+		overflow: hidden;
+	}
+
+	&__value {
+		display: block;
+		height: 100%;
+		border-radius: inherit;
+		background: var(--oc-accent);
+		transition: width var(--oc-motion-standard) var(--oc-ease-standard);
+	}
+}

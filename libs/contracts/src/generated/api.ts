@@ -757,8 +757,144 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Return the signed-in owner's resumable persona onboarding state */
-        get: operations["getMyPersonaOnboarding"];
+        /** Return the signed-in owner's resumable persona state */
+        get: operations["getMyPersonaStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/interview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start or resume the reviewed sorting interview */
+        post: operations["startMyPersonaInterview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/refreshes/{configurationChangeId}/interview": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start or resume an accepted persona refresh interview */
+        post: operations["startMyPersonaRefreshInterview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/interviews/{interviewId}/answers/{questionId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append one exact reviewed choice */
+        post: operations["answerMyPersonaQuestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/interviews/{interviewId}/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Freeze and score a fully answered interview */
+        post: operations["completeMyPersonaInterview"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/interviews/{interviewId}/resolutions/{kind}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append one explicit persona tie choice */
+        post: operations["resolveMyPersonaTie"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/interviews/{interviewId}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Compile a reviewable persona revision */
+        post: operations["draftMyPersona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/persona/drafts/{personaRevisionId}/approve": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Approve and activate the exact reviewed persona draft */
+        post: operations["approveMyPersona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/onboarding": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the signed-in owner's durable onboarding route */
+        get: operations["getMyOnboardingStatus"];
         put?: never;
         post?: never;
         delete?: never;
@@ -4106,7 +4242,7 @@ export interface operations {
             };
         };
     };
-    getMyPersonaOnboarding: {
+    getMyPersonaStatus: {
         parameters: {
             query?: never;
             header?: never;
@@ -4115,7 +4251,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description Durable onboarding progress without compiled persona instructions. */
+            /** @description Frozen questions, progress, tie state, and review result. */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -4123,31 +4259,738 @@ export interface operations {
                 content: {
                     "application/json": {
                         /** @enum {string} */
-                        state: "interview" | "review" | "ready";
+                        state: "interview" | "resolution" | "review" | "ready";
                         interviewId: string | null;
                         answeredQuestionCount: number;
                         questionCount: number;
                         personaRevisionId: string | null;
+                        questions: {
+                            id: string;
+                            category: string;
+                            prompt: string;
+                            ordinal: number;
+                            choices: {
+                                id: string;
+                                label: string;
+                                ordinal: number;
+                            }[];
+                            selectedChoiceId: string | null;
+                        }[];
+                        resolution: {
+                            /** @enum {string} */
+                            kind: "primary" | "secondary" | "modifier";
+                            candidates: ("red" | "yellow" | "green" | "blue" | "explorer" | "guardian")[];
+                        } | null;
+                        result: {
+                            /** @description Reviewed template name after drafting; a generic result label before a draft exists. */
+                            displayName: string;
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            secondaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            modifier: "explorer" | "guardian";
+                            colourScores: {
+                                red: number;
+                                yellow: number;
+                                green: number;
+                                blue: number;
+                                total: number;
+                            };
+                            opennessScores: {
+                                explorer: number;
+                                guardian: number;
+                                total: number;
+                            };
+                            insights: string[];
+                            instructionPreview: string | null;
+                        } | null;
                     };
                 };
             };
-            /** @description No browser session owns the request. */
+            /** @description The owner-bound persona transition was rejected. */
             401: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": {
+                        error: string;
+                    };
                 };
             };
-            /** @description Onboarding status could not be read. */
+            /** @description The owner-bound persona transition was rejected. */
             503: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Error"];
+                    "application/json": {
+                        error: string;
+                    };
                 };
+            };
+        };
+    };
+    startMyPersonaInterview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The exact frozen interview revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        interviewId: string;
+                        /** @enum {string} */
+                        state: "in_progress";
+                        reused: boolean;
+                        questions: {
+                            id: string;
+                            category: string;
+                            prompt: string;
+                            ordinal: number;
+                            choices: {
+                                id: string;
+                                label: string;
+                                ordinal: number;
+                            }[];
+                            selectedChoiceId: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    startMyPersonaRefreshInterview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                configurationChangeId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description The exact proposal-bound interview revision. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        interviewId: string;
+                        /** @enum {string} */
+                        state: "in_progress";
+                        reused: boolean;
+                        questions: {
+                            id: string;
+                            category: string;
+                            prompt: string;
+                            ordinal: number;
+                            choices: {
+                                id: string;
+                                label: string;
+                                ordinal: number;
+                            }[];
+                            selectedChoiceId: string | null;
+                        }[];
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    answerMyPersonaQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interviewId: string;
+                questionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    choiceId: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Immutable answer evidence appended. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        answerId: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    completeMyPersonaInterview: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Lossless score and any required tie boundary. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        interviewId: string;
+                        /** @enum {string} */
+                        state: "resolution" | "completed";
+                        resolution: {
+                            /** @enum {string} */
+                            kind: "primary" | "secondary" | "modifier";
+                            candidates: ("red" | "yellow" | "green" | "blue" | "explorer" | "guardian")[];
+                        } | null;
+                        result: {
+                            /** @description Reviewed template name after drafting; a generic result label before a draft exists. */
+                            displayName: string;
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            secondaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            modifier: "explorer" | "guardian";
+                            colourScores: {
+                                red: number;
+                                yellow: number;
+                                green: number;
+                                blue: number;
+                                total: number;
+                            };
+                            opennessScores: {
+                                explorer: number;
+                                guardian: number;
+                                total: number;
+                            };
+                            insights: string[];
+                            instructionPreview: string | null;
+                        } | null;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    resolveMyPersonaTie: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interviewId: string;
+                kind: "primary" | "secondary" | "modifier";
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    selectedValue: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Tie evidence appended and result replayed. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        interviewId: string;
+                        /** @enum {string} */
+                        state: "resolution" | "completed";
+                        resolution: {
+                            /** @enum {string} */
+                            kind: "primary" | "secondary" | "modifier";
+                            candidates: ("red" | "yellow" | "green" | "blue" | "explorer" | "guardian")[];
+                        } | null;
+                        result: {
+                            /** @description Reviewed template name after drafting; a generic result label before a draft exists. */
+                            displayName: string;
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            secondaryColour: "red" | "yellow" | "green" | "blue";
+                            /** @enum {string} */
+                            modifier: "explorer" | "guardian";
+                            colourScores: {
+                                red: number;
+                                yellow: number;
+                                green: number;
+                                blue: number;
+                                total: number;
+                            };
+                            opennessScores: {
+                                explorer: number;
+                                guardian: number;
+                                total: number;
+                            };
+                            insights: string[];
+                            instructionPreview: string | null;
+                        } | null;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    draftMyPersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                interviewId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Reviewable immutable draft created. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        personaRevisionId: string;
+                        /** @enum {string} */
+                        state: "draft";
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    approveMyPersona: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                personaRevisionId: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": Record<string, never>;
+            };
+        };
+        responses: {
+            /** @description Persona revision approved and activated. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        personaRevisionId: string;
+                        /** @enum {string} */
+                        state: "approved";
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+        };
+    };
+    getMyOnboardingStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Server-owned workflow state. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        personaInterviewId: string | null;
+                        personaRevisionId: string | null;
+                        bootstrapConversationId: string | null;
+                        /** Format: date-time */
+                        startedAt: string;
+                        /** Format: date-time */
+                        updatedAt: string;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Onboarding authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

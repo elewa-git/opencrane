@@ -17,7 +17,13 @@
       "path": "../../libs/frontend/features/tools"
     },
     {
-      "path": "../../libs/frontend/features/welcome"
+      "path": "../../libs/frontend/features/onboarding"
+    },
+    {
+      "path": "../../libs/frontend/state/onboarding"
+    },
+    {
+      "path": "../../libs/frontend/state/persona/adapter"
     },
     {
       "path": "../../libs/frontend/platform"

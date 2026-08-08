@@ -10,6 +10,8 @@ These capabilities govern the managed-agent product plane.
 - `channel-targets` authorizes a channel target for a specific operation.
 - `conversation-replay` reads an authorised thread snapshot and returns only display-safe AG-UI SSE
   events; it never exposes raw canonical event payloads.
+- `onboarding` owns the durable first-route workflow and pins exact persona and bootstrap references
+  to the session-derived silo and OIDC subject.
 
 The group may consult IAM for a proof or decision. It must not take a direct implementation
 dependency on gateways or knowledge; their results enter through public contracts.

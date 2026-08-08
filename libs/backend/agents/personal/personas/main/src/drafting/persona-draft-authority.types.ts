@@ -13,6 +13,10 @@ export enum PersonaDraftDenialReasons
 	InvalidInsights = "invalid_insights",
 	/** No reviewed template matched the completed interview evidence. */
 	TemplateNotSelected = "template_not_selected",
+	/** One or more exact scoring ties still require the owner's choice. */
+	ResolutionRequired = "resolution_required",
+	/** Reviewed scoring or interpolation evidence cannot be replayed exactly. */
+	DerivationMismatch = "derivation_mismatch",
 	/** A concurrent write prevented the draft transaction from committing. */
 	Conflict = "conflict",
 	/** The persistence authority could not provide a durable result. */

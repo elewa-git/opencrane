@@ -69,7 +69,7 @@ operator-input contract; the `website` agent documents one missing batch per run
 (read-only broad search — locating code across many files), `Plan` (design an implementation plan),
 `general-purpose` (multi-step research/execution). The `architecture` and `angular` types also apply
 to the WeOwnAI repo, which still owns the fleet app and the FORK libs (`core`, `platform`,
-`state/core`, `state/gateways`, `state/utils/storage`, `state/tenant/adapter`) shared with
+`state/core`, `state/gateways`, `state/tenant/adapter`) shared with
 `libs/frontend/*` here.
 
 When adding a new agent: put Claude Code subagents in `.claude/agents/` and add a row above — that is

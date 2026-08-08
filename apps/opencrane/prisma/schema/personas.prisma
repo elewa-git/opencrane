@@ -1,12 +1,32 @@
 enum PersonaInterviewCategory {
-  RelationshipRole @map("relationship_role")
-  ToneLanguage     @map("tone_language")
-  AnswerStructure  @map("answer_structure")
-  ChallengeSupport @map("challenge_support")
-  Initiative       @map("initiative")
-  ApprovalRisk     @map("approval_risk")
-  WorkingHabits    @map("working_habits")
-  MemoryBoundaries @map("memory_boundaries")
+  Pace
+  Response
+  Feedback
+  Interaction
+  Openness
+  Risk
+  Initiative
+  Challenge
+  Relationship
+  Tone
+}
+
+enum PersonaColour {
+  Red
+  Yellow
+  Green
+  Blue
+}
+
+enum PersonaOpennessModifier {
+  Explorer
+  Guardian
+}
+
+enum PersonaTieKind {
+  Primary
+  Secondary
+  Modifier
 }
 
 enum PersonaQuestionSetState {
@@ -25,14 +45,14 @@ enum PersonaRevisionState {
 }
 
 model PersonaQuestionSet {
-  id          String   @map("question_set_id")
-  version     Int
-  state       PersonaQuestionSetState @default(Draft)
-  reviewedBy  String?  @map("reviewed_by")
-  reviewedAt  DateTime? @map("reviewed_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  questions   PersonaQuestion[]
-  interviews  PersonaInterview[]
+  id         String                  @map("question_set_id")
+  version    Int
+  state      PersonaQuestionSetState @default(Draft)
+  reviewedBy String?                 @map("reviewed_by")
+  reviewedAt DateTime?               @map("reviewed_at")
+  createdAt  DateTime                @default(now()) @map("created_at")
+  questions  PersonaQuestion[]
+  interviews PersonaInterview[]
 
   @@id([id, version])
   @@map("persona_question_sets")
@@ -46,6 +66,7 @@ model PersonaQuestion {
   prompt             String
   ordinal            Int
   questionSet        PersonaQuestionSet       @relation(fields: [questionSetId, questionSetVersion], references: [id, version], onDelete: Restrict)
+  choices            PersonaQuestionChoice[]
 
   @@id([questionSetId, questionSetVersion, id])
   @@unique([questionSetId, questionSetVersion, ordinal])
@@ -53,32 +74,105 @@ model PersonaQuestion {
   @@map("persona_questions")
 }
 
-model PersonaSoulTemplate {
-  id             String   @map("template_id")
-  version        Int
-  digest         String
-  content        String
-  selectionRules Json     @map("selection_rules")
-  reviewedBy     String   @map("reviewed_by")
-  reviewedAt     DateTime @map("reviewed_at")
-  createdAt      DateTime @default(now()) @map("created_at")
-  revisions      PersonaRevision[]
+model PersonaQuestionChoice {
+  questionSetId      String                   @map("question_set_id")
+  questionSetVersion Int                      @map("question_set_version")
+  questionId         String                   @map("question_id")
+  id                 String                   @map("choice_id")
+  label              String
+  ordinal            Int
+  question           PersonaQuestion          @relation(fields: [questionSetId, questionSetVersion, questionId], references: [questionSetId, questionSetVersion, id], onDelete: Restrict)
+  answers            PersonaInterviewAnswer[]
+  weights            PersonaScoringWeight[]
+
+  @@id([questionSetId, questionSetVersion, questionId, id])
+  @@unique([questionSetId, questionSetVersion, questionId, ordinal])
+  @@map("persona_question_choices")
+}
+
+model PersonaScoringPolicy {
+  id          String                  @map("scoring_policy_id")
+  version     Int
+  digest      String
+  reviewedBy  String                  @map("reviewed_by")
+  reviewedAt  DateTime                @map("reviewed_at")
+  createdAt   DateTime                @default(now()) @map("created_at")
+  weights     PersonaScoringWeight[]
+  interviews  PersonaInterview[]
+  scores      PersonaInterviewScore[]
+  resolutions PersonaTieResolution[]
+  revisions   PersonaRevision[]
 
   @@id([id, version])
   @@unique([id, digest])
+  @@map("persona_scoring_policies")
+}
+
+model PersonaScoringWeight {
+  scoringPolicyId      String                @map("scoring_policy_id")
+  scoringPolicyVersion Int                   @map("scoring_policy_version")
+  questionSetId        String                @map("question_set_id")
+  questionSetVersion   Int                   @map("question_set_version")
+  questionId           String                @map("question_id")
+  choiceId             String                @map("choice_id")
+  red                  Int                   @default(0)
+  yellow               Int                   @default(0)
+  green                Int                   @default(0)
+  blue                 Int                   @default(0)
+  explorer             Int                   @default(0)
+  guardian             Int                   @default(0)
+  policy               PersonaScoringPolicy  @relation(fields: [scoringPolicyId, scoringPolicyVersion], references: [id, version], onDelete: Restrict)
+  choice               PersonaQuestionChoice @relation(fields: [questionSetId, questionSetVersion, questionId, choiceId], references: [questionSetId, questionSetVersion, questionId, id], onDelete: Restrict)
+
+  @@id([scoringPolicyId, scoringPolicyVersion, questionSetId, questionSetVersion, questionId, choiceId])
+  @@map("persona_scoring_weights")
+}
+
+model PersonaInterpolationMap {
+  id         String             @map("interpolation_map_id")
+  version    Int
+  digest     String
+  directives Json
+  reviewedBy String             @map("reviewed_by")
+  reviewedAt DateTime           @map("reviewed_at")
+  createdAt  DateTime           @default(now()) @map("created_at")
+  interviews PersonaInterview[]
+  revisions  PersonaRevision[]
+
+  @@id([id, version])
+  @@unique([id, digest])
+  @@map("persona_interpolation_maps")
+}
+
+model PersonaSoulTemplate {
+  id            String                  @map("template_id")
+  version       Int
+  digest        String
+  displayName   String                  @map("display_name")
+  primaryColour PersonaColour           @map("primary_colour")
+  modifier      PersonaOpennessModifier
+  content       String
+  reviewedBy    String                  @map("reviewed_by")
+  reviewedAt    DateTime                @map("reviewed_at")
+  createdAt     DateTime                @default(now()) @map("created_at")
+  revisions     PersonaRevision[]
+
+  @@id([id, version])
+  @@unique([id, digest])
+  @@unique([primaryColour, modifier, version])
   @@map("persona_soul_templates")
 }
 
 model PersonaProfile {
-  id               String            @id @default(cuid())
-  siloId           String            @map("silo_id")
-  userId           String            @map("user_id")
-  activeRevisionId String?           @map("active_revision_id")
-  createdAt        DateTime          @default(now()) @map("created_at")
-  updatedAt        DateTime          @updatedAt @map("updated_at")
+  id               String             @id @default(cuid())
+  siloId           String             @map("silo_id")
+  userId           String             @map("user_id")
+  activeRevisionId String?            @map("active_revision_id")
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
   interviews       PersonaInterview[]
-  revisions        PersonaRevision[] @relation("PersonaProfileRevisions")
-  activeRevision   PersonaRevision?  @relation("ActivePersonaRevision", fields: [id, activeRevisionId], references: [personaProfileId, id], onDelete: Restrict)
+  revisions        PersonaRevision[]  @relation("PersonaProfileRevisions")
+  activeRevision   PersonaRevision?   @relation("ActivePersonaRevision", fields: [id, activeRevisionId], references: [personaProfileId, id], onDelete: Restrict)
 
   @@unique([siloId, userId])
   @@unique([id, userId])
@@ -93,12 +187,20 @@ model PersonaInterview {
   refreshConfigurationChangeId String?                      @unique @map("refresh_configuration_change_id")
   questionSetId                String                       @map("question_set_id")
   questionSetVersion           Int                          @map("question_set_version")
+  scoringPolicyId              String                       @map("scoring_policy_id")
+  scoringPolicyVersion         Int                          @map("scoring_policy_version")
+  interpolationMapId           String                       @map("interpolation_map_id")
+  interpolationMapVersion      Int                          @map("interpolation_map_version")
   state                        PersonaInterviewState        @default(InProgress)
   startedAt                    DateTime                     @default(now()) @map("started_at")
   completedAt                  DateTime?                    @map("completed_at")
   profile                      PersonaProfile               @relation(fields: [personaProfileId, userId], references: [id, userId], onDelete: Restrict)
   questionSet                  PersonaQuestionSet           @relation(fields: [questionSetId, questionSetVersion], references: [id, version], onDelete: Restrict)
+  scoringPolicy                PersonaScoringPolicy         @relation(fields: [scoringPolicyId, scoringPolicyVersion], references: [id, version], onDelete: Restrict)
+  interpolationMap             PersonaInterpolationMap      @relation(fields: [interpolationMapId, interpolationMapVersion], references: [id, version], onDelete: Restrict)
   answers                      PersonaInterviewAnswer[]
+  score                        PersonaInterviewScore?
+  tieResolutions               PersonaTieResolution[]
   revisions                    PersonaRevision[]
   refreshConfigurationChange   PersonalConfigurationChange? @relation("PersonaRefreshConfiguration", fields: [refreshConfigurationChangeId], references: [id], onDelete: Restrict)
 
@@ -108,14 +210,15 @@ model PersonaInterview {
 }
 
 model PersonaInterviewAnswer {
-  id                 String             @id @default(cuid())
-  interviewId        String             @map("interview_id")
-  questionSetId      String             @map("question_set_id")
-  questionSetVersion Int                @map("question_set_version")
-  questionId         String             @map("question_id")
-  value              String
-  answeredAt         DateTime           @default(now()) @map("answered_at")
-  interview          PersonaInterview   @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  id                 String                @id @default(cuid())
+  interviewId        String                @map("interview_id")
+  questionSetId      String                @map("question_set_id")
+  questionSetVersion Int                   @map("question_set_version")
+  questionId         String                @map("question_id")
+  choiceId           String                @map("choice_id")
+  answeredAt         DateTime              @default(now()) @map("answered_at")
+  interview          PersonaInterview      @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  choice             PersonaQuestionChoice @relation(fields: [questionSetId, questionSetVersion, questionId, choiceId], references: [questionSetId, questionSetVersion, questionId, id], onDelete: Restrict)
 
   @@unique([interviewId, questionId])
   @@unique([id, interviewId, questionSetId, questionSetVersion, questionId])
@@ -123,30 +226,82 @@ model PersonaInterviewAnswer {
   @@map("persona_interview_answers")
 }
 
+model PersonaInterviewScore {
+  interviewId          String                    @id @map("interview_id")
+  scoringPolicyId      String                    @map("scoring_policy_id")
+  scoringPolicyVersion Int                       @map("scoring_policy_version")
+  scoringPolicyDigest  String                    @map("scoring_policy_digest")
+  orderedAnswerIds     String[]                  @map("ordered_answer_ids")
+  orderedChoiceIds     String[]                  @map("ordered_choice_ids")
+  red                  Int
+  yellow               Int
+  green                Int
+  blue                 Int
+  colourTotal          Int                       @map("colour_total")
+  explorer             Int
+  guardian             Int
+  opennessTotal        Int                       @map("openness_total")
+  primaryCandidates    PersonaColour[]           @map("primary_candidates")
+  secondaryCandidates  PersonaColour[]           @map("secondary_candidates")
+  modifierCandidates   PersonaOpennessModifier[] @map("modifier_candidates")
+  createdAt            DateTime                  @default(now()) @map("created_at")
+  interview            PersonaInterview          @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  policy               PersonaScoringPolicy      @relation(fields: [scoringPolicyId, scoringPolicyVersion], references: [id, version], onDelete: Restrict)
+
+  @@map("persona_interview_scores")
+}
+
+model PersonaTieResolution {
+  id                   String               @id @default(cuid())
+  interviewId          String               @map("interview_id")
+  scoringPolicyId      String               @map("scoring_policy_id")
+  scoringPolicyVersion Int                  @map("scoring_policy_version")
+  kind                 PersonaTieKind
+  candidates           String[]
+  selectedValue        String               @map("selected_value")
+  resolvedBy           String               @map("resolved_by")
+  resolvedAt           DateTime             @map("resolved_at")
+  interview            PersonaInterview     @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  policy               PersonaScoringPolicy @relation(fields: [scoringPolicyId, scoringPolicyVersion], references: [id, version], onDelete: Restrict)
+
+  @@unique([interviewId, kind])
+  @@map("persona_tie_resolutions")
+}
+
 model PersonaRevision {
-  id                        String               @id @default(cuid())
-  personaProfileId          String               @map("persona_profile_id")
+  id                        String                  @id @default(cuid())
+  personaProfileId          String                  @map("persona_profile_id")
   revision                  Int
-  state                     PersonaRevisionState @default(Draft)
-  soulTemplateId            String               @map("soul_template_id")
-  soulTemplateVersion       Int                  @map("soul_template_version")
-  soulTemplateDigest        String               @map("soul_template_digest")
-  interviewId               String               @map("interview_id")
-  selectionRuleId           String               @map("selection_rule_id")
-  selectionAnswerIds        String[]             @map("selection_answer_ids")
-  compiledInstructions      String               @map("compiled_instructions")
-  previousRevisionId        String?              @map("previous_revision_id")
-  authoredBy                String               @map("authored_by")
-  createdAt                 DateTime             @default(now()) @map("created_at")
-  approvedBy                String?              @map("approved_by")
-  approvedAt                DateTime?            @map("approved_at")
-  durableSoulMutationPolicy String               @default("forbidden") @map("durable_soul_mutation_policy")
-  profile                   PersonaProfile       @relation("PersonaProfileRevisions", fields: [personaProfileId], references: [id], onDelete: Restrict)
-  activeFor                 PersonaProfile[]     @relation("ActivePersonaRevision")
-  interview                 PersonaInterview     @relation(fields: [interviewId], references: [id], onDelete: Restrict)
-  soulTemplate              PersonaSoulTemplate  @relation(fields: [soulTemplateId, soulTemplateVersion], references: [id, version], onDelete: Restrict)
-  previousRevision          PersonaRevision?     @relation("PersonaRevisionHistory", fields: [previousRevisionId], references: [id], onDelete: Restrict)
-  laterRevisions            PersonaRevision[]    @relation("PersonaRevisionHistory")
+  state                     PersonaRevisionState    @default(Draft)
+  soulTemplateId            String                  @map("soul_template_id")
+  soulTemplateVersion       Int                     @map("soul_template_version")
+  soulTemplateDigest        String                  @map("soul_template_digest")
+  interviewId               String                  @map("interview_id")
+  scoringPolicyId           String                  @map("scoring_policy_id")
+  scoringPolicyVersion      Int                     @map("scoring_policy_version")
+  scoringPolicyDigest       String                  @map("scoring_policy_digest")
+  interpolationMapId        String                  @map("interpolation_map_id")
+  interpolationMapVersion   Int                     @map("interpolation_map_version")
+  interpolationMapDigest    String                  @map("interpolation_map_digest")
+  scoringEvidence           Json                    @map("scoring_evidence")
+  primaryColour             PersonaColour           @map("primary_colour")
+  secondaryColour           PersonaColour           @map("secondary_colour")
+  modifier                  PersonaOpennessModifier
+  compiledInstructions      String                  @map("compiled_instructions")
+  previousRevisionId        String?                 @map("previous_revision_id")
+  authoredBy                String                  @map("authored_by")
+  createdAt                 DateTime                @default(now()) @map("created_at")
+  approvedBy                String?                 @map("approved_by")
+  approvedAt                DateTime?               @map("approved_at")
+  durableSoulMutationPolicy String                  @default("forbidden") @map("durable_soul_mutation_policy")
+  profile                   PersonaProfile          @relation("PersonaProfileRevisions", fields: [personaProfileId], references: [id], onDelete: Restrict)
+  activeFor                 PersonaProfile[]        @relation("ActivePersonaRevision")
+  interview                 PersonaInterview        @relation(fields: [interviewId], references: [id], onDelete: Restrict)
+  soulTemplate              PersonaSoulTemplate     @relation(fields: [soulTemplateId, soulTemplateVersion], references: [id, version], onDelete: Restrict)
+  scoringPolicy             PersonaScoringPolicy    @relation(fields: [scoringPolicyId, scoringPolicyVersion], references: [id, version], onDelete: Restrict)
+  interpolationMap          PersonaInterpolationMap @relation(fields: [interpolationMapId, interpolationMapVersion], references: [id, version], onDelete: Restrict)
+  previousRevision          PersonaRevision?        @relation("PersonaRevisionHistory", fields: [previousRevisionId], references: [id], onDelete: Restrict)
+  laterRevisions            PersonaRevision[]       @relation("PersonaRevisionHistory")
   insights                  PersonaInsight[]
 
   @@unique([personaProfileId, revision])

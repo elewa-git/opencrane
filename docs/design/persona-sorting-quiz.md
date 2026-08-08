@@ -67,11 +67,8 @@ revision. Replaying the same completed interview and tie evidence must produce t
 
 ### Scoring authority and persisted result
 
-The current `PrismaPersonaDraftTemplateSelectorRepository` is an exact-answer rule matcher; it is
-not a weighted scorer or template compiler. Do not encode this algorithm by enumerating answer
-combinations in `selectionRules` or by relying on rule priority.
-
-Introduce a domain-owned scorer and compiler behind the persona authority. The scorer consumes one
+The persona authority owns one weighted scorer and compiler. It does not enumerate answer
+combinations as selection rules or use rule priority. The scorer consumes one
 completed interview, its exact reviewed question-set revision, and a reviewed scoring-policy
 revision in the same transaction snapshot. Its immutable result must retain:
 
@@ -299,17 +296,17 @@ revision and approval authority:
   fail before persistence.
 - Answers remain append-only interview evidence. A domain-owned scoring result and any tie choices
   add derivation provenance; they do not overwrite or reinterpret the answers.
-- The exact-match `PersonaDraftTemplateSelectorRepository` remains valid for its current contract,
-  but weighted scoring and compilation use dedicated domain ports. The resolved colour/modifier
-  selects one exact reviewed template without pretending the raw answers are selection rules.
+- The immutable weighted result and append-only tie evidence are replayed before drafting. The
+  resolved primary colour and modifier select one exact reviewed template; the secondary colour and
+  exact reviewed choices feed the pinned interpolation map.
 - The compiler replaces only the five reviewed variables and rejects incomplete output. Draft
   generation atomically pins the scoring result, tie evidence, selected template, compiled
   instructions, and provenance-linked insights in a reviewable immutable revision.
-- Approval goes through the existing `PersonaDraftTemplateSelection` → approve cycle.
+- Approval replays the immutable score vector, tie choices, source digests, template coordinates,
+  interpolation inputs, and insight provenance before activation.
 
-In the target implementation, the eight colour-and-modifier SOUL templates replace the two current
-templates (`direct-partner` and `supportive-partner`) in the reviewed catalogue. The shared AGENT.md
-is operational guidance, not a ninth SOUL template.
+The reviewed catalogue contains the eight colour-and-modifier SOUL templates. The shared AGENT.md is
+operational guidance, not a ninth SOUL template.
 
 ## Question set governance
 

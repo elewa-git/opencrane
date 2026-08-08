@@ -31,9 +31,22 @@ export interface PersonaOnboardingQuestionSet
 	readonly version: number;
 }
 
+/** Exact reviewed derivation sources pinned when an interview starts. */
+export interface PersonaOnboardingDerivationSources
+{
+	/** Stable weighted-scoring policy identifier. */
+	readonly scoringPolicyId: string;
+	/** Immutable weighted-scoring policy revision. */
+	readonly scoringPolicyVersion: number;
+	/** Stable interpolation-map identifier. */
+	readonly interpolationMapId: string;
+	/** Immutable interpolation-map revision. */
+	readonly interpolationMapVersion: number;
+}
+
 /** Result of provisioning the caller's profile and the server-owned onboarding catalogue. */
 export type EnsurePersonaOnboardingResult =
-	| { readonly outcome: PersonaLifecycleOutcomes.Ready; readonly personaProfileId: string; readonly questionSet: PersonaOnboardingQuestionSet }
+	| { readonly outcome: PersonaLifecycleOutcomes.Ready; readonly personaProfileId: string; readonly questionSet: PersonaOnboardingQuestionSet; readonly derivation: PersonaOnboardingDerivationSources }
 	| { readonly outcome: PersonaLifecycleOutcomes.Denied; readonly reason: PersonaOnboardingDenialReasons };
 
 /** Product-database boundary that verifies the clean-baseline source and provisions an owner profile. */

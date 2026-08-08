@@ -36,6 +36,8 @@ export interface PersonaApprovalSnapshot
 {
 	/** Current profile owner. */
 	readonly profileUserId: string;
+	/** Exact currently active revision, used to authenticate an idempotent approval retry. */
+	readonly activeRevisionId: string | null;
 	/** Current persona revision state. */
 	readonly revisionState: PersonaApprovalRevisionStates;
 	/** Profile owning the revision. */
@@ -46,7 +48,7 @@ export interface PersonaApprovalSnapshot
 	readonly insightCount: number;
 	/** Exact reviewed template digest pinned by the revision. */
 	readonly templateDigestMatches: boolean;
-	/** Deterministic winning template rule and exact answer evidence match the interview. */
+	/** Weighted score, tie evidence, reviewed source digests, and selected template replay exactly. */
 	readonly templateSelectionMatches: boolean;
 	/** Persisted policy value checked without coercion so an unknown database value fails approval closed rather than gaining local enum authority. */
 	readonly durableSoulMutationPolicy: string;

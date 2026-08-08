@@ -39,6 +39,11 @@ The package's index file (barrel) re-exports the components directly:
   sign-in and onboarding journeys.
 - `ChoiceCardGroupComponent`, `ChoiceCardOption`, and `ChoiceCardLayouts` — an accessible
   single-choice fieldset rendered as selectable paper cards.
+- `JourneyProgressComponent` — an accessible finite progress summary for resumable interviews and
+  other bounded journeys.
+- `PersonaSummaryComponent`, `PersonaArchetypeScore`, and `PersonaArchetypeTones` — a typed,
+  presentation-only persona result with primary, secondary, modifier, and complete score-vector
+  states.
 
 ## Boundary
 
@@ -49,10 +54,10 @@ loading, saving, routing, authorisation, and durable completion.
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It uses PrimeNG for accessible
-controls and `@opencrane/core` only for shared visual-language infrastructure; feature/domain
-packages must never flow back into this package.
+Tagged `type:lib`, `layer:frontend`, `scope:shared`, and `frontend-role:elements`. It may depend only
+on `frontend-role:core`; it uses PrimeNG for accessible controls and `@opencrane/core` for shared
+visual-language infrastructure. Feature, state, and adapter packages must never flow back into this
+package.
 
 ## Commands
 

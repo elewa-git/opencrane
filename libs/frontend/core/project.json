@@ -7,7 +7,8 @@
 	"tags": [
 		"type:lib",
 		"layer:frontend",
-		"scope:web"
+		"scope:shared",
+		"frontend-role:core"
 	],
 	"targets": {
 		"lint": {

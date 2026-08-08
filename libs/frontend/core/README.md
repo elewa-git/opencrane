@@ -47,9 +47,10 @@ coupling.
 
 ## Dependency direction
 
-Tagged `type:lib`, `layer:frontend`, and `scope:web` (the frontend dependency tier): it may import
-only other `scope:web` packages and `scope:shared` contracts. It imports no other frontend package;
-its one dependency is the `scope:shared` `@opencrane/contracts`.
+Tagged `type:lib`, `layer:frontend`, `scope:shared`, and `frontend-role:core`. It imports no other
+frontend package; its one dependency is the shared `@opencrane/contracts` package. Capability-bound
+frontend packages may depend on this explicitly cross-cutting core without gaining access to every
+legacy `scope:web` package.
 
 ## See also
 

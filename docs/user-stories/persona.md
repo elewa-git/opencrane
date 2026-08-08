@@ -8,10 +8,11 @@ archetypes (Red Commander, Yellow Catalyst, Green Anchor, Blue Analyst) plus an 
 (Explorer/Guardian). Persona changes are reviewed, provenance-linked, immutable revisions rather
 than hidden prompt mutation.
 
-Current status: `API partial` for the existing finite interview/draft/approval lifecycle and `UI
-missing`. The internal lifecycle exists, but only the status read appears in the generated OpenAPI
-contract today. Weighted scoring, tie resolution, bootstrap selection, and safe durable
-preference-memory admission and writes remain `API blocked`.
+Current status: `API implemented` and `UI implemented` for the sorting quiz through explicit review
+and approval. The generated contract covers status, interview start/answers/completion, weighted
+scoring, tie resolution, deterministic template/interpolation compilation, draft creation, and
+approval. Archetype-specific bootstrap conversation and safe durable preference-memory admission
+and writes remain `API blocked`.
 
 ## Onboarding relationship
 
