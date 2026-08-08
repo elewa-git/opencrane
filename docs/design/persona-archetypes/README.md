@@ -40,13 +40,16 @@ See the [quiz design](../persona-sorting-quiz.md#template-variables) for the ful
 
 ## Gender and demographics
 
-SOUL.md templates are **not** differentiated by gender or other demographic attributes. Research
-consistently shows within-gender variation in communication preferences massively exceeds
-between-gender variation (Weisberg & DeYoung, 2011; 105-country meta-analysis, 2020). The quiz
-already captures whatever signal demographics would approximate — and does so without the
-stereotyping risks documented by UNESCO (2019/2024), CHI 2025, and the UN (2026). No major AI
-platform personalises by gender. See the [gender research note](../research/ai-persona-onboarding-research.md#7-gender-and-ai-persona-personalisation)
-for the full evidence review.
+SOUL.md templates are **not** differentiated by gender or other demographic attributes. The quiz
+captures individual preferences directly, which already accounts for whatever signal demographics
+would approximate (within-gender variation dominates between-gender variation).
+
+However, gender-blind design is not gender-neutral. Most AI platforms fail to test for gender bias
+in their personalisation systems, defaulting to male-normed assumptions (Criado Perez, 2019; CHI
+2025). To avoid this trap: validate quiz phrasing and archetype labels across genders, audit
+template language for gendered communication norms, and monitor archetype distribution and
+re-sorting rates by gender post-launch. See the [gender research note](../research/ai-persona-onboarding-research.md#7-gender-and-ai-persona-personalisation)
+for the full evidence review and specific mitigations.
 
 ## Token budget
 

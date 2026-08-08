@@ -320,9 +320,11 @@ personality diagnosis. No colour is good or bad. Users can re-sort at any time.
    independence.
 9. **Make adaptation visible and revertible** — users should see what changed and why.
 10. **Frame as preference, not diagnosis** — honest, low-stakes, revisable.
-11. **No demographic segmentation** — personalise on stated preferences, not gender/age/culture.
-    Within-group variation dominates between-group variation; demographics add stereotyping risk
-    without improving accuracy.
+11. **No demographic segmentation, but gender-aware testing** — personalise on stated preferences,
+    not gender/age/culture. Within-group variation dominates; demographics add stereotyping risk.
+    But gender-blind is not gender-neutral: actively audit quiz phrasing, archetype labels, and
+    template language for male-default bias, and monitor archetype distribution across genders
+    post-launch.
 12. **Inject quiz-specific variables into templates** — the archetype sets the frame; individual
     quiz answers (response style, feedback approach, challenge mode, relationship model) calibrate
     the specific behavioural dials. This captures intra-archetype variation without template
@@ -369,12 +371,23 @@ The practical risk: if a female user receives a softer persona and a male user r
 direct one, the product encodes the stereotype rather than serving the individual — and users
 who violate the stereotype get a worse experience.
 
-### 7.4 Industry consensus: nobody personalises by gender
+### 7.4 The male-default trap: gender-blind is not gender-neutral
 
-Microsoft Copilot explicitly does not store or personalise on demographic data including age,
-gender, race, ethnicity, or sexual orientation. ChatGPT personalises via memory (stated
-preferences, habits, goals) and custom instructions — none of which reference demographic
-attributes. No major AI assistant platform personalises by gender.
+Most AI platforms do not personalise by gender, but they also do not test for gender bias in
+their personalisation systems. The result is well-documented: "gender-neutral" design defaults
+to male (Criado Perez, 2019; CHI 2025 male-default bias finding). When quiz questions,
+archetype labels, communication style descriptions, and feedback framing are designed and tested
+primarily with male users or male-normed assumptions, the system works well for men and
+under-serves everyone else — without anyone noticing, because the bias is invisible to the
+default group.
+
+This is the real gender risk for persona onboarding: not that we fail to create gender-specific
+templates, but that we fail to validate our gender-neutral templates across genders. A quiz
+question like "When you need to make a decision at work, which feels most natural?" may carry
+different connotations for users whose decisiveness is socially penalised versus rewarded. An
+archetype called "Commander" may appeal to users socialised to see assertiveness as a strength
+and repel users socialised to see it as transgressive — even when both users have identical
+underlying preferences.
 
 ### 7.5 Intersectionality reinforces the quiz-only approach
 
@@ -388,8 +401,10 @@ preferences directly.
 
 ### 7.6 Recommendation
 
-**Do not create gender-specific SOUL.md templates or gender modifiers.** The evidence supports
-this on three independent grounds:
+**Do not create gender-specific SOUL.md templates or gender modifiers** — but actively audit
+the quiz and templates for male-default bias.
+
+The evidence supports no demographic segmentation on three grounds:
 
 1. **Statistical**: within-gender variation in communication preferences massively exceeds
    between-gender variation. The quiz captures whatever signal gender would approximate.
@@ -399,10 +414,26 @@ this on three independent grounds:
    predictors are individual personality traits and stated preferences — both captured by the
    quiz.
 
-If post-launch data reveals that certain archetypes correlate with gender (e.g., more women
-land in Anchor than Commander), that is the quiz working correctly — it found their actual
-preference. Adding gender as an input would not improve accuracy; it would risk overriding the
-quiz result with a stereotype.
+However, not personalising by gender is insufficient. The following mitigations prevent the
+male-default trap:
+
+1. **Gender-balanced quiz testing**: validate that question phrasing, answer options, and scoring
+   weights produce equivalent archetype distributions across genders in user testing. If women
+   disproportionately cluster in one archetype, investigate whether the quiz is measuring
+   preference or reflecting socialised response patterns.
+2. **Archetype label audit**: ensure archetype names and descriptions do not unconsciously code
+   as masculine (Commander, Analyst) or feminine (Anchor, Catalyst). Test label appeal across
+   genders. If a label repels a gender group despite matching their actual preferences, the
+   label is the problem.
+3. **Template language review**: audit SOUL template directives for gendered communication norms.
+   "Push back when you see a better path" is neutral; "be aggressive in your recommendations"
+   carries gendered connotations.
+4. **Post-launch monitoring**: track archetype distribution, satisfaction, and re-sorting rates
+   by gender. Disproportionate re-sorting from a specific gender signals the initial assignment
+   is not working for them.
+5. **Feedback loop parity**: ensure the adaptive memory system (section 4) does not
+   systematically under-weight feedback signals from users whose communication style differs
+   from the training distribution.
 
 ## Sources
 
