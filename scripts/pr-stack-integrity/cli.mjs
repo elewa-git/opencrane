@@ -1,7 +1,7 @@
 import { digestEvidence, validationResult } from "./evidence.mjs";
 import { createGitHubAdapter } from "./github.mjs";
 import { createGitAdapter } from "./git.mjs";
-import { inspectLiveStack } from "./inspection.mjs";
+import { inspectStableStack } from "./inspection.mjs";
 import { evaluateStack } from "./policy.mjs";
 import { createCommandRunner } from "./process.mjs";
 import { publishResult } from "./report.mjs";
@@ -57,7 +57,7 @@ export function runCli(arguments_, dependencies = {})
 	try
 	{
 		repository ??= github.repositoryName();
-		const inspection = inspectLiveStack({
+		const inspection = inspectStableStack({
 			repository,
 			currentBranch: _Option(arguments_, "--current-branch"),
 			event,

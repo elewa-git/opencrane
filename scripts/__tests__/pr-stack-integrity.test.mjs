@@ -7,7 +7,7 @@ import test from "node:test";
 import { validationResult } from "../pr-stack-integrity/evidence.mjs";
 import { createGitHubAdapter } from "../pr-stack-integrity/github.mjs";
 import { createGitAdapter } from "../pr-stack-integrity/git.mjs";
-import { inspectLiveStack } from "../pr-stack-integrity/inspection.mjs";
+import { inspectLiveStack, inspectStableStack } from "../pr-stack-integrity/inspection.mjs";
 import { evaluateStack } from "../pr-stack-integrity/policy.mjs";
 import { createCommandRunner } from "../pr-stack-integrity/process.mjs";
 import { publishResult, renderMarkdown } from "../pr-stack-integrity/report.mjs";
@@ -221,6 +221,50 @@ test("fails when a live base ref changes during inspection", function _BaseDrift
 			},
 		});
 	}, /BASE_REF_DRIFT/u);
+});
+
+test("retries a transient merge-time base-ref drift with a fresh full inspection", function _TransientBaseDrift()
+{
+	const pullRequests = [_PullRequest(1, "feat/one", "a", "develop", "d")];
+	let fetches = 0;
+	const inspection = inspectStableStack({
+		repository: "example/opencrane",
+		event: { number: 99, action: "closed", headSha: "merged" },
+		github: { openPullRequests() { return pullRequests; } },
+		git: {
+			fetchAndVerify()
+			{
+				fetches += 1;
+				return new Map([["develop", fetches === 1 ? "before" : "after"]]);
+			},
+			remoteBaseHeads() { return new Map([["develop", "after"]]); },
+			evidence() { return { ancestry: new Set(), diffDigests: new Map(), patchIds: new Map() }; },
+		},
+	});
+	assert.equal(fetches, 2);
+	assert.equal(inspection.baseHeads.get("develop"), "after");
+});
+
+test("fails closed after bounded repeated base-ref drift", function _RepeatedBaseDrift()
+{
+	const pullRequests = [_PullRequest(1, "feat/one", "a", "develop", "d")];
+	let fetches = 0;
+	assert.throws(function _Inspect() {
+		inspectStableStack({
+			repository: "example/opencrane",
+			event: { number: 1, action: "edited", headSha: "a" },
+			github: { openPullRequests() { return pullRequests; } },
+			git: {
+				fetchAndVerify()
+				{
+					fetches += 1;
+					return new Map([["develop", "before"]]);
+				},
+				remoteBaseHeads() { return new Map([["develop", "after"]]); },
+			},
+		});
+	}, /BASE_REF_DRIFT/u);
+	assert.equal(fetches, 3);
 });
 
 test("fails when the graph changes while Git evidence is computed", function _FinalSnapshotDrift()
