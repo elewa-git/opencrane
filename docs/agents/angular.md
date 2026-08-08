@@ -2,8 +2,9 @@
 
 > Part of the OpenCrane agent guidance. See [`AGENTS.md`](../../AGENTS.md) for the index.
 >
-> **Scope note:** these rules target the WeOwnAI Angular frontend monorepo (a client of this
-> platform), not the AGPL platform repo itself. Apply them when working in Angular frontend code.
+> **Scope note:** these rules apply to the OpenCrane Angular frontend in `apps/opencrane-ui` and
+> `libs/frontend/*`. Some packages were originally ported from WeOwnAI, but the live OpenCrane
+> packages, public barrels, and dependency graph are the source of truth here.
 
 ## Integration Seam
 
@@ -19,28 +20,59 @@ For Angular frontend work, use PrimeNG as the default component library.
 
 - Prefer PrimeNG form, table, navigation, and feedback components over custom implementations.
 - Configure theme providers in `app.config.ts` using `providePrimeNG`.
-- Keep global visual tokens in `styles.css`; avoid ad-hoc per-page color systems.
+- Keep global visual tokens in `apps/opencrane-ui/src/styles.scss`; avoid ad-hoc per-page colour
+  systems.
 
 ## Reusable Component Rule (Required)
 
 Always create reusable UI components before writing repeated page-level markup.
 
-- Shared visual wrappers must live under `src/app/shared/components/**`.
-- Feature pages under `src/app/features/**` should compose shared components and services.
+- Domain-agnostic shared visual components must live under `libs/frontend/elements/ui`.
+- Feature-specific visual components live under their owning `libs/frontend/features/<capability>`
+  package; route-level screens compose them with shared elements and services.
 - If the same pattern appears in 2 or more places, refactor it into a shared component immediately.
 - Page components should focus on orchestration and data flow; display logic belongs in shared components.
 - Check these rules after every implementation cycle.
 
+## Component-manager collaboration gate
+
+Pair frontend implementation with the `component-manager` agent in
+`.claude/agents/component-manager.md` whenever adding or materially changing a screen, feature, or
+shared visual component.
+
+1. Run `PLAN` before implementation. The component manager inventories the live catalogue and maps
+   every screen region to `REUSE`, `EXTEND`, `COMPOSE`, `EXTRACT`, `NEW`, or `KEEP INLINE`.
+2. Let the component manager apply shared component APIs, semantic visual states, tokens, and their
+   story/fixture, behaviour, accessibility, and screenshot contracts when those changes are needed.
+3. Let the frontend implementer own feature orchestration, data access, routing, domain state, and
+   assembly of the selected components.
+4. Run `POST-DIFF` after implementation. It checks for duplicate primitives, arbitrary styling,
+   stale state fixtures, and cohesive components hidden inside a growing screen.
+
+A longer screen triggers a responsibility inventory, not an automatic split. Extract a region when
+it has a cohesive input/output or interaction/state contract, independent styling and testability,
+independent change pressure, or a visual/markup pattern used in two or more places. Keep one-off
+static layout inline when extraction would only fragment the screen.
+
+When a different kind of an existing control is required, extend its typed semantic state or
+compose it before creating a second base primitive. Do not use Angular class inheritance merely to
+reuse templates or styles; prefer a typed variant, content composition, a narrow wrapper, or a host
+directive. Class inheritance is reserved for a genuine stable non-visual behavioural contract.
+
 ## Frontend Layering
 
-- `core/`: API services, app-wide models, cross-cutting infrastructure
-- `shared/`: reusable presentational components and UI primitives
-- `features/`: route-level containers that compose `core` and `shared`
+- `core/`: bottom-layer models, typed HTTP client, theme, and pure utilities.
+- `elements/`: reusable presentational components; no feature or state dependency.
+- `state/`: gateway ports, adapters, dependency-injection wiring, stores, and caches.
+- `features/`: routed screens and panes that compose `elements/` and consume `state/` ports.
+- `platform/`: browser/desktop runtime-capability seam supplied by the app.
+- `apps/opencrane-ui`: thin browser composition and routing root.
 
 ## Data Access
 
-- All HTTP calls must go through dedicated `core/api` services.
-- Do not issue HTTP requests directly from templates or shared presentational components.
+- Features consume narrow ports from `state/`; they do not call the HTTP client directly.
+- State adapters make HTTP calls through the typed client in `core/api`.
+- Do not issue HTTP requests from templates or presentational components.
 
 ## Angular Signals, Resources, and Forms
 
