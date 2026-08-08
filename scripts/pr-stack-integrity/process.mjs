@@ -1,5 +1,8 @@
 import { execFileSync, spawnSync } from "node:child_process";
 
+/** Maximum captured output for broad-but-reviewable PR diffs and patch IDs. */
+export const COMMAND_OUTPUT_MAX_BYTES = 16 * 1024 * 1024;
+
 /** Create a bounded, injectable command adapter for repository governance tooling. */
 export function createCommandRunner(timeoutMilliseconds = 30_000)
 {
@@ -7,14 +10,18 @@ export function createCommandRunner(timeoutMilliseconds = 30_000)
 		run(command, arguments_, options = {})
 		{
 			return execFileSync(command, arguments_, {
-				encoding: "utf8",
-				timeout: timeoutMilliseconds,
 				...options,
+				encoding: "utf8",
+				maxBuffer: COMMAND_OUTPUT_MAX_BYTES,
+				timeout: timeoutMilliseconds,
 			}).trim();
 		},
 		runBuffer(command, arguments_)
 		{
-			return execFileSync(command, arguments_, { timeout: timeoutMilliseconds });
+			return execFileSync(command, arguments_, {
+				maxBuffer: COMMAND_OUTPUT_MAX_BYTES,
+				timeout: timeoutMilliseconds,
+			});
 		},
 		status(command, arguments_)
 		{

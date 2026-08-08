@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,7 +10,7 @@ import { createGitHubAdapter } from "../pr-stack-integrity/github.mjs";
 import { createGitAdapter } from "../pr-stack-integrity/git.mjs";
 import { inspectLiveStack, inspectStableStack } from "../pr-stack-integrity/inspection.mjs";
 import { evaluateStack } from "../pr-stack-integrity/policy.mjs";
-import { createCommandRunner } from "../pr-stack-integrity/process.mjs";
+import { COMMAND_OUTPUT_MAX_BYTES, createCommandRunner } from "../pr-stack-integrity/process.mjs";
 import { publishResult, renderMarkdown } from "../pr-stack-integrity/report.mjs";
 import { parseReviewOrder } from "../pr-stack-integrity/review-order.mjs";
 
@@ -301,12 +302,107 @@ test("fails when a fetched PR ref does not match GitHub's head SHA", function _F
 	}, /FETCHED_HEAD_DRIFT/u);
 });
 
+test("keeps distinct binary identities without buffering patch payloads", function _BinaryDiffMetadata()
+{
+	const firstDiff = Buffer.from("diff --git a/image.png b/image.png\nindex 0000000000000000000000000000000000000000..1111111111111111111111111111111111111111 100644\nBinary files differ\n");
+	const secondDiff = Buffer.from("diff --git a/image.png b/image.png\nindex 2222222222222222222222222222222222222222..3333333333333333333333333333333333333333 100644\nBinary files differ\n");
+	const diffArguments = [];
+	const commands = {
+		run(command, arguments_, options)
+		{
+			assert.equal(command, "git");
+			assert.deepEqual(arguments_, ["patch-id", "--stable"]);
+			return options.input === firstDiff ? "patch-one 0000000" : "patch-two 0000000";
+		},
+		runBuffer(command, arguments_)
+		{
+			assert.equal(command, "git");
+			diffArguments.push(arguments_);
+			return arguments_.at(-1) === "base-one...head-one" ? firstDiff : secondDiff;
+		},
+		status() { return 1; },
+	};
+	const evidence = createGitAdapter(commands).evidence([
+		_PullRequest(1, "feat/one", "head-one", "develop", "base-one"),
+		_PullRequest(2, "feat/two", "head-two", "develop", "base-two"),
+	]);
+
+	assert.deepEqual(diffArguments, [
+		["diff", "--full-index", "--no-textconv", "base-one...head-one"],
+		["diff", "--full-index", "--no-textconv", "base-two...head-two"],
+	]);
+	assert.equal(evidence.diffDigests.get(1), "d924fbc2f75baa1bba45c91bb33f0ba1dec1e83ba11286be8ade5adf5755d2ff");
+	assert.equal(evidence.diffDigests.get(2), "9f16cb7bfed85ee08080967d7d4a30688ce675a2457cc9ba44af889e31dd4bba");
+	assert.notEqual(evidence.diffDigests.get(1), evidence.diffDigests.get(2));
+	assert.equal(evidence.patchIds.get(1), "patch-one");
+	assert.equal(evidence.patchIds.get(2), "patch-two");
+});
+
+test("real Git assigns distinct stable patch IDs to different binary contents", function _RealBinaryPatchIdentity(context)
+{
+	const directory = mkdtempSync(join(tmpdir(), "opencrane-binary-patch-"));
+	context.after(function _Cleanup() { rmSync(directory, { recursive: true, force: true }); });
+	const git = function _Git(arguments_, options = {}) {
+		return execFileSync("git", arguments_, {
+			cwd: directory,
+			encoding: "utf8",
+			...options,
+		}).trim();
+	};
+
+	git(["init", "--quiet"]);
+	git(["config", "commit.gpgsign", "false"]);
+	git(["config", "user.email", "stack-check@example.test"]);
+	git(["config", "user.name", "Stack Check"]);
+	writeFileSync(join(directory, "image.bin"), Buffer.from([0, 1, 2, 3]));
+	git(["add", "image.bin"]);
+	git(["commit", "--quiet", "-m", "base"]);
+	const base = git(["rev-parse", "HEAD"]);
+
+	writeFileSync(join(directory, "image.bin"), Buffer.from([0, 4, 5, 6]));
+	git(["commit", "--quiet", "-am", "first"]);
+	const first = git(["rev-parse", "HEAD"]);
+	git(["checkout", "--quiet", "--detach", base]);
+	writeFileSync(join(directory, "image.bin"), Buffer.from([0, 7, 8, 9]));
+	git(["commit", "--quiet", "-am", "second"]);
+	const second = git(["rev-parse", "HEAD"]);
+
+	const firstDiff = git(["diff", "--full-index", "--no-textconv", `${base}...${first}`]);
+	const secondDiff = git(["diff", "--full-index", "--no-textconv", `${base}...${second}`]);
+	const firstPatchId = git(["patch-id", "--stable"], { input: firstDiff }).split(/\s+/u)[0];
+	const secondPatchId = git(["patch-id", "--stable"], { input: secondDiff }).split(/\s+/u)[0];
+
+	assert.notEqual(firstPatchId, secondPatchId);
+});
+
 test("bounds external commands and surfaces timeouts", function _CommandTimeout()
 {
 	const commands = createCommandRunner(10);
 	assert.throws(function _Timeout() {
 		commands.run(process.execPath, ["-e", "setTimeout(function () {}, 1000)"]);
 	}, /timed out|ETIMEDOUT/iu);
+});
+
+test("captures broad PR diffs beyond the Node child-process default", function _BroadDiffBuffer()
+{
+	const commands = createCommandRunner();
+	const bytes = 2 * 1024 * 1024;
+	const script = `process.stdout.write(Buffer.alloc(${bytes}))`;
+	assert.equal(commands.run(process.execPath, ["-e", script]).length, bytes);
+	assert.equal(commands.runBuffer(process.execPath, ["-e", script]).length, bytes);
+});
+
+test("enforces the command output cap for string and buffer callers", function _BoundedOutput()
+{
+	const commands = createCommandRunner();
+	const bytes = COMMAND_OUTPUT_MAX_BYTES + 1;
+	const script = `process.stdout.write(Buffer.alloc(${bytes}))`;
+	assert.throws(function _StringOutput() {
+		commands.run(process.execPath, ["-e", script], { maxBuffer: bytes * 2 });
+	}, /ENOBUFS/u);
+	assert.throws(function _BufferOutput() {
+		commands.runBuffer(process.execPath, ["-e", script]);
+	}, /ENOBUFS/u);
 });
 
 test("publishes deterministic JSON evidence and matching Markdown", function _Publish(context)
