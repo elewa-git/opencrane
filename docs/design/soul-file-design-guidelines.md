@@ -2,12 +2,13 @@
 
 Status: **draft** — August 2026
 
-These guidelines govern how OpenCrane designs, writes, tests, and evolves the personality files
-that define personal agent behaviour. They apply to SOUL.md templates, AGENT.md operational
-rules, bootstrap scripts, and the memory-based adaptation layer. The guidelines are grounded in
-the [AI persona onboarding research](../research/ai-persona-onboarding-research.md) and
-distilled from the archetype template library, sorting quiz design, and memory boundary
-specification.
+These guidelines govern how OpenCrane designs, writes, tests, and evolves reviewed persona source
+and its authoring guidance. SOUL.md templates are target compiler inputs, bootstrap scripts are
+future one-session conversation sources, and AGENT.md is currently an authoring/evaluation reference
+only. None is an independent runtime authority or mutable file inside an agent. The guidelines also
+define the proposal-only boundary for contextual memory. They are grounded in the
+[AI persona onboarding research](../research/ai-persona-onboarding-research.md) and distilled from
+the archetype template library, sorting quiz design, and memory boundary specification.
 
 > See also: [persona archetype templates](persona-archetypes/README.md),
 > [sorting quiz](persona-sorting-quiz.md),
@@ -16,64 +17,69 @@ specification.
 
 ## 1. File architecture
 
-Four files, four concerns. Never combine them.
+Four concerns. Never collapse their authority or lifecycle boundaries.
 
-| File | Purpose | Loaded | Budget | Update cadence |
+| Source | Purpose | Runtime treatment | Budget | Change cadence |
 |---|---|---|---|---|
-| **SOUL.md** | Who the agent is — personality, voice, style | Every turn | <500 tokens | Rare — governed refresh cycle |
-| **AGENT.md** | How the agent works — approval, initiative, boundaries | Every turn | <400 tokens | Per-task or operational change |
-| **bootstrap.md** | First-session onboarding script | Once | <800 tokens | Never (disposable after use) |
-| **Memory** | Learned preferences, contextual variations | Selectively retrieved | ~100–500/turn | Every ~3 conversations |
+| **SOUL.md** | Reviewed personality, voice, and style source | Compiled into an immutable approved `PersonaRevision` | <500 tokens | Rare — governed refresh cycle |
+| **AGENT.md** | Shared authoring and evaluation guidance | Not currently compiled or loaded at runtime; never grants authority | n/a | Governed product/configuration change |
+| **bootstrap.md** | First-session interview source | Produces evidence and candidate proposals only | <800 tokens | Versioned product change |
+| **Memory** | Explicitly confirmed contextual preferences | Target: only catalog-matched, consented fact references are frozen into a new run snapshot | ~100–500/turn | User-reviewed proposal; production writes and safe injection currently blocked |
 
-**Total always-loaded persona cost**: ~650 tokens. With retrieved memory: ~750–1150 tokens per
-turn. Compare to monolithic approaches: typically 1500–3000 tokens, much of it irrelevant per
-turn, with documented instruction-dilution effects.
+The implementation must measure the compiled recurring instruction payload and admitted memory
+content separately. The limits above are design budgets, not empirically established optima, and
+source-file token counts are not proof of the runtime payload.
 
 ### 1.1 Why the split matters
 
-SOUL.md is a token budget. Every token in it costs across every interaction for the lifetime of
-the agent. Memory is selectively retrieved — tokens are spent only when relevant facts are
-pulled into context. AGENT.md separates operational rules (which are personality-independent)
-from identity (which is personality-driven). This prevents personality changes from accidentally
-altering safety boundaries and vice versa.
+Compiled persona instructions are a token budget. Every approved token costs whenever that exact
+revision is selected for a new run. Memory must be selectively retrieved, and only facts intersected
+with the verified user's active, consented catalog entries may be frozen into that run's immutable
+`RunInputSnapshot`. The current recall/compiler path does not yet prove that intersection, so
+persona-memory injection remains a blocked target rather than a shipped guarantee. Operational
+rules remain separate from personality, and neither layer can create grants or alter approval
+boundaries.
 
 ### 1.2 What belongs where
 
 | Content | File | Why |
 |---|---|---|
-| Colour archetype and modifier name | SOUL.md | Activates the right associative cluster |
+| Explicit behaviour dials represented by the display archetype | SOUL.md | Compiles intended behaviour without relying on the label's associations |
 | Communication directives (3–5 lines) | SOUL.md | Must be consistently applied across all turns |
 | Tone calibration (directness, warmth, formality) | SOUL.md | Primary personality dials |
 | Challenge/pushback level | SOUL.md | Fundamental to the working relationship |
 | Response structure preference | SOUL.md | Drives every answer's shape |
 | What-to-avoid rules (3–4 lines) | SOUL.md | Prevents the most jarring personality violations |
-| Approval boundaries | AGENT.md | Operational safety — must never be skipped |
-| Initiative level defaults | AGENT.md | Action-vs-ask behaviour |
-| Working habits | AGENT.md | Tool use, follow-up, memory policy |
-| Boundary rules (honesty, access limits) | AGENT.md | Non-negotiable constraints |
-| Topic-specific style preferences | Memory | Context-dependent, discovered through interaction |
-| Corrections and explicit feedback | Memory | Evolving, selectively retrieved |
-| Relationship evolution | Memory | Dynamic, grows across sessions |
-| Domain terminology | Memory | Learned through corrections |
+| Server-owned approval boundaries | Server policy, documented in AGENT.md authoring guidance | Prompt text can explain but never establish the checkpoint |
+| Proposal/approval floor | Server policy, documented in AGENT.md authoring guidance | Requires proposal-only suggestions and proof-bound approval for action |
+| Initiative framing | SOUL.md | Tunes novelty, cadence, and presentation within that non-negotiable floor |
+| Working-habit expectations | AGENT.md authoring guidance | Review/test reference only until a versioned runtime model exists |
+| Boundary rules (honesty, access limits) | Server policy, documented in AGENT.md | Non-negotiable runtime constraints remain server-owned |
+| Confirmed topic-specific style preferences | Memory | Context-dependent and explicitly reviewed |
+| Confirmed corrections and feedback | Memory | Provenance-linked and selectively retrieved |
+| Confirmed relationship preferences | Memory | User-controlled and individually removable |
+| Confirmed domain terminology | Memory | Retained only after explicit review |
 
 ### 1.3 What is never stored
 
 | Content | Why |
 |---|---|
-| General knowledge about the archetype | The model already knows what "direct and results-driven" means |
+| General or stereotyped associations with an archetype | Unspecified entailment is not reviewed behaviour |
 | Personality theory or framework explanations | Wastes tokens; adds nothing to behaviour |
 | Elaborate backstory or character narrative | Research shows this degrades instruction-following |
 | Duplicate information available from tools | Memory stores what the agent cannot re-derive |
+| Inferred gender, sex, or demographic attributes | Audit data is never persona or memory evidence |
 
 ## 2. Writing SOUL.md templates
 
-### 2.1 Use archetype entailment for compression
+### 2.1 Prefer explicit behaviour dials over archetype entailment
 
-Naming a well-chosen archetype (e.g., "direct, results-driven partner") activates pre-existing
-associative clusters in the model. You do not need to spell out every implication — the model
-infers vocabulary, reasoning patterns, and domain conventions from a concise archetype cue.
-This is the primary compression mechanism. A 15-line SOUL.md with a well-named archetype
-outperforms a 60-line specification that describes every behaviour explicitly.
+Archetype names are useful display labels, but putting them in a prompt can activate unspecified
+associations, including gender stereotypes. The compiler excludes the Markdown title and display
+labels from runtime instructions. Specify directness, warmth, structure, challenge, and proposal
+cadence as short behavioural directives that can be tested independently. Treat any residual
+archetype cue as a compilation defect; never assume the model's inferred vocabulary, reasoning, or
+social conventions are desired behaviour.
 
 ### 2.2 Template structure
 
@@ -100,7 +106,8 @@ Every SOUL.md follows this structure:
 
 ## Initiative
 
-- [Proactive behaviour — archetype-specific, Explorer/Guardian-differentiated]
+- [Proposal initiative framing — archetype-specific and Explorer/Guardian-differentiated, but
+  always subordinate to the shared proposal-only and proof-bound approval floor]
 - [Suggestion framing — archetype-specific]
 - [Urgency handling — archetype-specific]
 
@@ -113,9 +120,9 @@ Every SOUL.md follows this structure:
 
 ### 2.3 Calibrate to moderate personality expression
 
-The strongest empirical finding (Northeastern 2026, n=150): moderate personality expression
-beats both flat/neutral and maximal/exaggerated. The SOUL template should sound like a
-professional with a clear communication style, not a caricature.
+Moderate expression is a safer starting hypothesis than a flat or exaggerated caricature, but it
+must be evaluated on OpenCrane's tasks, languages, and supported models. The SOUL template should
+sound like a professional with a clear communication style.
 
 - Write directives as behavioural instructions, not character descriptions.
 - "Lead with the conclusion" is better than "You are an impatient, no-nonsense person."
@@ -127,7 +134,7 @@ professional with a clear communication style, not a caricature.
 
 The identity line sets the entire frame. It combines:
 
-1. **Adjectives** that activate the archetype cluster (2–3, from the archetype definition)
+1. **Behavioural adjectives** that name tested dials (2–3, from the archetype definition)
 2. **Relationship frame** from the quiz (`{{relationship_frame}}` variable)
 3. **Core values** that anchor the archetype (2–3 nouns)
 
@@ -165,31 +172,30 @@ Each avoidance rule should describe a concrete behaviour, not an abstract qualit
 
 ### 2.7 Explorer versus Guardian differentiation
 
-The Openness modifier primarily affects the **Initiative** section. Explorer variants surface
-novel approaches, suggest bold options, and are comfortable with ambiguity. Guardian variants
-default to proven methods, flag untested approaches, and prefer predictability.
-
-The Communication style and Challenge sections are personality-driven (from the colour
-archetype) and do not change between Explorer and Guardian. The what-to-avoid section changes
-only in one line: Explorers avoid excessive caution; Guardians avoid recommending unproven
-approaches without flagging risk.
+The Openness modifier changes only directives that express the user's novelty-versus-proven-method
+preference. Explorer variants surface novel options and ambiguity; Guardian variants lead with
+tested methods and flag unproven approaches. A reviewed identity or communication line may express
+that same dial, but the modifier must not alter warmth, respect, challenge strength, response depth,
+action authority, or approval requirements. Every pairwise difference must trace to this explicit
+dial rather than an archetype stereotype.
 
 ## 3. Template variables
 
-SOUL templates contain `{{variables}}` interpolated from quiz answers at draft generation time.
-Variables personalise each template beyond the archetype default — they capture intra-archetype
-variation that the archetype selection alone misses.
+SOUL template source uses reviewed variable slots resolved at draft generation time. The compiler
+maps immutable answer IDs to reviewed single-line directives; it never interpolates raw answer or
+free-text content. Variables capture explicit preferences that the archetype selection alone misses.
 
 ### 3.1 Variable design principles
 
 1. **Variables replace existing lines, not add new ones.** Token count stays within budget.
-2. **The archetype provides the frame; variables calibrate the dials.** A Commander who prefers
-   step-by-step explanations gets that reflected without losing the Commander's directness.
+2. **The explicit answer controls its dial.** A user who selects step-by-step explanation receives
+   that directive even when a display archetype has a different default. Unrelated tested dials
+   remain stable.
 3. **Variable values are phrased as behavioural directives**, matching the surrounding template
    style. They are not raw quiz answers.
-4. **When a quiz answer aligns with the archetype default, the variable value matches what the
-   static template would have said anyway.** Personalisation only diverges where the user's
-   specific preference diverges from the archetype norm.
+4. **A specific preference overrides the template default on that dimension.** If this produces an
+   incoherent combination, ask the user or revise the template; never silently reinterpret the
+   explicit answer through an archetype stereotype.
 
 ### 3.2 Current variables
 
@@ -214,20 +220,24 @@ Before adding a variable, verify:
 
 ## 4. Writing AGENT.md
 
-### 4.1 AGENT.md is personality-independent
+### 4.1 AGENT.md is personality-independent authoring guidance
 
-Operational rules do not change with the user's colour archetype. One AGENT.md serves all
-archetypes. If you find yourself writing archetype-specific AGENT.md rules, the content belongs
-in SOUL.md.
+Operational conformance expectations do not change with the user's colour archetype. One AGENT.md
+serves authors and evaluation across all archetypes. It is not currently compiled, loaded, or
+pinned into a `PersonaRevision` or `RunInputSnapshot`; server policy owns the actual runtime
+boundary. If runtime shared guidance is introduced later, it first needs a server-owned versioned
+model, digest, activation lifecycle, and snapshot coordinate. If you find yourself writing
+archetype-specific AGENT.md guidance, the stylistic content belongs in SOUL.md.
 
 ### 4.2 Structure
 
 ```markdown
 ## Approval boundaries
-[What requires explicit user approval before acting]
+[How the server-owned approval checkpoint is presented; this file does not define it]
 
 ## Initiative level
-[Default action-vs-ask behaviour]
+[Non-negotiable proposal-only floor; SOUL may tune cadence, novelty, ordering, and phrasing but
+never action authority]
 
 ## Working habits
 [Memory use, follow-up, thread tracking]
@@ -236,25 +246,23 @@ in SOUL.md.
 [Non-negotiable constraints: honesty, access limits, data protection]
 
 ## Memory use
-[When to store and surface learned preferences]
+[How to propose a candidate preference and use only facts admitted in the run snapshot]
 ```
 
 ### 4.3 Boundaries are non-negotiable
 
-The Boundaries section in AGENT.md cannot be overridden by SOUL.md personality directives. A
-Commander's directness does not permit fabricating facts. An Anchor's patience does not permit
-sharing data across contexts. The personality layer sits above the boundary layer, not below it.
-
-This mirrors Anthropic's constitutional approach: HEXACO Honesty-Humility as a near-hard
-constraint that the stylistic personality layer cannot override.
+SOUL.md templates must conform to the shared AGENT authoring guidance, but neither source file can
+override or implement server policy. A Commander's directness does not permit fabricating facts.
+An Anchor's patience does not permit sharing data across contexts. Honesty, access limits, grants,
+and approval checks remain server-owned boundaries regardless of the selected style.
 
 ## 5. Writing bootstrap scripts
 
 ### 5.1 Purpose
 
 A bootstrap script guides the agent's first conversation after persona approval. It establishes
-the working relationship in the archetype's voice, captures initial calibration data for memory,
-and is discarded after the first session.
+the working relationship in the approved persona's voice and gathers evidence that may support
+user-reviewed preference proposals. It does not write memory.
 
 ### 5.2 Structure
 
@@ -263,13 +271,13 @@ and is discarded after the first session.
 [Self-introduction in archetype voice. 2–3 sentences. Set expectations.]
 
 ## First-session calibration (3 questions)
-[Three questions that populate initial agent memory. Pacing matches archetype.]
+[Three questions that can support candidate preference proposals. Pacing matches archetype.]
 
 ## After calibration
 [Summary of what was learned. One concrete offer to help. Match archetype tone.]
 
-## What to store in memory
-[Explicit list of what calibration answers produce as memory entries.]
+## Candidate preferences
+[Explicit list of proposals the user may review; none is retained merely because it was answered.]
 ```
 
 ### 5.3 Design rules
@@ -279,8 +287,10 @@ and is discarded after the first session.
    context, preferred support style — things that require open-ended answers.
 3. **Pacing matches the archetype**: Commander asks all three fast; Anchor asks one at a time
    with space between.
-4. **Answers go to memory, not SOUL.md.** Bootstrap calibration populates the agent's initial
-   memory, not the personality file.
+4. **Answers are evidence, not memory writes.** The agent may propose a candidate preference, but
+   durable retention requires explicit reviewed user confirmation. Keep the current runtime status
+   and target catalog-safe admission rule in the one shared AGENT authoring reference instead of
+   copying it into every archetype bootstrap.
 5. **The bootstrap is used once.** It does not recur in subsequent sessions.
 6. **The closing offer is low-stakes and concrete.** Not "how can I help?" but a specific
    suggestion based on what the user described.
@@ -302,13 +312,16 @@ Openness modifier (orthogonal to the grid):
 
 This produces 8 template variants (4 colours x 2 modifiers).
 
-### 6.2 Scoring substrate
+### 6.2 Product-specific preference scoring
 
-Score users on continuous Big Five aspects internally (the scientific substrate), then present
-results through colour archetype labels (the intuitive layer). This is the 16Personalities
-pattern: scientifically grounded scoring with memorable, non-judgmental labels.
+Score only the interaction preferences asked by the OpenCrane sorter and retain those continuous
+preference-axis scores for explanation and re-sorting. Big Five and DISC can suggest hypotheses,
+but they do not validate this custom instrument. The BFAS measure used to establish the 10 Big Five
+aspects has 100 items; OpenCrane's 10-item forced-choice sorter requires its own construct,
+reliability, validity, and fairness evidence before any scientific claim.
 
-DISC has no counterpart to Big Five Openness — hence the separate Explorer/Guardian modifier.
+The Explorer/Guardian modifier exposes novelty and risk appetite that the four-colour UX does not
+represent clearly. It is a product preference axis, not a validated Big Five score.
 
 ### 6.3 Archetype naming
 
@@ -320,107 +333,174 @@ Archetype names must be:
 
 ## 7. Adaptation and drift
 
-### 7.1 Two update loops
+### 7.1 Two governed proposal loops
 
-| Loop | Speed | Governance | Content |
+| Loop | Proposal cadence | Governance | Runtime result |
 |---|---|---|---|
-| **Core identity** (SOUL.md) | Slow — human-approved | Interview → draft → approve | Archetype, directives, tone, challenge level |
-| **Contextual modulation** (Memory) | Fast — per-session | Agent-proposed, user-visible, revertible | Topic-specific preferences, contextual variations |
+| **Core identity** | Rare | Accepted refresh proposal → interview → draft → explicit review and approval | One immutable `PersonaRevision`, eligible only for future run snapshots |
+| **Contextual preference** | When evidence warrants asking | Agent proposes one candidate; user explicitly reviews and confirms | Future consented memory fact, once a production write lifecycle exists |
 
-### 7.2 Memory update rules
+Markdown files and conversation text are never runtime authority. Draft creation compiles the
+reviewed SOUL content into immutable candidate `PersonaRevision.compiledInstructions`; approval
+must validate and activate that exact already-compiled payload rather than recompiling changed
+source. Each admitted run then freezes the exact approved `personaRevisionId`. The target memory
+contract additionally freezes a gateway-native dataset, catalog-matched fact identifiers/digests,
+and memory policy, but production injection remains blocked until admission proves that
+catalog-to-gateway intersection. A later approval or confirmation cannot change an already
+admitted run.
 
-1. **Cadence**: every ~3 conversations (empirically optimal per Tan et al., arXiv:2412.13103).
-2. **Trigger**: update only when the agent's behaviour prediction was wrong (IRIS framework), or
-   on explicit user feedback. Not on raw event counts.
-3. **Scope**: only the implicated dimension is updated. Stability regulariser prevents
-   oscillation across multiple dimensions at once.
-4. **Visibility**: every learned preference is visible to the user, labelled with its source
-   (bootstrap calibration, explicit feedback, inferred from interaction), and individually
-   removable.
+### 7.2 Preference-proposal rules
 
-### 7.3 Adaptation signals (ranked by reliability)
+1. **Evidence is not consent.** Quiz answers, bootstrap answers, corrections, transcript patterns,
+   and prediction errors may justify a proposal; none automatically creates a durable fact.
+2. **Ask about one bounded preference.** State the candidate, scope, evidence source, and expected
+   behavioral effect. Do not infer a personality trait or demographic identity.
+3. **Require explicit reviewed confirmation.** A future write also requires sensitivity,
+   provenance, exact source coordinate, idempotency, gateway acceptance, and catalog/outbox
+   lifecycle. Silence, continued use, and a generic thumbs-up are not durable-memory consent.
+4. **Preserve user control.** Confirmed facts must be visible, individually correctable and
+   forgettable, and labelled with their source and scope once those production paths exist.
+5. **Represent the current gap exactly.** Production record, correct, and forget operations and
+   their public API/UI surfaces remain blocked and fail closed. Gateway recall and prompt injection
+   exist today, but admission does not yet intersect each recalled fact with an active, consented
+   catalog record. Treat **catalog-safe persona-memory injection** as blocked and unqualified live;
+   never imply that the agent can write memory directly or that current injected facts have proven
+   consent/catalog linkage.
+6. **Keep authority separate.** Persona text, prompts, memory, and initiative settings never grant
+   permission to act. Consequential actions still require current grants and the exact proof-bound
+   approval checkpoint.
 
-1. **Direct edits/corrections** — highest signal, lowest ambiguity
-2. **Explicit scoped ratings** — thumbs up/down, per-response
-3. **Prediction-error-triggered behavioural signals** — session abandonment, reformulation
-4. **Register/formality drift** — trackable but noisy, needs several turns
-5. **Aggregate linguistic features** — real but weak (5–14% of trait variance), needs 100+
-   messages
+### 7.3 Proposal signals (ranked by reliability)
+
+1. **Direct edits/corrections** — strongest evidence for asking about the edited dimension
+2. **Explicit scoped ratings** — useful only when the rated quality is unambiguous
+3. **Prediction-error-triggered behavioral signals** — abandonment or reformulation can justify a
+   question, not an inference
+4. **Register/formality drift** — noisy; require repeated evidence and confirmation
+5. **Aggregate linguistic features** — weak and unsuitable for demographic or trait inference
+
+An experimental cadence such as every three conversations can schedule proposal review, but it
+cannot schedule writes. Direct explicit feedback may justify asking sooner; weak signals may never
+justify asking.
 
 ### 7.4 Persona drift mitigation
 
-SOUL.md alone is not sufficient for long-term consistency. Self-consistency degrades 30%+ within
-8–12 turns in documented settings. Architectural mitigations:
+Compiled persona instructions alone may not remain behaviorally salient over a long conversation.
+Evaluate mitigations without crossing the snapshot boundary:
 
-1. **Periodic persona re-injection**: re-surface core SOUL.md directives at regular intervals
-   during long conversations (~25% consistency improvement).
-2. **Persona vector monitoring**: detect when the agent's activation-space personality has
-   drifted from the target.
-3. **Sycophancy gate**: after any adaptation, compare affective alignment and epistemic
-   independence separately. If warmth goes up but pushback goes down, the adaptation is suspect.
+1. **Snapshot-consistent re-injection**: re-surface only the compiled instructions already frozen
+   for that run; never switch persona revisions mid-run.
+2. **Behavior monitoring**: measure whether explicit directness, warmth, structure, challenge, and
+   initiative dials remain stable, rather than relying on an opaque archetype vector alone.
+3. **Sycophancy gate**: compare affective alignment and epistemic independence separately. If
+   warmth rises while justified pushback falls, reject the candidate change.
 
-### 7.5 Sycophancy as the primary failure mode
+### 7.5 Sycophancy and over-personalisation
 
-Every paper that measures it finds personalising on affect/warmth increases agreement-seeking
-behaviour. Mitigations:
+Personalisation can increase agreement-seeking and can surface irrelevant sensitive history.
+Mitigations:
 
-- Separate epistemic-independence evaluation from affective-alignment evaluation
-- Over-personalisation benchmarks: irrelevance, repetition, sycophancy rubric (OP-Bench)
-- Warrant-based memory gating: sensitive history enters a response only when the current turn
-  independently justifies it (HUSH-Bench)
-- Honesty/integrity floor in AGENT.md that the SOUL.md stylistic layer cannot override
+- Evaluate epistemic independence separately from affective alignment.
+- Test irrelevance, repetition, and sycophancy using an over-personalisation rubric.
+- Target catalog-safe admission must select only consented facts whose exact matched references are
+  frozen at admission, then surface content only when the current turn warrants it. The current
+  recall/compiler path does not yet satisfy this requirement.
+- Keep honesty, access limits, and approval rules outside the stylistic personality layer.
 
 ## 8. Gender and demographic considerations
 
-### 8.1 No demographic segmentation in templates
+### 8.1 Demographics never select or alter a persona
 
-SOUL.md templates are not differentiated by gender, age, culture, or other demographic
-attributes. The sorting quiz captures individual preferences directly, which accounts for
-whatever signal demographics would approximate. Within-gender variation in communication
-preferences massively exceeds between-gender variation (75–100% distribution overlap, Weisberg
-& DeYoung 2011; confirmed across 105 countries, Kajonius & Johnson 2019).
+SOUL templates are not differentiated by gender, sex, age, culture, disability, or another
+demographic attribute. These attributes must not enter quiz scoring, tie-breaking, template
+selection, variables, compiled instructions, prompts, memory, or a run snapshot. Never infer
+gender from a name, voice, text, profile, behavior, or model output. Personalise only from the
+person's explicit quiz answers and later explicitly confirmed preferences.
 
-No major AI platform personalises by gender. No robust evidence shows gender-matched AI personas
-improve satisfaction or task completion.
+This exclusion is not a claim that gender has no effect on product experience. Gender remains an
+important evaluation dimension because questions, labels, model associations, and feedback paths
+can behave differently even when scoring never receives a demographic field.
 
-### 8.2 Gender-blind is not gender-neutral
+### 8.2 Audit-only demographic data contract
 
-Not personalising by gender is necessary but insufficient. Most AI platforms fail to test for
-gender bias in their personalisation systems, resulting in male-default design — systems designed
-and validated primarily with male users or male-normed assumptions that under-serve everyone
-else without anyone noticing.
+Gender identity and sex are distinct constructs. OpenCrane has an evaluation purpose for optional
+gender identity data; this design identifies no purpose for collecting sex assigned at birth.
 
-### 8.3 Required mitigations
+- Collect gender only through voluntary self-identification for a stated audit purpose, with
+  “prefer not to answer” and an inclusive self-description route. Never infer or backfill it.
+- Store audit data in a segregated evaluation system, outside persona, production prompts, memory,
+  and operational run records. It must never influence an individual's result or treatment.
+- When outcome auditing requires linkage, use a purpose-limited pseudonymous study identifier inside
+  the evaluation boundary. Export only the predeclared minimum outcome fields, never expose the
+  demographic value back to production, and delete the linkage on withdrawal or retention expiry.
+- Define consent, allowed uses, access, retention, deletion, category mapping, aggregation, and
+  missing-data handling before collection. Keep raw self-description separate from reported
+  categories and never repurpose it as prompt or profile text.
+- Predeclare minimum cell sizes and suppress or coarsen small cells to prevent re-identification.
+  Report **insufficient evidence** when a subgroup is too small or unrepresentative; do not claim
+  parity and do not silently merge that group into another.
 
-1. **Gender-balanced quiz testing**: validate that question phrasing, answer options, and scoring
-   weights produce equivalent archetype distributions across genders. If one gender
-   disproportionately clusters in one archetype, investigate whether the quiz is measuring
-   preference or reflecting socialised response patterns.
+### 8.3 Instrument fairness and validity
 
-2. **Archetype label audit**: ensure names and descriptions do not unconsciously code as
-   masculine or feminine. Test label appeal across genders. If a label repels a gender group
-   despite matching their actual preferences, the label is the problem, not the user.
+Before launch and at each material question, weight, template, language, or model change:
 
-3. **Template language review**: audit SOUL template directives for gendered communication norms.
-   "Push back when you see a better path" is neutral; "be aggressive in your recommendations"
-   carries gendered connotations. Review what-to-avoid rules for assumptions about "normal"
-   communication styles.
+1. **Predeclare the audit.** Name the intended preference constructs, validation samples,
+   reliability thresholds, measurement-invariance/DIF methods, outcome-gap investigation
+   thresholds, escalation owner, and remediation process before inspecting subgroup results.
+2. **Run cognitive interviews.** Include people across supported gender identities, languages,
+   cultures, and accessibility contexts, especially people whose preferences contradict common
+   gender stereotypes. Ask what each question and answer means; revise socially loaded or ambiguous
+   wording.
+3. **Validate this instrument.** Test dimensional structure, test-retest and internal reliability
+   where appropriate, score stability, content validity, and whether results predict the explicit
+   interaction preferences claimed. Big Five evidence from 100- or 120-item instruments does not
+   validate this 10-item sorter.
+4. **Test measurement equivalence.** Where sample size supports it, test measurement invariance and
+   differential item functioning (DIF): among people matched on the intended preference, does group
+   membership still change the probability of choosing an answer? Investigate flagged items with
+   participants before changing them.
+5. **Treat distributions as diagnostics, not targets.** Compare score and archetype distributions
+   to identify questions for investigation. Never tune weights to force equal demographic
+   distributions, and never treat a correlation as proof that the sorter is correct.
+6. **Measure user-visible errors and recourse.** Compare comprehension, label appeal, confidence,
+   satisfaction, correction requests, and re-sort rates. A gap triggers investigation; the remedy
+   improves measurement or recourse for everyone rather than assigning group-specific weights.
+7. **Audit the proposal path.** Compare whose feedback becomes a candidate proposal, whose
+   proposals are dismissed, and whose confirmed facts are selected in later snapshots. Gender is
+   an audit dimension only, never inferred preference content.
 
-4. **Post-launch monitoring**: track archetype distribution, satisfaction scores, and re-sorting
-   rates by gender. Disproportionate re-sorting from a specific gender signals the initial
-   assignment is not working for them — the quiz or template, not the user, needs adjustment.
+### 8.4 Counterfactual generated-output audit
 
-5. **Feedback loop parity**: ensure the adaptive memory system does not systematically
-   under-weight feedback signals from users whose communication style differs from the training
-   distribution.
+Surface-language review is necessary but insufficient because archetype names and adjectives may
+activate latent model stereotypes. In an isolated evaluation harness, across all eight templates,
+representative tasks, supported languages, and model versions, vary only a synthetic gender cue and
+include a no-cue condition. Do not copy a participant's audit attribute into a production prompt.
+Human-review cue sets so that names, pronouns, grammar, and translations do not silently introduce
+ethnicity, class, culture, or task differences. Cover the supported range of gender identities
+rather than treating a binary swap as a complete audit. Compare:
 
-### 8.4 Intersectionality
+- advice and recommendation content;
+- assumptions about competence and required explanation;
+- preservation of user autonomy and choice;
+- warmth, directness, challenge, and willingness to disagree;
+- safety handling and refusal behaviour.
 
-Gender interacts with culture, class, profession, and neurodivergence. Isolating any single
-demographic dimension produces a crude proxy when the quiz can measure the actual preferences
-directly. If post-launch data reveals archetype correlations with any demographic, that is the
-quiz working correctly — it found their actual preference. Adding demographics as input would
-risk overriding the quiz result with a stereotype.
+This implements [NIST AI 600-1](https://doi.org/10.6028/NIST.AI.600-1) action MS-2.11's
+recommendation to field-test with relevant subgroups and use counterfactual or low-context prompts.
+
+Any unjustified change is a template/model failure. Remove the archetype cue from compiled
+instructions or replace it with explicit behavior dials; never “fix” the result by tailoring output
+to the user's gender.
+
+### 8.5 Intersectional evaluation without intersectional targeting
+
+Aggregate gender results can conceal compounded harm. Where representation and privacy thresholds
+permit, evaluate supported intersections with language, culture, disability/neurodivergence, age,
+and other relevant contexts using the same measurement-error, satisfaction, correction, and
+re-sort outcomes. Review worst-group results and pair quantitative analysis with participatory
+qualitative testing. Unsupported intersections receive an insufficient-evidence finding and a
+recruitment/coverage plan, not a fairness claim. Intersectional membership never becomes a persona
+input.
 
 ## 9. Sorting quiz design principles
 
@@ -431,21 +511,27 @@ personality diagnosis. No colour is good or bad. Users can re-sort at any time.
 
 ### 9.2 Quiz constraints
 
-- **10 questions, ~3 minutes.** Industry precedent validates 10 as sufficient.
-- **5 axes**: pace, focus, openness, initiative, working relationship.
-- **Weighted-points scoring**: each answer adds weighted points to all four colour counters
-  simultaneously. No answer is "wrong."
-- **Continuous scores retained**: the full score vector is stored for re-sorting and potential
-  fine-tuning, not just the discrete archetype label.
+- **10 questions, ~3 minutes.** This is an onboarding-cost hypothesis, not evidence that 10 items
+  are psychometrically sufficient; validate the exact instrument.
+- **5 axes**: pace, focus, openness, proposal initiative, working relationship.
+- **Weighted-points scoring**: each answer may add the reviewed weights declared for one or more
+  colour counters. No answer is "wrong," but every mapping and weight requires validation.
+- **Continuous preference scores retained**: the full product-specific score vector supports
+  explanation and re-sorting, not trait diagnosis or demographic inference.
 - **Primary + secondary + modifier output**: most people are a blend; hard single labels
   misfile borderline users.
+- **Explicit ties**: if the primary colour, secondary colour, or Explorer/Guardian result is tied
+  or indeterminate, show only the tied descriptions and ask the user to choose. Do not infer a
+  tie-breaker and do not add a hidden default or ninth "Balanced" template.
 
 ### 9.3 Integration with templates
 
 Quiz answers drive two outputs:
-1. **Template selection**: primary colour + Openness modifier selects one of 8 SOUL templates.
-2. **Variable interpolation**: specific quiz answers (Q2, Q3, Q8, Q9) fill `{{variables}}`
-   within the selected template, and the secondary colour fills `{{secondary_blend}}`.
+1. **Template selection**: primary colour + explicit Explorer/Guardian result selects one of 8
+   SOUL templates. A tie pauses selection for the user's explicit choice.
+2. **Reviewed directive selection**: immutable answer IDs for Q2, Q3, Q8, and Q9 select reviewed
+   directives for the template slots; raw answer text is never interpolated. The reviewed scoring
+   result selects the secondary-blend directive.
 
 See the [quiz specification](persona-sorting-quiz.md) for the full question set, scoring
 algorithm, and variable mapping.
@@ -457,50 +543,66 @@ algorithm, and variable mapping.
 Before shipping a new or modified SOUL template:
 
 - [ ] Token count is under 500 tokens (use a tokeniser, not word count)
-- [ ] Identity line contains 2–3 adjectives, relationship frame variable, and 2–3 core values
+- [ ] Compiled instructions exclude the Markdown title and display-only archetype/modifier labels;
+  the identity line uses only explicit tested dials
 - [ ] All `{{variables}}` are present and correctly named
 - [ ] Directives are behavioural imperatives, not character descriptions
 - [ ] What-to-avoid rules are concrete behaviours, not abstract qualities
-- [ ] Explorer/Guardian differentiation is only in the Initiative and what-to-avoid sections
+- [ ] Every Explorer/Guardian difference traces only to the explicit novelty-versus-proven-method
+  dial and never changes authority, approval, warmth, respect, challenge strength, or response depth
 - [ ] Template reads as a professional with a clear communication style, not a caricature
 - [ ] No gendered language or assumptions in directives
 
-### 10.2 Archetype differentiation test
+### 10.2 Variant differentiation test
 
-Generate the same prompt through all 8 SOUL templates. Verify:
+Generate the same prompt using the compiled instructions for all 8 reviewed variants. Verify:
 
-- Responses are noticeably different in structure, tone, and information ordering
-- No template produces responses indistinguishable from another
+- Responses differ only on the explicit structure, tone, challenge, and initiative dials intended
+  by each variant
+- Differences can be traced to reviewed directives rather than display-label associations
 - Each template's what-to-avoid rules are visibly absent from its responses
 - The Explorer/Guardian distinction manifests in suggestion framing, not just word choice
 
 ### 10.3 Variable injection test
 
-For each template, test with both the archetype-aligned and archetype-divergent variable values:
+For each template, test with both default-aligned and default-divergent variable values:
 
-- A Commander with `{{response_style}}` = "Walk through steps sequentially" should still feel
-  like a Commander (direct tone, confident language) while delivering information step-by-step
-- A Catalyst with `{{challenge_mode}}` = "name the risk directly" should still feel like a
-  Catalyst (warm energy, collaborative framing) while being direct about risks
+- A user with `{{response_style}}` = "Walk through steps sequentially" consistently receives
+  sequential explanations; unrelated directness and initiative dials remain unchanged
+- A user with `{{challenge_mode}}` = "name the risk directly" receives direct risk language;
+  unrelated warmth and structure dials remain unchanged
 
-If the variable value contradicts the archetype identity, the surrounding archetype context
-should modulate how the variable is expressed, not the other way around.
+The explicit variable wins on its dimension. If the result is incoherent or unsafe, ask the user
+to resolve the conflict or revise the reviewed template; never let the archetype reinterpret the
+answer.
 
 ### 10.4 Drift test
 
-Run a 20+ turn conversation with each template. Verify:
+Run a 20+ turn conversation with each compiled variant. Verify:
 
-- Core personality traits are still recognisable at turn 20
+- Explicit compiled behaviour dials remain recognisable at turn 20
 - The what-to-avoid behaviours have not crept in
 - Sycophancy has not increased (measure pushback frequency at turn 1 vs turn 20)
-- Re-injecting the SOUL.md mid-conversation restores any drift that occurred
+- Re-injecting only the compiled persona instructions already frozen in the run snapshot restores
+  any drift that occurred; the test never changes revision mid-run
 
 ### 10.5 Gender bias audit
 
 Before launch and at each major quiz or template revision:
 
-- Run the quiz with a gender-balanced test panel
-- Compare archetype distribution across genders
-- Test archetype label appeal across genders (does "Commander" repel a gender group?)
-- Review template language with a gender-bias lens
-- Verify satisfaction and re-sorting rates do not skew by gender post-launch
+- [ ] The audit purpose, supported groups/intersections, sample thresholds, metrics, decision rules,
+  and remediation owner were declared before results were inspected
+- [ ] Audit demographics came only from voluntary self-identification, were not inferred, and
+  remained outside scoring, templates, prompts, memory, and run snapshots
+- [ ] Cognitive interviews covered supported genders, languages, cultures, and accessibility
+  contexts, including people whose preferences contradict gender stereotypes
+- [ ] Reliability, score stability, measurement invariance, and DIF were evaluated where the
+  construct and sample support them; unsupported comparisons are marked insufficient evidence
+- [ ] Archetype distributions were used as investigation signals, never forced-parity targets
+- [ ] Label appeal, comprehension, satisfaction, corrections, and re-sort rates were reviewed for
+  gaps in measurement quality and recourse
+- [ ] Isolated counterfactual output tests varied only human-reviewed synthetic gender cues—including
+  no cue—across all eight templates, tasks, supported languages, and model versions, measuring
+  advice, competence assumptions, autonomy, warmth, challenge, safety, and refusal behaviour
+- [ ] Supported intersections and worst-group outcomes were reviewed with small-cell suppression;
+  no demographic or intersectional result changed an individual's scoring or persona

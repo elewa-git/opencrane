@@ -13,29 +13,80 @@ reviewed SOUL.md template for the user's personal agent.
 
 1. **Preference-setting, not personality diagnosis.** Frame as "how would you like your assistant
    to work with you?" — never "this is who you are." No colour is good or bad.
-2. **Fast.** 10 questions, ~3 minutes. Industry precedent (Ally, Joii) validates 10 as sufficient.
+2. **Fast.** 10 questions, ~3 minutes. This count bounds onboarding effort; it is not a claim of
+   psychometric coverage or validity.
 3. **Blend-aware.** Output a primary + secondary colour, not a hard single label. Most people are
-   a blend; forcing one bucket misgenders borderline users.
+   a blend; forcing one bucket misclassifies borderline results.
 4. **Governed.** Answers are append-only, provenance-linked evidence. The resulting persona goes
    through the existing draft → review → approve cycle before activation.
 5. **Revisable.** Users can re-sort at any time through a persona refresh.
 
+This is a custom product-preference sorter, not a Big Five assessment, clinical instrument, or
+validated psychometric test. Its scores describe only how the reviewed answer weights below map to
+OpenCrane's communication templates. It does not inherit scientific validity from any personality
+framework, and results must never be presented as measurements of the user's personality.
+
 ## Scoring algorithm
 
-Weighted-points scoring with continuous trait retention:
+Weighted-points scoring with lossless score retention:
 
-1. Each answer adds weighted points to all four colour counters simultaneously (a single answer can
-   partially support multiple archetypes).
-2. Openness questions score independently on a separate Explorer ↔ Guardian axis.
-3. After all questions: normalise colour scores to percentages, select primary (highest) and
-   secondary (second highest) colours.
-4. Retain the full continuous score vector for future re-sorting and potential fine-tuning.
-5. Map the primary colour + Openness modifier to the reviewed SOUL template. The secondary colour
-   is stored as evidence and may influence future template refinements.
+1. Each reviewed answer choice contributes exactly the non-zero colour and Explorer/Guardian
+   weights printed beside that choice. Unlisted counters receive zero; an answer need not affect
+   all counters or either modifier counter.
+2. Sum the integer weights without rounding. The raw colour vector is
+   `C = { red, yellow, green, blue }`; the raw modifier vector is
+   `O = { explorer, guardian }`.
+3. Let `colourTotal = red + yellow + green + blue`. `colourTotal` must be greater than zero. The
+   exact normalised percentage for colour `c` is `100 × C[c] / colourTotal`.
+4. Let `opennessTotal = explorer + guardian`. `opennessTotal` must be greater than zero. The exact
+   Explorer score is `100 × explorer / opennessTotal`; the Guardian score is
+   `100 × guardian / opennessTotal`. Raw integers and denominators are authoritative; rounding is
+   presentation-only and never affects ordering or tie detection.
+5. Select the highest raw colour as primary and the highest remaining raw colour as secondary.
+   Resolve any tie at either selection boundary through the governed user-choice flow below.
+6. Select Explorer when `explorer > guardian` and Guardian when `guardian > explorer`. An exact tie
+   is not a third modifier; it requires an explicit user choice between Explorer and Guardian.
+7. Map the resolved primary colour and modifier to exactly one of the eight reviewed SOUL
+   templates. The resolved secondary colour supplies `{{secondary_blend}}`.
 
-The existing `PrismaPersonaDraftTemplateSelectorRepository` already supports this: expand the
-`selectionRules` to match on the new quiz answers, add templates to `PersonaSoulTemplate`, and
-the deterministic priority-based rule matcher handles the rest.
+### Tie resolution
+
+Ties must not be broken by template ID, catalogue order, rule priority, random choice, or a
+demographic attribute. Before draft creation:
+
+- A primary tie presents only the tied-highest colours and asks the user which collaboration style
+  they prefer.
+- After the primary is resolved, a secondary tie presents only the tied-highest remaining colours.
+- An Explorer/Guardian tie presents those two working-style options without inventing a
+  "Balanced" template.
+
+Each choice is appended as provenance bound to the completed interview, scoring-policy version,
+candidate set, selected value, user identity, and trusted timestamp. Until every required tie is
+resolved, draft creation returns a stable `resolution_required` outcome and creates no persona
+revision. Replaying the same completed interview and tie evidence must produce the same result.
+
+### Scoring authority and persisted result
+
+The current `PrismaPersonaDraftTemplateSelectorRepository` is an exact-answer rule matcher; it is
+not a weighted scorer or template compiler. Do not encode this algorithm by enumerating answer
+combinations in `selectionRules` or by relying on rule priority.
+
+Introduce a domain-owned scorer and compiler behind the persona authority. The scorer consumes one
+completed interview, its exact reviewed question-set revision, and a reviewed scoring-policy
+revision in the same transaction snapshot. Its immutable result must retain:
+
+- question-set ID/version and scoring-policy ID/version/digest;
+- the ordered answer IDs and exact reviewed choice IDs used;
+- raw colour counters, `colourTotal`, and the lossless normalisation inputs;
+- raw Explorer/Guardian counters, `opennessTotal`, and the lossless normalisation inputs;
+- every tie candidate set and its append-only user-resolution evidence;
+- resolved primary colour, secondary colour, and Explorer/Guardian modifier;
+- selected template ID/version/digest; and
+- the reviewed interpolation-map version/digest plus the answer IDs used for each variable.
+
+This score-and-resolution evidence is pinned to the immutable persona revision. Approval must
+recompute or rebind the same reviewed inputs and fail closed if the answers, policy, tie evidence,
+template, interpolation map, or digest no longer matches.
 
 ## The 10 questions
 
@@ -90,15 +141,18 @@ the deterministic priority-based rule matcher handles the rest.
 - (b) Suggest the safe, proven option and let me push it further. → Guardian +3, Blue +1
 - (c) Present both and explain the trade-offs. → Guardian +1, Explorer +1, Blue +1
 
-### Axis 4: Initiative and autonomy
+### Axis 4: Proposal initiative
 
-**Q7 — Initiative level**
-*How much should your assistant take the lead?*
+**Q7 — Suggestion cadence**
+*How proactively should your assistant surface ideas and recommendations?*
 
-- (a) Act first, explain later — I trust it to make good calls. → Red +2, Yellow +1
-- (b) Suggest options and wait for my decision. → Blue +2, Green +1
-- (c) Check in with me before doing anything significant. → Green +2, Blue +1
+- (a) Bring me a concrete recommendation without waiting to be asked. → Red +2, Yellow +1
+- (b) Suggest options when relevant and wait for my decision. → Blue +2, Green +1
+- (c) Check whether I want suggestions before expanding the topic. → Green +2, Blue +1
 - (d) Surprise me with ideas I hadn't thought of, but let me choose. → Yellow +2, Explorer +1
+
+This question changes proposal cadence only. No answer grants a capability, authorises an action,
+or weakens the current proof-bound approval checkpoint.
 
 **Q8 — Challenge preference**
 *When you're heading down a path your assistant thinks is wrong, it should…*
@@ -128,11 +182,11 @@ the deterministic priority-based rule matcher handles the rest.
 
 ## Template variables
 
-SOUL.md templates contain `{{variables}}` that are interpolated from quiz answers during draft
+SOUL.md templates contain `{{variables}}` compiled from reviewed quiz choice IDs during draft
 generation. This personalises each template beyond the archetype default — a Commander who prefers
 step-by-step explanations gets that reflected, rather than being forced into the archetype's
 default conclusion-first style. The archetype provides the frame (tone, energy, what-to-avoid);
-the variables calibrate the specific behavioural dials.
+the variables calibrate the specific behavioural dials. Raw user text is never inserted.
 
 ### `{{response_style}}` — from Q2 (response preference)
 
@@ -165,7 +219,7 @@ the variables calibrate the specific behavioural dials.
 
 | Q9 answer | Variable value |
 |---|---|
-| (a) Sharp tool | partner |
+| (a) Sharp tool | assistant |
 | (b) Thinking partner | thinking partner |
 | (c) Trusted advisor | trusted advisor |
 | (d) Rigorous collaborator | rigorous collaborator |
@@ -179,19 +233,29 @@ the variables calibrate the specific behavioural dials.
 | Green | You also value patience and steady support when complexity increases. |
 | Blue | You also value precision and evidence-based reasoning on important decisions. |
 
-Variables are interpolated during the `POST .../draft` step, after template selection. The
-archetype defaults (what currently appears in the templates) are the fallback when a quiz answer
-happens to align with the archetype's natural style — so a Commander who picks Q2(a) gets the same
-line as the old static template, but a Commander who picks Q2(c) gets a genuinely different SOUL.
+Variables are compiled during the `POST .../draft` step, after scoring, tie resolution, and template
+selection. The compiler accepts only reviewed choice IDs and reviewed directive values; it never
+inserts raw user-authored text. It excludes the Markdown title and display-only archetype/modifier
+names from runtime instructions. Each selected template must contain the exact five-placeholder set
+documented here, with every placeholder appearing once. Draft creation fails closed when a mapping
+is absent, a placeholder is missing or duplicated, an unknown placeholder appears, a display label
+leaks into the runtime payload, or any `{{...}}` token remains after compilation.
+
+The archetype-aligned mapping value should match the reviewed default behaviour. A Commander who
+picks Q2(a) therefore receives the familiar conclusion-first directive, while a Commander who picks
+Q2(c) receives the reviewed step-by-step directive without changing the template source itself.
 
 ## Score interpretation
 
 After scoring:
 
-1. Normalise each colour to a percentage of total colour points.
-2. Normalise Openness to a 0–100 scale (0 = pure Guardian, 100 = pure Explorer).
-3. Select primary colour (highest %), secondary colour (second highest %).
-4. Select Openness modifier: Explorer if ≥60, Guardian if ≤40, Balanced if 41–59.
+1. Retain the raw colour and modifier counters plus their denominators as the authoritative vector.
+2. Derive colour percentages using `100 × colour points / colourTotal` and the Explorer score using
+   `100 × explorer / opennessTotal`.
+3. Rank colours using unrounded raw counters; require governed user resolution at primary or
+   secondary ties.
+4. Select Explorer or Guardian by the greater raw modifier counter; require governed user
+   resolution when the counters are equal.
 
 ### Template mapping
 
@@ -206,9 +270,8 @@ After scoring:
 | Blue | Explorer | `analyst-explorer` | The Analyst (Explorer) |
 | Blue | Guardian | `analyst-guardian` | The Analyst (Guardian) |
 
-For "Balanced" Openness (41–59), use the primary colour's default template (without modifier),
-which targets moderate personality expression — the empirically strongest setting
-(Northeastern 2026).
+There is no automatic Balanced modifier and no unmodified colour template. A tied modifier vector
+must be resolved by the user before one of these eight templates is selected.
 
 ## Result presentation
 
@@ -225,21 +288,67 @@ The result screen shows:
 
 ## Integration with existing architecture
 
-The quiz maps directly onto OpenCrane's existing persona onboarding system:
+The quiz extends OpenCrane's existing persona onboarding lifecycle while preserving its immutable
+revision and approval authority:
 
 - Questions are added to the reviewed question set (version bump of
   `PERSONA_ONBOARDING_QUESTION_SET_VERSION`).
-- Answers flow through the existing `PersonaInterviewAnswer` model.
-- Template selection uses the existing `PersonaDraftTemplateSelectorRepository` with expanded
-  `selectionRules`.
-- Draft generation produces a reviewable immutable revision with provenance-linked insights.
+- Each question revision owns its reviewed choice IDs. One scoring-policy revision owns the weights
+  keyed by exact `(questionId, choiceId)` pairs. The answer boundary accepts only a choice belonging
+  to the interview's pinned question-set revision; free text, stale choices, and unknown choices
+  fail before persistence.
+- Answers remain append-only interview evidence. A domain-owned scoring result and any tie choices
+  add derivation provenance; they do not overwrite or reinterpret the answers.
+- The exact-match `PersonaDraftTemplateSelectorRepository` remains valid for its current contract,
+  but weighted scoring and compilation use dedicated domain ports. The resolved colour/modifier
+  selects one exact reviewed template without pretending the raw answers are selection rules.
+- The compiler replaces only the five reviewed variables and rejects incomplete output. Draft
+  generation atomically pins the scoring result, tie evidence, selected template, compiled
+  instructions, and provenance-linked insights in a reviewable immutable revision.
 - Approval goes through the existing `PersonaDraftTemplateSelection` → approve cycle.
 
-The two existing templates (`direct-partner` and `supportive-partner`) are replaced by the 8+1
-colour-archetype templates, which are richer expressions of the same underlying dimensions.
+In the target implementation, the eight colour-and-modifier SOUL templates replace the two current
+templates (`direct-partner` and `supportive-partner`) in the reviewed catalogue. The shared AGENT.md
+is operational guidance, not a ninth SOUL template.
 
 ## Question set governance
 
 The question set is reviewed, versioned, and immutable per version. Changes to questions require a
 new version. Active interviews resume against the version they started with. This is already
 enforced by the existing `PERSONA_ONBOARDING_QUESTION_SET_VERSION` mechanism.
+
+The scoring policy and interpolation map are reviewed, versioned inputs too. Changing a question or
+choice creates a new question-set revision; changing a weight, normalisation rule, or tie policy
+creates a new scoring-policy revision; changing a directive value creates a new interpolation-map
+revision. An existing interview never silently moves to any of them.
+
+## Conformance tests
+
+Implementation is not complete until the public interview → complete → resolve (when required) →
+draft path proves all of the following:
+
+1. **Exact accumulation and normalisation.** Q1(a), Q2(a), Q3(a), Q4(a), Q5(a), Q6(a), Q7(a),
+   Q8(a), Q9(a), Q10(a) produces `{ red: 23, yellow: 3, green: 0, blue: 7 }`,
+   `colourTotal = 33`, exact percentages `{ red: 2300/33, yellow: 300/33, green: 0,
+   blue: 700/33 }`, `{ explorer: 6, guardian: 0 }`, and `opennessTotal = 6`. The result is
+   Commander/Blue/Explorer and selects `commander-explorer`. Display rounding cannot change it.
+2. **Listed counters only.** Every reviewed choice adds exactly its printed weights and zero to all
+   unlisted counters.
+3. **Primary tie.** Q1(a), Q2(a), Q3(a), Q4(a), Q5(a), Q6(a), Q7(b), Q8(c), Q9(c), Q10(d)
+   produces Red=13 and Blue=13. Draft creation returns `resolution_required`; each allowed user
+   choice is persisted as provenance and replay selects the corresponding template.
+4. **Secondary tie.** Q1(a), Q2(a), Q3(a), Q4(a), Q5(a), Q6(a), Q7(a), Q8(a), Q9(c), Q10(b)
+   produces `{ red: 18, yellow: 6, green: 3, blue: 6 }`. Red is primary; only Yellow and Blue are
+   offered for secondary resolution, and the selected value is retained as evidence.
+5. **Modifier tie.** Q1(a), Q2(a), Q3(a), Q4(a), Q5(c), Q6(c), Q7(a), Q8(a), Q9(a), Q10(a)
+   produces `{ explorer: 2, guardian: 2 }`. The flow offers only Explorer and Guardian, creates no
+   Balanced result, and cannot draft before resolution.
+6. **Invalid choice.** Unknown, stale-version, free-text, duplicate, and cross-question choice IDs
+   are rejected without appending an answer or changing interview progress.
+7. **Compiler completeness.** All eight templates compile every valid variable combination with no
+   remaining placeholder or display-only archetype/modifier name. Missing, duplicated, unknown, or
+   unresolved placeholders, leaked display labels, and missing mapping values return a stable
+   failure and persist no revision.
+8. **Immutable replay.** The same interview, policy, and tie evidence always reproduce the same
+   score vector and compiled instructions. A changed policy, template, mapping, digest, or tie
+   choice fails approval rather than mutating an existing draft.

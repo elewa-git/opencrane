@@ -1,11 +1,11 @@
-# Persona file versus agent memory boundary
+# Persona source versus durable memory boundary
 
 Status: **draft** — August 2026
 
-This document defines what belongs in the static persona files (SOUL.md, AGENT.md) versus what
-should be stored in agent memory (dynamic, selectively retrieved, grows over time). The design
-goal is minimal token cost for the always-loaded files while retaining rich, evolving
-personalisation through memory.
+This document defines the boundary between reviewed persona source material and durable personal
+memory. `SOUL.md`, `AGENT.md`, and `bootstrap.md` in this design tree are authoring inputs and
+examples, not independent runtime authorities or writable stores. OpenCrane keeps persona,
+authorization, and memory lifecycle decisions in its server-owned contracts.
 
 > See also: [SOUL file design guidelines](soul-file-design-guidelines.md),
 > [AI persona onboarding research](../research/ai-persona-onboarding-research.md),
@@ -13,114 +13,138 @@ personalisation through memory.
 
 ## Design principles
 
-1. **Persona files are a token budget.** SOUL.md is loaded on every turn. Every token in it costs
-   across every interaction for the lifetime of the agent. Target: <500 tokens.
-2. **Memory is selectively retrieved.** Memory tokens are only spent when relevant facts are
-   pulled into the current context. This makes memory the right home for anything
-   context-dependent, topic-specific, or evolving.
-3. **Archetype entailment compresses well.** Naming a well-chosen archetype (e.g., "direct,
-   results-driven partner") activates pre-existing associative clusters in the model. You do not
-   need to spell out every implication — the model infers vocabulary, reasoning patterns, and
-   domain conventions from a concise archetype cue.
-4. **Two update loops, not one.** The stable core (SOUL.md) changes only through the governed
-   interview → draft → approve cycle. Contextual modulation (memory) changes per-session or
-   per-3-sessions, agent-proposed, user-visible, and revertible.
+1. **Reviewed source is not runtime state.** A reviewed SOUL source is persisted as a versioned
+   `PersonaSoulTemplate`, compiled into immutable `PersonaRevision.compiledInstructions`, and
+   activated only after the user approves that exact revision.
+2. **Activation affects future runs only.** An approved persona revision enters only subsequently
+   admitted `RunInputSnapshot`s. It cannot mutate an in-flight snapshot or conversation.
+3. **Target memory admission is snapshot-bound.** Recall may use only a gateway-native dataset and
+   fact references intersected with active, consented catalog records; those identifiers, content
+   digests, and the query policy are then frozen during run admission. The current recall/compiler
+   path does not yet enforce that intersection.
+4. **Conversation is evidence, not consent.** A bootstrap answer, correction, or observed pattern may
+   motivate a candidate preference proposal. It is never a direct durable write.
+5. **Prompts never grant authority.** Persona instructions and memory facts may affect communication
+   style and proposal cadence, but they cannot create a capability, approval, or durable permission.
 
 ## The boundary
 
-### Always in SOUL.md (loaded every turn, <500 tokens)
+### Reviewed SOUL source
+
+SOUL source may define the collaboration style that is compiled into an immutable persona revision:
 
 | Content | Why it belongs here |
 |---|---|
-| Colour archetype and modifier name | Activates the right associative cluster via entailment |
-| Core communication directives (3–5 lines) | Must be consistently applied across all turns |
-| Tone calibration (directness, warmth, formality) | These are the primary personality dials |
-| Challenge/pushback level | Fundamental to the working relationship |
-| Response structure preference (big-picture vs detail) | Drives every answer's shape |
-| What-to-avoid rules (3–4 lines) | Prevents the most jarring personality violations |
+| Colour archetype and modifier name | Names the reviewed collaboration style |
+| Core communication directives | Must be reviewed before activation |
+| Tone calibration | Shapes presentation without changing authority |
+| Challenge and pushback style | Shapes how evidence and disagreement are communicated |
+| Response structure preference | Shapes answer organisation |
+| What-to-avoid rules | Prevents known style violations |
 
-### Always in AGENT.md (loaded every turn, <400 tokens)
+The source file itself is not loaded or edited as durable runtime state. The approved immutable
+`PersonaRevision.compiledInstructions` is the persona input referenced by future run snapshots.
 
-| Content | Why it belongs here |
+### Shared AGENT guidance
+
+AGENT source documents expected behaviour for template authors:
+
+| Content | Boundary |
 |---|---|
-| Approval boundaries | Operational safety — must never be skipped |
-| Initiative level defaults | Determines action-vs-ask behaviour |
-| Working habit defaults | Baseline expectations for tool use, follow-up |
-| Memory use policy | Governs when to store and surface learned facts |
-| Boundary rules (honesty, access limits) | Non-negotiable constraints |
+| Approval language | Describes the server checkpoint; it does not implement or relax it |
+| Proposal/approval floor | Requires suggestions to remain proposals and preserves proof-bound approval |
+| Working habits | Describe presentation and follow-up preferences |
+| Memory guidance | Allows candidate proposals, never direct retention |
+| Honesty and data-protection rules | Reinforce, but do not replace, server policy |
 
-### Always in Memory (selectively retrieved, grows over time)
+Every consequential action remains bound to current grants and the exact proof-bound approval
+checkpoint for the run, capability, normalized action digest, decision owner, and expiry. A prior
+conversation, persona instruction, or memory fact can neither satisfy nor waive that checkpoint.
 
-| Content | Why it belongs here |
+### Candidate memory preferences
+
+The following may be proposed for review when the conversation contains clear evidence:
+
+| Candidate | Required evidence |
 |---|---|
-| Topic-specific style preferences | "Prefers directness on technical topics but warmth on people topics" — context-dependent |
-| Contextual communication variations | Learned through interaction, not predictable from quiz answers |
-| Corrections and explicit feedback | "User said: don't start with 'Great question'" |
-| Working relationship evolution | How the relationship has changed over sessions |
-| Project-specific context and priorities | Changes frequently, only relevant when that project is active |
-| Learned communication patterns | What response length, format, vocabulary the user actually engages with |
-| Bootstrap calibration answers | Current priority, friction points, preferred support style — from first session |
-| Domain terminology preferences | Learned through corrections, not predictable from archetype |
+| Topic-specific style preference | Explicit statement or correction in an exact message |
+| Response length or format preference | Explicit statement or confirmed candidate wording |
+| Project terminology | Exact source plus confirmation that durable reuse is wanted |
+| Bootstrap calibration preference | Exact answer, rewritten as a narrow candidate and reviewed |
 
-### Never stored (derived on the fly)
+The agent may explain why a candidate could be useful. It must not silently generalize a transient
+statement, infer a stable trait from engagement, or report a candidate as remembered.
+
+### Durable personal memory
+
+A candidate becomes durable only through the platform memory lifecycle:
+
+1. Show the user the exact candidate fact and its exact conversation or artifact source.
+2. Classify its sensitivity and explain the intended future use.
+3. Obtain explicit reviewed confirmation for that exact fact.
+4. Assign stable provenance and an idempotency key.
+5. Deliver through the memory gateway to the exact authenticated subject and Cognee dataset.
+6. Complete the recoverable catalog metadata and outbox lifecycle with the gateway acceptance
+   evidence and content digest.
+7. Admit the active fact into a future run snapshot; existing snapshots remain unchanged.
+
+OpenCrane currently has a gateway recall path and a separate consented catalog lookup, but run
+compilation does not yet prove that every recalled gateway fact matches an active, consented
+catalog record. Safe production persona-memory injection therefore remains blocked alongside
+record, correction, and forget. Their public APIs and management UI are also blocked. Until the
+catalog-to-gateway intersection and recoverable write lifecycle exist, confirmed candidates remain
+conversation evidence and must not be described as stored, editable, removable, indexed, or
+available for later recall.
+
+### Never stored as persona memory
 
 | Content | Why |
 |---|---|
-| General knowledge about the archetype | The model already knows what "direct and results-driven" means |
-| Detailed personality theory or framework explanations | Wastes tokens; adds nothing to behaviour |
-| Elaborate backstory or character narrative | Research shows this degrades instruction-following |
-| Duplicate information available from the codebase/tools | Memory should store what the agent cannot re-derive |
+| Action approvals, grants, or access boundaries | Only current server authority can establish them |
+| A guessed personality, intent, or sensitive trait | Model inference is not reviewed evidence |
+| Gender inferred from name, voice, pronouns, text, or behaviour | It is sensitive, unreliable, and unnecessary for preference-based persona selection |
+| Raw demographic audit data | Evaluation data has a separate purpose and governance boundary |
+| General archetype theory | The reviewed template already supplies the relevant instructions |
+| Duplicate tool or codebase facts | They should be resolved from their authoritative source |
 
-## Update cadence
+An explicitly stated language or pronoun preference may be proposed as its own narrow preference
+after confirmation; it must not be used to derive or retain a gender identity.
 
-### SOUL.md updates
+## Update lifecycle
 
-- **Trigger**: User requests a persona refresh, or the agent proposes a `persona_refresh`
-  configuration change.
-- **Process**: Full interview → draft → review → approve cycle (existing PER-01 through PER-06).
-- **Expected frequency**: Rare — quarterly at most, or when the user's work context changes
-  significantly.
+### Persona revisions
 
-### Memory updates
+- **Trigger**: the user requests a persona refresh or accepts a governed refresh proposal.
+- **Process**: interview → draft → review → approve the exact immutable revision.
+- **Activation**: only future admitted run snapshots reference the newly approved revision.
+- **Prohibited shortcut**: neither a model-written file nor a memory fact may mutate the active
+  persona outside this lifecycle.
 
-- **Cadence**: Every ~3 conversations (optimal per AI Persona research, Tan et al.).
-- **Trigger**: Prediction error (IRIS framework — only update when the agent's behaviour
-  prediction for this user was wrong), or explicit user feedback.
-- **Scope**: Only the implicated dimension is updated (stability regulariser prevents
-  oscillation).
-- **Visibility**: User can see, edit, and revert any learned preference.
-- **Safeguards**:
-  - Over-personalisation check: is this update irrelevant, repetitive, or sycophantic?
-    (OP-Bench rubric)
-  - Warrant check: does the current turn independently justify surfacing this memory?
-    (HUSH-Bench)
-  - Epistemic independence check: does this adaptation increase agreement-seeking behaviour?
+### Memory candidates
 
-## Token budget worked example
+- **Trigger**: an explicit user request, correction, or clear bootstrap answer may justify a
+  candidate proposal.
+- **No automatic cadence**: conversation counts and elapsed time do not authorize retention.
+- **Scope**: keep the candidate narrow; do not infer adjacent traits or demographic attributes.
+- **Review**: show exact content, source, sensitivity, and intended use before confirmation.
+- **Persistence**: use only the gateway and catalog/outbox lifecycle when production writes become
+  available; there is no direct Cognee or file fallback.
+- **Effect**: a newly active fact can influence only a future snapshot that explicitly admits it.
 
-A Commander (Explorer) agent's always-loaded context:
+## Gender and demographic audit boundary
 
-| Component | Estimated tokens |
-|---|---|
-| SOUL.md (Commander Explorer) | ~350 |
-| AGENT.md (shared operational rules) | ~300 |
-| **Total always-loaded persona** | **~650** |
-| Retrieved memory facts (0–5 per turn) | ~100–500 (variable) |
-| **Total persona + memory per turn** | **~750–1150** |
+Gender is an important evaluation dimension, not a persona input. OpenCrane must never infer gender
+or place it in persona instructions, durable memory, prompt context, or a run snapshot. If research
+collects optional self-described demographic data to audit outcomes, that data requires explicit
+purpose-specific consent, access controls, aggregation and small-cell protection, a retention limit,
+and an opt-out. It remains outside the operational persona and memory stores.
 
-Compare to a monolithic approach (everything in one file): typically 1500–3000 tokens, much of it
-irrelevant to the current turn, with documented instruction-dilution effects on smaller models.
+## Runtime consistency
 
-## Persona drift mitigation
-
-A well-written SOUL.md is necessary but not sufficient for long-term consistency. Research
-documents persona drift (self-consistency degrading 30%+ within 8–12 turns in some settings).
-
-Architectural mitigations the runtime should implement:
-
-1. **Periodic persona re-injection**: retrieve and re-surface core SOUL.md directives into context
-   at regular intervals during long conversations (~25% consistency improvement in cited work).
-2. **Persona vector monitoring**: detect when the agent's activation-space personality vector has
-   drifted from the target (Anthropic persona vectors, arXiv:2507.21509).
-3. **Sycophancy gate**: compare affective alignment and epistemic independence metrics separately
-   after any adaptation — if warmth goes up but pushback goes down, the adaptation is suspect.
+The shipped persona-consistency mechanism is the immutable chain from reviewed template to approved
+persona revision to admitted run snapshot. The target memory extension must first intersect every
+gateway result with an active, consented catalog record and then freeze the matched identifiers and
+digests. Only that joined evidence can give an operator an auditable explanation of which facts
+affected a run; freezing unrelated catalog IDs and gateway references is insufficient. Drift,
+sycophancy, and over-personalisation still require evaluation, but those evaluations cannot bypass
+the approval or memory lifecycle above.
