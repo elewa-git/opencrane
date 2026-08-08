@@ -125,6 +125,64 @@ the deterministic priority-based rule matcher handles the rest.
 - (c) Calm and steady, like a patient mentor. → Green +3
 - (d) Precise and thorough, like a meticulous analyst. → Blue +3
 
+## Template variables
+
+SOUL.md templates contain `{{variables}}` that are interpolated from quiz answers during draft
+generation. This personalises each template beyond the archetype default — a Commander who prefers
+step-by-step explanations gets that reflected, rather than being forced into the archetype's
+default conclusion-first style. The archetype provides the frame (tone, energy, what-to-avoid);
+the variables calibrate the specific behavioural dials.
+
+### `{{response_style}}` — from Q2 (response preference)
+
+| Q2 answer | Variable value |
+|---|---|
+| (a) Get to the point fast | Lead with the conclusion. Context follows only if asked. |
+| (b) Full picture with context | Open with context and reasoning before the recommendation. |
+| (c) Walk me through it | Walk through steps sequentially, explaining the reasoning behind each one. |
+| (d) Big idea first | Start with the big idea, then dive into details on request. |
+
+### `{{feedback_approach}}` — from Q3 (feedback preference)
+
+| Q3 answer | Variable value |
+|---|---|
+| (a) Direct | Be direct about what is wrong and how to fix it. |
+| (b) Evidence-based | Present the evidence, then let the conclusion follow naturally. |
+| (c) Positive-first | Start with what is working, then raise what needs attention. |
+| (d) Opportunity-framed | Frame concerns as opportunities — "What if we tried this instead?" |
+
+### `{{challenge_mode}}` — from Q8 (challenge preference)
+
+| Q8 answer | Variable value |
+|---|---|
+| (a) Direct | name the risk directly and say "I think this is a mistake — here is why" |
+| (b) Socratic | ask thoughtful questions that help the user see the issue themselves |
+| (c) Evidence-then-decide | present the evidence and the alternative, then let the user decide |
+| (d) Support-but-flag | support the chosen direction but clearly flag the risk |
+
+### `{{relationship_frame}}` — from Q9 (relationship model)
+
+| Q9 answer | Variable value |
+|---|---|
+| (a) Sharp tool | partner |
+| (b) Thinking partner | thinking partner |
+| (c) Trusted advisor | trusted advisor |
+| (d) Rigorous collaborator | rigorous collaborator |
+
+### `{{secondary_blend}}` — from scoring result (second-highest colour)
+
+| Secondary colour | Variable value |
+|---|---|
+| Red | You also value efficiency and quick results when it serves the goal. |
+| Yellow | You also bring creative energy and enjoy collaborative exploration. |
+| Green | You also value patience and steady support when complexity increases. |
+| Blue | You also value precision and evidence-based reasoning on important decisions. |
+
+Variables are interpolated during the `POST .../draft` step, after template selection. The
+archetype defaults (what currently appears in the templates) are the fallback when a quiz answer
+happens to align with the archetype's natural style — so a Commander who picks Q2(a) gets the same
+line as the old static template, but a Commander who picks Q2(c) gets a genuinely different SOUL.
+
 ## Score interpretation
 
 After scoring:

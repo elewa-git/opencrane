@@ -2,11 +2,11 @@
 
 Status: **complete** — August 2026
 
-This report synthesises findings from four research streams covering personality psychology
+This report synthesises findings from five research streams covering personality psychology
 frameworks, AI persona configuration patterns (SOUL.md), colour-coded personality models
-(Red/Yellow/Green/Blue), and adaptive personality refinement from chat transcripts. It informs
-the design of OpenCrane's persona onboarding interview, SOUL template library, and memory-based
-personality evolution.
+(Red/Yellow/Green/Blue), adaptive personality refinement from chat transcripts, and gender
+effects on AI interaction preferences. It informs the design of OpenCrane's persona onboarding
+interview, SOUL template library, and memory-based personality evolution.
 
 ## Research questions
 
@@ -14,6 +14,7 @@ personality evolution.
 2. How should a "sorting hat" onboarding quiz map users to agent archetypes?
 3. What goes in a static persona file versus evolving agent memory?
 4. How can personality be refined over time from transcripts and feedback?
+5. Should persona templates differ by gender or other demographics?
 
 ## 1. Personality framework landscape
 
@@ -319,6 +320,89 @@ personality diagnosis. No colour is good or bad. Users can re-sort at any time.
    independence.
 9. **Make adaptation visible and revertible** — users should see what changed and why.
 10. **Frame as preference, not diagnosis** — honest, low-stakes, revisable.
+11. **No demographic segmentation** — personalise on stated preferences, not gender/age/culture.
+    Within-group variation dominates between-group variation; demographics add stereotyping risk
+    without improving accuracy.
+12. **Inject quiz-specific variables into templates** — the archetype sets the frame; individual
+    quiz answers (response style, feedback approach, challenge mode, relationship model) calibrate
+    the specific behavioural dials. This captures intra-archetype variation without template
+    explosion.
+
+## 7. Gender and AI persona personalisation
+
+### 7.1 Within-gender variation dominates
+
+Population-level gender differences in Big Five traits exist but are small to moderate.
+Weisberg and DeYoung's meta-analytic study found women score higher on Agreeableness and
+Neuroticism, men higher on Assertiveness, but effect sizes are mostly Cohen's d 0.15–0.50,
+with distribution overlap between genders of 75–100% depending on the trait. A 105-country study
+(Kajonius & Johnson, 2019) confirmed these patterns are consistent across cultures, ages, and
+education levels. Individual variation within each gender far exceeds variation between genders.
+
+**Implication**: a personality quiz that measures directness, feedback style, detail preference,
+and autonomy level already captures whatever signal gender would approximate — and does so
+without the 75–100% misclassification rate that gender-as-proxy introduces.
+
+### 7.2 Gender-matched AI: weak and inconsistent evidence
+
+Studies on whether matching AI persona gender to user gender improves outcomes show mixed results.
+A gendered finance coach study (Frontiers in Psychology, 2022) found descriptive trends toward
+same-gender preference that did not reach statistical significance. Korean voice assistant
+research found men slightly preferred male-voiced AI, but women showed no female-voice
+preference — and the gender effect failed to replicate (Behaviour & Information Technology,
+2024). Trust research shows context matters more than gender matching: male-presenting agents
+generated higher trust in functional/task contexts, female-presenting agents in supportive
+contexts — but this reflects user stereotypes about gender roles, not genuine performance
+differences.
+
+### 7.3 Stereotyping risks are substantial
+
+UNESCO's "I'd Blush if I Could" report (2019, updated 2024) documented how female-defaulting
+AI assistants reinforce harmful stereotypes — subservience, docility, tolerance of abuse. A
+CHI 2025 scoping review found gendered expectations are readily applied to AI systems on minimal
+cues, with a persistent "male-default bias" in how users categorise agents. The UN (June 2026)
+confirmed AI systems continue to reproduce gender stereotypes at scale. Research on persona-based
+AI personalisation warns that personalising on sensitive attributes (gender, race) risks
+"perpetuating and normalising gendered harm" (arXiv:2505.04600).
+
+The practical risk: if a female user receives a softer persona and a male user receives a more
+direct one, the product encodes the stereotype rather than serving the individual — and users
+who violate the stereotype get a worse experience.
+
+### 7.4 Industry consensus: nobody personalises by gender
+
+Microsoft Copilot explicitly does not store or personalise on demographic data including age,
+gender, race, ethnicity, or sexual orientation. ChatGPT personalises via memory (stated
+preferences, habits, goals) and custom instructions — none of which reference demographic
+attributes. No major AI assistant platform personalises by gender.
+
+### 7.5 Intersectionality reinforces the quiz-only approach
+
+Intersectionality research shows that a high-Dominance woman and a high-Dominance man face
+different social perceptions (assertive women face backlash that assertive men do not), but
+these are social reception patterns, not interaction preference patterns. A personality-driven
+AI agent should respond to the user's actual Dominance score, not adjust its interpretation
+based on gender. Gender interacts with so many other dimensions (culture, class, profession,
+neurodivergence) that isolating it produces a crude proxy when the quiz measures the actual
+preferences directly.
+
+### 7.6 Recommendation
+
+**Do not create gender-specific SOUL.md templates or gender modifiers.** The evidence supports
+this on three independent grounds:
+
+1. **Statistical**: within-gender variation in communication preferences massively exceeds
+   between-gender variation. The quiz captures whatever signal gender would approximate.
+2. **Ethical**: gender-based AI personalisation carries documented stereotyping risks
+   (UNESCO 2019/2024, CHI 2025, UN 2026).
+3. **Practical**: no evidence shows gender-matched AI personas improve outcomes. The strongest
+   predictors are individual personality traits and stated preferences — both captured by the
+   quiz.
+
+If post-launch data reveals that certain archetypes correlate with gender (e.g., more women
+land in Anchor than Commander), that is the quiz working correctly — it found their actual
+preference. Adding gender as an input would not improve accuracy; it would risk overriding the
+quiz result with a stereotype.
 
 ## Sources
 
@@ -391,6 +475,29 @@ personality diagnosis. No colour is good or bad. Users can re-sort at any time.
 - DISC validity: German Persolog study (reliability met, validity not met).
 - Crystal Knows: crystalknows.com (DISC-to-AI communication product).
 - AgentTune: agent-tune.com (personality test → system prompt file).
+
+### Academic — gender and AI interaction
+
+- Weisberg, Y. J., DeYoung, C. G., & Hirsh, J. B. (2011). Gender Differences in Personality
+  across the Ten Aspects of the Big Five. *Frontiers in Psychology*, 2, 178.
+- Kajonius, P. J., & Johnson, J. A. (2019). Assessing the structure of the Five Factor Model of
+  personality (IPIP-NEO-120) in the public domain: A 105-country study. *Journal of Research in
+  Personality*, 81, 68–83.
+- Del Giudice, M. (2012). The Distance Between Mars and Venus: Measuring Global Sex Differences
+  in Personality. *PLOS ONE*, 7(1), e29265.
+- UNESCO (2019). *I'd Blush if I Could: Closing Gender Divides in Digital Skills Through
+  Education*. Updated 2024.
+- CHI 2025 scoping review: Gender stereotypes in AI: A systematic analysis of perception and
+  interaction. *ACM CHI 2025*.
+- United Nations (June 2026). AI systems continue to reproduce gender stereotypes at scale.
+  UN News.
+- Frontiers in Psychology (2025). Gender differences in attitudes toward AI: The role of AI
+  anxiety and perceived usefulness. *Frontiers in Psychology*, 16, 1559457.
+- Behaviour & Information Technology (2024). Gender effects on voice assistant trust and
+  preference. *Behaviour & IT*, doi:10.1080/0144929X.2024.2306136.
+- Frontiers in Psychology (2022). Gendered AI finance coaches: Same-gender matching and user
+  trust. *Frontiers in Psychology*, 13, 855091.
+- arXiv:2505.04600 (2025). Risks of demographic personalisation in persona-based AI agents.
 
 ### Recommender systems and cold-start
 
