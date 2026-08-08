@@ -140,9 +140,15 @@ Acceptance criteria:
 - Completion is not defined by local or session storage.
 - No onboarding record starts the current onboarding workflow; a compatible `completed` record
   enters the main application.
+- The journey derives its next step from session authority, persona status, personal-agent
+  availability, and workspace/thread readiness.
+- The onboarding sequence is: Sign in → Claim ownership → **Sorting quiz** → Review persona draft →
+  Approve persona → Bootstrap first conversation → Workspace ready.
+- The sorting quiz (PER-02) is a mandatory onboarding step. A personal agent cannot be provisioned
+  without an approved persona revision produced through the quiz.
 - Survey states route only to `/onboarding/survey`; bootstrap-chat states route only to
   `/onboarding/chat`; `completed` routes to the main application.
-- Refreshing or changing device resumes the same server-known position.
+- Refreshing or changing device resumes the same server-known position, including mid-quiz state.
 - Onboarding-state lookup failure renders a blocking recovery state rather than granting access or
   restarting the workflow.
 - The current `Welcome → Workspace → Personalize → Tour → Finish` local-only loop is not retained as
@@ -150,6 +156,9 @@ Acceptance criteria:
 
 Status: `API blocked`. Persona status exists, but a `UserOnboarding` record, public onboarding-status
 projection, main-app API fence, and personal workspace/AgentService provisioning do not.
+
+> See also: [persona sorting quiz](../design/persona-sorting-quiz.md),
+> [persona user stories](persona.md)
 
 ## IDO-06 — Start registration intentionally
 
