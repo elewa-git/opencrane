@@ -78,5 +78,6 @@ is not a recurring cost.
 | Corrections and feedback history | Memory | Evolving, selectively retrieved |
 | Relationship evolution | Memory | Dynamic, grows across sessions |
 
-> See also: [persona-sorting-quiz.md](../persona-sorting-quiz.md),
+> See also: [SOUL file design guidelines](../soul-file-design-guidelines.md),
+> [persona-sorting-quiz.md](../persona-sorting-quiz.md),
 > [persona-memory-boundary.md](../persona-memory-boundary.md)

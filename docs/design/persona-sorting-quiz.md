@@ -6,7 +6,8 @@ A short, governed interview that maps users to one of four colour-coded agent ar
 Yellow, Green, Blue) plus an Openness modifier (Explorer/Guardian). Produces a personalised,
 reviewed SOUL.md template for the user's personal agent.
 
-> See also: [AI persona onboarding research](../research/ai-persona-onboarding-research.md)
+> See also: [SOUL file design guidelines](soul-file-design-guidelines.md),
+> [AI persona onboarding research](../research/ai-persona-onboarding-research.md)
 
 ## Design principles
 

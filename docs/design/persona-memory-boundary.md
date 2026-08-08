@@ -7,7 +7,8 @@ should be stored in agent memory (dynamic, selectively retrieved, grows over tim
 goal is minimal token cost for the always-loaded files while retaining rich, evolving
 personalisation through memory.
 
-> See also: [AI persona onboarding research](../research/ai-persona-onboarding-research.md),
+> See also: [SOUL file design guidelines](soul-file-design-guidelines.md),
+> [AI persona onboarding research](../research/ai-persona-onboarding-research.md),
 > [persona archetype templates](persona-archetypes/README.md)
 
 ## Design principles
