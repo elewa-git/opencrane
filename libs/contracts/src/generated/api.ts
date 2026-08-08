@@ -903,6 +903,74 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/me/onboarding/chat": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Return the deterministic guided onboarding exchange */
+        get: operations["getMyOnboardingChat"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/onboarding/chat/start": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Start or resume the server-selected guided onboarding exchange */
+        post: operations["startMyOnboardingChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/onboarding/chat/answers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Append one bounded answer to the current server-selected question */
+        post: operations["answerMyOnboardingChatQuestion"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/onboarding/chat/conclude": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Complete onboarding after exactly three valid answers */
+        post: operations["concludeMyOnboardingChat"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/me/conversations/{threadId}/events": {
         parameters: {
             query?: never;
@@ -5063,6 +5131,457 @@ export interface operations {
                 content?: never;
             };
             /** @description Onboarding authority unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    getMyOnboardingChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current deterministic guided onboarding chat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        conversationId: string | null;
+                        persona: {
+                            revisionId: string;
+                            displayName: string;
+                            /** @enum {string} */
+                            archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                        } | null;
+                        contentRevision: {
+                            id: string;
+                            digest: string;
+                            sourceLabel: string;
+                        } | null;
+                        transcript: {
+                            ordinal: number;
+                            /** @enum {string} */
+                            role: "assistant" | "user";
+                            /** @enum {string} */
+                            kind: "opening" | "question" | "answer";
+                            text: string;
+                            questionOrdinal: number | null;
+                        }[];
+                        currentQuestion: {
+                            ordinal: number;
+                            text: string;
+                        } | null;
+                        answerCount: number;
+                        /** @enum {integer} */
+                        questionCount: 0 | 3;
+                        canConclude: boolean;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description Malformed or out-of-bounds owner input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current workflow, answer ordering, idempotency, or conclusion conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required onboarding, persona, or script evidence unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    startMyOnboardingChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current deterministic guided onboarding chat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        conversationId: string | null;
+                        persona: {
+                            revisionId: string;
+                            displayName: string;
+                            /** @enum {string} */
+                            archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                        } | null;
+                        contentRevision: {
+                            id: string;
+                            digest: string;
+                            sourceLabel: string;
+                        } | null;
+                        transcript: {
+                            ordinal: number;
+                            /** @enum {string} */
+                            role: "assistant" | "user";
+                            /** @enum {string} */
+                            kind: "opening" | "question" | "answer";
+                            text: string;
+                            questionOrdinal: number | null;
+                        }[];
+                        currentQuestion: {
+                            ordinal: number;
+                            text: string;
+                        } | null;
+                        answerCount: number;
+                        /** @enum {integer} */
+                        questionCount: 0 | 3;
+                        canConclude: boolean;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description Malformed or out-of-bounds owner input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current workflow, answer ordering, idempotency, or conclusion conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required onboarding, persona, or script evidence unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    answerMyOnboardingChatQuestion: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": {
+                    expectedConversationId: string;
+                    expectedQuestionOrdinal: number;
+                    text: string;
+                    idempotencyKey: string;
+                };
+            };
+        };
+        responses: {
+            /** @description Current deterministic guided onboarding chat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        conversationId: string | null;
+                        persona: {
+                            revisionId: string;
+                            displayName: string;
+                            /** @enum {string} */
+                            archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                        } | null;
+                        contentRevision: {
+                            id: string;
+                            digest: string;
+                            sourceLabel: string;
+                        } | null;
+                        transcript: {
+                            ordinal: number;
+                            /** @enum {string} */
+                            role: "assistant" | "user";
+                            /** @enum {string} */
+                            kind: "opening" | "question" | "answer";
+                            text: string;
+                            questionOrdinal: number | null;
+                        }[];
+                        currentQuestion: {
+                            ordinal: number;
+                            text: string;
+                        } | null;
+                        answerCount: number;
+                        /** @enum {integer} */
+                        questionCount: 0 | 3;
+                        canConclude: boolean;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description One new answer was durably appended. */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        conversationId: string | null;
+                        persona: {
+                            revisionId: string;
+                            displayName: string;
+                            /** @enum {string} */
+                            archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                        } | null;
+                        contentRevision: {
+                            id: string;
+                            digest: string;
+                            sourceLabel: string;
+                        } | null;
+                        transcript: {
+                            ordinal: number;
+                            /** @enum {string} */
+                            role: "assistant" | "user";
+                            /** @enum {string} */
+                            kind: "opening" | "question" | "answer";
+                            text: string;
+                            questionOrdinal: number | null;
+                        }[];
+                        currentQuestion: {
+                            ordinal: number;
+                            text: string;
+                        } | null;
+                        answerCount: number;
+                        /** @enum {integer} */
+                        questionCount: 0 | 3;
+                        canConclude: boolean;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description Malformed or out-of-bounds owner input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Stale question, workflow, or idempotency conflict, with the current chat when recoverable. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                        chat: {
+                            workflowVersion: number;
+                            /** @enum {string} */
+                            state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                            conversationId: string | null;
+                            persona: {
+                                revisionId: string;
+                                displayName: string;
+                                /** @enum {string} */
+                                archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                                /** @enum {string} */
+                                primaryColour: "red" | "yellow" | "green" | "blue";
+                            } | null;
+                            contentRevision: {
+                                id: string;
+                                digest: string;
+                                sourceLabel: string;
+                            } | null;
+                            transcript: {
+                                ordinal: number;
+                                /** @enum {string} */
+                                role: "assistant" | "user";
+                                /** @enum {string} */
+                                kind: "opening" | "question" | "answer";
+                                text: string;
+                                questionOrdinal: number | null;
+                            }[];
+                            currentQuestion: {
+                                ordinal: number;
+                                text: string;
+                            } | null;
+                            answerCount: number;
+                            /** @enum {integer} */
+                            questionCount: 0 | 3;
+                            canConclude: boolean;
+                            /** Format: date-time */
+                            startedAt: string | null;
+                            /** Format: date-time */
+                            completedAt: string | null;
+                        };
+                    } | {
+                        error: string;
+                    };
+                };
+            };
+            /** @description Required onboarding, persona, or script evidence unavailable. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    concludeMyOnboardingChat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Current deterministic guided onboarding chat. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        workflowVersion: number;
+                        /** @enum {string} */
+                        state: "survey_pending" | "survey_in_progress" | "bootstrap_chat_pending" | "bootstrap_chat_in_progress" | "completed";
+                        conversationId: string | null;
+                        persona: {
+                            revisionId: string;
+                            displayName: string;
+                            /** @enum {string} */
+                            archetype: "commander" | "catalyst" | "anchor" | "analyst";
+                            /** @enum {string} */
+                            primaryColour: "red" | "yellow" | "green" | "blue";
+                        } | null;
+                        contentRevision: {
+                            id: string;
+                            digest: string;
+                            sourceLabel: string;
+                        } | null;
+                        transcript: {
+                            ordinal: number;
+                            /** @enum {string} */
+                            role: "assistant" | "user";
+                            /** @enum {string} */
+                            kind: "opening" | "question" | "answer";
+                            text: string;
+                            questionOrdinal: number | null;
+                        }[];
+                        currentQuestion: {
+                            ordinal: number;
+                            text: string;
+                        } | null;
+                        answerCount: number;
+                        /** @enum {integer} */
+                        questionCount: 0 | 3;
+                        canConclude: boolean;
+                        /** Format: date-time */
+                        startedAt: string | null;
+                        /** Format: date-time */
+                        completedAt: string | null;
+                    };
+                };
+            };
+            /** @description Malformed or out-of-bounds owner input. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Authentication required. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Current workflow, answer ordering, idempotency, or conclusion conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Required onboarding, persona, or script evidence unavailable. */
             503: {
                 headers: {
                     [name: string]: unknown;

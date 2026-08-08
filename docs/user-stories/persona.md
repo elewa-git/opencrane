@@ -120,8 +120,8 @@ Acceptance criteria:
 - Approval activates the exact already-compiled instructions that the Owner reviewed; it does not
   recompile mutable source. Future admitted runs may use that revision, while active run snapshots
   remain unchanged.
-- Bootstrap identity, one-time-use evidence, and admission are not part of the current revision or
-  approval contract; they remain the blocked future contract in PER-07.
+- Bootstrap identity and one-time-use evidence are not part of revision approval. The onboarding
+  authority binds them only after the exact approved revision advances the workflow to first chat.
 
 API: `POST /api/v1/me/persona/drafts/{personaRevisionId}/approve`.
 
@@ -159,8 +159,10 @@ Acceptance criteria:
 - The bootstrap adapts its pacing and tone to the archetype (e.g., Commander is fast and direct,
   Anchor is patient and checks in).
 
-Status: `API blocked`; no reviewed bootstrap selection, one-time-use evidence, or durable-memory
-write flow is production-composed.
+Status: `API partial`, `UI implemented`. Reviewed archetype selection, one-time pinned source
+evidence, the three-question guided exchange, and server-validated conclusion are composed. Answers
+remain ordinary conversation evidence; the governed durable-memory confirmation/write flow remains
+blocked and fails closed.
 
 ## PER-08 — See how persona adapts over time
 

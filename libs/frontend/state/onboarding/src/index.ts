@@ -1,3 +1,7 @@
 export * from "./lib/persona-gateway.types";
 export * from "./lib/persona-gateway.validator";
 export * from "./lib/persona-onboarding.service";
+export { PERSONA_FIRST_CHAT_GATEWAY, PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatConflictError, PersonaFirstChatTranscriptKinds, PersonaFirstChatTranscriptRoles, UserOnboardingRouteStates } from "./lib/persona-first-chat.types.js";
+export type { PersonaFirstChatCurrentQuestion, PersonaFirstChatSnapshot, PersonaFirstChatTranscriptEntry, UserOnboardingRouteSnapshot } from "./lib/persona-first-chat.types.js";
+export * from "./lib/opencrane-persona-first-chat.gateway.js";
+export * from "./lib/persona-first-chat.service.js";

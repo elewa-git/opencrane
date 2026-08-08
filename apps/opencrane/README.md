@@ -56,7 +56,7 @@ The route registry is deliberately a catalogue rather than a second application 
 | --- | --- | --- |
 | Public `:8080` | Identity and access | audit, groups, grants, resource shares |
 | Public `:8080` | Agents | agent-service management and governed skill catalogue |
-| Public `:8080` | Personal workspace | assets, persona onboarding, approvals, runs, configuration, conversations |
+| Public `:8080` | Personal workspace | guided onboarding, assets, persona, approvals, runs, configuration, conversations |
 | Public `:8080` | Gateways | MCP, model routing, providers, bring-your-own-key, model registry |
 | Public `:8080` | Knowledge and reporting | retrieval sources, budgets, token usage |
 | Internal `:8081` | Controller | run-attempt and skill-workload dispatch |
@@ -94,7 +94,9 @@ its resources to the lifecycle owner.
 - `src/app/lifecycle.ts` starts both listeners, stops producers first, drains requests, disconnects
   Prisma, and flushes telemetry.
 - `prisma/schema/*.prisma` defines the product's durable domain models.
-- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database.
+- `prisma/bootstrap/target-baseline.sql` defines a clean OpenCrane database. Its focused source
+  verifiers prove the seeded persona and onboarding-bootstrap content against the reviewed files in
+  `docs/design/persona-archetypes/`.
 
 ## Boundary
 

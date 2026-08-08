@@ -66,6 +66,7 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 				if (!await this.ownsInterview(owner, interviewId) || approvalState !== "approved" || activeRevisionId === null) return null;
 				return { interviewId, personaRevisionId: activeRevisionId };
 			},
+			async readApprovedBootstrapEvidence(): Promise<null> { return null; },
 		};
 		const authority = new __UserOnboardingAuthority(onboardingRepository, personaEvidence, 1);
 		const workflow = _CreatePersonaOnboardingWorkflow(authority);
@@ -111,7 +112,7 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 		const app = express();
 		app.use(express.json());
 		app.use("/api/v1/me/persona", __CreatePersonaOnboardingRouter(personaDependencies));
-		app.use("/api/v1/me/onboarding", __CreateUserOnboardingRouter({ authority, resolveOwner: function _OwnerResolver() { return _OWNER; }, logger }));
+		app.use("/api/v1/me/onboarding", __CreateUserOnboardingRouter({ authority, chatAuthority: {} as never, resolveOwner: function _OwnerResolver() { return _OWNER; }, logger }));
 
 		await request(app).post("/api/v1/me/persona/interview").send({}).expect(503);
 		expect(onboarding.state).toBe(UserOnboardingStates.SurveyPending);

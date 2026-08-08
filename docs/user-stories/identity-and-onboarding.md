@@ -5,9 +5,10 @@
 Bring a person from an anonymous browser to a truthful, authority-bound starting point. Identity,
 organisation, and role come from the server session; the browser never chooses its own silo.
 
-Current status: `API partial`, `UI implemented` through persona approval, and `Design ready` for the
-full journey. Server-tracked survey routing and persona orchestration are implemented; bootstrap
-chat, the main-app API fence, and personal workspace provisioning remain `API blocked`.
+Current status: `API partial` and `UI implemented` through the guided first conversation.
+Server-tracked survey routing, persona orchestration, the pinned onboarding-only exchange, and its
+server-validated conclusion are implemented. The main-app API fence and personal workspace/runtime
+provisioning remain `API blocked`.
 
 ## Product workflow — server-tracked onboarding
 
@@ -218,8 +219,11 @@ Acceptance criteria:
   alone cannot mark onboarding complete.
 - A failed or interrupted chat remains resumable and never sends the user back to the survey.
 
-Status: `API blocked`. No `bootstrap.md` source, onboarding conversation authority, bootstrap-chat
-API, or personal workspace provisioning flow currently exists in the repository.
+Status: `API partial`, `UI implemented`. The server selects one of four reviewed `bootstrap.md`
+sources from the exact approved persona, pins its revision and digest, resumes one onboarding-owned
+conversation, records three append-only idempotent answers, and validates conclusion. This bounded
+exchange deliberately does not provision ordinary personal workspace, AgentService, membership,
+model runtime, or live-stream authority; those remain blocked.
 
 ## IDO-09 — Enter the main application only after conclusion
 
@@ -240,4 +244,7 @@ Acceptance criteria:
   Migration never fabricates bootstrap or persona evidence, and missing state never implicitly means
   completed.
 
-Status: `API blocked`; no completion authority or onboarding-aware product API fence exists.
+Status: `API partial`, `UI implemented`. The bootstrap authority atomically records
+`bootstrap_concluded` only after the exact pinned three-answer exchange is valid, and later route
+reads resume the completed state. The independent main-app API fence is still blocked, so this does
+not yet satisfy the complete access-control story.

@@ -15,8 +15,8 @@ import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/ret
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import { _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
-import { _CreatePersonaOnboardingRouter, _CreatePersonaWorkflowEvidenceRepository } from "@opencrane/backend/agents/personal/personas";
-import { __CreateUserOnboardingRouter, __UserOnboardingAuthority, _CreateUserOnboardingRepository, type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
+import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
+import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
 import { _CreatePersonalConfigurationRouter } from "@opencrane/backend/agents/personal/configuration";
 import { _CreateSelfConversationReplayRouter } from "@opencrane/backend/server/agents/conversation-replay";
@@ -31,8 +31,8 @@ import type { MemoryGatewayClient } from "@opencrane/backend/_server/memory-gate
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
-import type { RouteMount, SharesRouteOptions, UserOnboardingRouteComposition } from "./routes.types.js";
-import { _CreatePersonaOnboardingWorkflow } from "./user-onboarding-composition.js";
+import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
+import { _CreateUserOnboardingComposition } from "./user-onboarding-composition.js";
 
 /**
  * Register the authenticated product API from functional route lists.
@@ -48,7 +48,7 @@ import { _CreatePersonaOnboardingWorkflow } from "./user-onboarding-composition.
  */
 export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s.CoreV1Api, runAdmission: ManagedRunAdmissionPort, personalRunAdmission: PersonalRunAdmissionPort, serverNamespace: string, obotCustody: ObotCustodyPort): Express
 {
-	const onboarding = _CreateUserOnboardingComposition(prisma);
+	const onboarding = _CreateUserOnboardingComposition(prisma, _log, _ResolveUserOnboardingOwner);
 	const identityAndAccessRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/audit", handler: auditRouter(prisma) },
 		{ method: "use", path: "/api/v1/groups", handler: groupsRouter(prisma) },
@@ -100,13 +100,6 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		infrastructureRoutes,
 	]);
 	return app;
-}
-
-/** Compose durable onboarding once and adapt persona caller naming without sharing persistence. */
-function _CreateUserOnboardingComposition(prisma: PrismaClient): UserOnboardingRouteComposition
-{
-	const authority = new __UserOnboardingAuthority(_CreateUserOnboardingRepository(prisma), _CreatePersonaWorkflowEvidenceRepository(prisma), 1);
-	return { router: __CreateUserOnboardingRouter({ authority, resolveOwner: _ResolveUserOnboardingOwner, logger: _log }), personaWorkflow: _CreatePersonaOnboardingWorkflow(authority) };
 }
 
 /** Resolve the durable-onboarding owner only from the verified request principal. */

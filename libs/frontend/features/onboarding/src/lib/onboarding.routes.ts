@@ -1,6 +1,6 @@
 import { Routes } from "@angular/router";
 
-/** Lazy routes for the server-authoritative persona survey and review journey. */
+/** Lazy routes for the server-authoritative persona survey, review, and first-chat journey. */
 export const ONBOARDING_ROUTES: Routes =
 [
 	{
@@ -20,6 +20,16 @@ export const ONBOARDING_ROUTES: Routes =
 			return import("./review/persona-review-page.component").then(function pickReview(module)
 			{
 				return module.PersonaReviewPageComponent;
+			});
+		}
+	},
+	{
+		path: "chat",
+		loadComponent: function loadChat()
+		{
+			return import("./chat/persona-first-chat-page.component").then(function pickChat(module)
+			{
+				return module.PersonaFirstChatPageComponent;
 			});
 		}
 	},

@@ -30,7 +30,9 @@
 			"inputs": [
 				"default",
 				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -56,7 +58,9 @@
 			"inputs": [
 				"default",
 				"^production",
-				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss"
+				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

@@ -4,17 +4,17 @@
 
 ## What it owns
 
-This feature owns the signed-in person's routed persona survey and review screens. It is the visible
-part of a server-owned process: the persona authority supplies the reviewed questions, records each
-choice, computes any tie, creates the immutable draft, and activates only the exact revision the
-person approves.
+This feature owns the signed-in person's routed persona survey, review, and one-time first-chat
+screens. It is the visible part of a server-owned process: the persona authority supplies the
+reviewed questions and immutable revision, then onboarding pins the matching reviewed bootstrap
+source and validates the exact three-answer exchange before completion.
 
 ```
  signed-in owner
        │ durable persona snapshot
        ▼
  ┌────────────────────────────────┐
- │ features/onboarding  ◄── HERE  │  survey · tie choice · review · approve
+ │ features/onboarding  ◄── HERE  │  survey · review · approve · first chat
  └────────────────────────────────┘
        │ intent through state/onboarding
        ▼
@@ -24,18 +24,23 @@ person approves.
 **In this flow:** [state/onboarding](../../state/onboarding/README.md) ·
 [state/persona/adapter](../../state/persona/adapter/README.md)
 
-The survey holds only the unsaved choice currently visible on screen. Refreshing, changing device,
-or retrying resumes the server-confirmed position; a failed save never advances the progress shown.
+The survey and first-chat composer hold only the unsaved input currently visible. Refreshing,
+changing device, or retrying resumes the server-confirmed position. A failed first-chat answer keeps
+the same text and idempotency key for retry, while the browser can neither select the next question
+nor assert completion.
 
 ## Public surface
 
-- `ONBOARDING_ROUTES` — lazy `/survey` and `/review` route children mounted by `opencrane-ui`.
+- `ONBOARDING_ROUTES` — lazy `/survey`, `/review`, and `/chat` route children mounted by `opencrane-ui`.
+- The internal `PersonaFirstChatComponent` presentation boundary is covered in Storybook for the
+  authoritative transcript, provenance, one controlled answer, and finite recovery states.
 
 ## Boundary
 
 This package composes shared journey, progress, choice-card, and persona-summary elements. It does
-not call HTTP, calculate persona scores, persist browser flags, or activate a persona; those remain
-behind the state-layer port and authenticated server API.
+not call HTTP, calculate persona scores, persist browser flags, select bootstrap content, run a
+model, or mark onboarding complete; those remain behind the state-layer port and authenticated
+server API. The first-chat screen is a deterministic onboarding exchange, not a general chat client.
 
 ## Dependency direction
 

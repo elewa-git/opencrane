@@ -17,7 +17,7 @@
 			} @else if (snapshot.state === states.Review && result.instructionPreview === null) {
 				<p-message journey-status severity="error" [closable]="false">The immutable instruction preview is unavailable. Approval is blocked until the exact material can be reviewed.</p-message>
 			} @else if (snapshot.state === states.Ready) {
-				<p-message journey-status severity="success" [closable]="false">This exact persona revision is active for future admitted runs. Existing run snapshots are unchanged.</p-message>
+				<p-message journey-status severity="success" [closable]="false">This exact persona revision is active. OpenCrane is resolving your durable first-conversation route.</p-message>
 			} @else {
 				<p-message journey-status severity="info" [closable]="false">Nothing becomes active until you approve this exact immutable revision.</p-message>
 			}

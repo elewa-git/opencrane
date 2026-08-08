@@ -3,7 +3,11 @@ import type { StorybookConfig } from "@storybook/angular";
 /** Storybook catalogue configuration for shared OpenCrane UI elements. */
 const config: StorybookConfig =
 {
-	stories: ["../src/**/*.stories.@(js|jsx|mjs|ts|tsx)"],
+	stories:
+	[
+		"../src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
+		"../../../features/onboarding/src/**/*.stories.@(js|jsx|mjs|ts|tsx)"
+	],
 	addons:
 	[
 		"@storybook/addon-docs",

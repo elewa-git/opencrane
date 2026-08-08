@@ -11,6 +11,11 @@ const VISUAL_TARGET_ATTRIBUTE = "data-visual-target";
 /** Whole-story tolerance for platform-specific font rasterization. */
 const STORY_MAX_DIFF_PIXEL_RATIO = 0.005;
 
+/** Story-specific viewport overrides for canonical responsive contracts. */
+const STORY_VIEWPORTS: ReadonlyMap<string, { readonly width: number; readonly height: number }> = new Map([
+	["onboarding-persona-first-chat--narrow-long-content", { width: 390, height: 844 }],
+]);
+
 /** Tight absolute budget for a deliberately isolated control screenshot. */
 const TARGET_MAX_DIFF_PIXELS = 25;
 
@@ -44,14 +49,25 @@ test("tagged component states match their committed screenshots", async ({ conte
 async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry): Promise<void>
 {
 	const page = await context.newPage();
+	const viewport = STORY_VIEWPORTS.get(story.id);
 
 	try
 	{
+		// 1. Apply the story's responsive contract before navigation so layout starts deterministically.
+		if (viewport !== undefined)
+		{
+			await page.setViewportSize(viewport);
+		}
+
+		// 2. Wait for the shared stable-render prerequisites before any pixel comparison.
 		await _OpenStableStory(page, story.id);
+		// 3. Capture the complete feature composition against this platform's reviewed baseline.
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
 			maxDiffPixelRatio: STORY_MAX_DIFF_PIXEL_RATIO
 		});
+
+		// 4. Enforce strict local budgets for small controls that a whole-story ratio could hide.
 		await _AssertVisualTargets(page, story.id);
 	}
 	finally

@@ -7,28 +7,38 @@ enum UserOnboardingState {
 }
 
 enum UserOnboardingCompletionProvenance {
-  BootstrapConcluded     @map("bootstrap_concluded")
+  BootstrapConcluded    @map("bootstrap_concluded")
   ExistingUserMigration @map("existing_user_migration")
 }
 
+enum UserOnboardingBootstrapArchetype {
+  Commander @map("commander")
+  Catalyst  @map("catalyst")
+  Anchor    @map("anchor")
+  Analyst   @map("analyst")
+}
+
 model UserOnboarding {
-  id                          String                              @id @default(cuid())
-  siloId                      String                              @map("silo_id")
-  userId                      String                              @map("user_id")
-  workflowVersion             Int                                 @map("workflow_version")
-  state                       UserOnboardingState                  @default(SurveyPending)
-  personaInterviewId          String?                              @map("persona_interview_id")
-  personaRevisionId           String?                              @map("persona_revision_id")
-  bootstrapConversationId     String?                              @map("bootstrap_conversation_id")
-  bootstrapContentRevisionId  String?                              @map("bootstrap_content_revision_id")
-  bootstrapContentDigest      String?                              @map("bootstrap_content_digest")
-  completionProvenance        UserOnboardingCompletionProvenance?  @map("completion_provenance")
-  completionMigrationRevision String?                              @map("completion_migration_revision")
-  completionMigrationBatch    String?                              @map("completion_migration_batch")
-  startedAt                   DateTime                             @default(now()) @map("started_at")
-  surveyStartedAt             DateTime?                            @map("survey_started_at")
-  completedAt                 DateTime?                            @map("completed_at")
-  updatedAt                   DateTime                             @updatedAt @map("updated_at")
+  id                          String                                  @id @default(cuid())
+  siloId                      String                                  @map("silo_id")
+  userId                      String                                  @map("user_id")
+  workflowVersion             Int                                     @map("workflow_version")
+  state                       UserOnboardingState                     @default(SurveyPending)
+  personaInterviewId          String?                                 @map("persona_interview_id")
+  personaRevisionId           String?                                 @map("persona_revision_id")
+  bootstrapConversationId     String?                                 @map("bootstrap_conversation_id")
+  bootstrapContentRevisionId  String?                                 @map("bootstrap_content_revision_id")
+  bootstrapContentDigest      String?                                 @map("bootstrap_content_digest")
+  completionProvenance        UserOnboardingCompletionProvenance?     @map("completion_provenance")
+  completionMigrationRevision String?                                 @map("completion_migration_revision")
+  completionMigrationBatch    String?                                 @map("completion_migration_batch")
+  startedAt                   DateTime                                @default(now()) @map("started_at")
+  surveyStartedAt             DateTime?                               @map("survey_started_at")
+  completedAt                 DateTime?                               @map("completed_at")
+  updatedAt                   DateTime                                @updatedAt @map("updated_at")
+  bootstrapConversation       UserOnboardingBootstrapConversation?    @relation("PinnedUserOnboardingBootstrapConversation", fields: [bootstrapConversationId], references: [id], onDelete: Restrict)
+  ownedBootstrapConversation  UserOnboardingBootstrapConversation?    @relation("OwnedUserOnboardingBootstrapConversation")
+  bootstrapContentRevision    UserOnboardingBootstrapContentRevision? @relation(fields: [bootstrapContentRevisionId, bootstrapContentDigest], references: [id, digest], onDelete: Restrict)
 
   @@unique([siloId, userId])
   @@index([siloId, state])
@@ -36,4 +46,71 @@ model UserOnboarding {
   @@index([personaRevisionId])
   @@index([bootstrapConversationId])
   @@map("user_onboardings")
+}
+
+model UserOnboardingBootstrapContentRevision {
+  id              String                                @id
+  revision        Int
+  archetype       UserOnboardingBootstrapArchetype
+  primaryColour   PersonaColour                         @map("primary_colour")
+  sourceLabel     String                                @map("source_label")
+  digest          String
+  canonicalSource String                                @map("canonical_source")
+  opening         String
+  createdAt       DateTime                              @default(now()) @map("created_at")
+  questions       UserOnboardingBootstrapQuestion[]
+  conversations   UserOnboardingBootstrapConversation[]
+  onboardings     UserOnboarding[]
+
+  @@unique([archetype, revision])
+  @@unique([primaryColour, revision])
+  @@unique([id, digest])
+  @@map("user_onboarding_bootstrap_content_revisions")
+}
+
+model UserOnboardingBootstrapQuestion {
+  contentRevisionId String                                 @map("content_revision_id")
+  ordinal           Int
+  prompt            String
+  contentRevision   UserOnboardingBootstrapContentRevision @relation(fields: [contentRevisionId], references: [id], onDelete: Restrict)
+
+  @@id([contentRevisionId, ordinal])
+  @@map("user_onboarding_bootstrap_questions")
+}
+
+model UserOnboardingBootstrapConversation {
+  id                 String                                 @id
+  onboardingId       String                                 @unique @map("onboarding_id")
+  siloId             String                                 @map("silo_id")
+  userId             String                                 @map("user_id")
+  personaRevisionId  String                                 @map("persona_revision_id")
+  personaDisplayName String                                 @map("persona_display_name")
+  personaArchetype   UserOnboardingBootstrapArchetype       @map("persona_archetype")
+  contentRevisionId  String                                 @map("content_revision_id")
+  contentDigest      String                                 @map("content_digest")
+  startedAt          DateTime                               @default(now()) @map("started_at")
+  onboarding         UserOnboarding                         @relation("OwnedUserOnboardingBootstrapConversation", fields: [onboardingId], references: [id], onDelete: Restrict)
+  pinnedBy           UserOnboarding[]                       @relation("PinnedUserOnboardingBootstrapConversation")
+  contentRevision    UserOnboardingBootstrapContentRevision @relation(fields: [contentRevisionId, contentDigest], references: [id, digest], onDelete: Restrict)
+  answers            UserOnboardingBootstrapAnswer[]
+
+  @@index([siloId, userId])
+  @@index([personaRevisionId])
+  @@map("user_onboarding_bootstrap_conversations")
+}
+
+model UserOnboardingBootstrapAnswer {
+  id              String                              @id
+  conversationId  String                              @map("conversation_id")
+  ordinal         Int
+  questionOrdinal Int                                 @map("question_ordinal")
+  text            String
+  idempotencyKey  String                              @map("idempotency_key")
+  answeredAt      DateTime                            @default(now()) @map("answered_at")
+  conversation    UserOnboardingBootstrapConversation @relation(fields: [conversationId], references: [id], onDelete: Restrict)
+
+  @@unique([conversationId, ordinal])
+  @@unique([conversationId, questionOrdinal])
+  @@unique([conversationId, idempotencyKey])
+  @@map("user_onboarding_bootstrap_answers")
 }

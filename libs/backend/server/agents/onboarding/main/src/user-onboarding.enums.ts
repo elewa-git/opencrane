@@ -54,3 +54,81 @@ export enum UserOnboardingDenialReasons
 	/** The workflow's current durable state does not allow the requested transition. */
 	StateConflict = "state_conflict",
 }
+
+/** Approved persona archetypes that select one reviewed bootstrap script. */
+export enum UserOnboardingBootstrapArchetypes
+{
+	/** Direct, results-focused red persona. */
+	Commander = "commander",
+	/** Energetic, collaborative yellow persona. */
+	Catalyst = "catalyst",
+	/** Calm, supportive green persona. */
+	Anchor = "anchor",
+	/** Precise, structured blue persona. */
+	Analyst = "analyst",
+}
+
+/** Stable colours exposed only as approved persona display evidence. */
+export enum UserOnboardingPersonaColours
+{
+	/** Commander display colour. */
+	Red = "red",
+	/** Catalyst display colour. */
+	Yellow = "yellow",
+	/** Anchor display colour. */
+	Green = "green",
+	/** Analyst display colour. */
+	Blue = "blue",
+}
+
+/** Speaker roles in the deterministic onboarding-only transcript projection. */
+export enum UserOnboardingChatRoles
+{
+	/** Reviewed server-owned script content. */
+	Assistant = "assistant",
+	/** Exact bounded text submitted by the authenticated owner. */
+	User = "user",
+}
+
+/** Stable content categories in the deterministic transcript projection. */
+export enum UserOnboardingChatMessageKinds
+{
+	/** Reviewed archetype-specific introduction. */
+	Opening = "opening",
+	/** One of the three reviewed ordered prompts. */
+	Question = "question",
+	/** One append-only owner answer. */
+	Answer = "answer",
+}
+
+/** Outcomes for append-only answer submission. */
+export enum UserOnboardingAnswerStatuses
+{
+	/** One new bounded answer was appended. */
+	Recorded = "recorded",
+	/** The same key and text already produced the durable answer. */
+	Resumed = "resumed",
+	/** The key was already used with different text. */
+	IdempotencyConflict = "idempotency_conflict",
+	/** The chat state does not currently accept another answer. */
+	StateConflict = "state_conflict",
+}
+
+/** Stable fail-closed errors exposed by the guided onboarding chat boundary. */
+export enum UserOnboardingChatFailureReasons
+{
+	/** The persona survey has not produced an approved revision yet. */
+	NotReady = "not_ready",
+	/** Approved persona evidence or its reviewed script revision is unavailable. */
+	EvidenceUnavailable = "evidence_unavailable",
+	/** The durable workflow changed during the requested compare-and-set transition. */
+	StateConflict = "state_conflict",
+	/** Answer text is empty or exceeds the server-owned limit. */
+	InvalidAnswer = "invalid_answer",
+	/** The retry key is empty or exceeds the server-owned limit. */
+	InvalidIdempotencyKey = "invalid_idempotency_key",
+	/** The expected conversation or question coordinate is malformed. */
+	InvalidCoordinate = "invalid_coordinate",
+	/** Exactly three valid answers are required before conclusion. */
+	NotConcludable = "not_concludable",
+}

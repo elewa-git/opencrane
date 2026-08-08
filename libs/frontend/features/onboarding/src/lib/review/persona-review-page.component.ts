@@ -7,7 +7,7 @@ import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
 import { CollapsibleSectionComponent, JourneyShellComponent, JourneyShellLayouts, PersonaArchetypeScore, PersonaArchetypeTones, PersonaSummaryComponent } from "@opencrane/elements/ui";
-import { PersonaColours, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaQuestion, PersonaResult } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaFirstChatService, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaQuestion, PersonaResult, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
 
 import { _OnboardingErrorMessage, _PersonaDescription, _PersonaScores, _PersonaTone, _PersonaValueLabel, _SelectedChoiceLabel } from "../onboarding-view.util";
 
@@ -25,6 +25,9 @@ export class PersonaReviewPageComponent
 {
 	/** Server-backed persona lifecycle orchestration. */
 	private readonly _persona = inject(PersonaOnboardingService);
+
+	/** Server-owned onboarding route projection used after persona approval. */
+	private readonly _firstChat = inject(PersonaFirstChatService);
 
 	/** Router used only to move back to the authority-derived survey page. */
 	private readonly _router = inject(Router);
@@ -88,6 +91,7 @@ export class PersonaReviewPageComponent
 		await this._run(async function _Approve(this: PersonaReviewPageComponent)
 		{
 			this.onboarding.set(await this._persona.approve(personaRevisionId));
+			this._routeFromOnboarding(await this._firstChat.loadRouteState());
 		}.bind(this));
 	}
 
@@ -134,7 +138,24 @@ export class PersonaReviewPageComponent
 		{
 			void this._router.navigateByUrl("/onboarding/survey");
 		}
+		else if (snapshot.state === PersonaOnboardingStates.Ready)
+		{
+			this._routeFromOnboarding(await this._firstChat.loadRouteState());
+		}
 		return snapshot;
+	}
+
+	/** Route only from the public durable onboarding projection returned after approval. */
+	private _routeFromOnboarding(onboarding: UserOnboardingRouteSnapshot): void
+	{
+		if (onboarding.state === UserOnboardingRouteStates.BootstrapChatPending || onboarding.state === UserOnboardingRouteStates.BootstrapChatInProgress)
+		{
+			void this._router.navigateByUrl("/onboarding/chat");
+		}
+		else if (onboarding.state === UserOnboardingRouteStates.Completed)
+		{
+			void this._router.navigateByUrl("/admin");
+		}
 	}
 
 	/** Run one mutation while preserving the current draft and activation state on failure. */

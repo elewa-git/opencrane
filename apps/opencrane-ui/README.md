@@ -19,7 +19,7 @@ The backend that serves its APIs is [`apps/opencrane`](../opencrane/README.md) (
 this app only renders screens and calls that server.
 
 It composes the frontend feature and state libraries under `libs/frontend/*` — the route table
-lazy-loads the persona onboarding and MCP tool-administration screens. MCP is the Model Context Protocol for
+lazy-loads the persona survey, review, bounded first-chat, and MCP tool-administration screens. MCP is the Model Context Protocol for
 connecting tools. Two beats
 define what it *is* as a deployable:
 
@@ -51,14 +51,14 @@ If the backend is unreachable the app refuses authenticated actions.
 ## Public surface
 
 `Entrypoint: src/main.ts` (bootstraps `AppComponent` with `appConfig` from `src/app/app.config.ts`).
-Route table `src/app/app.routes.ts`: `login`, `onboarding` (persona survey and review), and `admin`
+Route table `src/app/app.routes.ts`: `login`, `onboarding` (persona survey, review, and first chat), and `admin`
 (MCP tool administration). The root route redirects to `/onboarding/survey`; protected routes use
 `OperatorAccessGuard`.
 
 ## Boundary
 
 Browser-only presentation. It holds no server secrets and no database; onboarding progress, persona
-answers, score evidence, and approval remain server-owned. It does not implement authorization
+answers, score evidence, bootstrap transcript, and completion remain server-owned. It does not implement authorization
 — it renders what the backend permits and gates screens on backend-supplied capability claims.
 
 ## Dependency direction

@@ -18,7 +18,7 @@ export const APP_ROUTES: Routes =
 		}
 	},
 	{
-		// Server-authoritative persona survey and review journey.
+		// Server-authoritative persona survey, review, and bounded first-chat journey.
 		path: "onboarding",
 		canActivate: [___OperatorAccessGuard],
 		loadChildren: function loadOnboardingRoutes()
