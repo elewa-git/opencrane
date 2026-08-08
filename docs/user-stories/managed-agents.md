@@ -5,8 +5,9 @@
 Let organisation administrators define bounded agents for scheduled or explicit work, with immutable
 revisions, optimistic concurrency, narrow attachments, and visible run history.
 
-Current status: `API ready` offline, `UI missing`, `Design ready`. Fourteen of the fifteen operations
-are absent from generated OpenAPI, and live runtime/scheduler capability must be shown separately.
+Current status: `API ready`, `UI missing`, `Design ready`. Fourteen of the fifteen operations are
+absent from generated OpenAPI. Offline validation exists, while live runtime and scheduler
+qualification must be shown separately.
 
 ## AGT-01 — Browse managed agents
 

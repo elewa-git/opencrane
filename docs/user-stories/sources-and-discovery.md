@@ -5,7 +5,8 @@
 Let administrators register bounded discovery sources and review what they report without silently
 installing discovered capabilities or converting external metadata into trusted authority.
 
-Current status: `API partial`, `UI missing`, `Design ready` after contract and authorization repair.
+Current status: `API partial`, `UI missing`, `Needs decision` until the contract and authorization
+boundary are repaired.
 
 ## SRC-01 — Browse third-party sources
 

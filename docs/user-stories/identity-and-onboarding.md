@@ -18,7 +18,8 @@ Acceptance criteria:
 - An anonymous visitor can start sign-in and return to a sanitized in-product destination.
 - Loading, identity-provider unavailable, access denied, expired state, and callback failure are
   distinct states.
-- Errors such as no access / user unknown / ... are clearly displayed when login fails
+- The failure surface distinguishes ineligible user, unknown identity, expired login, provider
+  refusal, and configuration unavailable using stable server outcomes and safe recovery actions.
 - The browser never displays or stores OIDC client secrets, session secrets, PKCE verifiers, or
   raw tokens.
 - A failed configured allowlist or first-owner admission does not leave a misleading signed-in UI.

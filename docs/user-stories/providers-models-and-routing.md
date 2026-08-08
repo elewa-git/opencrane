@@ -5,8 +5,8 @@
 Let administrators configure model custody and selection while distinguishing stored configuration,
 LiteLLM registration, routability, and actual runtime readiness.
 
-Current status: `API partial`, `UI early` for BYOK only, `Design ready` when readiness is represented
-honestly. Auto-routing configuration is not yet consumed by a runtime optimizer.
+Current status: `API partial`, `UI early` for BYOK only, `Needs decision` for the unified readiness
+contract. Auto-routing configuration is not yet consumed by a runtime optimizer.
 
 ## MOD-01 — Configure a supported BYOK provider
 

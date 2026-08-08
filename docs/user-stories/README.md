@@ -47,6 +47,7 @@ evidence to the owning file. Do not silently change a blocked story into fronten
 | Assets | [assets.md](assets.md) | Safe metadata catalogue only. |
 | Skills | [skills.md](skills.md) | Safe catalogue only; no public authoring lifecycle. |
 | Memory | [memory.md](memory.md) | No public management API; production reads remain an internal admission concern. |
+| Organisational knowledge | [organizational-knowledge.md](organizational-knowledge.md) | Dataset, ingestion, indexing and attachment journeys need public authority APIs. |
 | Organisation and sharing | [organization-and-sharing.md](organization-and-sharing.md) | Groups and sharing exist; member management and effective-access explanation do not. |
 | Providers, models and routing | [providers-models-and-routing.md](providers-models-and-routing.md) | Configuration exists, with partial readiness and no runtime auto-routing consumer. |
 | Budgets and usage | [budgets-and-usage.md](budgets-and-usage.md) | APIs exist but contract and authorization must be fixed before UI exposure. |
