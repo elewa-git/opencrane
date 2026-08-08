@@ -47,3 +47,5 @@ pr-stack-integrity-evidence.json
 /.agent-reviews/
 /.r0-estate-evidence*/
 /.r0-evidence*/
+
+/keys/*
