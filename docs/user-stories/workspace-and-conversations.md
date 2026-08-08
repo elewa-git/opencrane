@@ -6,17 +6,19 @@ Provide the personal workspace where a user starts, resumes, and understands con
 their agent. The transcript is server-authoritative and recoverable; the browser is a client, not
 the conversation ledger.
 
-Current status: `API blocked` for the complete journey. Bounded event replay is `API ready`; thread
-discovery, creation, prompt submission, and live tail are missing.
+Current status: `API blocked` for the ordinary workspace journey. The onboarding-owned guided
+exchange and bounded event replay are `API ready`; ordinary thread discovery, creation, prompt
+submission, and live tail are missing.
 
 ## Onboarding-chat boundary
 
-The `bootstrap.md` onboarding chat is a bounded pre-main-app conversation owned by the onboarding
-workflow, not a browser-local demo thread and not ordinary workspace access. It must create or
-resolve the personal agent/workspace authority needed for that conversation, pin the bootstrap
-workflow revision, and remain resumable while main-app conversation routes and APIs stay fenced.
-Its conclusion advances `UserOnboarding`; ordinary conversation events cannot mark onboarding
-complete by themselves. The canonical workflow and routing states live in
+The `bootstrap.md` onboarding chat is a bounded pre-main-app exchange owned by the onboarding
+workflow, not a browser-local demo thread and not ordinary workspace access. Its implemented
+deterministic form pins the reviewed bootstrap source and approved persona, remains resumable, and
+records ordered owner answers without minting AgentService, workspace, run, model, membership, or
+memory authority. Its conclusion advances `UserOnboarding`; ordinary conversation events cannot
+mark onboarding complete by themselves. The future model-driven form still requires those general
+workspace authorities. The canonical workflow and routing states live in
 [identity-and-onboarding.md](identity-and-onboarding.md).
 
 ## CON-01 — See my conversations

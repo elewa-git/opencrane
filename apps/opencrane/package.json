@@ -14,6 +14,7 @@
     "lint": "tsc --noEmit",
     "db:generate": "prisma generate",
     "test:persona-source-seeds": "node prisma/bootstrap/verify-persona-source-seeds.mjs",
+    "test:onboarding-bootstrap-seeds": "node prisma/bootstrap/verify-onboarding-bootstrap-seeds.mjs",
     "test:authority-baseline": "node prisma/bootstrap/verify-authority-baseline.mjs"
   },
   "dependencies": {

@@ -6,17 +6,20 @@
 
 This package owns the server-tracked workflow that routes one authenticated person through persona
 survey and bootstrap chat before the main product. Authentication supplies the silo and stable OIDC
-subject; the persona package supplies interview and approval evidence; later bootstrap orchestration
-will supply the exact conversation and immutable `bootstrap.md` content revision.
+subject; the persona package supplies interview, approval, display-name, and primary-colour
+evidence; onboarding owns the exact immutable bootstrap source and exchange.
 
-The current slice owns the survey stages end to end:
+The package owns the survey hand-off and first guided exchange end to end:
 
 1. Create one workflow pinned to the current workflow version in `survey_pending`.
 2. Verify and pin an owner-bound persona interview before entering `survey_in_progress`.
 3. Resume the same interview, or CAS-replace its exact pin when the owner deliberately sorts again
    before leaving `survey_in_progress`.
-4. Verify the exact approved persona revision before entering `bootstrap_chat_pending`; later
-   owner-verified persona maintenance is accepted without regressing the completed survey workflow.
+4. Verify the exact approved persona revision before entering `bootstrap_chat_pending`.
+5. Select and pin one reviewed Commander, Catalyst, Anchor, or Analyst script revision.
+6. Append exactly three bounded answers in order; each request echoes the server-issued conversation
+   and question coordinate, identical retries resume, and stale devices or conflicting key reuse fail.
+7. Conclude server-side only after all three answers and atomically complete onboarding.
 
 ```text
  authenticated session       persona evidence authority
@@ -26,42 +29,45 @@ The current slice owns the survey stages end to end:
        ┌────────────────────────────┐
        │ user onboarding  ◄── HERE  │  durable route state + exact references
        └────────────────────────────┘
-                       │ approved persona pinned
+                       │ persona + script pinned
                        ▼
-              bootstrap provisioning
+             deterministic 3-answer chat
 ```
 
-**In this flow:** [persona evidence](../../../../agents/personal/personas/main/README.md) · bootstrap
-provisioning (planned)
+**In this flow:** [persona evidence](../../../../agents/personal/personas/main/README.md)
 
-The invariant is that a browser never chooses its own silo, subject, survey completion, or approved
-persona. A failed or conflicting transition leaves the last durable state unchanged. This package
+The invariant is that a browser never chooses its own silo, subject, survey completion, approved
+persona, script, conversation, question, or completion. A failed or conflicting transition leaves
+the last durable state unchanged. This guided exchange is not a general chat or agent-runtime path.
+This package
 accepts repeated owner-bound interview notifications. Before observing a newer interview, its
 coordinator first reconciles an already-approved persona for the durable pinned interview, closing
 the post-commit notification gap. Initial-survey replacement remains open only until the pinned
 interview's persona becomes active; PostgreSQL closes the opposite side of that approval race with a
-single onboarding-first lock order and requires approval to match the current pin. This package does
-not yet enforce the global main-API fence because bootstrap provisioning and conclusion are not
-available yet.
+single onboarding-first lock order and requires approval to match the current pin.
 
 ## Public surface
 
 - `__UserOnboardingAuthority` reads/creates route state and admits interview-start and approved-persona transitions.
+- `__UserOnboardingChatAuthority` selects reviewed content, renders the deterministic transcript,
+  appends answers only against exact projected coordinates, and admits server conclusion.
 - `_CreateUserOnboardingRepository` composes the Prisma persistence adapter at the server edge.
-- `__CreateUserOnboardingRouter` exposes the owner-only route-state projection, while
+- `__CreateUserOnboardingRouter` exposes route state plus the four owner-only chat endpoints, while
   `UserOnboardingPersonaWorkflowCoordinator` translates accepted persona events into workflow transitions.
 - `UserOnboardingRouterDependencies`, `UserOnboardingOwnerResolver`, and
   `UserOnboardingPersonaWorkflowPort` are the narrow logged HTTP and persona-notification
   composition contracts.
-- `_UserOnboardingOpenapiPaths` contributes the route-state contract to the generated API.
-- `UserOnboardingStates`, completion provenance, transition statuses, and denial reasons are the stable workflow vocabulary.
-- `UserOnboardingOwner`, persona evidence, record, and transition result types define the owner-bound authority contract.
+- `_UserOnboardingOpenapiPaths` contributes route-state and guided-chat contracts to the generated API.
+- The workflow, archetype, colour, completion, denial, and transition enums form the exported
+  composition vocabulary; chat wire details stay internal to the authority and HTTP boundary.
+- Owner, approved-persona evidence, and transition types define the exported authority contracts;
+  immutable script, transcript, answer, projection, and repository shapes remain package-internal.
 
 ## Boundary
 
-Callers must derive `UserOnboardingOwner` from the verified request principal. Persona questions,
-answers, scores, drafts, revisions, and approval remain owned by the persona package and enter only
-through the evidence port. Bootstrap content and transcript content are never copied into this row.
+Callers must derive `UserOnboardingOwner` from the verified request principal. Persona survey
+questions, scores, drafts, compiled instructions, and approval remain owned by the persona package.
+Bootstrap answers remain ordinary evidence: they grant no memory retention or action authority.
 
 ## Dependency direction
 
@@ -70,10 +76,13 @@ may compose it, but this package never imports app code or frontend state.
 
 ## Data & persistence
 
-This package owns `UserOnboarding` and its state and completion-provenance enums in
+This package owns `UserOnboarding`, immutable bootstrap content and questions, the single
+conversation, append-only answers, and their enums in
 `apps/opencrane/prisma/schema/user-onboarding.prisma`. PostgreSQL is authoritative; browser storage
-is not. The reviewed clean-database baseline contains the same schema plus lifecycle triggers and is
-the deployment setup boundary.
+is not. The immutable conversation carries provenance only; `UserOnboarding.state` and
+`UserOnboarding.completedAt` are the sole completion authority, admitted only when its pinned
+conversation has exactly three answers. The reviewed clean-database baseline contains the same
+schema plus lifecycle triggers and is the deployment setup boundary.
 
 ## See also
 

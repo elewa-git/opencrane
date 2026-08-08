@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { __UserOnboardingAuthority } from "../user-onboarding-authority.js";
-import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums.js";
+import { UserOnboardingBootstrapArchetypes, UserOnboardingDenialReasons, UserOnboardingPersonaColours, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums.js";
 import { UserOnboardingPersonaWorkflowCoordinator } from "../user-onboarding.http.js";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository } from "../user-onboarding.types.js";
 
@@ -99,6 +99,13 @@ class _FakePersonaEvidence implements UserOnboardingPersonaEvidencePort
 		const personaRevisionId = this.approvedRevisions[interviewId];
 		if (!await this.ownsInterview(owner, interviewId) || personaRevisionId === undefined) return null;
 		return { interviewId, personaRevisionId };
+	}
+
+	/** Return safe bootstrap display evidence for one configured approved revision. */
+	async readApprovedBootstrapEvidence(owner: UserOnboardingOwner, personaRevisionId: string)
+	{
+		if (owner.siloId !== _OWNER.siloId || owner.subjectId !== _OWNER.subjectId || !Object.values(this.approvedRevisions).includes(personaRevisionId)) return null;
+		return { personaRevisionId, displayName: "The Commander", archetype: UserOnboardingBootstrapArchetypes.Commander, primaryColour: UserOnboardingPersonaColours.Red };
 	}
 }
 

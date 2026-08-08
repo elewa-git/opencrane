@@ -4,3 +4,5 @@ export { _CreatePersonaOnboardingRouter } from "./http/prisma-persona-onboarding
 export { _PersonaOnboardingOpenapiPaths } from "./http/openapi.js";
 export type { PersonaOnboardingCaller, PersonaOnboardingClock, PersonaOnboardingRouterDependencies, PersonaOnboardingWorkflowPort } from "./http/persona-onboarding.router.types.js";
 export { _CreatePersonaWorkflowEvidenceRepository } from "./profile/prisma-persona-workflow-evidence.js";
+export { PersonaWorkflowColours } from "./profile/persona-workflow-evidence.types.js";
+export type { PersonaWorkflowEvidenceRepository } from "./profile/persona-workflow-evidence.types.js";

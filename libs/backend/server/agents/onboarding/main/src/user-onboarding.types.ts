@@ -1,4 +1,5 @@
 import type { UserOnboardingCompletionProvenances, UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "./user-onboarding.enums.js";
+import type { ApprovedPersonaBootstrapEvidence } from "./user-onboarding-chat.types.js";
 
 /** Trusted owner coordinates derived from the authenticated server session. */
 export interface UserOnboardingOwner
@@ -66,6 +67,8 @@ export interface UserOnboardingPersonaEvidencePort
 	readApprovedPersona(owner: UserOnboardingOwner, evidence: ApprovedPersonaEvidence): Promise<ApprovedPersonaEvidence | null>;
 	/** Return the latest approved revision for the exact owner-bound interview, when one exists. */
 	readLatestApprovedPersona(owner: UserOnboardingOwner, interviewId: string): Promise<ApprovedPersonaEvidence | null>;
+	/** Return safe display and archetype selection facts for the exact active approved revision. */
+	readApprovedBootstrapEvidence(owner: UserOnboardingOwner, personaRevisionId: string): Promise<ApprovedPersonaBootstrapEvidence | null>;
 }
 
 /** Persistence operations owned exclusively by the user-onboarding package. */

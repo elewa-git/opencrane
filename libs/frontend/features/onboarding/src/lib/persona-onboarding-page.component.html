@@ -23,7 +23,7 @@
 			<wo-persona-review-state [snapshot]="stateSnapshot(snapshot, states.Review)" [busy]="saving()" [actionError]="actionError()" (retryRequested)="retry()" (draftRequested)="prepareDraft()" (restartRequested)="restart()" (approvalRequested)="approve($event)" />
 		}
 		@case (states.Ready) {
-			<wo-persona-ready-state [snapshot]="stateSnapshot(snapshot, states.Ready)" (retryRequested)="retry()" />
+			<wo-persona-ready-state [snapshot]="stateSnapshot(snapshot, states.Ready)" [actionError]="actionError()" (retryRequested)="retry()" />
 		}
 		@default {
 			<wo-journey-shell title="This onboarding state is unavailable" description="OpenCrane will not infer a later screen from an unknown lifecycle state." [layout]="layouts.Compact">

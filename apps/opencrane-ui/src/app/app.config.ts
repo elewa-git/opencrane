@@ -7,7 +7,7 @@ import { providePrimeNG } from "primeng/config";
 import { OpenCranePreset } from "@opencrane/core";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
-import { PERSONA_GATEWAY } from "@opencrane/state/onboarding";
+import { OpenCranePersonaFirstChatGateway, PERSONA_FIRST_CHAT_GATEWAY, PERSONA_GATEWAY } from "@opencrane/state/onboarding";
 import { OpenCranePersonaGateway } from "@opencrane/state/persona/adapter";
 import { provideWebPlatform } from "@opencrane/platform";
 
@@ -32,6 +32,7 @@ export const appConfig: ApplicationConfig =
 		providePrimeNG({ theme: { preset: OpenCranePreset } }),
 		provideWebPlatform(),
 		{ provide: PERSONA_GATEWAY, useClass: OpenCranePersonaGateway },
+		{ provide: PERSONA_FIRST_CHAT_GATEWAY, useClass: OpenCranePersonaFirstChatGateway },
 		// This app is the org/customer surface — capabilities derive from the
 		// org-admin claim only (platform-operator claims grant nothing here).
 		{ provide: PLATFORM_SURFACE, useValue: "org" },

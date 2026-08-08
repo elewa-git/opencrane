@@ -22,6 +22,9 @@ export class PersonaReadyStateComponent
 	/** Authoritative approved projection selected by the parent state switch. */
 	public readonly snapshot = input.required<PersonaOnboardingStateSnapshot<PersonaOnboardingStates.Ready>>();
 
+	/** Bounded failure while resolving the next durable onboarding route. */
+	public readonly actionError = input.required<string | null>();
+
 	/** Intent to reload incomplete approved-persona evidence. */
 	public readonly retryRequested = output<void>();
 
