@@ -253,6 +253,16 @@ jobs:
         if: steps.storybook-regression.outputs.required == 'true'
         run: npx nx affected -t build-storybook test-storybook test-storybook-visual --base="$NX_BASE" --head="$NX_HEAD" --parallel=1
 
+      - name: Upload failed Storybook visual evidence
+        if: failure() && steps.storybook-regression.outputs.required == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: storybook-visual-evidence-${{ github.run_attempt }}
+          path: .nx/test-results/storybook
+          include-hidden-files: true
+          if-no-files-found: ignore
+          retention-days: 7
+
       - name: Enforce monorepo dependency boundaries
         run: npm run lint:boundaries
 
