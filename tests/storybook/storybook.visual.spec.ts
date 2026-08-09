@@ -11,11 +11,6 @@ const VISUAL_TARGET_ATTRIBUTE = "data-visual-target";
 /** Whole-story tolerance for platform-specific font rasterization. */
 const STORY_MAX_DIFF_PIXEL_RATIO = 0.005;
 
-/** Absolute budgets for story states whose opacity amplifies platform font rasterization. */
-const STORY_MAX_DIFF_PIXELS: ReadonlyMap<string, number> = new Map([
-	["foundation-choice-card-group--disabled", 4_096],
-]);
-
 /** Tight absolute budget for a deliberately isolated control screenshot. */
 const TARGET_MAX_DIFF_PIXELS = 25;
 
@@ -53,11 +48,9 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 	try
 	{
 		await _OpenStableStory(page, story.id);
-		const maxDiffPixels = STORY_MAX_DIFF_PIXELS.get(story.id);
 		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
-			maxDiffPixelRatio: maxDiffPixels === undefined ? STORY_MAX_DIFF_PIXEL_RATIO : undefined,
-			maxDiffPixels,
+			maxDiffPixelRatio: STORY_MAX_DIFF_PIXEL_RATIO
 		});
 		await _AssertVisualTargets(page, story.id);
 	}
