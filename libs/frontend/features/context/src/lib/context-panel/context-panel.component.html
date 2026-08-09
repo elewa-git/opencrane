@@ -126,7 +126,12 @@
 		}
 
 		@if (tab() === "canvas") {
-			<wo-canvas-doc />
+			<wo-canvas-doc
+				[document]="canvasDocument()"
+				[saveState]="canvasSaveState()"
+				(saveRequested)="canvasSaveRequested.emit()"
+				(exportRequested)="canvasExportRequested.emit()"
+			/>
 		}
 	</div>
 </aside>

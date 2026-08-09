@@ -1,6 +1,6 @@
-import { ChangeDetectionStrategy, Component, output, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, input, output, signal } from "@angular/core";
 
-import { ActiveSkill, LedgerEntry, SCOPE_COLORS, ScopeCitation, ScopeContextEntry, ScopeLevel } from "@opencrane/core";
+import { ActiveSkill, CanvasDocument, CanvasDocumentSaveStates, LedgerEntry, SCOPE_COLORS, ScopeCitation, ScopeContextEntry, ScopeLevel } from "@opencrane/core";
 import { CollapsibleSectionComponent, LedgerCardComponent, LedgerCardKinds } from "@opencrane/elements/ui";
 import { CanvasDocComponent } from "../components/canvas-doc/canvas-doc.component";
 
@@ -25,6 +25,18 @@ export class ContextPanelComponent
 
 	/** Emits when the panel close button is clicked. */
 	public readonly closed = output<void>();
+
+	/** Canvas document selected by the owning workspace, or null before selection. */
+	public readonly canvasDocument = input<CanvasDocument | null>(null);
+
+	/** Canvas save lifecycle supplied by the owning workspace. */
+	public readonly canvasSaveState = input<CanvasDocumentSaveStates>(CanvasDocumentSaveStates.Idle);
+
+	/** Emits a canvas save intent for the owning workspace to admit. */
+	public readonly canvasSaveRequested = output<void>();
+
+	/** Emits a canvas export intent for the owning workspace to handle. */
+	public readonly canvasExportRequested = output<void>();
 
 	/** Active tab ("context" | "ledger" | "canvas"). */
 	public readonly tab = signal<string>("context");

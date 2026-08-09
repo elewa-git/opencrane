@@ -10,13 +10,15 @@ context behind the current conversation: the awareness contract (what the agent 
 the scopes in play, the retrieved sources it cited, the skills it has active, and the ledger trace
 of what it did.
 
-It is presentational: it reads models and demo data from `core` and renders them. It does not fetch
-from the API itself or hold long-lived state — the workspace shell decides when it is shown.
+It is presentational: it receives typed models from its owner and renders them. It does not fetch
+from the API itself or hold long-lived state — the workspace shell decides when it is shown and
+when a canvas document is selected, saved, or exported.
 
 ## Public surface
 
 - `ContextPanelComponent` — the pane: an awareness card and scope strip, an expandable
-  retrieved-scope rail with citations, active skills, and the ledger trace.
+  retrieved-scope rail with citations, active skills, the ledger trace, and a pass-through canvas
+  document/action contract for its owner.
 
 ## Boundary
 

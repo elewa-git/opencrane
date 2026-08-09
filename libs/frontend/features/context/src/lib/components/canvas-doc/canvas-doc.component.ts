@@ -1,47 +1,50 @@
-import { ChangeDetectionStrategy, Component, signal } from "@angular/core";
+import { ChangeDetectionStrategy, Component, input, output } from "@angular/core";
 
-import { CanvasInitiative, CanvasMetric, CanvasRisk } from "@opencrane/core";
+import { CanvasDocument, CanvasDocumentSaveStates, CanvasRiskSeverities } from "@opencrane/core";
+import { ScopeChipAppearances, ScopeChipComponent } from "@opencrane/elements/ui";
+import { _CanvasCitationScopeSummary, _CanvasInitiativeStatusLabel, _CanvasInitiativeStatusTone, _CanvasSaveLabel } from "./canvas-doc.utils";
 
-/** Status display metadata for canvas initiative rows. */
-interface InitiativeStatusStyle { color: string; label: string; }
-
-/** Canvas document panel — populated from the live gateway once available. */
+/** Feature-local visualisation of an authority-supplied canvas document. */
 @Component({
 	selector: "wo-canvas-doc",
 	standalone: true,
+	imports: [ScopeChipComponent],
 	templateUrl: "./canvas-doc.component.html",
 	styleUrl: "./canvas-doc.component.scss",
 	changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class CanvasDocComponent
 {
-	/** Whether the save confirmation is showing. */
-	public readonly saved = signal<boolean>(false);
+	/** Document supplied by the context owner, or null before a document is selected. */
+	public readonly document = input<CanvasDocument | null>(null);
 
-	/** Growth target metric rows — populated from the live gateway once available. */
-	public readonly metrics: CanvasMetric[] = [];
+	/** Save lifecycle supplied by the context owner. */
+	public readonly saveState = input<CanvasDocumentSaveStates>(CanvasDocumentSaveStates.Idle);
 
-	/** Key initiative rows — populated from the live gateway once available. */
-	public readonly initiatives: CanvasInitiative[] = [];
+	/** Emits a save intent for the context owner to handle. */
+	public readonly saveRequested = output<void>();
 
-	/** Top risk rows — populated from the live gateway once available. */
-	public readonly risks: CanvasRisk[] = [];
+	/** Emits an export intent for the context owner to handle. */
+	public readonly exportRequested = output<void>();
 
-	/** Resolves status display metadata for an initiative. */
-	public statusStyle(status: string): InitiativeStatusStyle
-	{
-		switch (status)
-		{
-			case "on-track": return { color: "#5A8A5A", label: "on track" };
-			case "at-risk": return { color: "#A0855A", label: "at risk" };
-			default: return { color: "var(--oc-ink-muted)", label: "pending" };
-		}
-	}
+	/** Save-state enum exposed to the template. */
+	public readonly saveStates = CanvasDocumentSaveStates;
 
-	/** Shows the saved confirmation for two seconds. */
-	public save(): void
-	{
-		this.saved.set(true);
-		setTimeout(() => this.saved.set(false), 2000);
-	}
+	/** Risk-severity enum exposed to the template. */
+	public readonly riskSeverities = CanvasRiskSeverities;
+
+	/** Shared chip appearance exposed to the template. */
+	public readonly chipAppearances = ScopeChipAppearances;
+
+	/** Maps an admitted initiative state to the shared semantic chip treatment. */
+	public readonly initiativeStatusTone = _CanvasInitiativeStatusTone;
+
+	/** Maps an admitted initiative state to its readable chip label. */
+	public readonly initiativeStatusLabel = _CanvasInitiativeStatusLabel;
+
+	/** Maps the owner-supplied save lifecycle to the visible action label. */
+	public readonly saveLabel = _CanvasSaveLabel;
+
+	/** Renders the supplied citation scopes without constructing source data. */
+	public readonly citationScopeSummary = _CanvasCitationScopeSummary;
 }

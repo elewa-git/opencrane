@@ -64,6 +64,48 @@ export interface LedgerEntry
 	status: string | null;
 }
 
+/** Lifecycle supplied by the canvas-document authority. */
+export enum CanvasDocumentLifecycles
+{
+	/** An editable document that has not become the published reference. */
+	Draft = "draft",
+	/** A reviewed document that is the published reference for its scope. */
+	Published = "published"
+}
+
+/** Save state supplied by the canvas-document owner; the renderer never fabricates it. */
+export enum CanvasDocumentSaveStates
+{
+	/** No save request is in flight. */
+	Idle = "idle",
+	/** The owner is admitting a requested save. */
+	Saving = "saving",
+	/** The owner confirmed that the supplied document was saved. */
+	Saved = "saved",
+	/** The owner rejected or could not complete the save request. */
+	Failed = "failed"
+}
+
+/** Stable initiative state supplied by a canvas document. */
+export enum CanvasInitiativeStates
+{
+	/** The initiative is progressing within its supplied plan. */
+	OnTrack = "on-track",
+	/** The initiative needs attention to meet its supplied target. */
+	AtRisk = "at-risk",
+	/** The document does not yet classify the initiative as on track or at risk. */
+	Pending = "pending"
+}
+
+/** Stable severity supplied by a canvas document for a described risk. */
+export enum CanvasRiskSeverities
+{
+	/** A risk that requires prominent attention. */
+	High = "high",
+	/** A risk that remains visible without the high-severity treatment. */
+	Medium = "medium"
+}
+
 /** A key initiative row in the canvas document table. */
 export interface CanvasInitiative
 {
@@ -75,8 +117,8 @@ export interface CanvasInitiative
 	target: string;
 	/** Timeline window. */
 	timeline: string;
-	/** Status key ("on-track" | "at-risk" | "pending"). */
-	status: string;
+	/** Lifecycle state supplied by the document authority. */
+	status: CanvasInitiativeStates;
 }
 
 /** A growth-target metric row in the canvas document. */
@@ -95,6 +137,33 @@ export interface CanvasRisk
 {
 	/** Risk description. */
 	risk: string;
-	/** Severity key ("high" | "medium"). */
-	severity: string;
+	/** Severity supplied by the document authority. */
+	severity: CanvasRiskSeverities;
+}
+
+/** A complete read-only document rendered in the context canvas. */
+export interface CanvasDocument
+{
+	/** Short title used in the canvas navigation bar. */
+	navigationTitle: string;
+	/** Full document heading shown in the canvas body. */
+	title: string;
+	/** Lifecycle supplied by the document authority. */
+	lifecycle: CanvasDocumentLifecycles;
+	/** Bounded provenance summary shown above the document content. */
+	provenance: string;
+	/** Source-supplied metadata values displayed below the heading. */
+	metadata: readonly string[];
+	/** Read-only executive summary supplied by the document authority. */
+	executiveSummary: string;
+	/** Growth or outcome metrics supplied by the document authority. */
+	metrics: readonly CanvasMetric[];
+	/** Initiative rows supplied by the document authority. */
+	initiatives: readonly CanvasInitiative[];
+	/** Risk rows supplied by the document authority. */
+	risks: readonly CanvasRisk[];
+	/** Number of citations that grounded this document. */
+	citationCount: number;
+	/** Scope levels from which the document's citations were admitted. */
+	citationScopes: readonly ScopeLevel[];
 }

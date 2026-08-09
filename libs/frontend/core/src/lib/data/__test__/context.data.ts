@@ -1,4 +1,4 @@
-import { ActiveSkill, CanvasInitiative, CanvasMetric, CanvasRisk, LedgerEntry, ScopeCitation, ScopeContextEntry } from "../../models/context.types";
+import { ActiveSkill, CanvasInitiative, CanvasInitiativeStates, CanvasMetric, CanvasRisk, CanvasRiskSeverities, LedgerEntry, ScopeCitation, ScopeContextEntry } from "../../models/context.types";
 import { ScopeLevel } from "../../models/scope.types";
 
 /** Scope datasets feeding the current session, innermost first. */
@@ -51,16 +51,16 @@ export const CANVAS_METRICS: CanvasMetric[] =
 /** Canvas doc — key initiative table rows. */
 export const CANVAS_INITIATIVES: CanvasInitiative[] =
 [
-	{ name: "PLG expansion", owner: "Growth", target: "+40% trial starts", timeline: "Jul 1 – Aug 15", status: "on-track" },
-	{ name: "Enterprise pilot", owner: "Sales", target: "3 design partners", timeline: "Jul 15 – Sep 30", status: "at-risk" },
-	{ name: "Data export v1", owner: "Engineering", target: "GA release", timeline: "Aug 30", status: "on-track" },
-	{ name: "Mobile beta", owner: "Product", target: "500 beta users", timeline: "Sep 15", status: "pending" }
+	{ name: "PLG expansion", owner: "Growth", target: "+40% trial starts", timeline: "Jul 1 – Aug 15", status: CanvasInitiativeStates.OnTrack },
+	{ name: "Enterprise pilot", owner: "Sales", target: "3 design partners", timeline: "Jul 15 – Sep 30", status: CanvasInitiativeStates.AtRisk },
+	{ name: "Data export v1", owner: "Engineering", target: "GA release", timeline: "Aug 30", status: CanvasInitiativeStates.OnTrack },
+	{ name: "Mobile beta", owner: "Product", target: "500 beta users", timeline: "Sep 15", status: CanvasInitiativeStates.Pending }
 ];
 
 /** Canvas doc — top risk rows. */
 export const CANVAS_RISKS: CanvasRisk[] =
 [
-	{ risk: "PLG conversion underperforms if onboarding rework slips past Aug 1", severity: "high" },
-	{ risk: "Enterprise pilot stalls if Data Export v1 misses Aug 30 deadline", severity: "high" },
-	{ risk: "Mobile beta scope creep delays Q4 GA by a sprint or more", severity: "medium" }
+	{ risk: "PLG conversion underperforms if onboarding rework slips past Aug 1", severity: CanvasRiskSeverities.High },
+	{ risk: "Enterprise pilot stalls if Data Export v1 misses Aug 30 deadline", severity: CanvasRiskSeverities.High },
+	{ risk: "Mobile beta scope creep delays Q4 GA by a sprint or more", severity: CanvasRiskSeverities.Medium }
 ];
