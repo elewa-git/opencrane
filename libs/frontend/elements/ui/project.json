@@ -32,7 +32,9 @@
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/__tests__/*.stories.ts",
-				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*",
+				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*"
 			],
 			"options": {
 				"browserTarget": "frontend-elements-ui:build-storybook",
@@ -60,7 +62,9 @@
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/__tests__/*.stories.ts",
-				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*",
+				"{workspaceRoot}/libs/frontend/features/context/src/**/__tests__/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/context/src/lib/components/canvas-doc/**/*"
 			],
 			"outputs": [
 				"{options.outputDir}"

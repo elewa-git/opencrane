@@ -1,81 +1,84 @@
 <div class="wo-canvas">
-	<div class="wo-canvas__bar">
-		<div class="wo-canvas__bar-title">
-			<span>Q3 Strategy</span>
-			<span class="wo-mono">· draft</span>
-		</div>
-		<div class="wo-canvas__bar-actions wo-mono">
-			<button type="button" [class.wo-canvas__saved]="saved()" (click)="save()">
-				<i class="pi" [class.pi-check]="saved()" [class.pi-save]="!saved()"></i>
-				{{ saved() ? "saved" : "save" }}
-			</button>
-			<button type="button"><i class="pi pi-download"></i> export</button>
-		</div>
-	</div>
-
-	<div class="wo-canvas__body wo-scrollable">
-		<div class="wo-canvas__generated wo-mono">
-			<i class="pi pi-bolt"></i>
-			generated · Q3 strategy draft · alex.oc
-		</div>
-
-		<h2>Q3 2026 Strategy</h2>
-		<p class="wo-canvas__meta wo-mono">acme-corp · Product · draft · Jun 3 2026</p>
-
-		<p class="wo-canvas__section-title">Executive Summary</p>
-		<p class="wo-canvas__prose">
-			Q3 targets $4.2M ARR (+18% QoQ) with a focus on expanding self-serve adoption and converting enterprise
-			pipeline. Four initiatives carry this quarter: PLG expansion, an enterprise design-partner pilot, the data
-			export GA release, and a mobile beta. Resourcing decisions above $50K require VP sign-off per org policy v2.1.
-		</p>
-
-		<p class="wo-canvas__section-title">Growth Targets</p>
-		@for (metric of metrics; track metric.label) {
-			<div class="wo-canvas__metric">
-				<span class="wo-canvas__metric-label">{{ metric.label }}</span>
-				<span class="wo-canvas__metric-value">
-					<span class="wo-mono">{{ metric.value }}</span>
-					<span class="wo-canvas__metric-note">{{ metric.note }}</span>
-				</span>
+	@if (document(); as canvasDocument) {
+		<div class="wo-canvas__bar">
+			<div class="wo-canvas__bar-title">
+				<span>{{ canvasDocument.navigationTitle }}</span>
+				<span class="wo-mono">· {{ canvasDocument.lifecycle }}</span>
 			</div>
-		}
+			<div class="wo-canvas__bar-actions wo-mono">
+				<button type="button" [class.wo-canvas__saved]="saveState() === saveStates.Saved" [disabled]="saveState() === saveStates.Saving" (click)="saveRequested.emit()">
+					<i class="pi" [class.pi-check]="saveState() === saveStates.Saved" [class.pi-save]="saveState() !== saveStates.Saved"></i>
+					{{ saveLabel(saveState()) }}
+				</button>
+				<button type="button" (click)="exportRequested.emit()"><i class="pi pi-download"></i> Export</button>
+			</div>
+		</div>
 
-		<p class="wo-canvas__section-title">Key Initiatives</p>
-		<table class="wo-canvas__table">
-			<thead>
-				<tr>
-					<th>Initiative</th>
-					<th>Owner</th>
-					<th>Timeline</th>
-					<th>Status</th>
-				</tr>
-			</thead>
-			<tbody>
-				@for (initiative of initiatives; track initiative.name) {
+		<div
+			aria-label="Canvas document"
+			class="wo-canvas__body wo-scrollable"
+			tabindex="0"
+		>
+			<div class="wo-canvas__generated wo-mono">
+				<i class="pi pi-bolt"></i>
+				{{ canvasDocument.provenance }}
+			</div>
+
+			<h2>{{ canvasDocument.title }}</h2>
+			<p class="wo-canvas__meta wo-mono">{{ canvasDocument.metadata.join(" · ") }}</p>
+
+			<p class="wo-canvas__section-title">Executive Summary</p>
+			<p class="wo-canvas__prose">{{ canvasDocument.executiveSummary }}</p>
+
+			<p class="wo-canvas__section-title">Growth Targets</p>
+			@for (metric of canvasDocument.metrics; track metric.label) {
+				<div class="wo-canvas__metric">
+					<span class="wo-canvas__metric-label">{{ metric.label }}</span>
+					<span class="wo-canvas__metric-value">
+						<span class="wo-mono">{{ metric.value }}</span>
+						<span class="wo-canvas__metric-note">{{ metric.note }}</span>
+					</span>
+				</div>
+			}
+
+			<p class="wo-canvas__section-title">Key Initiatives</p>
+			<table class="wo-canvas__table">
+				<caption class="wo-canvas__table-caption">Key initiatives</caption>
+				<thead>
 					<tr>
-						<td>{{ initiative.name }}</td>
-						<td class="wo-canvas__table-muted">{{ initiative.owner }}</td>
-						<td class="wo-canvas__table-timeline wo-mono">{{ initiative.timeline }}</td>
-						<td>
-							<span
-								class="wo-canvas__status wo-mono"
-								[style.color]="statusStyle(initiative.status).color"
-								[style.border-color]="statusStyle(initiative.status).color"
-							>{{ statusStyle(initiative.status).label }}</span>
-						</td>
+						<th>Initiative</th>
+						<th>Owner</th>
+						<th>Timeline</th>
+						<th>Status</th>
 					</tr>
-				}
-			</tbody>
-		</table>
+				</thead>
+				<tbody>
+					@for (initiative of canvasDocument.initiatives; track initiative.name) {
+						<tr>
+							<td>{{ initiative.name }}</td>
+							<td class="wo-canvas__table-muted">{{ initiative.owner }}</td>
+							<td class="wo-canvas__table-timeline wo-mono">{{ initiative.timeline }}</td>
+							<td><wo-scope-chip [label]="initiativeStatusLabel(initiative.status)" [tone]="initiativeStatusTone(initiative.status)" [appearance]="chipAppearances.Outlined" /></td>
+						</tr>
+					}
+				</tbody>
+			</table>
 
-		<p class="wo-canvas__section-title">Top Risks</p>
-		@for (risk of risks; track $index) {
-			<div class="wo-canvas__risk" [class.wo-canvas__risk--high]="risk.severity === 'high'">
-				<i class="pi pi-exclamation-triangle"></i>
-				<p>{{ risk.risk }}</p>
-			</div>
-		}
+			<p class="wo-canvas__section-title">Top Risks</p>
+			@for (risk of canvasDocument.risks; track risk.risk) {
+				<div class="wo-canvas__risk" [class.wo-canvas__risk--high]="risk.severity === riskSeverities.High">
+					<i class="pi pi-exclamation-triangle"></i>
+					<p>{{ risk.risk }}</p>
+				</div>
+			}
 
-		<p class="wo-canvas__footer wo-mono">Grounded in 11 Cognee citations · org · dept · project · personal scopes</p>
-	</div>
+			<p class="wo-canvas__footer wo-mono">Grounded in {{ canvasDocument.citationCount }} citations · {{ citationScopeSummary(canvasDocument.citationScopes) }}</p>
+		</div>
+	} @else {
+		<div class="wo-canvas__empty" role="status">
+			<i class="pi pi-table"></i>
+			<p>No canvas document is selected.</p>
+			<span>Select a document to inspect its admitted metrics, initiatives, risks, and citations.</span>
+		</div>
+	}
 </div>
