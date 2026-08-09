@@ -1,9 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import { _CompilePersonaDraftInstructions } from "../persona-draft-instruction-compiler.js";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "../persona-draft-instruction-compiler.types.js";
 
 /** Complete reviewed interpolation fixture. */
-const _VARIABLES = { response_style: "Lead with the conclusion.", feedback_approach: "Present evidence.", challenge_mode: "Name the risk directly.", relationship_frame: "thinking partner", secondary_blend: "Also value precision." };
+const _VARIABLES: PersonaTemplateVariables = {
+	[PersonaTemplateVariable.ResponseStyle]: "Lead with the conclusion.",
+	[PersonaTemplateVariable.FeedbackApproach]: "Present evidence.",
+	[PersonaTemplateVariable.ChallengeMode]: "Name the risk directly.",
+	[PersonaTemplateVariable.RelationshipFrame]: "thinking partner",
+	[PersonaTemplateVariable.SecondaryBlend]: "Also value precision.",
+};
 
 describe("_CompilePersonaDraftInstructions", () =>
 {
@@ -18,6 +25,6 @@ describe("_CompilePersonaDraftInstructions", () =>
 		expect(_CompilePersonaDraftInstructions("{{response_style}}", _VARIABLES)).toBeNull();
 		expect(_CompilePersonaDraftInstructions("{{response_style}}{{response_style}}{{feedback_approach}}{{challenge_mode}}{{relationship_frame}}", _VARIABLES)).toBeNull();
 		expect(_CompilePersonaDraftInstructions("{{response_style}}{{feedback_approach}}{{challenge_mode}}{{relationship_frame}}{{unknown}}", _VARIABLES)).toBeNull();
-		expect(_CompilePersonaDraftInstructions("{{response_style}}{{feedback_approach}}{{challenge_mode}}{{relationship_frame}}{{secondary_blend}}", { ..._VARIABLES, response_style: "{{unsafe}}" })).toBeNull();
+		expect(_CompilePersonaDraftInstructions("{{response_style}}{{feedback_approach}}{{challenge_mode}}{{relationship_frame}}{{secondary_blend}}", { ..._VARIABLES, [PersonaTemplateVariable.ResponseStyle]: "{{unsafe}}" })).toBeNull();
 	});
 });

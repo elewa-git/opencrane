@@ -46,6 +46,10 @@ export interface StoredPersonaScore
 	readonly opennessTotal: number;
 	/** Exact highest-colour candidate set serialized by Prisma. */
 	readonly primaryCandidates: readonly string[];
+	/** Exact initial secondary-colour candidate set serialized by Prisma. */
+	readonly secondaryCandidates: readonly string[];
+	/** Exact initial modifier candidate set serialized by Prisma. */
+	readonly modifierCandidates: readonly string[];
 }
 
 /** Owner-bound request to append one exact tie resolution. */

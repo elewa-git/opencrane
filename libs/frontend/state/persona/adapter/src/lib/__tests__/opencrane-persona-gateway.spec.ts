@@ -25,7 +25,7 @@ describe("OpenCranePersonaGateway", function _OpenCranePersonaGatewaySuite()
 				answeredQuestionCount: 1,
 				questionCount: 1,
 				personaRevisionId: "revision-1",
-				questions: [{ id: "q1", category: "pace", prompt: "Choose", ordinal: 1, choices: [{ id: "a", label: "Fast", ordinal: 1 }], selectedChoiceId: "a" }],
+				questions: [{ id: "q1", category: "pace", prompt: "Choose", ordinal: 1, choices: [{ id: "a", label: "Fast", ordinal: 1 }, { id: "b", label: "Deliberately", ordinal: 2 }], selectedChoiceId: "a" }],
 				resolution: null,
 				result: {
 					displayName: "The Commander",
@@ -58,7 +58,7 @@ describe("OpenCranePersonaGateway", function _OpenCranePersonaGatewaySuite()
 				answeredQuestionCount: 1,
 				questionCount: 2,
 				personaRevisionId: null,
-				questions: [{ id: "q1", category: "pace", prompt: "Choose", ordinal: 1, choices: [{ id: "a", label: "Fast", ordinal: 1 }], selectedChoiceId: "a" }],
+				questions: [{ id: "q1", category: "pace", prompt: "Choose", ordinal: 1, choices: [{ id: "a", label: "Fast", ordinal: 1 }, { id: "b", label: "Deliberately", ordinal: 2 }], selectedChoiceId: "a" }],
 				resolution: null,
 				result: null
 			}

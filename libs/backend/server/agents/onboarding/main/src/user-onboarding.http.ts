@@ -42,6 +42,10 @@ export class UserOnboardingPersonaWorkflowCoordinator implements UserOnboardingP
 	/** @inheritdoc */
 	async surveyStarted(owner: UserOnboardingOwner, interviewId: string): Promise<void>
 	{
+		// Reconcile an already-approved pinned interview before a newer persona interview may be
+		// observed. This closes the post-commit notification gap without letting a restart replace
+		// the only onboarding evidence that can advance the owner to bootstrap chat.
+		await this.authority.readOrCreate(owner);
 		_RequireAccepted(await this.authority.startSurvey(owner, interviewId));
 	}
 

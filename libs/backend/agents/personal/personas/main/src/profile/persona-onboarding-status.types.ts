@@ -1,5 +1,5 @@
 import { PersonaOnboardingApiStates } from "./persona-lifecycle.types.js";
-import type { PersonaScoreResult } from "../scoring/persona-scorer.types.js";
+import type { PersonaColourValues, PersonaModifierValues, PersonaScoreResult } from "../scoring/persona-scorer.types.js";
 
 /** Owner-visible resumable state of the required personal persona onboarding flow. */
 export interface PersonaOnboardingStatus
@@ -56,11 +56,11 @@ export interface PersonaStatusResult
 	/** Reviewed archetype/modifier display name. */
 	readonly displayName: string;
 	/** Resolved primary colour. */
-	readonly primaryColour: string;
+	readonly primaryColour: PersonaColourValues;
 	/** Resolved secondary blend colour. */
-	readonly secondaryColour: string;
+	readonly secondaryColour: PersonaColourValues;
 	/** Resolved Explorer/Guardian modifier. */
-	readonly modifier: string;
+	readonly modifier: PersonaModifierValues;
 	/** Authoritative raw colour counters. */
 	readonly colourScores: PersonaScoreResult["colours"];
 	/** Authoritative raw modifier counters. */

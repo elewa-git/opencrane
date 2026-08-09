@@ -45,6 +45,8 @@ INSERT INTO "persona_interviews" (
         'personal-agent-scoring', 1, 'personal-agent-interpolation', 1),
     ('interview-2', 'profile-1', 'user-1', 'personal-agent-onboarding', 1,
         'personal-agent-scoring', 1, 'personal-agent-interpolation', 1),
+    ('interview-score-invalid', 'profile-1', 'user-1', 'personal-agent-onboarding', 1,
+        'personal-agent-scoring', 1, 'personal-agent-interpolation', 1),
     ('interview-foreign-silo', 'profile-foreign-silo', 'user-1', 'personal-agent-onboarding', 1,
         'personal-agent-scoring', 1, 'personal-agent-interpolation', 1),
     ('interview-wrong-subject', 'profile-wrong-subject', 'user-2', 'personal-agent-onboarding', 1,
@@ -59,8 +61,26 @@ FROM "persona_questions" question
 WHERE question."question_set_id" = 'personal-agent-onboarding' AND question."question_set_version" = 1;
 SELECT pg_temp.expect_failure('answer must bind an exact reviewed choice', $statement$
     INSERT INTO "persona_interview_answers" ("id", "interview_id", "question_set_id", "question_set_version", "question_id", "choice_id")
-    VALUES ('invalid-choice','interview-1','personal-agent-onboarding',1,'q1-decision-speed','missing')
+    VALUES ('invalid-choice','interview-2','personal-agent-onboarding',1,'q1-decision-speed','missing')
 $statement$, 'persona_interview_answers_question_set_id_question_set_ver_fkey');
+INSERT INTO "persona_interview_answers" ("id", "interview_id", "question_set_id", "question_set_version", "question_id", "choice_id")
+SELECT 'answer-score-invalid-' || question."ordinal", 'interview-score-invalid', 'personal-agent-onboarding', 1, question."question_id", 'a'
+FROM "persona_questions" question
+WHERE question."question_set_id" = 'personal-agent-onboarding' AND question."question_set_version" = 1;
+UPDATE "persona_interviews" SET "state" = 'completed', "completed_at" = clock_timestamp() WHERE "id" = 'interview-score-invalid';
+SELECT pg_temp.expect_failure('score must retain exact downstream candidate evidence', $statement$
+    INSERT INTO "persona_interview_scores" (
+        "interview_id", "scoring_policy_id", "scoring_policy_version", "scoring_policy_digest",
+        "ordered_answer_ids", "ordered_choice_ids", "red", "yellow", "green", "blue", "colour_total",
+        "explorer", "guardian", "openness_total", "primary_candidates", "secondary_candidates", "modifier_candidates"
+    )
+    SELECT 'interview-score-invalid', 'personal-agent-scoring', 1, 'sha256:dd84a619e9a465cce882e63e523946502a325dd5b0dcb56fd7d33da6fd072af9',
+        array_agg(answer."id" ORDER BY question."ordinal"), array_agg(answer."question_id" || ':' || answer."choice_id" ORDER BY question."ordinal"),
+        23, 3, 0, 7, 33, 6, 0, 6, ARRAY['Red']::"PersonaColour"[], ARRAY['Green']::"PersonaColour"[], ARRAY['Explorer']::"PersonaOpennessModifier"[]
+    FROM "persona_interview_answers" answer
+    JOIN "persona_questions" question ON question."question_set_id" = answer."question_set_id" AND question."question_set_version" = answer."question_set_version" AND question."question_id" = answer."question_id"
+    WHERE answer."interview_id" = 'interview-score-invalid'
+$statement$, 'exact downstream candidate sets');
 UPDATE "persona_interviews" SET "state" = 'completed', "completed_at" = clock_timestamp() WHERE "id" = 'interview-1';
 SELECT pg_temp.expect_failure('completed interview cannot gain answers', $statement$
     INSERT INTO "persona_interview_answers" ("id", "interview_id", "question_set_id", "question_set_version", "question_id", "choice_id")
@@ -100,6 +120,7 @@ SELECT 'persona-1', 'profile-1', 1, 'commander-explorer', 1, 'sha256:8cf1b0a5180
         'orderedAnswerIds', score."ordered_answer_ids", 'orderedChoiceIds', score."ordered_choice_ids",
         'colours', jsonb_build_object('red',23,'yellow',3,'green',0,'blue',7,'total',33),
         'openness', jsonb_build_object('explorer',6,'guardian',0,'total',6),
+        'tieResolutions', jsonb_build_array(),
         'primary','red','secondary','blue','modifier','explorer'
     ), 'Red', 'Blue', 'Explorer', '# Compiled instructions', 'user-1'
 FROM "persona_interview_scores" score WHERE score."interview_id" = 'interview-1';
@@ -119,6 +140,23 @@ INSERT INTO "persona_insights" ("id", "persona_revision_id", "category", "statem
     ('insight-2','persona-1','Feedback','Feedback evidence','interview-1','personal-agent-onboarding',1,'q3-feedback-preference','answer-3'),
     ('insight-3','persona-1','Challenge','Challenge evidence','interview-1','personal-agent-onboarding',1,'q8-challenge-preference','answer-8'),
     ('insight-4','persona-1','Relationship','Relationship evidence','interview-1','personal-agent-onboarding',1,'q9-relationship-model','answer-9');
+INSERT INTO "persona_revisions" (
+    "id", "persona_profile_id", "revision", "soul_template_id", "soul_template_version", "soul_template_digest", "interview_id",
+    "scoring_policy_id", "scoring_policy_version", "scoring_policy_digest", "interpolation_map_id", "interpolation_map_version", "interpolation_map_digest",
+    "scoring_evidence", "primary_colour", "secondary_colour", "modifier", "compiled_instructions", "authored_by"
+)
+SELECT 'persona-invalid-evidence', "persona_profile_id", 99, "soul_template_id", "soul_template_version", "soul_template_digest", "interview_id",
+    "scoring_policy_id", "scoring_policy_version", "scoring_policy_digest", "interpolation_map_id", "interpolation_map_version", "interpolation_map_digest",
+    "scoring_evidence" - 'tieResolutions', "primary_colour", "secondary_colour", "modifier", "compiled_instructions", "authored_by"
+FROM "persona_revisions" WHERE "id" = 'persona-1';
+INSERT INTO "persona_insights" ("id", "persona_revision_id", "category", "statement", "interview_id", "question_set_id", "question_set_version", "question_id", "answer_id") VALUES
+    ('invalid-evidence-insight-1','persona-invalid-evidence','Response','Response evidence','interview-1','personal-agent-onboarding',1,'q2-response-preference','answer-2'),
+    ('invalid-evidence-insight-2','persona-invalid-evidence','Feedback','Feedback evidence','interview-1','personal-agent-onboarding',1,'q3-feedback-preference','answer-3'),
+    ('invalid-evidence-insight-3','persona-invalid-evidence','Challenge','Challenge evidence','interview-1','personal-agent-onboarding',1,'q8-challenge-preference','answer-8');
+SELECT pg_temp.expect_failure('approval requires the exact complete scoring evidence document', $statement$
+    UPDATE "persona_revisions" SET "state" = 'approved', "approved_by" = 'user-1', "approved_at" = clock_timestamp()
+    WHERE "id" = 'persona-invalid-evidence'
+$statement$, 'scoring evidence must replay the immutable score vector');
 UPDATE "persona_revisions" SET "state" = 'approved', "approved_by" = 'user-1', "approved_at" = clock_timestamp() WHERE "id" = 'persona-1';
 INSERT INTO "persona_revisions" (
     "id", "persona_profile_id", "revision", "soul_template_id", "soul_template_version", "soul_template_digest", "interview_id",
@@ -137,7 +175,6 @@ SELECT pg_temp.expect_failure('persona revision approver must own the profile an
     UPDATE "persona_revisions" SET "state" = 'approved', "approved_by" = 'attacker', "approved_at" = clock_timestamp()
     WHERE "id" = 'persona-pending-approval'
 $statement$, 'approval actor must equal the profile and interview owner');
-UPDATE "persona_profiles" SET "active_revision_id" = 'persona-1' WHERE "id" = 'profile-1';
 SELECT pg_temp.expect_failure('approved persona content is immutable', $statement$
     UPDATE "persona_revisions" SET "compiled_instructions" = 'changed' WHERE "id" = 'persona-1'
 $statement$, 'approved PersonaRevision is immutable');
@@ -170,6 +207,10 @@ BEGIN
     END IF;
 END;
 $$;
+SELECT pg_temp.expect_failure('approval rejects a draft from a replaced initial-survey interview', $statement$
+    UPDATE "persona_revisions" SET "state" = 'approved', "approved_by" = 'user-1', "approved_at" = clock_timestamp()
+    WHERE "id" = 'persona-pending-approval'
+$statement$, 'approval requires the current initial-survey interview');
 SELECT pg_temp.expect_failure('onboarding revision must derive from the pinned interview', $statement$
     UPDATE "user_onboardings" SET "state" = 'bootstrap_chat_pending', "persona_revision_id" = 'persona-1', "updated_at" = clock_timestamp()
     WHERE "id" = 'onboarding-1'
@@ -179,6 +220,11 @@ SELECT pg_temp.expect_failure('onboarding rejects an unapproved persona revision
     UPDATE "user_onboardings" SET "state" = 'bootstrap_chat_pending', "persona_revision_id" = 'persona-pending-approval', "updated_at" = clock_timestamp()
     WHERE "id" = 'onboarding-1'
 $statement$, 'revision must be approved, owned by the interview profile, and derived from the pinned interview');
+UPDATE "persona_profiles" SET "active_revision_id" = 'persona-1' WHERE "id" = 'profile-1';
+SELECT pg_temp.expect_failure('onboarding cannot replace an interview after its persona became active', $statement$
+    UPDATE "user_onboardings" SET "persona_interview_id" = 'interview-2', "updated_at" = clock_timestamp()
+    WHERE "id" = 'onboarding-1'
+$statement$, 'cannot replace an interview after its persona became active');
 UPDATE "user_onboardings" SET "state" = 'bootstrap_chat_pending', "persona_revision_id" = 'persona-1', "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1';
 SELECT pg_temp.expect_failure('interview provenance freezes after the initial survey', $statement$
     UPDATE "user_onboardings" SET "persona_interview_id" = 'interview-2', "updated_at" = clock_timestamp() WHERE "id" = 'onboarding-1'

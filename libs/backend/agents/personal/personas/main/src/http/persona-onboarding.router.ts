@@ -73,7 +73,9 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 		if (caller === null) return;
 		try
 		{
-			response.status(200).json(await dependencies.status.readStatus(caller.siloId, caller.userId));
+			const status = await dependencies.status.readStatus(caller.siloId, caller.userId);
+			if (status.interviewId !== null) await dependencies.workflow.surveyStarted(caller, status.interviewId);
+			response.status(200).json(status);
 		}
 		catch (err)
 		{
@@ -86,6 +88,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 	{
 		const caller = _requireCaller(request, response, dependencies);
 		if (caller === null) return;
+		if (!_isEmptyObject(request.body)) { _respond(response, 400, "invalid_persona_interview"); return; }
 		try
 		{
 			const ready = await _ensure(caller, dependencies);
@@ -165,7 +168,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __CompletePersonaInterview(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, completedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			response.status(200).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : "resolution", ..._scoreProjection(result.score) });
+			response.status(200).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : PersonaOnboardingApiStates.Resolution, ..._scoreProjection(result.score) });
 		}
 		catch (err)
 		{
@@ -188,7 +191,7 @@ export function __CreatePersonaOnboardingRouter(dependencies: PersonaOnboardingR
 			if (ready === null) { _respond(response, 503, "persona_onboarding_unavailable"); return; }
 			const result = await __ResolvePersonaInterviewTie(dependencies.interviews, { userId: caller.userId, personaProfileId: ready.personaProfileId, interviewId, kind, selectedValue, resolvedAt: dependencies.clock.now().toISOString() });
 			if (result.outcome === PersonaLifecycleOutcomes.Denied) { _respond(response, _interviewDenialStatus(result.reason), result.reason); return; }
-			response.status(201).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : "resolution", ..._scoreProjection(result.score) });
+			response.status(201).json({ interviewId, state: result.score.resolutionRequired === null ? PersonaOnboardingApiStates.Completed : PersonaOnboardingApiStates.Resolution, ..._scoreProjection(result.score) });
 		}
 		catch (err)
 		{

@@ -31,6 +31,9 @@ export enum PersonaTieKinds
 	Modifier = "modifier",
 }
 
+/** Exact colour or modifier value that may participate in a governed persona selection. */
+export type PersonaSelectionValue = PersonaColourValues | PersonaModifierValues;
+
 /** One persisted answer joined to its exact reviewed scoring weight. */
 export interface PersonaWeightedAnswer
 {
@@ -60,9 +63,9 @@ export interface PersonaTieChoice
 	/** Boundary being resolved. */
 	readonly kind: PersonaTieKinds;
 	/** Exact candidates shown to the owner. */
-	readonly candidates: readonly string[];
+	readonly candidates: readonly PersonaSelectionValue[];
 	/** Candidate explicitly selected by the owner. */
-	readonly selectedValue: string;
+	readonly selectedValue: PersonaSelectionValue;
 }
 
 /** Lossless raw colour vector. */
@@ -97,7 +100,7 @@ export interface PersonaResolutionRequired
 	/** Boundary requiring the user's choice. */
 	readonly kind: PersonaTieKinds;
 	/** Exact tied candidates, in stable product order. */
-	readonly candidates: readonly string[];
+	readonly candidates: readonly PersonaSelectionValue[];
 }
 
 /** Ordered candidate evidence derived by the authoritative persona scoring policy. */
@@ -109,6 +112,21 @@ export interface PersonaScoreCandidateEvidence
 	readonly secondary: readonly PersonaColourValues[];
 	/** Modifier candidates, or an empty vector until both colour boundaries are resolved. */
 	readonly modifier: readonly PersonaModifierValues[];
+}
+
+/** Immutable inputs required to replay a previously persisted persona score. */
+export interface PersonaScoreReplayEvidence
+{
+	/** Ordered immutable answer identities used in the original calculation. */
+	readonly orderedAnswerIds: readonly string[];
+	/** Ordered exact question and choice coordinates used in the original calculation. */
+	readonly orderedChoiceIds: readonly string[];
+	/** Authoritative raw colour counters. */
+	readonly colours: PersonaColourScores;
+	/** Authoritative raw modifier counters. */
+	readonly openness: PersonaOpennessScores;
+	/** Exact append-only tie resolutions admitted before drafting. */
+	readonly tieResolutions: readonly PersonaTieChoice[];
 }
 
 /** Fully scored result, with a stable next resolution when still ambiguous. */
@@ -139,4 +157,25 @@ export interface PersonaAuthoritativeScoreResult extends PersonaScoreResult
 {
 	/** Ordered candidates reached while replaying the score's current append-only tie evidence. */
 	readonly candidateEvidence: PersonaScoreCandidateEvidence;
+}
+
+/** Exact resolved score evidence serialized into one immutable persona revision. */
+export interface PersonaPersistedScoreEvidence
+{
+	/** Ordered immutable answer identities used in the calculation. */
+	readonly orderedAnswerIds: readonly string[];
+	/** Ordered exact question and choice coordinates used in the calculation. */
+	readonly orderedChoiceIds: readonly string[];
+	/** Authoritative raw colour counters. */
+	readonly colours: PersonaColourScores;
+	/** Authoritative raw modifier counters. */
+	readonly openness: PersonaOpennessScores;
+	/** Exact append-only tie resolutions admitted before drafting. */
+	readonly tieResolutions: readonly PersonaTieChoice[];
+	/** Resolved primary colour. */
+	readonly primary: PersonaColourValues;
+	/** Resolved secondary colour. */
+	readonly secondary: PersonaColourValues;
+	/** Resolved working-style modifier. */
+	readonly modifier: PersonaModifierValues;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { _ScorePersona } from "../persona-scorer.js";
+import { _ReplayPersonaScore, _ScorePersona } from "../persona-scorer.js";
 import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaWeightedAnswer } from "../persona-scorer.types.js";
 
 /** Build one reviewed answer weight fixture. */
@@ -35,14 +35,23 @@ describe("_ScorePersona", () =>
 		const secondary = _ScorePersona(secondaryAnswers, []);
 		expect(secondary?.resolutionRequired).toEqual({ kind: PersonaTieKinds.Secondary, candidates: [PersonaColourValues.Yellow, PersonaColourValues.Blue] });
 		expect(secondary?.candidateEvidence).toEqual({ primary: [PersonaColourValues.Red], secondary: [PersonaColourValues.Yellow, PersonaColourValues.Blue], modifier: [] });
-		const modifier = _ScorePersona(secondaryAnswers, [{ kind: PersonaTieKinds.Secondary, candidates: ["yellow", "blue"], selectedValue: "blue" }]);
+		const modifier = _ScorePersona(secondaryAnswers, [{ kind: PersonaTieKinds.Secondary, candidates: [PersonaColourValues.Yellow, PersonaColourValues.Blue], selectedValue: PersonaColourValues.Blue }]);
 		expect(modifier?.resolutionRequired).toEqual({ kind: PersonaTieKinds.Modifier, candidates: [PersonaModifierValues.Explorer, PersonaModifierValues.Guardian] });
 	});
 
 	it("rejects stale candidate sets and invalid weights", () =>
 	{
 		const tied = [_Answer("q1", { red: 1, blue: 1, explorer: 1 })];
-		expect(_ScorePersona(tied, [{ kind: PersonaTieKinds.Primary, candidates: ["blue", "red"], selectedValue: "red" }])?.primary).toBeNull();
+		expect(_ScorePersona(tied, [{ kind: PersonaTieKinds.Primary, candidates: [PersonaColourValues.Blue, PersonaColourValues.Red], selectedValue: PersonaColourValues.Red }])?.primary).toBeNull();
 		expect(_ScorePersona([_Answer("q1", { red: -1, explorer: 1 })], [])).toBeNull();
+	});
+
+	it("canonicalizes persisted tie evidence by governed boundary", function _CanonicalTieOrder()
+	{
+		const modifier = { kind: PersonaTieKinds.Modifier, candidates: [PersonaModifierValues.Explorer, PersonaModifierValues.Guardian], selectedValue: PersonaModifierValues.Explorer };
+		const primary = { kind: PersonaTieKinds.Primary, candidates: [PersonaColourValues.Red, PersonaColourValues.Blue], selectedValue: PersonaColourValues.Red };
+		const replayed = _ReplayPersonaScore({ orderedAnswerIds: ["answer-1"], orderedChoiceIds: ["question-1:a"], colours: { red: 2, yellow: 0, green: 0, blue: 2, total: 4 }, openness: { explorer: 1, guardian: 1, total: 2 }, tieResolutions: [modifier, primary] });
+
+		expect(replayed?.tieResolutions.map(function _Kind(resolution) { return resolution.kind; })).toEqual([PersonaTieKinds.Primary, PersonaTieKinds.Modifier]);
 	});
 });
