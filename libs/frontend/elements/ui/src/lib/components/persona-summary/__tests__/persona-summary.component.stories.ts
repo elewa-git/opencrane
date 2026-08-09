@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { PersonaSummaryComponent } from "./persona-summary.component";
-import { PersonaArchetypeScore, PersonaArchetypeTones } from "./persona-summary.types";
+import { PersonaSummaryComponent } from "../persona-summary.component";
+import { PersonaArchetypeScore, PersonaArchetypeTones } from "../persona-summary.types";
 
 /** Stable complete score vector used by persona-summary stories. */
 const _SCORES: readonly PersonaArchetypeScore[] =
@@ -18,6 +18,16 @@ const meta: Meta<PersonaSummaryComponent> =
 	title: "Foundation/Persona summary",
 	component: PersonaSummaryComponent,
 	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A reviewable presentation of a persona result and its supplied score vector. It makes the basis for an owner decision legible without turning a visual result into an active persona."
+			}
+		}
+	},
 	args:
 	{
 		componentId: "persona-summary",
@@ -38,12 +48,14 @@ type Story = StoryObj<PersonaSummaryComponent>;
 /** Typical reviewed persona with a complete four-colour vector. */
 export const Typical: Story =
 {
+	parameters: { docs: { description: { story: "The standard reviewed result with an explicit four-archetype vector. It is the baseline for the primary archetype, secondary influence, modifier, and complete evidence distribution." } } },
 	tags: ["visual-test"]
 };
 
 /** Narrow layout with long translated result content. */
 export const NarrowLongContent: Story =
 {
+	parameters: { docs: { description: { story: "Longer Dutch result content in the minimum supported reading width. It guards the review surface against clipped evidence or an unreadable score explanation in localized use." } } },
 	tags: ["visual-test"],
 	render: function render(args)
 	{

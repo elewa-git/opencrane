@@ -1,13 +1,23 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { SectionHeadingComponent } from "./section-heading.component";
+import { SectionHeadingComponent } from "../section-heading.component";
 
 /** Storybook catalogue metadata for retained section headings. */
 const meta: Meta<SectionHeadingComponent> =
 {
 	title: "Foundation/Section heading",
 	component: SectionHeadingComponent,
-	tags: ["autodocs"]
+	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A structural heading with optional explanatory copy. It supplies hierarchy and context while leaving the surrounding route responsible for actions and data."
+			}
+		}
+	}
 };
 
 export default meta;
@@ -18,6 +28,7 @@ type Story = StoryObj<SectionHeadingComponent>;
 /** Typical heading with explanatory copy. */
 export const Typical: Story =
 {
+	parameters: { docs: { description: { story: "The ordinary two-line section introduction used before a constrained configuration decision. It is the baseline for typography, spacing, and readable supporting copy." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -29,6 +40,7 @@ export const Typical: Story =
 /** Long and localised text verifies wrapping without clipping. */
 export const LongLocalized: Story =
 {
+	parameters: { docs: { description: { story: "Longer Dutch content that exercises the supported wrapping behaviour. It protects translated UI from clipping, overlap, or a visually detached subtitle." } } },
 	tags: ["visual-test"],
 	args:
 	{

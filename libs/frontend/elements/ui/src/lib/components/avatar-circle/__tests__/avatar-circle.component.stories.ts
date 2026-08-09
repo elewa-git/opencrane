@@ -1,14 +1,24 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { AvatarCircleComponent } from "./avatar-circle.component";
-import { AvatarSizes, AvatarTones } from "./avatar-circle.types";
+import { AvatarCircleComponent } from "../avatar-circle.component";
+import { AvatarSizes, AvatarTones } from "../avatar-circle.types";
 
 /** Storybook catalogue metadata for finite avatar states. */
 const meta: Meta<AvatarCircleComponent> =
 {
 	title: "Foundation/Avatar circle",
 	component: AvatarCircleComponent,
-	tags: ["autodocs"]
+	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A labelled visual identity marker whose tone and size communicate context without carrying permissions or lifecycle state. The catalogue keeps every supported semantic treatment reviewable in one place."
+			}
+		}
+	}
 };
 
 export default meta;
@@ -19,6 +29,7 @@ type Story = StoryObj<AvatarCircleComponent>;
 /** Every supported semantic tone paired with representative sizes. */
 export const SemanticTonesAndSizes: Story =
 {
+	parameters: { docs: { description: { story: "The complete approved tone-and-size matrix, using representative initials and labels. It makes visual regressions across compact participant lists and prominent identity moments immediately comparable." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{

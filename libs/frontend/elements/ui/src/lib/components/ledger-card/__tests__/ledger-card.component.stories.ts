@@ -1,15 +1,25 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
 import { ScopeLevel } from "@opencrane/core";
-import { LedgerCardComponent } from "./ledger-card.component";
-import { LedgerCardKinds } from "./ledger-card.types";
+import { LedgerCardComponent } from "../ledger-card.component";
+import { LedgerCardKinds } from "../ledger-card.types";
 
 /** Storybook catalogue metadata for retained ledger states. */
 const meta: Meta<LedgerCardComponent> =
 {
 	title: "Foundation/Ledger card",
 	component: LedgerCardComponent,
-	tags: ["autodocs"]
+	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A presentational record of a supplied observation, policy, or action. It preserves the provenance and scope a feature gives it, but never infers or changes that record's authority."
+			}
+		}
+	}
 };
 
 export default meta;
@@ -20,6 +30,7 @@ type Story = StoryObj<LedgerCardComponent>;
 /** Observation, policy, and action states with representative metadata. */
 export const KindsAndScopes: Story =
 {
+	parameters: { docs: { description: { story: "Observation, policy, and action cards shown with distinct owner-supplied scopes. This is the comparison fixture for semantic labels, references, and compact ledger density." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -39,6 +50,7 @@ export const KindsAndScopes: Story =
 /** Resolved action keeps its evidence legible while visually receding. */
 export const Resolved: Story =
 {
+	parameters: { docs: { description: { story: "A completed action that visually recedes while retaining its evidence reference. Resolution is displayed from the supplied record rather than inferred from styling or client-side behaviour." } } },
 	tags: ["visual-test"],
 	args:
 	{

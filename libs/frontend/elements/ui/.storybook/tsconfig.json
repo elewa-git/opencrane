@@ -15,12 +15,12 @@
     "../**/*.spec.ts"
   ],
   "include": [
-    "../src/**/*.stories.ts",
-    "../src/**/*.stories.js",
-    "../src/**/*.stories.jsx",
-    "../src/**/*.stories.tsx",
-    "../src/**/*.stories.mdx",
-    "../../../features/onboarding/src/**/*.stories.ts",
+    "../src/**/__tests__/*.stories.ts",
+    "../src/**/__tests__/*.stories.js",
+    "../src/**/__tests__/*.stories.jsx",
+    "../src/**/__tests__/*.stories.tsx",
+    "../src/**/__tests__/*.stories.mdx",
+    "../../../features/onboarding/src/**/__tests__/*.stories.ts",
     "preview.ts"
   ]
 }
