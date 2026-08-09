@@ -54,7 +54,7 @@ async function _CaptureStory(context: BrowserContext, story: StorybookIndexEntry
 	{
 		await _OpenStableStory(page, story.id);
 		const maxDiffPixels = STORY_MAX_DIFF_PIXELS.get(story.id);
-		await expect(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
+		await expect.soft(page.locator("#storybook-root")).toHaveScreenshot(`${story.id}.png`,
 		{
 			maxDiffPixelRatio: maxDiffPixels === undefined ? STORY_MAX_DIFF_PIXEL_RATIO : undefined,
 			maxDiffPixels,
@@ -82,7 +82,7 @@ async function _AssertVisualTargets(page: Page, storyId: string): Promise<void>
 		const target = targets.nth(index);
 		const targetName = await target.getAttribute(VISUAL_TARGET_ATTRIBUTE);
 		expect(targetName, `${VISUAL_TARGET_ATTRIBUTE} must name each strict contract`).toMatch(/^[a-z0-9-]+$/u);
-		await expect(target).toHaveScreenshot(`${storyId}--${targetName}.png`,
+		await expect.soft(target).toHaveScreenshot(`${storyId}--${targetName}.png`,
 		{
 			maxDiffPixels: TARGET_MAX_DIFF_PIXELS
 		});
