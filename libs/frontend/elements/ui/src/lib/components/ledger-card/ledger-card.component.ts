@@ -1,7 +1,18 @@
 import { ChangeDetectionStrategy, Component, computed, input } from "@angular/core";
 
-import { LEDGER_KIND_STYLES, LedgerKindStyle, SCOPE_COLORS, ScopeLevel } from "@opencrane/core";
+import { ScopeLevel } from "@opencrane/core";
+import { LedgerCardKinds } from "./ledger-card.types";
 import { ScopeChipComponent } from "../scope-chip/scope-chip.component";
+import { ScopeChipTones } from "../scope-chip/scope-chip.types";
+
+/** Shared-chip tone for each knowledge scope rendered by ledger metadata. */
+const _SCOPE_TONES: Record<ScopeLevel, ScopeChipTones> =
+{
+	[ScopeLevel.Org]: ScopeChipTones.Organization,
+	[ScopeLevel.Dept]: ScopeChipTones.Department,
+	[ScopeLevel.Project]: ScopeChipTones.Project,
+	[ScopeLevel.Personal]: ScopeChipTones.Personal
+};
 
 /** Observation / policy / action ledger card (used in chat and ledger tab). */
 @Component({
@@ -14,11 +25,14 @@ import { ScopeChipComponent } from "../scope-chip/scope-chip.component";
 })
 export class LedgerCardComponent
 {
+	/** Entry-kind enum exposed to the template for typed class selection. */
+	public readonly kinds = LedgerCardKinds;
+
 	/** Entry id (e.g. "R1"). */
 	public readonly entryId = input.required<string>();
 
-	/** Entry kind ("observation" | "policy" | "action"). */
-	public readonly kind = input.required<string>();
+	/** Finite semantic entry kind; arbitrary visual values are deliberately rejected. */
+	public readonly kind = input.required<LedgerCardKinds>();
 
 	/** Entry label text. */
 	public readonly label = input.required<string>();
@@ -35,13 +49,10 @@ export class LedgerCardComponent
 	/** Dim the label (resolved entries). */
 	public readonly dimmed = input<boolean>(false);
 
-	/** Visual style for the current kind (memoised). */
-	public readonly style = computed<LedgerKindStyle>(() => LEDGER_KIND_STYLES[this.kind()] ?? LEDGER_KIND_STYLES["observation"]);
-
-	/** Scope accent colour for the scope chip (memoised). */
-	public readonly scopeColor = computed<string>(() =>
+	/** Semantic scope treatment for the scope chip. */
+	public readonly scopeTone = computed<ScopeChipTones>(() =>
 	{
 		const level = this.scope();
-		return level ? SCOPE_COLORS[level] : "var(--muted-foreground)";
+		return level ? _SCOPE_TONES[level] : ScopeChipTones.Neutral;
 	});
 }

@@ -15,14 +15,14 @@
 		max-width: 28rem;
 		text-align: center;
 		padding: 1.5rem 1rem;
-		border: 1px solid var(--border);
-		background: var(--card);
+		border: 1px solid var(--oc-border-default);
+		background: var(--oc-surface-subtle);
 	}
 
 	&__eyebrow {
-		font-family: var(--font-mono);
+		font-family: var(--oc-font-mono);
 		font-size: 0.75rem;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		text-transform: uppercase;
 		letter-spacing: 0.05em;
 		margin: 0 0 1rem;
@@ -30,15 +30,15 @@
 
 	&__brand {
 		font-size: 1.8rem;
-		font-weight: var(--font-weight-medium);
-		color: var(--foreground);
+		font-weight: var(--oc-font-weight-medium);
+		color: var(--oc-ink-strong);
 		margin: 0 0 1rem;
 		line-height: 1.2;
 	}
 
 	&__sub {
 		font-size: 0.95rem;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		margin: 0 0 2rem;
 		line-height: 1.5;
 	}

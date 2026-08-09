@@ -10,7 +10,9 @@
     "src/**/*.ts"
   ],
   "exclude": [
-    "**/*.spec.ts"
+    "**/*.spec.ts",
+    "**/*.stories.ts",
+    "**/*.stories.js"
   ],
   "references": [
     {

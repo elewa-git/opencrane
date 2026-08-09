@@ -1,7 +1,7 @@
 import type { Types } from "@a2ui/angular/v0_8";
 
 /**
- * The WeOwnAI A2UI theme — brings agent-authored canvas surfaces onto our design tokens.
+ * The OpenCrane A2UI theme — brings agent-authored canvas surfaces onto our design tokens.
  *
  * A2UI applies `additionalStyles.<Component>` as inline styles on each rendered component, so
  * that channel is the bridge to our CSS variables (no A2UI-named CSS classes exist to target, so
@@ -13,7 +13,7 @@ import type { Types } from "@a2ui/angular/v0_8";
  * borders, which need per-element class-maps A2UI doesn't expose via additionalStyles) is a
  * further refinement on top of this.
  */
-export function _WoA2uiTheme(): Types.Theme
+export function _OpenCraneA2uiTheme(): Types.Theme
 {
 	const on: Record<string, boolean> = {};
 	const leaf = { container: on, element: on, label: on };
@@ -44,37 +44,37 @@ export function _WoA2uiTheme(): Types.Theme
 		},
 		markdown: { p: [], h1: [], h2: [], h3: [], h4: [], h5: [], ul: [], ol: [], li: [], a: [], strong: [], em: [] },
 		additionalStyles: {
-			Card: { background: "var(--card)", border: "1px solid var(--border)", "border-radius": "var(--radius)", padding: "12px" },
+			Card: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "12px" },
 			Row: { gap: "8px", "align-items": "center" },
 			Column: { gap: "8px" },
 			List: { gap: "6px" },
 			Button: {
-				background: "var(--primary)",
-				color: "var(--primary-foreground)",
+				background: "var(--oc-ink-strong)",
+				color: "var(--oc-on-strong)",
 				border: "none",
-				"border-radius": "var(--radius)",
+				"border-radius": "var(--oc-radius-chip)",
 				padding: "6px 14px",
 				"font-size": "13px",
 				cursor: "pointer",
 			},
-			Divider: { "border-top": "1px solid var(--border)", margin: "8px 0" },
-			Icon: { color: "var(--muted-foreground)" },
-			Image: { "border-radius": "var(--radius)", "max-width": "100%" },
-			TextField: { color: "var(--foreground)", "font-size": "13px" },
-			CheckBox: { color: "var(--foreground)", "font-size": "13px", "accent-color": "var(--accent)" },
-			DateTimeInput: { color: "var(--foreground)", "font-size": "13px" },
-			MultipleChoice: { color: "var(--foreground)", "font-size": "13px" },
-			Slider: { "accent-color": "var(--accent)" },
-			Tabs: { "font-size": "13px", color: "var(--foreground)" },
-			Modal: { background: "var(--card)", border: "1px solid var(--border)", "border-radius": "var(--radius)", padding: "16px" },
+			Divider: { "border-top": "1px solid var(--oc-border-default)", margin: "8px 0" },
+			Icon: { color: "var(--oc-ink-muted)" },
+			Image: { "border-radius": "var(--oc-radius-chip)", "max-width": "100%" },
+			TextField: { color: "var(--oc-ink-strong)", "font-size": "13px" },
+			CheckBox: { color: "var(--oc-ink-strong)", "font-size": "13px", "accent-color": "var(--oc-accent)" },
+			DateTimeInput: { color: "var(--oc-ink-strong)", "font-size": "13px" },
+			MultipleChoice: { color: "var(--oc-ink-strong)", "font-size": "13px" },
+			Slider: { "accent-color": "var(--oc-accent)" },
+			Tabs: { "font-size": "13px", color: "var(--oc-ink-strong)" },
+			Modal: { background: "var(--oc-surface-subtle)", border: "1px solid var(--oc-border-default)", "border-radius": "var(--oc-radius-chip)", padding: "16px" },
 			Text: {
-				body: { color: "var(--foreground)", "font-size": "14px", "line-height": "1.6" },
-				caption: { color: "var(--muted-foreground)", "font-size": "12px" },
-				h1: { color: "var(--foreground)", "font-size": "18px", "font-weight": "600" },
-				h2: { color: "var(--foreground)", "font-size": "16px", "font-weight": "600" },
-				h3: { color: "var(--foreground)", "font-size": "14px", "font-weight": "600" },
-				h4: { color: "var(--foreground)", "font-size": "13px", "font-weight": "600" },
-				h5: { color: "var(--foreground)", "font-size": "12px", "font-weight": "600" },
+				body: { color: "var(--oc-ink-strong)", "font-size": "14px", "line-height": "1.6" },
+				caption: { color: "var(--oc-ink-muted)", "font-size": "12px" },
+				h1: { color: "var(--oc-ink-strong)", "font-size": "18px", "font-weight": "600" },
+				h2: { color: "var(--oc-ink-strong)", "font-size": "16px", "font-weight": "600" },
+				h3: { color: "var(--oc-ink-strong)", "font-size": "14px", "font-weight": "600" },
+				h4: { color: "var(--oc-ink-strong)", "font-size": "13px", "font-weight": "600" },
+				h5: { color: "var(--oc-ink-strong)", "font-size": "12px", "font-weight": "600" },
 			},
 		},
 	};

@@ -5,15 +5,15 @@
 	flex-shrink: 0;
 	width: 288px;
 	min-width: 288px;
-	background: var(--card);
-	border-left: 1px solid var(--border);
+	background: var(--oc-surface-subtle);
+	border-left: 1px solid var(--oc-border-default);
 
 	&__tabs {
 		display: flex;
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 12px;
-		border-bottom: 1px solid var(--border);
+		border-bottom: 1px solid var(--oc-border-default);
 	}
 
 	&__tab-group {
@@ -27,27 +27,27 @@
 		align-items: center;
 		gap: 6px;
 		padding: 4px 10px;
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		font-size: 12px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 
 		i {
 			font-size: 11px;
 		}
 
 		&--active {
-			background: var(--secondary);
-			color: var(--foreground);
+			background: var(--oc-surface-subtle);
+			color: var(--oc-ink-strong);
 		}
 	}
 
 	&__close {
 		padding: 4px;
 		margin-left: 4px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 
 		&:hover {
-			color: var(--foreground);
+			color: var(--oc-ink-strong);
 		}
 
 		i {
@@ -60,18 +60,18 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 10px 16px;
-		border-bottom: 1px solid var(--border);
-		background: var(--background);
+		border-bottom: 1px solid var(--oc-border-default);
+		background: var(--oc-surface-paper);
 
 		p {
 			margin: 0;
 			font-size: 11px;
-			color: var(--muted-foreground);
+			color: var(--oc-ink-muted);
 		}
 
 		button {
 			padding: 4px;
-			color: var(--muted-foreground);
+			color: var(--oc-ink-muted);
 
 			i {
 				font-size: 11px;
@@ -104,9 +104,9 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 8px 12px;
-		border-radius: var(--radius);
-		background: var(--background);
-		border: 1px solid var(--border);
+		border-radius: var(--oc-radius-chip);
+		background: var(--oc-surface-paper);
+		border: 1px solid var(--oc-border-default);
 
 		p {
 			margin: 0;
@@ -120,7 +120,7 @@
 
 	&__contract-scopes {
 		font-size: 10px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		margin-top: 2px !important;
 	}
 
@@ -129,14 +129,14 @@
 		align-items: center;
 		gap: 6px;
 		font-size: 10px;
-		color: var(--wo-ok);
+		color: var(--oc-status-ok);
 	}
 
 	&__contract-dot {
 		width: 6px;
 		height: 6px;
 		border-radius: 50%;
-		background: var(--wo-ok);
+		background: var(--oc-status-ok);
 	}
 
 	&__scope-strip {
@@ -148,7 +148,7 @@
 		flex: 1;
 		text-align: center;
 		padding: 4px 0;
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		border: 1px solid;
 
 		p {
@@ -170,12 +170,12 @@
 		align-items: center;
 		gap: 10px;
 		padding: 8px 10px;
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		text-align: left;
 
 		&:hover,
 		&--active {
-			background: color-mix(in srgb, var(--secondary) 50%, transparent);
+			background: color-mix(in srgb, var(--oc-surface-subtle) 50%, transparent);
 		}
 	}
 
@@ -207,7 +207,7 @@
 
 	&__scope-sub {
 		font-size: 10px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		margin-top: 1px;
 	}
 
@@ -221,12 +221,12 @@
 
 	&__scope-fresh {
 		font-size: 10px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__scope-chevron {
 		font-size: 10px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		flex-shrink: 0;
 		transition: transform 120ms ease;
 
@@ -243,7 +243,7 @@
 	}
 
 	&__citation {
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		border-left: 2px solid;
 		padding: 8px 10px;
 
@@ -258,7 +258,7 @@
 			&:last-child {
 				font-size: 11px;
 				line-height: 1.5;
-				color: var(--muted-foreground);
+				color: var(--oc-ink-muted);
 			}
 		}
 	}
@@ -292,7 +292,7 @@
 
 	&__skill-version {
 		font-size: 9px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__ledger {
@@ -312,7 +312,7 @@
 			font-weight: 500;
 			letter-spacing: 0.07em;
 			text-transform: uppercase;
-			color: var(--muted-foreground);
+			color: var(--oc-ink-muted);
 		}
 	}
 
@@ -324,7 +324,7 @@
 			display: flex;
 			align-items: center;
 			padding: 2px 6px;
-			border-radius: var(--radius);
+			border-radius: var(--oc-radius-chip);
 			border: 1px solid;
 			opacity: 0.7;
 

@@ -1,4 +1,5 @@
 import { ModelProvider } from "@opencrane/state/provider-key/adapter";
+import { ScopeChipTones } from "@opencrane/elements/ui";
 
 /**
  * Per-provider row view model for the Model Keys table.
@@ -48,8 +49,8 @@ export interface ModelKeyBadgeStyle
 	/** Badge label. */
 	label: string;
 
-	/** Accent colour (hex). */
-	color: string;
+	/** Semantic shared-chip treatment. */
+	tone: ScopeChipTones;
 }
 
 /** Display name for each provider, keyed by the gateway enum. */
@@ -66,7 +67,7 @@ export const MODEL_PROVIDER_LABELS: Record<ModelProvider, string> =
 /** LiteLLM badge style, mapping each registration state onto a status colour. */
 export const LITELLM_BADGE_STYLES: Record<LiteLlmBadge, ModelKeyBadgeStyle> =
 {
-	[LiteLlmBadge.Active]: { label: "LiteLLM: active", color: "#5A8A5A" },
-	[LiteLlmBadge.SecretOnly]: { label: "Secret-only", color: "#A0855A" },
-	[LiteLlmBadge.None]: { label: "not configured", color: "#7A766D" }
+	[LiteLlmBadge.Active]: { label: "LiteLLM: active", tone: ScopeChipTones.Success },
+	[LiteLlmBadge.SecretOnly]: { label: "Secret-only", tone: ScopeChipTones.Warning },
+	[LiteLlmBadge.None]: { label: "not configured", tone: ScopeChipTones.Neutral }
 };

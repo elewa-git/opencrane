@@ -1,0 +1,38 @@
+<fieldset
+	class="wo-choice"
+	[class.wo-choice--grid]="layout() === layouts.Grid"
+	[disabled]="disabled()"
+	[attr.aria-invalid]="validationMessage() ? true : null"
+	[attr.aria-describedby]="validationMessage() ? controlId() + '-error' : null"
+>
+	<legend [id]="controlId() + '-legend'" class="wo-choice__legend">{{ legend() }}</legend>
+	<div class="wo-choice__options">
+		@for (option of options(); track option.id) {
+			<label
+				class="wo-choice__option"
+				[class.wo-choice__option--selected]="selectedId() === option.id"
+				[class.wo-choice__option--disabled]="disabled() || option.disabled"
+				[attr.for]="controlId() + '-' + option.id"
+			>
+				<p-radiobutton
+					[inputId]="controlId() + '-' + option.id"
+					[name]="controlId()"
+					[value]="option.id"
+					[ngModel]="selectedId()"
+					[disabled]="disabled() || option.disabled === true"
+					(ngModelChange)="select($event)"
+				/>
+				<span class="wo-choice__copy">
+					<span class="wo-choice__label">{{ option.label }}</span>
+					@if (option.description) {
+						<span class="wo-choice__description">{{ option.description }}</span>
+					}
+				</span>
+				<span class="wo-choice__fold" aria-hidden="true"></span>
+			</label>
+		}
+	</div>
+	@if (validationMessage(); as validationMessageValue) {
+		<p [id]="controlId() + '-error'" class="wo-choice__error" role="alert">{{ validationMessageValue }}</p>
+	}
+</fieldset>

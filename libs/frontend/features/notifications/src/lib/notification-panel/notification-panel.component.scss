@@ -7,9 +7,9 @@
 	display: flex;
 	flex-direction: column;
 	width: 320px;
-	background: var(--card);
-	border: 1px solid var(--border);
-	border-radius: var(--radius);
+	background: var(--oc-surface-subtle);
+	border: 1px solid var(--oc-border-default);
+	border-radius: var(--oc-radius-chip);
 	box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12);
 	max-height: calc(100vh - 32px);
 	overflow: hidden;
@@ -19,7 +19,7 @@
 		align-items: center;
 		justify-content: space-between;
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--border);
+		border-bottom: 1px solid var(--oc-border-default);
 	}
 
 	&__title {
@@ -31,8 +31,8 @@
 
 	&__count {
 		font-size: 10px;
-		background: var(--accent);
-		color: var(--accent-foreground);
+		background: var(--oc-accent);
+		color: var(--oc-on-accent);
 		border-radius: 10px;
 		padding: 1px 6px;
 	}
@@ -48,12 +48,12 @@
 		align-items: center;
 		gap: 4px;
 		padding: 4px 8px;
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		font-size: 11px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 
 		&:hover {
-			background: var(--secondary);
+			background: var(--oc-surface-subtle);
 		}
 
 		i {
@@ -64,10 +64,10 @@
 	&__close {
 		padding: 4px;
 		margin-left: 4px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 
 		&:hover {
-			color: var(--foreground);
+			color: var(--oc-ink-strong);
 		}
 
 		i {
@@ -83,19 +83,19 @@
 		display: flex;
 		gap: 12px;
 		padding: 12px 16px;
-		border-bottom: 1px solid var(--border);
+		border-bottom: 1px solid var(--oc-border-default);
 		cursor: pointer;
 		transition: background 120ms ease;
 
 		&:hover {
-			background: color-mix(in srgb, var(--secondary) 40%, transparent);
+			background: color-mix(in srgb, var(--oc-surface-subtle) 40%, transparent);
 		}
 	}
 
 	&__icon {
 		width: 28px;
 		height: 28px;
-		border-radius: var(--radius);
+		border-radius: var(--oc-radius-chip);
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -140,7 +140,7 @@
 	&__row-body {
 		font-size: 11px;
 		line-height: 1.5;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		margin: 2px 0 0;
 	}
 
@@ -152,7 +152,7 @@
 
 		span {
 			font-size: 10px;
-			color: var(--muted-foreground);
+			color: var(--oc-ink-muted);
 		}
 
 		button {

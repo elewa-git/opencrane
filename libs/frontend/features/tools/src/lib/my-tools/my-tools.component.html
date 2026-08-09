@@ -20,11 +20,18 @@
 					@for (row of rows(); track row.server.id) {
 						<tr>
 							<td class="wo-mono wo-mytools__name">{{ row.server.name }}</td>
-							<td><wo-scope-chip [label]="typeStyles[row.server.type].label" [color]="typeStyles[row.server.type].color" /></td>
+							<td><wo-scope-chip [label]="typeChips[row.server.type].label" [tone]="typeChips[row.server.type].tone" /></td>
 							<td>
-								<span class="wo-tools__status" [style.color]="connectionStyles[row.installed.connectionStatus].color">
-									<span class="wo-tools__status-dot" [class.wo-tools__status-dot--pulse]="connectionStyles[row.installed.connectionStatus].pulse"></span>
-									{{ connectionStyles[row.installed.connectionStatus].label }}
+								<span
+									class="wo-tools__status"
+									[class.wo-tools__status--neutral]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Neutral"
+									[class.wo-tools__status--info]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Info"
+									[class.wo-tools__status--success]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Success"
+									[class.wo-tools__status--warning]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Warning"
+									[class.wo-tools__status--danger]="connectionIndicators[row.installed.connectionStatus].tone === chipTones.Danger"
+								>
+									<span class="wo-tools__status-dot" [class.wo-tools__status-dot--pulse]="connectionIndicators[row.installed.connectionStatus].pulse"></span>
+									{{ connectionIndicators[row.installed.connectionStatus].label }}
 								</span>
 							</td>
 							<td class="wo-mytools__muted">{{ row.installed.lastUsed ?? "—" }}</td>

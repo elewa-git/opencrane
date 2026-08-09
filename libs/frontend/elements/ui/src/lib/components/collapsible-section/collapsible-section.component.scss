@@ -1,5 +1,5 @@
 .wo-section {
-	border-bottom: 1px solid var(--border);
+	border-bottom: 1px solid var(--oc-border-default);
 
 	&__header {
 		width: 100%;
@@ -10,7 +10,7 @@
 		transition: background 120ms ease;
 
 		&:hover {
-			background: color-mix(in srgb, var(--secondary) 40%, transparent);
+			background: color-mix(in srgb, var(--oc-surface-subtle) 40%, transparent);
 		}
 	}
 
@@ -19,12 +19,12 @@
 		font-weight: 500;
 		letter-spacing: 0.07em;
 		text-transform: uppercase;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__chevron {
 		font-size: 11px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		transition: transform 120ms ease;
 
 		&--closed {
@@ -53,7 +53,7 @@
 
 		.wo-section__title,
 		.wo-section__chevron {
-			color: rgba(232, 228, 220, 0.3);
+			color: rgba(232, 228, 220, 0.72);
 		}
 
 		.wo-section__chevron {

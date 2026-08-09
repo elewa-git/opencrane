@@ -151,20 +151,3 @@ export interface ThreadData
 	/** Messages in chronological order. */
 	messages: ThreadMessage[];
 }
-
-/** Visual style for a ledger card kind. */
-export interface LedgerKindStyle
-{
-	/** Card background tint. */
-	bg: string;
-	/** Left border / label colour. */
-	border: string;
-}
-
-/** Ledger kind → visual style. */
-export const LEDGER_KIND_STYLES: Record<string, LedgerKindStyle> =
-{
-	[MessageCardKind.Observation]: { bg: "rgba(74,107,138,0.07)", border: "#4A6B8A" },
-	[MessageCardKind.Policy]: { bg: "rgba(160,133,90,0.09)", border: "#A0855A" },
-	[MessageCardKind.Action]: { bg: "rgba(90,138,90,0.08)", border: "#5A8A5A" }
-};

@@ -24,7 +24,7 @@
 			top: 50%;
 			transform: translateY(-50%);
 			font-size: 13px;
-			color: var(--muted-foreground);
+			color: var(--oc-ink-muted);
 		}
 
 		.wo-text-input {
@@ -43,9 +43,9 @@
 		flex-direction: column;
 		gap: 8px;
 		padding: 14px 16px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--card);
+		border: 1px solid var(--oc-border-default);
+		border-radius: var(--oc-radius-chip);
+		background: var(--oc-surface-subtle);
 	}
 
 	&__card-top {
@@ -62,8 +62,8 @@
 		width: 34px;
 		height: 34px;
 		border-radius: 8px;
-		background: var(--secondary);
-		color: var(--foreground);
+		background: var(--oc-surface-subtle);
+		color: var(--oc-ink-strong);
 		font-size: 13px;
 		font-weight: 600;
 	}
@@ -80,7 +80,7 @@
 
 	&__desc {
 		font-size: 12px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		line-height: 1.45;
 		margin: 3px 0 0;
 	}
@@ -97,7 +97,7 @@
 		align-items: center;
 		gap: 5px;
 		font-size: 11px;
-		color: var(--wo-ok);
+		color: var(--oc-status-ok);
 
 		i {
 			font-size: 11px;
@@ -109,14 +109,14 @@
 		padding: 24px 0;
 		text-align: center;
 		font-size: 13px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__note {
 		margin-top: 18px;
 
 		a {
-			color: var(--accent);
+			color: var(--oc-accent);
 			text-decoration: none;
 		}
 	}

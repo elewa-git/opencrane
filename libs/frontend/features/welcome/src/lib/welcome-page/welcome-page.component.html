@@ -1,7 +1,7 @@
 <div class="wo-welcome">
 	<header class="wo-welcome__masthead">
-		<p class="wo-welcome__eyebrow">WeOwnAI</p>
-		<h1 class="wo-welcome__title wo-serif">Welcome aboard</h1>
+		<p class="wo-welcome__eyebrow">OpenCrane</p>
+		<h1 class="wo-welcome__title">Welcome aboard</h1>
 		<p class="wo-welcome__lead">A quick tour to get you settled into your private AI workspace.</p>
 	</header>
 
@@ -18,12 +18,12 @@
 	<section class="wo-welcome__panel">
 		@switch (step()) {
 			@case (steps.Welcome) {
-				<h2 class="wo-welcome__panel-title wo-serif">Hello, {{ displayName() }}</h2>
-				<p class="wo-welcome__panel-hint">WeOwnAI gives you a private, isolated AI workspace you control — your own assistant, your own data, your own rules.</p>
+				<h2 class="wo-welcome__panel-title">Hello, {{ displayName() }}</h2>
+				<p class="wo-welcome__panel-hint">OpenCrane gives you a private, isolated AI workspace you control — your own assistant, your own data, your own rules.</p>
 			}
 
 			@case (steps.Workspace) {
-				<h2 class="wo-welcome__panel-title wo-serif">Your AI workspace</h2>
+				<h2 class="wo-welcome__panel-title">Your AI workspace</h2>
 				@if (clusterTenant(); as workspace) {
 					<p-message severity="success" [closable]="false" class="wo-welcome__notice">Your governed agent workspace is ready.</p-message>
 					<div class="wo-welcome__summary">
@@ -39,7 +39,7 @@
 			}
 
 			@case (steps.Personalize) {
-				<h2 class="wo-welcome__panel-title wo-serif">Make it yours</h2>
+				<h2 class="wo-welcome__panel-title">Make it yours</h2>
 				<p class="wo-welcome__panel-hint">Tell us what to call you. This stays on your device for now — preferences will sync to your account later.</p>
 
 				<div class="wo-welcome__form">
@@ -58,7 +58,7 @@
 			}
 
 			@case (steps.Tour) {
-				<h2 class="wo-welcome__panel-title wo-serif">Find your way around</h2>
+				<h2 class="wo-welcome__panel-title">Find your way around</h2>
 				<p class="wo-welcome__panel-hint">Three places you will use most.</p>
 
 				<div class="wo-welcome__cards">
@@ -72,7 +72,7 @@
 			}
 
 			@case (steps.Finish) {
-				<h2 class="wo-welcome__panel-title wo-serif">You are all set</h2>
+				<h2 class="wo-welcome__panel-title">You are all set</h2>
 				<p class="wo-welcome__panel-hint">That is everything. Jump into your workspace and start a conversation.</p>
 
 				<div class="wo-welcome__finish">

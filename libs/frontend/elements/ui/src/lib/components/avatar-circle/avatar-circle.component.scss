@@ -2,8 +2,57 @@
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	border-radius: 50%;
+	width: var(--oc-avatar-size);
+	height: var(--oc-avatar-size);
+	border-radius: var(--oc-radius-round);
 	flex-shrink: 0;
 	font-weight: 600;
-	color: #f6f4ef;
+	font-size: var(--oc-avatar-text-size);
+	color: var(--oc-avatar-foreground);
+	background: var(--oc-avatar-background);
+
+	&--brand {
+		--oc-avatar-background: var(--oc-avatar-brand);
+		--oc-avatar-foreground: var(--oc-on-accent);
+	}
+
+	&--blue {
+		--oc-avatar-background: var(--oc-avatar-blue);
+		--oc-avatar-foreground: var(--oc-on-strong);
+	}
+
+	&--green {
+		--oc-avatar-background: var(--oc-avatar-green);
+		--oc-avatar-foreground: var(--oc-on-strong);
+	}
+
+	&--amber {
+		--oc-avatar-background: var(--oc-avatar-amber);
+		--oc-avatar-foreground: var(--oc-on-strong);
+	}
+
+	&--neutral {
+		--oc-avatar-background: var(--oc-avatar-neutral);
+		--oc-avatar-foreground: var(--oc-ink-default);
+	}
+
+	&--compact {
+		--oc-avatar-size: var(--oc-avatar-compact);
+		--oc-avatar-text-size: var(--oc-avatar-compact-text);
+	}
+
+	&--small {
+		--oc-avatar-size: var(--oc-avatar-small);
+		--oc-avatar-text-size: var(--oc-avatar-small-text);
+	}
+
+	&--medium {
+		--oc-avatar-size: var(--oc-avatar-medium);
+		--oc-avatar-text-size: var(--oc-avatar-medium-text);
+	}
+
+	&--large {
+		--oc-avatar-size: var(--oc-avatar-large);
+		--oc-avatar-text-size: var(--oc-avatar-large-text);
+	}
 }

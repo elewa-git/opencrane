@@ -1,0 +1,25 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "composite": false,
+    "emitDecoratorMetadata": true,
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "outDir": "../../../../../dist/out-tsc/storybook/frontend-elements-ui",
+    "tsBuildInfoFile": "../../../../../dist/out-tsc/storybook/frontend-elements-ui/tsconfig.tsbuildinfo",
+    "types": [
+      "node"
+    ]
+  },
+  "exclude": [
+    "../**/*.spec.ts"
+  ],
+  "include": [
+    "../src/**/*.stories.ts",
+    "../src/**/*.stories.js",
+    "../src/**/*.stories.jsx",
+    "../src/**/*.stories.tsx",
+    "../src/**/*.stories.mdx",
+    "preview.ts"
+  ]
+}

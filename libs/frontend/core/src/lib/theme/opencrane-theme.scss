@@ -1,0 +1,189 @@
+/* OpenCrane's shared visual-language owner. PrimeNG, the application, and
+ * Storybook all load these fonts, tokens, resets, and global primitives. */
+
+@import "@fontsource/dm-sans/400.css";
+@import "@fontsource/dm-sans/500.css";
+@import "@fontsource/dm-sans/600.css";
+@import "@fontsource/dm-mono/400.css";
+@import "@fontsource/dm-mono/500.css";
+@import "primeicons/primeicons.css";
+
+:root {
+	/* Typography */
+	--oc-font-size-root: 15px;
+	--oc-font-sans: "DM Sans", system-ui, sans-serif;
+	--oc-font-mono: "DM Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+	--oc-font-weight-medium: 500;
+
+	/* Primitive product colours */
+	--oc-surface-canvas: #eceff0;
+	--oc-surface-paper: #fbfcfc;
+	--oc-surface-raised: #ffffff;
+	--oc-surface-subtle: #f1f4f5;
+	--oc-ink-strong: #16191a;
+	--oc-ink-default: #42494b;
+	--oc-ink-muted: #5f6769;
+	--oc-border-subtle: #e6eaeb;
+	--oc-border-default: #d9dfe0;
+	--oc-border-strong: #b8c0c1;
+	--oc-accent: #0db5cc;
+	--oc-accent-active: #0b7787;
+	--oc-accent-soft: #e9f8fb;
+	--oc-on-accent: var(--oc-ink-strong);
+	--oc-on-strong: #ffffff;
+	--oc-danger: #b73f43;
+	--oc-danger-soft: #fbecee;
+	--oc-warning: #8a6426;
+	--oc-warning-soft: #f8f0df;
+	--oc-success: #2a7d4f;
+	--oc-success-soft: #e7f3ec;
+	--oc-info: #2a5c9a;
+	--oc-info-soft: #e8eef7;
+	--oc-neutral-soft: #eef1f2;
+
+	/* Archetype and knowledge-scope colours */
+	--oc-archetype-commander: #b73f43;
+	--oc-archetype-catalyst: #c28a19;
+	--oc-archetype-anchor: #2a7d4f;
+	--oc-archetype-analyst: #2a5c9a;
+	--oc-scope-organization: #2a7d4f;
+	--oc-scope-organization-soft: #e7f3ec;
+	--oc-scope-department: #765b99;
+	--oc-scope-department-soft: #eee9f4;
+	--oc-scope-project: #2a5c9a;
+	--oc-scope-project-soft: #e8eef7;
+	--oc-scope-personal: #087589;
+	--oc-scope-personal-soft: #e9f8fb;
+
+	/* Avatar treatments */
+	--oc-avatar-brand: var(--oc-accent);
+	--oc-avatar-blue: var(--oc-info);
+	--oc-avatar-green: var(--oc-success);
+	--oc-avatar-amber: var(--oc-warning);
+	--oc-avatar-neutral: #e1e7e8;
+	--oc-avatar-compact: 18px;
+	--oc-avatar-small: 22px;
+	--oc-avatar-medium: 24px;
+	--oc-avatar-large: 32px;
+	--oc-avatar-compact-text: 7px;
+	--oc-avatar-small-text: 9px;
+	--oc-avatar-medium-text: 10px;
+	--oc-avatar-large-text: 12px;
+
+	/* Type scale and spacing */
+	--oc-text-2xs: 10px;
+	--oc-text-xs: 11px;
+	--oc-text-sm: 12.5px;
+	--oc-text-md: 14.5px;
+	--oc-text-lg: 17px;
+	--oc-text-2xl: 26px;
+	--oc-text-4xl: 38px;
+	--oc-tracking-label: 0.07em;
+	--oc-tracking-title: -0.025em;
+	--oc-space-1: 4px;
+	--oc-space-2: 8px;
+	--oc-space-3: 12px;
+	--oc-space-4: 16px;
+	--oc-space-5: 20px;
+	--oc-space-6: 24px;
+	--oc-space-8: 32px;
+
+	/* Shape, depth, focus, and motion */
+	--oc-radius-chip: 5px;
+	--oc-radius-card: 9px;
+	--oc-radius-panel: 11px;
+	--oc-radius-round: 999px;
+	--oc-chip-padding-block: 2px;
+	--oc-chip-padding-inline: 7px;
+	--oc-shadow-paper: 0 10px 32px rgba(22, 25, 26, 0.08);
+	--oc-shadow-card: 0 1px 1px rgba(22, 25, 26, 0.04);
+	--oc-shadow-card-hover: 0 2px 5px rgba(22, 25, 26, 0.08);
+	--oc-shadow-selected: 0 0 0 1px var(--oc-accent-soft);
+	--oc-focus-ring: color-mix(in srgb, var(--oc-accent) 42%, transparent);
+	--oc-focus-width: 3px;
+	--oc-focus-offset: 2px;
+	--oc-lift-card: -1px;
+	--oc-fold-size: 20px;
+	--oc-opacity-disabled: 0.52;
+	--oc-motion-fast: 140ms;
+	--oc-motion-standard: 220ms;
+	--oc-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+	--oc-ease-fold: cubic-bezier(0.32, 0.72, 0, 1);
+
+	/* Journey composition */
+	--oc-journey-compact-width: 620px;
+	--oc-journey-wide-width: 960px;
+	--oc-reading-width: 680px;
+	--oc-paper-texture-opacity: 0.075;
+	--oc-paper-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140' viewBox='0 0 140 140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.82' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)' opacity='.42'/%3E%3C/svg%3E");
+
+	/* Dark sidebar rail */
+	--oc-sidebar-background: #1e1c19;
+	--oc-sidebar-foreground: #e8e4dc;
+
+	/* Ledger card kinds */
+	--oc-ledger-observation: #3d5f7d;
+	--oc-ledger-observation-background: rgba(74, 107, 138, 0.07);
+	--oc-ledger-policy: #715529;
+	--oc-ledger-policy-background: rgba(160, 133, 90, 0.09);
+	--oc-ledger-action: #426d42;
+	--oc-ledger-action-background: rgba(90, 138, 90, 0.08);
+
+	/* Status colours */
+	--oc-status-ok: var(--oc-success);
+}
+
+html,
+body {
+	height: 100%;
+	margin: 0;
+	font-family: var(--oc-font-sans);
+	font-size: var(--oc-font-size-root);
+	background: var(--oc-surface-paper);
+	color: var(--oc-ink-strong);
+}
+
+:focus-visible {
+	outline: var(--oc-focus-width) solid var(--oc-focus-ring);
+	outline-offset: var(--oc-focus-offset);
+}
+
+* {
+	box-sizing: border-box;
+}
+
+button {
+	font-family: inherit;
+	background: none;
+	border: none;
+	padding: 0;
+	cursor: pointer;
+	color: inherit;
+}
+
+input,
+textarea,
+select {
+	font-family: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation-duration: 0.01ms !important;
+		animation-iteration-count: 1 !important;
+		scroll-behavior: auto !important;
+		transition-duration: 0.01ms !important;
+	}
+}
+
+/* Shared typography and overflow utilities. */
+.wo-mono {
+	font-family: var(--oc-font-mono);
+}
+
+.wo-scrollable {
+	overflow-y: auto;
+	scrollbar-width: none;
+}

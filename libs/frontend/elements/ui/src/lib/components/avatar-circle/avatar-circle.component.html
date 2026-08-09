@@ -1,7 +1,14 @@
 <span
 	class="wo-avatar"
-	[style.width.px]="size()"
-	[style.height.px]="size()"
-	[style.font-size.px]="size() * 0.4"
-	[style.background]="color()"
+	[class.wo-avatar--brand]="tone() === tones.Brand"
+	[class.wo-avatar--blue]="tone() === tones.Blue"
+	[class.wo-avatar--green]="tone() === tones.Green"
+	[class.wo-avatar--amber]="tone() === tones.Amber"
+	[class.wo-avatar--neutral]="tone() === tones.Neutral"
+	[class.wo-avatar--compact]="size() === sizes.Compact"
+	[class.wo-avatar--small]="size() === sizes.Small"
+	[class.wo-avatar--medium]="size() === sizes.Medium"
+	[class.wo-avatar--large]="size() === sizes.Large"
+	[attr.aria-label]="label()"
+	[attr.aria-hidden]="label() ? null : true"
 >{{ initials() }}</span>

@@ -29,7 +29,7 @@
 						</div>
 					</div>
 					<div class="wo-cat__card-foot">
-						<wo-scope-chip [label]="typeStyles[server.type].label" [color]="typeStyles[server.type].color" />
+						<wo-scope-chip [label]="typeChips[server.type].label" [tone]="typeChips[server.type].tone" />
 						@if (isInstalled(server.id)) {
 							<span class="wo-cat__installed"><i class="pi pi-check"></i> Installed</span>
 						} @else {

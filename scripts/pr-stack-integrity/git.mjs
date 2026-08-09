@@ -57,7 +57,12 @@ export function createGitAdapter(commands)
 						ancestry.add(`${possibleAncestor.number}:${possibleDescendant.number}`);
 					}
 				}
-				const diff = commands.runBuffer("git", ["diff", "--binary", `${possibleAncestor.base.sha}...${possibleAncestor.head.sha}`]);
+				const diff = commands.runBuffer("git", [
+					"diff",
+					"--full-index",
+					"--no-textconv",
+					`${possibleAncestor.base.sha}...${possibleAncestor.head.sha}`,
+				]);
 				diffDigests.set(possibleAncestor.number, createHash("sha256").update(diff).digest("hex"));
 				if (diff.length > 0)
 				{
