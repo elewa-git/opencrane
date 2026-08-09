@@ -23,8 +23,10 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 	it("recovers interrupted sort and approval notifications without regressing later refreshes", async function _RecoversCrossAuthorityRetries()
 	{
 		let onboarding = _PendingRecord();
+		let failNextSurveyStart = true;
 		let failNextInterviewReplacement = true;
 		let failNextApprovalTransition = true;
+		let repinBeforeFirstActivation = true;
 		let approvalState = "draft";
 		let activeRevisionId: string | null = null;
 		const onboardingRepository = {
@@ -32,6 +34,7 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 			async read(owner: UserOnboardingOwner): Promise<UserOnboardingRecord | null> { return owner.siloId === _OWNER.siloId && owner.subjectId === _OWNER.subjectId ? onboarding : null; },
 			async markSurveyInProgress(owner: UserOnboardingOwner, interviewId: string): Promise<boolean>
 			{
+				if (failNextSurveyStart) { failNextSurveyStart = false; throw new Error("induced onboarding survey-start interruption"); }
 				if (owner.siloId !== _OWNER.siloId || owner.subjectId !== _OWNER.subjectId || onboarding.state !== UserOnboardingStates.SurveyPending) return false;
 				onboarding = { ...onboarding, state: UserOnboardingStates.SurveyInProgress, personaInterviewId: interviewId, surveyStartedAt: new Date("2026-08-08T10:01:00.000Z") };
 				return true;
@@ -69,12 +72,19 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 		const approveAndActivateAtomically = vi.fn();
 		approveAndActivateAtomically.mockImplementation(async function _Approve()
 		{
+			if (repinBeforeFirstActivation)
+			{
+				repinBeforeFirstActivation = false;
+				await authority.startSurvey(_OWNER, "interview-c");
+				return { status: "conflict" };
+			}
 			approvalState = "approved";
 			activeRevisionId = "revision-b";
 			return { status: "approved" };
 		});
 		const startAtomically = vi.fn()
 			.mockResolvedValueOnce({ status: "started", interviewId: "interview-a" })
+			.mockResolvedValueOnce({ status: "already_in_progress", interviewId: "interview-a" })
 			.mockResolvedValueOnce({ status: "started", interviewId: "interview-b" })
 			.mockResolvedValueOnce({ status: "already_in_progress", interviewId: "interview-b" })
 			.mockResolvedValueOnce({ status: "started", interviewId: "interview-c" });
@@ -103,7 +113,10 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 		app.use("/api/v1/me/persona", __CreatePersonaOnboardingRouter(personaDependencies));
 		app.use("/api/v1/me/onboarding", __CreateUserOnboardingRouter({ authority, resolveOwner: function _OwnerResolver() { return _OWNER; }, logger }));
 
+		await request(app).post("/api/v1/me/persona/interview").send({}).expect(503);
+		expect(onboarding.state).toBe(UserOnboardingStates.SurveyPending);
 		await request(app).post("/api/v1/me/persona/interview").send({}).expect(200);
+		expect(onboarding.personaInterviewId).toBe("interview-a");
 		await request(app).post("/api/v1/me/persona/interview").send({}).expect(503);
 		expect(onboarding.personaInterviewId).toBe("interview-a");
 		await request(app).post("/api/v1/me/persona/interview").send({}).expect(200);
@@ -111,11 +124,16 @@ describe("persona and durable onboarding app composition", function _PersonaUser
 		await request(app).post("/api/v1/me/persona/interviews/interview-b/answers/q1").send({ choiceId: "a" }).expect(201);
 		expect(recordAnswerAtomically).toHaveBeenCalledTimes(1);
 
+		await request(app).post("/api/v1/me/persona/drafts/revision-b/approve").send({}).expect(409);
+		expect(activeRevisionId).toBeNull();
+		expect(onboarding.personaInterviewId).toBe("interview-c");
+		await authority.startSurvey(_OWNER, "interview-b");
+
 		await request(app).post("/api/v1/me/persona/drafts/revision-b/approve").send({}).expect(503);
 		expect(approvalState).toBe("approved");
 		expect(onboarding.state).toBe(UserOnboardingStates.SurveyInProgress);
 		await request(app).post("/api/v1/me/persona/drafts/revision-b/approve").send({}).expect(200);
-		expect(approveAndActivateAtomically).toHaveBeenCalledTimes(1);
+		expect(approveAndActivateAtomically).toHaveBeenCalledTimes(2);
 
 		await request(app).post("/api/v1/me/persona/refreshes/change-1/interview").send({}).expect(200);
 		const durable = await request(app).get("/api/v1/me/onboarding/").expect(200);

@@ -1,7 +1,7 @@
 import { PersonaColour, PersonaOpennessModifier, PersonaTieKind, Prisma } from "@prisma/client";
 
 import { _ScorePersona } from "./persona-scorer.js";
-import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
+import { PersonaColourValues, PersonaModifierValues, PersonaTieKinds, type PersonaAuthoritativeScoreResult, type PersonaSelectionValue, type PersonaTieChoice, type PersonaWeightedAnswer } from "./persona-scorer.types.js";
 import { PersonaScoringPersistenceStatuses, type PersonaScoringEvidence, type PersonaScoringPersistenceResult, type PersonaScoringRepository, type ResolvePersonaTieCommand, type StoredPersonaScore } from "./persona-scoring-repository.types.js";
 
 /** Prisma adapter for immutable score vectors and append-only tie choices. */
@@ -22,9 +22,10 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		const evidence = await this._evidence(interviewId, personaProfileId, userId);
 		if (evidence === null) return { status: PersonaScoringPersistenceStatuses.NotFound };
 		const score = _ScorePersona(evidence.answers, evidence.resolutions);
-		if (score === null) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
-		const existing = await this.transaction.personaInterviewScore.findUnique({ where: { interviewId }, select: { scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicyDigest: true, orderedAnswerIds: true, orderedChoiceIds: true, red: true, yellow: true, green: true, blue: true, colourTotal: true, explorer: true, guardian: true, opennessTotal: true, primaryCandidates: true } });
-		if (existing !== null && !_StoredScoreMatches(evidence, score, existing)) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
+		const initialScore = _ScorePersona(evidence.answers, []);
+		if (score === null || initialScore === null) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
+		const existing = await this.transaction.personaInterviewScore.findUnique({ where: { interviewId }, select: { scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicyDigest: true, orderedAnswerIds: true, orderedChoiceIds: true, red: true, yellow: true, green: true, blue: true, colourTotal: true, explorer: true, guardian: true, opennessTotal: true, primaryCandidates: true, secondaryCandidates: true, modifierCandidates: true } });
+		if (existing !== null && !_StoredScoreMatches(evidence, score, initialScore.candidateEvidence, existing)) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
 		if (existing === null)
 		{
 			await this.transaction.personaInterviewScore.create({ data: {
@@ -42,9 +43,9 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 				explorer: score.openness.explorer,
 				guardian: score.openness.guardian,
 				opennessTotal: score.openness.total,
-				primaryCandidates: score.candidateEvidence.primary.map(_ToPrismaColour),
-				secondaryCandidates: score.candidateEvidence.secondary.map(_ToPrismaColour),
-				modifierCandidates: score.candidateEvidence.modifier.map(_ToPrismaModifier),
+				primaryCandidates: initialScore.candidateEvidence.primary.map(_ToPrismaColour),
+				secondaryCandidates: initialScore.candidateEvidence.secondary.map(_ToPrismaColour),
+				modifierCandidates: initialScore.candidateEvidence.modifier.map(_ToPrismaModifier),
 			} });
 		}
 		return { status: PersonaScoringPersistenceStatuses.Ready, score };
@@ -56,9 +57,10 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		const evidence = await this._evidence(interviewId, personaProfileId, userId);
 		if (evidence === null) return { status: PersonaScoringPersistenceStatuses.NotFound };
 		const score = _ScorePersona(evidence.answers, evidence.resolutions);
-		if (score === null) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
-		const stored = await this.transaction.personaInterviewScore.findUnique({ where: { interviewId }, select: { scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicyDigest: true, orderedAnswerIds: true, orderedChoiceIds: true, red: true, yellow: true, green: true, blue: true, colourTotal: true, explorer: true, guardian: true, opennessTotal: true, primaryCandidates: true } });
-		if (stored === null || !_StoredScoreMatches(evidence, score, stored)) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
+		const initialScore = _ScorePersona(evidence.answers, []);
+		if (score === null || initialScore === null) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
+		const stored = await this.transaction.personaInterviewScore.findUnique({ where: { interviewId }, select: { scoringPolicyId: true, scoringPolicyVersion: true, scoringPolicyDigest: true, orderedAnswerIds: true, orderedChoiceIds: true, red: true, yellow: true, green: true, blue: true, colourTotal: true, explorer: true, guardian: true, opennessTotal: true, primaryCandidates: true, secondaryCandidates: true, modifierCandidates: true } });
+		if (stored === null || !_StoredScoreMatches(evidence, score, initialScore.candidateEvidence, stored)) return { status: PersonaScoringPersistenceStatuses.InvalidEvidence };
 		return { status: PersonaScoringPersistenceStatuses.Ready, score };
 	}
 
@@ -68,7 +70,7 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 		const current = await this.ensureScore(command.interviewId, command.personaProfileId, command.userId);
 		if (current.status !== PersonaScoringPersistenceStatuses.Ready) return current;
 		const required = current.score.resolutionRequired;
-		if (required === null || required.kind !== command.kind || !required.candidates.includes(command.selectedValue)) return { status: PersonaScoringPersistenceStatuses.InvalidResolution };
+		if (required === null || required.kind !== command.kind || !_IsSelectionValue(command.selectedValue) || !required.candidates.includes(command.selectedValue)) return { status: PersonaScoringPersistenceStatuses.InvalidResolution };
 		const evidence = await this._evidence(command.interviewId, command.personaProfileId, command.userId);
 		if (evidence === null) return { status: PersonaScoringPersistenceStatuses.NotFound };
 		if (evidence.resolutions.some(function _SameKind(resolution) { return resolution.kind === command.kind; })) return { status: PersonaScoringPersistenceStatuses.AlreadyResolved };
@@ -91,12 +93,19 @@ export class PrismaPersonaScoringRepository implements PersonaScoringRepository
 			weighted.push({ answerId: answer.id, questionId: answer.questionId, choiceId: answer.choiceId, ...weight });
 		}
 		const rows = await this.transaction.personaTieResolution.findMany({ where: { interviewId }, select: { kind: true, candidates: true, selectedValue: true }, orderBy: { resolvedAt: "asc" } });
-		return { scoringPolicyId: interview.scoringPolicyId, scoringPolicyVersion: interview.scoringPolicyVersion, scoringPolicyDigest: interview.scoringPolicy.digest, answers: weighted, resolutions: rows.map(function _Resolution(row): PersonaTieChoice { return { kind: _FromPrismaTieKind(row.kind), candidates: row.candidates, selectedValue: row.selectedValue }; }) };
+		const resolutions: PersonaTieChoice[] = [];
+		for (const row of rows)
+		{
+			const resolution = _StoredTieChoice(row);
+			if (resolution === null) return null;
+			resolutions.push(resolution);
+		}
+		return { scoringPolicyId: interview.scoringPolicyId, scoringPolicyVersion: interview.scoringPolicyVersion, scoringPolicyDigest: interview.scoringPolicy.digest, answers: weighted, resolutions };
 	}
 }
 
 /** Require an existing immutable row to match a replayed policy, answer order, and raw vector. */
-function _StoredScoreMatches(evidence: PersonaScoringEvidence, score: PersonaAuthoritativeScoreResult, stored: StoredPersonaScore): boolean
+function _StoredScoreMatches(evidence: PersonaScoringEvidence, score: PersonaAuthoritativeScoreResult, initialCandidates: PersonaAuthoritativeScoreResult["candidateEvidence"], stored: StoredPersonaScore): boolean
 {
 	return stored.scoringPolicyId === evidence.scoringPolicyId
 		&& stored.scoringPolicyVersion === evidence.scoringPolicyVersion
@@ -108,7 +117,9 @@ function _StoredScoreMatches(evidence: PersonaScoringEvidence, score: PersonaAut
 		&& stored.colourTotal === score.colours.total
 		&& stored.explorer === score.openness.explorer && stored.guardian === score.openness.guardian
 		&& stored.opennessTotal === score.openness.total
-		&& _SameStrings(stored.primaryCandidates, score.candidateEvidence.primary.map(_ToPrismaColour));
+		&& _SameStrings(stored.primaryCandidates, initialCandidates.primary.map(_ToPrismaColour))
+		&& _SameStrings(stored.secondaryCandidates, initialCandidates.secondary.map(_ToPrismaColour))
+		&& _SameStrings(stored.modifierCandidates, initialCandidates.modifier.map(_ToPrismaModifier));
 }
 
 /** Compare one ordered immutable string or string-enum vector. */
@@ -143,4 +154,33 @@ function _ToPrismaTieKind(value: PersonaTieKinds): PersonaTieKind
 function _FromPrismaTieKind(value: PersonaTieKind): PersonaTieKinds
 {
 	return { [PersonaTieKind.Primary]: PersonaTieKinds.Primary, [PersonaTieKind.Secondary]: PersonaTieKinds.Secondary, [PersonaTieKind.Modifier]: PersonaTieKinds.Modifier }[value];
+}
+
+/** Parse one durable tie row into its exact domain-owned selection vocabulary. */
+function _StoredTieChoice(row: { readonly kind: PersonaTieKind; readonly candidates: readonly string[]; readonly selectedValue: string }): PersonaTieChoice | null
+{
+	const kind = _FromPrismaTieKind(row.kind);
+	const candidates = row.candidates.filter(_IsSelectionValue);
+	if (candidates.length !== row.candidates.length || !_IsSelectionValue(row.selectedValue)) return null;
+	if (kind === PersonaTieKinds.Modifier && candidates.some(_IsColourValue)) return null;
+	if (kind !== PersonaTieKinds.Modifier && candidates.some(_IsModifierValue)) return null;
+	return { kind, candidates, selectedValue: row.selectedValue };
+}
+
+/** Narrow one durable string to a persona-owned selection value. */
+function _IsSelectionValue(value: string): value is PersonaSelectionValue
+{
+	return _IsColourValue(value) || _IsModifierValue(value);
+}
+
+/** Narrow one durable string to a persona-owned colour. */
+function _IsColourValue(value: string): value is PersonaColourValues
+{
+	return Object.values(PersonaColourValues).some(function _Same(candidate) { return candidate === value; });
+}
+
+/** Narrow one durable string to a persona-owned modifier. */
+function _IsModifierValue(value: string): value is PersonaModifierValues
+{
+	return Object.values(PersonaModifierValues).some(function _Same(candidate) { return candidate === value; });
 }

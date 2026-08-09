@@ -1,16 +1,16 @@
 import { PersonaColourValues } from "../scoring/persona-scorer.types.js";
 
 import { _CompilePersonaDraftInstructions } from "./persona-draft-instruction-compiler.js";
-import type { PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
 import type { PersonaDraftDirectives, PersonaDraftSourceAnswer, PersonaDraftSourceDerivationInput, PersonaDraftSourceDerivationResult } from "./persona-draft-source-deriver.types.js";
 import { _ParsePersonaDraftDirectives } from "./persona-draft-source-deriver.validator.js";
 
 /** Exact reviewed question coordinates that supply runtime interpolation and insight evidence. */
 const _VARIABLE_QUESTIONS = {
-	response_style: "q2-response-preference",
-	feedback_approach: "q3-feedback-preference",
-	challenge_mode: "q8-challenge-preference",
-	relationship_frame: "q9-relationship-model",
+	[PersonaTemplateVariable.ResponseStyle]: "q2-response-preference",
+	[PersonaTemplateVariable.FeedbackApproach]: "q3-feedback-preference",
+	[PersonaTemplateVariable.ChallengeMode]: "q8-challenge-preference",
+	[PersonaTemplateVariable.RelationshipFrame]: "q9-relationship-model",
 } as const;
 
 /** Parse reviewed sources and derive exact runtime instructions plus answer-linked insights. */
@@ -44,7 +44,7 @@ function _Variables<Category>(answers: ReadonlyMap<string, PersonaDraftSourceAns
 		resolved[variable] = directive;
 	}
 	const secondaryBlend = directives.secondaryBlend[secondary];
-	return secondaryBlend === undefined ? null : { ...resolved, secondary_blend: secondaryBlend };
+	return secondaryBlend === undefined ? null : { ...resolved, [PersonaTemplateVariable.SecondaryBlend]: secondaryBlend };
 }
 
 /** Derive four provenance-linked insights from the same reviewed coordinates used at runtime. */

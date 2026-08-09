@@ -36,7 +36,12 @@ provisioning (planned)
 
 The invariant is that a browser never chooses its own silo, subject, survey completion, or approved
 persona. A failed or conflicting transition leaves the last durable state unchanged. This package
-does not yet enforce the global main-API fence because bootstrap provisioning and conclusion are not
+accepts repeated owner-bound interview notifications. Before observing a newer interview, its
+coordinator first reconciles an already-approved persona for the durable pinned interview, closing
+the post-commit notification gap. Initial-survey replacement remains open only until the pinned
+interview's persona becomes active; PostgreSQL closes the opposite side of that approval race with a
+single onboarding-first lock order and requires approval to match the current pin. This package does
+not yet enforce the global main-API fence because bootstrap provisioning and conclusion are not
 available yet.
 
 ## Public surface

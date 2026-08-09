@@ -59,6 +59,9 @@ policy forbidding a mutable runtime "SOUL" file holds. Any failure is a specific
 
 An interrupted HTTP response can be retried safely after approval commits: the authority accepts an
 already-approved revision only when it is still the exact active revision of the same owner profile.
+Status reads also re-emit the current owner-bound interview notification. Before accepting that
+notification, the workflow coordinator reconciles any already-approved persona for its durable
+pinned interview, so a newer interview cannot hide the only evidence that advances onboarding.
 Persona refreshes after initial onboarding remain persona-owned maintenance and do not rewind the
 separate `UserOnboarding` route state.
 
@@ -67,13 +70,20 @@ documented string-backed enums. That keeps the API's readable response values st
 the profile, interview, drafting, and approval owners cannot silently drift into different control
 flow vocabularies. Ties never fall back to template order or application collation: the owner must
 append the exact required primary, secondary, or modifier choice before drafting can proceed.
+The status adapter parses the complete immutable scoring-evidence document before projecting a draft
+for review and rejects mismatched totals, classifications, tie categories, or insight bounds. The
+stored initial primary, secondary, and modifier candidate sets are replayed independently of later
+append-only tie choices, so persisted provenance cannot drift while a resolved score advances.
 
 Invariant: onboarding evidence is append-only until completion, and only a fully evidenced draft
 becomes active. The approval swap rebinds every precondition at commit time, so a concurrent edit
 fails closed and a crash leaves the previous active persona intact, never a half-approved one. When
-the interview was started by an accepted refresh proposal, the approval transaction must still find
-and apply that exact proposal; a missing or concurrently changed proposal rejects and rolls back the
-whole approval rather than activating the revision alone.
+the initial onboarding survey is still open, the database also requires the approving revision to
+come from its currently pinned interview. Conversely, that pin cannot be replaced after its persona
+became active; either ordering of an approval-versus-sort-again race therefore rejects the stale
+operation. When the interview was started by an accepted refresh proposal, the approval transaction
+must still find and apply that exact proposal; a missing or concurrently changed proposal rejects
+and rolls back the whole approval rather than activating the revision alone.
 
 ## Public surface
 
@@ -139,8 +149,9 @@ active-persona pointer in one transaction. A
 configuration-owned repository joins a proposal-bound refresh to that same transaction: persona
 logic retains only the opaque change identifier and never accesses `PersonalConfigurationChange`
 through a Prisma delegate.
-Postgres-level lifecycle behaviour is exercised by the `test:sql` target
-(`src/approval/__tests__/persona-authority.sql`).
+Postgres-level lifecycle behaviour is exercised by the `test:sql` target. Its authority assertions
+live in `src/approval/__tests__/persona-authority.sql`; a two-session race test also proves both
+approval-first and replacement-first outcomes complete without a deadlock and retain one winner.
 On a clean database, the target baseline supplies one reviewed ten-question choice catalogue, its
 weighted scoring and interpolation sources, and eight reviewed colour/modifier SOUL templates.
 Profiles, interviews, scores, tie choices, revisions, and approval evidence remain user-owned runtime

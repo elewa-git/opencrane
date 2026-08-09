@@ -3900,6 +3900,8 @@ DECLARE
     interview_profile TEXT;
     interview_user TEXT;
     profile_user TEXT;
+    onboarding_state "UserOnboardingState";
+    onboarding_interview TEXT;
     interview_policy_id TEXT;
     interview_policy_version INTEGER;
     interview_map_id TEXT;
@@ -3916,9 +3918,26 @@ DECLARE
     modifier_candidates TEXT[];
     resolution_candidates TEXT[];
     resolution_selection TEXT;
+    expected_tie_resolutions JSONB;
+    expected_scoring_evidence JSONB;
 BEGIN
     IF TG_OP = 'INSERT' AND NEW."state" <> 'draft' THEN RAISE EXCEPTION 'PersonaRevision must begin as Draft'; END IF;
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'PersonaRevision rows cannot be deleted'; END IF;
+    IF NEW."state" = 'approved' THEN
+        -- UserOnboarding replacements already hold this row before they inspect the active profile.
+        -- Approval must take the same onboarding -> profile/revision lock order so the race has one
+        -- durable winner without a PostgreSQL deadlock victim.
+        SELECT onboarding."state", onboarding."persona_interview_id" INTO onboarding_state, onboarding_interview
+          FROM "user_onboardings" onboarding
+          JOIN "persona_profiles" profile ON profile."silo_id" = onboarding."silo_id" AND profile."user_id" = onboarding."user_id"
+          WHERE profile."id" = NEW."persona_profile_id"
+          FOR UPDATE OF onboarding;
+        IF onboarding_state IN ('survey_pending', 'survey_in_progress') AND (
+            onboarding_state IS DISTINCT FROM 'survey_in_progress' OR onboarding_interview IS DISTINCT FROM NEW."interview_id"
+        ) THEN
+            RAISE EXCEPTION 'PersonaRevision approval requires the current initial-survey interview';
+        END IF;
+    END IF;
     SELECT interview."user_id", profile."user_id"
       INTO interview_user, profile_user
       FROM "persona_interviews" interview
@@ -3976,13 +3995,24 @@ BEGIN
             RAISE EXCEPTION 'PersonaRevision approval requires exact completed interview, reviewed sources, score, template, and insight evidence';
         END IF;
 
-        IF NEW."scoring_evidence" -> 'orderedAnswerIds' IS DISTINCT FROM to_jsonb(score_row."ordered_answer_ids")
-            OR NEW."scoring_evidence" -> 'orderedChoiceIds' IS DISTINCT FROM to_jsonb(score_row."ordered_choice_ids")
-            OR NEW."scoring_evidence" -> 'colours' IS DISTINCT FROM jsonb_build_object('red', score_row."red", 'yellow', score_row."yellow", 'green', score_row."green", 'blue', score_row."blue", 'total', score_row."colour_total")
-            OR NEW."scoring_evidence" -> 'openness' IS DISTINCT FROM jsonb_build_object('explorer', score_row."explorer", 'guardian', score_row."guardian", 'total', score_row."openness_total")
-            OR NEW."scoring_evidence" ->> 'primary' IS DISTINCT FROM lower(NEW."primary_colour"::TEXT)
-            OR NEW."scoring_evidence" ->> 'secondary' IS DISTINCT FROM lower(NEW."secondary_colour"::TEXT)
-            OR NEW."scoring_evidence" ->> 'modifier' IS DISTINCT FROM lower(NEW."modifier"::TEXT) THEN
+        SELECT COALESCE(jsonb_agg(jsonb_build_object(
+            'kind', lower(resolution."kind"::TEXT),
+            'candidates', to_jsonb(resolution."candidates"),
+            'selectedValue', resolution."selected_value"
+        ) ORDER BY CASE resolution."kind" WHEN 'Primary' THEN 1 WHEN 'Secondary' THEN 2 ELSE 3 END), '[]'::JSONB)
+          INTO expected_tie_resolutions
+          FROM "persona_tie_resolutions" resolution WHERE resolution."interview_id" = NEW."interview_id";
+        expected_scoring_evidence := jsonb_build_object(
+            'orderedAnswerIds', to_jsonb(score_row."ordered_answer_ids"),
+            'orderedChoiceIds', to_jsonb(score_row."ordered_choice_ids"),
+            'colours', jsonb_build_object('red', score_row."red", 'yellow', score_row."yellow", 'green', score_row."green", 'blue', score_row."blue", 'total', score_row."colour_total"),
+            'openness', jsonb_build_object('explorer', score_row."explorer", 'guardian', score_row."guardian", 'total', score_row."openness_total"),
+            'tieResolutions', expected_tie_resolutions,
+            'primary', lower(NEW."primary_colour"::TEXT),
+            'secondary', lower(NEW."secondary_colour"::TEXT),
+            'modifier', lower(NEW."modifier"::TEXT)
+        );
+        IF NEW."scoring_evidence" IS DISTINCT FROM expected_scoring_evidence THEN
             RAISE EXCEPTION 'PersonaRevision scoring evidence must replay the immutable score vector';
         END IF;
 
@@ -4069,6 +4099,9 @@ DECLARE
     calculated_explorer INTEGER;
     calculated_guardian INTEGER;
     calculated_primary "PersonaColour"[];
+    calculated_secondary "PersonaColour"[] := ARRAY[]::"PersonaColour"[];
+    calculated_modifier "PersonaOpennessModifier"[] := ARRAY[]::"PersonaOpennessModifier"[];
+    resolved_primary "PersonaColour";
 BEGIN
     SELECT interview."state", interview."scoring_policy_id", interview."scoring_policy_version", policy."digest"
       INTO interview_state, interview_policy_id, interview_policy_version, policy_digest
@@ -4103,6 +4136,31 @@ BEGIN
     IF calculated_primary IS DISTINCT FROM NEW."primary_candidates" THEN
         RAISE EXCEPTION 'PersonaInterviewScore must retain the exact primary candidate set';
     END IF;
+    IF cardinality(calculated_primary) = 1 THEN
+        resolved_primary := calculated_primary[1];
+        SELECT array_agg(candidate ORDER BY ordinal) INTO calculated_secondary FROM (
+            SELECT candidate, ordinal FROM unnest(enum_range(NULL::"PersonaColour")) WITH ORDINALITY candidate(candidate, ordinal)
+            WHERE candidate <> resolved_primary
+              AND CASE candidate WHEN 'Red' THEN NEW."red" WHEN 'Yellow' THEN NEW."yellow" WHEN 'Green' THEN NEW."green" ELSE NEW."blue" END
+                  = GREATEST(
+                      CASE WHEN resolved_primary = 'Red' THEN -1 ELSE NEW."red" END,
+                      CASE WHEN resolved_primary = 'Yellow' THEN -1 ELSE NEW."yellow" END,
+                      CASE WHEN resolved_primary = 'Green' THEN -1 ELSE NEW."green" END,
+                      CASE WHEN resolved_primary = 'Blue' THEN -1 ELSE NEW."blue" END
+                  )
+        ) ranked;
+        IF cardinality(calculated_secondary) = 1 THEN
+            calculated_modifier := CASE
+                WHEN NEW."explorer" = NEW."guardian" THEN ARRAY['Explorer', 'Guardian']::"PersonaOpennessModifier"[]
+                WHEN NEW."explorer" > NEW."guardian" THEN ARRAY['Explorer']::"PersonaOpennessModifier"[]
+                ELSE ARRAY['Guardian']::"PersonaOpennessModifier"[]
+            END;
+        END IF;
+    END IF;
+    IF calculated_secondary IS DISTINCT FROM NEW."secondary_candidates"
+        OR calculated_modifier IS DISTINCT FROM NEW."modifier_candidates" THEN
+        RAISE EXCEPTION 'PersonaInterviewScore must retain the exact downstream candidate sets';
+    END IF;
     RETURN NEW;
 END;
 $$;
@@ -4134,6 +4192,7 @@ DECLARE
     revision_state "PersonaRevisionState";
     revision_profile TEXT;
     revision_interview TEXT;
+    active_revision_interview TEXT;
 BEGIN
     IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'UserOnboarding rows cannot be deleted'; END IF;
     IF TG_OP = 'INSERT' THEN
@@ -4164,6 +4223,16 @@ BEGIN
         AND OLD."completed_at" IS NULL AND NEW."completed_at" IS NULL
     ) THEN
         RAISE EXCEPTION 'UserOnboarding interview provenance is immutable outside the initial survey';
+    END IF;
+    IF OLD."persona_interview_id" IS NOT NULL AND NEW."persona_interview_id" IS DISTINCT FROM OLD."persona_interview_id" THEN
+        SELECT revision."interview_id" INTO active_revision_interview
+          FROM "persona_profiles" profile
+          JOIN "persona_revisions" revision ON revision."id" = profile."active_revision_id"
+          WHERE profile."silo_id" = NEW."silo_id" AND profile."user_id" = NEW."user_id"
+          FOR UPDATE OF profile, revision;
+        IF active_revision_interview IS NOT NULL AND active_revision_interview = OLD."persona_interview_id" THEN
+            RAISE EXCEPTION 'UserOnboarding cannot replace an interview after its persona became active';
+        END IF;
     END IF;
     IF OLD."persona_revision_id" IS NOT NULL AND NEW."persona_revision_id" IS DISTINCT FROM OLD."persona_revision_id"
         OR OLD."bootstrap_conversation_id" IS NOT NULL AND NEW."bootstrap_conversation_id" IS DISTINCT FROM OLD."bootstrap_conversation_id"

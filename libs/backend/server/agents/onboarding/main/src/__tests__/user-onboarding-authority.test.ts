@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import { __UserOnboardingAuthority } from "../user-onboarding-authority.js";
 import { UserOnboardingDenialReasons, UserOnboardingStates, UserOnboardingTransitionStatuses } from "../user-onboarding.enums.js";
+import { UserOnboardingPersonaWorkflowCoordinator } from "../user-onboarding.http.js";
 import type { ApprovedPersonaEvidence, UserOnboardingOwner, UserOnboardingPersonaEvidencePort, UserOnboardingRecord, UserOnboardingRepository } from "../user-onboarding.types.js";
 
 /** Stable authenticated owner used by the authority tests. */
@@ -157,6 +158,18 @@ describe("__UserOnboardingAuthority", function _UserOnboardingAuthoritySuite()
 
 		expect(started).toMatchObject({ status: UserOnboardingTransitionStatuses.Advanced, onboarding: { state: UserOnboardingStates.SurveyInProgress, personaInterviewId: "interview-a" } });
 		expect(resumed).toMatchObject({ status: UserOnboardingTransitionStatuses.Resumed, onboarding: { personaInterviewId: "interview-a" } });
+	});
+
+	it("reconciles an interrupted approval before observing a newer persona interview", async function _ReconcilesBeforeRestart()
+	{
+		const inProgress = { ..._Record(_OWNER, 3), state: UserOnboardingStates.SurveyInProgress, personaInterviewId: "interview-a", surveyStartedAt: new Date("2026-08-08T10:01:00.000Z") };
+		const repository = new _FakeUserOnboardingRepository(inProgress);
+		const evidence = new _FakePersonaEvidence(["interview-a", "interview-b"], { "interview-a": "revision-a" });
+		const coordinator = new UserOnboardingPersonaWorkflowCoordinator(new __UserOnboardingAuthority(repository, evidence, 3));
+
+		await coordinator.surveyStarted(_OWNER, "interview-b");
+
+		expect(await repository.read(_OWNER)).toMatchObject({ state: UserOnboardingStates.BootstrapChatPending, personaInterviewId: "interview-a", personaRevisionId: "revision-a" });
 	});
 
 	it("denies a foreign interview without creating browser-selected authority", async function _DeniesForeignInterview()

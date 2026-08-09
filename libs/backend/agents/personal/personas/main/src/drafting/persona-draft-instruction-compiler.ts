@@ -1,7 +1,7 @@
-import type { PersonaTemplateVariable, PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
+import { PersonaTemplateVariable, type PersonaTemplateVariables } from "./persona-draft-instruction-compiler.types.js";
 
 /** Exact reviewed placeholders accepted by every persona SOUL template. */
-const PERSONA_TEMPLATE_VARIABLES = ["response_style", "feedback_approach", "challenge_mode", "relationship_frame", "secondary_blend"] as const satisfies readonly PersonaTemplateVariable[];
+const PERSONA_TEMPLATE_VARIABLES: readonly PersonaTemplateVariable[] = Object.values(PersonaTemplateVariable);
 
 /** Compile one reviewed template and fail closed on missing, duplicate, unknown, or unresolved variables. */
 export function _CompilePersonaDraftInstructions(templateContent: string, variables: PersonaTemplateVariables): string | null

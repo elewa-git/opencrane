@@ -57,6 +57,20 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(response.body).toEqual(status);
 		expect(dependencies.status.readStatus).toHaveBeenCalledWith("silo-1", "user-1");
 	});
+
+	it("retries a missing durable survey notification whenever status resumes an interview", async function _ReconcilesSurveyNotification()
+	{
+		const status = { state: PersonaOnboardingApiStates.Interview, interviewId: "interview-1", answeredQuestionCount: 0, questionCount: 1, personaRevisionId: null, questions: [], resolution: null, result: null } as const;
+		const surveyStarted = vi.fn().mockRejectedValueOnce(new Error("induced notification interruption")).mockResolvedValue(undefined);
+		const dependencies = _dependencies({ status: { readStatus: vi.fn().mockResolvedValue(status) }, workflow: { surveyStarted, personaApproved: vi.fn() } });
+
+		await request(_app(dependencies)).get("/api/v1/me/persona/").expect(503);
+		const recovered = await request(_app(dependencies)).get("/api/v1/me/persona/").expect(200);
+
+		expect(recovered.body).toEqual(status);
+		expect(surveyStarted).toHaveBeenCalledTimes(2);
+		expect(surveyStarted).toHaveBeenNthCalledWith(2, { siloId: "silo-1", userId: "user-1" }, "interview-1");
+	});
 	it("requires session-derived caller identity before it reveals an onboarding flow", async function _requiresCaller()
 	{
 		const response = await request(_app(_dependencies({ resolveCaller: function _none() { return null; } }))).post("/api/v1/me/persona/interview").send({});
@@ -64,13 +78,23 @@ describe("__CreatePersonaOnboardingRouter", function _describe()
 		expect(response.body).toEqual({ error: "persona_authentication_required" });
 	});
 
-	it("starts the reviewed server-selected questionnaire without accepting browser ownership coordinates", async function _starts()
+	it("starts the reviewed server-selected questionnaire from trusted ownership coordinates", async function _starts()
 	{
 		const dependencies = _dependencies();
-		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interview").send({ personaProfileId: "forged", siloId: "forged" });
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interview").send({});
 		expect(response.status).toBe(200);
 		expect(response.body.interviewId).toBe("interview-1");
 		expect(dependencies.interviews.startAtomically).toHaveBeenCalledWith(expect.objectContaining({ siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", questionSetId: "personal-agent-onboarding", questionSetVersion: 1 }));
+	});
+
+	it("rejects browser-supplied ownership coordinates outside the empty request contract", async function _RejectsOwnershipBody()
+	{
+		const dependencies = _dependencies();
+		const response = await request(_app(dependencies)).post("/api/v1/me/persona/interview").send({ personaProfileId: "forged", siloId: "forged" });
+
+		expect(response.status).toBe(400);
+		expect(response.body).toEqual({ error: "invalid_persona_interview" });
+		expect(dependencies.interviews.startAtomically).not.toHaveBeenCalled();
 	});
 
 	it.each([

@@ -15,7 +15,7 @@ const _MAXIMUM_QUESTIONS = 64;
 const _PersonaQuestionChoiceSchema: z.ZodType<PersonaQuestionChoice> = z.object({
 	id: z.string().min(1).max(256),
 	label: z.string().min(1).max(512),
-	ordinal: z.number().int().nonnegative()
+	ordinal: z.number().int().min(1)
 }).strip();
 
 /** One bounded reviewed question plus its immutable selected answer. */
@@ -23,8 +23,8 @@ const _PersonaQuestionSchema: z.ZodType<PersonaQuestion> = z.object({
 	id: z.string().min(1).max(256),
 	category: z.string().min(1).max(128),
 	prompt: z.string().min(1).max(2_000),
-	ordinal: z.number().int().nonnegative(),
-	choices: z.array(_PersonaQuestionChoiceSchema).min(1).max(32),
+	ordinal: z.number().int().min(1),
+	choices: z.array(_PersonaQuestionChoiceSchema).min(2).max(32),
 	selectedChoiceId: z.string().min(1).max(256).nullable()
 }).strip().superRefine(function _ValidateSelectedChoice(question, context)
 {
@@ -52,7 +52,7 @@ const _PersonaColourScoresSchema = z.object({
 	yellow: z.number().int().nonnegative(),
 	green: z.number().int().nonnegative(),
 	blue: z.number().int().nonnegative(),
-	total: z.number().int().nonnegative()
+	total: z.number().int().positive()
 }).strip().superRefine(function _ValidateColourTotal(scores, context)
 {
 	if (scores.total !== scores.red + scores.yellow + scores.green + scores.blue) context.addIssue({ code: z.ZodIssueCode.custom, path: ["total"], message: "must equal the colour score sum" });
@@ -62,7 +62,7 @@ const _PersonaColourScoresSchema = z.object({
 const _PersonaOpennessScoresSchema = z.object({
 	explorer: z.number().int().nonnegative(),
 	guardian: z.number().int().nonnegative(),
-	total: z.number().int().nonnegative()
+	total: z.number().int().positive()
 }).strip().superRefine(function _ValidateOpennessTotal(scores, context)
 {
 	if (scores.total !== scores.explorer + scores.guardian) context.addIssue({ code: z.ZodIssueCode.custom, path: ["total"], message: "must equal the openness score sum" });
@@ -76,7 +76,7 @@ const _PersonaResultSchema: z.ZodType<PersonaResult> = z.object({
 	modifier: z.nativeEnum(PersonaModifiers),
 	colourScores: _PersonaColourScoresSchema,
 	opennessScores: _PersonaOpennessScoresSchema,
-	insights: z.array(z.string().min(1).max(4_000)).max(64),
+	insights: z.array(z.string().min(1).max(4_000)).max(5),
 	instructionPreview: z.string().min(1).max(100_000).nullable()
 }).strip();
 

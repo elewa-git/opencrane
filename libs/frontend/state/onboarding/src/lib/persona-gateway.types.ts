@@ -53,7 +53,7 @@ export interface PersonaQuestionChoice
 	readonly id: string;
 	/** Human-readable preference shown to the owner. */
 	readonly label: string;
-	/** Stable order within the question. */
+	/** One-based stable order within the question. */
 	readonly ordinal: number;
 }
 
@@ -66,9 +66,9 @@ export interface PersonaQuestion
 	readonly category: string;
 	/** Human-readable preference question. */
 	readonly prompt: string;
-	/** Stable order within the interview. */
+	/** One-based stable order within the interview. */
 	readonly ordinal: number;
-	/** Finite reviewed choices accepted for this question. */
+	/** At least two finite reviewed choices accepted for this question. */
 	readonly choices: readonly PersonaQuestionChoice[];
 	/** Already-recorded choice, or null while the question is unanswered. */
 	readonly selectedChoiceId: string | null;
@@ -124,7 +124,7 @@ export interface PersonaResult
 	readonly colourScores: PersonaColourScores;
 	/** Complete lossless openness score vector. */
 	readonly opennessScores: PersonaOpennessScores;
-	/** Server-derived, provenance-linked review explanations. */
+	/** Up to five server-derived, provenance-linked review explanations. */
 	readonly insights: readonly string[];
 	/** Exact immutable compiled instructions the owner reviews before approval. */
 	readonly instructionPreview: string | null;

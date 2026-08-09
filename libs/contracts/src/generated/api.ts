@@ -4372,7 +4372,29 @@ export interface operations {
                 };
             };
             /** @description The owner-bound persona transition was rejected. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4567,6 +4589,17 @@ export interface operations {
                 };
             };
             /** @description The owner-bound persona transition was rejected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4660,6 +4693,17 @@ export interface operations {
             };
             /** @description The owner-bound persona transition was rejected. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4776,6 +4820,17 @@ export interface operations {
                 };
             };
             /** @description The owner-bound persona transition was rejected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4850,6 +4905,17 @@ export interface operations {
                 };
             };
             /** @description The owner-bound persona transition was rejected. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
             409: {
                 headers: {
                     [name: string]: unknown;
@@ -4914,6 +4980,17 @@ export interface operations {
             };
             /** @description The owner-bound persona transition was rejected. */
             401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        error: string;
+                    };
+                };
+            };
+            /** @description The owner-bound persona transition was rejected. */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
