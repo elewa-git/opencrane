@@ -11,7 +11,7 @@ export default defineConfig(
 {
 	testDir: "./tests/storybook",
 	outputDir: "./.nx/test-results/storybook",
-	snapshotPathTemplate: "{testDir}/__screenshots__/{arg}{ext}",
+	snapshotPathTemplate: "{testDir}/__screenshots__/{platform}/{arg}{ext}",
 	fullyParallel: false,
 	forbidOnly: Boolean(process.env.CI),
 	retries: 0,
