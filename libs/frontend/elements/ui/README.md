@@ -22,6 +22,18 @@ the same fonts, global tokens, PrimeNG preset, and zoneless change detection as 
 **In this flow:** feature packages own orchestration; `OpenCranePreset` in
 [`core`](../../core/README.md) owns the PrimeNG theme mapping.
 
+## Story organisation
+
+Every catalogue story lives beside the contract it verifies, under that component's `__tests__/`
+directory. This keeps the visual, interaction, accessibility, and unit-test fixtures together and
+prevents a component implementation from accumulating a second, detached story tree.
+
+Each story must document three things in its Storybook description: the user-facing state it
+represents, the component contract it verifies, and the authority it deliberately does **not**
+own. `visual-test` stories additionally provide the stable screenshot baseline; `play` stories
+prove interactions against the component boundary rather than pretending to exercise a feature's
+network or persistence transition.
+
 ## Public surface
 
 The package's index file (barrel) re-exports the components directly:

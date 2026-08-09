@@ -3,8 +3,8 @@ import { expect, userEvent, within } from "storybook/test";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 
-import { PersonaFirstChatComponent } from "./persona-first-chat.component.js";
-import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "./persona-first-chat.types.js";
+import { PersonaFirstChatComponent } from "../persona-first-chat.component.js";
+import { type PersonaFirstChatIdentity, PersonaFirstChatMessageRoles, type PersonaFirstChatProvenance, type PersonaFirstChatQuestion, PersonaFirstChatStates, type PersonaFirstChatTranscriptMessage } from "../persona-first-chat.types.js";
 
 /** Stable personal-agent identity shared by canonical Analyst stories. */
 const _ANALYST_IDENTITY: PersonaFirstChatIdentity =
@@ -46,6 +46,16 @@ const meta: Meta<PersonaFirstChatComponent> =
 	title: "Onboarding/Persona first chat",
 	component: PersonaFirstChatComponent,
 	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "The feature presentation boundary for a reviewed first-chat calibration. It renders server-provided identity, provenance, transcript, and lifecycle state, then emits intent for the owning route to admit."
+			}
+		}
+	},
 	args:
 	{
 		identity: _ANALYST_IDENTITY,
@@ -93,12 +103,14 @@ type Story = StoryObj<PersonaFirstChatComponent>;
 /** First canonical question with keyboard and focus interaction coverage. */
 export const AwaitingCalibration: Story =
 {
+	parameters: { docs: { description: { story: "The initial reviewed calibration question after the agent's opening statement. It documents editable intent before any answer is sent, saved, or interpreted as a preference." } } },
 	tags: ["visual-test"]
 };
 
 /** Keyboard interaction keeps multiline intent distinct from answer submission. */
 export const InteractionKeyboardSubmit: Story =
 {
+	parameters: { docs: { description: { story: "The keyboard contract for a multiline answer: Shift+Enter remains text input and Enter emits the exact answer intent. The Storybook play test proves this component contract without performing a network transition." } } },
 	play: async function play({ canvasElement })
 	{
 		const canvas = within(canvasElement);
@@ -121,6 +133,7 @@ export const InteractionKeyboardSubmit: Story =
 /** Saved first answer followed by the second sequential Analyst question. */
 export const AnsweredProgression: Story =
 {
+	parameters: { docs: { description: { story: "A server-projected transcript after the first answer is saved and before the second is answered. It demonstrates that sequential position follows supplied durable evidence, not local draft state." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -137,6 +150,7 @@ export const AnsweredProgression: Story =
 /** Composer disabled while the exact current answer is being admitted. */
 export const Submitting: Story =
 {
+	parameters: { docs: { description: { story: "The exact current answer while admission is pending. Editing is disabled and an explicit status is announced, protecting against duplicate or conflicting local submissions." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -158,6 +172,7 @@ export const Submitting: Story =
 /** Saved progression retained while the authoritative projection reloads before question three. */
 export const ReconnectingResume: Story =
 {
+	parameters: { docs: { description: { story: "A reconnecting projection that retains two saved answers and identifies the next question. It assures the owner that transcript evidence is intact while editing waits for authoritative recovery." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -187,6 +202,7 @@ export const ReconnectingResume: Story =
 /** Long provenance, transcript, and question content at the supported narrow viewport. */
 export const NarrowLongContent: Story =
 {
+	parameters: { docs: { description: { story: "Long Dutch identity, provenance, transcript, and question content at the supported narrow viewport. It protects the audit trail and question meaning from truncation in localized or high-detail use." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -214,6 +230,7 @@ export const NarrowLongContent: Story =
 /** Authority-confirmed terminal state with no editable composer. */
 export const Completed: Story =
 {
+	parameters: { docs: { description: { story: "The terminal server-confirmed calibration state. The composer disappears, and the message distinguishes ordinary conversation evidence from an explicitly reviewed retained preference." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -234,6 +251,7 @@ export const Completed: Story =
 /** Recoverable failure retains transcript and emits retry intent without local recovery logic. */
 export const Error: Story =
 {
+	parameters: { docs: { description: { story: "A recoverable authority failure that preserves the existing transcript and exposes retry intent. It never invents a recovery transition in the component itself." } } },
 	tags: ["visual-test"],
 	args:
 	{

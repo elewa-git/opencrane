@@ -5,8 +5,8 @@ const config: StorybookConfig =
 {
 	stories:
 	[
-		"../src/**/*.stories.@(js|jsx|mjs|ts|tsx)",
-		"../../../features/onboarding/src/**/*.stories.@(js|jsx|mjs|ts|tsx)"
+		"../src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)",
+		"../../../features/onboarding/src/**/__tests__/*.stories.@(js|jsx|mjs|ts|tsx)"
 	],
 	addons:
 	[

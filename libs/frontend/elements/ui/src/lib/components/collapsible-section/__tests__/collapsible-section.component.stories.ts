@@ -1,15 +1,25 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 import { expect, userEvent, within } from "storybook/test";
 
-import { CollapsibleSectionComponent } from "./collapsible-section.component";
-import { CollapsibleSectionVariants } from "./collapsible-section.types";
+import { CollapsibleSectionComponent } from "../collapsible-section.component";
+import { CollapsibleSectionVariants } from "../collapsible-section.types";
 
 /** Storybook catalogue metadata for expandable section states. */
 const meta: Meta<CollapsibleSectionComponent> =
 {
 	title: "Foundation/Collapsible section",
 	component: CollapsibleSectionComponent,
-	tags: ["autodocs"]
+	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A disclosure control for context that may be read on demand. Its stories cover visual variants and the accessible button-to-region relationship, not the policy content projected inside it."
+			}
+		}
+	}
 };
 
 export default meta;
@@ -20,6 +30,7 @@ type Story = StoryObj<CollapsibleSectionComponent>;
 /** Expanded light-panel state with realistic projected content. */
 export const PanelExpanded: Story =
 {
+	parameters: { docs: { description: { story: "An open light-panel disclosure with realistic projected evidence. Use it to inspect the default reading state and the spacing inherited by content supplied by a feature." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -46,6 +57,7 @@ export const PanelExpanded: Story =
 /** Collapsed light-panel state. */
 export const PanelCollapsed: Story =
 {
+	parameters: { docs: { description: { story: "The compact, closed panel before an owner asks to inspect the detail. It confirms that the title remains discoverable while the controlled region is initially hidden." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -59,6 +71,7 @@ export const PanelCollapsed: Story =
 /** Dark-rail state retained for the context surface. */
 export const Rail: Story =
 {
+	parameters: { docs: { description: { story: "The dark-rail treatment used for secondary context. It documents contrast and projected-content legibility without creating a second disclosure implementation." } } },
 	tags: ["visual-test"],
 	args:
 	{
@@ -85,6 +98,7 @@ export const Rail: Story =
 /** Keyboard interaction contract for the trigger and controlled region. */
 export const KeyboardToggle: Story =
 {
+	parameters: { docs: { description: { story: "The accessibility interaction contract for a closed panel. It proves the trigger reports expanded state and exposes a labelled region after the owner opens it." } } },
 	args:
 	{
 		sectionId: "keyboard-contract",

@@ -31,7 +31,7 @@
 				"default",
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
-				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
 			],
 			"options": {
@@ -59,7 +59,7 @@
 				"default",
 				"^production",
 				"{workspaceRoot}/libs/frontend/core/src/lib/theme/opencrane-theme.scss",
-				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/*.stories.ts",
+				"{workspaceRoot}/libs/frontend/features/onboarding/src/**/__tests__/*.stories.ts",
 				"{workspaceRoot}/libs/frontend/features/onboarding/src/lib/chat/**/*"
 			],
 			"outputs": [

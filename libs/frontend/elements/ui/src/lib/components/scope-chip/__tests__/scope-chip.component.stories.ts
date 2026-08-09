@@ -1,14 +1,24 @@
 import type { Meta, StoryObj } from "@storybook/angular";
 
-import { ScopeChipComponent } from "./scope-chip.component";
-import { ScopeChipAppearances, ScopeChipTones } from "./scope-chip.types";
+import { ScopeChipComponent } from "../scope-chip.component";
+import { ScopeChipAppearances, ScopeChipTones } from "../scope-chip.types";
 
 /** Storybook catalogue metadata for finite chip states. */
 const meta: Meta<ScopeChipComponent> =
 {
 	title: "Foundation/Scope chip",
 	component: ScopeChipComponent,
-	tags: ["autodocs"]
+	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "A compact scope and status marker that makes the owner-provided meaning visible without granting access. Stories cover the semantic vocabulary and its permitted visual treatments."
+			}
+		}
+	}
 };
 
 export default meta;
@@ -19,6 +29,7 @@ type Story = StoryObj<ScopeChipComponent>;
 /** Every supported semantic tone in the default outlined treatment. */
 export const SemanticTones: Story =
 {
+	parameters: { docs: { description: { story: "The full semantic vocabulary in the default outlined treatment. Review it when adding a scope or status to ensure the colour remains an aid, not the only source of meaning." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -44,6 +55,7 @@ export const SemanticTones: Story =
 /** Outlined and soft treatments using one semantic meaning. */
 export const Appearances: Story =
 {
+	parameters: { docs: { description: { story: "Two approved treatments for the same personal scope. This documents that appearance changes emphasis only; it never changes the underlying scope or authority." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{

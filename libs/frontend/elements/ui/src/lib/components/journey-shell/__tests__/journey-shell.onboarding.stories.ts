@@ -4,14 +4,14 @@ import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
-import { ChoiceCardGroupComponent } from "../choice-card-group/choice-card-group.component";
-import { ChoiceCardLayouts, ChoiceCardOption } from "../choice-card-group/choice-card-group.types";
-import { CollapsibleSectionComponent } from "../collapsible-section/collapsible-section.component";
-import { JourneyProgressComponent } from "../journey-progress/journey-progress.component";
-import { PersonaSummaryComponent } from "../persona-summary/persona-summary.component";
-import { PersonaArchetypeScore, PersonaArchetypeTones } from "../persona-summary/persona-summary.types";
-import { JourneyShellComponent } from "./journey-shell.component";
-import { JourneyShellLayouts } from "./journey-shell.types";
+import { ChoiceCardGroupComponent } from "../../choice-card-group/choice-card-group.component";
+import { ChoiceCardLayouts, ChoiceCardOption } from "../../choice-card-group/choice-card-group.types";
+import { CollapsibleSectionComponent } from "../../collapsible-section/collapsible-section.component";
+import { JourneyProgressComponent } from "../../journey-progress/journey-progress.component";
+import { PersonaSummaryComponent } from "../../persona-summary/persona-summary.component";
+import { PersonaArchetypeScore, PersonaArchetypeTones } from "../../persona-summary/persona-summary.types";
+import { JourneyShellComponent } from "../journey-shell.component";
+import { JourneyShellLayouts } from "../journey-shell.types";
 
 /** Stable onboarding answers used by the journey composition. */
 const _ONBOARDING_OPTIONS: readonly ChoiceCardOption[] =
@@ -44,6 +44,16 @@ const meta: Meta<JourneyShellComponent> =
 	title: "Foundation/Journey shell",
 	component: JourneyShellComponent,
 	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "The shared visual frame for server-owned journeys. These onboarding compositions document the feedback users need while the feature retains control of routing, durable state, and every transition."
+			}
+		}
+	},
 	decorators: [moduleMetadata({ imports: [ButtonModule, ChoiceCardGroupComponent, CollapsibleSectionComponent, JourneyProgressComponent, MessageModule, PersonaSummaryComponent, ProgressSpinnerModule] })]
 };
 
@@ -55,6 +65,7 @@ type Story = StoryObj<JourneyShellComponent>;
 /** Ten-question onboarding composition using the shared choice-card contract. */
 export const OnboardingQuestion: Story =
 {
+	parameters: { docs: { description: { story: "Question six of a ten-question survey with an already saved answer. It shows the ordinary decision surface: local selection is clear, while the surrounding feature owns durable admission and navigation." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -74,6 +85,7 @@ export const OnboardingQuestion: Story =
 /** Blocking read while the server resolves the durable interview position. */
 export const InterviewLoading: Story =
 {
+	parameters: { docs: { description: { story: "The blocking read while the server resolves the reviewed question set and saved position. It explicitly avoids presenting a guessed question or progress count before the authority responds." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -94,6 +106,7 @@ export const InterviewLoading: Story =
 /** Durable resume state begins at the next unanswered question. */
 export const ResumeInterview: Story =
 {
+	parameters: { docs: { description: { story: "A durable resume at the next unanswered question. It makes the retained answer count visible and keeps Continue unavailable until the current answer is selected." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -114,6 +127,7 @@ export const ResumeInterview: Story =
 /** Failed answer persistence keeps the exact selected choice reviewable. */
 export const AnswerSaveError: Story =
 {
+	parameters: { docs: { description: { story: "A failed save that leaves the exact selected answer visible and does not advance progress. It documents a recoverable retry affordance while preserving the server as the source of truth." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -134,6 +148,7 @@ export const AnswerSaveError: Story =
 /** Tied score is unresolved until the owner chooses one exact candidate. */
 export const TiedScoreResolution: Story =
 {
+	parameters: { docs: { description: { story: "An unresolved scoring tie that needs the owner's explicit choice before a persona draft exists. It prevents an apparently neutral visual tie-break from silently selecting an identity." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -152,6 +167,7 @@ export const TiedScoreResolution: Story =
 /** Persona result composition with archetype scores, evidence, and approval action. */
 export const PersonaResult: Story =
 {
+	parameters: { docs: { description: { story: "The review surface for a proposed persona, its score vector, and the evidence behind it. Approval is intentionally shown as an explicit action rather than an automatic consequence of displaying the result." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -172,6 +188,7 @@ export const PersonaResult: Story =
 /** Draft generation preserves completed evidence while review content is prepared. */
 export const PersonaDraftLoading: Story =
 {
+	parameters: { docs: { description: { story: "The busy state after evidence is complete but before a reviewed persona draft is ready. It reassures the owner that answers are frozen while avoiding a premature preview of inactive content." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -193,6 +210,7 @@ export const PersonaDraftLoading: Story =
 /** Failed approval leaves the exact reviewed revision inactive and retryable. */
 export const PersonaApprovalError: Story =
 {
+	parameters: { docs: { description: { story: "A failed activation where the exact reviewed draft remains inactive and retryable. It distinguishes a displayable candidate from a persona that an authority has actually made active." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
