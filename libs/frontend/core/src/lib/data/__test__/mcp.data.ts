@@ -135,10 +135,10 @@ export const MCP_INSTALLED: McpInstalledServer[] =
 /** Directory of users an admin can entitle (mock). */
 const _USERS: Record<string, McpEntitledUser> =
 {
-	jente: { id: "jente", name: "Jente Rosseel", initials: "JR", color: "#C84B31" },
-	maya: { id: "maya", name: "Maya Adeyemi", initials: "MA", color: "#4A6B8A" },
-	tom: { id: "tom", name: "Tom Lindqvist", initials: "TL", color: "#5A8A5A" },
-	dana: { id: "dana", name: "Dana Okonkwo", initials: "DA", color: "#7A6AA0" }
+	jente: { id: "jente", name: "Jente Rosseel", initials: "JR" },
+	maya: { id: "maya", name: "Maya Adeyemi", initials: "MA" },
+	tom: { id: "tom", name: "Tom Lindqvist", initials: "TL" },
+	dana: { id: "dana", name: "Dana Okonkwo", initials: "DA" }
 };
 
 /** Assignable users + groups for the access-policy editor (mock). */

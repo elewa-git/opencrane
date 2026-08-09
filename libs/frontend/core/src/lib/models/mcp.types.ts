@@ -2,9 +2,8 @@
  * Domain model for the MCP (Model Context Protocol) catalogue, credential
  * connect, and activation feature.
  *
- * WeOwnAI is a pure network client: these are local projections of the
- * OpenCrane opencrane-ui `/api/v1/mcp/...` contract shapes the catalogue UI
- * renders, never a re-export of OpenCrane source.
+ * These are the browser-safe projections of the OpenCrane
+ * `/api/v1/mcp/...` contract shapes rendered by the catalogue UI.
  */
 
 /**
@@ -128,62 +127,6 @@ export interface McpInstalledServer
 	connectedAccount?: string;
 }
 
-/** Visual style for a server type chip. */
-export interface McpChipStyle
-{
-	/** Chip label. */
-	label: string;
-	/** Accent colour (hex). */
-	color: string;
-}
-
-/**
- * Server-type chip style, reusing the scope-colour palette so the connection
- * mechanism is legible at a glance.
- */
-export const MCP_TYPE_STYLES: Record<McpServerType, McpChipStyle> =
-{
-	[McpServerType.SingleUser]: { label: "single-user", color: "#C84B31" },
-	[McpServerType.MultiUser]: { label: "multi-user", color: "#7A6AA0" },
-	[McpServerType.RemoteOauth]: { label: "remote-oauth", color: "#4A6B8A" }
-};
-
-/**
- * Approval-status chip style, mapping each lifecycle state onto a status colour.
- */
-export const MCP_APPROVAL_STYLES: Record<McpApprovalStatus, McpChipStyle> =
-{
-	[McpApprovalStatus.PendingReview]: { label: "pending review", color: "#A0855A" },
-	[McpApprovalStatus.Approved]: { label: "approved", color: "#4A6B8A" },
-	[McpApprovalStatus.Published]: { label: "published", color: "#5A8A5A" },
-	[McpApprovalStatus.Disabled]: { label: "disabled", color: "#7A766D" }
-};
-
-/** Visual style for a connection-status indicator. */
-export interface McpConnectionStyle
-{
-	/** Status label. */
-	label: string;
-	/** Indicator colour (hex). */
-	color: string;
-	/** Whether the dot should pulse (in-progress states). */
-	pulse: boolean;
-}
-
-/**
- * Connection-status indicator style. `NeedsCredential` is the one state tinted
- * with the terracotta accent, since it is the only one carrying a user CTA.
- */
-export const MCP_CONNECTION_STYLES: Record<McpConnectionStatus, McpConnectionStyle> =
-{
-	[McpConnectionStatus.NeedsCredential]: { label: "Needs credential", color: "#C84B31", pulse: false },
-	[McpConnectionStatus.Activating]: { label: "Activating…", color: "#7A766D", pulse: true },
-	[McpConnectionStatus.Connected]: { label: "Connected", color: "#5A8A5A", pulse: false },
-	[McpConnectionStatus.OauthConnected]: { label: "OAuth connected", color: "#5A8A5A", pulse: false },
-	[McpConnectionStatus.SharedKey]: { label: "Shared key · set by admin", color: "#4A6B8A", pulse: false },
-	[McpConnectionStatus.ActivationFailed]: { label: "Activation failed", color: "#C84B31", pulse: false }
-};
-
 /** A user that can be granted access to a server (entitlement target). */
 export interface McpEntitledUser
 {
@@ -193,8 +136,6 @@ export interface McpEntitledUser
 	name: string;
 	/** Two-letter avatar initials. */
 	initials: string;
-	/** Avatar background colour (hex). */
-	color: string;
 }
 
 /**

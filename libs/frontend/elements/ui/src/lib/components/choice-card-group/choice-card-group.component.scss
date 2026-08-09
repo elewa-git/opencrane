@@ -1,0 +1,108 @@
+.wo-choice {
+	min-width: 0;
+	margin: 0;
+	padding: 0;
+	border: 0;
+
+	&__legend {
+		width: 100%;
+		margin-bottom: var(--oc-space-4);
+		font-size: var(--oc-text-lg);
+		font-weight: 500;
+		line-height: 1.4;
+		color: var(--oc-ink-strong);
+	}
+
+	&__options {
+		display: grid;
+		gap: var(--oc-space-3);
+	}
+
+	&--grid &__options {
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+	}
+
+	&__option {
+		position: relative;
+		display: flex;
+		align-items: flex-start;
+		gap: var(--oc-space-3);
+		min-width: 0;
+		padding: var(--oc-space-4);
+		border: 1px solid var(--oc-border-default);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-surface-raised);
+		box-shadow: var(--oc-shadow-card);
+		cursor: pointer;
+		transition: border-color var(--oc-motion-fast) var(--oc-ease-standard), box-shadow var(--oc-motion-fast) var(--oc-ease-standard), transform var(--oc-motion-fast) var(--oc-ease-standard);
+		overflow: hidden;
+
+		&:hover:not(&--disabled) {
+			border-color: var(--oc-border-strong);
+			box-shadow: var(--oc-shadow-card-hover);
+			transform: translateY(var(--oc-lift-card));
+		}
+
+		&:focus-within {
+			outline: var(--oc-focus-width) solid var(--oc-focus-ring);
+			outline-offset: var(--oc-focus-offset);
+		}
+
+		&--selected {
+			border-color: var(--oc-accent);
+			background: var(--oc-accent-soft);
+			box-shadow: var(--oc-shadow-selected);
+		}
+
+		&--disabled {
+			cursor: not-allowed;
+			opacity: var(--oc-opacity-disabled);
+		}
+	}
+
+	&__copy {
+		display: grid;
+		gap: var(--oc-space-1);
+		min-width: 0;
+	}
+
+	&__label {
+		font-size: var(--oc-text-md);
+		font-weight: 500;
+		line-height: 1.35;
+		color: var(--oc-ink-strong);
+	}
+
+	&__description {
+		font-size: var(--oc-text-sm);
+		line-height: 1.5;
+		color: var(--oc-ink-muted);
+	}
+
+	&__fold {
+		position: absolute;
+		top: 0;
+		right: 0;
+		width: var(--oc-fold-size);
+		height: var(--oc-fold-size);
+		background: linear-gradient(225deg, var(--oc-surface-canvas) 0 48%, var(--oc-border-default) 49% 51%, var(--oc-surface-paper) 52% 100%);
+		transform-origin: top right;
+		transition: transform var(--oc-motion-standard) var(--oc-ease-fold);
+	}
+
+	&__option--selected &__fold {
+		transform: rotateY(180deg);
+	}
+
+	&__error {
+		margin: var(--oc-space-3) 0 0;
+		font-size: var(--oc-text-sm);
+		color: var(--oc-danger);
+	}
+}
+
+@media (max-width: 640px) {
+	.wo-choice--grid .wo-choice__options {
+		grid-template-columns: 1fr;
+	}
+}

@@ -1,6 +1,14 @@
 <span
 	class="wo-chip wo-mono"
-	[class.wo-chip--bordered]="bordered()"
-	[style.color]="color()"
-	[style.border-color]="bordered() ? color() : 'transparent'"
+	[class.wo-chip--neutral]="tone() === tones.Neutral"
+	[class.wo-chip--info]="tone() === tones.Info"
+	[class.wo-chip--success]="tone() === tones.Success"
+	[class.wo-chip--warning]="tone() === tones.Warning"
+	[class.wo-chip--danger]="tone() === tones.Danger"
+	[class.wo-chip--organization]="tone() === tones.Organization"
+	[class.wo-chip--department]="tone() === tones.Department"
+	[class.wo-chip--project]="tone() === tones.Project"
+	[class.wo-chip--personal]="tone() === tones.Personal"
+	[class.wo-chip--outlined]="appearance() === appearances.Outlined"
+	[class.wo-chip--soft]="appearance() === appearances.Soft"
 >{{ label() }}</span>

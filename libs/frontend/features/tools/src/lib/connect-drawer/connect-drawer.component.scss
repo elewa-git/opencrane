@@ -1,7 +1,7 @@
 .wo-connect {
 	&__sub {
 		font-size: 12px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		margin: 0 0 18px;
 	}
 
@@ -19,18 +19,18 @@
 	}
 
 	&__req {
-		color: var(--accent);
+		color: var(--oc-accent);
 		font-size: 11px;
 	}
 
 	&__opt {
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		font-size: 10px;
 	}
 
 	&__hint {
 		font-size: 11px;
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 		line-height: 1.45;
 		margin: 4px 0 0;
 	}
@@ -45,18 +45,18 @@
 		justify-content: space-between;
 		gap: 10px;
 		padding: 8px 12px;
-		border: 1px solid var(--border);
-		border-radius: var(--radius);
-		background: var(--secondary);
+		border: 1px solid var(--oc-border-default);
+		border-radius: var(--oc-radius-chip);
+		background: var(--oc-surface-subtle);
 		font-size: 12px;
 	}
 
 	&__masked {
-		color: var(--muted-foreground);
+		color: var(--oc-ink-muted);
 	}
 
 	&__set-ok {
-		color: var(--wo-ok);
+		color: var(--oc-status-ok);
 	}
 
 	&__account {

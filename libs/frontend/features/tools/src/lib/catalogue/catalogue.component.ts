@@ -1,9 +1,11 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, resource, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
-import { MCP_TYPE_STYLES, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
 import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+
+import { MCP_TYPE_CHIPS } from "../mcp-chip.constants";
 
 /**
  * Catalogue — user browse view.
@@ -45,8 +47,8 @@ export class CatalogueComponent
 	/** Server-type enum for the template's filter options. */
 	public readonly serverType = McpServerType;
 
-	/** Type chip styles for the template. */
-	public readonly typeStyles = MCP_TYPE_STYLES;
+	/** Feature-owned labels and semantic tones for server-type chips. */
+	public readonly typeChips = MCP_TYPE_CHIPS;
 
 	/** Set of installed server ids, for the installed-state lookup. */
 	private readonly _installedIds: Signal<Set<string>> = computed((): Set<string> =>

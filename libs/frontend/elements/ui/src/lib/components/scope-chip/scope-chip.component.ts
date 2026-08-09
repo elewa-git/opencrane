@@ -1,5 +1,7 @@
 import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 
+import { ScopeChipAppearances, ScopeChipTones } from "./scope-chip.types";
+
 /** Small mono bordered chip tinted with a scope/status colour. */
 @Component({
 	selector: "wo-scope-chip",
@@ -10,12 +12,18 @@ import { ChangeDetectionStrategy, Component, input } from "@angular/core";
 })
 export class ScopeChipComponent
 {
+	/** Tone enum exposed to the template for typed class selection. */
+	public readonly tones = ScopeChipTones;
+
+	/** Appearance enum exposed to the template for typed class selection. */
+	public readonly appearances = ScopeChipAppearances;
+
 	/** Chip text. */
 	public readonly label = input.required<string>();
 
-	/** Chip accent colour. */
-	public readonly color = input.required<string>();
+	/** Semantic colour treatment; raw colour values are deliberately rejected. */
+	public readonly tone = input<ScopeChipTones>(ScopeChipTones.Neutral);
 
-	/** Render a border around the chip. */
-	public readonly bordered = input<boolean>(true);
+	/** Typed boundary/fill treatment. */
+	public readonly appearance = input<ScopeChipAppearances>(ScopeChipAppearances.Outlined);
 }

@@ -1,0 +1,33 @@
+<main
+	class="wo-journey"
+	[class.wo-journey--wide]="layout() === layouts.Wide"
+	[attr.aria-busy]="busy()"
+>
+	<div class="wo-journey__paper" aria-hidden="true"></div>
+	<section class="wo-journey__panel">
+		<header class="wo-journey__header">
+			<div class="wo-journey__brand" aria-label="OpenCrane">
+				<span class="wo-journey__mark" aria-hidden="true"></span>
+				<span>OpenCrane</span>
+			</div>
+			<ng-content select="[journey-eyebrow]" />
+			<h1 class="wo-journey__title">{{ title() }}</h1>
+			@if (description(); as descriptionValue) {
+				<p class="wo-journey__description">{{ descriptionValue }}</p>
+			}
+			<ng-content select="[journey-progress]" />
+		</header>
+
+		<div class="wo-journey__status" aria-live="polite">
+			<ng-content select="[journey-status]" />
+		</div>
+
+		<div class="wo-journey__content">
+			<ng-content />
+		</div>
+
+		<footer class="wo-journey__actions">
+			<ng-content select="[journey-actions]" />
+		</footer>
+	</section>
+</main>

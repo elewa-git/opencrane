@@ -4,7 +4,7 @@ import { provideAnimationsAsync } from "@angular/platform-browser/animations/asy
 import { provideHttpClient, withFetch } from "@angular/common/http";
 import { providePrimeNG } from "primeng/config";
 
-import { WeOwnAiPreset } from "@opencrane/core";
+import { OpenCranePreset } from "@opencrane/core";
 import { PLATFORM_SURFACE } from "@opencrane/state/core";
 import { LOCAL_STORAGE_GATEWAY, SESSION_STORAGE_GATEWAY, WebLocalStorageAdapter, WebSessionStorageAdapter } from "@opencrane/state/utils/storage";
 import { provideControlPlaneGateways } from "@opencrane/state/gateways";
@@ -13,7 +13,7 @@ import { provideWebPlatform } from "@opencrane/platform";
 import { APP_ROUTES } from "./app.routes";
 
 /**
- * Root application configuration for the WeOwnAI frontend.
+ * Root application configuration for the OpenCrane frontend.
  *
  * Change detection is zoneless: the app is fully signal-driven with OnPush
  * components, so zone.js is not bundled (see the empty polyfills in the build).
@@ -28,7 +28,7 @@ export const appConfig: ApplicationConfig =
 		provideRouter(APP_ROUTES, withComponentInputBinding()),
 		provideHttpClient(withFetch()),
 		provideAnimationsAsync(),
-		providePrimeNG({ theme: { preset: WeOwnAiPreset } }),
+		providePrimeNG({ theme: { preset: OpenCranePreset } }),
 		provideWebPlatform(),
 		{ provide: LOCAL_STORAGE_GATEWAY, useClass: WebLocalStorageAdapter },
 		{ provide: SESSION_STORAGE_GATEWAY, useClass: WebSessionStorageAdapter },

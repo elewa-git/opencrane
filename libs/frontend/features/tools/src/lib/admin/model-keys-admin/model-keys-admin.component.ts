@@ -5,7 +5,7 @@ import { ConfirmDialogModule } from "primeng/confirmdialog";
 
 import { ModelProvider, PROVIDER_KEY_GATEWAY, ProviderKeyStatus } from "@opencrane/state/provider-key/adapter";
 import { SessionStore } from "@opencrane/state/core";
-import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+import { ScopeChipAppearances, ScopeChipComponent, ScopeChipTones, SectionHeadingComponent } from "@opencrane/elements/ui";
 
 import { LITELLM_BADGE_STYLES, ModelKeyRow } from "./model-keys-admin.types";
 import { _BadgeFor, _ToModelKeyRows } from "./model-keys-admin.utils";
@@ -32,6 +32,12 @@ import { _BadgeFor, _ToModelKeyRows } from "./model-keys-admin.utils";
 })
 export class ModelKeysAdminComponent
 {
+	/** Shared chip tones exposed for configured and unconfigured summaries. */
+	public readonly chipTones = ScopeChipTones;
+
+	/** Shared chip appearances exposed for compact table badges. */
+	public readonly chipAppearances = ScopeChipAppearances;
+
 	/** Active BYOK provider-key data source (live OpenCrane when bound). */
 	private readonly _gateway = inject(PROVIDER_KEY_GATEWAY);
 
@@ -74,7 +80,7 @@ export class ModelKeysAdminComponent
 	});
 
 	/** Resolve a row's LiteLLM badge style (active / Secret-only / not configured). */
-	public badgeStyle(row: ModelKeyRow): { label: string; color: string }
+	public badgeStyle(row: ModelKeyRow): { label: string; tone: ScopeChipTones }
 	{
 		return this.badgeStyles[_BadgeFor(row)];
 	}

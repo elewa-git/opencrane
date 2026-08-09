@@ -34,7 +34,7 @@ export class CanvasDocComponent
 		{
 			case "on-track": return { color: "#5A8A5A", label: "on track" };
 			case "at-risk": return { color: "#A0855A", label: "at risk" };
-			default: return { color: "var(--muted-foreground)", label: "pending" };
+			default: return { color: "var(--oc-ink-muted)", label: "pending" };
 		}
 	}
 

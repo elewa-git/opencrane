@@ -25,9 +25,9 @@
 								<div class="wo-admin__desc">{{ server.description }}</div>
 							</td>
 							<td class="wo-admin__muted">{{ server.publisher }}</td>
-							<td><wo-scope-chip [label]="typeStyles[server.type].label" [color]="typeStyles[server.type].color" /></td>
+							<td><wo-scope-chip [label]="typeChips[server.type].label" [tone]="typeChips[server.type].tone" /></td>
 							<td class="wo-admin__muted">{{ server.entitlementSummary }}</td>
-							<td><wo-scope-chip [label]="approvalStyles[server.approvalStatus].label" [color]="approvalStyles[server.approvalStatus].color" /></td>
+							<td><wo-scope-chip [label]="approvalChips[server.approvalStatus].label" [tone]="approvalChips[server.approvalStatus].tone" /></td>
 							<td class="wo-admin__actions">
 								@switch (server.approvalStatus) {
 									@case (status.PendingReview) {
@@ -53,7 +53,7 @@
 			</table>
 		} @else {
 			<div class="wo-admin__denied">
-				<h2 class="wo-serif">Admins only</h2>
+				<h2>Admins only</h2>
 				<p>The MCP catalogue is managed by your organisation's administrators.</p>
 			</div>
 		}

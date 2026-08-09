@@ -1,11 +1,66 @@
 .wo-chip {
-	font-size: 9px;
-	border-radius: 3px;
-	padding: 1px 5px;
-	opacity: 0.8;
+	display: inline-flex;
+	align-items: center;
+	padding: var(--oc-chip-padding-block) var(--oc-chip-padding-inline);
+	border-radius: var(--oc-radius-chip);
+	font-size: var(--oc-text-2xs);
+	font-weight: 500;
+	letter-spacing: var(--oc-tracking-label);
+	color: var(--oc-chip-foreground);
+	background: var(--oc-chip-background);
 	white-space: nowrap;
 
-	&--bordered {
-		border: 1px solid currentColor;
+	&--outlined {
+		border: 1px solid var(--oc-chip-foreground);
+		background: transparent;
+	}
+
+	&--soft {
+		border: 1px solid transparent;
+	}
+
+	&--neutral {
+		--oc-chip-foreground: var(--oc-ink-muted);
+		--oc-chip-background: var(--oc-neutral-soft);
+	}
+
+	&--info {
+		--oc-chip-foreground: var(--oc-info);
+		--oc-chip-background: var(--oc-info-soft);
+	}
+
+	&--success {
+		--oc-chip-foreground: var(--oc-success);
+		--oc-chip-background: var(--oc-success-soft);
+	}
+
+	&--warning {
+		--oc-chip-foreground: var(--oc-warning);
+		--oc-chip-background: var(--oc-warning-soft);
+	}
+
+	&--danger {
+		--oc-chip-foreground: var(--oc-danger);
+		--oc-chip-background: var(--oc-danger-soft);
+	}
+
+	&--organization {
+		--oc-chip-foreground: var(--oc-scope-organization);
+		--oc-chip-background: var(--oc-scope-organization-soft);
+	}
+
+	&--department {
+		--oc-chip-foreground: var(--oc-scope-department);
+		--oc-chip-background: var(--oc-scope-department-soft);
+	}
+
+	&--project {
+		--oc-chip-foreground: var(--oc-scope-project);
+		--oc-chip-background: var(--oc-scope-project-soft);
+	}
+
+	&--personal {
+		--oc-chip-foreground: var(--oc-scope-personal);
+		--oc-chip-background: var(--oc-scope-personal-soft);
 	}
 }

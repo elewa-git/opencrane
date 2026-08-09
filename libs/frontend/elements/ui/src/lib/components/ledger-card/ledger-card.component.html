@@ -1,10 +1,15 @@
-<div class="wo-ledger" [style.background]="style().bg" [style.border-left-color]="style().border">
-	<span class="wo-ledger__id wo-mono" [style.color]="style().border">{{ entryId() }}</span>
+<div
+	class="wo-ledger"
+	[class.wo-ledger--observation]="kind() === kinds.Observation"
+	[class.wo-ledger--policy]="kind() === kinds.Policy"
+	[class.wo-ledger--action]="kind() === kinds.Action"
+>
+	<span class="wo-ledger__id wo-mono">{{ entryId() }}</span>
 	<div class="wo-ledger__body">
 		<p class="wo-ledger__label" [class.wo-ledger__label--dimmed]="dimmed()">{{ label() }}</p>
 		<div class="wo-ledger__meta">
 			@if (scope(); as scopeLevel) {
-				<wo-scope-chip [label]="scopeLevel" [color]="scopeColor()" />
+				<wo-scope-chip [label]="scopeLevel" [tone]="scopeTone()" />
 			}
 			@if (entryRef(); as refValue) {
 				<span class="wo-ledger__ref wo-mono">{{ refValue }}</span>
@@ -12,6 +17,6 @@
 		</div>
 	</div>
 	@if (status(); as statusValue) {
-		<span class="wo-ledger__status wo-mono" [style.color]="style().border" [style.border-color]="style().border">{{ statusValue }}</span>
+		<span class="wo-ledger__status wo-mono">{{ statusValue }}</span>
 	}
 </div>

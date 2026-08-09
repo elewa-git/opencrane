@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, resource, signal } from "@angular/core";
 import { RouterLink } from "@angular/router";
 
-import { MCP_CONNECTION_STYLES, MCP_TYPE_STYLES, McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
+import { McpConnectionStatus, McpInstalledServer, McpServer, McpServerType } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
-import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+import { ScopeChipComponent, ScopeChipTones, SectionHeadingComponent } from "@opencrane/elements/ui";
 import { ConnectDrawerComponent } from "../connect-drawer/connect-drawer.component";
+import { MCP_CONNECTION_INDICATORS, MCP_TYPE_CHIPS } from "../mcp-chip.constants";
 
 /** One installed-server row: the catalogue server joined to its install record. */
 interface _McpToolRow
@@ -50,11 +51,14 @@ export class MyToolsComponent
 	/** Server whose connect drawer is open, or null when closed. */
 	public readonly connectTarget = signal<McpServer | null>(null);
 
-	/** Connection-status styles for the template. */
-	public readonly connectionStyles = MCP_CONNECTION_STYLES;
+	/** Feature-owned status label, tone, and motion for each connection state. */
+	public readonly connectionIndicators = MCP_CONNECTION_INDICATORS;
 
-	/** Type chip styles for the template. */
-	public readonly typeStyles = MCP_TYPE_STYLES;
+	/** Shared tones exposed for typed status-class selection. */
+	public readonly chipTones = ScopeChipTones;
+
+	/** Feature-owned labels and semantic tones for server-type chips. */
+	public readonly typeChips = MCP_TYPE_CHIPS;
 
 	/** Connection-status enum for the template. */
 	public readonly status = McpConnectionStatus;

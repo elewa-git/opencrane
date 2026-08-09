@@ -8,14 +8,14 @@
 .wo-keys__note {
 	margin: 16px 0 8px;
 	font-size: 12px;
-	color: var(--muted-foreground);
+	color: var(--oc-ink-muted);
 	max-width: 52rem;
 }
 
 .wo-keys__error {
 	margin: 8px 0 0;
 	font-size: 12px;
-	color: var(--destructive, #c84b31);
+	color: var(--oc-danger, #c84b31);
 }
 
 .wo-keys__name {

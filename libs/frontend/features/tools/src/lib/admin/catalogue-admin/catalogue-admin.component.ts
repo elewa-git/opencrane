@@ -1,10 +1,12 @@
 import { ChangeDetectionStrategy, Component, Signal, computed, inject, resource } from "@angular/core";
 import { Router } from "@angular/router";
 
-import { MCP_APPROVAL_STYLES, MCP_TYPE_STYLES, McpApprovalStatus, McpServer } from "@opencrane/core";
+import { McpApprovalStatus, McpServer } from "@opencrane/core";
 import { MCP_GATEWAY } from "@opencrane/state/mcp/adapter";
 import { SessionStore } from "@opencrane/state/core";
 import { ScopeChipComponent, SectionHeadingComponent } from "@opencrane/elements/ui";
+
+import { MCP_APPROVAL_CHIPS, MCP_TYPE_CHIPS } from "../../mcp-chip.constants";
 
 /**
  * Catalogue — admin governance view.
@@ -43,11 +45,11 @@ export class CatalogueAdminComponent
 	/** Whether the session may use the admin console (else a denied state shows). */
 	public readonly canAdminister: Signal<boolean> = computed((): boolean => this._session.capabilities().customerAdmin);
 
-	/** Approval-status chip styles for the template. */
-	public readonly approvalStyles = MCP_APPROVAL_STYLES;
+	/** Feature-owned labels and semantic tones for approval-status chips. */
+	public readonly approvalChips = MCP_APPROVAL_CHIPS;
 
-	/** Type chip styles for the template. */
-	public readonly typeStyles = MCP_TYPE_STYLES;
+	/** Feature-owned labels and semantic tones for server-type chips. */
+	public readonly typeChips = MCP_TYPE_CHIPS;
 
 	/** Approval-status enum for the template. */
 	public readonly status = McpApprovalStatus;

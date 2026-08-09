@@ -29,7 +29,7 @@
 
 	<div class="wo-ctx__body wo-scrollable">
 		@if (tab() === "context") {
-			<wo-collapsible-section title="Awareness Contract">
+			<wo-collapsible-section sectionId="context-awareness" title="Awareness Contract">
 				<div class="wo-ctx__contract">
 					<div class="wo-ctx__contract-card">
 						<div>
@@ -51,12 +51,12 @@
 				</div>
 			</wo-collapsible-section>
 
-			<wo-collapsible-section title="Retrieved Scope Context">
+			<wo-collapsible-section sectionId="context-retrieved-scope" title="Retrieved Scope Context">
 				<div class="wo-ctx__scopes">
 					@for (entry of scopeEntries; track entry.level) {
 						<div>
 							<button type="button" class="wo-ctx__scope-row" [class.wo-ctx__scope-row--active]="expandedScope() === entry.level" (click)="toggleScope(entry.level)">
-								<span class="wo-ctx__scope-dot" [style.background]="entry.active ? entry.color : 'var(--muted-foreground)'" [style.opacity]="entry.active ? 1 : 0.4"></span>
+								<span class="wo-ctx__scope-dot" [style.background]="entry.active ? entry.color : 'var(--oc-ink-muted)'" [style.opacity]="entry.active ? 1 : 0.4"></span>
 								<span class="wo-ctx__scope-body">
 									<span class="wo-ctx__scope-title">
 										<span>{{ entry.label }}</span>
@@ -85,7 +85,7 @@
 				</div>
 			</wo-collapsible-section>
 
-			<wo-collapsible-section title="Active Skills" [defaultOpen]="false">
+			<wo-collapsible-section sectionId="context-active-skills" title="Active Skills" [defaultOpen]="false">
 				<div class="wo-ctx__skills">
 					@for (skill of skills; track skill.name) {
 						<div class="wo-ctx__skill">
@@ -104,16 +104,16 @@
 				<div class="wo-ctx__ledger-head">
 					<p>Grounded in 1 trace</p>
 					<div class="wo-ctx__ledger-kinds">
-						<span class="wo-mono" style="color: #4a6b8a; border-color: #4a6b8a"><i class="pi pi-info-circle"></i></span>
-						<span class="wo-mono" style="color: #a0855a; border-color: #a0855a"><i class="pi pi-exclamation-triangle"></i></span>
-						<span class="wo-mono" style="color: #5a8a5a; border-color: #5a8a5a"><i class="pi pi-bolt"></i></span>
+						<span class="wo-mono" style="color: var(--oc-ledger-observation); border-color: var(--oc-ledger-observation)"><i class="pi pi-info-circle"></i></span>
+						<span class="wo-mono" style="color: var(--oc-ledger-policy); border-color: var(--oc-ledger-policy)"><i class="pi pi-exclamation-triangle"></i></span>
+						<span class="wo-mono" style="color: var(--oc-ledger-action); border-color: var(--oc-ledger-action)"><i class="pi pi-bolt"></i></span>
 					</div>
 				</div>
 				<div class="wo-ctx__ledger-list">
 					@for (entry of ledger; track entry.id) {
 						<wo-ledger-card
 							[entryId]="entry.id"
-							[kind]="entry.type"
+							[kind]="ledgerKind(entry.type)"
 							[label]="entry.label"
 							[scope]="entry.scope"
 							[entryRef]="entry.ref"

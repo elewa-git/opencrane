@@ -27,7 +27,7 @@
 						<h3 class="wo-mono wo-ap__detail-title">{{ srv.name }}</h3>
 						<p class="wo-ap__detail-sub">
 							{{ srv.description }} ·
-							<wo-scope-chip [label]="typeStyles[srv.type].label" [color]="typeStyles[srv.type].color" />
+							<wo-scope-chip [label]="typeChips[srv.type].label" [tone]="typeChips[srv.type].tone" />
 						</p>
 
 						@if (policy(); as pol) {
@@ -64,7 +64,7 @@
 							<div class="wo-ap__chips">
 								@for (user of pol.users; track user.id) {
 									<span class="wo-ap__chip">
-										<wo-avatar-circle [initials]="user.initials" [color]="user.color" [size]="18" />
+										<wo-avatar-circle [initials]="user.initials" [tone]="avatarTones.Neutral" [size]="avatarSizes.Compact" />
 										{{ user.name }}
 										<button type="button" class="wo-ap__chip-x" (click)="removeUser(user.id)">✕</button>
 									</span>
@@ -94,7 +94,7 @@
 			<a class="wo-tools__act wo-ap__back" [routerLink]="['/admin/catalogue']">← Back to catalogue</a>
 		} @else {
 			<div class="wo-admin__denied">
-				<h2 class="wo-serif">Admins only</h2>
+				<h2>Admins only</h2>
 				<p>Access policy is managed by your organisation's administrators.</p>
 			</div>
 		}
