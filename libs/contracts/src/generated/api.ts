@@ -655,9 +655,29 @@ export interface paths {
         };
         /**
          * List the signed-in owner's pending tool approvals
-         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable approvals and never returns arguments, proof data, policy digests, or resume credentials.
+         * @description The server derives the owner and silo from the browser session and host. It returns at most fifty actionable interrupts with pre-redacted proposed arguments and an exact decision response schema derived from the frozen reviewed tool schema. It never returns secret-marked values, raw authority evidence, policy digests, or resume material.
          */
         get: operations["listMyPendingToolApprovals"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me/approvals/{approvalRequestId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Read one tool interrupt owned by the signed-in user
+         * @description The approval id is the interrupt id. The response reports actor-relevant state, pre-redacted proposed arguments, and the frozen decision response schema without returning server-only reviewed arguments or resume material.
+         */
+        get: operations["getMyToolApproval"];
         put?: never;
         post?: never;
         delete?: never;
@@ -677,7 +697,7 @@ export interface paths {
         put?: never;
         /**
          * Approve or deny one pending tool action owned by the signed-in user
-         * @description The server derives the owner and silo from the browser session. The body can contain only the terminal decision; it cannot choose another run, subject, tool result, or resume credential.
+         * @description The server derives the owner and silo from the browser session. Approval must carry one complete argument value, which the server validates against the frozen reviewed response schema; denial carries no arguments. Partial edits, run coordinates, tool results, and resume material are rejected.
          */
         post: operations["decideDeferredToolApproval"];
         delete?: never;
@@ -1804,6 +1824,11 @@ export interface components {
             runId: string;
             attempt: number;
             toolRevisionId: string;
+            toolInvocationId: string;
+            /** @enum {string} */
+            state: "pending" | "approved" | "denied" | "expired" | "cancelled";
+            proposedArguments: unknown;
+            responseSchema: Record<string, never>;
             /** Format: date-time */
             expiresAt: string;
             /** Format: date-time */
@@ -4051,6 +4076,67 @@ export interface operations {
             };
         };
     };
+    getMyToolApproval: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                /** @description Interrupt identifier for the owned approval. */
+                approvalRequestId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Owned tool interrupt. */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        approval: components["schemas"]["SelfDeferredToolApproval"];
+                    };
+                };
+            };
+            /** @description The interrupt identifier is empty. */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description No authenticated browser session owns the request. */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The interrupt is absent or belongs to another actor or silo. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+            /** @description The product authority could not read the interrupt. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Error"];
+                };
+            };
+        };
+    };
     decideDeferredToolApproval: {
         parameters: {
             query?: never;
@@ -4064,8 +4150,12 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": {
-                    /** @enum {string} */
-                    decision: "approved" | "denied";
+                    /** @constant */
+                    decision: "approved";
+                    arguments: unknown;
+                } | {
+                    /** @constant */
+                    decision: "denied";
                 };
             };
         };
@@ -4083,7 +4173,7 @@ export interface operations {
                     };
                 };
             };
-            /** @description The request body is not the exact decision shape. */
+            /** @description The request body is not the exact decision shape, or approved arguments fail the frozen reviewed schema. */
             400: {
                 headers: {
                     [name: string]: unknown;

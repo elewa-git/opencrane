@@ -1,8 +1,10 @@
 import { ApprovalRequestState, Prisma } from "@prisma/client";
 
-import type { JsonValue } from "@opencrane/util";
+import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
-import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolDecision, DeferToolRequestCommand, DeferToolRequestResult } from "./deferred-tool-approval.types.js";
+import { __DigestCanonicalJson } from "./canonical-json-digest.js";
+import { __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
+import { DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type DeferToolRequestCommand, type DeferToolRequestResult } from "./deferred-tool-approval.types.js";
 
 /**
  * Pause one reserved tool invocation behind a new pending deferred-tool approval.
@@ -32,6 +34,7 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	{
 		const created = await transaction.approvalRequest.create({
 			data: {
+				id: command.interruptId,
 				runId: command.runId,
 				attempt: command.attempt,
 				agentRevisionId: assignment.agentRevisionId,
@@ -56,6 +59,11 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 				state: ApprovalRequestState.Pending,
 				expiresAt: command.expiresAt,
 				toolInvocationRowId: command.toolInvocationRowId,
+				reviewedToolArguments: command.reviewedArguments as unknown as Prisma.InputJsonValue,
+				reviewedToolSchema: command.reviewedParametersSchema as unknown as Prisma.InputJsonValue,
+				reviewedToolSchemaDigest: command.reviewedParametersSchemaDigest,
+				safeProposedArguments: command.safeProposedArguments as unknown as Prisma.InputJsonValue,
+				responseSchema: command.responseSchema as unknown as Prisma.InputJsonValue,
 			},
 		});
 		return { outcome: "deferred", approvalRequestId: created.id };
@@ -65,15 +73,16 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 		if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
 		const existing = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
 		if (existing === null) throw error;
+		if (existing.id !== command.interruptId || existing.argumentsDigest !== command.argumentsDigest || existing.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest) throw error;
 		return { outcome: "already_deferred", approvalRequestId: existing.id };
 	}
 }
 
 /** Maps a decided approval state back to the stable decision literal, or null while still pending. */
-function _decisionOf(state: ApprovalRequestState): DeferredToolDecision | null
+function _decisionOf(state: ApprovalRequestState): DeferredToolDecisionKinds | null
 {
-	if (state === ApprovalRequestState.Approved) return "approved";
-	if (state === ApprovalRequestState.Denied) return "denied";
+	if (state === ApprovalRequestState.Approved) return DeferredToolDecisionKinds.Approved;
+	if (state === ApprovalRequestState.Denied) return DeferredToolDecisionKinds.Denied;
 	return null;
 }
 
@@ -105,7 +114,14 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 
 	// 2. A previously decided request replays idempotently or conflicts on a differing outcome.
 	const priorDecision = _decisionOf(approval.state);
-	if (priorDecision !== null) return priorDecision === command.decision ? { outcome: "already_decided", decision: priorDecision } : { outcome: "conflict" };
+	if (priorDecision !== null)
+	{
+		if (priorDecision !== command.decision) return { outcome: "conflict" };
+		if (priorDecision === DeferredToolDecisionKinds.Denied) return command.arguments === undefined ? { outcome: "already_decided", decision: priorDecision } : { outcome: "conflict" };
+		if (command.arguments === undefined) return { outcome: "conflict" };
+		const digest = __DigestCanonicalJson(___CloneCanonicalJson(command.arguments));
+		return digest === approval.finalArgumentsDigest ? { outcome: "already_decided", decision: priorDecision, argumentsDigest: digest } : { outcome: "conflict" };
+	}
 	if (approval.state !== ApprovalRequestState.Pending) return { outcome: "conflict" };
 	if (approval.expiresAt.getTime() <= command.now.getTime())
 	{
@@ -117,8 +133,9 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	}
 
 	// 3. Deny by closing the pending row; no result and no resume token are recorded.
-	if (command.decision === "denied")
+	if (command.decision === DeferredToolDecisionKinds.Denied)
 	{
+		if (command.arguments !== undefined) return { outcome: "invalid_arguments" };
 		const denied = await transaction.approvalRequest.updateMany({
 			where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 			data: { state: ApprovalRequestState.Denied, decidedAt: command.now, decidedBy: command.decidedBy },
@@ -130,22 +147,25 @@ export async function __DecideDeferredToolRequest(transaction: Prisma.Transactio
 	// runtime must map the approval back to. A missing reservation row is a broken linkage: conflict,
 	// never an approval whose resume payload the runtime could not act on.
 	const invocation = await transaction.toolInvocation.findUnique({ where: { id: approval.toolInvocationRowId } });
-	if (invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt) return { outcome: "conflict" };
+	if (invocation === null || invocation.runId !== approval.runId || invocation.attempt !== approval.attempt || invocation.toolRevisionId !== approval.resourceId || invocation.argumentsDigest !== approval.argumentsDigest || approval.reviewedToolSchema === null || approval.reviewedToolSchemaDigest === null || __DigestCanonicalJson(approval.reviewedToolSchema as JsonValue) !== approval.reviewedToolSchemaDigest) return { outcome: "conflict" };
+	if (command.arguments === undefined || command.arguments === null || typeof command.arguments !== "object" || Array.isArray(command.arguments) || !__ValidateDeferredToolArguments(approval.reviewedToolSchema as JsonValue, command.arguments)) return { outcome: "invalid_arguments" };
+	const finalArguments = ___CloneCanonicalJson(command.arguments);
+	const finalArgumentsDigest = __DigestCanonicalJson(finalArguments);
+	const resumeTokenHash = __DigestCanonicalJson({ approvalRequestId: approval.id, argumentsDigest: finalArgumentsDigest, decidedBy: command.decidedBy, decidedAt: command.now.toISOString() });
 
-	// 5. Approve atomically, recording the authorized deferred result and single-use resume-token hash.
-	const suppliedResult = command.deferredToolResult;
-	const deferredToolResult: JsonValue = { ...(suppliedResult !== undefined && suppliedResult !== null && typeof suppliedResult === "object" && !Array.isArray(suppliedResult) ? suppliedResult : {}), toolInvocationId: invocation.toolInvocationId };
+	// 5. Approve atomically, persisting the exact normalized replacement and one resume marker.
 	const approved = await transaction.approvalRequest.updateMany({
 		where: { id: command.approvalRequestId, state: ApprovalRequestState.Pending, expiresAt: { gt: command.now } },
 		data: {
 			state: ApprovalRequestState.Approved,
 			decidedAt: command.now,
 			decidedBy: command.decidedBy,
-			resumeTokenHash: command.resumeTokenHash ?? null,
-			deferredToolResult: deferredToolResult as unknown as Prisma.InputJsonValue,
+			resumeTokenHash,
+			finalArguments: finalArguments as unknown as Prisma.InputJsonValue,
+			finalArgumentsDigest,
 		},
 	});
-	return approved.count === 1 ? { outcome: "approved", deferredToolResult } : _conflictOrExpire(transaction, command);
+	return approved.count === 1 ? { outcome: "approved", argumentsDigest: finalArgumentsDigest } : _conflictOrExpire(transaction, command);
 }
 /** Terminalise a just-expired owner-bound request after a decision compare-and-set loses its fence. */
 async function _conflictOrExpire(transaction: Prisma.TransactionClient, command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>

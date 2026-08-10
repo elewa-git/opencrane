@@ -45,6 +45,14 @@ transaction to cancel every still-pending approval and clear its resume token. I
 strict: anything missing, altered, or out of date is a "no". A mistake here can only ever refuse a
 legitimate request — never hand out access it should not.
 
+Tool approval is an interrupt in that same authority, not a second execution path. Its identifier is
+the interrupt identifier. The opener freezes the exact candidate arguments and reviewed compiled
+tool schema before the actor sees the request. Actor reads select only a pre-redacted argument
+projection plus a decision schema derived from that frozen tool schema; schema-marked secret values,
+policy evidence, and resume material never cross the API. Approval requires one complete argument
+value, validates it server-side against the frozen schema, then atomically records the normalized
+value and digest. Denial records no arguments and creates no resume authority.
+
 ## Public surface
 
 - `__ResolveEffectiveAccess` — computes the capabilities allowed to *both* the person and the agent,
@@ -59,13 +67,16 @@ legitimate request — never hand out access it should not.
 - `__CancelPendingRunApprovalAuthority` — closes only pending approvals for an exact run attempt on
   a caller-owned database transaction, clearing every late-resume token atomically with cancellation.
 - `__CreateDeferredToolApprovalRouter`, `PrismaDeferredToolApprovalDecisionRepository`,
-  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only pending approval inbox, decision
-  surface, and their persistence adapters. The router derives the person and silo from the signed-in
-  browser session; the list omits arguments, proof data, policy digests, and resume credentials.
+  `PrismaSelfDeferredToolApprovalListRepository` — the owner-only approval inbox, interrupt detail,
+  decision surface, and persistence adapters. The router derives the person and silo from the
+  signed-in browser session; actor reads select only pre-redacted arguments and the derived response
+  schema, never raw reviewed or final arguments, proof data, policy digests, or resume material.
 - `_CreateDeferredToolApprovalRouter` — the ready-to-mount Prisma composition that maps the shared
   authenticated request principal into the approval caller and owns the adapters and clock.
 - `__OpenDeferredToolApproval` — atomically links a reserved external action to its approval, then
   recovers an ambiguous commit or terminalises the reservation so it cannot be replayed.
+- `__ProjectDeferredToolApproval`, `__ValidateDeferredToolArguments` — derive the secret-safe actor
+  projection and validate a complete approved replacement against the frozen reviewed tool schema.
 - `__DigestCanonicalJson` — an authorization-domain wrapper over the shared environment-neutral
   canonical JSON hash, preserving one SHA-256 implementation across server and browser consumers.
 - `PrismaRuntimeAuthorityRepository`, `PrismaAuthorizationGrantRepository` — the database-backed
@@ -85,8 +96,9 @@ must delegate approval-row cancellation through this package's transaction-level
 writes authorization tables directly.
 
 For a deferred tool action, the API is deliberately narrower than the database record: the browser
-cannot name a run, choose an executor result, or provide a resume token. It may only approve or deny
-the pending action attached to its own subject in its own silo. An expired request is terminalised
+cannot name a run, choose an executor result, or provide resume material. It may only deny or approve
+with one complete argument value for the pending action attached to its own subject in its own silo.
+An expired request is terminalised
 before any decision is recorded; a decision whose run, workload, or proof is stale becomes a typed
 conflict rather than a silently cancelled approval; and a successful approval wakes the existing
 runtime command path exactly once.
@@ -110,7 +122,11 @@ repository contract and map the generated Prisma scope enum into the narrower sh
 an unsupported stored scope fails closed rather than being cast into the domain result.
 
 Owns `AuthorizationGrant`, `CapabilityCatalogRevision`, `ApprovalRequest`, and
-`ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`.
+`ActionExecutionReceipt` in `apps/opencrane/prisma/schema/authorization.prisma`. A tool-backed
+`ApprovalRequest` retains the frozen reviewed candidate and schema as server-only authority,
+precomputes a separate actor-safe projection, and stores the exact normalized final arguments and
+digest only when approved. Its single-use resume hash is consumption evidence, not a generic result
+payload or an alternative resume endpoint.
 
 ## See also
 

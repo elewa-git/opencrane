@@ -2,11 +2,12 @@ import { createHash } from "node:crypto";
 
 import { AgentRunState as PrismaAgentRunState, AgentRunTerminalReason, ApprovalRequestState, Prisma, RuntimeCommandKind, WorkloadAssignmentState, type PrismaClient } from "@prisma/client";
 
-import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RunInputSnapshotIdentity, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
+import { AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, AGENT_RUNTIME_PROTOCOL_V1, MANAGED_AGENT_RUNTIME_PROJECTED_TOKEN_AUDIENCE, ___IsAgentRuntimeServiceAccountName, ___IsManagedAgentRuntimeServiceAccountName, type CancelAttemptCommand, type CompiledRunInput, type ResumeAttemptCommand, type RunInputSnapshot, type RuntimeAssignment, type RuntimeAssignmentIdentity, type RuntimeCandidate, type RuntimeCommand, type RuntimeCommandEnvelope, type RuntimeExternalActionCandidate, type RuntimeStreamOpen } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 import { ___CreateLogger, ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
 import { _ApplyRuntimeCandidateSideEffects, _RuntimeCandidateRequiresTerminalReporter } from "./prisma-runtime-candidate-side-effects.js";
+import { __ProjectRuntimeInputSnapshot } from "./runtime-input-snapshot-projector.js";
 import { __AdmitRuntimeCandidate, __AdmitRuntimeCommand } from "./runtime-protocol-authority.js";
 import type { RuntimeAdmissionRunState, RuntimeAttemptAuthority, RuntimeProtocolClock } from "./runtime-protocol-authority.types.js";
 import type { RunInputCompiler, RuntimeCandidateDispatchResult, RuntimeDispatchAuthorityConfig, RuntimeExternalActionRunner, RuntimeStreamWorkloadIdentity, RuntimeTerminalReporter } from "./prisma-runtime-dispatch-authority.types.js";
@@ -390,7 +391,7 @@ async function _loadContext(transaction: Prisma.TransactionClient, config: Runti
 		terminalReason: run.terminalReason,
 		assignmentDigest,
 		inputSnapshotDigest: run.inputSnapshotDigest,
-		snapshot: _buildSnapshotFrame(snapshot),
+		snapshot: __ProjectRuntimeInputSnapshot(snapshot),
 		personaRevisionId: snapshot.personaRevisionId,
 		identity: snapshotIdentity,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
@@ -561,52 +562,19 @@ function _cancelReason(terminalReason: AgentRunTerminalReason | null): CancelAtt
 	return "cancelled";
 }
 
-/**
- * Assemble the authorized deferred-result payload for a resume frame from approved approvals.
- *
- * It gathers every Approved deferred-tool approval for the attempt whose single-use resume token has
- * not been consumed (`resumeTokenHash` still set), ordered by id so the payload is deterministic, and
- * returns the current input generation with the ordered results plus the approval ids to consume on
- * mint. Once consumed, a duplicate resume finds nothing and is a no-op rather than a re-execution.
- * Returns null when no unconsumed approved result exists.
- */
+/** Load pending approved results and steering requests for one atomic resume frame. */
 async function _loadResume(transaction: Prisma.TransactionClient, context: RuntimeDispatchContext, inputGeneration: number): Promise<{ resume: ResumeAttemptCommand; approvalIds: string[]; steeringRequestIds: string[] } | null>
 {
-	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" } });
+	const approvals = await transaction.approvalRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: ApprovalRequestState.Approved, toolInvocationRowId: { not: null }, resumeTokenHash: { not: null } }, orderBy: { id: "asc" }, include: { toolInvocation: { select: { toolInvocationId: true } } } });
 	const steering = await transaction.runtimeSteeringRequest.findMany({ where: { runId: context.runId, attempt: context.attempt, state: "Pending" }, orderBy: { submittedAt: "asc" } });
 	if (approvals.length === 0 && steering.length === 0) return null;
-	const deferredToolResults = approvals.map(function _result(row): JsonValue { return row.deferredToolResult as JsonValue; });
+	const deferredToolResults = approvals.map(function _result(row): JsonValue
+	{
+		if (row.toolInvocation === null || row.finalArguments === null || typeof row.finalArgumentsDigest !== "string") throw new Error("approved deferred tool request has incomplete resume authority");
+		return { approvalRequestId: row.id, decision: "approved", toolInvocationId: row.toolInvocation.toolInvocationId, arguments: row.finalArguments as JsonValue, argumentsDigest: row.finalArgumentsDigest };
+	});
 	const steeringRequests = steering.map(function _content(row): JsonValue { return row.content as JsonValue; });
 	return { resume: { inputGeneration, deferredToolResults, steeringRequests }, approvalIds: approvals.map(function _id(row) { return row.id; }), steeringRequestIds: steering.map(function _id(row) { return row.id; }) };
-}
-
-/** Map the durable snapshot row into the immutable wire snapshot the runtime receives. */
-function _buildSnapshotFrame(row: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; snapshotVersion: number; conversationId: string | null; messageIds: string[]; personaRevisionId: string | null; preferenceFactIds: string[]; artifactRevisionIds: string[]; skillRevisionIds: string[]; memoryFacts: Prisma.JsonValue; memoryQueryPolicy: Prisma.JsonValue; integrationAssignments: Prisma.JsonValue; modelRoute: Prisma.JsonValue; budgetPolicy: Prisma.JsonValue; identitySnapshot: Prisma.JsonValue; capabilitySetDigest: string; effectiveContractDigest: string; promptCompilerVersion: string; digest: string; compiledAt: Date }): RunInputSnapshot
-{
-	return {
-		runId: row.runId,
-		siloId: row.siloId,
-		agentServiceId: row.agentServiceId,
-		agentRevisionId: row.agentRevisionId,
-		snapshotVersion: row.snapshotVersion,
-		conversationId: row.conversationId,
-		messageIds: row.messageIds,
-		personaRevisionId: row.personaRevisionId,
-		preferenceFactIds: row.preferenceFactIds,
-		artifactRevisionIds: row.artifactRevisionIds,
-		skillRevisionIds: row.skillRevisionIds,
-		memoryFacts: row.memoryFacts as unknown as RunInputSnapshot["memoryFacts"],
-		memoryQueryPolicy: row.memoryQueryPolicy as unknown as RunInputSnapshot["memoryQueryPolicy"],
-		integrationAssignments: row.integrationAssignments as unknown as RunInputSnapshot["integrationAssignments"],
-		modelRoute: row.modelRoute as unknown as RunInputSnapshot["modelRoute"],
-		budgetPolicy: row.budgetPolicy as unknown as RunInputSnapshot["budgetPolicy"],
-		identitySnapshot: row.identitySnapshot as unknown as RunInputSnapshotIdentity,
-		capabilitySetDigest: row.capabilitySetDigest,
-		effectiveContractDigest: row.effectiveContractDigest,
-		promptCompilerVersion: row.promptCompilerVersion,
-		digest: row.digest,
-		compiledAt: row.compiledAt.toISOString(),
-	};
 }
 
 /** Derive a deterministic, attempt-scoped command id so retries reuse one idempotency key. */

@@ -9,6 +9,12 @@ explicit lifecycle, and one canonical position across messages, run events, memb
 system events, and parent deliveries. Those meanings cannot be derived truthfully from arbitrary
 legacy persona content or existing transcript rows.
 
+The 0.8 deferred-tool approval authority also replaces synthetic deferred result bodies with frozen
+reviewed arguments and parameter schemas, actor-safe projections, and the complete validated
+replacement arguments that the runtime executes. Those semantics cannot be reconstructed from an
+existing 0.7 approval row, so the automatic path requires `approval_requests` to be empty and fails
+with `OC711` otherwise.
+
 `migration.sql` still performs the complete fail-closed preflight: it takes the shared migration
 advisory lock, requires the exact protected 0.7 bootstrap envelope digest, rejects partial/repeated
 states, verifies the old enum/table/catalog shape, locks every table that could gain persona data,

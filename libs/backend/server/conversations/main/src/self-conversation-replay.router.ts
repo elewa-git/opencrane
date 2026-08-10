@@ -17,7 +17,10 @@ export function __CreateSelfConversationReplayRouter(dependencies: SelfConversat
 		if (caller === null) { response.status(401).json({ error: "conversation_authentication_required" }); return; }
 		if (typeof conversationId !== "string" || !conversationId.trim() || cursor === undefined || (cursor !== null && cursor.conversationId !== conversationId)) { response.status(400).json({ error: "invalid_conversation_replay_request" }); return; }
 		const abort = new AbortController();
-		request.once("close", function _Closed(): void { abort.abort(); });
+		function _Abort(): void { abort.abort(); }
+		response.once("close", _Abort);
+		response.once("error", _Abort);
+		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
 		try
 		{
 			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, ...(dependencies.interrupts === undefined ? {} : { interrupts: dependencies.interrupts }), clock: dependencies.clock, limits: dependencies.limits }, {
@@ -32,6 +35,12 @@ export function __CreateSelfConversationReplayRouter(dependencies: SelfConversat
 			dependencies.logger.error({ err, operation: "conversation_replay.self", siloId: caller.siloId }, "Self conversation replay failed");
 			if (!response.headersSent) response.status(503).json({ error: "conversation_replay_unavailable" });
 			else if (!response.writableEnded) response.end();
+		}
+		finally
+		{
+			response.removeListener("close", _Abort);
+			response.removeListener("error", _Abort);
+			dependencies.shutdownSignal?.removeEventListener("abort", _Abort);
 		}
 	});
 	return router;

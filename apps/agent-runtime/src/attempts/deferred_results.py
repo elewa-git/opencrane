@@ -1,9 +1,10 @@
 """Turn control-plane approval decisions into executed tool results for the model loop.
 
 A ``resume_attempt`` delivers ``deferredToolResults`` as an array of
-``{approvalRequestId, decision, toolInvocationId}`` records — the server tells the runtime WHICH
-proposed tool call was approved, never a result body. This module maps each record back to its
-pending proposed call, executes an approved call directly against Obot with the attempt-scoped key,
+``{approvalRequestId, decision, toolInvocationId, arguments, argumentsDigest}`` records. The server
+supplies the complete authority-approved replacement arguments, never an executed result body. This
+module maps each record back to its pending proposed call, verifies the replacement digest, executes
+an approved call directly against Obot with the attempt-scoped key,
 reports a digest-only ``tool.completed`` candidate, and returns the ``{tool_call_id: result}``
 mapping the Pydantic adapter feeds back into the framework as deferred tool results.
 
@@ -46,7 +47,18 @@ def resolve_deferred_tool_results(
             take_pending_tool_call(str(coordinates["runId"]), int(coordinates["attempt"]), tool_invocation_id)  # type: ignore[arg-type]
             results[tool_invocation_id] = {"approved": False, "reason": "approval_denied"}
             continue
-        results[tool_invocation_id] = _execute_approved_call(coordinates, compiled_input, tool_invocation_id, post_candidate)
+        approved_arguments = entry.get("arguments")
+        approved_arguments_digest = entry.get("argumentsDigest")
+        if (
+            not isinstance(approved_arguments, dict)
+            or not isinstance(approved_arguments_digest, str)
+            or arguments_digest(approved_arguments) != approved_arguments_digest
+        ):
+            take_pending_tool_call(str(coordinates["runId"]), int(coordinates["attempt"]), tool_invocation_id)  # type: ignore[arg-type]
+            post_candidate(candidate(coordinates, "run.error", {"reason": "invalid_deferred_result", "toolInvocationId": tool_invocation_id}))
+            results[tool_invocation_id] = {"error": "invalid_deferred_result"}
+            continue
+        results[tool_invocation_id] = _execute_approved_call(coordinates, compiled_input, tool_invocation_id, approved_arguments, post_candidate)
     return results
 
 
@@ -54,9 +66,10 @@ def _execute_approved_call(
     coordinates: dict[str, object],
     compiled_input: dict[str, object],
     tool_invocation_id: str,
+    approved_arguments: dict[str, object],
     post_candidate,
 ) -> object:
-    """Execute one approved pending call against Obot and report its digest-only completion."""
+    """Execute one authoritative replacement argument object and report its digest-only completion."""
     pending = take_pending_tool_call(str(coordinates["runId"]), int(coordinates["attempt"]), tool_invocation_id)  # type: ignore[arg-type]
     if pending is None:
         post_candidate(candidate(coordinates, "run.error", {"reason": "unknown_tool_invocation", "toolInvocationId": tool_invocation_id}))
@@ -84,7 +97,7 @@ def _execute_approved_call(
             read_attempt_obot_key(key_path),
             mcp_server_id,
             mcp_tool_name,
-            pending.get("arguments"),
+            approved_arguments,
             OBOT_INVOCATION_TIMEOUT_SECONDS,
         )
     except (HTTPError, URLError, OSError, RuntimeError, ValueError) as error:

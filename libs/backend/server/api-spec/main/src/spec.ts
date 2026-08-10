@@ -12,6 +12,7 @@
 
 import { _DomainOpenapiPaths } from "./domain-openapi-paths.js";
 import { _ErrorEnvelopeSchema, _ValidationIssueSchema } from "./error-schemas.js";
+import { _SelfDeferredToolApprovalSchema } from "./approval-schemas.js";
 
 // ---------------------------------------------------------------------------
 // Reusable schema components
@@ -598,18 +599,7 @@ export const spec = {
           finishedAt: { type: "string", format: "date-time", nullable: true },
         },
       },
-      SelfDeferredToolApproval: {
-        type: "object",
-        required: ["approvalRequestId", "runId", "attempt", "toolRevisionId", "expiresAt", "createdAt"],
-        properties: {
-          approvalRequestId: { type: "string" },
-          runId: { type: "string" },
-          attempt: { type: "integer", minimum: 1 },
-          toolRevisionId: { type: "string" },
-          expiresAt: { type: "string", format: "date-time" },
-          createdAt: { type: "string", format: "date-time" },
-        },
-      },
+      SelfDeferredToolApproval: _SelfDeferredToolApprovalSchema,
       AgentService: {
         type: "object",
         required: ["id", "siloId", "kind", "name", "state", "activeRevisionId", "workloadProfile", "createdAt", "updatedAt"],

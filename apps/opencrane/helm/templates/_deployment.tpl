@@ -67,6 +67,8 @@ spec:
             # Second (internal-only) listener for /api/internal/*.
             - name: INTERNAL_PORT
               value: {{ .Values.clustertenantManager.service.internalPort | quote }}
+            - name: CHANNEL_REPLAY_ROUTE_ID
+              value: {{ required "clustertenantManager.channelReplayRouteId is required" .Values.clustertenantManager.channelReplayRouteId | quote }}
             - name: AGENT_CONTROLLER_CLAIM_LEASE_SECONDS
               value: {{ .Values.agentController.claimLeaseSeconds | quote }}
             - name: AGENT_RUNTIME_ASSIGNMENT_TTL_SECONDS

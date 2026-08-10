@@ -424,6 +424,8 @@ clustertenantManager:
     tag: latest
     pullPolicy: IfNotPresent
   replicas: 1
+  # -- Exact receiver identity for opaque channel replay invocation contexts.
+  channelReplayRouteId: opencrane-conversation-replay-v1
   # -- Bound run admission before snapshot assembly can take a pooled PostgreSQL connection.
   # These apply per silo and AgentService; keep the active limit below the server's five-connection
   # Prisma budget so a hot service cannot starve unrelated control-plane work.

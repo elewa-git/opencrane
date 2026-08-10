@@ -89,8 +89,9 @@ def _resume_command(deferred: list, input_generation: int = 9) -> dict:
     """Build one structurally valid ``resume_attempt`` carrying authorized approval decisions.
 
     The REAL control-plane payload shape is an array of
-    ``{approvalRequestId, decision, toolInvocationId}`` records — the server names WHICH proposed
-    call was approved and never carries a result body. The default input generation matches the
+    ``{approvalRequestId, decision, toolInvocationId, arguments, argumentsDigest}`` records. The
+    server carries the authoritative replacement arguments and never carries an executed result body.
+    The default input generation matches the
     start fixture so checkpoint recovery of the compiled grants succeeds.
     """
     return {
@@ -100,6 +101,11 @@ def _resume_command(deferred: list, input_generation: int = 9) -> dict:
         "assignment": {"runId": "run-conf", "attempt": 1},
         "payload": {"inputGeneration": input_generation, "deferredToolResults": deferred, "steeringRequests": []},
     }
+
+
+def _approved(approval_request_id: str, tool_invocation_id: str, arguments: dict) -> dict:
+    """Build one authority-approved replacement with its exact canonical digest."""
+    return {"approvalRequestId": approval_request_id, "decision": "approved", "toolInvocationId": tool_invocation_id, "arguments": arguments, "argumentsDigest": _arguments_digest(arguments)}
 
 
 def _scripted_source(events: list[dict]):
@@ -249,9 +255,9 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
                 start_emitted = _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-approve", "arguments": '{"title":"x"}'}], checkpoint_cipher=cipher)
                 self.assertEqual([candidate["kind"] for candidate in start_emitted if candidate["kind"] == "external_action"], ["external_action"])
                 with unittest.mock.patch.object(_obot_mcp, "invoke_tool", _invoke):
-                    _execute_resume_attempt(_resume_command([{"approvalRequestId": "approval-1", "decision": "approved", "toolInvocationId": "call-approve"}]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
+                    _execute_resume_attempt(_resume_command([_approved("approval-1", "call-approve", {"title": "edited"})]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
 
-        self.assertEqual(obot_calls, [{"base_url": "http://obot.silo.svc.cluster.local:8080", "key": "ok1-attempt-key", "mcp_server_id": "srv-9", "tool_name": "create_issue", "arguments": {"title": "x"}, "timeout_s": 30.0}])
+        self.assertEqual(obot_calls, [{"base_url": "http://obot.silo.svc.cluster.local:8080", "key": "ok1-attempt-key", "mcp_server_id": "srv-9", "tool_name": "create_issue", "arguments": {"title": "edited"}, "timeout_s": 30.0}])
         self.assertEqual(captured["deferred"], {"call-approve": tool_result})
         completed = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "tool.completed")
         self.assertEqual(completed["payload"], {"toolInvocationId": "call-approve", "resultDigest": _arguments_digest(tool_result)})
@@ -292,7 +298,7 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
         environment = {key: value for key, value in os.environ.items() if not key.startswith("OPENCRANE_RUNTIME_OBOT_")}
         resume_emitted: list[dict] = []
         with unittest.mock.patch.dict(os.environ, environment, clear=True):
-            _execute_resume_attempt(_resume_command([{"approvalRequestId": "approval-1", "decision": "approved", "toolInvocationId": "call-unconfigured"}]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
+            _execute_resume_attempt(_resume_command([_approved("approval-1", "call-unconfigured", {})]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source)
 
         self.assertEqual(captured["deferred"], {"call-unconfigured": {"error": "obot_unavailable"}})
         error = next(candidate for candidate in resume_emitted if candidate.get("eventType") == "run.error")
@@ -318,8 +324,8 @@ class ConformanceApprovalResumeTests(unittest.TestCase):
                 _run_start(_integration_start_command(), [{"type": "tool_call", "toolName": "integration:github:create_issue", "toolCallId": "call-fails", "arguments": "{}"}], checkpoint_cipher=cipher)
                 with unittest.mock.patch.object(_obot_mcp, "invoke_tool", _broken_invoke):
                     _execute_resume_attempt(_resume_command([
-                        {"approvalRequestId": "approval-1", "decision": "approved", "toolInvocationId": "call-fails"},
-                        {"approvalRequestId": "approval-2", "decision": "approved", "toolInvocationId": "call-never-proposed"},
+                        _approved("approval-1", "call-fails", {}),
+                        _approved("approval-2", "call-never-proposed", {}),
                     ]), "instance-conf", resume_emitted.append, resume_event_source=_resume_source, checkpoint_cipher=cipher)
 
         self.assertEqual(captured["deferred"], {

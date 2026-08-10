@@ -1,4 +1,5 @@
 import { UPGRADE_SESSION_TOOL_REVISION } from "@opencrane/backend/agents/personal/configuration";
+import { __DigestCanonicalJson } from "@opencrane/backend/server/iam/authorization";
 import type { CompiledToolDefinition, RunInputSnapshot, RuntimeExternalActionCandidate } from "@opencrane/contracts";
 import type { JsonValue } from "@opencrane/util";
 
@@ -44,7 +45,7 @@ async function _runExternalAction(candidate: RuntimeExternalActionCandidate, sna
 
 	// 3. Open approval only for the exact deferred reservation; every other success is complete.
 	if (result.outcome !== "deferred") return { outcome: "completed" };
-	return _openDeferredApproval(candidate, snapshot, result.reservationId, dependencies);
+	return _openDeferredApproval(candidate, snapshot, compiledTools, result.reservationId, dependencies);
 }
 
 /** Select the first-party upgrade executor or the transport router admitted by the snapshot. */
@@ -76,15 +77,20 @@ function _approvalRequired(candidate: RuntimeExternalActionCandidate, compiledTo
 }
 
 /** Open the deferred approval with one trusted instant shared by creation and expiry. */
-async function _openDeferredApproval(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, reservationId: string, dependencies: ProductionExternalActionRunnerDependencies): Promise<RuntimeExternalActionRunnerResult>
+async function _openDeferredApproval(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, compiledTools: readonly CompiledToolDefinition[], reservationId: string, dependencies: ProductionExternalActionRunnerDependencies): Promise<RuntimeExternalActionRunnerResult>
 {
 	const now = dependencies.clock.now();
+	const tool = compiledTools.find(function _Match(definition) { return definition.toolRevisionId === candidate.toolRevisionId; });
+	if (tool === undefined) return { outcome: "denied" };
 	const opened = await dependencies.approvals.open({
+		interruptId: __DigestCanonicalJson({ runId: candidate.runId, attempt: candidate.attempt, candidateId: candidate.candidateId, toolInvocationId: candidate.toolInvocationId }),
 		runId: candidate.runId,
 		attempt: candidate.attempt,
 		toolInvocationId: candidate.toolInvocationId,
 		toolRevisionId: candidate.toolRevisionId,
+		arguments: candidate.arguments,
 		argumentsDigest: candidate.argumentsDigest,
+		parametersSchema: tool.parametersSchema,
 		capabilitySetDigest: snapshot.capabilitySetDigest,
 		reservationId,
 		now,

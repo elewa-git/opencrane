@@ -36,7 +36,7 @@ SELECT (
         WHERE "schema_version" = '0.8.0'
           AND "source_schema_version" = '0.7.0'
           AND "source_baseline_sha256" = :'source_baseline_sha256'
-          AND "target_baseline_sha256" = 'c95459f939a3d662094fbff172cf0ea96bf1e61257d28d2ec255cb60b2896997'
+          AND "target_baseline_sha256" = 'efa0cde407286dac66ff5fdb6b45bb7f127fdf98128ebcb75b985d27a0106734'
           AND "sql_sha256" = :'migration_sql_sha256'
           AND "migration_id" = '0.7.0-to-0.8.0') = 1
     AND (SELECT "baseline_sha256" FROM "opencrane_bootstrap"."target_baseline" WHERE "singleton" = TRUE)
@@ -116,6 +116,7 @@ DECLARE
     conversation_context_revisions_count BIGINT;
     active_conversation_runs_count BIGINT;
     retired_channel_commands_count BIGINT;
+	approval_requests_count BIGINT;
 BEGIN
     IF expected_baseline_sha256 IS DISTINCT FROM '25bfc5d31c4966ee697ae5aaa47edc855d25120d0829c241f213353f69e0358d' THEN
         RAISE EXCEPTION USING
@@ -213,6 +214,7 @@ BEGIN
         "persona_questions",
         "persona_soul_templates"
       IN SHARE ROW EXCLUSIVE MODE;
+	LOCK TABLE "approval_requests" IN SHARE ROW EXCLUSIVE MODE;
 
     LOCK TABLE
         "conversation_threads",
@@ -263,6 +265,7 @@ BEGIN
         (SELECT count(*) FROM "channel_runtime_routes" WHERE "action" = 'command.forward')
         + (SELECT count(*) FROM "channel_invocation_contexts" WHERE "action" = 'command.forward')
       INTO retired_channel_commands_count;
+	SELECT count(*) INTO approval_requests_count FROM "approval_requests";
 
     IF persona_profiles_count + persona_interviews_count + persona_answers_count
         + persona_revisions_count + persona_insights_count + personal_configuration_changes_count
@@ -299,8 +302,182 @@ BEGIN
             )::TEXT,
             HINT = 'Mode, lifecycle, participant visibility, cross-source timeline order, foreground-run authority, and retired command admission must not be guessed. Clone the source and approve a deterministic manual mapping.';
     END IF;
+	IF approval_requests_count > 0 THEN
+		RAISE EXCEPTION USING
+			ERRCODE = 'OC711',
+			MESSAGE = 'automatic 0.7.0-to-0.8.0 migration requires deferred approval requests to be empty',
+			DETAIL = json_build_object('approval_requests', approval_requests_count)::TEXT,
+			HINT = 'Pending and terminal approvals contain authority-bound argument semantics that must not be guessed. Finish or remove them through a reviewed manual transition.';
+	END IF;
 END;
 $migration_preflight$;
+
+-- The automatic path proved the shared approval ledger empty, so replace the retired synthetic
+-- result body with frozen review input, actor-safe projection, and exact approved replacements.
+ALTER TABLE "approval_requests"
+	DROP COLUMN "deferred_tool_result",
+	ADD COLUMN "reviewed_tool_arguments" JSONB,
+	ADD COLUMN "reviewed_tool_schema" JSONB,
+	ADD COLUMN "reviewed_tool_schema_digest" TEXT,
+	ADD COLUMN "safe_proposed_arguments" JSONB,
+	ADD COLUMN "response_schema" JSONB,
+	ADD COLUMN "final_arguments" JSONB,
+	ADD COLUMN "final_arguments_digest" TEXT;
+
+ALTER TABLE "approval_requests" DROP CONSTRAINT "approval_requests_exact_check";
+ALTER TABLE "approval_requests" DROP CONSTRAINT "approval_requests_decision_check";
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" CHECK (
+	"attempt" > 0 AND btrim("agent_revision_id") <> '' AND btrim("agent_service_id") <> '' AND btrim("silo_id") <> '' AND
+	"proof_key_thumbprint" ~ '^[A-Za-z0-9_-]{43}$' AND btrim("subject_id") <> '' AND
+	btrim("workload_audience") <> '' AND btrim("service_account_name") <> '' AND btrim("namespace") <> '' AND
+	btrim("workload_uid") <> '' AND btrim("pod_uid") <> '' AND
+	(("catalog_id" IS NULL AND "catalog_revision" IS NULL AND "catalog_digest" IS NULL AND "capability_id" IS NULL) OR
+	 ("catalog_id" IS NOT NULL AND "catalog_revision" IS NOT NULL AND "catalog_digest" IS NOT NULL AND "capability_id" IS NOT NULL AND
+	  btrim("catalog_id") <> '' AND "catalog_revision" > 0 AND "catalog_digest" ~ '^sha256:[0-9a-f]{64}$' AND btrim("capability_id") <> '')) AND
+	btrim("resource_kind") NOT IN ('', '*') AND btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
+	"arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+	btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND "expires_at" > "created_at" AND
+	(("tool_invocation_row_id" IS NULL AND "reviewed_tool_arguments" IS NULL AND "reviewed_tool_schema" IS NULL AND
+	  "reviewed_tool_schema_digest" IS NULL AND "safe_proposed_arguments" IS NULL AND "response_schema" IS NULL AND
+	  "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	 ("tool_invocation_row_id" IS NOT NULL AND "catalog_id" IS NULL AND jsonb_typeof("reviewed_tool_arguments") = 'object' AND
+	  jsonb_typeof("reviewed_tool_schema") = 'object' AND "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+	  "safe_proposed_arguments" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'))
+);
+ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
+	("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+	 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND
+	 (("tool_invocation_row_id" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	  ("tool_invocation_row_id" IS NOT NULL AND jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$'))) OR
+	("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+	("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
+);
+
+CREATE OR REPLACE FUNCTION "enforce_approval_request_update"() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    decision_time TIMESTAMP(3) := clock_timestamp();
+    current_attempt INTEGER;
+    current_run_state "AgentRunState";
+    assignment_state "WorkloadAssignmentState";
+    assignment_expires_at TIMESTAMP(3);
+    proof_expires_at TIMESTAMP(3);
+    proof_revoked_at TIMESTAMP(3);
+BEGIN
+    IF TG_OP = 'INSERT' THEN
+        IF NEW."state" <> 'pending' OR NEW."decided_at" IS NOT NULL
+            OR NEW."decided_by" IS NOT NULL OR NEW."resume_token_hash" IS NOT NULL THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must begin pending';
+        END IF;
+        IF NEW."created_at" > decision_time OR NEW."expires_at" <= decision_time THEN
+            RAISE EXCEPTION 'a new ApprovalRequest must have a current, future expiry';
+        END IF;
+        SELECT "attempt", "state" INTO current_attempt, current_run_state
+        FROM "agent_runs" WHERE "id" = NEW."run_id" FOR UPDATE;
+        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
+        FROM "workload_assignments"
+        WHERE "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+          AND "agent_service_id" = NEW."agent_service_id" AND "agent_revision_id" = NEW."agent_revision_id"
+          AND "silo_id" = NEW."silo_id" AND "subject_id" = NEW."subject_id"
+          AND "audience" = NEW."workload_audience" AND "service_account_name" = NEW."service_account_name"
+          AND "namespace" = NEW."namespace" AND "workload_kind" = NEW."workload_kind"
+          AND "workload_uid" = NEW."workload_uid" AND "pod_uid" = NEW."pod_uid"
+        FOR UPDATE;
+        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
+        FROM "run_proof_keys"
+        WHERE "id" = NEW."proof_key_id" AND "run_id" = NEW."run_id" AND "attempt" = NEW."attempt"
+          AND "workload_kind" = NEW."workload_kind" AND "workload_uid" = NEW."workload_uid"
+          AND "key_thumbprint" = NEW."proof_key_thumbprint" AND "pod_uid" = NEW."pod_uid"
+        FOR UPDATE;
+        IF current_attempt IS DISTINCT FROM NEW."attempt"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
+            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
+            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
+            OR proof_expires_at <= decision_time THEN
+            RAISE EXCEPTION 'ApprovalRequest requires current WaitingForApproval run, assignment, and proof authority';
+        END IF;
+        RETURN NEW;
+    END IF;
+    IF TG_OP = 'DELETE' THEN RAISE EXCEPTION 'ApprovalRequest rows cannot be deleted'; END IF;
+    IF NEW."id" IS DISTINCT FROM OLD."id" OR NEW."run_id" IS DISTINCT FROM OLD."run_id"
+        OR NEW."attempt" IS DISTINCT FROM OLD."attempt" OR NEW."agent_revision_id" IS DISTINCT FROM OLD."agent_revision_id"
+        OR NEW."agent_service_id" IS DISTINCT FROM OLD."agent_service_id" OR NEW."silo_id" IS DISTINCT FROM OLD."silo_id"
+        OR NEW."proof_key_id" IS DISTINCT FROM OLD."proof_key_id" OR NEW."proof_key_thumbprint" IS DISTINCT FROM OLD."proof_key_thumbprint"
+        OR NEW."subject_id" IS DISTINCT FROM OLD."subject_id" OR NEW."workload_audience" IS DISTINCT FROM OLD."workload_audience"
+        OR NEW."service_account_name" IS DISTINCT FROM OLD."service_account_name" OR NEW."namespace" IS DISTINCT FROM OLD."namespace"
+        OR NEW."workload_kind" IS DISTINCT FROM OLD."workload_kind" OR NEW."workload_uid" IS DISTINCT FROM OLD."workload_uid"
+        OR NEW."pod_uid" IS DISTINCT FROM OLD."pod_uid" OR NEW."catalog_id" IS DISTINCT FROM OLD."catalog_id"
+        OR NEW."catalog_revision" IS DISTINCT FROM OLD."catalog_revision" OR NEW."catalog_digest" IS DISTINCT FROM OLD."catalog_digest"
+        OR NEW."capability_id" IS DISTINCT FROM OLD."capability_id" OR NEW."resource_kind" IS DISTINCT FROM OLD."resource_kind"
+        OR NEW."resource_id" IS DISTINCT FROM OLD."resource_id" OR NEW."action" IS DISTINCT FROM OLD."action"
+        OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
+        OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
+        OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+		OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+		OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+		OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+		OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+		OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+		OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
+        OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
+    END IF;
+    IF OLD."state" = 'approved' THEN
+        IF NEW."state" = 'approved'
+            AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
+            AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
+            AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
+			AND NEW."final_arguments" IS NOT DISTINCT FROM OLD."final_arguments"
+			AND NEW."final_arguments_digest" IS NOT DISTINCT FROM OLD."final_arguments_digest" THEN
+            RETURN NEW;
+        END IF;
+        RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
+    END IF;
+    IF OLD."state" <> 'pending' OR NEW."state" = 'pending' THEN
+        RAISE EXCEPTION 'ApprovalRequest may be decided exactly once';
+    END IF;
+    IF NEW."state" = 'cancelled' THEN
+        IF NEW."decided_at" IS NULL OR NEW."decided_at" > decision_time OR NEW."decided_at" < OLD."created_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest cancellation requires a caller-supplied decision time between creation and now';
+        END IF;
+    ELSE
+        NEW."decided_at" := decision_time;
+    END IF;
+    IF NEW."state" IN ('approved', 'denied') THEN
+        SELECT "attempt", "state" INTO current_attempt, current_run_state
+        FROM "agent_runs" WHERE "id" = OLD."run_id" FOR UPDATE;
+        SELECT "state", "expires_at" INTO assignment_state, assignment_expires_at
+        FROM "workload_assignments"
+        WHERE "run_id" = OLD."run_id" AND "attempt" = OLD."attempt"
+          AND "agent_service_id" = OLD."agent_service_id" AND "agent_revision_id" = OLD."agent_revision_id"
+          AND "silo_id" = OLD."silo_id" AND "subject_id" = OLD."subject_id"
+          AND "audience" = OLD."workload_audience" AND "service_account_name" = OLD."service_account_name"
+          AND "namespace" = OLD."namespace" AND "workload_kind" = OLD."workload_kind"
+          AND "workload_uid" = OLD."workload_uid" AND "pod_uid" = OLD."pod_uid"
+        FOR UPDATE;
+        SELECT "expires_at", "revoked_at" INTO proof_expires_at, proof_revoked_at
+        FROM "run_proof_keys" WHERE "id" = OLD."proof_key_id" FOR UPDATE;
+        IF current_attempt IS DISTINCT FROM OLD."attempt"
+            OR current_run_state IS DISTINCT FROM 'waiting_for_approval'::"AgentRunState"
+            OR assignment_state IS DISTINCT FROM 'registered'::"WorkloadAssignmentState"
+            OR assignment_expires_at <= decision_time OR proof_revoked_at IS NOT NULL
+            OR proof_expires_at <= decision_time THEN
+            RAISE EXCEPTION 'ApprovalRequest decision authority is no longer current';
+        END IF;
+    END IF;
+    IF NEW."state" = 'cancelled' THEN
+        NEW."decided_by" := NULL;
+        NEW."resume_token_hash" := NULL;
+    ELSIF NEW."state" = 'expired' THEN
+        IF decision_time < OLD."expires_at" THEN
+            RAISE EXCEPTION 'ApprovalRequest may expire only after its deadline';
+        END IF;
+    ELSIF NEW."state" IN ('approved', 'denied') AND decision_time >= OLD."expires_at" THEN
+        RAISE EXCEPTION 'ApprovalRequest decisions must be recorded before expiry';
+    END IF;
+    RETURN NEW;
+END;
+$$;
 
 -- Conversation is a direct replacement, not an in-place interpretation of legacy transcript
 -- rows. The preflight above proves every retired conversation aggregate and command-forward
@@ -2799,7 +2976,7 @@ INSERT INTO "opencrane_migrations"."schema_history" (
     "target_baseline_sha256", "sql_sha256", "migration_id"
 ) VALUES (
     '0.8.0', '0.7.0', current_setting('opencrane.expected_source_baseline_sha256'),
-    'c95459f939a3d662094fbff172cf0ea96bf1e61257d28d2ec255cb60b2896997',
+    'efa0cde407286dac66ff5fdb6b45bb7f127fdf98128ebcb75b985d27a0106734',
     current_setting('opencrane.expected_migration_sql_sha256'),
     '0.7.0-to-0.8.0'
 );

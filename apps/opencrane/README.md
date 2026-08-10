@@ -176,7 +176,7 @@ are:
 | `OPENCRANE_SCHEDULER_*` | Optional scheduled-run loop and interval | disabled |
 | `ARTIFACT_SERVICE_URL` and mounted artifact keys | Private byte promotion/read brokers | required when used |
 | `ARTIFACT_PREPROCESSOR_*` | Restricted preprocessing worker and output ceiling | disabled |
-| `CHANNEL_REPLAY_ROUTE_ID` | Exact internal replay policy-enforcement route | disabled when absent |
+| `CHANNEL_REPLAY_ROUTE_ID` | Exact internal replay policy-enforcement route | Helm supplies `opencrane-conversation-replay-v1`; disabled only in an explicit non-Helm composition |
 
 The app builds into `dist/apps/opencrane`, uses `deploy/Dockerfile`, and ships through its app-owned
 Helm library chart, which [`deploy-k8s`](../_infra/deploy-k8s/README.md) composes into a release.

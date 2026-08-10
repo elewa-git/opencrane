@@ -142,11 +142,14 @@ describe("production external-action runner", function _suite()
 		expect(dependencies.personalConfiguration.proposeUpgradeSession).not.toHaveBeenCalled();
 		expect(effects).toEqual(["reserve", "open_approval"]);
 		expect(dependencies.approvals.open).toHaveBeenCalledWith({
+			interruptId: expect.stringMatching(/^sha256:/),
 			runId: "run-1",
 			attempt: 1,
 			toolInvocationId: "invocation-1",
 			toolRevisionId: UPGRADE_SESSION_TOOL_REVISION,
+			arguments: _candidate().arguments,
 			argumentsDigest: _candidate().argumentsDigest,
+			parametersSchema: approvalTool.parametersSchema,
 			capabilitySetDigest: "sha256:capabilities",
 			reservationId: "reservation-1",
 			now: NOW,

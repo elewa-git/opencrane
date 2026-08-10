@@ -523,7 +523,13 @@ CREATE TABLE "approval_requests" (
     "decided_by" TEXT,
     "resume_token_hash" TEXT,
     "tool_invocation_row_id" TEXT,
-    "deferred_tool_result" JSONB,
+    "reviewed_tool_arguments" JSONB,
+    "reviewed_tool_schema" JSONB,
+    "reviewed_tool_schema_digest" TEXT,
+    "safe_proposed_arguments" JSONB,
+    "response_schema" JSONB,
+    "final_arguments" JSONB,
+    "final_arguments_digest" TEXT,
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT "approval_requests_pkey" PRIMARY KEY ("id")
@@ -3480,6 +3486,12 @@ BEGIN
         OR NEW."arguments_digest" IS DISTINCT FROM OLD."arguments_digest" OR NEW."action_digest" IS DISTINCT FROM OLD."action_digest"
         OR NEW."approver_policy_revision" IS DISTINCT FROM OLD."approver_policy_revision"
         OR NEW."effective_policy_digest" IS DISTINCT FROM OLD."effective_policy_digest"
+		OR NEW."tool_invocation_row_id" IS DISTINCT FROM OLD."tool_invocation_row_id"
+		OR NEW."reviewed_tool_arguments" IS DISTINCT FROM OLD."reviewed_tool_arguments"
+		OR NEW."reviewed_tool_schema" IS DISTINCT FROM OLD."reviewed_tool_schema"
+		OR NEW."reviewed_tool_schema_digest" IS DISTINCT FROM OLD."reviewed_tool_schema_digest"
+		OR NEW."safe_proposed_arguments" IS DISTINCT FROM OLD."safe_proposed_arguments"
+		OR NEW."response_schema" IS DISTINCT FROM OLD."response_schema"
         OR NEW."expires_at" IS DISTINCT FROM OLD."expires_at" OR NEW."created_at" IS DISTINCT FROM OLD."created_at" THEN
         RAISE EXCEPTION 'ApprovalRequest proof and action bindings are immutable';
     END IF;
@@ -3490,7 +3502,8 @@ BEGIN
             AND OLD."resume_token_hash" IS NOT NULL AND NEW."resume_token_hash" IS NULL
             AND NEW."decided_at" IS NOT DISTINCT FROM OLD."decided_at"
             AND NEW."decided_by" IS NOT DISTINCT FROM OLD."decided_by"
-            AND NEW."deferred_tool_result" IS NOT DISTINCT FROM OLD."deferred_tool_result" THEN
+			AND NEW."final_arguments" IS NOT DISTINCT FROM OLD."final_arguments"
+			AND NEW."final_arguments_digest" IS NOT DISTINCT FROM OLD."final_arguments_digest" THEN
             RETURN NEW;
         END IF;
         RAISE EXCEPTION 'an approved ApprovalRequest may only consume its resume token once';
@@ -5546,7 +5559,14 @@ ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_exact_check" C
         btrim("resource_id") NOT IN ('', '*') AND btrim("action") <> '' AND
         "arguments_digest" ~ '^sha256:[0-9a-f]{64}$' AND "action_digest" ~ '^sha256:[0-9a-f]{64}$' AND
         btrim("approver_policy_revision") <> '' AND "effective_policy_digest" ~ '^sha256:[0-9a-f]{64}$' AND
-        "expires_at" > "created_at"
+		"expires_at" > "created_at" AND
+		(("tool_invocation_row_id" IS NULL AND "reviewed_tool_arguments" IS NULL AND "reviewed_tool_schema" IS NULL AND
+		  "reviewed_tool_schema_digest" IS NULL AND "safe_proposed_arguments" IS NULL AND "response_schema" IS NULL AND
+		  "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		 ("tool_invocation_row_id" IS NOT NULL AND "catalog_id" IS NULL AND "reviewed_tool_arguments" IS NOT NULL AND
+		  jsonb_typeof("reviewed_tool_arguments") = 'object' AND "reviewed_tool_schema" IS NOT NULL AND
+		  jsonb_typeof("reviewed_tool_schema") = 'object' AND "reviewed_tool_schema_digest" ~ '^sha256:[0-9a-f]{64}$' AND
+		  "safe_proposed_arguments" IS NOT NULL AND "response_schema" IS NOT NULL AND jsonb_typeof("response_schema") = 'object'))
     );
 ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_requests_exact_check" CHECK (
         btrim("id") <> '' AND btrim("run_id") <> '' AND "attempt" > 0 AND
@@ -5556,10 +5576,13 @@ ALTER TABLE "runtime_steering_requests" ADD CONSTRAINT "runtime_steering_request
          ("state" = 'consumed' AND "consumed_at" IS NOT NULL))
     );
 ALTER TABLE "approval_requests" ADD CONSTRAINT "approval_requests_decision_check" CHECK (
-        ("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL) OR
-        ("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NOT NULL AND btrim("resume_token_hash") <> '') OR
-        ("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL) OR
-        ("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL)
+		("state" = 'pending' AND "decided_at" IS NULL AND "decided_by" IS NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" = 'approved' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND
+		 ("resume_token_hash" IS NULL OR btrim("resume_token_hash") <> '') AND
+		 (("tool_invocation_row_id" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		  ("tool_invocation_row_id" IS NOT NULL AND jsonb_typeof("final_arguments") = 'object' AND "final_arguments_digest" ~ '^sha256:[0-9a-f]{64}$'))) OR
+		("state" = 'denied' AND "decided_at" IS NOT NULL AND "decided_by" IS NOT NULL AND btrim("decided_by") <> '' AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL) OR
+		("state" IN ('expired', 'cancelled') AND "decided_at" IS NOT NULL AND "resume_token_hash" IS NULL AND "final_arguments" IS NULL AND "final_arguments_digest" IS NULL)
     );
 ALTER TABLE "action_execution_receipts" ADD CONSTRAINT "action_execution_receipts_exact_check" CHECK (
         btrim("silo_id") <> '' AND btrim("subject_id") <> '' AND btrim("audience") <> '' AND

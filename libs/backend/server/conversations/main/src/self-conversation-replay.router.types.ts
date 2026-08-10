@@ -13,6 +13,15 @@ export interface SelfConversationReplayCaller
 	readonly subjectId: string;
 }
 
+/** Optional process-owned seams supplied by the app composition root. */
+export interface SelfConversationReplayCompositionOptions
+{
+	/** Current open-approval overlay, kept outside canonical cursor authority. */
+	readonly interrupts?: ConversationOpenInterruptReader;
+	/** Process shutdown signal that drains long-lived streams before telemetry flush. */
+	readonly shutdownSignal?: AbortSignal;
+}
+
 /** App-composed ports for self-only canonical conversation replay. */
 export interface SelfConversationReplayRouterDependencies
 {
@@ -26,6 +35,8 @@ export interface SelfConversationReplayRouterDependencies
 	clock: ConversationLiveReplayClock;
 	/** Bounded page, heartbeat, polling, and response-duration limits. */
 	limits: ConversationLiveReplayLimits;
+	/** Process shutdown signal that drains long-lived streams before telemetry flush. */
+	shutdownSignal?: AbortSignal;
 	/** Records unexpected persistence failures without event content. */
 	logger: Logger;
 }

@@ -14,7 +14,7 @@ import { resourceSharesRouter, sharesRouter } from "@opencrane/backend/server/ia
 import { thirdPartySourcesRouter } from "@opencrane/backend/server/knowledge/retrieval";
 import { spec } from "@opencrane/backend/server/api-spec";
 import { _CreateAgentServicesRouter, type ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
-import { _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
+import { _CreateDeferredToolApprovalInterruptReader, _CreateDeferredToolApprovalRouter } from "@opencrane/backend/server/iam/authorization";
 import { _CreatePersonaOnboardingRouter } from "@opencrane/backend/agents/personal/personas";
 import { type UserOnboardingOwnerResolver } from "@opencrane/backend/server/agents/onboarding";
 import { _CreatePersonalArtifactCatalogueRouter } from "@opencrane/backend/server/agents/artifacts";
@@ -33,6 +33,7 @@ import { _log } from "./log.js";
 import { _CreateInternalRuntimeComposition } from "./runtime-composition.js";
 import type { RouteMount, SharesRouteOptions } from "./routes.types.js";
 import { _CreateUserOnboardingComposition } from "./user-onboarding-composition.js";
+import { _ProcessShutdownSignal } from "./process-shutdown.js";
 import { ___CreateDbHealthProbe } from "../infra/db/db.js";
 
 /**
@@ -69,7 +70,7 @@ export function _RegisterRoutes(app: Express, prisma: PrismaClient, coreApi: k8s
 		{ method: "use", path: "/api/v1/me/runs", handler: _CreateSelfRunStatusRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/configuration", handler: _CreatePersonalConfigurationRouter(prisma, _log) },
 		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationsRouter(prisma, personalRunAdmission, _log) },
-		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log) },
+		{ method: "use", path: "/api/v1/me/conversations", handler: _CreateSelfConversationReplayRouter(prisma, _log, { interrupts: _CreateDeferredToolApprovalInterruptReader(prisma), shutdownSignal: _ProcessShutdownSignal }) },
 	];
 	const gatewayRoutes: readonly RouteMount[] = [
 		{ method: "use", path: "/api/v1/mcp-servers", handler: mcpServersRouter(prisma) },

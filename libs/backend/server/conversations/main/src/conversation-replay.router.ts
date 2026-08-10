@@ -20,13 +20,25 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		if (consumed.status !== "consumed" || consumed.context.action !== "events.read") { response.status(403).json({ error: "replay_denied" }); return; }
 		if (cursor !== null && cursor.conversationId !== consumed.context.conversationId) { response.status(403).json({ error: "replay_denied" }); return; }
 		const abort = new AbortController();
-		request.once("close", function _Closed(): void { abort.abort(); });
-		const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, {
-			open: function _Open(): void { response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream", "x-accel-buffering": "no" }); response.flushHeaders(); },
-			write: function _Write(value): void { response.write(value); },
-		}, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
-		if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
-		else if (!response.writableEnded) response.end();
+		function _Abort(): void { abort.abort(); }
+		response.once("close", _Abort);
+		response.once("error", _Abort);
+		dependencies.shutdownSignal?.addEventListener("abort", _Abort, { once: true });
+		try
+		{
+			const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, {
+				open: function _Open(): void { response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream", "x-accel-buffering": "no" }); response.flushHeaders(); },
+				write: function _Write(value): void { response.write(value); },
+			}, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
+			if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
+			else if (!response.writableEnded) response.end();
+		}
+		finally
+		{
+			response.removeListener("close", _Abort);
+			response.removeListener("error", _Abort);
+			dependencies.shutdownSignal?.removeEventListener("abort", _Abort);
+		}
 	});
 	return router;
 }

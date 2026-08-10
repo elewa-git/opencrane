@@ -8,10 +8,13 @@ export type { ActionReplayMode, CapabilityActionExecutor, CapabilityActionFailur
 export { __CancelPendingRunApprovalAuthority } from "./run-approval-cancellation.js";
 export type { CancelPendingRunApprovalAuthorityCommand, CancelPendingRunApprovalAuthorityResult } from "./run-approval-cancellation.types.js";
 export { __DecideDeferredToolRequest, __DeferToolRequest } from "./deferred-tool-approval.js";
-export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolDecision, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
+export { __ProjectDeferredToolApproval, __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
+export { DeferredToolApprovalStates, DeferredToolDecisionKinds } from "./deferred-tool-approval.types.js";
+export type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository, DeferredToolApprovalInterruptReader, DeferredToolApprovalProjection, DeferToolRequestCommand, DeferToolRequestResult, OpenDeferredToolApprovalCommand, SelfDeferredToolApproval, SelfDeferredToolApprovalListRepository } from "./deferred-tool-approval.types.js";
 export { __OpenDeferredToolApproval } from "./prisma-deferred-tool-approval-opener.js";
 export { PrismaDeferredToolApprovalDecisionRepository } from "./prisma-deferred-tool-approval-decision-repository.js";
 export { PrismaSelfDeferredToolApprovalListRepository } from "./prisma-self-deferred-tool-approval-list-repository.js";
+export { _CreateDeferredToolApprovalInterruptReader } from "./prisma-deferred-tool-approval-interrupt-reader.js";
 export { __CreateDeferredToolApprovalRouter } from "./deferred-tool-approval.router.js";
 export { _CreateDeferredToolApprovalRouter } from "./prisma-deferred-tool-approval.router.js";
 export type { DeferredToolApprovalCaller, DeferredToolApprovalClock, DeferredToolApprovalRouterDependencies } from "./deferred-tool-approval.router.types.js";

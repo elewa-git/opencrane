@@ -105,13 +105,13 @@ interface FakeOptions
 }
 
 /** Minimal in-memory Prisma double covering only the reads and writes the adapter performs. */
-function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
+function _fakePrisma(options: FakeOptions): { prisma: PrismaClient; queryRaw: ReturnType<typeof vi.fn>; streams: FakeStreamRow[]; commands: FakeCommandRow[]; retries: FakeExternalActionRetryRow[]; approvals: { id: string; finalArguments: unknown; finalArgumentsDigest: string; toolInvocation: { toolInvocationId: string }; resumeTokenHash: string | null }[]; steeringRequests: { id: string; content: unknown; state: string }[]; toolInvocations: { id: string; runId: string; attempt: number; toolInvocationId: string; requestFingerprint: string; state: string; result: unknown }[] }
 {
 	const streams: FakeStreamRow[] = [];
 	const commands: FakeCommandRow[] = [];
 	const retries: FakeExternalActionRetryRow[] = [];
 	const toolInvocations = [...(options.toolInvocations ?? [])].map(function _row(row) { return { ...row }; });
-	const approvals: { id: string; deferredToolResult: unknown; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(result, index) { return { id: `approval-${index}`, deferredToolResult: result, resumeTokenHash: `hash-${index}` }; });
+	const approvals: { id: string; finalArguments: unknown; finalArgumentsDigest: string; toolInvocation: { toolInvocationId: string }; resumeTokenHash: string | null }[] = [...(options.approvedDeferredResults ?? [])].map(function _row(argumentsValue, index) { return { id: `approval-${index}`, finalArguments: argumentsValue, finalArgumentsDigest: `sha256:approved-${index}`, toolInvocation: { toolInvocationId: `invocation-${index}` }, resumeTokenHash: `hash-${index}` }; });
 	const steeringRequests: { id: string; content: unknown; state: string }[] = [...(options.pendingSteeringRequests ?? [])].map(function _row(content, index) { return { id: `steering-${index}`, content, state: "Pending" }; });
 	const workloadIdentity = options.managed ? _managedIdentity : _identity;
 	const subjectId = options.managed ? "agent-service:svc-1" : "user-1";
@@ -326,7 +326,7 @@ describe("PrismaRuntimeDispatchAuthority", function _describeDispatchAuthority()
 
 		expect(start?.kind).toBe("start_attempt");
 		expect(resume?.kind).toBe("resume_attempt");
-		expect(resume?.kind === "resume_attempt" ? resume.payload.deferredToolResults : null).toEqual([{ ok: true }]);
+		expect(resume?.kind === "resume_attempt" ? resume.payload.deferredToolResults : null).toEqual([{ approvalRequestId: "approval-0", decision: "approved", toolInvocationId: "invocation-0", arguments: { ok: true }, argumentsDigest: "sha256:approved-0" }]);
 	});
 
 	it("mints one fenced resume carrying pending steering and consumes it only after persistence", async function _mintsSteeringResume()

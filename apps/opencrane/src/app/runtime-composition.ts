@@ -18,6 +18,7 @@ import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory
 import { _CreateArtifactPreprocessSourceBroker } from "../infra/artifacts/artifact-preprocess-source-broker.factory.js";
 import { _CreateArtifactPreprocessOutputBroker, _CreateSkillAuthoringArtifactReader } from "../infra/artifacts/artifact-upload.factory.js";
 import type { InternalRuntimeConfig } from "./config.types.js";
+import { _ProcessShutdownSignal } from "./process-shutdown.js";
 import { _log } from "./log.js";
 import type { ControllerRuntimeComposition, InternalRuntimeComposition, OptionalRuntimeComposition, RuntimeProtocolComposition, SkillWorkloadRuntimeComposition } from "./runtime-composition.types.js";
 
@@ -209,6 +210,7 @@ function _CreateOptionalRuntimeComposition(prisma: PrismaClient, authApi: k8s.Au
 				repository: _CreateConversationReplayRepository(prisma),
 				clock: CONVERSATION_LIVE_REPLAY_CLOCK,
 				limits: CONVERSATION_LIVE_REPLAY_LIMITS,
+				shutdownSignal: _ProcessShutdownSignal,
 				expectedRouteId: config.channelReplayRouteId,
 				nowEpochMs: function _nowEpochMs() { return Date.now(); },
 			}),

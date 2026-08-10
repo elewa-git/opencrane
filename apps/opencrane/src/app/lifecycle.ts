@@ -11,6 +11,7 @@ import { _StartBackgroundWorkers } from "./background-workers.js";
 import type { OpenCraneProcessConfig } from "./config.types.js";
 import type { OpenCraneHttpServers } from "./lifecycle.types.js";
 import { _log } from "./log.js";
+import { _BeginProcessShutdown } from "./process-shutdown.js";
 
 /** Close an HTTP server after it has stopped accepting new connections. */
 function _closeServer(server: Server): Promise<void>
@@ -62,13 +63,15 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 
 		try
 		{
-			// 1. Stop producers and drain active cleanup before its Kubernetes and Prisma ports close.
+			// 1. End long-lived streams before the ten-second hard-exit and telemetry-flush fence.
+			_BeginProcessShutdown();
+			// 2. Stop producers and drain active cleanup before its Kubernetes and Prisma ports close.
 			await backgroundWorkers.stop();
-			// 2. Stop both listeners together so public and workload traffic drain as one process.
+			// 3. Stop both listeners together so public and workload traffic drain as one process.
 			await Promise.all([_closeServer(servers.public), _closeServer(servers.internal)]);
-			// 3. Release durable state only after requests and workers can no longer use it.
+			// 4. Release durable state only after requests and workers can no longer use it.
 			await prisma.$disconnect();
-			// 4. Flush buffered spans after all instrumented I/O has completed.
+			// 5. Flush buffered spans after all instrumented I/O has completed.
 			await ___ShutdownTelemetry();
 		}
 		catch (error)
@@ -77,7 +80,7 @@ export function _StartProcessLifecycle(publicApp: Express, internalApp: Express,
 		}
 		finally
 		{
-			// 5. Restore console last so no shutdown log can escape the structured logger.
+			// 6. Restore console last so no shutdown log can escape the structured logger.
 			unbindConsole();
 			process.exit(0);
 		}

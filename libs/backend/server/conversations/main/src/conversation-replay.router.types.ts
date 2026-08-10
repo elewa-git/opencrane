@@ -12,6 +12,8 @@ export interface ConversationReplayRouterDependencies
 	readonly repository: ConversationReplayUnitOfWork;
 	readonly clock: ConversationLiveReplayClock;
 	readonly limits: ConversationLiveReplayLimits;
+	/** Process shutdown signal that drains the stream before telemetry flush. */
+	readonly shutdownSignal?: AbortSignal;
 	/** Route selected only by server configuration. */
 	readonly expectedRouteId: string;
 	/** Trusted server clock. */

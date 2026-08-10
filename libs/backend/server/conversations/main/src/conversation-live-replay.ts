@@ -1,4 +1,5 @@
 import { EventType } from "@ag-ui/core";
+import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
 import { __EncodeAgUiSseRecord, __ProjectAgUiEvent, __ProjectAgUiEvents } from "@opencrane/contracts";
 import type { ConversationReplayCursor } from "@opencrane/models/conversations";
 
@@ -9,6 +10,17 @@ import { ConversationLiveReplayOutcomes, type ConversationLiveReplayDependencies
 
 /** Stream an authorized snapshot followed by a bounded recovery-polled live tail. */
 export async function __StreamConversationLiveReplay(dependencies: ConversationLiveReplayDependencies, sink: ConversationLiveReplaySink, command: StreamConversationLiveReplayCommand): Promise<ConversationLiveReplayOutcomes>
+{
+	return ___DoWithTrace("conversation.replay.stream", { siloId: command.siloId, conversationId: command.conversationId, subjectId: command.subjectId, hasCursor: command.cursor !== null }, async function _traceReplay()
+	{
+		const outcome = await _streamConversationLiveReplay(dependencies, sink, command);
+		___GetActiveSpan()?.setAttribute("outcome", outcome);
+		return outcome;
+	});
+}
+
+/** Execute the bounded replay loop inside the central trace boundary. */
+async function _streamConversationLiveReplay(dependencies: ConversationLiveReplayDependencies, sink: ConversationLiveReplaySink, command: StreamConversationLiveReplayCommand): Promise<ConversationLiveReplayOutcomes>
 {
 	_Validate(dependencies);
 	let cursor = command.cursor;
@@ -43,6 +55,7 @@ export async function __StreamConversationLiveReplay(dependencies: ConversationL
 		}
 		if (result.rows.length >= dependencies.limits.pageSize) continue;
 		await dependencies.clock.wait(dependencies.limits.pollMilliseconds, command.signal);
+		if (command.signal.aborted) continue;
 		if (dependencies.clock.now() - heartbeatAt >= dependencies.limits.heartbeatMilliseconds)
 		{
 			sink.write(": heartbeat\n\n");
@@ -94,8 +107,15 @@ export const CONVERSATION_LIVE_REPLAY_CLOCK: import("./conversation-live-replay.
 		if (signal.aborted) return;
 		await new Promise<void>(function _Until(resolve)
 		{
-			const timeout = setTimeout(resolve, milliseconds);
-			signal.addEventListener("abort", function _Abort(): void { clearTimeout(timeout); resolve(); }, { once: true });
+			function _Finish(): void
+			{
+				clearTimeout(timeout);
+				signal.removeEventListener("abort", _Abort);
+				resolve();
+			}
+			function _Abort(): void { _Finish(); }
+			const timeout = setTimeout(_Finish, milliseconds);
+			signal.addEventListener("abort", _Abort, { once: true });
 		});
 	},
 };

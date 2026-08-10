@@ -1,4 +1,5 @@
 import type { PrismaClient } from "@prisma/client";
+import { ___DoWithTrace } from "@opencrane/backend/observability";
 
 import { __DecideDeferredToolRequest } from "./deferred-tool-approval.js";
 import type { DecideDeferredToolRequestCommand, DecideDeferredToolRequestResult, DeferredToolApprovalDecisionRepository } from "./deferred-tool-approval.types.js";
@@ -18,18 +19,22 @@ export class PrismaDeferredToolApprovalDecisionRepository implements DeferredToo
 	/** Decide one owner-bound request inside one database transaction. */
 	async decideAtomically(command: DecideDeferredToolRequestCommand): Promise<DecideDeferredToolRequestResult>
 	{
-		try
+		const prisma = this._prisma;
+		return ___DoWithTrace("approval.decide.db", { siloId: command.siloId, subjectId: command.subjectId }, async function _traceDecideDb()
 		{
-			return await this._prisma.$transaction(async function _decide(transaction): Promise<DecideDeferredToolRequestResult>
+			try
 			{
-				return __DecideDeferredToolRequest(transaction, command);
-			});
-		}
-		catch (error)
-		{
-			if (_isStaleApprovalDecision(error)) return { outcome: "conflict" };
-			throw error;
-		}
+				return await prisma.$transaction(async function _decide(transaction): Promise<DecideDeferredToolRequestResult>
+				{
+					return __DecideDeferredToolRequest(transaction, command);
+				});
+			}
+			catch (error)
+			{
+				if (_isStaleApprovalDecision(error)) return { outcome: "conflict" };
+				throw error;
+			}
+		});
 	}
 }
 

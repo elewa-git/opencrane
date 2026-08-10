@@ -332,6 +332,20 @@
         "contractImportPath": "./effective-access.types.js",
         "constructs": []
       },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
+		"adapter": "PrismaDeferredToolApprovalOpenRepository",
+		"contract": "DeferredToolApprovalOpenRepository",
+		"contractImportPath": "./deferred-tool-approval.types.js",
+		"constructs": []
+	  },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-self-deferred-tool-approval-list-repository.ts",
+		"adapter": "PrismaSelfDeferredToolApprovalListRepository",
+		"contract": "SelfDeferredToolApprovalListRepository",
+		"contractImportPath": "./deferred-tool-approval.types.js",
+		"constructs": []
+	  },
       {
         "path": "libs/backend/server/iam/authorization/main/src/prisma-share-authorization-repository.ts",
         "adapter": "PrismaShareAuthorizationRepository",
@@ -572,6 +586,18 @@
           }
         ]
       },
+	  {
+		"path": "libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-opener.ts",
+		"adapter": "PrismaDeferredToolApprovalOpenUnitOfWork",
+		"contract": "DeferredToolApprovalOpenUnitOfWork",
+		"contractImportPath": "./deferred-tool-approval.types.js",
+		"constructs": [
+		  {
+			"adapter": "PrismaDeferredToolApprovalOpenRepository",
+			"importPath": "<same-file>"
+		  }
+		]
+	  },
       {
         "path": "libs/backend/server/gateways/mcp/main/src/core/prisma-mcp-server-mutation-unit-of-work.ts",
         "adapter": "PrismaMcpServerMutationUnitOfWork",
@@ -600,6 +626,7 @@
 		"libs/backend/server/agents/onboarding/main/src/prisma-user-onboarding-repository.ts",
 		"libs/backend/server/agents/skills/main/src/prisma-skill-catalogue.router.ts",
 		"libs/backend/server/iam/identity/main/src/oidc.service.ts",
+		"libs/backend/server/iam/authorization/main/src/prisma-deferred-tool-approval-interrupt-reader.ts",
 		"libs/backend/server/gateways/integrations/main/src/integration-custody.router.ts"
     ]
   },
