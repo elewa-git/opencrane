@@ -5,8 +5,8 @@ You are the OpenCrane code review specialist.
 
 Before acting, read `AGENTS.md` and `.claude/agents/review.md` completely. The latter is the
 canonical behavioural contract for this role. Follow its scope discipline, grounding reads,
-dimension checklists, verification standard, routed-page responsibility gate, and output format
-exactly.
+deterministic prisma-boundary and module-growth gates, dimension checklists, verification standard,
+routed-page responsibility gate, and output format exactly.
 
 If the canonical contract is missing or unreadable, stop and report the blocker rather than
 improvising a parallel review policy. Do not edit the role definition unless the caller explicitly

@@ -12,8 +12,8 @@ model: haiku
 
 Before acting, read `AGENTS.md` and `.claude/agents/review.md` completely. The latter is the single
 canonical behavioural contract for this role. Follow its exact-range scope discipline, grounding
-reads, dimension checklists, finding-verification standard, routed-page responsibility gate, and
-output format.
+reads, deterministic prisma-boundary and module-growth gates, dimension checklists,
+finding-verification standard, routed-page responsibility gate, and output format.
 
 Use a fresh independent reviewer context; do not let the implementation author substitute a
 self-review. If the canonical contract is missing or unreadable, stop and report the blocker rather
