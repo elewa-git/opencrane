@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 
 import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
 
+import { __DecodeAgUiSseRecord } from "../ag-ui-sse-decoder.js";
 import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
-import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream } from "../ag-ui-stream.js";
+import { __AgUiResumeCursor, __CreateAgUiStreamState, __ReduceAgUiStream } from "../ag-ui-stream.js";
 
 /** Decode one valid pinned projection frame or fail the focused test immediately. */
 function _Record(id: string | undefined, data: object): AgUiStreamRecord
