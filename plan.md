@@ -10,8 +10,10 @@
 The [personal-agent platform architecture](docs/design/personal-agent-platform-architecture.md) is
 the target:
 
-1. **Product:** OpenCrane owns Thread, Message, Run, RunEvent, approvals, transcript, compaction,
-   retries, budgets, identity, memory, artifacts, and tool policy. The runtime is a replaceable
+1. **Product:** OpenCrane owns mode-bound Conversation, Message, canonical timeline, Run, RunEvent,
+   approvals, transcript, compaction, retries, budgets, identity, memory, artifacts, and tool policy.
+   AgentRun is a conditional child of `agent_session`, never the backing record for direct or ordinary
+   group messages ([ADR 0012](docs/adr/0012-conversation-modes-and-agent-thread-authority.md)). The runtime is a replaceable
    workload behind a **language-neutral** `AgentRuntimeProtocol v1` ([ADR 0010](docs/adr/0010-language-neutral-agent-runtime.md));
    `pydantic-ai-slim` (Python) is the first qualification candidate for the bounded model/tool loop,
    adopted only after it passes the live-LiteLLM conformance gate. Language is not a product contract.
@@ -79,8 +81,9 @@ path and ownership refactor; it adds no compatibility aliases and changes no run
 
 ### Phase D — foundations, identity, and fresh provisioning
 
-Build the target Postgres models for AgentService/Revision/Run, Thread/Message/RunEvent, Approval,
-Persona, Artifact, SkillRevision, audit, and membership projection. Build the authorization facade,
+Build the target Postgres models for AgentService/Revision, Conversation/Message/canonical timeline,
+conditional AgentRun/RunEvent, Approval, Persona, Artifact, SkillRevision, audit, and membership
+projection. Build the authorization facade,
 proof-bound capabilities, channel proxy, agent controller, ArtifactStore CAS, outbox, app-owned
 Cognee/Obot adapters, default-deny Cilium profiles, workload identities, and deterministic creation
 of fresh application stores and credentials. Every durable store uses an expandable mounted volume;

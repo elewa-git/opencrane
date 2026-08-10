@@ -10,12 +10,15 @@ model loop replaceable and non-authoritative.
 OIDC subject + signed organisation membership
                     │
                     ▼
-        OpenCrane authorization and run admission
+      OpenCrane conversation and run admission
                     │
-                    ├──► immutable RunInputSnapshot
-                    │
-                    ▼
-          AgentRun + ordered RunEvent stream
+                    ├──► direct/group Message (no run)
+                    ├──► canonical Conversation timeline
+                    └──► agent_session only
+                              │
+                              ├──► immutable RunInputSnapshot
+                              ▼
+                    AgentRun + ordered RunEvent stream
                     │
                     ▼
        controller assigns one fenced attempt
@@ -30,21 +33,25 @@ OIDC subject + signed organisation membership
                      OpenCrane authorizes and executes
 ```
 
-The canonical run hierarchy is:
+The canonical conversation and conditional run hierarchy is:
 
 ```text
-Thread
-  └── AgentRun
-        ├── RunInputSnapshot
-        ├── ordered RunEvent
-        └── RuntimeAssignment
-              └── fenced attempt commands and candidates
+Conversation (immutable mode)
+  ├── Message + ordered ConversationTimelineEntry
+  └── agent_session only
+        └── AgentRun
+              ├── RunInputSnapshot
+              ├── ordered RunEvent
+              └── RuntimeAssignment
+                    └── fenced attempt commands and candidates
 ```
 
-The database enforces that an `AgentRun` has its exact immutable `RunInputSnapshot`. The input
-compiler resolves persona, conversation, memory references, tool policy, model route, budget, and
-identity before dispatch; the runtime receives literal compiled input and cannot reinterpret those
-authorities.
+Direct and ordinary group messages never create runs. The database enforces that an `AgentRun` has
+its exact immutable `RunInputSnapshot`. The input compiler resolves persona, conversation, memory
+references, tool policy, model route, budget, and identity before dispatch; the runtime receives
+literal compiled input and cannot reinterpret those authorities.
+[ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the mode, timeline,
+lifecycle, and Agent-thread authority.
 
 Source contracts:
 
@@ -61,7 +68,7 @@ OpenCrane owns every durable or security-sensitive decision:
 |-----------|-------|
 | Organisation identity and membership evidence | OIDC plus verified, bounded signed membership evidence |
 | Agent definitions and immutable revisions | Agent-service domain |
-| Thread, run, input snapshot, and ordered events | Run and conversation domains |
+| Conversation, messages, canonical timeline, conditional runs, input snapshots, and ordered run events | Conversation and run domains |
 | Persona and preference revisions | Personal-configuration domain |
 | Skill publication and assignments | Skill domains |
 | Model routes, provider credentials, and budgets | Model and execution authorities |
@@ -122,7 +129,7 @@ default and validates the silo coordinate again at each storage and workload bou
 
 Postgres and artifact storage are authoritative durable stores. Runtime workspaces are scratch
 space: they are not backed up and may disappear when a Pod terminates. Recovery reconstructs work
-from canonical run, snapshot, event, assignment, and artifact records.
+from canonical conversation, timeline, run, snapshot, event, assignment, and artifact records.
 
 ## Validation
 

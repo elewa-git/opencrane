@@ -12,8 +12,8 @@ status belongs in the code, tests, and release notes.
 |------------|----------|
 | Organisation identity and membership | Bind OIDC subjects to signed, revisioned organisation membership evidence. Unknown, expired, or unverifiable membership fails closed. |
 | Agents and revisions | Keep agent definitions stable and configuration immutable per revision. A run binds one exact revision. |
-| Conversations and runs | Provide stable threads, streaming output, ordered events, cancellation, retry, recovery, and terminal-state fencing. |
-| Run input | Persist one immutable `RunInputSnapshot` before dispatch. It binds identity, thread context, persona, memory references, tools, model route, and budget. |
+| Conversations and runs | Provide immutable `agent_session`, `direct`, and `group` modes with a canonical timeline. Agent sessions add governed serial runs; ordinary direct and group messages create no runs. |
+| Run input | Persist one immutable `RunInputSnapshot` before dispatch. It binds identity, conversation context, persona, memory references, tools, model route, and budget. |
 | Persona and preferences | Store reviewable, versioned persona and preference facts. Changes affect later snapshots only. |
 | Memory | Apply explicit dataset identity, scope, provenance, and authorization to durable personal and organisation memory. |
 | Artifacts | Store immutable bytes and revision metadata with ownership, hashes, media type, provenance, and run links. |
@@ -46,16 +46,23 @@ An unknown subject, missing binding, invalid signature, stale revision, or unava
 authority cannot authorize sign-in, run admission, grant expansion, administration, or credential
 renewal. An outage must not turn an unknown member into an active member.
 
-## Run and event contract
+## Conversation, run, and event contract
 
-The durable hierarchy is `Thread -> AgentRun -> ordered RunEvent`. Before an attempt starts,
-OpenCrane persists the run and its exact immutable input snapshot. Events are accepted only through
-the control-plane admission path, use deterministic sequence ordering, and preserve one terminal
-outcome.
+`Conversation` is the durable aggregate. Its immutable mode is `agent_session`, `direct`, or `group`,
+and one database-owned sequence orders its messages and safe run-backed projections. Direct and
+ordinary group messages create no run. An agent session conditionally owns serial
+`AgentRun -> ordered RunEvent` hierarchies; before an attempt starts, OpenCrane persists the run and
+its exact immutable input snapshot. Events are accepted only through the control-plane admission
+path, use deterministic sequence ordering, and preserve one terminal outcome.
 
 Runtime assignments and commands are fenced by attempt. Retry creates a new attempt; it does not
 rewrite the evidence of an earlier one. Cancellation, approvals, usage, external-action results,
 and failures become canonical events before clients rely on them.
+
+Conversation close is monotonic; participant archive and unread position remain separate visibility
+coordinates. An authorized group `@agent` message atomically creates one child agent session and its
+first run. [ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md) records the full
+mode, parent/child, delivery, and non-disclosure contract.
 
 ## External-action contract
 
@@ -102,4 +109,5 @@ authority boundary and does not determine which product paths remain supported.
 
 > See also: [platform architecture](personal-agent-platform-architecture.md),
 > [ADR 0008](../adr/0008-target-agent-contracts-and-workload-identity.md), and
-> [ADR 0011](../adr/0011-single-run-input-and-artifact-read-authorities.md).
+> [ADR 0011](../adr/0011-single-run-input-and-artifact-read-authorities.md), and
+> [ADR 0012](../adr/0012-conversation-modes-and-agent-thread-authority.md).
