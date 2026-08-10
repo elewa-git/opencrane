@@ -1,0 +1,23 @@
+<section class="wo-first-chat__question" [attr.aria-labelledby]="'first-chat-question-' + question().id">
+	<span class="wo-first-chat__step">Calibration question {{ question().ordinal }} of 3</span>
+	<h2 [id]="'first-chat-question-' + question().id">{{ question().prompt }}</h2>
+</section>
+
+<div class="wo-first-chat__composer">
+	<label for="first-chat-answer">Your answer</label>
+	<textarea
+		pTextarea
+		id="first-chat-answer"
+		rows="3"
+		[disabled]="disabled()"
+		[value]="draftAnswer()"
+		aria-describedby="first-chat-composer-hint"
+		placeholder="Write your answer…"
+		(input)="updateDraft($event)"
+		(keydown)="handleComposerKeydown($event)"
+	></textarea>
+	<div class="wo-first-chat__composer-footer">
+		<span id="first-chat-composer-hint">Enter to send · Shift+Enter for a new line</span>
+		<p-button label="Send answer" icon="pi pi-arrow-right" iconPos="right" [disabled]="!canSubmit()" (onClick)="submitAnswer()" />
+	</div>
+</div>

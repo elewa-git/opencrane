@@ -2,7 +2,7 @@
 	title="Meet your personal agent"
 	description="This private first conversation calibrates how you will work together."
 	[layout]="journeyLayouts.Wide"
-	[busy]="state() === states.Submitting || state() === states.Reconnecting"
+	[busy]="state() === states.Submitting || state() === states.Reconnecting || state() === states.Finishing"
 >
 	@if (state() === states.Submitting) {
 		<div journey-status class="wo-first-chat__status" role="status" aria-live="polite">
@@ -11,71 +11,28 @@
 		</div>
 	} @else if (state() === states.Reconnecting) {
 		<p-message journey-status severity="warn" [closable]="false">{{ statusMessage() ?? "Reconnecting to the saved conversation…" }}</p-message>
+	} @else if (state() === states.Finishing) {
+		<div journey-status class="wo-first-chat__status" role="status" aria-live="polite">
+			<p-progressspinner class="wo-first-chat__spinner" ariaLabel="Finishing onboarding" data-visual-target="progress-spinner" strokeWidth="5" />
+			<span>{{ statusMessage() ?? "Validating your completed calibration…" }}</span>
+		</div>
 	} @else if (state() === states.Error) {
 		<p-message journey-status severity="error" [closable]="false">{{ statusMessage() ?? "The conversation could not continue." }}</p-message>
 	}
 
 	<section class="wo-first-chat" aria-label="First conversation">
-		<header class="wo-first-chat__identity">
-			<wo-avatar-circle [initials]="identity().initials" [label]="identity().name" [tone]="avatarTones.Brand" [size]="avatarSizes.Large" />
-			<div class="wo-first-chat__identity-copy">
-				<strong>{{ identity().name }}</strong>
-				<span>Approved personal agent</span>
-			</div>
-			<wo-scope-chip label="Private onboarding" [tone]="chipTones.Personal" [appearance]="chipAppearances.Soft" />
-		</header>
+		<wo-persona-first-chat-identity [identity]="identity()" [provenance]="provenance()" />
 
-		<dl
-			class="wo-first-chat__provenance"
-			[ngClass]="provenanceArchetypeClass()"
-			aria-label="Persona and bootstrap provenance"
-		>
-			<div>
-				<dt>Approved persona</dt>
-				<dd>{{ identity().name }} · {{ provenance().personaRevision }}</dd>
-			</div>
-			<div>
-				<dt>Bootstrap script</dt>
-				<dd>{{ provenance().scriptLabel }} · {{ provenance().scriptRevision }}</dd>
-			</div>
-		</dl>
-
-		<ol class="wo-first-chat__transcript" tabindex="0" aria-label="Saved conversation transcript" aria-live="polite" aria-relevant="additions text">
-			@for (message of transcript(); track message.id) {
-				<li
-					class="wo-first-chat__message"
-					[class.wo-first-chat__message--owner]="message.role === messageRoles.Owner"
-				>
-					<span class="wo-first-chat__speaker">{{ speakerLabel(message.role) }}</span>
-					<p>{{ message.body }}</p>
-				</li>
-			}
-		</ol>
+		<wo-persona-first-chat-transcript [agentName]="identity().name" [messages]="transcript()" />
 
 		@if (currentQuestion(); as question) {
-			<section class="wo-first-chat__question" [attr.aria-labelledby]="'first-chat-question-' + question.id">
-				<span class="wo-first-chat__step">Calibration question {{ question.ordinal }} of 3</span>
-				<h2 [id]="'first-chat-question-' + question.id">{{ question.prompt }}</h2>
-			</section>
-
-			<div class="wo-first-chat__composer">
-				<label for="first-chat-answer">Your answer</label>
-				<textarea
-					pTextarea
-					id="first-chat-answer"
-					rows="3"
-					[disabled]="composerDisabled()"
-					[value]="draftAnswer()"
-					aria-describedby="first-chat-composer-hint"
-					placeholder="Write your answer…"
-					(input)="updateDraft($event)"
-					(keydown)="handleComposerKeydown($event)"
-				></textarea>
-				<div class="wo-first-chat__composer-footer">
-					<span id="first-chat-composer-hint">Enter to send · Shift+Enter for a new line</span>
-					<p-button label="Send answer" icon="pi pi-arrow-right" iconPos="right" [disabled]="!canSubmit()" (onClick)="submitAnswer()" />
-				</div>
-			</div>
+			<wo-persona-first-chat-composer
+				[question]="question"
+				[state]="state()"
+				[draftAnswer]="draftAnswer()"
+				(draftAnswerChange)="draftAnswer.set($event)"
+				(answerSubmitted)="answerSubmitted.emit($event)"
+			/>
 		} @else if (state() === states.Completed) {
 			<div class="wo-first-chat__completion" role="status" aria-live="polite">
 				<i class="pi pi-check-circle" aria-hidden="true"></i>

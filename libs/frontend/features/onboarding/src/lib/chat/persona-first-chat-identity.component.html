@@ -1,0 +1,23 @@
+<header class="wo-first-chat__identity">
+	<wo-avatar-circle [initials]="identity().initials" [label]="identity().name" [tone]="avatarTones.Brand" [size]="avatarSizes.Large" />
+	<div class="wo-first-chat__identity-copy">
+		<strong>{{ identity().name }}</strong>
+		<span>Approved personal agent</span>
+	</div>
+	<wo-scope-chip label="Private onboarding" [tone]="chipTones.Personal" [appearance]="chipAppearances.Soft" />
+</header>
+
+<dl
+	class="wo-first-chat__provenance"
+	[ngClass]="provenanceArchetypeClass()"
+	aria-label="Persona and bootstrap provenance"
+>
+	<div>
+		<dt>Approved persona</dt>
+		<dd>{{ identity().name }} · {{ provenance().personaRevision }}</dd>
+	</div>
+	<div>
+		<dt>Bootstrap script</dt>
+		<dd>{{ provenance().scriptLabel }} · {{ provenance().scriptRevision }}</dd>
+	</div>
+</dl>

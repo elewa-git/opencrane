@@ -1,0 +1,11 @@
+<ol class="wo-first-chat__transcript" tabindex="0" aria-label="Saved conversation transcript" aria-live="polite" aria-relevant="additions text">
+	@for (message of messages(); track message.id) {
+		<li
+			class="wo-first-chat__message"
+			[class.wo-first-chat__message--owner]="message.role === messageRoles.Owner"
+		>
+			<span class="wo-first-chat__speaker">{{ speakerLabel(message.role) }}</span>
+			<p>{{ message.body }}</p>
+		</li>
+	}
+</ol>

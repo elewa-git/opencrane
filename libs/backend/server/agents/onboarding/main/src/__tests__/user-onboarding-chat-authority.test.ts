@@ -134,6 +134,25 @@ describe("__UserOnboardingChatAuthority", function _UserOnboardingChatAuthorityS
 		expect(fourth.chat.answerCount).toBe(3);
 	});
 
+	it("recovers exact answer identity after another client concludes onboarding", async function _RetriesAfterConclusion()
+	{
+		const { authority } = _Authority();
+		const started = await authority.start(_OWNER);
+		const conversationId = started.conversationId ?? "";
+		await authority.answer(_OWNER, _Answer(conversationId, 1, "One", "key-1"));
+		await authority.answer(_OWNER, _Answer(conversationId, 2, "Two", "key-2"));
+		await authority.answer(_OWNER, _Answer(conversationId, 3, "Three", "key-3"));
+		await authority.conclude(_OWNER);
+
+		const resumed = await authority.answer(_OWNER, _Answer(conversationId, 3, " Three ", "key-3"));
+		const conflicting = await authority.answer(_OWNER, _Answer(conversationId, 3, "Different", "key-3"));
+		const newKey = await authority.answer(_OWNER, _Answer(conversationId, 3, "Three", "key-4"));
+
+		expect(resumed).toMatchObject({ status: UserOnboardingAnswerStatuses.Resumed, chat: { state: UserOnboardingStates.Completed, answerCount: 3 } });
+		expect(conflicting).toMatchObject({ status: UserOnboardingAnswerStatuses.IdempotencyConflict, chat: { state: UserOnboardingStates.Completed, answerCount: 3 } });
+		expect(newKey).toMatchObject({ status: UserOnboardingAnswerStatuses.StateConflict, chat: { state: UserOnboardingStates.Completed, answerCount: 3 } });
+	});
+
 	it("refuses conclusion until exactly three durable answers exist", async function _RejectsEarlyConclusion()
 	{
 		const { authority } = _Authority();

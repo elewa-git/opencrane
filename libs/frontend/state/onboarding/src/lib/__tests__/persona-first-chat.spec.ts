@@ -48,6 +48,24 @@ describe("persona first-chat response validation", function _PersonaFirstChatVal
 		expect(parsed).not.toHaveProperty("ignored");
 	});
 
+	it("accepts migrated completion without inventing first-chat evidence", function _MigratedCompletion()
+	{
+		const parsed = _ParsePersonaFirstChatSnapshot(_Snapshot({
+			state: UserOnboardingRouteStates.Completed,
+			conversationId: null,
+			persona: null,
+			contentRevision: null,
+			transcript: [],
+			currentQuestion: null,
+			questionCount: 0,
+			startedAt: null,
+			completedAt: "2026-08-08T11:00:00.000Z"
+		}));
+
+		expect(parsed.state).toBe(UserOnboardingRouteStates.Completed);
+		expect(parsed.conversationId).toBeNull();
+	});
+
 	it("rejects reordered transcript evidence and a question that disagrees with admitted count", function _InvalidOrdering()
 	{
 		expect(function _ParseReordered() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ transcript: [{ ..._Snapshot().transcript[0], ordinal: 2 }] })); }).toThrow("invalid first-chat projection");
@@ -57,6 +75,19 @@ describe("persona first-chat response validation", function _PersonaFirstChatVal
 	it("rejects conversation evidence without complete persona and script provenance", function _MissingProvenance()
 	{
 		expect(function _ParseMissingPersona() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ persona: null })); }).toThrow("invalid first-chat projection");
+	});
+
+	it("rejects lifecycle states whose question and conclusion evidence is incomplete", function _IncompleteLifecycleEvidence()
+	{
+		expect(function _ParseBlankConclusion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ answerCount: 3, currentQuestion: null, canConclude: false })); }).toThrow("invalid first-chat projection");
+		expect(function _ParseMissingQuestion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ answerCount: 1, currentQuestion: null })); }).toThrow("invalid first-chat projection");
+		expect(function _ParseIncompleteCompletion() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ state: UserOnboardingRouteStates.Completed, completedAt: "2026-08-08T11:00:00.000Z" })); }).toThrow("invalid first-chat projection");
+	});
+
+	it("rejects transcript roles, kinds, and question coordinates that disagree with evidence", function _InvalidTranscriptSemantics()
+	{
+		const invalidOpening = { ..._Snapshot().transcript[0], role: PersonaFirstChatTranscriptRoles.User, kind: PersonaFirstChatTranscriptKinds.Answer, questionOrdinal: 1 };
+		expect(function _ParseInvalidOpening() { return _ParsePersonaFirstChatSnapshot(_Snapshot({ transcript: [invalidOpening, _Snapshot().transcript[1]] })); }).toThrow("invalid first-chat projection");
 	});
 
 	it("validates the public route projection used after persona approval", function _RouteProjection()
@@ -87,7 +118,15 @@ describe("OpenCranePersonaFirstChatGateway", function _OpenCranePersonaFirstChat
 
 	it("preserves the authoritative projection from a documented answer conflict", async function _AnswerConflict()
 	{
-		const advanced = _Snapshot({ answerCount: 1, currentQuestion: { ordinal: 2, text: "What wastes time?" } });
+		const advanced = _Snapshot({
+			answerCount: 1,
+			currentQuestion: { ordinal: 2, text: "What wastes time?" },
+			transcript: [
+				..._Snapshot().transcript,
+				{ ordinal: 3, role: PersonaFirstChatTranscriptRoles.User, kind: PersonaFirstChatTranscriptKinds.Answer, text: "Saved elsewhere.", questionOrdinal: 1 },
+				{ ordinal: 4, role: PersonaFirstChatTranscriptRoles.Assistant, kind: PersonaFirstChatTranscriptKinds.Question, text: "What wastes time?", questionOrdinal: 2 }
+			]
+		});
 		const post = vi.fn().mockResolvedValue({ error: { error: "onboarding_chat_state_conflict", chat: advanced } });
 		const adapter = _Adapter(vi.fn(), post);
 
@@ -123,15 +162,14 @@ describe("PersonaFirstChatService", function _PersonaFirstChatServiceSuite()
 		service = runInInjectionContext(injector, function _CreateService() { return new PersonaFirstChatService(); });
 	});
 
-	it("starts only from the durable pending state and otherwise resumes exactly", async function _StartBoundary()
+	it("starts only from the durable pending projection", async function _StartBoundary()
 	{
-		const pending = _Snapshot({ state: UserOnboardingRouteStates.BootstrapChatPending, conversationId: null, persona: null, contentRevision: null, transcript: [], currentQuestion: null, answerCount: 0, questionCount: 0, startedAt: null });
+		const pending = _Snapshot({ state: UserOnboardingRouteStates.BootstrapChatPending, conversationId: null, transcript: [], currentQuestion: null, answerCount: 0, startedAt: null });
 		const started = _Snapshot();
-		vi.mocked(gateway.load).mockResolvedValueOnce(pending).mockResolvedValueOnce(started);
 		vi.mocked(gateway.start).mockResolvedValue(started);
 
-		await expect(service.loadOrStart()).resolves.toBe(started);
-		await expect(service.loadOrStart()).resolves.toBe(started);
+		await expect(service.start(pending)).resolves.toBe(started);
+		expect(function _StartAgain() { service.start(started); }).toThrow("not ready to start");
 		expect(gateway.start).toHaveBeenCalledTimes(1);
 	});
 

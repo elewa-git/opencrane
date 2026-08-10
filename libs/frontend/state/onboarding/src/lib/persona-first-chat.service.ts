@@ -15,12 +15,14 @@ export class PersonaFirstChatService
 		return this._gateway.loadRouteState();
 	}
 
-	/** Resume the exact durable conversation, starting only from the explicit pending state. */
-	public async loadOrStart(): Promise<PersonaFirstChatSnapshot>
+	/** Start only the exact durable pending conversation supplied by the latest read projection. */
+	public start(snapshot: PersonaFirstChatSnapshot): Promise<PersonaFirstChatSnapshot>
 	{
-		const snapshot = await this._gateway.load();
-		if (snapshot.state === UserOnboardingRouteStates.BootstrapChatPending) return this._gateway.start();
-		return snapshot;
+		if (snapshot.state !== UserOnboardingRouteStates.BootstrapChatPending || snapshot.conversationId !== null)
+		{
+			throw new Error("The first conversation is not ready to start.");
+		}
+		return this._gateway.start();
 	}
 
 	/** Retry a failed authoritative read without creating or advancing evidence. */

@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest";
 
 import { PersonaArchetypeTones } from "@opencrane/elements/ui";
 
-import { _PersonaFirstChatAnswerIntent, _PersonaFirstChatArchetypeClass } from "../persona-first-chat.component.js";
-import { PersonaFirstChatArchetypeClasses, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "../persona-first-chat.types.js";
+import { _PersonaFirstChatAnswerIntent } from "../persona-first-chat-composer.component.js";
+import { _PersonaFirstChatArchetypeClass } from "../persona-first-chat-identity.component.js";
+import { _PersonaFirstChatSpeakerLabel } from "../persona-first-chat-transcript.component.js";
+import { PersonaFirstChatArchetypeClasses, PersonaFirstChatMessageRoles, type PersonaFirstChatQuestion, PersonaFirstChatStates } from "../persona-first-chat.types.js";
 
 /** All three canonical ordinals used to prove one typed sequential component contract. */
 const _QUESTIONS: readonly PersonaFirstChatQuestion[] =
@@ -13,7 +15,7 @@ const _QUESTIONS: readonly PersonaFirstChatQuestion[] =
 	{ id: "question-three", ordinal: 3, prompt: "Third question" }
 ];
 
-describe("PersonaFirstChatComponent presentation contract", function _PersonaFirstChatContractSuite()
+describe("persona first-chat presentational region contract", function _PersonaFirstChatContractSuite()
 {
 	it("maps Commander, Catalyst, Anchor, and Analyst through one finite visual owner", function _ArchetypeMapping()
 	{
@@ -43,15 +45,20 @@ describe("PersonaFirstChatComponent presentation contract", function _PersonaFir
 		]);
 	});
 
-	it("returns no intent for empty, questionless, or externally blocked lifecycle states", function _ExternallyOwnedLifecycle()
+	it("returns no intent for empty or externally blocked lifecycle states", function _ExternallyOwnedLifecycle()
 	{
 		expect(_PersonaFirstChatAnswerIntent(_QUESTIONS[0], PersonaFirstChatStates.AwaitingCalibration, "   ")).toBeNull();
-		expect(_PersonaFirstChatAnswerIntent(null, PersonaFirstChatStates.AwaitingCalibration, "Answer")).toBeNull();
 
-		const blockedStates = [PersonaFirstChatStates.Submitting, PersonaFirstChatStates.Reconnecting, PersonaFirstChatStates.Completed, PersonaFirstChatStates.Error];
+		const blockedStates = [PersonaFirstChatStates.Submitting, PersonaFirstChatStates.Reconnecting, PersonaFirstChatStates.Finishing, PersonaFirstChatStates.Completed, PersonaFirstChatStates.Error];
 		for (const state of blockedStates)
 		{
 			expect(_PersonaFirstChatAnswerIntent(_QUESTIONS[0], state, "Answer")).toBeNull();
 		}
+	});
+
+	it("labels agent and owner transcript evidence without accepting an untyped role", function _SpeakerLabels()
+	{
+		expect(_PersonaFirstChatSpeakerLabel(PersonaFirstChatMessageRoles.Agent, "The Analyst")).toBe("The Analyst");
+		expect(_PersonaFirstChatSpeakerLabel(PersonaFirstChatMessageRoles.Owner, "The Analyst")).toBe("You");
 	});
 });

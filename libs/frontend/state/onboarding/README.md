@@ -28,9 +28,11 @@ server authority.
 The orchestrator creates a draft only after the completed snapshot proves no tie remains. An
 explicit prepare-draft command resumes an interrupted durable review transition. A failed mutation
 returns no optimistic state, so the current durable screen stays retryable. The first-chat
-orchestrator starts only from `bootstrap_chat_pending`, keeps retry identity outside durable browser
-storage, and asks the server to conclude only when its latest projection says all three answers are
-present.
+store is component-scoped: its resource performs only the authoritative read, while explicit
+single-flight entry, answer, conclusion, and retry commands adopt complete server projections. It
+keeps retry identity outside durable browser storage, resets controlled input when the authoritative
+question changes, and asks the server to conclude only when its latest projection says all three
+answers are present.
 
 The model-adjacent runtime validators strip unknown response extensions and reject invalid lifecycle,
 question, score, revision, transcript, source, or completion evidence before feature state can
@@ -45,8 +47,10 @@ consume it.
 - `PERSONA_GATEWAY` and `PersonaGateway` — transport-neutral dependency-injection port.
 - `_ParsePersonaOnboardingSnapshot` plus persona lifecycle models — bounded response validation and
   the feature-facing projection.
-- `PersonaFirstChatService` and `PERSONA_FIRST_CHAT_GATEWAY` — resumable first-chat loading, answer
-  admission, and guarded conclusion over a package-internal narrow port.
+- `PersonaFirstChatService` and `PERSONA_FIRST_CHAT_GATEWAY` — read and explicit start, answer, and
+  guarded-conclusion operations over a package-internal narrow port.
+- `PersonaFirstChatStore` — component-scoped read resource, typed command phases and admission,
+  retry coordinates, conflict adoption, controlled draft, and authoritative projection state.
 - `OpenCranePersonaFirstChatGateway` — thin generated-client adapter for the signed-in owner's
   onboarding and first-chat endpoints.
 - Package-internal adapter validators fail closed on routing, provenance, transcript order, and

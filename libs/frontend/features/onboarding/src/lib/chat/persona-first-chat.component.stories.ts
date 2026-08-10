@@ -40,6 +40,18 @@ const _ANALYST_QUESTIONS: readonly PersonaFirstChatQuestion[] =
 	{ id: "analyst-standards", ordinal: 3, prompt: "What standards or references should I use as authoritative in your field?" }
 ];
 
+/** Canonical fully answered Analyst transcript retained while conclusion is admitted. */
+const _ANALYST_FINISHING_TRANSCRIPT: readonly PersonaFirstChatTranscriptMessage[] =
+[
+	..._ANALYST_OPENING,
+	{ id: "event-question-one", role: PersonaFirstChatMessageRoles.Agent, body: _ANALYST_QUESTIONS[0].prompt },
+	{ id: "event-answer-one", role: PersonaFirstChatMessageRoles.Owner, body: "Governed agent infrastructure." },
+	{ id: "event-question-two", role: PersonaFirstChatMessageRoles.Agent, body: _ANALYST_QUESTIONS[1].prompt },
+	{ id: "event-answer-two", role: PersonaFirstChatMessageRoles.Owner, body: "Recommendation first, evidence directly underneath." },
+	{ id: "event-question-three", role: PersonaFirstChatMessageRoles.Agent, body: _ANALYST_QUESTIONS[2].prompt },
+	{ id: "event-answer-three", role: PersonaFirstChatMessageRoles.Owner, body: "Official specifications and reviewed primary sources." }
+];
+
 /** Storybook metadata for the feature-owned first-chat composition. */
 const meta: Meta<PersonaFirstChatComponent> =
 {
@@ -181,6 +193,28 @@ export const ReconnectingResume: Story =
 		await expect(canvas.getByText("Calibration question 3 of 3")).toBeInTheDocument();
 		await expect(canvas.getByRole("textbox", { name: "Your answer" })).toBeDisabled();
 		await expect(canvas.getByLabelText("Saved conversation transcript").children).toHaveLength(5);
+	}
+};
+
+/** All admitted answers remain visible while the server validates onboarding completion. */
+export const Finishing: Story =
+{
+	tags: ["visual-test"],
+	args:
+	{
+		state: PersonaFirstChatStates.Finishing,
+		statusMessage: "Validating your completed calibration…",
+		transcript: _ANALYST_FINISHING_TRANSCRIPT,
+		currentQuestion: null
+	},
+	play: async function play({ canvasElement })
+	{
+		const canvas = within(canvasElement);
+
+		// 1. Keep admitted evidence readable while accurately naming server-owned completion work.
+		await expect(canvas.getByRole("status")).toHaveTextContent("Validating your completed calibration");
+		await expect(canvas.queryByRole("textbox")).not.toBeInTheDocument();
+		await expect(canvas.getByLabelText("Saved conversation transcript").children).toHaveLength(7);
 	}
 };
 

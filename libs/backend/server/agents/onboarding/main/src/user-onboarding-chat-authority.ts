@@ -87,7 +87,8 @@ export class __UserOnboardingChatAuthority
 			// 2. Derive the next question only from the durable answer count of the pinned conversation.
 			const workflow = await self.onboarding.readOrCreate(owner);
 			const conversation = await self.repository.readConversation(owner);
-			if (workflow.state !== UserOnboardingStates.BootstrapChatInProgress || conversation === null || workflow.bootstrapConversationId !== conversation.id) throw new UserOnboardingChatError(UserOnboardingChatFailureReasons.StateConflict);
+			const answerState = workflow.state === UserOnboardingStates.BootstrapChatInProgress || workflow.state === UserOnboardingStates.Completed;
+			if (!answerState || conversation === null || workflow.bootstrapConversationId !== conversation.id) throw new UserOnboardingChatError(UserOnboardingChatFailureReasons.StateConflict);
 			if (conversation.id !== expectedConversationId) return { status: UserOnboardingAnswerStatuses.StateConflict, chat: await self._project(owner, workflow) };
 
 			// 3. Append or resume at the repository boundary, then return the authoritative durable projection.

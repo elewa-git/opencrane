@@ -9,6 +9,8 @@ export enum PersonaFirstChatStates
 	Submitting = "submitting",
 	/** Saved transcript evidence remains readable while the authoritative projection reloads. */
 	Reconnecting = "reconnecting",
+	/** All admitted answers are being validated for server-owned onboarding completion. */
+	Finishing = "finishing",
 	/** The authority has confirmed that all three calibration answers are complete. */
 	Completed = "completed",
 	/** A recoverable presentation error prevents the next answer from being submitted. */
@@ -91,4 +93,17 @@ export interface PersonaFirstChatAnswerIntent
 	readonly questionId: string;
 	/** Trimmed non-empty answer supplied by the owner. */
 	readonly answer: string;
+}
+
+/** Complete pure presentation derived from one authoritative first-chat projection. */
+export interface PersonaFirstChatView
+{
+	/** Approved personal-agent identity rendered by the conversation surface. */
+	readonly identity: PersonaFirstChatIdentity;
+	/** Exact persona and bootstrap source provenance shown to the owner. */
+	readonly provenance: PersonaFirstChatProvenance;
+	/** Canonical transcript adapted without changing server order. */
+	readonly transcript: readonly PersonaFirstChatTranscriptMessage[];
+	/** Current server-selected question, or null after all answers. */
+	readonly currentQuestion: PersonaFirstChatQuestion | null;
 }

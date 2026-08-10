@@ -1,0 +1,88 @@
+:host {
+	display: contents;
+}
+
+.wo-first-chat {
+	&__identity {
+		display: flex;
+		align-items: center;
+		gap: var(--oc-space-3);
+		padding-bottom: var(--oc-space-4);
+		border-bottom: 1px solid var(--oc-border-subtle);
+	}
+
+	&__identity-copy {
+		display: grid;
+		flex: 1;
+		min-width: 0;
+
+		span {
+			font-size: var(--oc-text-sm);
+			color: var(--oc-ink-muted);
+		}
+	}
+
+	&__provenance {
+		--oc-first-chat-archetype: var(--oc-accent);
+		display: grid;
+		grid-template-columns: repeat(2, minmax(0, 1fr));
+		gap: var(--oc-space-3);
+		margin: 0;
+		padding: var(--oc-space-3) var(--oc-space-4);
+		border-left: var(--oc-space-1) solid var(--oc-first-chat-archetype);
+		border-radius: var(--oc-radius-card);
+		background: var(--oc-surface-subtle);
+
+		&--commander {
+			--oc-first-chat-archetype: var(--oc-archetype-commander);
+		}
+
+		&--catalyst {
+			--oc-first-chat-archetype: var(--oc-archetype-catalyst);
+		}
+
+		&--anchor {
+			--oc-first-chat-archetype: var(--oc-archetype-anchor);
+		}
+
+		&--analyst {
+			--oc-first-chat-archetype: var(--oc-archetype-analyst);
+		}
+
+		div {
+			min-width: 0;
+		}
+
+		dt {
+			font-family: var(--oc-font-mono);
+			font-size: var(--oc-text-2xs);
+			font-weight: 500;
+			letter-spacing: var(--oc-tracking-label);
+			text-transform: uppercase;
+			color: var(--oc-ink-muted);
+		}
+
+		dd {
+			margin: var(--oc-space-1) 0 0;
+			font-size: var(--oc-text-sm);
+			// Keep long immutable revision coordinates readable without changing the shared type scale.
+			line-height: 1.45;
+			color: var(--oc-ink-strong);
+			overflow-wrap: anywhere;
+		}
+	}
+}
+
+// Match the parent conversation's reviewed mobile composition.
+@media (max-width: 640px) {
+	.wo-first-chat {
+		&__identity {
+			align-items: flex-start;
+			flex-wrap: wrap;
+		}
+
+		&__provenance {
+			grid-template-columns: 1fr;
+		}
+	}
+}
