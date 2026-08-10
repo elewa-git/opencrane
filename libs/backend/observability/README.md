@@ -28,8 +28,9 @@ them as intentional platform-wide API rather than local helpers. The side-effect
 run before the rest of the application graph loads.
 
 Consumed by every app and server domain. Invariant: logs are always structured JSON on stdout, known
-credential and argument fields are redacted, and a correlation id follows the work — so a request can
-be traced end to end even across async hops without exporting query-bearing URLs.
+credential and executable `arguments` fields are recursively redacted at any casing or nesting depth,
+and a correlation id follows the work — so a request can be traced end to end even across async hops
+without exporting query-bearing URLs or executable payloads.
 
 ## Public surface
 

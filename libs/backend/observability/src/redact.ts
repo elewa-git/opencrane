@@ -32,6 +32,7 @@ export const REDACT_PATHS: readonly string[] = [
   "databaseUrl",
   "reviewedToolArguments",
   "finalArguments",
+  "arguments",
   "*.cursor",
   "*.password",
   "*.token",
@@ -40,4 +41,5 @@ export const REDACT_PATHS: readonly string[] = [
   "*.client_secret",
   "*.reviewedToolArguments",
   "*.finalArguments",
+  "*.arguments",
 ];
