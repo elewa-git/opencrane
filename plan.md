@@ -310,11 +310,12 @@ The accepted product contract is:
   free text. Consequential A2UI actions use that authority; rendered UI never grants permission.
 
 The accepted paper/origami workspace language remains the visual source. The repository-owned
-[canonical design target](./docs/ui-design/README.md) now contains the accepted workspace, A2UI, and
-Agent-thread boards plus stable issue-specific screenshot extracts. Its group mention admission,
-starting/running/waiting/failed/completed parent summaries, breadcrumb child view, parent delivery,
-follow-up run, access loss, reconnect, and compact/mobile navigation are implementation contracts,
-not evidence that the corresponding route or authority has shipped.
+[canonical design context target](./docs/ui-design/README.md) contains the current workspace, A2UI,
+and Agent-thread boards plus stable issue-specific screenshot extracts. It is not yet an
+implementation-ready handoff: dedicated Agent-thread boards remain for queued admission,
+unauthorized or revoked access, deep-linked ask landing, and reconnect; the A2UI catalogue count and
+protocol names must be reconciled with the current sink and the open #319 retain/re-pin-versus-delete
+decision. F1.1 closes only after those gaps are resolved and component-manager returns `PASS`.
 
 | Step | Outcome | Owning GitHub issues | Exit gate |
 |---|---|---|---|
@@ -334,7 +335,8 @@ The implementation unit is one vertical, full-stack feature PR per owning issue.
 a dependency or consumer issue, but must not close or absorb another issue's feature slice. The
 review order follows the real branch ancestry and incremental diff, not merely this table:
 
-1. Land the design-target and planning preflight without claiming an implemented feature.
+1. Land the current design-context and planning preflight without claiming an implemented feature,
+   then close the explicit F1.1 design gates before starting #600 production work.
 2. **[#600](https://github.com/elewa-git/opencrane/issues/600)** — establish Conversation modes,
    strategy ownership, canonical timeline, membership, and ordinary direct/group messaging.
 3. After #600, execute these independent branches in parallel when capacity permits:
