@@ -11,7 +11,7 @@ ground a published page, but it is not itself published.
 | [0002](0002-per-clustertenant-silo-architecture.md) | Per-ClusterTenant silo architecture | Accepted |
 | [0003](0003-cilium-spiffe-identity-substrate.md) | Cilium identity and network-policy substrate | Accepted |
 | [0005](0005-opencrane-owned-agent-runtime.md) | OpenCrane-owned agent runtime | Accepted; runtime-language clause superseded by 0010 |
-| [0008](0008-target-agent-contracts-and-workload-identity.md) | Agent contracts and workload identity | Accepted; clarified by 0011 |
+| [0008](0008-target-agent-contracts-and-workload-identity.md) | Agent contracts and workload identity | Accepted; clarified by 0011; universal `Thread` clause superseded by 0012 |
 | [0010](0010-language-neutral-agent-runtime.md) | Language-neutral agent runtime | Accepted |
 | [0011](0011-single-run-input-and-artifact-read-authorities.md) | Single run-input and artifact-read authorities | Accepted |
 | [0012](0012-conversation-modes-and-agent-thread-authority.md) | Conversation modes and Agent-thread authority | Accepted |

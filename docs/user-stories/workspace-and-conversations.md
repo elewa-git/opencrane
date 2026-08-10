@@ -32,7 +32,7 @@ Acceptance criteria:
 - Empty, loading, pagination, unavailable, and long-title states are defined.
 - Conversation metadata does not rely on browser-local cache for authority.
 
-Status: `API blocked`; there is no public thread-list endpoint.
+Status: `API blocked`; there is no public conversation-list endpoint.
 
 ## CON-02 — Start a mode-bound conversation
 
@@ -46,7 +46,7 @@ Acceptance criteria:
 - The immutable mode is `agent_session`, `direct`, or `group`; only an agent session binds an agent.
 - Creation failure does not leave a local-only conversation that appears durable.
 
-Status: `API blocked`; there is no public thread-create endpoint.
+Status: `API blocked`; there is no public conversation-create endpoint.
 
 ## CON-03 — Send input to an agent session
 
@@ -63,8 +63,8 @@ Acceptance criteria:
 - Attachments are included only after an authoritative upload/attachment contract exists.
 - The browser never supplies silo, membership, persona, memory dataset, or tool authority.
 
-Status: `API blocked`; run admission accepts an existing `threadId` but no public prompt/message
-submission endpoint exists.
+Status: `API blocked`; current run admission accepts an existing coordinate named `threadId`, which
+#600 directly replaces with `conversationId`; no public prompt/message submission endpoint exists.
 
 ## CON-04 — Replay the canonical transcript
 
@@ -80,7 +80,9 @@ Acceptance criteria:
 - Rendering supports typical, long, tool-related, approval-related, terminal, and malformed-safe
   display states.
 
-API: `GET /api/v1/me/conversations/{threadId}/events`.
+Target API: `GET /api/v1/me/conversations/{conversationId}/events`. The current implementation names
+that route coordinate `threadId`; #600 replaces the parameter vocabulary without a compatibility
+alias.
 
 ## CON-05 — Follow new events live
 
