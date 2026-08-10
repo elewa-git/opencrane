@@ -29,17 +29,19 @@ its frozen inputs.
 ```
 
 **In this flow:** [execution/inputs](../../inputs/main/README.md) *(assembles the snapshot through this
-package's admission boundary)* · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) *(stores the
+package's admission boundary)* · [conversation replay](../../../../server/conversations/main/README.md) *(stores the
 run's ordered user-visible events)* · dispatcher *(polls the outbox and launches the workload)*
 
 Initial admission serialises the silo and request idempotency key before compiling any mutable
-input. A duplicate returns the first durable snapshot only when the AgentService, conversation
-thread, trigger, and tagged execution identity are the same. An interactive run proves its delegated
+input. A duplicate returns the first durable snapshot only when the AgentService, conversation,
+trigger, and tagged execution identity are the same. An interactive run proves its delegated
 user is that exact subject; a scheduled or explicitly invoked managed run proves the derived service
 principal is the active service. A same-silo key from any other authority scope fails closed without
 exposing a run. A new request locks the AgentService, lets the session assembler
-revalidate every input inside that transaction, and commits the `AgentRun`, its only `RunInputSnapshot`, and the ordered
-`RunAccepted` and `RunAttemptRequested` outbox events together. The canonical digest covers every
+revalidate every input inside that transaction, and commits the `AgentRun`, its only
+`RunInputSnapshot`, and the ordered `RunAccepted` and `RunAttemptRequested` outbox events together.
+For an agent-session message, the conversation authority supplies a transaction callback that also
+persists that canonical message in this same commit. The canonical digest covers every
 snapshot field except its own digest. The persisted snapshot stores revision-selected integration
 tool assignments as canonical JSON, not a mutable MCP-server grant or a custody reference; custody
 is rechecked only when an action is actually attempted.
@@ -187,7 +189,9 @@ confirmation. Kubernetes inspection and mutation remain in the dedicated
 decides when physical evidence may defer or confirm durable cleanup; it never sees a Kubernetes
 client or object.
 
-Child admission is not an alternate public run-start route. A caller must derive parent authority
+Child admission is not an alternate public run-start route. Interactive root runs can start only
+from the participant-owned agent-session message API; the old public `POST /api/v1/me/runs` route no
+longer exists. A child-run caller must derive parent authority
 from the admitted parent run, use the target-authorization port backed by that parent's approved
 tool policy, and persist the prepared record through a transaction that rechecks and reserves it.
 This package neither trusts a child-supplied subject, silo or lineage nor creates a child run by
@@ -214,7 +218,9 @@ sibling domains. The auth edge is limited to backend-type-free request-principal
 
 Owns `AgentRun`, its one `RunInputSnapshot`, and run-domain outbox rows in
 `apps/opencrane/prisma/schema/runs.prisma`. Initial admission commits the run, snapshot,
-`RunAccepted`, and first `RunAttemptRequested` event together; later retries atomically advance the
+`RunAccepted`, and first `RunAttemptRequested` event together. An optional caller-owned commit hook
+lets the conversation authority add the participant's input message without opening a second
+transaction; it cannot replace or weaken run-owned validation. Later retries atomically advance the
 attempt counter and append another `RunAttemptRequested` event. Dispatch leases that event, persists
 the immutable `WorkloadAssignment` and `WorkloadBootstrap`, advances the run to `Assigned`, appends
 one `RunWorkloadReleaseRequested` event for that attempt, and publishes only the attempt event in one
@@ -226,4 +232,4 @@ Cancellation reuses the same outbox with `RunCancellationRequested` and
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Siblings: [inputs](../../inputs/main/README.md) · [runtime cleanup](../../../runtime/cleanup/main/README.md) · [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [agent memory](../../../memory/main/README.md) · [personal-memory selection](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)
+- Siblings: [inputs](../../inputs/main/README.md) · [runtime cleanup](../../../runtime/cleanup/main/README.md) · [conversation replay](../../../../server/conversations/main/README.md) · [agent memory](../../../memory/main/README.md) · [personal-memory selection](../../../personal/memory/main/README.md) · [personas](../../../personal/personas/main/README.md)

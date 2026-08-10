@@ -12,7 +12,7 @@ function _run(): AgentRun
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "revision-1",
-		threadId: "thread-1",
+		conversationId: "conversation-1",
 		trigger: "interactive",
 		delegatedUserId: "user-1",
 		requestIdempotencyKey: "request-1",

@@ -1,4 +1,4 @@
-import { AgentServiceKind, Prisma, type Prisma as PrismaTypes } from "@prisma/client";
+import { AgentServiceKind, ConversationMode, Prisma, type Prisma as PrismaTypes } from "@prisma/client";
 
 import { PersonalConfigurationProposalCodes, type ProposePersonalConfigurationChangeCommand } from "./personal-configuration-proposal.types.js";
 import type { PersonalConfigurationProposalPersistenceResult, PersonalConfigurationProposalRepository } from "./personal-configuration-proposal-unit-of-work.types.js";
@@ -23,16 +23,16 @@ export class PrismaPersonalConfigurationProposalRepository implements PersonalCo
 		if (profile === null) return { status: PersonalConfigurationProposalCodes.ProvenanceConflict };
 
 		// 2. Rebind the conversation, run, and personal service to the same owner and silo.
-		const thread = await this.transaction.conversationThread.findFirst({ where: { id: command.sourceThreadId, siloId: command.siloId, participants: { some: { userId: command.userId } } }, select: { agentServiceId: true } });
-		const run = await this.transaction.agentRun.findFirst({ where: { id: command.sourceRunId, siloId: command.siloId, threadId: command.sourceThreadId, agentServiceId: command.agentServiceId, delegatedUserId: command.userId }, select: { id: true } });
+		const conversation = await this.transaction.conversation.findFirst({ where: { id: command.sourceConversationId, siloId: command.siloId, mode: ConversationMode.AgentSession, participants: { some: { userId: command.userId, accessEndedPosition: null } } }, select: { agentServiceId: true } });
+		const run = await this.transaction.agentRun.findFirst({ where: { id: command.sourceRunId, siloId: command.siloId, conversationId: command.sourceConversationId, agentServiceId: command.agentServiceId, delegatedUserId: command.userId }, select: { id: true } });
 		const service = await this.transaction.agentService.findFirst({ where: { id: command.agentServiceId, siloId: command.siloId, kind: AgentServiceKind.Personal }, select: { activeRevisionId: true } });
-		if (thread === null || thread.agentServiceId !== command.agentServiceId || run === null || service === null || profile.activeRevisionId !== command.expectedPersonaRevisionId || service.activeRevisionId !== command.expectedAgentRevisionId)
+		if (conversation === null || conversation.agentServiceId !== command.agentServiceId || run === null || service === null || profile.activeRevisionId !== command.expectedPersonaRevisionId || service.activeRevisionId !== command.expectedAgentRevisionId)
 		{
 			return { status: PersonalConfigurationProposalCodes.ProvenanceConflict };
 		}
 
 		// 3. Store only immutable request evidence for a later owner decision and materialisation.
-		const change = await this.transaction.personalConfigurationChange.create({ data: { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, agentServiceId: command.agentServiceId, sourceThreadId: command.sourceThreadId, sourceRunId: command.sourceRunId, sourceMessageId: command.sourceMessageId, requestedPatch: command.requestedPatch as Prisma.InputJsonValue, requestedPatchDigest: command.requestedPatchDigest, expectedPersonaRevisionId: command.expectedPersonaRevisionId, expectedAgentRevisionId: command.expectedAgentRevisionId, proposedAt: new Date(command.proposedAt) }, select: { id: true } });
+		const change = await this.transaction.personalConfigurationChange.create({ data: { siloId: command.siloId, userId: command.userId, personaProfileId: command.personaProfileId, agentServiceId: command.agentServiceId, sourceConversationId: command.sourceConversationId, sourceRunId: command.sourceRunId, sourceMessageId: command.sourceMessageId, requestedPatch: command.requestedPatch as Prisma.InputJsonValue, requestedPatchDigest: command.requestedPatchDigest, expectedPersonaRevisionId: command.expectedPersonaRevisionId, expectedAgentRevisionId: command.expectedAgentRevisionId, proposedAt: new Date(command.proposedAt) }, select: { id: true } });
 		return { status: PersonalConfigurationProposalCodes.Proposed, changeId: change.id };
 	}
 }

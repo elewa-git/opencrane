@@ -1,12 +1,12 @@
 import { __DigestRunInputSnapshot } from "@opencrane/backend/agents/execution/runs";
-import type { InitialRunAuthority } from "@opencrane/backend/agents/execution/runs";
+import type { InitialRunAuthority, RunAdmissionCommit } from "@opencrane/backend/agents/execution/runs";
 import type { RunInputSnapshot, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import { ___CloneCanonicalJson, ___SortBy } from "@opencrane/util";
 import type { JsonValue } from "@opencrane/util";
 
 import { _CanonicalMemoryFacts, _IsIdentityFresh } from "./utils/canonical-inputs.js";
 import type { AssembleRunInputSnapshotResult, SessionAssemblyRefusalReason } from "./session-assembly-result.types.js";
-import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ThreadContextInput, ToolPolicyInput } from "./session-assembly.types.js";
+import type { ApprovedPersonaInput, IdentityEnvelopeInput, MemoryScopeInput, SessionAssemblyAuthorities, SessionAssemblyCommand, ConversationContextInput, ToolPolicyInput } from "./session-assembly.types.js";
 
 /** Stable contract version emitted by the first session assembler. */
 const _SNAPSHOT_VERSION = 1;
@@ -16,12 +16,12 @@ const _SNAPSHOT_VERSION = 1;
  *
  * The heavy lifting is delegated: this function only sequences it. Inside the admission
  * repository's single transaction (which serializes duplicates and holds the service lock),
- * each injected authority loads its slice of the input — run/revision, persona, thread,
+ * each injected authority loads its slice of the input — run/revision, persona, conversation,
  * preferences, memory, tools, budget, signed identity — and any single refusal aborts the
  * whole admission with that reason. Nothing is persisted unless every source loads; a
  * duplicate `requestIdempotencyKey` returns the previously admitted snapshot untouched.
  */
-export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities): Promise<AssembleRunInputSnapshotResult>
+export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand, authorities: SessionAssemblyAuthorities, commit?: RunAdmissionCommit): Promise<AssembleRunInputSnapshotResult>
 {
 	// 1. Reject malformed coordinates before any authority read can accidentally widen its scope.
 	if (!_isCommandValid(command)) return { outcome: "denied", reason: "invalid_command" };
@@ -45,14 +45,14 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		if ((run.value.agentKind === "personal") !== (persona.value.personaRevisionId !== null)) return { outcome: "denied", reason: "persona_unavailable" } as const;
 
 		// 6. Freeze the transcript, rejecting messages that leaked into a non-conversational run.
-		const thread = await authorities.threadContext.load(command, run.value, transaction);
-		if (thread.outcome === "denied") return thread;
-		if (command.threadId === null && thread.value.messageIds.length > 0) return { outcome: "denied", reason: "thread_unavailable" } as const;
+		const conversation = await authorities.conversationContext.load(command, run.value, transaction);
+		if (conversation.outcome === "denied") return conversation;
+		if (command.conversationId === null && conversation.value.messageIds.length > 0) return { outcome: "denied", reason: "conversation_unavailable" } as const;
 
 		// 7. Freeze preferences, identity-scoped memory, tools, and budgets in the same final transaction.
 		const preferences = await authorities.preferenceFacts.load(command, run.value, identity.value, transaction);
 		if (preferences.outcome === "denied") return preferences;
-		const memory = await authorities.memoryScope.load(command, run.value, identity.value, thread.value, transaction);
+		const memory = await authorities.memoryScope.load(command, run.value, identity.value, conversation.value, transaction);
 		if (memory.outcome === "denied") return memory;
 		const tools = await authorities.toolPolicy.load(command, run.value, transaction);
 		if (tools.outcome === "denied") return tools;
@@ -62,8 +62,8 @@ export async function __AssembleRunInputSnapshot(command: SessionAssemblyCommand
 		const budget = await authorities.budgetPolicy.load(command, run.value, transaction);
 		if (budget.outcome === "denied") return budget;
 		// 8. Compile the immutable snapshot only after all source authority is revalidated at the durable fence.
-		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, thread.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
-	});
+		return { outcome: "ready", value: { authority: run.value, snapshot: _compileSnapshot(command, transaction.admittedAt, run.value, persona.value, conversation.value, preferences.value, memory.value, tools.value, budget.value.budgetPolicy, identity.value) } } as const;
+	}, commit);
 	if (admitted.outcome === "denied") return { outcome: "denied", reason: _publicReason(admitted.reason) };
 	return { outcome: "assembled", admissionOutcome: admitted.outcome, snapshot: admitted.snapshot };
 }
@@ -73,8 +73,9 @@ function _isCommandValid(command: SessionAssemblyCommand): boolean
 {
 	return command.runId.trim().length > 0
 		&& command.siloId.trim().length > 0
-		&& (command.threadId === null || command.threadId.trim().length > 0)
+		&& (command.conversationId === null || command.conversationId.trim().length > 0)
 		&& command.requestIdempotencyKey.trim().length > 0
+		&& (command.identityKind !== "user" || command.conversationId === null || (typeof command.inputMessageId === "string" && command.inputMessageId.trim().length > 0 && Array.isArray(command.inputMessageBlocks) && command.inputMessageBlocks.length > 0))
 		&& (command.identityKind === "user"
 			? command.trigger === "interactive" && command.executionSubjectId.trim().length > 0
 			: (command.trigger === "schedule" || command.trigger === "managed_invocation"));
@@ -87,7 +88,7 @@ function _publicReason(reason: SessionAssemblyRefusalReason | "authority_conflic
 }
 
 /** Compiles sorted source outputs into the one canonical shape and digests it without self-reference. */
-function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, thread: ThreadContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: JsonValue, identity: IdentityEnvelopeInput): RunInputSnapshot
+function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, run: InitialRunAuthority, persona: ApprovedPersonaInput, conversation: ConversationContextInput, preferences: readonly { readonly id: string }[], memory: MemoryScopeInput, tools: ToolPolicyInput, budgetPolicy: JsonValue, identity: IdentityEnvelopeInput): RunInputSnapshot
 {
 	const withoutDigest = {
 		runId: command.runId,
@@ -95,8 +96,8 @@ function _compileSnapshot(command: SessionAssemblyCommand, admittedAt: string, r
 		agentServiceId: run.agentServiceId,
 		agentRevisionId: run.agentRevisionId,
 		snapshotVersion: _SNAPSHOT_VERSION,
-		threadId: command.threadId,
-		messageIds: [...thread.messageIds],
+		conversationId: command.conversationId,
+		messageIds: [...conversation.messageIds],
 		personaRevisionId: persona.personaRevisionId,
 		preferenceFactIds: ___SortBy(preferences.map(function _preferenceId(preference): string { return preference.id; })),
 		artifactRevisionIds: ___SortBy([...tools.artifactRevisionIds]),

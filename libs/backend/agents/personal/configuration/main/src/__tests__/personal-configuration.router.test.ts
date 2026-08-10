@@ -23,7 +23,7 @@ describe("personal configuration router", function _suite()
 {
 	it("lists only proposal state read through the session-derived owner", async function _lists()
 	{
-		const { app, listOwned } = _app({ siloId: "silo-1", userId: "user-1" }, vi.fn(async function _list() { return [{ changeId: "change-1", requestedPatch: { kind: AgentConfigPatchKinds.PersonaRefresh }, state: PersonalConfigurationChangeViewStates.Proposed, sourceThreadId: "thread-1", sourceRunId: "run-1", proposedAt: "2026-07-26T12:00:00.000Z", decidedAt: null, rejectionReason: null }]; }));
+		const { app, listOwned } = _app({ siloId: "silo-1", userId: "user-1" }, vi.fn(async function _list() { return [{ changeId: "change-1", requestedPatch: { kind: AgentConfigPatchKinds.PersonaRefresh }, state: PersonalConfigurationChangeViewStates.Proposed, sourceConversationId: "conversation-1", sourceRunId: "run-1", proposedAt: "2026-07-26T12:00:00.000Z", decidedAt: null, rejectionReason: null }]; }));
 		const response = await request(app).get("/changes");
 		expect(response.status).toBe(200);
 		expect(response.body.changes).toHaveLength(1);

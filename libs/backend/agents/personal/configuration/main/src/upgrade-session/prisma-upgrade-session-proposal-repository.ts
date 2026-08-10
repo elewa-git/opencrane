@@ -27,14 +27,14 @@ export class PrismaUpgradeSessionProposalRepository implements UpgradeSessionPro
 	async proposeUpgradeSession(candidate: RuntimeExternalActionCandidate, snapshot: RunInputSnapshot, now: string): Promise<UpgradeSessionProposalReceipt>
 	{
 		// 1. Reject non-personal or non-conversation snapshots before resolving mutable profile state.
-		if (snapshot.personaRevisionId === null || snapshot.threadId === null || !_IsPersonalConfigurationPatch(candidate.arguments)) throw new Error("upgrade_session requires a personal conversation snapshot and supported configuration patch");
+		if (snapshot.personaRevisionId === null || snapshot.conversationId === null || !_IsPersonalConfigurationPatch(candidate.arguments)) throw new Error("upgrade_session requires a personal conversation snapshot and supported configuration patch");
 
 		// 2. Resolve the only profile owned by the immutable execution subject in this silo.
 		const profile = await this.prisma.personaProfile.findUnique({ where: { siloId_userId: { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId } }, select: { id: true } });
 		if (profile === null) throw new Error("upgrade_session personal profile is unavailable");
 
 		// 3. Reuse the proposal UoW so all current-revision provenance is rebound before insertion.
-		const result = await __ProposePersonalConfigurationChange(this.proposals, { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, personaProfileId: profile.id, agentServiceId: snapshot.agentServiceId, sourceThreadId: snapshot.threadId, sourceRunId: snapshot.runId, sourceMessageId: null, requestedPatch: candidate.arguments, requestedPatchDigest: candidate.argumentsDigest, expectedPersonaRevisionId: snapshot.personaRevisionId, expectedAgentRevisionId: snapshot.agentRevisionId, proposedAt: now });
+		const result = await __ProposePersonalConfigurationChange(this.proposals, { siloId: snapshot.siloId, userId: snapshot.identitySnapshot.executionSubjectId, personaProfileId: profile.id, agentServiceId: snapshot.agentServiceId, sourceConversationId: snapshot.conversationId, sourceRunId: snapshot.runId, sourceMessageId: null, requestedPatch: candidate.arguments, requestedPatchDigest: candidate.argumentsDigest, expectedPersonaRevisionId: snapshot.personaRevisionId, expectedAgentRevisionId: snapshot.agentRevisionId, proposedAt: now });
 		if (result.outcome !== PersonalConfigurationProposalCodes.Proposed) throw new Error(`upgrade_session proposal denied: ${result.reason}`);
 		return { changeId: result.changeId };
 	}

@@ -20,7 +20,7 @@ function _Issuer(record?: (request: AttemptModelKeyMintRequest) => void): Attemp
 /** Creates one dispatchable personal-agent run. */
 function _Run()
 {
-	return { id: "run-1", attempt: 1, state: AgentRunState.Accepted, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:snapshot", effectiveContractDigest: "sha256:contract", threadId: "thread-1" };
+	return { id: "run-1", attempt: 1, state: AgentRunState.Accepted, siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", inputSnapshotDigest: "sha256:snapshot", effectiveContractDigest: "sha256:contract", conversationId: "conversation-1" };
 }
 
 /** Creates the active service authority pinned by the run. */
@@ -38,7 +38,7 @@ function _Event(overrides: Record<string, unknown> = {})
 /** Creates the immutable input snapshot and its time-bounded signed membership identity. */
 function _Snapshot(trustedUntil = "2026-07-20T02:00:00.000Z")
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", threadId: "thread-1", modelRoute: { alias: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", fleetMembershipTrustedUntil: trustedUntil } };
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "revision-1", effectiveContractDigest: "sha256:contract", digest: "sha256:snapshot", conversationId: "conversation-1", modelRoute: { alias: "silo-default" }, budgetPolicy: { maxCostUsdMicros: 5_000_000 }, identitySnapshot: { kind: "user", executionSubjectId: "user-1", fleetMembershipTrustedUntil: trustedUntil } };
 }
 
 /** Creates the exact suspended-Job assignment command returned after a claim. */
@@ -288,7 +288,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		await expect(repository.claimNextAttemptAtomically()).resolves.toEqual({ status: "none" });
 		expect(firstTransaction.outboxEvent.updateMany).toHaveBeenCalledWith({ where: { id: "event-1", claimedAt: null, deliveryCount: 0, publishedAt: null, failedAt: null }, data: { claimedAt: new Date("2026-07-20T00:00:00.000Z"), deliveryCount: 1, failedAt: new Date("2026-07-20T00:00:00.000Z"), failureCode: "RUN_DISPATCH_MEMBERSHIP_EXPIRED" } });
 		expect(firstTransaction.agentRun.updateMany).toHaveBeenCalledWith({ where: expect.objectContaining({ id: "run-1" }), data: expect.objectContaining({ state: AgentRunState.Failed }) });
-		expect(firstTransaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: { runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "policy_denied", failureCode: "RUN_DISPATCH_MEMBERSHIP_EXPIRED" }, occurredAt: new Date("2026-07-20T00:00:00.000Z") } });
+		expect(firstTransaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: { conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "policy_denied", failureCode: "RUN_DISPATCH_MEMBERSHIP_EXPIRED" }, occurredAt: new Date("2026-07-20T00:00:00.000Z") } });
 		await expect(repository.claimNextAttemptAtomically()).resolves.toMatchObject({ status: "claimed", claim: { lease: { eventId: "event-2" }, attempt: { runId: "run-2" } } });
 	});
 
@@ -540,7 +540,7 @@ describe("PrismaRunDispatchRepository", function _DescribeDispatchRepository()
 		expect(transaction.workloadAssignment.updateMany).toHaveBeenCalledWith({ where: { runId: "run-1", attempt: 1, state: WorkloadAssignmentState.PendingPod, podUid: null }, data: { state: WorkloadAssignmentState.Revoked, revokedAt: new Date("2026-07-20T00:20:00.000Z") } });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Assigned }, data: { state: AgentRunState.Failed, terminalReason: AgentRunTerminalReason.RuntimeFailure, finishedAt: new Date("2026-07-20T00:20:00.000Z") } });
 		expect(transaction.outboxEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ kind: RunOutboxEventKind.RunWorkloadCleanupRequested, payload: expect.objectContaining({ mode: "assigned", reason: "dispatch_failure", workloadUid: "job-uid-1" }) }) });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: { runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_WORKLOAD_RELEASE_INTEGRITY_INVALID" }, occurredAt: new Date("2026-07-20T00:20:00.000Z") } });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: { conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode: "RUN_WORKLOAD_RELEASE_INTEGRITY_INVALID" }, occurredAt: new Date("2026-07-20T00:20:00.000Z") } });
 	});
 
 	it("replays the durable assignment after revocation, membership expiry, and a next attempt", async function _AssignmentReplayAfterLifecycleAdvance()

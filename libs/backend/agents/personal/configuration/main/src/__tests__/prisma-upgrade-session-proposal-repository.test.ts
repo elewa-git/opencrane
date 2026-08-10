@@ -9,7 +9,7 @@ import { PrismaUpgradeSessionProposalRepository } from "../upgrade-session/prism
 /** Build the immutable personal-session snapshot consumed by the runtime bridge. */
 function _snapshot(): RunInputSnapshot
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", threadId: "thread-1", personaRevisionId: "persona-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" } } as unknown as RunInputSnapshot;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", agentRevisionId: "agent-1", conversationId: "conversation-1", personaRevisionId: "persona-1", identitySnapshot: { kind: "user", executionSubjectId: "user-1" } } as unknown as RunInputSnapshot;
 }
 
 /** Build one valid model-selection candidate with its canonical argument digest. */
@@ -25,7 +25,7 @@ function _prisma(profile: { readonly id: string } | null = { id: "profile-1" })
 {
 	const transaction = {
 		personaProfile: { findFirst: vi.fn(async function _findProfile() { return { activeRevisionId: "persona-1" }; }) },
-		conversationThread: { findFirst: vi.fn(async function _findThread() { return { agentServiceId: "service-1" }; }) },
+		conversation: { findFirst: vi.fn(async function _findConversation() { return { agentServiceId: "service-1" }; }) },
 		agentRun: { findFirst: vi.fn(async function _findRun() { return { id: "run-1" }; }) },
 		agentService: { findFirst: vi.fn(async function _findService() { return { activeRevisionId: "agent-1" }; }) },
 		personalConfigurationChange: { create: vi.fn(async function _create() { return { id: "change-1" }; }) },

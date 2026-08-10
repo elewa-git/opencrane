@@ -3,16 +3,17 @@
 > [backend](../README.md) › agents
 
 This tier holds the rules and state that make an agent behave as an agent: a durable identity and
-service, a conversation, a run and its attempts, a frozen input, learned memory, a persona or other
-context, and the execution boundary that turns an authorised attempt into work. These concepts are
+service, a run and its attempts, a frozen input, learned memory, a persona or other context, and the
+execution boundary that turns an authorised attempt into work. These concepts are
 general: a personal assistant and a future managed agent both need an identity, an attempt, and a
 safe execution boundary.
 
 `personal/` is the current specialization. It owns employee-specific policy — a person's
 configuration-change provenance, verified memory selection, and approved persona. Generic durable
 fact metadata and its outbox intent live in `memory/`, so a future managed scope does not need to
-depend on personal policy. Conversation replay remains
-part of the shared server run authority. This tier is deliberately distinct from
+depend on personal policy. Conversation modes, participant visibility, the canonical timeline, and
+replay are owned by [`libs/backend/server/conversations`](../server/conversations/main/README.md).
+This tier is deliberately distinct from
 [`libs/backend/server`](../server/README.md), the **control plane** that governs identity,
 organisation scope, gateways, and managed services. The execution and runtime packages below remain shared
 agent principles rather than becoming personal-only by proximity.

@@ -62,14 +62,14 @@ function _serviceState(value: string | null): AgentServiceState | null
 }
 
 /** Maps one Prisma run row to the dependency-light target contract. */
-function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; threadId: string | null; trigger: string; delegatedUserId: string | null; requestIdempotencyKey: string; rootRunId: string; parentRunId: string | null; attempt: number; state: string; effectiveContractDigest: string; inputSnapshotDigest: string; acceptedAt: Date; startedAt: Date | null; finishedAt: Date | null; terminalReason: string | null }): AgentRun
+function _mapRun(row: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; conversationId: string | null; trigger: string; delegatedUserId: string | null; requestIdempotencyKey: string; rootRunId: string; parentRunId: string | null; attempt: number; state: string; effectiveContractDigest: string; inputSnapshotDigest: string; acceptedAt: Date; startedAt: Date | null; finishedAt: Date | null; terminalReason: string | null }): AgentRun
 {
 	return {
 		id: row.id,
 		siloId: row.siloId,
 		agentServiceId: row.agentServiceId,
 		agentRevisionId: row.agentRevisionId,
-		threadId: row.threadId,
+		conversationId: row.conversationId,
 		trigger: _runTrigger(row.trigger),
 		delegatedUserId: row.delegatedUserId,
 		requestIdempotencyKey: row.requestIdempotencyKey,

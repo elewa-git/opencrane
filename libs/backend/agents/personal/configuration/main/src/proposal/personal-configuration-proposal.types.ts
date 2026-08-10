@@ -27,7 +27,7 @@ export interface ProposePersonalConfigurationChangeCommand
 	/** Personal AgentService whose active revision was observed. */
 	readonly agentServiceId: string;
 	/** Conversation that supplied the request. */
-	readonly sourceThreadId: string;
+	readonly sourceConversationId: string;
 	/** Canonical run that recorded the request. */
 	readonly sourceRunId: string;
 	/** Optional message that caused the request. */

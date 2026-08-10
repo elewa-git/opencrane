@@ -13,10 +13,10 @@ agent can reuse the machinery without inheriting personal policy.
 | [memory](./memory/README.md) | Verified dataset and explicit preference selection for one admitted run. |
 
 ```
- POST /api/v1/me/runs  { threadId · requestIdempotencyKey }
+ POST /api/v1/me/conversations/:conversationId/messages  { conversationId · requestIdempotencyKey }
         │ trusted session + host
         ▼
- execution admission ── proves thread · membership · grants
+ execution admission ── proves conversation · membership · grants
         │
         ├── configuration ── active revision ─────┐
         ├── personas ─────── approved persona ────┼──► frozen run input
@@ -30,10 +30,10 @@ chooses already-consented coordinates; [execution inputs](../execution/inputs/ma
 the accepted inputs; and [agent memory](../memory/main/README.md) owns durable fact metadata and its
 outbox intent.
 
-The browser may start a personal conversation run with only its existing `threadId` and a
+The browser may start a personal conversation run with only its existing `conversationId` and a
 `requestIdempotencyKey` used to make retries return the same run. The server derives the person from
 the authenticated session and the silo from the trusted host, then re-resolves the participant-bound
-thread, personal agent service, signed fleet membership, effective grants, approved persona, and
+conversation, personal agent service, signed fleet membership, effective grants, approved persona, and
 personal-memory coordinates inside the admission flow. None of those authority coordinates can be
 supplied in the request body.
 

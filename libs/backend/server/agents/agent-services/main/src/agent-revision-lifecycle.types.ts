@@ -125,7 +125,7 @@ export type AgentRevisionLifecycleDenial =
 	| "run_not_admittable"
 	| "revision_unavailable"
 	| "persona_unavailable"
-	| "thread_unavailable"
+	| "conversation_unavailable"
 	| "memory_scope_unavailable"
 	| "memory_unavailable"
 	| "tool_policy_unavailable"

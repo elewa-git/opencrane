@@ -163,4 +163,4 @@ it does not rely on an ORM-side default for a database column that deliberately 
 ## See also
 
 - Parent index: [agents](../../../README.md)
-- Related authorities: [conversation replay](../../../../server/agents/conversation-replay/main/README.md) · [memory](../../memory/main/README.md) · [runs](../../../execution/runs/main/README.md)
+- Related authorities: [conversation replay](../../../../server/conversations/main/README.md) · [memory](../../memory/main/README.md) · [runs](../../../execution/runs/main/README.md)

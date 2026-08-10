@@ -19,8 +19,8 @@ export interface SelfRunStatus
 	readonly attempt: number;
 	/** Product lifecycle state. */
 	readonly state: string;
-	/** Linked conversation thread when the run began from one. */
-	readonly threadId: string | null;
+	/** Linked conversation conversation when the run began from one. */
+	readonly conversationId: string | null;
 	/** Immutable revision selected when the run was accepted. */
 	readonly agentRevisionId: string;
 	/** Server acceptance time. */

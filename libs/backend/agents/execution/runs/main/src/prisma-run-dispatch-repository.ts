@@ -459,7 +459,7 @@ export class PrismaRunDispatchRepository implements RunDispatchRepository
 }
 
 /** Terminalise one poisoned dispatch row so it cannot starve every later valid attempt. */
-async function _TerminalizeUndispatchableAttempt(transaction: Prisma.TransactionClient, event: { id: string; claimedAt: Date | null; deliveryCount: number }, run: { id: string; attempt: number; threadId: string | null }, now: Date, failureCode: string, terminalReason: AgentRunTerminalReason): Promise<void>
+async function _TerminalizeUndispatchableAttempt(transaction: Prisma.TransactionClient, event: { id: string; claimedAt: Date | null; deliveryCount: number }, run: { id: string; attempt: number; conversationId: string | null }, now: Date, failureCode: string, terminalReason: AgentRunTerminalReason): Promise<void>
 {
 	// 1. Fence and terminalise the poisoned outbox command without violating delivery coherence.
 	const claimedAt = new Date(Math.max(now.getTime(), (event.claimedAt?.getTime() ?? -1) + 1));
@@ -469,10 +469,10 @@ async function _TerminalizeUndispatchableAttempt(transaction: Prisma.Transaction
 	await __DeliverChildRunCompletionInTransaction(transaction, { childRunId: run.id });
 
 	// 2. Conversation-bound runs require their contiguous canonical terminal event in this transaction.
-	if (run.threadId !== null)
+	if (run.conversationId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: _TerminalReasonPayload(terminalReason), failureCode }, occurredAt: now } });
+		await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: _TerminalReasonPayload(terminalReason), failureCode }, occurredAt: now } });
 	}
 }
 
@@ -583,9 +583,9 @@ function _CanonicalUtcInstantEpochMilliseconds(value: string): number | null
 }
 
 /** Require the persisted snapshot to repeat every immutable run authority coordinate exactly. */
-function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; digest: string; threadId: string | null }, run: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; inputSnapshotDigest: string; threadId: string | null }): boolean
+function _SnapshotMatchesRun(snapshot: { runId: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; digest: string; conversationId: string | null }, run: { id: string; siloId: string; agentServiceId: string; agentRevisionId: string; effectiveContractDigest: string; inputSnapshotDigest: string; conversationId: string | null }): boolean
 {
-	return snapshot.runId === run.id && snapshot.siloId === run.siloId && snapshot.agentServiceId === run.agentServiceId && snapshot.agentRevisionId === run.agentRevisionId && snapshot.effectiveContractDigest === run.effectiveContractDigest && snapshot.digest === run.inputSnapshotDigest && snapshot.threadId === run.threadId;
+	return snapshot.runId === run.id && snapshot.siloId === run.siloId && snapshot.agentServiceId === run.agentServiceId && snapshot.agentRevisionId === run.agentRevisionId && snapshot.effectiveContractDigest === run.effectiveContractDigest && snapshot.digest === run.inputSnapshotDigest && snapshot.conversationId === run.conversationId;
 }
 
 /** Compare an existing immutable assignment with the complete canonical command and run authority. */
@@ -761,10 +761,10 @@ async function _TerminalizePoisonedRelease(transaction: Prisma.TransactionClient
 	}
 
 	// 4. Conversation-bound runs require their contiguous canonical failure event.
-	if (run.threadId !== null)
+	if (run.conversationId !== null)
 	{
 		const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: run.id }, _max: { sequence: true } });
-		await transaction.conversationRunEvent.create({ data: { runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode }, occurredAt: now } });
+		await transaction.conversationRunEvent.create({ data: { conversationId: run.conversationId, runId: run.id, sequence: (maximum._max.sequence ?? 0) + 1, type: "run.failed", payload: { terminalReason: "runtime_failure", failureCode }, occurredAt: now } });
 	}
 }
 

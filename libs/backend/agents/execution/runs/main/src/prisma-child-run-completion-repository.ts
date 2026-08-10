@@ -59,14 +59,14 @@ export async function __DeliverChildRunCompletionInTransaction(transaction: Pris
 	const parent = await transaction.agentRun.findUnique({ where: { id: child.parentRunId } });
 	const reservation = await transaction.childRunReservation.findUnique({ where: { childRunId: child.id } });
 	if (parent === null || reservation === null || !_hasExactLineage(child, parent, reservation)) return { outcome: "denied", reason: "lineage_conflict" };
-	if (parent.threadId === null) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.NoParentStream);
+	if (parent.conversationId === null) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.NoParentStream);
 	const maximum = await transaction.conversationRunEvent.aggregate({ where: { runId: parent.id }, _max: { sequence: true } });
 	if (_hasTerminalEvent(await transaction.conversationRunEvent.findMany({ where: { runId: parent.id, type: { in: ["run.completed", "run.failed", "run.cancelled"] } }, select: { type: true } }))) return _recordSuppressed(transaction, child.id, parent.id, ChildRunCompletionDeliveryOutcome.ParentStreamTerminal);
 
 	// 3. Write the ledger before its matching parent event; the deferred database constraint makes the pair inseparable.
 	const sequence = (maximum._max.sequence ?? 0) + 1;
 	await transaction.childRunCompletionDelivery.create({ data: { childRunId: child.id, parentRunId: parent.id, parentEventSequence: sequence, outcome: ChildRunCompletionDeliveryOutcome.Delivered } });
-	await transaction.conversationRunEvent.create({ data: { runId: parent.id, sequence, type: _eventType(child.state), payload: { childRunId: child.id, childAttempt: child.attempt, childState: _state(child.state), terminalReason: child.terminalReason, finishedAt: child.finishedAt?.toISOString() ?? null }, occurredAt: new Date() } });
+	await transaction.conversationRunEvent.create({ data: { conversationId: parent.conversationId, runId: parent.id, sequence, type: _eventType(child.state), payload: { childRunId: child.id, childAttempt: child.attempt, childState: _state(child.state), terminalReason: child.terminalReason, finishedAt: child.finishedAt?.toISOString() ?? null }, occurredAt: new Date() } });
 	return { outcome: "delivered", parentRunId: parent.id, parentEventSequence: sequence };
 }
 

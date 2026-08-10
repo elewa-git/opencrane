@@ -7,7 +7,7 @@ import { PrismaRunAuthoritySource } from "../prisma-run-authority-source.js";
 /** Creates the minimum command coordinates needed for a run-authority lookup. */
 function _Command(overrides: Record<string, unknown> = {})
 {
-	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", threadId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1", ...overrides } as never;
+	return { runId: "run-1", siloId: "silo-1", agentServiceId: "service-1", conversationId: null, identityKind: "service", trigger: "managed_invocation", requestIdempotencyKey: "request-1", ...overrides } as never;
 }
 
 /** Creates the admission transaction facade with one controllable service row. */

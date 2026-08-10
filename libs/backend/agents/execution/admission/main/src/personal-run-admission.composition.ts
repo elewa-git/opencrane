@@ -25,18 +25,20 @@ export function __CreatePersonalRunAdmissionPort(prisma: PrismaClient, capacityG
 	return __CreatePersonalRunAdmissionPortWithGate({
 		repository: personalAdmissionRepository,
 		capacityGate,
-		assemble: async function _assemble(command, authority)
+		assemble: async function _assemble(command, authority, commit)
 		{
 			return __AssembleRunInputSnapshot({
 				runId: randomUUID(),
 				siloId: command.siloId,
 				agentServiceId: authority.agentServiceId,
-				threadId: command.threadId,
+				conversationId: command.conversationId,
+				inputMessageId: command.inputMessageId,
+				inputMessageBlocks: command.inputMessageBlocks,
 				identityKind: "user",
 				trigger: "interactive",
 				executionSubjectId: command.executionSubjectId,
 				requestIdempotencyKey: command.requestIdempotencyKey,
-			}, authorities);
+			}, authorities, commit);
 		},
 	});
 }

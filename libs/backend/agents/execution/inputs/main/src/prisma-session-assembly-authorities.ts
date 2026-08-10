@@ -9,7 +9,8 @@ import { PersonalMemoryScopeSource } from "./personal-memory-scope-source.js";
 import { PrismaApprovedPersonaSource } from "./prisma-approved-persona-source.js";
 import { PrismaRevisionBudgetPolicySource, PrismaRevisionToolPolicySource } from "./prisma-revision-tool-policy-source.js";
 import { PrismaRunAuthoritySource } from "./prisma-run-authority-source.js";
-import { PrismaThreadContextSource } from "./prisma-thread-context-source.js";
+import { PrismaConversationContextRepository } from "./prisma-conversation-context-repository.js";
+import { TransactionBoundConversationContextSource } from "./prisma-conversation-context-source.js";
 import type { PersonalMemoryFactSelector } from "./memory-fact-selector.types.js";
 import type { IdentityEnvelopeSource, SessionAssemblyAuthorities, SkillRevisionEligibilitySource } from "./session-assembly.types.js";
 
@@ -20,7 +21,7 @@ export function __CreatePrismaManagedSessionAssemblyAuthorities(admission: RunAd
 		admission,
 		runAuthority: new PrismaRunAuthoritySource(),
 		approvedPersona: new PrismaApprovedPersonaSource(),
-		threadContext: new PrismaThreadContextSource(),
+		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: { load: async function _LoadManagedEmptyPreferences() { return { outcome: "loaded", value: [] }; } },
 		memoryScope: new ManagedNoPersonalMemoryScopeSource(),
 		toolPolicy: new PrismaRevisionToolPolicySource(),
@@ -47,7 +48,7 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 		admission,
 		runAuthority: new PrismaRunAuthoritySource(),
 		approvedPersona: new PrismaApprovedPersonaSource(),
-		threadContext: new PrismaThreadContextSource(),
+		conversationContext: new TransactionBoundConversationContextSource(_CreateConversationContextRepository),
 		preferenceFacts: new PersonalMemoryPreferenceFactSource(_CreatePersonalMemory),
 		memoryScope: new PersonalMemoryScopeSource(_CreatePersonalMemory, memoryFactSelector),
 		toolPolicy: new PrismaRevisionToolPolicySource(),
@@ -61,4 +62,10 @@ export function __CreatePrismaPersonalSessionAssemblyAuthorities(admission: RunA
 function _CreatePersonalMemory(transaction: RunAdmissionTransaction): PrismaPersonalMemoryAdmissionRepository
 {
 	return new PrismaPersonalMemoryAdmissionRepository(transaction.prisma as Prisma.TransactionClient);
+}
+
+/** Bind the conversation reader to the exact final-admission transaction. */
+function _CreateConversationContextRepository(transaction: RunAdmissionTransaction): PrismaConversationContextRepository
+{
+	return new PrismaConversationContextRepository(transaction.prisma);
 }

@@ -15,5 +15,5 @@ export const UPGRADE_SESSION_TOOL: CompiledToolDefinition = {
 /** Return whether an immutable snapshot is eligible for the built-in personal configuration tool. */
 export function __IsUpgradeSessionAvailable(snapshot: RunInputSnapshot): boolean
 {
-	return snapshot.personaRevisionId !== null && snapshot.threadId !== null;
+	return snapshot.personaRevisionId !== null && snapshot.conversationId !== null;
 }

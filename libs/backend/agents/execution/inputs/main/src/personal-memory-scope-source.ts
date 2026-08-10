@@ -4,7 +4,7 @@ import { RunInputSnapshotIdentityKinds } from "@opencrane/contracts";
 import { AgentServiceKinds } from "@opencrane/models/agents";
 
 import type { PersonalMemoryFactSelector } from "./memory-fact-selector.types.js";
-import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad, ThreadContextInput } from "./session-assembly.types.js";
+import type { IdentityEnvelopeInput, MemoryScopeInput, MemoryScopeSource, SessionAssemblyCommand, SessionAssemblyLoad, ConversationContextInput } from "./session-assembly.types.js";
 
 /** Number of fact references frozen into one personal snapshot. */
 const _MAX_FACTS = 8;
@@ -29,7 +29,7 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 	}
 
 	/** Freezes the verified personal dataset and gateway-selected fact references without accepting caller input. */
-	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, thread: ThreadContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
+	async load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>
 	{
 		// 1. Personal datasets cannot enter a managed-service snapshot, even if a delegated user has signed membership.
 		if (run.agentKind !== AgentServiceKinds.Personal) return { outcome: "denied", reason: "memory_scope_unavailable" };
@@ -41,7 +41,10 @@ export class PersonalMemoryScopeSource implements MemoryScopeSource
 
 		// 3. Derive the recall query from the newest user turn frozen in the same transaction; a run
 		//    without any user message freezes only coordinates, so recall stays snapshot-bounded.
-		const queryText = await _loadLatestUserMessageText(transaction, thread.messageIds);
+		const pendingQueryText = conversation.pendingUserMessage === null ? null : _messageText(conversation.pendingUserMessage.blocks).slice(0, _MAX_QUERY_CHARACTERS).trim();
+		const queryText = conversation.pendingUserMessage === null
+			? await _loadLatestUserMessageText(transaction, conversation.messageIds)
+			: (pendingQueryText && pendingQueryText.length > 0 ? pendingQueryText : null);
 		if (queryText === null)
 		{
 			return { outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: resolved.dataset.datasetId, cogneeDatasetId: resolved.dataset.cogneeDatasetId }, memoryFacts: [] } };
@@ -94,7 +97,12 @@ function _messageText(blocks: unknown): string
 	for (const block of blocks)
 	{
 		if (typeof block === "string") parts.push(block);
-		else if (block && typeof block === "object" && !Array.isArray(block) && typeof (block as Record<string, unknown>)["text"] === "string") parts.push((block as Record<string, unknown>)["text"] as string);
+		else if (block && typeof block === "object" && !Array.isArray(block))
+		{
+			const candidate = block as Record<string, unknown>;
+			if (candidate["kind"] === "text" && typeof candidate["value"] === "string") parts.push(candidate["value"]);
+			else if (typeof candidate["text"] === "string") parts.push(candidate["text"]);
+		}
 	}
 	return parts.join("\n");
 }

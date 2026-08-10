@@ -30,7 +30,7 @@ describe("Prisma session assembly authority factories", function _DescribePrisma
 		const identity = { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never;
 
 		expect(authorities.memoryScope).toBeInstanceOf(PersonalMemoryScopeSource);
-		await expect(authorities.memoryScope.load(command, run, identity, { messageIds: [] }, transaction as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-dataset-1" }, memoryFacts: [] } });
+		await expect(authorities.memoryScope.load(command, run, identity, { messageIds: [], pendingUserMessage: null }, transaction as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-dataset-1" }, memoryFacts: [] } });
 		await expect(authorities.preferenceFacts.load(command, run, identity, transaction as never)).resolves.toEqual({ outcome: "loaded", value: [{ id: "fact-1" }] });
 		expect(transaction.prisma.memoryFactCatalog.findMany).toHaveBeenCalledWith(expect.objectContaining({ select: { id: true, provenance: true } }));
 		expect(selector.select).not.toHaveBeenCalled();

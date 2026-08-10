@@ -11,7 +11,7 @@ function _runRow()
 		siloId: "silo-1",
 		agentServiceId: "service-1",
 		agentRevisionId: "revision-1",
-		threadId: null,
+		conversationId: null,
 		trigger: "Interactive",
 		delegatedUserId: "user-1",
 		requestIdempotencyKey: "request-1",

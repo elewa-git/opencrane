@@ -1,6 +1,7 @@
 import type { MemoryFactReference, RunInputSnapshotIdentity, RunInputSnapshotIntegrationAssignment } from "@opencrane/contracts";
 import type { InitialRunAuthority, RunAdmissionCommand, RunAdmissionRepository, RunAdmissionTransaction } from "@opencrane/backend/agents/execution/runs";
-import type { MessageId, PersonaRevisionId } from "@opencrane/models/agents";
+import type { PersonaRevisionId } from "@opencrane/models/agents";
+import type { MessageContentBlock, MessageId } from "@opencrane/models/conversations";
 import type { ArtifactRevisionId, SkillRevisionId } from "@opencrane/models/artifacts";
 import type { JsonValue } from "@opencrane/util";
 
@@ -19,11 +20,13 @@ export interface ApprovedPersonaInput
 	personaRevisionId: PersonaRevisionId | null;
 }
 
-/** Ordered persisted thread context already fenced by the conversation authority. */
-export interface ThreadContextInput
+/** Ordered persisted conversation context already fenced by the conversation authority. */
+export interface ConversationContextInput
 {
 	/** Ordered message identifiers included in the runtime prompt. */
 	messageIds: readonly MessageId[];
+	/** Current validated user input staged for same-transaction persistence, or null outside browser conversation admission. */
+	pendingUserMessage: { readonly id: MessageId; readonly blocks: readonly MessageContentBlock[] } | null;
 }
 
 /** Durable preference fact chosen for transparent prompt personalization. */
@@ -82,11 +85,24 @@ export interface ApprovedPersonaSource
 	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ApprovedPersonaInput>>;
 }
 
-/** Reads the ordered transcript input for the fixed thread. */
-export interface ThreadContextSource
+/** Reads the ordered transcript input for the fixed conversation. */
+export interface ConversationContextSource
 {
 	/** Loads the already ordered message coordinates for this session. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ThreadContextInput>>;
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+}
+
+/** Transaction-scoped durable reader used by the conversation-context source. */
+export interface ConversationContextRepository
+{
+	/** Loads ordered message coordinates from one final-admission snapshot. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority): Promise<SessionAssemblyLoad<ConversationContextInput>>;
+}
+
+/** Creates the conversation reader over the exact final-admission transaction. */
+export interface ConversationContextRepositoryFactory
+{
+	(transaction: RunAdmissionTransaction): ConversationContextRepository;
 }
 
 /** Reads explicit and accepted durable preference facts for the execution subject. */
@@ -99,8 +115,8 @@ export interface PreferenceFactSource
 /** Reads authorised memory scope and pinned fact references. */
 export interface MemoryScopeSource
 {
-	/** Loads the exact memory scope allowed for this run from fresh verified identity and the frozen thread. */
-	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, thread: ThreadContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
+	/** Loads the exact memory scope allowed for this run from fresh verified identity and the frozen conversation. */
+	load(command: SessionAssemblyCommand, run: InitialRunAuthority, identity: IdentityEnvelopeInput, conversation: ConversationContextInput, transaction: RunAdmissionTransaction): Promise<SessionAssemblyLoad<MemoryScopeInput>>;
 }
 
 /** Reads revision assignments intersected with the caller's effective grants. */
@@ -141,7 +157,7 @@ export interface SessionAssemblyAuthorities
 	/** Approved-persona authority. */
 	approvedPersona: ApprovedPersonaSource;
 	/** Conversation transcript authority. */
-	threadContext: ThreadContextSource;
+	conversationContext: ConversationContextSource;
 	/** Durable preference-fact authority. */
 	preferenceFacts: PreferenceFactSource;
 	/** Memory-scope authority. */

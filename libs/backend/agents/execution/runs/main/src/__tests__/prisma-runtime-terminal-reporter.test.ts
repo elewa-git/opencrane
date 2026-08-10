@@ -6,7 +6,7 @@ import { PrismaRuntimeTerminalReporter } from "../prisma-runtime-terminal-report
 /** Builds the minimum direct run row needed by the terminal reporting authority. */
 function _run(overrides: Record<string, unknown> = {})
 {
-	return { id: "run-1", attempt: 1, state: AgentRunState.Running, threadId: "thread-1", parentRunId: null, ...overrides };
+	return { id: "run-1", attempt: 1, state: AgentRunState.Running, conversationId: "conversation-1", parentRunId: null, ...overrides };
 }
 
 /** Builds one transaction double that exposes only terminal reporter dependencies. */
@@ -28,7 +28,7 @@ describe("PrismaRuntimeTerminalReporter", function _describeReporter()
 
 		await expect(reporter.reportInTransaction(transaction as never, { runId: "run-1", attempt: 1, eventType: "run.completed" })).resolves.toEqual({ outcome: "reported" });
 		expect(transaction.agentRun.updateMany).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 1, state: AgentRunState.Running }, data: expect.objectContaining({ state: AgentRunState.Completed, terminalReason: AgentRunTerminalReason.Success }) });
-		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ runId: "run-1", sequence: 5, type: "run.completed", payload: { terminalReason: "success" } }) });
+		expect(transaction.conversationRunEvent.create).toHaveBeenCalledWith({ data: expect.objectContaining({ conversationId: "conversation-1", runId: "run-1", sequence: 5, type: "run.completed", payload: { terminalReason: "success" } }) });
 	});
 
 	it("refuses a report after cancellation or another terminal writer won", async function _deniesStaleReport()

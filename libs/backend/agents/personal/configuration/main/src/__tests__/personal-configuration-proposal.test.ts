@@ -7,7 +7,7 @@ import { PersonalConfigurationProposalCodes } from "../proposal/personal-configu
 /** Build one valid proposal command with optional overrides. */
 function _Command(overrides: Partial<Parameters<typeof __ProposePersonalConfigurationChange>[1]> = {})
 {
-	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceThreadId: "thread-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }, requestedPatchDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z", ...overrides };
+	return { siloId: "silo-1", userId: "user-1", personaProfileId: "profile-1", agentServiceId: "service-1", sourceConversationId: "conversation-1", sourceRunId: "run-1", sourceMessageId: "message-1", requestedPatch: { kind: AgentConfigPatchKinds.ModelAlias, modelAlias: "careful-model" }, requestedPatchDigest: "sha256:2f03c46815d8ef4662fd1544f939dd487e797baebec17c65b10742222a0a4406", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1", proposedAt: "2026-07-23T00:00:00.000Z", ...overrides };
 }
 
 describe("personal configuration proposals", function _PersonalConfigurationProposalSuite()
@@ -17,7 +17,7 @@ describe("personal configuration proposals", function _PersonalConfigurationProp
 		let accepted: unknown;
 		const result = await __ProposePersonalConfigurationChange({ proposeAtomically: async function _propose(command) { accepted = command; return { status: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" } as const; } }, _Command());
 		expect(result).toEqual({ outcome: PersonalConfigurationProposalCodes.Proposed, changeId: "change-1" });
-		expect(accepted).toMatchObject({ sourceThreadId: "thread-1", sourceRunId: "run-1", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1" });
+		expect(accepted).toMatchObject({ sourceConversationId: "conversation-1", sourceRunId: "run-1", expectedPersonaRevisionId: "persona-1", expectedAgentRevisionId: "agent-1" });
 	});
 
 	it("refuses malformed proposal evidence before persistence", async function _RejectsMalformed()

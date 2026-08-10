@@ -16,7 +16,7 @@ export interface SelectPersonalMemoryFactsInput
 	cogneeDatasetId: string;
 	/** Verified execution subject whose personal memory is being queried. */
 	subjectId: string;
-	/** Free-text recall query derived from the frozen thread context. */
+	/** Free-text recall query derived from the frozen conversation context. */
 	queryText: string;
 	/** Upper bound on the number of fact references to freeze. */
 	maxFacts: number;

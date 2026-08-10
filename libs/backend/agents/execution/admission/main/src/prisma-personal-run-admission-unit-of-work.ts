@@ -1,9 +1,9 @@
 import { Prisma, type PrismaClient } from "@prisma/client";
 
-import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunThreadAuthority } from "./personal-run-admission.types.js";
+import type { PersonalRunAdmissionCommand, PersonalRunAdmissionReadRepository, PersonalRunAdmissionUnitOfWork, PersonalRunIdempotencyResult, PersonalRunConversationAuthority } from "./personal-run-admission.types.js";
 import { PrismaPersonalRunAdmissionRepository } from "./prisma-personal-run-admission-repository.js";
 
-/** Prisma transaction owner for durable duplicate and participant-thread authority reads. */
+/** Prisma transaction owner for durable duplicate and participant-conversation authority reads. */
 export class PrismaPersonalRunAdmissionUnitOfWork implements PersonalRunAdmissionUnitOfWork
 {
 	/** OpenCrane product database client. */
@@ -25,11 +25,11 @@ export class PrismaPersonalRunAdmissionUnitOfWork implements PersonalRunAdmissio
 	}
 
 	/** Resolves one active participant-bound personal service from one serializable authority snapshot. */
-	async resolveThread(command: PersonalRunAdmissionCommand): Promise<PersonalRunThreadAuthority | null>
+	async resolveConversation(command: PersonalRunAdmissionCommand): Promise<PersonalRunConversationAuthority | null>
 	{
-		return this._run(async function _ResolveThread(repository)
+		return this._run(async function _ResolveConversation(repository)
 		{
-			return repository.resolveThread(command);
+			return repository.resolveConversation(command);
 		});
 	}
 

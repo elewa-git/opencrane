@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { MessageContentBlockKinds } from "@opencrane/models/conversations";
 
 import { PersonalMemoryScopeSource } from "../personal-memory-scope-source.js";
 
@@ -29,7 +30,7 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 		const transaction = _Transaction({ "message-2": { role: "User", blocks: [{ text: "what did we decide" }] } });
 		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2"] }, transaction as never)).resolves.toEqual({
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2"], pendingUserMessage: null }, transaction as never)).resolves.toEqual({
 			outcome: "loaded",
 			value: {
 				memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1", queryText: "what did we decide", maxFacts: 8 },
@@ -47,18 +48,18 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 		const datasets = _Datasets();
 		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
-		await source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2", "message-3"] }, transaction as never);
+		await source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1", "message-2", "message-3"], pendingUserMessage: null }, transaction as never);
 
 		expect(selector.select).toHaveBeenCalledWith(expect.objectContaining({ queryText: "latest question" }));
 	});
 
-	it("freezes coordinates with no facts when the thread has no user message", async function _freezesEmptyWithoutUserMessage()
+	it("freezes coordinates with no facts when the conversation has no user message", async function _freezesEmptyWithoutUserMessage()
 	{
 		const selector = { select: vi.fn() };
 		const datasets = _Datasets();
 		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [] }, _Transaction({}) as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }, memoryFacts: [] } });
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [], pendingUserMessage: null }, _Transaction({}) as never)).resolves.toEqual({ outcome: "loaded", value: { memoryQueryPolicy: { scope: "personal", datasetId: "dataset-1", cogneeDatasetId: "cognee-personal-1" }, memoryFacts: [] } });
 		expect(selector.select).not.toHaveBeenCalled();
 	});
 
@@ -69,7 +70,7 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 		const datasets = _Datasets();
 		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, selector);
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1"] }, transaction as never)).resolves.toEqual({ outcome: "denied", reason: "memory_unavailable" });
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-1"], pendingUserMessage: null }, transaction as never)).resolves.toEqual({ outcome: "denied", reason: "memory_unavailable" });
 	});
 
 	it("refuses a managed run before personal dataset lookup", async function _deniesManagedRun()
@@ -77,7 +78,17 @@ describe("PersonalMemoryScopeSource", function _describePersonalMemoryScopeSourc
 		const datasets = { findActivePersonalDataset: vi.fn() };
 		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return datasets as never; }, { select: vi.fn() });
 
-		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "managed" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [] }, _Transaction({}) as never)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
+		await expect(source.load({ siloId: "silo-1" } as never, { agentKind: "managed" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: [], pendingUserMessage: null }, _Transaction({}) as never)).resolves.toEqual({ outcome: "denied", reason: "memory_scope_unavailable" });
 		expect(datasets.findActivePersonalDataset).not.toHaveBeenCalled();
+	});
+
+	it("derives recall from the staged user input before its atomic persistence", async function _UsesPendingInput()
+	{
+		const selector = { select: vi.fn().mockResolvedValue([]) };
+		const source = new PersonalMemoryScopeSource(function _CreatePersonalMemory() { return _Datasets() as never; }, selector);
+
+		await source.load({ siloId: "silo-1" } as never, { agentKind: "personal" } as never, { kind: "user", organizationId: "org-1", executionSubjectId: "user-1" } as never, { messageIds: ["message-current"], pendingUserMessage: { id: "message-current", blocks: [{ id: "block-1", kind: MessageContentBlockKinds.Text, value: "remember the signed decision" }] } }, _Transaction({}) as never);
+
+		expect(selector.select).toHaveBeenCalledWith(expect.objectContaining({ queryText: "remember the signed decision" }));
 	});
 });

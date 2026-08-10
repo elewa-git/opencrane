@@ -38,6 +38,8 @@ that must coordinate more than one repository.
 Invariant: a proposal is immutable provenance, not mutable session state. Before a proposal is
 recorded or applied, the authority rebinds its user, conversation, run, persona, service, and active
 revision evidence. Missing, stale, or cross-owner evidence fails closed.
+The stored `sourceConversationId` is provenance only: it names the participant-bound conversation
+that produced the proposal and never grants access to that conversation or changes its lifecycle.
 
 Internally, the source is grouped by responsibility:
 
