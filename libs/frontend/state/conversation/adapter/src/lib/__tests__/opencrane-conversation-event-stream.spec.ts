@@ -3,7 +3,7 @@ import { EventType } from "@ag-ui/core";
 import { describe, expect, it, vi } from "vitest";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { AgUiRunStatuses } from "@opencrane/state/conversation/ag-ui";
+import { AgUiRunStatuses, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
 import { ConversationEventStreamStatuses, type ConversationEventStreamUpdate } from "../conversation-event-stream.types.js";
 import { OpenCraneConversationEventStream } from "../opencrane-conversation-event-stream.js";
@@ -16,6 +16,36 @@ function _Stream(...chunks: readonly string[]): ReadableStream<Uint8Array>
 		{
 			for (const chunk of chunks) controller.enqueue(new TextEncoder().encode(chunk));
 			controller.close();
+		},
+	});
+}
+
+/** Return one successful generated-client stream response. */
+function _Success(body: ReadableStream<Uint8Array>): { readonly data: ReadableStream<Uint8Array>; readonly response: Response }
+{
+	return { data: body, response: new Response(null, { status: 200 }) };
+}
+
+/** Return one generated-client HTTP failure while retaining its response status. */
+function _HttpFailure(status: number): { readonly error: object; readonly response: Response }
+{
+	return { error: {}, response: new Response(null, { status }) };
+}
+
+/** Emit one accepted frame before the transport fails during the next read. */
+function _FailAfter(frame: string): ReadableStream<Uint8Array>
+{
+	let emitted = false;
+	return new ReadableStream<Uint8Array>({
+		pull: function _Pull(controller): void
+		{
+			if (!emitted)
+			{
+				emitted = true;
+				controller.enqueue(new TextEncoder().encode(frame));
+				return;
+			}
+			controller.error(new Error("connection reset"));
 		},
 	});
 }
@@ -33,6 +63,15 @@ function _Frame(id: string | undefined, data: object): string
 	return `${id === undefined ? "" : `id: ${id}\n`}event: ag-ui\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+/** Reduce one prior message fixture through the same strict AG-UI boundary as production. */
+function _PriorState(): AgUiStreamState
+{
+	const start = __DecodeAgUiSseRecord(_Frame("prior-1", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "user" }));
+	const content = __DecodeAgUiSseRecord(_Frame("prior-2", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "message-1", delta: "private" }));
+	if (start === null || content === null) throw new Error("expected valid prior state fixtures");
+	return __ReduceAgUiStream(__ReduceAgUiStream(__CreateAgUiStreamState(), start), content);
+}
+
 describe("OpenCraneConversationEventStream", function _Suite()
 {
 	it("reduces partial UTF-8 chunks incrementally and reports heartbeats", async function _StreamsIncrementally()
@@ -40,7 +79,7 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		const controller = new AbortController();
 		const updates: ConversationEventStreamUpdate[] = [];
 		const body = _Frame("cursor-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" }) + ": heartbeat\n\n" + _Frame("cursor-2", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "assistant" }) + _Frame("cursor-3", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "message-1", delta: "héllo" });
-		const get = vi.fn().mockResolvedValue({ data: _Stream(body.slice(0, 19), body.slice(19, 97), body.slice(97)) });
+		const get = vi.fn().mockResolvedValue(_Success(_Stream(body.slice(0, 19), body.slice(19, 97), body.slice(97))));
 		const stream = _EventStream(get);
 
 		const state = await stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
@@ -60,7 +99,7 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		const controller = new AbortController();
 		const first = _Frame("opaque/+= cursor", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" });
 		const interrupt = _Frame(undefined, { type: EventType.RUN_FINISHED, threadId: "conversation-1", runId: "run-1", outcome: { type: "interrupt", interrupts: [{ id: "approval-1", reason: "tool_approval" }] } });
-		const get = vi.fn().mockResolvedValueOnce({ data: _Stream(first) }).mockResolvedValueOnce({ data: _Stream(interrupt) });
+		const get = vi.fn().mockResolvedValueOnce(_Success(_Stream(first))).mockResolvedValueOnce(_Success(_Stream(interrupt)));
 		const stream = _EventStream(get);
 
 		const state = await stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
@@ -78,24 +117,81 @@ describe("OpenCraneConversationEventStream", function _Suite()
 		expect(state.interrupts[0]?.id).toBe("approval-1");
 	});
 
-	it("fails closed on malformed frames after the configured retry bound", async function _RejectsMalformed()
+	it("fails malformed protocol frames immediately without using the default retries", async function _RejectsMalformed()
 	{
 		const controller = new AbortController();
 		const statuses: ConversationEventStreamStatuses[] = [];
-		const get = vi.fn().mockResolvedValue({ data: _Stream("event: ag-ui\ndata: {bad}\n\n") });
+		const get = vi.fn().mockResolvedValue(_Success(_Stream("event: ag-ui\ndata: {bad}\n\n")));
 		const stream = _EventStream(get);
 
-		await expect(stream.stream({ conversationId: "conversation-1", signal: controller.signal, maximumReconnectAttempts: 0, onUpdate: function _Update(update): void { statuses.push(update.status); } })).rejects.toThrow("invalid canonical conversation event record");
+		await expect(stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void { statuses.push(update.status); } })).rejects.toThrow("invalid canonical conversation event record");
+		expect(get).toHaveBeenCalledTimes(1);
 		expect(statuses.at(-1)).toBe(ConversationEventStreamStatuses.Failed);
+	});
+
+	it("reconnects from progress accepted before a mid-response transport failure", async function _KeepsMidResponseProgress()
+	{
+		const controller = new AbortController();
+		const first = _Frame("cursor-before-reset", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" });
+		const second = _Frame("cursor-after-reset", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "assistant" });
+		const get = vi.fn().mockResolvedValueOnce(_Success(_FailAfter(first))).mockResolvedValueOnce(_Success(_Stream(second)));
+		const stream = _EventStream(get);
+
+		const state = await stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
+		{
+			if (update.state.cursor === "cursor-after-reset") controller.abort();
+		} });
+
+		expect(get).toHaveBeenNthCalledWith(2, "/me/conversations/{conversationId}/events", {
+			params: { path: { conversationId: "conversation-1" }, query: { cursor: "cursor-before-reset" }, header: { "Last-Event-ID": "cursor-before-reset" } },
+			parseAs: "stream",
+			signal: controller.signal
+		});
+		expect(state.cursor).toBe("cursor-after-reset");
+		expect(state.runId).toBe("run-1");
+	});
+
+	it("retains a heartbeat observed before a transport reconnect", async function _KeepsHeartbeatProgress()
+	{
+		const controller = new AbortController();
+		const updates: ConversationEventStreamUpdate[] = [];
+		const event = _Frame("cursor-1", { type: EventType.RUN_STARTED, threadId: "conversation-1", runId: "run-1" });
+		const get = vi.fn().mockResolvedValueOnce(_Success(_FailAfter(": heartbeat\n\n"))).mockResolvedValueOnce(_Success(_Stream(event)));
+		const stream = _EventStream(get);
+
+		await stream.stream({ conversationId: "conversation-1", signal: controller.signal, reconnectDelayMilliseconds: 0, onUpdate: function _Update(update): void
+		{
+			updates.push(update);
+			if (update.state.cursor === "cursor-1") controller.abort();
+		} });
+
+		expect(updates.some(update => update.status === ConversationEventStreamStatuses.Reconnecting && update.lastHeartbeatAt !== null)).toBe(true);
 	});
 
 	it("purges state and terminates when the live stream reports authority loss", async function _PurgesRevoked()
 	{
 		const controller = new AbortController();
 		const content = _Frame("cursor-1", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "user" }) + _Frame("cursor-2", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "message-1", delta: "private" }) + _Frame(undefined, { type: EventType.CUSTOM, name: "opencrane.access_revoked", value: { eventType: "access.revoked" } });
-		const get = vi.fn().mockResolvedValue({ data: _Stream(content) });
+		const get = vi.fn().mockResolvedValue(_Success(_Stream(content)));
 		const stream = _EventStream(get);
 
 		await expect(stream.stream({ conversationId: "conversation-1", signal: controller.signal, maximumReconnectAttempts: 0 })).rejects.toThrow("access was revoked");
+	});
+
+	it("classifies endpoint 404 as authority loss and purges prior content", async function _PurgesNotFound()
+	{
+		const controller = new AbortController();
+		const updates: ConversationEventStreamUpdate[] = [];
+		const get = vi.fn().mockResolvedValue(_HttpFailure(404));
+		const stream = _EventStream(get);
+
+		await expect(stream.stream({ conversationId: "conversation-1", signal: controller.signal, initialState: _PriorState(), onUpdate: function _Update(update): void { updates.push(update); } })).rejects.toThrow("access was revoked");
+
+		const failed = updates.at(-1);
+		expect(get).toHaveBeenCalledTimes(1);
+		expect(failed?.status).toBe(ConversationEventStreamStatuses.Failed);
+		expect(failed?.state.accessRevoked).toBe(true);
+		expect(failed?.state.cursor).toBeNull();
+		expect(failed?.state.messages).toEqual({});
 	});
 });

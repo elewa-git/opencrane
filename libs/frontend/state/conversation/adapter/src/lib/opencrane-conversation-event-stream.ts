@@ -1,22 +1,23 @@
 import { Injectable, inject } from "@angular/core";
 
 import { ControlPlaneApiService } from "@opencrane/core";
-import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
+import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream, __RevokeAgUiStreamAccess, type AgUiStreamState } from "@opencrane/state/conversation/ag-ui";
 
+import { _ConversationEventHttpError, _ConversationEventProtocolError } from "./conversation-event-stream.errors.js";
 import { ConversationEventStreamStatuses, type ConversationEventStream, type ConversationEventStreamUpdate, type StreamConversationEventsCommand } from "./conversation-event-stream.types.js";
 
 /** Maximum incomplete SSE frame retained between network chunks. */
 const _MAXIMUM_FRAME_BYTES = 1_048_576;
 
-/** Result of consuming one bounded SSE response. */
-interface ConversationEventResponseResult
+/** Reconnect-loop-owned progress published after every accepted frame. */
+interface ConversationEventStreamProgress
 {
-	/** Strictly reduced state at response completion. */
-	readonly state: AgUiStreamState;
-	/** Latest heartbeat time observed in this response. */
-	readonly lastHeartbeatAt: number | null;
-	/** Whether any durable or overlay event was reduced. */
-	readonly receivedEvent: boolean;
+	/** Latest strictly reduced state, including the exact accepted cursor. */
+	state: AgUiStreamState;
+	/** Latest heartbeat time accepted from the transport. */
+	lastHeartbeatAt: number | null;
+	/** Whether this response accepted any durable or overlay event. */
+	receivedEvent: boolean;
 }
 
 /** Cookie-session incremental stream for the owner-bound conversation event endpoint. */
@@ -37,31 +38,32 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 
 		while (!command.signal.aborted)
 		{
+			const progress: ConversationEventStreamProgress = { state, lastHeartbeatAt, receivedEvent: false };
 			try
 			{
 				const body = await this._open(command, state);
 				_Emit(command, { status: ConversationEventStreamStatuses.Live, state, reconnectAttempt, lastHeartbeatAt });
-				const result = await _ConsumeResponse(body, state, command, reconnectAttempt, lastHeartbeatAt);
-				state = result.state;
-				lastHeartbeatAt = result.lastHeartbeatAt;
+				await _ConsumeResponse(body, progress, command, reconnectAttempt);
+				state = progress.state;
+				lastHeartbeatAt = progress.lastHeartbeatAt;
 				if (state.accessRevoked) throw new Error("conversation event access was revoked");
-				if (result.receivedEvent) reconnectAttempt = 0;
+				if (progress.receivedEvent) reconnectAttempt = 0;
 			}
 			catch (error)
 			{
+				state = progress.state;
+				lastHeartbeatAt = progress.lastHeartbeatAt;
 				if (command.signal.aborted) break;
-				if (state.accessRevoked)
+				if (error instanceof _ConversationEventHttpError && error.status === 404)
 				{
-					const message = _ErrorMessage(error);
-					_Emit(command, { status: ConversationEventStreamStatuses.Failed, state, reconnectAttempt, lastHeartbeatAt, error: message });
-					throw new Error(message, { cause: error });
+					state = __RevokeAgUiStreamAccess();
+					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
 				}
+				if (state.accessRevoked || error instanceof _ConversationEventProtocolError || (error instanceof _ConversationEventHttpError && !_IsRetryableHttpStatus(error.status))) _Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
 				reconnectAttempt += 1;
 				if (reconnectAttempt > (command.maximumReconnectAttempts ?? 3))
 				{
-					const message = _ErrorMessage(error);
-					_Emit(command, { status: ConversationEventStreamStatuses.Failed, state, reconnectAttempt, lastHeartbeatAt, error: message });
-					throw new Error(message, { cause: error });
+					_Fail(command, state, reconnectAttempt, lastHeartbeatAt, error);
 				}
 			}
 
@@ -80,7 +82,7 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 	private async _open(command: StreamConversationEventsCommand, state: AgUiStreamState): Promise<ReadableStream<Uint8Array>>
 	{
 		const cursor = __AgUiResumeCursor(state);
-		const { data, error } = await this._api.client.GET("/me/conversations/{conversationId}/events", {
+		const { data, error, response } = await this._api.client.GET("/me/conversations/{conversationId}/events", {
 			params: {
 				path: { conversationId: command.conversationId },
 				...(cursor === undefined ? {} : { query: { cursor }, header: { "Last-Event-ID": cursor } })
@@ -88,20 +90,18 @@ export class OpenCraneConversationEventStream implements ConversationEventStream
 			parseAs: "stream",
 			signal: command.signal
 		});
-		if (error !== undefined || data === undefined || data === null) throw new Error("canonical conversation event stream is unavailable");
+		if (error !== undefined || !response.ok) throw new _ConversationEventHttpError(response.status);
+		if (data === undefined || data === null) throw new _ConversationEventProtocolError("canonical conversation event response has no stream body");
 		return data;
 	}
 }
 
 /** Incrementally decode arbitrary byte chunks into complete strict SSE records. */
-async function _ConsumeResponse(body: ReadableStream<Uint8Array>, initialState: AgUiStreamState, command: StreamConversationEventsCommand, reconnectAttempt: number, priorHeartbeatAt: number | null): Promise<ConversationEventResponseResult>
+async function _ConsumeResponse(body: ReadableStream<Uint8Array>, progress: ConversationEventStreamProgress, command: StreamConversationEventsCommand, reconnectAttempt: number): Promise<void>
 {
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
 	let buffer = "";
-	let state = initialState;
-	let lastHeartbeatAt = priorHeartbeatAt;
-	let receivedEvent = false;
 	try
 	{
 		while (!command.signal.aborted)
@@ -109,39 +109,27 @@ async function _ConsumeResponse(body: ReadableStream<Uint8Array>, initialState: 
 			const chunk = await reader.read();
 			if (chunk.done) break;
 			buffer += decoder.decode(chunk.value, { stream: true });
-			if (buffer.length > _MAXIMUM_FRAME_BYTES) throw new Error("canonical conversation event frame exceeded its bound");
-			const consumed = _ConsumeFrames(buffer, state, command, reconnectAttempt, lastHeartbeatAt);
-			buffer = consumed.buffer;
-			state = consumed.state;
-			lastHeartbeatAt = consumed.lastHeartbeatAt;
-			receivedEvent ||= consumed.receivedEvent;
+			if (buffer.length > _MAXIMUM_FRAME_BYTES) throw new _ConversationEventProtocolError("canonical conversation event frame exceeded its bound");
+			buffer = _ConsumeFrames(buffer, progress, command, reconnectAttempt);
 		}
 		buffer += decoder.decode();
-		const consumed = _ConsumeFrames(buffer, state, command, reconnectAttempt, lastHeartbeatAt);
-		buffer = consumed.buffer;
-		state = consumed.state;
-		lastHeartbeatAt = consumed.lastHeartbeatAt;
-		receivedEvent ||= consumed.receivedEvent;
-		if (!command.signal.aborted && buffer.trim().length > 0) throw new Error("canonical conversation event stream ended with an incomplete frame");
+		buffer = _ConsumeFrames(buffer, progress, command, reconnectAttempt);
+		if (!command.signal.aborted && buffer.trim().length > 0) throw new _ConversationEventProtocolError("canonical conversation event stream ended with an incomplete frame");
 	}
 	finally
 	{
 		await reader.cancel().catch(function _IgnoreClosedReader(): void { /* The response may already be closed. */ });
 		_releaseReader(reader);
 	}
-	return { state, lastHeartbeatAt, receivedEvent };
 }
 
 /** Release a response reader after cancellation without retaining buffered bytes. */
 function _releaseReader(reader: ReadableStreamDefaultReader<Uint8Array>): void { reader.releaseLock(); }
 
 /** Consume every complete LF or CRLF-delimited SSE frame currently buffered. */
-function _ConsumeFrames(buffer: string, initialState: AgUiStreamState, command: StreamConversationEventsCommand, reconnectAttempt: number, priorHeartbeatAt: number | null): { readonly buffer: string; readonly state: AgUiStreamState; readonly lastHeartbeatAt: number | null; readonly receivedEvent: boolean }
+function _ConsumeFrames(buffer: string, progress: ConversationEventStreamProgress, command: StreamConversationEventsCommand, reconnectAttempt: number): string
 {
 	let remaining = buffer;
-	let state = initialState;
-	let lastHeartbeatAt = priorHeartbeatAt;
-	let receivedEvent = false;
 	while (true)
 	{
 		const boundary = /\r?\n\r?\n/u.exec(remaining);
@@ -150,17 +138,24 @@ function _ConsumeFrames(buffer: string, initialState: AgUiStreamState, command: 
 		remaining = remaining.slice(boundary.index + boundary[0].length);
 		if (_IsHeartbeat(frame))
 		{
-			lastHeartbeatAt = Date.now();
-			_Emit(command, { status: ConversationEventStreamStatuses.Live, state, reconnectAttempt, lastHeartbeatAt });
+			progress.lastHeartbeatAt = Date.now();
+			_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
 			continue;
 		}
 		const record = __DecodeAgUiSseRecord(frame);
-		if (record === null) throw new Error("invalid canonical conversation event record");
-		state = __ReduceAgUiStream(state, record);
-		receivedEvent = true;
-		_Emit(command, { status: ConversationEventStreamStatuses.Live, state, reconnectAttempt, lastHeartbeatAt });
+		if (record === null) throw new _ConversationEventProtocolError("invalid canonical conversation event record");
+		try
+		{
+			progress.state = __ReduceAgUiStream(progress.state, record);
+		}
+		catch (error)
+		{
+			throw new _ConversationEventProtocolError("canonical conversation event sequence is invalid", { cause: error });
+		}
+		progress.receivedEvent = true;
+		_Emit(command, { status: ConversationEventStreamStatuses.Live, state: progress.state, reconnectAttempt, lastHeartbeatAt: progress.lastHeartbeatAt });
 	}
-	return { buffer: remaining, state, lastHeartbeatAt, receivedEvent };
+	return remaining;
 }
 
 /** Accept only comment-only SSE frames as transport heartbeats. */
@@ -199,4 +194,18 @@ function _ValidateCommand(command: StreamConversationEventsCommand): void
 function _ErrorMessage(error: unknown): string
 {
 	return error instanceof Error ? error.message : "canonical conversation event stream failed";
+}
+
+/** Fail one stream immediately while publishing the last accepted safe state. */
+function _Fail(command: StreamConversationEventsCommand, state: AgUiStreamState, reconnectAttempt: number, lastHeartbeatAt: number | null, error: unknown): never
+{
+	const message = _ErrorMessage(error);
+	_Emit(command, { status: ConversationEventStreamStatuses.Failed, state, reconnectAttempt, lastHeartbeatAt, error: message });
+	throw new Error(message, { cause: error });
+}
+
+/** Admit only response statuses whose retry can plausibly recover without changing caller input. */
+function _IsRetryableHttpStatus(status: number): boolean
+{
+	return status === 408 || status === 429 || status >= 500;
 }

@@ -10,6 +10,12 @@ export function __CreateAgUiStreamState(): AgUiStreamState
 	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, interrupts: [], messages: {}, tools: {}, customEvents: [], accessRevoked: false };
 }
 
+/** Purge all projected content and reconnect coordinates after proven access loss. */
+export function __RevokeAgUiStreamAccess(): AgUiStreamState
+{
+	return { ...__CreateAgUiStreamState(), accessRevoked: true, customEvents: ["opencrane.access_revoked"] };
+}
+
 /** Decode one complete AG-UI SSE record, rejecting malformed or non-projection input. */
 export function __DecodeAgUiSseRecord(frame: string): AgUiStreamRecord | null
 {
@@ -153,7 +159,7 @@ function _ResultTool(state: AgUiStreamState, toolCallId: string, content: string
 /** Apply OpenCrane custom display signals without adopting raw authority payloads. */
 function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStreamState
 {
-	if (name === "opencrane.access_revoked") return { ...__CreateAgUiStreamState(), accessRevoked: true, customEvents: [name] };
+	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
 	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
 	return { ...state, customEvents: [...state.customEvents, name] };
 }

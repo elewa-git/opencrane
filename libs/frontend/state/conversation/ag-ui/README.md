@@ -21,7 +21,8 @@ storage, or invents conversation authority.
      green workspace feature
 ```
 
-**In this flow:** a future authorised replay reader · the green workspace feature.
+**In this flow:** the live [conversation event adapter](../adapter/README.md) · the green workspace
+feature.
 
 Malformed records and invalid lifecycle sequences fail closed. Exact duplicate cursors are ignored;
 a duplicate cursor carrying different data is rejected. Cursorless open-interrupt overlays replace
@@ -34,6 +35,7 @@ projected content and reconnect coordinates immediately.
 - `__ReduceAgUiStream` / `__CreateAgUiStreamState` — builds immutable browser view state while
   preserving truthful success, interruption, failure, and cancellation terminals.
 - `__AgUiResumeCursor` — returns only the latest durable server cursor for reconnect.
+- `__RevokeAgUiStreamAccess` — purges all projected content and reconnect coordinates after access loss.
 - `AgUiRunStatuses` / `AgUiMessageStatuses` — the browser's explicit projection lifecycle.
 
 ## Boundary
