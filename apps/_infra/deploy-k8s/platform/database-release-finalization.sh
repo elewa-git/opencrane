@@ -7,10 +7,11 @@ capture_fenced_main_release_revision()
 {
   local fenced_release_status
   local status_result
-  set +e
-  fenced_release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"
-  status_result=$?
-  set -e
+  if fenced_release_status="$(helm status "$RELEASE" -n "$NAMESPACE" -o json)"; then
+    status_result=0
+  else
+    status_result=$?
+  fi
   if (( status_result != 0 )); then
     err "Unable to read the fenced OpenCrane Helm release before final application transition."
     return "$status_result"
@@ -27,14 +28,15 @@ restore_fenced_release_after_finalization_failure()
   local original_status="$1"
   local rollback_status
   err "Final OpenCrane application transition failed; restoring the exact fenced release revision."
-  set +e
-  helm rollback "$RELEASE" "$DATABASE_FENCED_RELEASE_REVISION" \
+  if helm rollback "$RELEASE" "$DATABASE_FENCED_RELEASE_REVISION" \
     --namespace "$NAMESPACE" \
     --wait \
     --timeout "${TIMEOUT}s" \
-    --force-conflicts
-  rollback_status=$?
-  set -e
+    --force-conflicts; then
+    rollback_status=0
+  else
+    rollback_status=$?
+  fi
   if (( rollback_status != 0 )); then
     err "Rollback to fenced Helm revision '$DATABASE_FENCED_RELEASE_REVISION' failed; manual fence verification is required."
   fi
@@ -44,10 +46,11 @@ restore_fenced_release_after_finalization_failure()
 run_fenced_finalization_stage()
 {
   local stage_status
-  set +e
-  (set -e; "$@")
-  stage_status=$?
-  set -e
+  if "$@"; then
+    stage_status=0
+  else
+    stage_status=$?
+  fi
   if (( stage_status == 0 )); then
     return 0
   fi
@@ -60,7 +63,7 @@ run_opencrane_finalization_stage()
     run_fenced_finalization_stage "$@"
     return
   fi
-  (set -e; "$@")
+  "$@"
 }
 
 restart_database_consumers_for_finalization()
@@ -72,19 +75,21 @@ restart_database_consumers_for_finalization()
   local deployment_resource
   shift 2
   for deployment in "$@"; do
-    set +e
-    deployment_resource="$(kubectl get "deployment/$deployment" -n "$namespace" --ignore-not-found -o name)"
-    command_status=$?
-    set -e
+    if deployment_resource="$(kubectl get "deployment/$deployment" -n "$namespace" --ignore-not-found -o name)"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to inventory database consumer Deployment '$deployment' before restart."
       return "$command_status"
     fi
     if [[ -n "$deployment_resource" ]]; then
-      set +e
-      kubectl rollout restart "deployment/$deployment" -n "$namespace"
-      command_status=$?
-      set -e
+      if kubectl rollout restart "deployment/$deployment" -n "$namespace"; then
+        command_status=0
+      else
+        command_status=$?
+      fi
       if (( command_status != 0 )); then
         err "Unable to restart database consumer Deployment '$deployment'."
         return "$command_status"
@@ -92,19 +97,21 @@ restart_database_consumers_for_finalization()
     fi
   done
   for deployment in "$@"; do
-    set +e
-    deployment_resource="$(kubectl get "deployment/$deployment" -n "$namespace" --ignore-not-found -o name)"
-    command_status=$?
-    set -e
+    if deployment_resource="$(kubectl get "deployment/$deployment" -n "$namespace" --ignore-not-found -o name)"; then
+      command_status=0
+    else
+      command_status=$?
+    fi
     if (( command_status != 0 )); then
       err "Unable to inventory database consumer Deployment '$deployment' after restart."
       return "$command_status"
     fi
     if [[ -n "$deployment_resource" ]]; then
-      set +e
-      kubectl rollout status "deployment/$deployment" -n "$namespace" --timeout="${timeout}s"
-      command_status=$?
-      set -e
+      if kubectl rollout status "deployment/$deployment" -n "$namespace" --timeout="${timeout}s"; then
+        command_status=0
+      else
+        command_status=$?
+      fi
       if (( command_status != 0 )); then
         err "Database consumer Deployment '$deployment' did not complete its restart."
         return "$command_status"
@@ -118,10 +125,11 @@ wait_for_final_deployment_if_present()
   local deployment="$1"
   local command_status
   local deployment_resource
-  set +e
-  deployment_resource="$(kubectl get "deployment/$deployment" -n "$NAMESPACE" --ignore-not-found -o name)"
-  command_status=$?
-  set -e
+  if deployment_resource="$(kubectl get "deployment/$deployment" -n "$NAMESPACE" --ignore-not-found -o name)"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Unable to inventory final Deployment '$deployment'."
     return "$command_status"
@@ -129,10 +137,11 @@ wait_for_final_deployment_if_present()
   if [[ -z "$deployment_resource" ]]; then
     return 0
   fi
-  set +e
-  kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  command_status=$?
-  set -e
+  if kubectl rollout status "deployment/$deployment" -n "$NAMESPACE" --timeout="${TIMEOUT}s"; then
+    command_status=0
+  else
+    command_status=$?
+  fi
   if (( command_status != 0 )); then
     err "Final Deployment '$deployment' did not complete its rollout."
     return "$command_status"

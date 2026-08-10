@@ -346,11 +346,11 @@ review order follows the real branch ancestry and incremental diff, not merely t
    then close the explicit F1.1 design gates before starting #600 production work.
 2. **[#600](https://github.com/elewa-git/opencrane/issues/600)** — establish Conversation modes,
    strategy ownership, canonical timeline, membership, and ordinary direct/group messaging.
-3. After #600, execute these independent branches in parallel when capacity permits:
-   - **[#602](https://github.com/elewa-git/opencrane/issues/602)** — onboarding handoff and the
-     immutable closed/read-only conversation;
-   - **[#319](https://github.com/elewa-git/opencrane/issues/319)** — snapshot-to-live delivery,
-     reconnect, truthful terminal projection, interrupts, and the versioned A2UI envelope.
+3. After #600, execute **[#319](https://github.com/elewa-git/opencrane/issues/319)** —
+   snapshot-to-live delivery, reconnect, truthful terminal projection, interrupts, and the
+   versioned A2UI envelope. Architecture preflight found that #602 cannot pass its route and direct
+   navigation acceptance before #351 mounts the workspace shell; do not ship a partial redirect or
+   an unmounted onboarding pane.
 4. After #319, execute these independent branches in parallel when capacity permits:
    - **[#603](https://github.com/elewa-git/opencrane/issues/603)** — governed attachments, finalized
      outputs, transcript asset events, and Files;
@@ -362,8 +362,11 @@ review order follows the real branch ancestry and incremental diff, not merely t
 6. **[#351](https://github.com/elewa-git/opencrane/issues/351)** — compose the authenticated
    workspace and routes after the owning feature PRs expose their production contracts. This PR
    contains integration and remaining shell work, not duplicate implementations of earlier issues.
-7. **[#162](https://github.com/elewa-git/opencrane/issues/162)** — qualify the immutable deployed
-   SPA and named live journeys after #351. Attach live-only evidence directly to #162; create a
+7. **[#602](https://github.com/elewa-git/opencrane/issues/602)** — complete the onboarding handoff
+   against the mounted workspace: retain the immutable bootstrap evidence as closed/read-only
+   history, select it after completion, reject writes and runs, and expose Start a new chat.
+8. **[#162](https://github.com/elewa-git/opencrane/issues/162)** — qualify the immutable deployed
+   SPA and named live journeys after #602. Attach live-only evidence directly to #162; create a
    separate #162 PR only when qualification reveals an owned chart, release, or status change.
 
 Every feature PR should contain several coherent green commits: model/contracts and version or
