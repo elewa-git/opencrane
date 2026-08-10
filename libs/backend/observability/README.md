@@ -18,15 +18,18 @@ It owns two joined-up concerns:
   work without threading it by hand (so every log line from one request shares an id), and
   `___DoWithTrace` wraps an operation as an OpenTelemetry (OTEL) **span** — a timed, named unit of
   work — exported over OTLP (OpenTelemetry Protocol) to operator-owned telemetry when configured.
-  `___RequestContext` is the Express middleware that opens a per-request context and span.
+  `___RequestContext` is the Express middleware that opens a per-request context and span. Automatic
+  HTTP and Undici spans retain query-free transport coordinates only; query values never become
+  trace attributes.
 
 Naming convention: wide, cross-cutting exports use the `___` (triple-underscore) prefix, marking
 them as intentional platform-wide API rather than local helpers. The side-effecting SDK bootstrap
 `___StartTelemetry` is also reachable on its own via `@opencrane/backend/observability/telemetry`, so it can
 run before the rest of the application graph loads.
 
-Consumed by every app and server domain. Invariant: logs are always structured JSON on stdout and a
-correlation id follows the work — so a request can be traced end to end even across async hops.
+Consumed by every app and server domain. Invariant: logs are always structured JSON on stdout, known
+credential and argument fields are redacted, and a correlation id follows the work — so a request can
+be traced end to end even across async hops without exporting query-bearing URLs.
 
 ## Public surface
 

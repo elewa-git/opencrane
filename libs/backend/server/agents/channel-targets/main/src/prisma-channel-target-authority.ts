@@ -1,5 +1,7 @@
 import { ChannelInvocationAction, ConversationLifecycle, ConversationMode, Prisma, type PrismaClient } from "@prisma/client";
 
+import { ___DoWithTrace, ___GetActiveSpan } from "@opencrane/backend/observability";
+
 import type { ChannelConversationAuthority, ChannelTargetAuthorityRepository, ChannelTargetAuthorityUnitOfWork, ConsumeChannelInvocationContextCommand, ConsumeChannelInvocationContextResult, IssueChannelInvocationContextCommand, IssueChannelInvocationContextResult } from "./channel-target-resolution.types.js";
 
 /** Accepts only credential-free HTTP(S) endpoints inside configured runtime DNS suffixes. */
@@ -42,13 +44,31 @@ export class PrismaChannelTargetAuthorityUnitOfWork implements ChannelTargetAuth
 	/** Rechecks every mutable authority coordinate while persisting only the opaque digest. */
 	async issueInvocationContextAtomically(command: IssueChannelInvocationContextCommand): Promise<IssueChannelInvocationContextResult>
 	{
-		return this._withRepository(function _Issue(repository) { return repository.issueInvocationContextAtomically(command); });
+		const self = this;
+		return ___DoWithTrace("channel.context.issue", {}, async function _IssueContext()
+		{
+			// 1. Run the authority transaction inside the operation span without attaching its command.
+			const result = await self._withRepository(function _Issue(repository) { return repository.issueInvocationContextAtomically(command); });
+
+			// 2. Retain only the terminal category; identifiers, digests, and endpoints stay out of OTLP.
+			___GetActiveSpan()?.setAttribute("outcome", result.status);
+			return result;
+		});
 	}
 
 	/** Consumes one digest while requiring the receiving runtime's exact active event route. */
 	async consumeInvocationContextAtomically(command: ConsumeChannelInvocationContextCommand): Promise<ConsumeChannelInvocationContextResult>
 	{
-		return this._withRepository(function _Consume(repository) { return repository.consumeInvocationContextAtomically(command); });
+		const self = this;
+		return ___DoWithTrace("channel.context.consume", {}, async function _ConsumeContext()
+		{
+			// 1. Consume the bearer digest inside the operation span without attaching its command.
+			const result = await self._withRepository(function _Consume(repository) { return repository.consumeInvocationContextAtomically(command); });
+
+			// 2. Retain only the terminal category; the presented digest and returned authority stay private.
+			___GetActiveSpan()?.setAttribute("outcome", result.status);
+			return result;
+		});
 	}
 
 	/** Runs one authority operation against an exact serializable transaction snapshot. */

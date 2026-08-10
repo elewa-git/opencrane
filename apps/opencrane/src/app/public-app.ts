@@ -1,21 +1,19 @@
-import { randomUUID } from "node:crypto";
-
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
-import { pinoHttp } from "pino-http";
 
 import type { ManagedRunAdmissionPort } from "@opencrane/backend/server/agents/agent-services";
 import type { ObotCustodyPort } from "@opencrane/backend/server/infra/obot-custody";
 import type { PersonalRunAdmissionPort } from "@opencrane/backend/agents/execution/admission";
 import { __CreateStandaloneFirstUserAdmissionAuditAppender } from "@opencrane/backend/server/iam/audit";
 import { ___AuthRouter, ___CreateOidcAuthService, type StandaloneFirstUserAdmissionAuditPort, type StandaloneFirstUserAdmissionConfig } from "@opencrane/backend/server/iam/identity";
-import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
+import { ___RequestContext } from "@opencrane/backend/observability";
 import { ___AuthMiddleware } from "@opencrane/backend/server/infra/auth";
 import { _ErrorHandler, _RateLimit, _TransportSecurity } from "@opencrane/backend/server/infra/http";
 
 import { _log } from "./log.js";
 import { _RegisterRoutes } from "./routes.js";
+import { _CreateHttpRequestLogger } from "./telemetry.js";
 
 /** Composes the audit-owned adapter only when the standalone owner claim is enabled. */
 function _CreateStandaloneFirstUserAudit(config: StandaloneFirstUserAdmissionConfig | null): StandaloneFirstUserAdmissionAuditPort | null
@@ -52,7 +50,7 @@ export function _CreatePublicApp(prisma: PrismaClient, customApi: k8s.CustomObje
 
 	// 2. Seed correlation before request logging so every downstream log shares the same request ID.
 	app.use(___RequestContext());
-	app.use(pinoHttp({ logger: _log, genReqId: function _genRequestId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
+	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount session establishment before the product-authentication boundary.
 	app.use(...authService.createSessionMiddleware());

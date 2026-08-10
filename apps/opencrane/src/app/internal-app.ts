@@ -1,11 +1,8 @@
-import { randomUUID } from "node:crypto";
-
 import * as k8s from "@kubernetes/client-node";
 import type { PrismaClient } from "@prisma/client";
 import express, { type Express } from "express";
-import { pinoHttp } from "pino-http";
 
-import { ___GetContext, ___RequestContext } from "@opencrane/backend/observability";
+import { ___RequestContext } from "@opencrane/backend/observability";
 import { _ErrorHandler } from "@opencrane/backend/server/infra/http";
 import type { MemoryGatewayClient } from "@opencrane/backend/server/infra/memory-gateway-client";
 import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-custody";
@@ -13,6 +10,7 @@ import type { ObotAttemptKeyIssuer } from "@opencrane/backend/server/infra/obot-
 import type { InternalRuntimeConfig } from "./config.types.js";
 import { _log } from "./log.js";
 import { _RegisterInternalRoutes } from "./routes.js";
+import { _CreateHttpRequestLogger } from "./telemetry.js";
 
 /**
  * Build the workload-facing Express application.
@@ -32,7 +30,7 @@ export function _CreateInternalApp(prisma: PrismaClient, authApi: k8s.Authentica
 
 	// 2. Correlate every internal request without treating correlation as authentication.
 	app.use(___RequestContext());
-	app.use(pinoHttp({ logger: _log, genReqId: function _genRequestId() { return ___GetContext()?.requestId ?? randomUUID(); } }));
+	app.use(_CreateHttpRequestLogger(_log));
 
 	// 3. Mount only workload-facing routes and terminate failures through the structured handler.
 	_RegisterInternalRoutes(app, prisma, authApi, config, memoryGateway, obotAttemptKeys);

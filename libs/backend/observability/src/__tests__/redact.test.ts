@@ -48,6 +48,35 @@ describe("REDACT_PATHS", function _redactSuite()
     expect(req.headers["authorization"]).toBe("[Redacted]");
   });
 
+  it("redacts replay cursors in headers and structured fields", function _replayCursor()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({ req: { headers: { "last-event-id": "opaque-header" } }, cursor: "opaque-cursor", replay: { cursor: "opaque-nested" } }, "replay");
+    const req = records[0]?.["req"] as { headers: Record<string, unknown> };
+    const replay = records[0]?.["replay"] as Record<string, unknown>;
+    expect(req.headers["last-event-id"]).toBe("[Redacted]");
+    expect(records[0]?.["cursor"]).toBe("[Redacted]");
+    expect(replay["cursor"]).toBe("[Redacted]");
+  });
+
+  it("redacts reviewed and final tool arguments at top-level and nested paths", function _toolArguments()
+  {
+    const { logger, records } = _redactingLogger();
+    logger.info({
+      reviewedToolArguments: { nested: { secret: "top-level-reviewed" } },
+      finalArguments: { nested: { secret: "top-level-final" } },
+      approval: {
+        reviewedToolArguments: { nested: { secret: "nested-reviewed" } },
+        finalArguments: { nested: { secret: "nested-final" } },
+      },
+    }, "approval");
+    const approval = records[0]?.["approval"] as Record<string, unknown>;
+    expect(records[0]?.["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(records[0]?.["finalArguments"]).toBe("[Redacted]");
+    expect(approval["reviewedToolArguments"]).toBe("[Redacted]");
+    expect(approval["finalArguments"]).toBe("[Redacted]");
+  });
+
   it("leaves non-sensitive fields intact", function _passthrough()
   {
     const { logger, records } = _redactingLogger();

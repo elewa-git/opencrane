@@ -3,6 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 
 import { PrismaChannelTargetAuthorityUnitOfWork } from "../prisma-channel-target-authority.js";
 
+/** Captured observability calls for authority-boundary trace assertions. */
+const _trace = vi.hoisted(function _CreateTraceState()
+{
+	return {
+		doWithTrace: vi.fn(async function _DoWithTrace<T>(_name: string, _fields: Record<string, unknown>, work: () => Promise<T>): Promise<T> { return work(); }),
+		setAttribute: vi.fn(),
+	};
+});
+
+vi.mock("@opencrane/backend/observability", function _ObservabilityMock()
+{
+	return { ___DoWithTrace: _trace.doWithTrace, ___GetActiveSpan: function _GetActiveSpan() { return { setAttribute: _trace.setAttribute }; } };
+});
+
 /** Builds a Prisma facade that executes serializable work against one test transaction. */
 function _Prisma(transaction: Record<string, unknown>, conversation?: Record<string, unknown>): never
 {
@@ -44,6 +58,8 @@ describe("PrismaChannelTargetAuthorityUnitOfWork", function _Suite()
 
 		await expect(repository.issueInvocationContextAtomically(_IssueCommand())).resolves.toEqual({ status: "conversation_conflict" });
 		expect(transaction.channelRuntimeRoute.findMany).not.toHaveBeenCalled();
+		expect(_trace.doWithTrace).toHaveBeenLastCalledWith("channel.context.issue", {}, expect.any(Function));
+		expect(_trace.setAttribute).toHaveBeenLastCalledWith("outcome", "conversation_conflict");
 	});
 
 	it("issues only one current event-read route without raw locking", async function _IssuesEventRead()
@@ -57,6 +73,9 @@ describe("PrismaChannelTargetAuthorityUnitOfWork", function _Suite()
 
 		await expect(repository.issueInvocationContextAtomically(_IssueCommand())).resolves.toEqual({ status: "issued", context: { id: "context-1", routeId: "route-1", endpoint: "http://runtime.svc.cluster.local/events" } });
 		expect(transaction.channelInvocationContext.create).toHaveBeenCalledWith({ data: expect.objectContaining({ action: ChannelInvocationAction.EventsRead, conversationId: "conversation-1" }) });
+		expect(_trace.doWithTrace).toHaveBeenLastCalledWith("channel.context.issue", {}, expect.any(Function));
+		expect(_trace.setAttribute).toHaveBeenCalledWith("outcome", "issued");
+		expect(JSON.stringify(_trace.doWithTrace.mock.calls)).not.toContain("sha256:");
 	});
 
 	it("claims an unused event context once before returning its authority", async function _ConsumesOnce()
@@ -70,5 +89,8 @@ describe("PrismaChannelTargetAuthorityUnitOfWork", function _Suite()
 		const repository = new PrismaChannelTargetAuthorityUnitOfWork(_Prisma(transaction));
 
 		await expect(repository.consumeInvocationContextAtomically({ digest: `sha256:${"a".repeat(64)}`, expectedRouteId: "route-1", nowEpochMs: 1_000 })).resolves.toEqual({ status: "consumed", context: { subjectId: "user-1", siloId: "silo-1", conversationId: "conversation-1", agentServiceId: "service-1", action: "events.read", authorizationDigest: `sha256:${"b".repeat(64)}` } });
+		expect(_trace.doWithTrace).toHaveBeenLastCalledWith("channel.context.consume", {}, expect.any(Function));
+		expect(_trace.setAttribute).toHaveBeenCalledWith("outcome", "consumed");
+		expect(JSON.stringify(_trace.doWithTrace.mock.calls)).not.toContain("sha256:");
 	});
 });
