@@ -1,10 +1,19 @@
-import { ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
 
 import { ___CloneCanonicalJson, type JsonValue } from "@opencrane/util";
 
 import { __DigestCanonicalJson } from "./canonical-json-digest.js";
+import { __PlanDeferredToolApprovalLifecycle } from "./deferred-tool-approval-lifecycle.js";
 import { __ValidateDeferredToolArguments } from "./deferred-tool-approval-schema.js";
-import { DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type DeferToolRequestCommand, type DeferToolRequestResult } from "./deferred-tool-approval.types.js";
+import { DeferredToolApprovalLifecycleActions, DeferredToolApprovalLifecycleEvents, DeferredToolApprovalRunStates, DeferredToolDecisionKinds, type DecideDeferredToolRequestCommand, type DecideDeferredToolRequestResult, type DeferToolRequestCommand, type DeferToolRequestResult } from "./deferred-tool-approval.types.js";
+
+/** Map the two run states that may own a live approval batch into the lifecycle authority. */
+function _approvalRunState(state: AgentRunState): DeferredToolApprovalRunStates | null
+{
+	if (state === AgentRunState.Running) return DeferredToolApprovalRunStates.Running;
+	if (state === AgentRunState.WaitingForApproval) return DeferredToolApprovalRunStates.WaitingForApproval;
+	return null;
+}
 
 /**
  * Pause one reserved tool invocation behind a new pending deferred-tool approval.
@@ -31,7 +40,29 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	const expiresAt = new Date(Math.min(command.expiresAt.getTime(), assignment.expiresAt.getTime(), proofKey.expiresAt.getTime()));
 	if (expiresAt.getTime() <= command.now.getTime()) return { outcome: "unavailable" };
 
-	// 2. Open the pending approval; a duplicate defer for the same action replays the existing row.
+	// 2. Replay an exact existing defer before changing run state; digest collisions fail closed.
+	const existing = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
+	if (existing !== null)
+	{
+		if (existing.id !== command.interruptId || existing.argumentsDigest !== command.argumentsDigest || existing.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest) throw new Error("deferred approval action digest collision");
+		return { outcome: "already_deferred", approvalRequestId: existing.id };
+	}
+
+	// 3. Move the run behind its approval fence before the first row becomes visible, or join its batch.
+	const run = await transaction.agentRun.findUnique({ where: { id: command.runId } });
+	if (run === null || run.attempt !== command.attempt) return { outcome: "unavailable" };
+	const runState = _approvalRunState(run.state);
+	if (runState === null) return { outcome: "unavailable" };
+	const pendingCount = await transaction.approvalRequest.count({ where: { runId: command.runId, attempt: command.attempt, state: ApprovalRequestState.Pending } });
+	const action = __PlanDeferredToolApprovalLifecycle({ runState, event: DeferredToolApprovalLifecycleEvents.Open, pendingCount });
+	if (action === DeferredToolApprovalLifecycleActions.PauseAndOpen)
+	{
+		const paused = await transaction.agentRun.updateMany({ where: { id: command.runId, attempt: command.attempt, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForApproval } });
+		if (paused.count !== 1) return { outcome: "unavailable" };
+	}
+	else if (action !== DeferredToolApprovalLifecycleActions.OpenInBatch) return { outcome: "unavailable" };
+
+	// 4. Open the pending approval only after the same transaction owns the waiting-state fence.
 	try
 	{
 		const created = await transaction.approvalRequest.create({
@@ -73,10 +104,10 @@ export async function __DeferToolRequest(transaction: Prisma.TransactionClient, 
 	catch (error)
 	{
 		if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== "P2002") throw error;
-		const existing = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
-		if (existing === null) throw error;
-		if (existing.id !== command.interruptId || existing.argumentsDigest !== command.argumentsDigest || existing.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest) throw error;
-		return { outcome: "already_deferred", approvalRequestId: existing.id };
+		const raced = await transaction.approvalRequest.findFirst({ where: { runId: command.runId, attempt: command.attempt, actionDigest: command.actionDigest } });
+		if (raced === null) throw error;
+		if (raced.id !== command.interruptId || raced.argumentsDigest !== command.argumentsDigest || raced.reviewedToolSchemaDigest !== command.reviewedParametersSchemaDigest) throw error;
+		return { outcome: "already_deferred", approvalRequestId: raced.id };
 	}
 }
 

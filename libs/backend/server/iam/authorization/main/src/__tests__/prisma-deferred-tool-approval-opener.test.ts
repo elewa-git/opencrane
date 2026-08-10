@@ -1,4 +1,4 @@
-import { WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, Prisma, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __OpenDeferredToolApproval } from "../prisma-deferred-tool-approval-opener.js";
@@ -25,7 +25,8 @@ function _LiveTransaction()
 	return {
 		workloadAssignment: { findUnique: vi.fn(async function _assignment() { return { agentRevisionId: "revision-1", agentServiceId: "service-1", siloId: "silo-1", subjectId: "subject-1", audience: "audience-1", serviceAccountName: "runtime-1", namespace: "runtime", workloadKind: "Job", workloadUid: "job-1", podUid: "pod-1", state: WorkloadAssignmentState.Registered, expiresAt: new Date("2026-07-29T00:02:00.000Z") }; }) },
 		runProofKey: { findUnique: vi.fn(async function _proof() { return { id: "proof-1", keyThumbprint: "thumbprint-1", expiresAt: new Date("2026-07-29T00:01:30.000Z"), revokedAt: null }; }) },
-		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }) },
+		agentRun: { findUnique: vi.fn(async function _run() { return { id: "run-1", attempt: 1, state: AgentRunState.Running }; }), updateMany: vi.fn(async function _pause() { return { count: 1 }; }) },
+		approvalRequest: { create: vi.fn(async function _create() { return { id: "approval-1" }; }), findFirst: vi.fn(async function _existing() { return null; }), count: vi.fn(async function _pending() { return 0; }) },
 		toolInvocation: { updateMany: vi.fn() },
 	};
 }
@@ -43,6 +44,7 @@ describe("Prisma deferred-tool approval opener", function _describeOpener()
 
 		await expect(__OpenDeferredToolApproval(prisma as never, _Command(), _Logger() as never)).resolves.toBe(true);
 		expect(transaction.approvalRequest.create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ id: "interrupt-1", toolInvocationRowId: "reservation-1", reviewedToolArguments: { calendarId: "primary" }, reviewedToolSchema: expect.any(Object), actionDigest: expect.stringMatching(/^sha256:/) }) }));
+		expect(prisma.$transaction).toHaveBeenCalledWith(expect.any(Function), { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 	});
 
 	it("fails closed before approval creation when the compiled schema digest is stale", async function _rejectsStaleSchemaDigest()

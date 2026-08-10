@@ -1,4 +1,4 @@
-import { ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
+import { AgentRunState, ApprovalRequestState, Prisma, WorkloadAssignmentState } from "@prisma/client";
 import { describe, expect, it, vi } from "vitest";
 
 import { __DecideDeferredToolRequest, __DeferToolRequest } from "../deferred-tool-approval.js";
@@ -118,16 +118,34 @@ describe("defer tool request authority", function _deferSuite()
 	it("opens a pending approval bound to the reserved tool invocation and live workload", async function _defers()
 	{
 		const create = vi.fn().mockResolvedValue({ id: "approval-9" });
+		const pause = vi.fn().mockResolvedValue({ count: 1 });
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
-			approvalRequest: { create },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running }), updateMany: pause },
+			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
 		} as unknown as Prisma.TransactionClient;
 
 		const result = await __DeferToolRequest(transaction, _deferCommand());
 
 		expect(result).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
+		expect(pause).toHaveBeenCalledWith({ where: { id: "run-1", attempt: 2, state: AgentRunState.Running }, data: { state: AgentRunState.WaitingForApproval } });
 		expect(create).toHaveBeenCalledWith(expect.objectContaining({ data: expect.objectContaining({ state: ApprovalRequestState.Pending, toolInvocationRowId: "tool-1", resourceKind: "tool", resourceId: "integration:search:query", proofKeyId: "proof-1", expiresAt: PROOF_KEY.expiresAt }) }));
+	});
+
+	it("adds a second pending request without changing an already-waiting run", async function _batches()
+	{
+		const create = vi.fn().mockResolvedValue({ id: "approval-9" });
+		const pause = vi.fn();
+		const transaction = {
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.WaitingForApproval }), updateMany: pause },
+			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(1) },
+		} as unknown as Prisma.TransactionClient;
+
+		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "deferred", approvalRequestId: "approval-9" });
+		expect(pause).not.toHaveBeenCalled();
 	});
 
 	it("reports unavailable when the live workload or proof key is absent", async function _unavailable()
@@ -135,7 +153,7 @@ describe("defer tool request authority", function _deferSuite()
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(null) },
-			approvalRequest: { create: vi.fn() },
+			approvalRequest: { create: vi.fn(), findFirst: vi.fn() },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "unavailable" });
@@ -143,13 +161,26 @@ describe("defer tool request authority", function _deferSuite()
 
 	it("replays the existing approval idempotently on a duplicate defer", async function _idempotentDefer()
 	{
-		const create = vi.fn().mockRejectedValue(new Prisma.PrismaClientKnownRequestError("duplicate", { code: "P2002", clientVersion: "6" }));
 		const transaction = {
 			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
 			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
-			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
+			approvalRequest: { create: vi.fn(), findFirst: vi.fn().mockResolvedValue({ id: "approval-existing", argumentsDigest: _deferCommand().argumentsDigest, reviewedToolSchemaDigest: _deferCommand().reviewedParametersSchemaDigest }) },
 		} as unknown as Prisma.TransactionClient;
 
 		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "already_deferred", approvalRequestId: "approval-existing" });
+	});
+
+	it("does not open when the run cannot enter its waiting state", async function _pauseRace()
+	{
+		const create = vi.fn();
+		const transaction = {
+			workloadAssignment: { findUnique: vi.fn().mockResolvedValue(ASSIGNMENT) },
+			runProofKey: { findUnique: vi.fn().mockResolvedValue(PROOF_KEY) },
+			agentRun: { findUnique: vi.fn().mockResolvedValue({ id: "run-1", attempt: 2, state: AgentRunState.Running }), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+			approvalRequest: { create, findFirst: vi.fn().mockResolvedValue(null), count: vi.fn().mockResolvedValue(0) },
+		} as unknown as Prisma.TransactionClient;
+
+		expect(await __DeferToolRequest(transaction, _deferCommand())).toEqual({ outcome: "unavailable" });
+		expect(create).not.toHaveBeenCalled();
 	});
 });

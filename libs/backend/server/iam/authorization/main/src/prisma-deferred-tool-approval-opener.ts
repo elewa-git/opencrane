@@ -1,4 +1,4 @@
-import { ActionExecutionState, type Prisma, type PrismaClient } from "@prisma/client";
+import { ActionExecutionState, Prisma, type PrismaClient } from "@prisma/client";
 
 import { ___DoWithTrace, type Logger } from "@opencrane/backend/observability";
 
@@ -87,7 +87,7 @@ class PrismaDeferredToolApprovalOpenUnitOfWork implements DeferredToolApprovalOp
 			return prisma.$transaction(async function _transaction(transaction): Promise<TResult>
 			{
 				return operation(new PrismaDeferredToolApprovalOpenRepository(transaction));
-			});
+			}, { isolationLevel: Prisma.TransactionIsolationLevel.Serializable });
 		}
 		return ___DoWithTrace("approval.open", { runId: command.runId, attempt: command.attempt }, async function _traceOpen()
 		{
