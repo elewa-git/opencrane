@@ -5,7 +5,27 @@ import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, type AgU
 /** Project one server-authorized canonical event into the small, display-safe AG-UI subset. */
 export function __ProjectAgUiEvent(source: AgUiProjectionSourceEvent): AgUiSseRecord
 {
-	return { ...(source.cursor === undefined ? {} : { id: source.cursor }), event: "ag-ui", data: _Project(source) };
+	return { ...(source.cursor === undefined ? {} : { id: source.cursor }), event: "ag-ui", data: __ProjectAgUiEvents(source)[0] ?? _Custom(source) };
+}
+
+/** Project one canonical row into its deterministic ordered AG-UI subframes. */
+export function __ProjectAgUiEvents(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
+{
+	if (source.eventType === "conversation.message") return _Message(source);
+	return [_Project(source)];
+}
+
+/** Expand one durable ordinary message into the standard streaming message vocabulary. */
+function _Message(source: AgUiProjectionSourceEvent): readonly AgUiProjectionEvent[]
+{
+	const payload = source.payload;
+	if (payload.messageId === undefined || payload.messageRole === undefined || payload.messageState === undefined) return [_Custom(source)];
+	if (payload.messageRole === "tool") return [_Custom(source)];
+	const events: AgUiProjectionEvent[] = [{ type: EventType.TEXT_MESSAGE_START, messageId: payload.messageId, role: payload.messageRole }];
+	if (payload.messageText !== undefined && payload.messageText.length > 0) events.push({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: payload.messageId, delta: payload.messageText });
+	if (payload.messageState === "completed") events.push({ type: EventType.TEXT_MESSAGE_END, messageId: payload.messageId });
+	if (payload.messageState === "failed" || payload.messageState === "cancelled") events.push({ type: EventType.CUSTOM, name: "opencrane.message_terminal", value: { eventType: `message.${payload.messageState}`, messageId: payload.messageId } });
+	return events;
 }
 
 /** Select the narrowest standard event whose required display-safe fields are available. */
@@ -15,15 +35,15 @@ function _Project(source: AgUiProjectionSourceEvent): AgUiProjectionEvent
 	{
 		case RunEventTypes.RunAccepted:
 		case RunEventTypes.RunStarted:
-			return { type: EventType.RUN_STARTED, threadId: source.conversationId, runId: source.runId };
+			return source.runId === undefined ? _Custom(source) : { type: EventType.RUN_STARTED, threadId: source.conversationId, runId: source.runId };
 		case RunEventTypes.RunCompleted:
-			return { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "success" } };
+			return source.runId === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "success" } };
 		case RunEventTypes.RunFailed:
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run failed"), ...(source.payload.failureCode === undefined ? {} : { code: source.payload.failureCode }) };
 		case RunEventTypes.RunCancelled:
 			return { type: EventType.RUN_ERROR, message: _TerminalMessage(source, "Run cancelled"), code: "RUN_CANCELLED" };
 		case RunEventTypes.ToolApprovalRequired:
-			return source.payload.interrupt === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } };
+			return source.payload.interrupt === undefined || source.runId === undefined ? _Custom(source) : { type: EventType.RUN_FINISHED, threadId: source.conversationId, runId: source.runId, outcome: { type: "interrupt", interrupts: [source.payload.interrupt] } };
 		case RunEventTypes.MessageStarted:
 			return typeof source.payload.messageId === "string" ? { type: EventType.TEXT_MESSAGE_START, messageId: source.payload.messageId, role: "assistant" } : _Custom(source);
 		case RunEventTypes.MessageDelta:

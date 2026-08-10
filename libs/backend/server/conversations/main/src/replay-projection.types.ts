@@ -8,7 +8,7 @@ export interface ConversationReplayEventRow
 	/** Authorised conversation associated with the run. */
 	readonly conversationId: string;
 	/** Run that owns the event. */
-	readonly runId: string;
+	readonly runId: string | null;
 	/** Database-owned canonical timeline position. */
 	readonly position: string;
 	/** Canonical public event name. */

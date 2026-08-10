@@ -1,11 +1,11 @@
 import { Router, type Request, type Response } from "express";
-import { __EncodeAgUiSseRecord, __ProjectAgUiEvent } from "@opencrane/contracts";
 
+import { __StreamConversationLiveReplay } from "./conversation-live-replay.js";
+import { ConversationLiveReplayOutcomes } from "./conversation-live-replay.types.js";
 import { __DecodeConversationReplayCursor } from "./replay-cursor.js";
-import { __ReadConversationReplay } from "./conversation-replay.js";
 import type { ConversationReplayRouterDependencies } from "./conversation-replay.router.types.js";
 
-/** Create the internal authorised conversation snapshot route. */
+/** Create the internal consumed-context-authorized snapshot-to-live route. */
 export function __CreateConversationReplayRouter(dependencies: ConversationReplayRouterDependencies): Router
 {
 	const router = Router();
@@ -19,18 +19,18 @@ export function __CreateConversationReplayRouter(dependencies: ConversationRepla
 		const consumed = await dependencies.contexts.consumeInvocationContextAtomically({ digest: token, expectedRouteId: dependencies.expectedRouteId, nowEpochMs: dependencies.nowEpochMs() });
 		if (consumed.status !== "consumed" || consumed.context.action !== "events.read") { response.status(403).json({ error: "replay_denied" }); return; }
 		if (cursor !== null && cursor.conversationId !== consumed.context.conversationId) { response.status(403).json({ error: "replay_denied" }); return; }
-		const events = await __ReadConversationReplay(dependencies.repository, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, limit: 200 });
-		response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream" });
-		for (const event of events)
-		{
-			response.write(__EncodeAgUiSseRecord(__ProjectAgUiEvent(event)));
-		}
-		response.end();
+		const abort = new AbortController();
+		request.once("close", function _Closed(): void { abort.abort(); });
+		const outcome = await __StreamConversationLiveReplay({ repository: dependencies.repository, clock: dependencies.clock, limits: dependencies.limits }, {
+			open: function _Open(): void { response.status(200).set({ "cache-control": "no-store", connection: "keep-alive", "content-type": "text/event-stream", "x-accel-buffering": "no" }); response.flushHeaders(); },
+			write: function _Write(value): void { response.write(value); },
+		}, { conversationId: consumed.context.conversationId, siloId: consumed.context.siloId, subjectId: consumed.context.subjectId, cursor, signal: abort.signal });
+		if (outcome === ConversationLiveReplayOutcomes.RevokedOrMissing && !response.headersSent) response.status(403).json({ error: "replay_denied" });
+		else if (!response.writableEnded) response.end();
 	});
 	return router;
 }
 
-/** Resolve the one permitted upstream resume cursor without accepting conflicting coordinates. */
 function _SuppliedCursor(request: Request): string | undefined | null
 {
 	if (request.query.cursor !== undefined && typeof request.query.cursor !== "string") return null;
@@ -40,7 +40,6 @@ function _SuppliedCursor(request: Request): string | undefined | null
 	return queryCursor ?? headerCursor;
 }
 
-/** Parse one unambiguous bearer context. */
 function _Bearer(value: string | undefined): string | null
 {
 	const match = /^Bearer ([^\s,]+)$/u.exec(value ?? "");

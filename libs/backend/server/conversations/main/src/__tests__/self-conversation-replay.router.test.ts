@@ -8,8 +8,9 @@ import { __CreateSelfConversationReplayRouter } from "../self-conversation-repla
 /** Mount the self-only replay router with caller and event-reader seams. */
 function _app(caller: unknown, read = vi.fn(async function _read() { return []; }))
 {
+	let now = 0;
 	const app = express();
-	app.use(__CreateSelfConversationReplayRouter({ resolveCaller: function _caller() { return caller as never; }, repository: { read }, logger: { error: vi.fn() } as unknown as Logger }));
+	app.use(__CreateSelfConversationReplayRouter({ resolveCaller: function _caller() { return caller as never; }, repository: { read }, clock: { now: function _Now() { return now; }, wait: async function _Wait(milliseconds) { now += milliseconds; } }, limits: { pageSize: 200, pollMilliseconds: 25, heartbeatMilliseconds: 50, maximumDurationMilliseconds: 50 }, logger: { error: vi.fn() } as unknown as Logger }));
 	return { app, read };
 }
 

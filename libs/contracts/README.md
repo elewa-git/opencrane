@@ -65,10 +65,13 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   to map authorized request failures back to frontend fields without trusting arbitrary responses.
 - `___ModelRoutingDefaultWriteSchema` — the model-adjacent Zod schema shared by the public routing
   defaults boundary; it enforces known fields while deliberately preserving auto-config extensions.
-- `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`, `AgUiSseRecord`,
-  `__ProjectAgUiEvent`, and `__EncodeAgUiSseRecord` — the display-safe input, output, projection,
-  and SSE-record contract used by the server-owned AG-UI replay path. They do not authenticate a
-  browser, read canonical event storage, or create an approval-resume protocol.
+- `AG_UI_PROTOCOL_VERSION`, `AG_UI_PROJECTION_VERSION`, `AgUiProjectionSourceEvent`,
+  `AgUiSseRecord`, `__ProjectAgUiEvents`, and `__EncodeAgUiSseRecord` — the exact-pinned upstream
+  AG-UI vocabulary and display-safe projection used by server-owned live replay. Deterministic
+  subframes support ordinary messages; open interrupt overlays deliberately omit SSE ids.
+- `AG_UI_A2UI_ENVELOPE_VERSION` and `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM
+  envelopes for admitted A2UI operations and lossy immediate-child terminal updates. They contain
+  presentation facts only and never grant actions or expose child/sibling context.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,

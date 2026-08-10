@@ -40,14 +40,17 @@ access-ended position; reads are clipped to those bounds and writes require cont
 
 The database allocates one monotonically increasing position across message and run-event timeline
 entries. Timeline entries hold typed references to canonical rows, never copied payloads. Replay
-uses an opaque `{ conversationId, position }` cursor, reads only linked run events, and projects an
-allow-listed Agent User Interface (AG-UI) server-sent event snapshot. Unknown events remain visible
+uses an opaque `{ conversationId, position, subframe? }` cursor, reads linked messages and run
+events, and projects an allow-listed Agent User Interface (AG-UI) server-sent event stream. Unknown events remain visible
 as a bounded custom event, but proofs, credentials, fences, and provider metadata never cross the
 browser boundary.
 
-The snapshot has no live tail or wake-up loop. The server mounts the adapter only when its
-controller-issued `CHANNEL_REPLAY_ROUTE_ID` is configured; the controller must register that exact
-endpoint as the current `events.read` channel route. Without both facts, no replay route is exposed.
+Each response drains the durable snapshot before entering a bounded live tail. Recovery polling is
+authoritative; wake-ups may reduce latency later but can never replace a database read. The server
+rechecks organisation membership and participant bounds on every page, emits heartbeats below the
+proxy idle fence, and ends at five minutes so clients reconnect with the exact last subframe cursor.
+Still-open approval interrupts are overlays without SSE ids, so reconnect restores them without
+advancing `Last-Event-ID`. Proven revocation emits a bounded purge signal and closes the stream.
 
 ## Public surface
 
@@ -55,8 +58,10 @@ endpoint as the current `events.read` channel route. Without both facts, no repl
   archive, and close API over Prisma and the internal run-admission port.
 - `_CreateConversationReplayRepository` composes replay over one `RepeatableRead` transaction so
   access-ending races cannot expose later events.
-- `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI replay.
-- `_CreateSelfConversationReplayRouter` mounts the participant-authenticated replay route.
+- `__CreateConversationReplayRouter` mounts internal context-authorized AG-UI snapshot-to-live replay.
+- `_CreateSelfConversationReplayRouter` mounts the participant-authenticated live replay route.
+- `__StreamConversationLiveReplay` owns page draining, deterministic subframes, polling,
+  heartbeats, interrupt restoration, revocation, and the response-duration fence.
 - `_SelfConversationsOpenapiPaths` and `_SelfConversationReplayOpenapiPaths` contribute those APIs
   to the server-owned OpenAPI document.
 
@@ -86,7 +91,8 @@ only. It cannot import an app, frontend state, or deployment package.
 Owns participant-facing operations over `Conversation`, `ConversationParticipant`,
 `ConversationMessage`, and `ConversationTimelineEntry`. The write authority uses serialisable
 transactions and projects create, archive, and close results from the same authorised write
-snapshot. The replay adapter is read-only and joins timeline references to `RunEvent`; neither path
+snapshot. The replay adapter is read-only and joins timeline references to canonical messages and
+`RunEvent`; neither path
 reconstructs order from client or run timestamps. All paths depend on current active `OrgMembership`
 in the caller's host-selected silo; participant rows alone never preserve authority after revocation.
 

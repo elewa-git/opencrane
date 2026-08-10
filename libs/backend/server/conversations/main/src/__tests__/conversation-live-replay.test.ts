@@ -1,0 +1,77 @@
+import { describe, expect, it, vi } from "vitest";
+
+import { __StreamConversationLiveReplay } from "../conversation-live-replay.js";
+import { ConversationLiveReplayOutcomes } from "../conversation-live-replay.types.js";
+import { ConversationReplayReadStatuses } from "../replay-reader.types.js";
+
+/** Deterministic clock that advances only when the live reader waits. */
+function _Clock()
+{
+	let now = 0;
+	return { now: function _Now() { return now; }, wait: async function _Wait(milliseconds: number) { now += milliseconds; } };
+}
+
+function _Limits(pageSize = 10)
+{
+	return { pageSize, pollMilliseconds: 25, heartbeatMilliseconds: 50, maximumDurationMilliseconds: 50 };
+}
+
+function _Row()
+{
+	return { cursor: "legacy-row-cursor", conversationId: "conversation-1", runId: null, position: "1", type: "conversation.message", payload: { messageId: "message-1", role: "user", state: "completed", blocks: [{ id: "block-1", kind: "text", value: "hello" }] }, occurredAt: "2026-08-11T00:00:00.000Z" };
+}
+
+describe("live conversation replay", function _Suite()
+{
+	it("resumes inside a multi-frame ordinary message without a gap or duplicate", async function _ResumesSubframe()
+	{
+		const output: string[] = [];
+		const readAuthorized = vi.fn(async function _Read()
+		{
+			return { status: ConversationReplayReadStatuses.Authorized, rows: [_Row()] };
+		});
+		const abort = new AbortController();
+		const result = await __StreamConversationLiveReplay({ repository: { read: async function _ReadLegacy() { return []; }, readAuthorized }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "1", subframe: 0 }, signal: abort.signal });
+
+		expect(result).toBe(ConversationLiveReplayOutcomes.DurationReached);
+		expect(output.join("")).not.toContain("TEXT_MESSAGE_START");
+		expect(output.join("")).toContain("TEXT_MESSAGE_CONTENT");
+		expect(output.join("")).toContain("TEXT_MESSAGE_END");
+		expect(output.join("").match(/TEXT_MESSAGE_CONTENT/gu)).toHaveLength(1);
+		expect(readAuthorized).toHaveBeenCalledWith(expect.objectContaining({ cursor: expect.objectContaining({ subframe: 2 }) }));
+	});
+
+	it("re-presents one open interrupt overlay without advancing the durable cursor", async function _RestoresInterrupt()
+	{
+		const output: string[] = [];
+		const interrupt = { cursor: undefined, conversationId: "conversation-1", runId: "run-1", position: "1", eventType: "tool.approval_required", occurredAt: "2026-08-11T00:00:00.000Z", payload: { interrupt: { id: "approval-1", reason: "tool_approval", responseSchema: { type: "object" } } } } as const;
+		await __StreamConversationLiveReplay({ repository: { read: async function _Read() { return []; } }, interrupts: { readOpen: async function _Open() { return [interrupt]; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+
+		const body = output.join("");
+		expect(body.match(/approval-1/gu)).toHaveLength(1);
+		expect(body).not.toContain("id:");
+	});
+
+	it("signals proven revocation after the stream opened and stops", async function _PurgesOnRevocation()
+	{
+		let reads = 0;
+		const output: string[] = [];
+		const readAuthorized = vi.fn(async function _Read()
+		{
+			reads += 1;
+			return reads === 1 ? { status: ConversationReplayReadStatuses.Authorized, rows: [_Row()] } : { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
+		});
+		const result = await __StreamConversationLiveReplay({ repository: { read: async function _Legacy() { return []; }, readAuthorized }, clock: _Clock(), limits: _Limits(1) }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+
+		expect(result).toBe(ConversationLiveReplayOutcomes.RevokedOrMissing);
+		expect(output.join("")).toContain("opencrane.access_revoked");
+		expect(readAuthorized).toHaveBeenCalledTimes(2);
+	});
+
+	it("heartbeats below the proxy idle fence while recovery polling", async function _Heartbeats()
+	{
+		const output: string[] = [];
+		await __StreamConversationLiveReplay({ repository: { read: async function _Read() { return []; } }, clock: _Clock(), limits: _Limits() }, { open: vi.fn(), write: value => output.push(value) }, { conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, signal: new AbortController().signal });
+		expect(output).toContain(": heartbeat\n\n");
+	});
+});

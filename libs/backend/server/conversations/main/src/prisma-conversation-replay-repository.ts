@@ -1,7 +1,7 @@
 import { ConversationTimelineEntryKind, OrgMemberStatus, type Prisma } from "@prisma/client";
 
 import { __EncodeConversationReplayCursor } from "./replay-cursor.js";
-import type { ConversationReplayRepository, ReadConversationReplayCommand } from "./replay-reader.types.js";
+import { ConversationReplayReadStatuses, type ConversationReplayReadResult, type ConversationReplayRepository, type ReadConversationReplayCommand } from "./replay-reader.types.js";
 import type { ConversationReplayEventRow } from "./replay-projection.types.js";
 
 /** Prisma adapter that reads only participant-visible run events through canonical timeline order. */
@@ -19,32 +19,47 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 	/** Read a bounded snapshot through explicit participant, silo, conversation, and position fences. */
 	async read(command: ReadConversationReplayCommand): Promise<readonly ConversationReplayEventRow[]>
 	{
+		return (await this.readAuthorized(command)).rows;
+	}
+
+	/** Read a bounded page and retain the same-snapshot authority result for live streams. */
+	async readAuthorized(command: ReadConversationReplayCommand): Promise<ConversationReplayReadResult>
+	{
 		// 1. Reject a foreign cursor before consulting any durable authority.
-		if (command.cursor !== null && command.cursor.conversationId !== command.conversationId) return [];
+		if (command.cursor !== null && command.cursor.conversationId !== command.conversationId) return { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
 
 		// 2. Require current organisation membership and participant bounds in this repeatable snapshot.
 		const membership = await this.prisma.orgMembership.findFirst({ where: { clusterTenant: command.siloId, subject: command.subjectId, status: OrgMemberStatus.Active }, select: { clusterTenant: true } });
-		if (membership === null) return [];
+		if (membership === null) return { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
 		const participant = await this.prisma.conversationParticipant.findUnique({ where: { conversationId_userId: { conversationId: command.conversationId, userId: command.subjectId } }, include: { conversation: { select: { siloId: true } } } });
-		if (participant === null || participant.conversation.siloId !== command.siloId) return [];
+		if (participant === null || participant.conversation.siloId !== command.siloId) return { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
 
 		// 3. Read and project only canonical run events within the durable participant bounds.
 		const afterPosition = command.cursor === null ? BigInt(participant.visibleFromPosition) - 1n : BigInt(command.cursor.position);
-		if (afterPosition < BigInt(participant.visibleFromPosition) - 1n) return [];
+		if (afterPosition < BigInt(participant.visibleFromPosition) - 1n) return { status: ConversationReplayReadStatuses.RevokedOrMissing, rows: [] };
+		const position = command.cursor?.subframe === undefined ? { gt: afterPosition } : { gte: afterPosition };
+		const boundedPosition = participant.accessEndedPosition === null ? position : { ...position, lte: participant.accessEndedPosition };
 		const entries = await this.prisma.conversationTimelineEntry.findMany({
 			where: {
 				conversationId: command.conversationId,
-				position: { gt: afterPosition, ...(participant.accessEndedPosition === null ? {} : { lte: participant.accessEndedPosition }) },
-				kind: ConversationTimelineEntryKind.RunEvent,
+				position: boundedPosition,
+				kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] },
 			},
-			include: { runEvent: true },
+			include: { runEvent: true, message: true },
 			orderBy: { position: "asc" },
 			take: command.limit,
 		});
-		return entries.flatMap(function _Project(entry): readonly ConversationReplayEventRow[]
+		const rows = entries.flatMap(function _Project(entry): readonly ConversationReplayEventRow[]
 		{
-			if (entry.runEvent === null || entry.runId === null) return [];
 			const position = entry.position.toString(10);
+			if (entry.message != null && entry.messageId != null)
+			{
+				return [{
+					cursor: __EncodeConversationReplayCursor({ conversationId: command.conversationId, position }), conversationId: command.conversationId, position,
+					runId: entry.message.runId, type: "conversation.message", payload: { messageId: entry.message.id, role: entry.message.role, state: entry.message.state, blocks: entry.message.blocks }, occurredAt: entry.occurredAt.toISOString(),
+				}];
+			}
+			if (entry.runEvent === null || entry.runId === null) return [];
 			return [{
 				cursor: __EncodeConversationReplayCursor({ conversationId: command.conversationId, position }),
 				conversationId: command.conversationId,
@@ -55,5 +70,6 @@ export class PrismaConversationReplayRepository implements ConversationReplayRep
 				occurredAt: entry.occurredAt.toISOString(),
 			}];
 		});
+		return { status: ConversationReplayReadStatuses.Authorized, rows };
 	}
 }

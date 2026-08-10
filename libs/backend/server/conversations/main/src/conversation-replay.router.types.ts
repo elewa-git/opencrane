@@ -1,6 +1,7 @@
 import type { ChannelTargetAuthorityRepository } from "@opencrane/backend/server/agents/channel-targets";
 
 import type { ConversationReplayUnitOfWork } from "./replay-reader.types.js";
+import type { ConversationLiveReplayClock, ConversationLiveReplayLimits } from "./conversation-live-replay.types.js";
 
 /** Dependencies owned by the server composition root for internal conversation replay. */
 export interface ConversationReplayRouterDependencies
@@ -9,6 +10,8 @@ export interface ConversationReplayRouterDependencies
 	readonly contexts: ChannelTargetAuthorityRepository;
 	/** Canonical participant-bound replay reader. */
 	readonly repository: ConversationReplayUnitOfWork;
+	readonly clock: ConversationLiveReplayClock;
+	readonly limits: ConversationLiveReplayLimits;
 	/** Route selected only by server configuration. */
 	readonly expectedRouteId: string;
 	/** Trusted server clock. */

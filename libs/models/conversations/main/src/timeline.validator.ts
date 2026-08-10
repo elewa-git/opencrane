@@ -36,4 +36,4 @@ const _ParentDeliveryTimelineEntrySchema = z.object({ ..._TimelineEntryBaseShape
 export const ___ConversationTimelineEntrySchema: z.ZodType<ConversationTimelineEntry> = z.discriminatedUnion("kind", [_MessageTimelineEntrySchema, _RunEventTimelineEntrySchema, _MembershipTimelineEntrySchema, _SystemTimelineEntrySchema, _ParentDeliveryTimelineEntrySchema]);
 
 /** Strict validator for a resumable cursor bound to one conversation and observed position. */
-export const ___ConversationReplayCursorSchema: z.ZodType<ConversationReplayCursor> = z.object({ conversationId: _IdentifierSchema, position: _PositionSchema }).strict();
+export const ___ConversationReplayCursorSchema: z.ZodType<ConversationReplayCursor> = z.object({ conversationId: _IdentifierSchema, position: _PositionSchema, subframe: z.number().int().nonnegative().max(255).optional() }).strict();

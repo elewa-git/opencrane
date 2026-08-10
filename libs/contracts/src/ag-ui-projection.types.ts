@@ -1,17 +1,4 @@
-import type {
-	CustomEvent,
-	Interrupt,
-	RunErrorEvent,
-	RunFinishedEvent,
-	RunStartedEvent,
-	TextMessageContentEvent,
-	TextMessageEndEvent,
-	TextMessageStartEvent,
-	ToolCallArgsEvent,
-	ToolCallEndEvent,
-	ToolCallResultEvent,
-	ToolCallStartEvent,
-} from "@ag-ui/core";
+import type { CustomEvent, Interrupt, RunErrorEvent, RunFinishedEvent, RunStartedEvent, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent, ToolCallArgsEvent, ToolCallEndEvent, ToolCallResultEvent, ToolCallStartEvent } from "@ag-ui/core";
 import type { DataModelUpdate, SurfaceUpdateMessage } from "@a2ui/web_core/v0_8";
 
 import type { RunEventType } from "@opencrane/models/agents";
@@ -63,6 +50,9 @@ export interface AgUiChildRunEnvelope
 export interface AgUiPublicEventPayload
 {
 	readonly messageId?: string;
+	readonly messageRole?: "assistant" | "user" | "system" | "tool";
+	readonly messageState?: "pending" | "streaming" | "completed" | "failed" | "cancelled";
+	readonly messageText?: string;
 	readonly delta?: string;
 	readonly toolCallId?: string;
 	readonly toolCallName?: string;
@@ -80,7 +70,7 @@ export interface AgUiProjectionSourceEvent
 	/** Durable cursor selected by the server-owned replay reader; overlays intentionally omit it. */
 	readonly cursor?: string;
 	readonly conversationId: ConversationId;
-	readonly runId: string;
+	readonly runId?: string;
 	readonly position: string;
 	readonly eventType: RunEventType | (string & {});
 	readonly occurredAt: string;
@@ -101,13 +91,23 @@ export interface AgUiSseRecord
 
 /** Backward-compatible names now alias the exact upstream AG-UI types. */
 export type AgUiRunStartedEvent = RunStartedEvent;
+/** Exact upstream run-finished event. */
 export type AgUiRunFinishedEvent = RunFinishedEvent;
+/** Exact upstream run-error event. */
 export type AgUiRunErrorEvent = RunErrorEvent;
+/** Exact upstream text-start event. */
 export type AgUiTextMessageStartEvent = TextMessageStartEvent;
+/** Exact upstream text-content event. */
 export type AgUiTextMessageContentEvent = TextMessageContentEvent;
+/** Exact upstream text-end event. */
 export type AgUiTextMessageEndEvent = TextMessageEndEvent;
+/** Exact upstream tool-call-start event. */
 export type AgUiToolCallStartEvent = ToolCallStartEvent;
+/** Exact upstream tool-call-arguments event. */
 export type AgUiToolCallArgsEvent = ToolCallArgsEvent;
+/** Exact upstream tool-call-end event. */
 export type AgUiToolCallEndEvent = ToolCallEndEvent;
+/** Exact upstream tool-result event. */
 export type AgUiToolCallResultEvent = ToolCallResultEvent;
+/** Exact upstream custom event. */
 export type AgUiCustomEvent = CustomEvent;

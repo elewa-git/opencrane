@@ -16,7 +16,7 @@ describe("Prisma conversation replay repository", function _Suite()
 
 		const rows = await new PrismaConversationReplayRepository(prisma as never).read({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: { conversationId: "conversation-1", position: "2" }, limit: 10 });
 
-		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 2n }, kind: ConversationTimelineEntryKind.RunEvent }, orderBy: { position: "asc" } }));
+		expect(findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 2n }, kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } }, orderBy: { position: "asc" } }));
 		expect(rows).toEqual([{ cursor: expect.stringMatching(/^c\./u), conversationId: "conversation-1", position: "3", runId: "run-1", type: "message.delta", payload: { messageId: "message-1", delta: "later" }, occurredAt: "2026-07-23T10:00:03.000Z" }]);
 	});
 
@@ -41,7 +41,7 @@ describe("Prisma conversation replay repository", function _Suite()
 		};
 
 		await expect(new PrismaConversationReplayRepository(prisma as never).read({ conversationId: "conversation-1", siloId: "silo-1", subjectId: "user-1", cursor: null, limit: 10 })).resolves.toEqual([]);
-		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, kind: ConversationTimelineEntryKind.RunEvent } }));
+		expect(timeline).toHaveBeenCalledWith(expect.objectContaining({ where: { conversationId: "conversation-1", position: { gt: 0n, lte: 3n }, kind: { in: [ConversationTimelineEntryKind.RunEvent, ConversationTimelineEntryKind.Message] } } }));
 	});
 
 	it("returns no replay rows after organisation membership revocation", async function _RejectsRevokedMembership()
