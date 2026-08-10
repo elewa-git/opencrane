@@ -24,7 +24,7 @@ describe("PrismaPersonaOnboardingRepository", function _describePrismaPersonaOnb
 
 		await expect(repository.ensureAtomically({ siloId: "silo-1", userId: "user-1", provisionedAt: "2026-07-26T12:00:00.000Z" })).resolves.toEqual({ outcome: "ready", personaProfileId: "profile-1", questionSet: { id: "personal-agent-onboarding", version: 1 }, derivation: { scoringPolicyId: "personal-agent-scoring", scoringPolicyVersion: 1, interpolationMapId: "personal-agent-interpolation", interpolationMapVersion: 1 } });
 		expect(prisma.personaQuestionSet.findUnique).toHaveBeenCalledBefore(prisma.personaProfile.upsert as never);
-		expect(prisma.personaProfile.upsert).toHaveBeenCalledWith({ where: { siloId_userId: { siloId: "silo-1", userId: "user-1" } }, create: { siloId: "silo-1", userId: "user-1", createdAt: new Date("2026-07-26T12:00:00.000Z"), updatedAt: new Date("2026-07-26T12:00:00.000Z") }, update: {}, select: { id: true } });
+		expect(prisma.personaProfile.upsert).toHaveBeenCalledWith({ where: { siloId_userId: { siloId: "silo-1", userId: "user-1" } }, create: { id: expect.stringMatching(/^[0-9a-f-]{36}$/u), siloId: "silo-1", userId: "user-1", createdAt: new Date("2026-07-26T12:00:00.000Z"), updatedAt: new Date("2026-07-26T12:00:00.000Z") }, update: {}, select: { id: true } });
 	});
 
 	it.each([null, PersonaQuestionSetState.Draft] as const)("refuses provisioning when the baseline catalogue state is %s", async function _rejectsUnavailableCatalogue(questionSetState)

@@ -157,7 +157,8 @@ approval-first and replacement-first outcomes complete without a deadlock and re
 On a clean database, the target baseline supplies one reviewed ten-question choice catalogue, its
 weighted scoring and interpolation sources, and eight reviewed colour/modifier SOUL templates.
 Profiles, interviews, scores, tie choices, revisions, and approval evidence remain user-owned runtime
-records.
+records. Profile provisioning supplies its opaque identifier explicitly on the native upsert path;
+it does not rely on an ORM-side default for a database column that deliberately has no SQL default.
 
 ## See also
 
