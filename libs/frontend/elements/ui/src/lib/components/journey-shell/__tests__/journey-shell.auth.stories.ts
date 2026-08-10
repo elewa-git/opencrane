@@ -4,8 +4,8 @@ import { ButtonModule } from "primeng/button";
 import { MessageModule } from "primeng/message";
 import { ProgressSpinnerModule } from "primeng/progressspinner";
 
-import { JourneyShellComponent } from "./journey-shell.component";
-import { JourneyShellLayouts } from "./journey-shell.types";
+import { JourneyShellComponent } from "../journey-shell.component";
+import { JourneyShellLayouts } from "../journey-shell.types";
 
 /** Storybook metadata for OIDC entry and recovery states. */
 const meta: Meta<JourneyShellComponent> =
@@ -13,6 +13,16 @@ const meta: Meta<JourneyShellComponent> =
 	title: "Foundation/Journey shell",
 	component: JourneyShellComponent,
 	tags: ["autodocs"],
+	parameters:
+	{
+		docs:
+		{
+			description:
+			{
+				component: "The shared visual frame for the identity boundary. These fixtures demonstrate user-facing handoff and recovery states without treating the component as an authentication authority."
+			}
+		}
+	},
 	decorators: [moduleMetadata({ imports: [ButtonModule, MessageModule, ProgressSpinnerModule] })]
 };
 
@@ -24,6 +34,7 @@ type Story = StoryObj<JourneyShellComponent>;
 /** OIDC-only sign-in state with one primary identity-provider action. */
 export const SsoSignIn: Story =
 {
+	parameters: { docs: { description: { story: "The only supported sign-in entry: hand off to the organisation's identity provider. It makes the password boundary explicit and supplies one clear, non-local credential action." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -44,6 +55,7 @@ export const SsoSignIn: Story =
 /** Identity-provider handoff state with a bounded cancel action. */
 export const IdentityHandoff: Story =
 {
+	parameters: { docs: { description: { story: "The transitional state while the browser is handed to the identity provider. It communicates that the user will return here and offers a bounded cancel action without claiming an authentication outcome." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
@@ -65,6 +77,7 @@ export const IdentityHandoff: Story =
 /** Blocking authority error with one explicit recovery action. */
 export const Error: Story =
 {
+	parameters: { docs: { description: { story: "A blocking onboarding-read failure with one safe recovery action. The message explicitly says that saved survey, persona, and conversation data remain unchanged while the authority is unavailable." } } },
 	tags: ["visual-test"],
 	render: function render()
 	{
