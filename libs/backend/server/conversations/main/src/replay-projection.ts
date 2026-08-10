@@ -1,4 +1,4 @@
-import { AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_CHILD_RUN_ENVELOPE_VERSION, type AgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
+import { AG_UI_CHILD_RUN_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiChildRunEnvelope, type AgUiPublicEventPayload } from "@opencrane/contracts";
 
 import type { ConversationReplayEventRow, ConversationReplayProjectionResult } from "./replay-projection.types.js";
 
@@ -18,7 +18,7 @@ function _SafePayload(type: string, payload: Readonly<Record<string, unknown>>, 
 	if (type === "tool.completed") return _Strings(payload, ["toolCallId"]);
 	if (type === "run.failed" || type === "run.cancelled") return _Strings(payload, ["terminalReason", "failureCode"]);
 	if (type === "conversation.message") return _Message(payload);
-	if (type === "a2ui.surface.updated" || type === "a2ui.data_model.updated") return _A2ui(payload, conversationId, runId);
+	if (type === "a2ui.rendering.begun" || type === "a2ui.surface.updated" || type === "a2ui.data_model.updated") return _A2ui(payload, conversationId, runId);
 	if (type === "child.run.completed" || type === "child.run.failed" || type === "child.run.cancelled") return _ChildRun(type, payload, runId);
 	return {};
 }
@@ -42,25 +42,13 @@ function _Message(payload: Readonly<Record<string, unknown>>): AgUiPublicEventPa
 /** Admit only an already-versioned A2UI envelope with no secret-shaped field names. */
 function _A2ui(payload: Readonly<Record<string, unknown>>, conversationId: string, runId: string | null): AgUiPublicEventPayload
 {
-	const envelope = payload["a2ui"];
-	if (!_Record(envelope) || envelope["version"] !== AG_UI_A2UI_ENVELOPE_VERSION || envelope["conversationId"] !== conversationId || runId === null || envelope["runId"] !== runId || typeof envelope["messageId"] !== "string" || typeof envelope["surfaceId"] !== "string" || !Number.isSafeInteger(envelope["sequence"]) || !Array.isArray(envelope["operations"]) || _HasSecretField(envelope)) return {};
-	if (!envelope["operations"].every(_A2uiOperation)) return {};
-	return { a2ui: envelope as unknown as AgUiA2uiEnvelope };
-}
-
-/** Admit only the two frozen A2UI operation names and the exact component catalogue. */
-function _A2uiOperation(value: unknown): boolean
-{
-	if (!_Record(value)) return false;
-	if (_Record(value["dataModelUpdate"])) return Object.keys(value).length === 1;
-	const update = value["surfaceUpdate"];
-	if (!_Record(update) || !Array.isArray(update["components"]) || Object.keys(value).length !== 1) return false;
-	return update["components"].every(function _Supported(component): boolean
+	try
 	{
-		if (!_Record(component) || !_Record(component["component"])) return false;
-		const names = Object.keys(component["component"]);
-		return names.length === 1 && ["Text", "Button", "TextField", "MultipleChoice", "Slider", "DateTimeInput", "Image", "Card", "List"].includes(names[0] ?? "");
-	});
+		const envelope = ___ParseAgUiA2uiEnvelope(payload["a2ui"]);
+		if (runId === null || envelope.conversationId !== conversationId || envelope.runId !== runId) return {};
+		return { a2ui: envelope };
+	}
+	catch { return {}; }
 }
 
 /** Select direct-parent terminal child facts and discard all child context/output. */
@@ -74,14 +62,6 @@ function _ChildRun(type: string, payload: Readonly<Record<string, unknown>>, par
 	const terminalReason = payload["terminalReason"];
 	const childRun: AgUiChildRunEnvelope = { version: AG_UI_CHILD_RUN_ENVELOPE_VERSION, parentRunId, childRunId, attempt: attempt as number, state, ...(typeof terminalReason === "string" ? { terminalReason } : {}), finishedAt };
 	return { childRun };
-}
-
-/** Reject credential-like field names recursively before a browser projection. */
-function _HasSecretField(value: unknown): boolean
-{
-	if (Array.isArray(value)) return value.some(_HasSecretField);
-	if (!_Record(value)) return false;
-	return Object.entries(value).some(([key, nested]) => /secret|token|password|credential|authorization/iu.test(key) || _HasSecretField(nested));
 }
 
 function _Record(value: unknown): value is Record<string, unknown> { return value !== null && typeof value === "object" && !Array.isArray(value); }

@@ -69,9 +69,15 @@ runtime from silently interpreting a frozen snapshot with different assembly rul
   `AgUiSseRecord`, `__ProjectAgUiEvents`, and `__EncodeAgUiSseRecord` — the exact-pinned upstream
   AG-UI vocabulary and display-safe projection used by server-owned live replay. Deterministic
   subframes support ordinary messages; open interrupt overlays deliberately omit SSE ids.
-- `AG_UI_A2UI_ENVELOPE_VERSION` and `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM
-  envelopes for admitted A2UI operations and lossy immediate-child terminal updates. They contain
-  presentation facts only and never grant actions or expose child/sibling context.
+- `AG_UI_A2UI_ENVELOPE_VERSION`, `AgUiA2uiSurfaceStates`, and
+  `___ParseAgUiA2uiEnvelope` — the versioned CUSTOM envelope, authoritative ten-state presentation
+  lifecycle, and strict parser for governed A2UI surfaces. Each envelope binds conversation, run,
+  message, surface, and monotonic sequence coordinates; admits only ordered upstream
+  `beginRendering`, `surfaceUpdate`, and `dataModelUpdate` operations from the nine-name upstream
+  catalogue; and may carry one bounded display-safe reason. These are presentation facts only and
+  never grant an action or let a client infer lifecycle authority.
+- `AG_UI_CHILD_RUN_ENVELOPE_VERSION` — versioned CUSTOM envelope for lossy immediate-child terminal
+  updates. It never exposes child context or sibling data.
 - Hand-written DTOs/enums: `Grant`/`GrantScope`/`GrantAccess`, `Group`, `ClusterTenant*`,
   `McpServer*`/`Mcp*` operator types (MCP — the Model Context Protocol for connecting external tools),
   model-routing types, `Memory*`, `Approval`, `ThirdPartySource*`, `RuntimeAssignment`,

@@ -45,6 +45,13 @@ events, and projects an allow-listed Agent User Interface (AG-UI) server-sent ev
 as a bounded custom event, but proofs, credentials, fences, and provider metadata never cross the
 browser boundary.
 
+Governed A2UI replay adopts only the exact `opencrane.a2ui.v1` envelope bound to the replayed
+conversation and run. It preserves ordered upstream `beginRendering`, `surfaceUpdate`, and
+`dataModelUpdate` operations, admits only the nine upstream component wrappers, and forwards the
+server-selected ten-state presentation lifecycle plus optional bounded safe reason. Replay never
+maps the frontend-only `SingleChoice` or `Select` aliases into upstream authority and never infers
+an action or lifecycle transition locally.
+
 Each response drains the durable snapshot before entering a bounded live tail. Recovery polling is
 authoritative; wake-ups may reduce latency later but can never replace a database read. The server
 rechecks organisation membership and participant bounds on every page, emits heartbeats below the
@@ -62,6 +69,8 @@ advancing `Last-Event-ID`. Proven revocation emits a bounded purge signal and cl
 - `_CreateSelfConversationReplayRouter` mounts the participant-authenticated live replay route.
 - `__StreamConversationLiveReplay` owns page draining, deterministic subframes, polling,
   heartbeats, interrupt restoration, revocation, and the response-duration fence.
+- `__ProjectConversationReplayEvent` strictly redacts canonical rows and adopts only full-coordinate,
+  catalogue-safe governed A2UI envelopes before the shared AG-UI projector can emit them.
 - `_SelfConversationsOpenapiPaths` and `_SelfConversationReplayOpenapiPaths` contribute those APIs
   to the server-owned OpenAPI document.
 

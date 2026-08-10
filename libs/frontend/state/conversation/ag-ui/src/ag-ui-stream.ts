@@ -1,5 +1,5 @@
 import { EventSchemas, EventType } from "@ag-ui/core";
-import type { AgUiProjectionEvent } from "@opencrane/contracts";
+import { AG_UI_A2UI_ENVELOPE_VERSION, ___ParseAgUiA2uiEnvelope, type AgUiA2uiEnvelope, type AgUiProjectionEvent } from "@opencrane/contracts";
 import { ___ParseAndValidateJson } from "@opencrane/util";
 
 import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiMessageView, type AgUiStreamRecord, type AgUiStreamState } from "./ag-ui-stream.types.js";
@@ -7,7 +7,7 @@ import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiMessageView, type AgUiSt
 /** Construct empty state that requires an authoritative stream before displaying content. */
 export function __CreateAgUiStreamState(): AgUiStreamState
 {
-	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, interrupts: [], messages: {}, tools: {}, customEvents: [], accessRevoked: false };
+	return { cursor: null, seenCursors: new Map(), runId: null, runStatus: AgUiRunStatuses.Idle, runFailure: null, interrupts: [], messages: {}, tools: {}, surfaces: new Map(), customEvents: [], accessRevoked: false };
 }
 
 /** Purge all projected content and reconnect coordinates after proven access loss. */
@@ -49,6 +49,7 @@ function _ProjectionEvent(value: unknown): AgUiProjectionEvent
 {
 	const parsed = EventSchemas.safeParse(value);
 	if (!parsed.success || !_IsProjectionEvent(parsed.data)) throw new Error("AG-UI SSE data must contain a supported projection event");
+	if (parsed.data.type === EventType.CUSTOM && parsed.data.name === AG_UI_A2UI_ENVELOPE_VERSION) ___ParseAgUiA2uiEnvelope(parsed.data.value);
 	return parsed.data;
 }
 
@@ -161,7 +162,28 @@ function _Custom(state: AgUiStreamState, name: string, value: unknown): AgUiStre
 {
 	if (name === "opencrane.access_revoked") return __RevokeAgUiStreamAccess();
 	if (name === "opencrane.message_terminal") return _MessageTerminal(state, value, name);
+	if (name === AG_UI_A2UI_ENVELOPE_VERSION) return _A2uiSurface(state, ___ParseAgUiA2uiEnvelope(value), name);
 	return { ...state, customEvents: [...state.customEvents, name] };
+}
+
+/** Adopt only an authoritative monotonic surface envelope under its complete stable identity. */
+function _A2uiSurface(state: AgUiStreamState, envelope: AgUiA2uiEnvelope, name: string): AgUiStreamState
+{
+	const identity = _A2uiSurfaceIdentity(envelope);
+	const previous = state.surfaces.get(identity);
+	if (previous !== undefined && envelope.sequence < previous.sequence) throw new Error("governed A2UI surface sequence regressed");
+	if (previous !== undefined && envelope.sequence === previous.sequence)
+	{
+		if (JSON.stringify(previous) !== JSON.stringify(envelope)) throw new Error("governed A2UI surface sequence changed payload");
+		return state;
+	}
+	return { ...state, surfaces: new Map(state.surfaces).set(identity, envelope), customEvents: [...state.customEvents, name] };
+}
+
+/** Build one collision-safe key from every stable coordinate that selects a governed surface. */
+function _A2uiSurfaceIdentity(envelope: AgUiA2uiEnvelope): string
+{
+	return JSON.stringify([envelope.conversationId, envelope.runId, envelope.messageId, envelope.surfaceId]);
 }
 
 /** Apply the display-safe message terminal marker emitted by the shared projector. */

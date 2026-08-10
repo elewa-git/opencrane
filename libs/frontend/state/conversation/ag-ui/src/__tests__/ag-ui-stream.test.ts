@@ -1,6 +1,8 @@
 import { EventType } from "@ag-ui/core";
 import { describe, expect, it } from "vitest";
 
+import { AG_UI_A2UI_ENVELOPE_VERSION, AgUiA2uiSurfaceStates } from "@opencrane/contracts";
+
 import { AgUiMessageStatuses, AgUiRunStatuses, type AgUiStreamRecord } from "../ag-ui-stream.types.js";
 import { __AgUiResumeCursor, __CreateAgUiStreamState, __DecodeAgUiSseRecord, __ReduceAgUiStream } from "../ag-ui-stream.js";
 
@@ -11,6 +13,18 @@ function _Record(id: string | undefined, data: object): AgUiStreamRecord
 	const record = __DecodeAgUiSseRecord(`${cursor}event: ag-ui\ndata: ${JSON.stringify(data)}\n\n`);
 	if (record === null) throw new Error("expected a valid projection record");
 	return record;
+}
+
+/** Build one full-coordinate governed A2UI envelope for browser projection tests. */
+function _A2ui(sequence: number, state: AgUiA2uiSurfaceStates, operations: readonly unknown[], overrides: Readonly<Record<string, unknown>> = {}): Readonly<Record<string, unknown>>
+{
+	return { version: AG_UI_A2UI_ENVELOPE_VERSION, conversationId: "conversation-1", runId: "run-1", messageId: "message-1", surfaceId: "surface-1", sequence, state, operations, ...overrides };
+}
+
+/** Wrap one governed A2UI envelope in its exact AG-UI CUSTOM event. */
+function _A2uiRecord(id: string, envelope: Readonly<Record<string, unknown>>): AgUiStreamRecord
+{
+	return _Record(id, { type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: envelope });
 }
 
 describe("AG-UI stream state", function _Suite()
@@ -74,6 +88,7 @@ describe("AG-UI stream state", function _Suite()
 	{
 		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _Record("cursor-1", { type: EventType.TEXT_MESSAGE_START, messageId: "message-1", role: "user" }));
 		state = __ReduceAgUiStream(state, _Record("cursor-2", { type: EventType.TEXT_MESSAGE_CONTENT, messageId: "message-1", delta: "sensitive" }));
+		state = __ReduceAgUiStream(state, _A2uiRecord("cursor-3", _A2ui(0, AgUiA2uiSurfaceStates.Ready, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }])));
 		state = __ReduceAgUiStream(state, _Record(undefined, { type: EventType.CUSTOM, name: "opencrane.access_revoked", value: { eventType: "access.revoked" } }));
 
 		expect(state.accessRevoked).toBe(true);
@@ -81,7 +96,69 @@ describe("AG-UI stream state", function _Suite()
 		expect(state.seenCursors.size).toBe(0);
 		expect(state.messages).toEqual({});
 		expect(state.tools).toEqual({});
+		expect(state.surfaces.size).toBe(0);
 		expect(state.interrupts).toEqual([]);
+	});
+
+	it("stores a renderable begin operation in supplied order under the full stable identity", function _StoresRenderableA2ui()
+	{
+		const operations = [
+			{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "root-1", component: { Text: { text: { literalString: "Pricing" } } } }] } },
+			{ dataModelUpdate: { surfaceId: "surface-1", contents: [{ key: "title", valueString: "Pricing" }] } },
+			{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }
+		];
+		const envelope = _A2ui(0, AgUiA2uiSurfaceStates.Streaming, operations);
+		const state = __ReduceAgUiStream(__CreateAgUiStreamState(), _A2uiRecord("cursor-a2ui-1", envelope));
+		const stored = [...state.surfaces.values()][0];
+
+		expect(state.surfaces.size).toBe(1);
+		expect(stored).toEqual(envelope);
+		expect(stored?.operations).toEqual(operations);
+		expect(stored?.operations[2]).toEqual({ beginRendering: { surfaceId: "surface-1", root: "root-1" } });
+	});
+
+	it("adopts progressive authoritative lifecycle and reason without local inference", function _AdoptsProgressiveA2ui()
+	{
+		const first = _A2ui(0, AgUiA2uiSurfaceStates.Streaming, [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "root-1", component: { Text: { text: { literalString: "Pricing" } } } }] } }]);
+		const second = _A2ui(1, AgUiA2uiSurfaceStates.Expired, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }], { reason: "The server-declared action window expired" });
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _A2uiRecord("cursor-a2ui-1", first));
+		state = __ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-2", second));
+		const progressed = state;
+		state = __ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-3", second));
+
+		expect([...progressed.surfaces.values()][0]).toMatchObject({ sequence: 1, state: AgUiA2uiSurfaceStates.Expired, reason: "The server-declared action window expired" });
+		expect(state.surfaces).toEqual(progressed.surfaces);
+		expect(state.customEvents).toEqual([AG_UI_A2UI_ENVELOPE_VERSION, AG_UI_A2UI_ENVELOPE_VERSION]);
+	});
+
+	it("rejects same-sequence mutation and sequence regression", function _RejectsA2uiSequenceDrift()
+	{
+		const initial = _A2ui(2, AgUiA2uiSurfaceStates.Ready, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }]);
+		const state = __ReduceAgUiStream(__CreateAgUiStreamState(), _A2uiRecord("cursor-a2ui-1", initial));
+		expect(function _MutatedSequence(): void
+		{
+			__ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-2", _A2ui(2, AgUiA2uiSurfaceStates.Expired, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }])));
+		}).toThrow("sequence changed payload");
+		expect(function _RegressedSequence(): void
+		{
+			__ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-3", _A2ui(1, AgUiA2uiSurfaceStates.Streaming, [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }])));
+		}).toThrow("sequence regressed");
+	});
+
+	it("keeps surfaces with one reused surface id separate across full coordinates", function _KeysA2uiByFullIdentity()
+	{
+		const operation = [{ beginRendering: { surfaceId: "surface-1", root: "root-1" } }];
+		let state = __ReduceAgUiStream(__CreateAgUiStreamState(), _A2uiRecord("cursor-a2ui-1", _A2ui(0, AgUiA2uiSurfaceStates.Ready, operation)));
+		state = __ReduceAgUiStream(state, _A2uiRecord("cursor-a2ui-2", _A2ui(0, AgUiA2uiSurfaceStates.Ready, operation, { messageId: "message-2" })));
+		expect(state.surfaces.size).toBe(2);
+		expect([...state.surfaces.values()].map(surface => surface.messageId)).toEqual(["message-1", "message-2"]);
+	});
+
+	it("rejects malformed governed A2UI custom values during strict SSE decoding", function _RejectsMalformedA2uiCustom()
+	{
+		const invalid = _A2ui(0, AgUiA2uiSurfaceStates.Ready, [{ surfaceUpdate: { surfaceId: "surface-1", components: [{ id: "choice-1", component: { Select: {} } }] } }]);
+		const frame = `id: cursor-a2ui\nevent: ag-ui\ndata: ${JSON.stringify({ type: EventType.CUSTOM, name: AG_UI_A2UI_ENVELOPE_VERSION, value: invalid })}\n\n`;
+		expect(__DecodeAgUiSseRecord(frame)).toBeNull();
 	});
 
 	it("fails closed on unsupported pinned events, malformed data, and sequence gaps", function _FailsClosed()

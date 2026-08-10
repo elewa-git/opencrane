@@ -1,5 +1,5 @@
 import type { CustomEvent, Interrupt, RunErrorEvent, RunFinishedEvent, RunStartedEvent, TextMessageContentEvent, TextMessageEndEvent, TextMessageStartEvent, ToolCallArgsEvent, ToolCallEndEvent, ToolCallResultEvent, ToolCallStartEvent } from "@ag-ui/core";
-import type { DataModelUpdate, SurfaceUpdateMessage } from "@a2ui/web_core/v0_8";
+import type { BeginRenderingMessage, DataModelUpdate, SurfaceUpdateMessage } from "@a2ui/web_core/v0_8";
 
 import type { RunEventType } from "@opencrane/models/agents";
 import type { ConversationId } from "@opencrane/models/conversations";
@@ -16,8 +16,38 @@ export const AG_UI_A2UI_ENVELOPE_VERSION = "opencrane.a2ui.v1";
 /** Version of the lossy governed-child update carried inside a parent run stream. */
 export const AG_UI_CHILD_RUN_ENVELOPE_VERSION = "opencrane.child_run.v1";
 
+/**
+ * Authoritative browser presentation lifecycle for one governed A2UI surface.
+ *
+ * These serialized values describe display state only. They never authorize an action, infer a
+ * canonical run transition, or let the browser select the next state.
+ */
+export enum AgUiA2uiSurfaceStates
+{
+	/** Ordered surface operations are still arriving. */
+	Streaming = "streaming",
+	/** The authoritative projection declares the surface ready for a displayed action. */
+	Ready = "ready",
+	/** One displayed action awaits authoritative server admission. */
+	ActionPending = "action_pending",
+	/** The authoritative server accepted the displayed action. */
+	Submitted = "submitted",
+	/** The server rejected submitted values as invalid. */
+	ValidationError = "validation_error",
+	/** The authoritative action path failed without claiming success. */
+	ActionFailed = "action_failed",
+	/** The server-declared action window expired. */
+	Expired = "expired",
+	/** The one-use action was already consumed. */
+	AlreadyUsed = "already_used",
+	/** The current actor is not authorized to use the displayed action. */
+	Unauthorized = "unauthorized",
+	/** The admitted surface cannot be rendered by this client. */
+	Unsupported = "unsupported",
+}
+
 /** One strictly admitted A2UI surface operation. */
-export type AgUiA2uiOperation = { readonly surfaceUpdate: SurfaceUpdateMessage } | { readonly dataModelUpdate: DataModelUpdate };
+export type AgUiA2uiOperation = { readonly beginRendering: BeginRenderingMessage } | { readonly surfaceUpdate: SurfaceUpdateMessage } | { readonly dataModelUpdate: DataModelUpdate };
 
 /** Browser-safe A2UI projection. It carries presentation coordinates, never action authority. */
 export interface AgUiA2uiEnvelope
@@ -28,7 +58,9 @@ export interface AgUiA2uiEnvelope
 	readonly messageId: string;
 	readonly surfaceId: string;
 	readonly sequence: number;
+	readonly state: AgUiA2uiSurfaceStates;
 	readonly operations: readonly AgUiA2uiOperation[];
+	readonly reason?: string;
 }
 
 /** Terminal state of one governed child as observed by its immediate parent. */

@@ -1,5 +1,5 @@
 import type { Interrupt, TextMessageStartEvent } from "@ag-ui/core";
-import type { AgUiProjectionEvent } from "@opencrane/contracts";
+import type { AgUiA2uiEnvelope, AgUiProjectionEvent } from "@opencrane/contracts";
 
 /** Browser-visible lifecycle for one projected conversation run. */
 export enum AgUiRunStatuses
@@ -87,6 +87,8 @@ export interface AgUiStreamState
 	readonly messages: Readonly<Record<string, AgUiMessageView>>;
 	/** Tool lifecycles assembled from safe events. */
 	readonly tools: Readonly<Record<string, AgUiToolView>>;
+	/** Governed A2UI surfaces keyed by their complete stable presentation identity. */
+	readonly surfaces: ReadonlyMap<string, AgUiA2uiEnvelope>;
 	/** Names of custom display signals; their authority-bearing source payloads stay server-side. */
 	readonly customEvents: readonly string[];
 	/** Whether authority loss purged this in-memory projection. */
