@@ -4,22 +4,36 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../../.." && pwd)"
 DEPLOY_SCRIPT="$ROOT_DIR/apps/_infra/deploy-k8s/platform/k8s-deploy.sh"
 ORCHESTRATOR="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-orchestrator.sh"
+RECOVERY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-migration-recovery.sh"
+FINALIZATION="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-release-finalization.sh"
+POLICY="$ROOT_DIR/apps/_infra/deploy-k8s/platform/database-convergence-policy.sh"
 BACKUP_SCRIPT="$ROOT_DIR/apps/postgres/scripts/create-pre-migration-backup.sh"
 
 bash -n "$DEPLOY_SCRIPT"
+bash -n "$RECOVERY"
 bash -n "$ORCHESTRATOR"
+bash -n "$FINALIZATION"
+bash -n "$POLICY"
 bash -n "$BACKUP_SCRIPT"
+source "$POLICY"
 grep -q -- '--release-version' "$DEPLOY_SCRIPT"
 grep -q -- '--from-release-version' "$DEPLOY_SCRIPT"
 grep -q 'DATABASE_RELEASE_TRANSITION=.*DATABASE_TRANSITION_RESOLVER' "$DEPLOY_SCRIPT"
 grep -q 'automatic database migration permits only an adjacent minor transition' \
   "$ROOT_DIR/scripts/release-versioning/database-validation.mjs"
 grep -q 'run_database_release_transition' "$DEPLOY_SCRIPT"
-grep -q 'fence_existing_opencrane_server' "$ORCHESTRATOR"
+grep -q 'fence_existing_opencrane_server' "$RECOVERY"
+grep -q 'source "$SCRIPT_DIR/database-convergence-classifier.sh"' "$DEPLOY_SCRIPT"
 grep -q 'TIMEOUT_SECONDS must be an integer from 1 through 3600' "$DEPLOY_SCRIPT"
-grep -q 'migrationFence.active=true' "$ORCHESTRATOR"
+grep -q 'migrationFence.active=true' "$RECOVERY"
 grep -q 'migrationFence.active=false' "$DEPLOY_SCRIPT"
 grep -q 'POSTGRES_BOOTSTRAP_BASELINE_SHA256=.*existing_postgres_values' "$DEPLOY_SCRIPT"
+grep -q 'classify_live_database_convergence' "$ORCHESTRATOR"
+grep -q 'capture_pre_fence_main_release_revision' "$RECOVERY"
+grep -q 'helm rollback "$RELEASE" "$DATABASE_PRE_FENCE_RELEASE_REVISION"' "$RECOVERY"
+grep -q 'helm rollback "$RELEASE" "$DATABASE_FENCED_RELEASE_REVISION"' "$FINALIZATION"
+grep -q -- '--ignore-not-found -o name' "$DEPLOY_SCRIPT"
+grep -q 'postgres_cluster_status' "$DEPLOY_SCRIPT"
 grep -q 'CNPG recovery evidence completed before migration' "$ORCHESTRATOR"
 grep -q 'install_postgres_release false false' "$ORCHESTRATOR"
 grep -q 'install_postgres_release true true' "$ORCHESTRATOR"
@@ -32,6 +46,7 @@ grep -q -- '--set "privileges.enabled=$privileges_enabled"' "$ORCHESTRATOR"
 TEST_POSTGRES_ARGS="$(mktemp)"
 export TEST_POSTGRES_ARGS
 (
+  source "$RECOVERY"
   source "$ORCHESTRATOR"
   TIMEOUT=37
   POSTGRES_RELEASE=opencrane-postgres
@@ -73,16 +88,8 @@ grep -Fxq -- 'migration.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.timeoutSeconds=37' "$TEST_POSTGRES_ARGS"
 grep -Fxq -- 'privileges.jobDeadlineGraceSeconds=30' "$TEST_POSTGRES_ARGS"
 
-fence_line="$(grep -n 'fence_existing_opencrane_server$' "$ORCHESTRATOR" | tail -1 | cut -d: -f1)"
-backup_line="$(grep -n 'backup_evidence=.*POSTGRES_MIGRATION_BACKUP' "$ORCHESTRATOR" | cut -d: -f1)"
-migration_line="$(grep -n 'install_postgres_release true true' "$ORCHESTRATOR" | cut -d: -f1)"
-restore_line="$(grep -n 'migrationFence.active=false' "$DEPLOY_SCRIPT" | tail -1 | cut -d: -f1)"
-if (( fence_line >= backup_line || backup_line >= migration_line )); then
-  echo "database migration fence, backup, mutation, and restore ordering regressed" >&2
-  exit 1
-fi
-if (( restore_line == 0 )); then
-  echo "database migration fence has no success-only restore path" >&2
+if rg -q 'DATABASE_MIGRATION_CONFIG_MAP="\$\(bash' "$DEPLOY_SCRIPT"; then
+  echo "deploy entrypoint still publishes migration SQL before live-state classification" >&2
   exit 1
 fi
 
@@ -92,6 +99,7 @@ TEST_CURRENT_SENTINEL="$(mktemp)"
 export TEST_CURRENT_SENTINEL
 rm -f "$TEST_CURRENT_SENTINEL"
 (
+  source "$RECOVERY"
   source "$ORCHESTRATOR"
   POSTGRES_CLUSTER_EXISTS=1
   DATABASE_TRANSITION_KIND=current
@@ -105,7 +113,9 @@ rm -f "$TEST_CURRENT_SENTINEL"
 grep -q '^current$' "$TEST_CURRENT_SENTINEL"
 
 if (
+  source "$RECOVERY"
   source "$ORCHESTRATOR"
+  source "$FINALIZATION"
   RELEASE=opencrane
   NAMESPACE=opencrane
   err() { :; }
@@ -128,7 +138,9 @@ fi
 # every matching Pod/Job must be terminal and every ReplicaSet must be zero-scaled and owned by
 # that exact Deployment UID.
 if (
+  source "$RECOVERY"
   source "$ORCHESTRATOR"
+  source "$FINALIZATION"
   RELEASE=opencrane
   NAMESPACE=opencrane
   CHART_DIR=/chart
@@ -174,19 +186,262 @@ trap 'rm -rf "$TEST_DIR"; rm -f "$TEST_CURRENT_SENTINEL" "$TEST_POSTGRES_ARGS"' 
 export TEST_DIR
 mkdir -p "$TEST_DIR/bin"
 
-# Exercise the real migration branch through its public orchestration function. This proves the
-# executable order and argument binding rather than inferring them from source-line positions.
+# Exercise the successful public shell boundaries with fake Helm and Kubernetes APIs. The real
+# fence proves the exact Deployment UID, owned zero-scaled ReplicaSet, and quiescent Pod/Job sets;
+# the real finalization helpers capture and clear that fence, restart consumers, and wait for every
+# final readiness boundary in order.
+SUCCESS_CALLS="$TEST_DIR/public-success.calls"
+export SUCCESS_CALLS
 (
+  source "$RECOVERY"
+  source "$FINALIZATION"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  CHART_DIR=/chart
+  FROM_RELEASE_VERSION=0.7.0
+  RELEASE_VERSION=0.8.0
+  TIMEOUT=37
+  DATABASE_FENCED_RELEASE_REVISION=""
+  BOUNDARY_PHASE=fence
+  helm()
+  {
+    if [[ "$1" == "status" && "$*" == *"-o json"* ]]; then
+      printf '%s\n' helm-capture-fenced >>"$SUCCESS_CALLS"
+      printf '%s\n' '{"version":13}'
+    elif [[ "$1" == "status" ]]; then
+      printf '%s\n' helm-status-pre-fence >>"$SUCCESS_CALLS"
+    elif [[ "$1 $2" == "get values" ]]; then
+      printf '%s\n' helm-get-values >>"$SUCCESS_CALLS"
+      printf '%s\n' '{"clustertenantManager":{"replicas":2}}'
+    elif [[ "$1" == "upgrade" && "$*" == *"migrationFence.active=true"* ]]; then
+      printf '%s\n' helm-fence >>"$SUCCESS_CALLS"
+    elif [[ "$1" == "upgrade" && "$*" == *"migrationFence.active=false"* ]]; then
+      printf '%s\n' helm-unfence >>"$SUCCESS_CALLS"
+    else
+      printf 'unexpected helm call: %s\n' "$*" >&2
+      return 1
+    fi
+  }
+  kubectl()
+  {
+    local deployment_name
+    if [[ "$BOUNDARY_PHASE" == "fence" ]]; then
+      if [[ "$*" == *"get deployment opencrane-opencrane-server"*"-o name"* ]]; then
+        printf '%s\n' fence-deployment >>"$SUCCESS_CALLS"
+        printf '%s\n' deployment.apps/opencrane-opencrane-server
+      elif [[ "$*" == *"get deployment opencrane-opencrane-server"*"metadata.uid"* ]]; then
+        printf '%s\n' fence-uid >>"$SUCCESS_CALLS"
+        printf '%s' deployment-uid
+      elif [[ "$*" == *"get deployment opencrane-opencrane-server"*"spec.replicas"* ]]; then
+        printf '%s\n' fence-desired-replicas >>"$SUCCESS_CALLS"
+        printf '%s' 0
+      elif [[ "$*" == *"get deployment opencrane-opencrane-server"*"status.replicas"* ]]; then
+        printf '%s\n' fence-live-replicas >>"$SUCCESS_CALLS"
+        printf '%s' 0
+      elif [[ "$*" == *"get pods"* ]]; then
+        printf '%s\n' fence-pods >>"$SUCCESS_CALLS"
+        printf '%s\n' '{"items":[]}'
+      elif [[ "$*" == *"get replicasets"* ]]; then
+        printf '%s\n' fence-replicasets >>"$SUCCESS_CALLS"
+        printf '%s\n' '{"items":[{"spec":{"replicas":0},"metadata":{"ownerReferences":[{"kind":"Deployment","uid":"deployment-uid"}]}}]}'
+      elif [[ "$*" == *"get jobs"* ]]; then
+        printf '%s\n' fence-jobs >>"$SUCCESS_CALLS"
+        printf '%s\n' '{"items":[]}'
+      else
+        printf 'unexpected fence kubectl call: %s\n' "$*" >&2
+        return 1
+      fi
+      return
+    fi
+    if [[ "$1 $2" == "get deployment/"* ]]; then
+      deployment_name="${2#deployment/}"
+      printf 'inventory %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
+      printf 'deployment.apps/%s\n' "$deployment_name"
+    elif [[ "$1 $2" == "rollout restart" ]]; then
+      deployment_name="${3#deployment/}"
+      printf 'restart %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
+    elif [[ "$1 $2" == "rollout status" ]]; then
+      deployment_name="${3#deployment/}"
+      printf 'rollout %s\n' "$deployment_name" >>"$SUCCESS_CALLS"
+    else
+      printf 'unexpected finalization kubectl call: %s\n' "$*" >&2
+      return 1
+    fi
+  }
+  err() { :; }
+  log() { :; }
+  _wait_for_release_certificate() { printf '%s\n' certificate-ready >>"$SUCCESS_CALLS"; }
+  _post_deploy_verify() { printf '%s\n' verification-passed >>"$SUCCESS_CALLS"; }
+
+  fence_existing_opencrane_server
+  [[ "$DATABASE_FENCE_PRIOR_REPLICAS" == "2" ]]
+  capture_fenced_main_release_revision
+  [[ "$DATABASE_FENCED_RELEASE_REVISION" == "13" ]]
+  BOUNDARY_PHASE=finalization
+  run_opencrane_finalization_stage helm upgrade opencrane /chart \
+    --set clustertenantManager.replicas=2 --set migrationFence.active=false
+  run_opencrane_finalization_stage restart_database_consumers_for_finalization opencrane 37 \
+    opencrane-opencrane-server opencrane-litellm
+  run_opencrane_finalization_stage wait_for_final_deployment_if_present opencrane-clustertenant-manager
+  run_opencrane_finalization_stage _wait_for_release_certificate
+  run_opencrane_finalization_stage _post_deploy_verify
+)
+printf '%s\n' \
+  helm-status-pre-fence \
+  helm-get-values \
+  helm-fence \
+  fence-deployment \
+  fence-uid \
+  fence-desired-replicas \
+  fence-live-replicas \
+  fence-pods \
+  fence-replicasets \
+  fence-jobs \
+  helm-capture-fenced \
+  helm-unfence \
+  'inventory opencrane-opencrane-server' \
+  'restart opencrane-opencrane-server' \
+  'inventory opencrane-litellm' \
+  'restart opencrane-litellm' \
+  'inventory opencrane-opencrane-server' \
+  'rollout opencrane-opencrane-server' \
+  'inventory opencrane-litellm' \
+  'rollout opencrane-litellm' \
+  'inventory opencrane-clustertenant-manager' \
+  'rollout opencrane-clustertenant-manager' \
+  certificate-ready \
+  verification-passed >"$TEST_DIR/public-success.expected"
+cmp "$TEST_DIR/public-success.expected" "$SUCCESS_CALLS"
+! grep -q '^helm rollback ' "$SUCCESS_CALLS"
+
+# Current and completed evidence are both adoption-safe: reconcile privileges, but do not publish
+# SQL, capture a fence revision, fence the server, back up, or invoke migration.
+for state in current completed; do
+  STATE_CALLS="$TEST_DIR/${state}.calls"
+  export STATE_CALLS state
+  (
+    source "$RECOVERY"
+    source "$ORCHESTRATOR"
+    POSTGRES_CLUSTER_EXISTS=1
+    DATABASE_TRANSITION_KIND=migration
+    classify_live_database_convergence() { printf '%s\n' "$state"; }
+    adopt_matching_existing_database_fence() { :; }
+    install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$STATE_CALLS"; }
+    publish_database_migration_config_map() { printf '%s\n' publish >>"$STATE_CALLS"; }
+    capture_pre_fence_main_release_revision() { printf '%s\n' capture >>"$STATE_CALLS"; }
+    fence_existing_opencrane_server() { printf '%s\n' fence >>"$STATE_CALLS"; }
+    log() { :; }
+    err() { :; }
+    run_database_release_transition
+  )
+  printf 'install false true\n' >"$TEST_DIR/${state}.expected"
+  cmp "$TEST_DIR/${state}.expected" "$STATE_CALLS"
+done
+
+# A crash after migration but before final application Helm leaves an exact active fence. Completed
+# re-entry adopts that matching fence and carries its positive prior replica count into finalization.
+REENTRY_CALLS="$TEST_DIR/completed-reentry.calls"
+export REENTRY_CALLS
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  FROM_RELEASE_VERSION=0.7.0
+  RELEASE_VERSION=0.8.0
+  POSTGRES_CLUSTER_EXISTS=1
+  DATABASE_TRANSITION_KIND=migration
+  classify_live_database_convergence() { printf '%s\n' completed; }
+  helm()
+  {
+    if [[ "$1" == "status" ]]; then printf '%s\n' '{"version":13}'; return 0; fi
+    if [[ "$1 $2" == "get values" ]]; then
+      printf '%s\n' '{"clustertenantManager":{"replicas":0},"migrationFence":{"active":true,"previousReplicas":2,"fromReleaseVersion":"0.7.0","toReleaseVersion":"0.8.0"}}'
+      return 0
+    fi
+    return 1
+  }
+  install_postgres_release()
+  {
+    printf 'install %s %s\n' "$1" "$2" >>"$REENTRY_CALLS"
+    printf 'prior %s\n' "$DATABASE_FENCE_PRIOR_REPLICAS" >>"$REENTRY_CALLS"
+  }
+  log() { :; }
+  err() { :; }
+  run_database_release_transition
+)
+printf '%s\n' 'install false true' 'prior 2' >"$TEST_DIR/completed-reentry.expected"
+cmp "$TEST_DIR/completed-reentry.expected" "$REENTRY_CALLS"
+
+# Readable incompatible evidence and unreadable or ambiguous evidence all fail before publication
+# or fencing. The classifier's original nonzero status remains observable.
+for state in incompatible ambiguous; do
+  STATE_CALLS="$TEST_DIR/${state}.calls"
+  export STATE_CALLS state
+  set +e
+  (
+    source "$RECOVERY"
+    source "$ORCHESTRATOR"
+    POSTGRES_CLUSTER_EXISTS=1
+    DATABASE_TRANSITION_KIND=migration
+    if [[ "$state" == "ambiguous" ]]; then
+      classify_live_database_convergence() { printf 'source\ncurrent\n'; }
+    else
+      classify_live_database_convergence() { printf '%s\n' "$state"; }
+    fi
+    publish_database_migration_config_map() { printf '%s\n' publish >>"$STATE_CALLS"; }
+    capture_pre_fence_main_release_revision() { printf '%s\n' capture >>"$STATE_CALLS"; }
+    fence_existing_opencrane_server() { printf '%s\n' fence >>"$STATE_CALLS"; }
+    log() { :; }
+    err() { :; }
+    run_database_release_transition
+  )
+  state_status=$?
+  set -e
+  (( state_status != 0 ))
+  [[ ! -s "$STATE_CALLS" ]]
+done
+
+STATE_CALLS="$TEST_DIR/unreadable.calls"
+export STATE_CALLS
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  POSTGRES_CLUSTER_EXISTS=1
+  DATABASE_TRANSITION_KIND=migration
+  classify_live_database_convergence() { return 19; }
+  publish_database_migration_config_map() { printf '%s\n' publish >>"$STATE_CALLS"; }
+  fence_existing_opencrane_server() { printf '%s\n' fence >>"$STATE_CALLS"; }
+  log() { :; }
+  err() { :; }
+  run_database_release_transition
+)
+unreadable_status=$?
+set -e
+[[ "$unreadable_status" == "19" ]]
+[[ ! -s "$STATE_CALLS" ]]
+
+# Exercise the successful live-source branch through its public orchestration function. This proves
+# classification -> exact SQL publication -> revision capture -> fence -> backup -> migration.
+(
+  source "$RECOVERY"
   source "$ORCHESTRATOR"
   DATABASE_TRANSITION_KIND=migration
-  POSTGRES_CLUSTER_EXISTS=0
+  POSTGRES_CLUSTER_EXISTS=1
   NAMESPACE=opencrane
   POSTGRES_RELEASE=opencrane-postgres
   POSTGRES_MIGRATION_BACKUP=/backup-owner.sh
   TIMEOUT=37
+  classify_live_database_convergence() { printf '%s\n' source; }
+  publish_database_migration_config_map() { printf '%s\n' publish >>"$TEST_DIR/migration-order"; }
+  capture_pre_fence_main_release_revision()
+  {
+    DATABASE_PRE_FENCE_RELEASE_REVISION=12
+    printf '%s\n' capture >>"$TEST_DIR/migration-order"
+  }
   log() { :; }
   err() { :; }
-  postgres_release_render_has_recovery() { return 0; }
   fence_existing_opencrane_server() { printf '%s\n' fence >>"$TEST_DIR/migration-order"; }
   install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$TEST_DIR/migration-order"; }
   bash()
@@ -196,13 +451,318 @@ mkdir -p "$TEST_DIR/bin"
   }
   run_database_release_transition
 )
-cat >"$TEST_DIR/expected-migration-order" <<'EOF'
-fence
-install false false
-backup /backup-owner.sh opencrane opencrane-postgres 37
-install true true
-EOF
+printf '%s\n' \
+  publish \
+  capture \
+  fence \
+  'backup /backup-owner.sh opencrane opencrane-postgres 37' \
+  'install true true' >"$TEST_DIR/expected-migration-order"
 cmp "$TEST_DIR/expected-migration-order" "$TEST_DIR/migration-order"
+
+# Missing-Cluster recovery fails before a fence unless the PostgreSQL render contains an explicit
+# physical recovery source. Once admitted, it fences before restoring, classifies the live restored
+# database, and only then publishes SQL.
+MISSING_CALLS="$TEST_DIR/missing-no-recovery.calls"
+export MISSING_CALLS
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  POSTGRES_CLUSTER_EXISTS=0
+  postgres_release_render_has_recovery() { return 1; }
+  capture_pre_fence_main_release_revision() { printf '%s\n' capture >>"$MISSING_CALLS"; }
+  fence_existing_opencrane_server() { printf '%s\n' fence >>"$MISSING_CALLS"; }
+  log() { :; }
+  err() { :; }
+  run_database_release_transition
+)
+missing_status=$?
+set -e
+(( missing_status != 0 ))
+[[ ! -s "$MISSING_CALLS" ]]
+
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  DATABASE_TRANSITION_KIND=migration
+  POSTGRES_CLUSTER_EXISTS=0
+  NAMESPACE=opencrane
+  POSTGRES_RELEASE=opencrane-postgres
+  POSTGRES_MIGRATION_BACKUP=/backup-owner.sh
+  TIMEOUT=37
+  postgres_release_render_has_recovery() { printf '%s\n' recovery-render >>"$TEST_DIR/missing-order"; }
+  capture_pre_fence_main_release_revision() { DATABASE_PRE_FENCE_RELEASE_REVISION=12; printf '%s\n' capture >>"$TEST_DIR/missing-order"; }
+  fence_existing_opencrane_server() { printf '%s\n' fence >>"$TEST_DIR/missing-order"; }
+  install_postgres_release() { printf 'install %s %s\n' "$1" "$2" >>"$TEST_DIR/missing-order"; }
+  classify_live_database_convergence() { printf '%s\n' classify >>"$TEST_DIR/missing-order"; printf '%s\n' source; }
+  publish_database_migration_config_map() { printf '%s\n' publish >>"$TEST_DIR/missing-order"; }
+  bash()
+  {
+    printf '%s\n' backup >>"$TEST_DIR/missing-order"
+    printf '%s\n' verified-backup
+  }
+  database_migration_job_is_terminal_or_absent() { return 0; }
+  log() { :; }
+  err() { :; }
+  run_database_release_transition
+)
+printf '%s\n' \
+  recovery-render \
+  capture \
+  fence \
+  'install false false' \
+  classify \
+  publish \
+  backup \
+  'install true true' >"$TEST_DIR/missing-expected"
+cmp "$TEST_DIR/missing-expected" "$TEST_DIR/missing-order"
+
+# Recovery is exhaustive across every readable convergence state. Only an exact source state with
+# a terminal/absent migration Job may issue the exact Helm rollback command, while the original
+# post-fence failure status is always returned.
+for state in current completed incompatible source; do
+  RECOVERY_CALLS="$TEST_DIR/recovery-${state}.calls"
+  export RECOVERY_CALLS state
+  set +e
+  (
+    source "$RECOVERY"
+    source "$ORCHESTRATOR"
+    RELEASE=opencrane
+    NAMESPACE=opencrane
+    TIMEOUT=37
+    DATABASE_PRE_FENCE_RELEASE_REVISION=12
+    database_migration_job_is_terminal_or_absent() { return 0; }
+    classify_live_database_convergence() { printf '%s\n' "$state"; }
+    helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
+    log() { :; }
+    err() { :; }
+    recover_failed_database_transition 23
+  )
+  recovery_status=$?
+  set -e
+  [[ "$recovery_status" == "23" ]]
+  if [[ "$state" == "source" ]]; then
+    grep -Fxq 'helm rollback opencrane 12 --namespace opencrane --wait --timeout 37s --force-conflicts' "$RECOVERY_CALLS"
+  else
+    [[ ! -s "$RECOVERY_CALLS" ]]
+  fi
+done
+
+# Unreadable recovery evidence leaves the fence active and does not mask the original status.
+RECOVERY_CALLS="$TEST_DIR/recovery-unreadable.calls"
+export RECOVERY_CALLS
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  database_migration_job_is_terminal_or_absent() { return 0; }
+  classify_live_database_convergence() { return 41; }
+  helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
+  log() { :; }
+  err() { :; }
+  recover_failed_database_transition 23
+)
+recovery_status=$?
+set -e
+[[ "$recovery_status" == "23" ]]
+[[ ! -s "$RECOVERY_CALLS" ]]
+
+# Active and non-active-but-nonterminal migration Jobs both block reclassification and rollback.
+for job_state in active unknown; do
+  RECOVERY_CALLS="$TEST_DIR/recovery-${job_state}-job.calls"
+  export RECOVERY_CALLS job_state
+  set +e
+  (
+    source "$RECOVERY"
+    source "$ORCHESTRATOR"
+    POSTGRES_RELEASE=opencrane-postgres
+    NAMESPACE=opencrane
+    kubectl()
+    {
+      if [[ "$job_state" == "active" ]]; then
+        printf '%s\n' '{"kind":"Job","status":{"active":1,"conditions":[]}}'
+      else
+        printf '%s\n' '{"kind":"Job","status":{"active":0,"conditions":[]}}'
+      fi
+    }
+    classify_live_database_convergence() { printf '%s\n' source >>"$RECOVERY_CALLS"; }
+    helm() { printf 'helm %s\n' "$*" >>"$RECOVERY_CALLS"; }
+    log() { :; }
+    err() { :; }
+    recover_failed_database_transition 23
+  )
+  recovery_status=$?
+  set -e
+  [[ "$recovery_status" == "23" ]]
+  [[ ! -s "$RECOVERY_CALLS" ]]
+done
+
+# A failed rollback also returns the original stage status, never Helm's replacement status.
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  TIMEOUT=37
+  DATABASE_PRE_FENCE_RELEASE_REVISION=12
+  database_migration_job_is_terminal_or_absent() { return 0; }
+  classify_live_database_convergence() { printf '%s\n' source; }
+  helm() { return 47; }
+  log() { :; }
+  err() { :; }
+  recover_failed_database_transition 23
+)
+rollback_failure_status=$?
+set -e
+[[ "$rollback_failure_status" == "23" ]]
+
+# External PostgreSQL and SQL-publication failures retain their exact statuses for the recovery
+# policy instead of collapsing every failure to status 1.
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  POSTGRES_BOOTSTRAP_BASELINE_CONFIG_MAP=baseline
+  build_postgres_release_args() { POSTGRES_ARGS=(upgrade); }
+  helm() { return 23; }
+  log() { :; }
+  err() { :; }
+  install_postgres_release false true
+)
+install_failure_status=$?
+set -e
+[[ "$install_failure_status" == "23" ]]
+
+set +e
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  POSTGRES_MIGRATION_PUBLISHER=/publisher
+  NAMESPACE=opencrane
+  DATABASE_PREVIOUS_MIGRATION_ID=0.7.0-to-0.8.0
+  DATABASE_MIGRATION_SQL_FILE=/migration.sql
+  DATABASE_PREVIOUS_MIGRATION_SQL_SHA256=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+  bash() { return 19; }
+  err() { :; }
+  publish_database_migration_config_map
+)
+publisher_failure_status=$?
+set -e
+[[ "$publisher_failure_status" == "19" ]]
+
+set +e
+(
+  source "$RECOVERY"
+  source "$FINALIZATION"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  CHART_DIR=/chart
+  FROM_RELEASE_VERSION=0.7.0
+  RELEASE_VERSION=0.8.0
+  TIMEOUT=37
+  helm()
+  {
+    if [[ "$1 $2" == "get values" ]]; then
+      printf '%s\n' '{"clustertenantManager":{"replicas":1}}'
+      return 0
+    fi
+    [[ "$1" == "status" ]] && return 0
+    return 23
+  }
+  log() { :; }
+  err() { :; }
+  fence_existing_opencrane_server
+)
+fence_failure_status=$?
+set -e
+[[ "$fence_failure_status" == "23" ]]
+
+# A failed final un-fence restores the exact already-fenced revision and returns the original Helm
+# failure even when that restoration succeeds.
+FINAL_CALLS="$TEST_DIR/final-transition.calls"
+export FINAL_CALLS
+set +e
+(
+  source "$RECOVERY"
+  source "$FINALIZATION"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  TIMEOUT=37
+  DATABASE_FENCED_RELEASE_REVISION=13
+  helm()
+  {
+    printf 'helm %s\n' "$*" >>"$FINAL_CALLS"
+    [[ "$1" == "rollback" ]] && return 0
+    return 23
+  }
+  err() { :; }
+  run_fenced_finalization_stage helm upgrade --install opencrane /chart
+)
+final_transition_status=$?
+set -e
+[[ "$final_transition_status" == "23" ]]
+printf '%s\n' \
+  'helm upgrade --install opencrane /chart' \
+  'helm rollback opencrane 13 --namespace opencrane --wait --timeout 37s --force-conflicts' \
+  >"$TEST_DIR/final-transition.expected"
+cmp "$TEST_DIR/final-transition.expected" "$FINAL_CALLS"
+
+# Finalization inventory is strict: an API read error is not "Deployment absent", triggers exact
+# fenced-revision restoration, and retains the inventory status.
+FINAL_CALLS="$TEST_DIR/final-inventory.calls"
+export FINAL_CALLS
+set +e
+(
+  source "$RECOVERY"
+  source "$FINALIZATION"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  TIMEOUT=37
+  DATABASE_FENCED_RELEASE_REVISION=13
+  kubectl() { return 29; }
+  helm() { printf 'helm %s\n' "$*" >>"$FINAL_CALLS"; }
+  err() { :; }
+  run_opencrane_finalization_stage restart_database_consumers_for_finalization opencrane 37 opencrane-server
+)
+final_inventory_status=$?
+set -e
+[[ "$final_inventory_status" == "29" ]]
+grep -Fxq 'helm rollback opencrane 13 --namespace opencrane --wait --timeout 37s --force-conflicts' "$FINAL_CALLS"
+
+# Reading the fenced revision and post-fence workload inventory also preserve their original status.
+set +e
+(
+  source "$RECOVERY"
+  source "$FINALIZATION"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  helm() { return 31; }
+  err() { :; }
+  capture_fenced_main_release_revision
+)
+fenced_capture_status=$?
+set -e
+[[ "$fenced_capture_status" == "31" ]]
+
+# A source database without a main Helm release remains supported only when Helm proves the release
+# list is empty. There is then no invented rollback revision.
+(
+  source "$RECOVERY"
+  source "$ORCHESTRATOR"
+  RELEASE=opencrane
+  NAMESPACE=opencrane
+  log() { :; }
+  err() { :; }
+  helm()
+  {
+    if [[ "$1" == "status" ]]; then return 1; fi
+    printf '%s\n' '[]'
+  }
+  capture_pre_fence_main_release_revision
+  [[ -z "$DATABASE_PRE_FENCE_RELEASE_REVISION" ]]
+)
 
 cat >"$TEST_DIR/bin/kubectl" <<'EOF'
 #!/usr/bin/env bash

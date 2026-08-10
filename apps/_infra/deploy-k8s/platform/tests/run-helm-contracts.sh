@@ -11,6 +11,8 @@ for contract in \
   kubernetes-api-helm-args-contract.sh \
   pooler-deploy-contract.sh \
   database-migration-deploy-contract.sh \
+  database-convergence-classifier-contract.sh \
+  database-convergence-policy-contract.sh \
   server-key-permissions-contract.sh \
   server-runtime-cleanup-rbac-contract.sh \
   server-network-policy-contract.sh \

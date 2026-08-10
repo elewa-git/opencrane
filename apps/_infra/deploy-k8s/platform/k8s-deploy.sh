@@ -98,7 +98,11 @@ source "$SCRIPT_DIR/postgres-connection.sh"
 source "$SCRIPT_DIR/registry-pull-secret.sh"
 source "$SCRIPT_DIR/current-chart-sources.sh"
 source "$SCRIPT_DIR/initial-model-provider.sh"
+source "$SCRIPT_DIR/database-convergence-classifier.sh"
+source "$SCRIPT_DIR/database-convergence-policy.sh"
+source "$SCRIPT_DIR/database-migration-recovery.sh"
 source "$SCRIPT_DIR/database-migration-orchestrator.sh"
+source "$SCRIPT_DIR/database-release-finalization.sh"
 CHART_DIR="${OPENCRANE_CHART_DIR:-}"
 if [[ -z "$CHART_DIR" ]]; then
   echo "[k8s-deploy] OPENCRANE_CHART_DIR is unset. Run a role wrapper deploy.sh — the fleet-platform chart's deploy.sh (now in WeOwnAI) or apps/_infra/deploy-k8s/deploy.sh — not k8s-deploy.sh directly." >&2
@@ -501,7 +505,16 @@ _require_postgres_bootstrap litellm "$LITELLM_POSTGRES_CREDENTIALS_SECRET" "$LIT
 _require_postgres_bootstrap database-admin "$POSTGRES_ADMIN_CREDENTIALS_SECRET" "$POSTGRES_ADMIN_NAME"
 
 POSTGRES_RELEASE="${RELEASE}-postgres"
-if kubectl get "cluster/$POSTGRES_RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
+set +e
+postgres_cluster_resource="$(kubectl get "cluster/$POSTGRES_RELEASE" -n "$NAMESPACE" \
+  --ignore-not-found -o name)"
+postgres_cluster_status=$?
+set -e
+if (( postgres_cluster_status != 0 )); then
+  err "Unable to determine whether PostgreSQL Cluster '$POSTGRES_RELEASE' exists."
+  exit "$postgres_cluster_status"
+fi
+if [[ -n "$postgres_cluster_resource" ]]; then
   POSTGRES_CLUSTER_EXISTS="1"
 else
   POSTGRES_CLUSTER_EXISTS="0"
@@ -557,8 +570,6 @@ if [[ "$DATABASE_TRANSITION_KIND" == "migration" ]]; then
     exit 1
   fi
   DATABASE_MIGRATION_SQL_FILE="$(jq -r '.migration.sqlFile' <<<"$DATABASE_RELEASE_TRANSITION")"
-  DATABASE_MIGRATION_CONFIG_MAP="$(bash "$POSTGRES_MIGRATION_PUBLISHER" \
-    "$NAMESPACE" "$DATABASE_PREVIOUS_MIGRATION_ID" "$DATABASE_MIGRATION_SQL_FILE" "$DATABASE_PREVIOUS_MIGRATION_SQL_SHA256")"
 fi
 
 _load_kubernetes_api_helm_args networkPolicy "PostgreSQL pooler"
@@ -580,6 +591,7 @@ _copy_cnpg_uri_secret() {
 }
 
 DATABASE_FENCE_PRIOR_REPLICAS=""
+DATABASE_FENCED_RELEASE_REVISION=""
 run_database_release_transition
 POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-opencrane-app"
 OBOT_POSTGRES_APP_SECRET="${POSTGRES_RELEASE}-obot-app"
@@ -911,6 +923,7 @@ elif helm status "$RELEASE" -n "$NAMESPACE" >/dev/null 2>&1; then
   helm_args+=(--reset-then-reuse-values)
 fi
 if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
+  capture_fenced_main_release_revision || exit $?
   helm_args+=(
     --set "clustertenantManager.replicas=$DATABASE_FENCE_PRIOR_REPLICAS"
     --set migrationFence.active=false
@@ -918,8 +931,9 @@ if [[ -n "$DATABASE_FENCE_PRIOR_REPLICAS" ]]; then
     --set-string "migrationFence.fromReleaseVersion=$FROM_RELEASE_VERSION"
     --set-string "migrationFence.toReleaseVersion=$RELEASE_VERSION")
 fi
-helm "${helm_args[@]}"
-restart_postgres_connection_consumers "$NAMESPACE" "$TIMEOUT" "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway"
+run_opencrane_finalization_stage helm "${helm_args[@]}" || exit $?
+run_opencrane_finalization_stage restart_database_consumers_for_finalization "$NAMESPACE" "$TIMEOUT" \
+  "${RELEASE}-opencrane-server" "${RELEASE}-litellm" "${RELEASE}-mcp-gateway" || exit $?
 
 # 4. Wait for the core workloads. The database schema was created by CNPG initdb or converged by
 # the bounded deployment-owned migration Job; application startup never mutates it.
@@ -928,14 +942,11 @@ restart_postgres_connection_consumers "$NAMESPACE" "$TIMEOUT" "${RELEASE}-opencr
 # install has just one, so guard each wait on the deployment existing rather than waiting
 # unconditionally (which NotFound-errored on the absent component after the split).
 for _comp in fleet-manager clustertenant-manager; do
-  if kubectl get "deployment/${RELEASE}-${_comp}" -n "$NAMESPACE" >/dev/null 2>&1; then
-    kubectl rollout status "deployment/${RELEASE}-${_comp}" -n "$NAMESPACE" --timeout="${TIMEOUT}s"
-  fi
+  run_opencrane_finalization_stage wait_for_final_deployment_if_present "${RELEASE}-${_comp}" || exit $?
 done
 
-_wait_for_release_certificate
-
-_post_deploy_verify
+run_opencrane_finalization_stage _wait_for_release_certificate || exit $?
+run_opencrane_finalization_stage _post_deploy_verify || exit $?
 
 log "Done. OpenCrane is installed in namespace '$NAMESPACE'."
 _cp_hosts="$(_control_plane_hosts)"
