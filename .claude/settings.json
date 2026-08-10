@@ -11,12 +11,6 @@
           {
             "type": "command",
             "command": "bash \"$CLAUDE_PROJECT_DIR/.claude/hooks/require-review.sh\""
-          },
-          {
-            "type": "agent",
-            "model": "haiku",
-            "timeout": 60,
-            "prompt": "You are the review-gate judge for the OpenCrane repo. Decide whether this turn's supported production-source changes need an independent @review pass before the turn ends.\n\nSteps:\n1. Read .claude/.review-context.md (written by the pre-filter hook). Its first line is VERDICT=SKIP or VERDICT=JUDGE.\n2. If the file is missing or VERDICT=SKIP, respond {\"ok\": true} and stop — do nothing else.\n3. If VERDICT=JUDGE, read .claude/review-policy.md (the 'Judgment guidance' section) and apply it to the DIFF, UNTRACKED_SOURCE_BODIES, and MODULE_GROWTH sections in the context file.\n4. Decide: block only if the change carries real risk per the policy. A module-growth candidate requires a responsibility inventory but is not a finding by line count alone. Otherwise allow; over-blocking wastes tokens.\n\nRespond with JSON only: {\"ok\": true} to allow the turn to end, or {\"ok\": false, \"reason\": \"<one sentence: what risk, and that the model must run the @review subagent and resolve Critical/High findings>\"} to block.\n\n$ARGUMENTS"
           }
         ]
       }

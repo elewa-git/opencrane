@@ -81,5 +81,11 @@ Produce one report, sections in order:
 5. **Summary** — one paragraph: verdict on the change, plus which tiers/finders ran
    and which were skipped.
 
-If the review gate invoked this pipeline, resolve every Critical and High finding
-(fix or justify) before ending the turn — same rule as a direct `review` delegation.
+If the review gate invoked this pipeline, resolve every Critical and High finding and every
+routed-page ownership finding regardless of severity (fix or justify) before ending the turn — the
+same rule as a direct `review` delegation.
+
+This pipeline satisfies only the independent-review leg of the routed Angular screen override. For
+routed scope, require recorded architecture preflight and component-manager PLAN evidence before
+review, then architecture and component-manager POST-DIFF PASS before reporting the overall gate as
+green. Missing evidence keeps the routed-screen gate BLOCKED even when every review finder passes.

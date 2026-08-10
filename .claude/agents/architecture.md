@@ -18,13 +18,15 @@ Read these before reaching a verdict:
 
 1. `AGENTS.md`;
 2. `docs/agents/monorepo.md`;
-3. `docs/agents/maintainability.md` when a changed production module triggers the
+3. `docs/agents/angular.md` whenever a routed Angular component, its screen store, mapper, or
+   presentational tree changes;
+4. `docs/agents/maintainability.md` when a changed production module triggers the
    language-neutral growth checker;
-4. `docs/agents/architecture.md`, `docs/agents/cluster-architecture.md`, and
+5. `docs/agents/architecture.md`, `docs/agents/cluster-architecture.md`, and
    `docs/agents/app-specific.md` when the slice touches identity, Kubernetes, apps, or libraries;
    also `docs/agents/package-docs.md` when the slice adds or moves a package;
-5. the selected `plan.md` entry and its linked issue/design acceptance criteria;
-6. for personal-agent replacement work, the active direct-refactor plan and the target architecture
+6. the selected `plan.md` entry and its linked issue/design acceptance criteria;
+7. for personal-agent replacement work, the active direct-refactor plan and the target architecture
    it links.
 
 Inventory live `apps/`, `libs/`, NX projects, and rendered manifests before using the static package
@@ -129,6 +131,11 @@ preserves the old implementation, so no compatibility or operational-retention g
 
 ## Other architecture checks
 
+- For every materially changed routed Angular page, apply the responsibility inventory in
+  `docs/agents/angular.md` even when the language-neutral growth checker is silent. Preflight must
+  name every owner in the canonical table; post-diff must verify each owner against the actual page,
+  store, mapper, and component tree. BLOCK every canonical violation and return the exact ownership
+  moves required; do not approve cosmetic helper extraction or an oversized replacement store.
 - Treat `scripts/module-growth-check.mjs` findings as mandatory responsibility-inventory triggers
   across every supported production language. For each candidate, classify configuration/identity,
   external I/O, orchestration, domain policy, protocol translation, persistence, retry/cancellation,
@@ -171,9 +178,11 @@ Return:
 5. **Communication matrix** — edge, classification, contract, identity/authz, network rule, and
    failure semantics
 6. **Authority and trust-boundary checks**
-7. **Direct-replacement classification** — survivor / drop
-8. **Required moves or deletions** — exact paths and sequencing
-9. **Validation gate** — targeted NX tasks, boundary lint, render/security tests
+7. **Routed-page responsibility table** — required when Angular route/state/presentation is in scope;
+   name the owning path and symbol for every canonical row
+8. **Direct-replacement classification** — survivor / drop
+9. **Required moves or deletions** — exact paths and sequencing
+10. **Validation gate** — targeted NX tasks, boundary lint, render/security tests
 
 BLOCK only on a concrete rule violation or unresolved decision. Give the smallest direct correction;
 do not propose compatibility scaffolding.

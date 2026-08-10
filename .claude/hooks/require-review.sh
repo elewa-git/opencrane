@@ -2,19 +2,17 @@
 #
 # Stop-hook PRE-FILTER for the policy-driven review gate.
 #
-# This runs IN PARALLEL with the Haiku agent hook (Claude Code runs all hooks in a
-# matcher array concurrently). It does the cheap, deterministic work so the Haiku
-# judge barely runs on the obvious cases:
+# This is the deterministic Claude Code gate and the shared classifier used by the
+# sequential Codex wrapper:
 #
 #   - Computes the supported production-source change set (tracked diff vs HEAD + untracked bodies).
-#   - Runs the deterministic module-growth classifier and routes every candidate to judgment.
-#   - Writes .claude/.review-context.md (VERDICT + diff + policy) for the Haiku hook to read.
-#   - Resolves SKIP cases (no code / trivial / already-reviewed / loop-guard) so the
-#     agent can short-circuit to ok:true after a single read.
+#   - Runs the deterministic module-growth classifier and routes every candidate to review.
+#   - Writes .claude/.review-context.md (VERDICT + diff + policy) for the continued session.
+#   - Resolves SKIP cases (no code / trivial / already-reviewed / loop-guard) without a model call.
 #
-# It never calls a model and (intentionally) never blocks: the Haiku agent hook is the
-# sole blocker. If you want a free deterministic floor instead, see the git history of
-# this file for the exit-2 variant.
+# It never calls a model. `JUDGE` exits 2 and blocks Claude Code with instructions to
+# run the repository agents; `SKIP` exits 0. Keeping classification and blocking in one
+# sequential process prevents missing or stale review context from becoming an allow.
 #
 # Policy lives in .claude/review-policy.md (the single tunable surface).
 # State files (.claude/.review-context.md, .claude/.last-review-hash) are git-ignored.
@@ -32,7 +30,7 @@ policy="$repo/.claude/review-policy.md"
 marker="$repo/.claude/.last-review-hash"
 context="$repo/.claude/.review-context.md"
 
-# Helper: write the context file the agent hook reads, then exit 0.
+# Helper: write the context file the main agent reads, then block on JUDGE.
 # $1 = verdict (SKIP|JUDGE); remaining args ignored — body assembled from globals.
 _write_context_and_exit() {
   local verdict="$1"
@@ -60,6 +58,10 @@ _write_context_and_exit() {
     echo "REVIEW_BASE_RESOLUTION:"
     printf '%s\n' "${base_resolution:-}"
   } > "$context" 2>/dev/null || true
+  if [ "$verdict" = "JUDGE" ]; then
+    printf '%s\n' "Run the repository review gates now: read $context and $policy, invoke review for all required dimensions and specialist gates, resolve every verified finding, rerun validation, and then stop again." >&2
+    exit 2
+  fi
   exit 0
 }
 
@@ -104,7 +106,7 @@ while IFS= read -r pattern; do
   [ -n "$pattern" ] && source_paths+=("$pattern")
 done < <(node -e 'const p=require("./docs/agents/module-growth-policy.json"); for (const e of p.sourceExtensions) console.log(`:(icase)*${e}`)' 2>/dev/null)
 if [ ${#source_paths[@]} -eq 0 ]; then
-  # Fail open to the broad Git diff but closed to the model judge: a broken policy must never make
+  # Fail open to the broad Git diff but closed to the mandatory review gate: a broken policy must never make
   # production changes disappear from review.
   source_paths=('*')
 fi
@@ -164,7 +166,7 @@ if [ "$stop_active" = "true" ]; then
   _write_context_and_exit "SKIP"
 fi
 
-# 8. No supported source changes and a valid live stack -> nothing to judge.
+# 8. No supported source changes and a valid live stack -> nothing to review.
 if [ -z "$committed_diff" ] && [ -z "$staged_diff" ] && [ -z "$unstaged_diff" ] \
   && [ -z "$untracked_manifest" ] && [ "$stack_status" -eq 0 ]; then
   if [ "$base_status" -ne 0 ]; then
@@ -224,10 +226,15 @@ done <<EOF
 $changed_files
 EOF
 
-# 13. Cheap SKIP: not critical, and either fully excluded or under the line threshold.
-if [ "$critical" = "no" ] && { [ "$all_excluded" = "yes" ] || [ "$total_lines" -le "$threshold" ]; }; then
+# 13. Cheap SKIP: an explicitly excluded-only diff wins over content keywords, but never over a
+#     broken checker/topology/base. Otherwise the size threshold applies only to non-critical work.
+if [ "$all_excluded" = "yes" ] && [ "$growth_status" -eq 0 ] \
+  && [ "$stack_status" -eq 0 ] && [ "$base_status" -eq 0 ]; then
+  _write_context_and_exit "SKIP"
+fi
+if [ "$critical" = "no" ] && [ "$total_lines" -le "$threshold" ]; then
   _write_context_and_exit "SKIP"
 fi
 
-# 14. Otherwise the Haiku judge must decide — hand it the full context.
+# 14. Otherwise the mandatory review gate blocks with the full context.
 _write_context_and_exit "JUDGE"

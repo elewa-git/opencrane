@@ -143,6 +143,19 @@ independent review is required before the turn can end. When the gate asks for r
    your response why it is not applicable.
 3. Only then finish the turn.
 
+### Routed Angular screen override
+
+Any change to a routed component's inputs, dependencies, reactive state, commands, mapping,
+navigation, template, styles, or interactive regions — or to its component-scoped store, mapper, or
+presentational tree — requires all three gates regardless of diff size:
+
+1. `architecture` preflight and post-diff PASS with the canonical routed-page owner table;
+2. `component-manager` PLAN and POST-DIFF PASS with the component/responsibility map; and
+3. independent `review` with the same table in its evidence.
+
+Resolve every routed-page ownership finding regardless of severity. Missing or ambiguous ownership
+is a BLOCK, not an open question, and a generic runner/helper extraction cannot satisfy the gate.
+
 A change to a package's public surface, boundary, invariant, owned Prisma models, or config that
 does **not** update that package's `README.md` in the same change is an incomplete change — the
 review gate treats a stale or missing package README as a finding. See
@@ -173,21 +186,21 @@ or dependency boundary, run its current boundary guard before review:
 
 **How the gate decides**:
 
-- `.claude/hooks/require-review.sh` — a free shell pre-filter. It skips the obvious
+- `.claude/hooks/require-review.sh` — the deterministic classifier and Claude Code blocker. It skips the obvious
   cases (no supported production-source change, trivial size, test/type-only/generated files,
   already-reviewed) and escalates the rest. Its fingerprint includes the live PR-stack evidence,
   committed base range, `HEAD`, staged diff, unstaged diff, and untracked source bodies. It writes
-  `.claude/.review-context.md` for the judge.
-- In Claude Code, a **Haiku agent hook** reads that context plus `.claude/review-policy.md` in
-  parallel with the pre-filter. It judges whether the change carries real risk (auth, secrets,
-  network, IAM, money, or non-trivial production control flow) and blocks only when warranted.
+  `.claude/.review-context.md`; `JUDGE` exits 2 so classification and blocking happen sequentially
+  and missing or stale context cannot allow the turn to end.
+- In Claude Code, that command is the sole `Stop` hook. The continued session reads the context and
+  invokes the required repository agents; there is no parallel model hook racing the context write.
 - In Codex, `.codex/hooks/require-review.sh` runs the same pre-filter and translates `JUDGE` into a
   blocking `Stop` continuation that requires the independent review agent. Only a fresh, explicit
   `SKIP` lets the turn end; a checker crash, missing context, or unknown verdict blocks closed.
 
 **`.claude/review-policy.md` is the single tunable surface.** If review fires too often
 and burns tokens — or misses something — edit that file (threshold, `always-review`
-keywords, `never-review-paths`, or the judgment guidance) and record it in its tuning log.
+keywords, `never-review-paths`, or the review-dimension guidance) and record it in its tuning log.
 
 The gate blocks **at most once per stop sequence** (loop-safety via `stop_hook_active`),
 so it can never trap a turn — but skipping the review when it fires defeats the purpose.

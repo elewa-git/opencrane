@@ -1,15 +1,16 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import { CUSTOM_ELEMENTS_SCHEMA, Component, input, output, ɵresolveComponentResources as resolveComponentResources } from "@angular/core";
+import { CUSTOM_ELEMENTS_SCHEMA, Component, input, output, signal, ɵresolveComponentResources as resolveComponentResources } from "@angular/core";
 import { TestBed, type ComponentFixture } from "@angular/core/testing";
 import { BrowserDynamicTestingModule, platformBrowserDynamicTesting } from "@angular/platform-browser-dynamic/testing";
 import { By } from "@angular/platform-browser";
 import { Router } from "@angular/router";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { PersonaColours, PersonaFirstChatService, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
+import { PersonaColours, PersonaFirstChatArchetypes, PersonaFirstChatColours, PersonaFirstChatCommandPhases, PersonaFirstChatService, PersonaFirstChatSnapshot, PersonaFirstChatStore, PersonaModifiers, PersonaOnboardingService, PersonaOnboardingSnapshot, PersonaOnboardingStates, PersonaOnboardingStore, PersonaResolutionKinds, UserOnboardingRouteSnapshot, UserOnboardingRouteStates } from "@opencrane/state/onboarding";
 
+import { PersonaFirstChatPageComponent } from "../chat/persona-first-chat-page.component";
 import { PersonaOnboardingPageComponent } from "../persona-onboarding-page.component";
 import type { PersonaAnswerIntent, PersonaApprovalIntent, PersonaResolutionIntent } from "../persona-onboarding-state.types";
 
@@ -25,7 +26,7 @@ const _STATE_TEMPLATE_CASES: Readonly<Record<PersonaOnboardingStates, string>> =
 const _SHELL_TEMPLATE = readFileSync(join(process.cwd(), "src/lib/persona-onboarding-page.component.html"), "utf8");
 
 /** Test-only interview state boundary used to execute the real shell template. */
-@Component({ selector: "wo-persona-interview-state", standalone: true, template: "" })
+@Component({ selector: "wo-persona-interview-state", standalone: true, template: "", host: { "data-test-stub": "interview" } })
 class _PersonaInterviewStateStubComponent
 {
 	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
@@ -36,7 +37,7 @@ class _PersonaInterviewStateStubComponent
 }
 
 /** Test-only resolution state boundary used to execute the real shell template. */
-@Component({ selector: "wo-persona-resolution-state", standalone: true, template: "" })
+@Component({ selector: "wo-persona-resolution-state", standalone: true, template: "", host: { "data-test-stub": "resolution" } })
 class _PersonaResolutionStateStubComponent
 {
 	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
@@ -47,7 +48,7 @@ class _PersonaResolutionStateStubComponent
 }
 
 /** Test-only review state boundary used to execute the real shell template. */
-@Component({ selector: "wo-persona-review-state", standalone: true, template: "" })
+@Component({ selector: "wo-persona-review-state", standalone: true, template: "", host: { "data-test-stub": "review" } })
 class _PersonaReviewStateStubComponent
 {
 	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
@@ -60,7 +61,7 @@ class _PersonaReviewStateStubComponent
 }
 
 /** Test-only ready state boundary used to execute the real shell template. */
-@Component({ selector: "wo-persona-ready-state", standalone: true, template: "" })
+@Component({ selector: "wo-persona-ready-state", standalone: true, template: "", host: { "data-test-stub": "ready" } })
 class _PersonaReadyStateStubComponent
 {
 	public readonly snapshot = input.required<PersonaOnboardingSnapshot>();
@@ -126,6 +127,40 @@ function _RouteSnapshot(state: UserOnboardingRouteStates): UserOnboardingRouteSn
 	};
 }
 
+/** Build one complete first-chat projection for canonical route tests. */
+function _ChatSnapshot(state: UserOnboardingRouteStates): PersonaFirstChatSnapshot
+{
+	return {
+		workflowVersion: 1,
+		state,
+		conversationId: null,
+		persona: null,
+		contentRevision: null,
+		transcript: [],
+		currentQuestion: null,
+		answerCount: 0,
+		questionCount: 0,
+		canConclude: false,
+		startedAt: null,
+		completedAt: null
+	};
+}
+
+/** Build the minimal component-scoped first-chat store used by canonical route tests. */
+function _FirstChatStore(snapshot: PersonaFirstChatSnapshot): PersonaFirstChatStore
+{
+	return {
+		chat: { hasValue: function _HasValue() { return true; }, isLoading: function _IsLoading() { return false; }, value: function _Value() { return snapshot; } },
+		draftAnswer: signal(""),
+		actionError: signal<string | null>(null),
+		phase: signal(PersonaFirstChatCommandPhases.Idle).asReadonly(),
+		enter: vi.fn().mockResolvedValue(undefined),
+		answer: vi.fn().mockResolvedValue(undefined),
+		updateDraft: vi.fn(),
+		retry: vi.fn().mockResolvedValue(undefined)
+	} as unknown as PersonaFirstChatStore;
+}
+
 /** Build valid state evidence for every durable shell case. */
 function _StateSnapshot(state: PersonaOnboardingStates): PersonaOnboardingSnapshot
 {
@@ -159,8 +194,8 @@ function _Service(snapshot: PersonaOnboardingSnapshot): PersonaOnboardingService
 	} as unknown as PersonaOnboardingService;
 }
 
-/** Render the real shell template against test-only state boundaries and a controlled service. */
-async function _RenderShell(snapshot: PersonaOnboardingSnapshot, service: PersonaOnboardingService = _Service(snapshot)): Promise<ComponentFixture<PersonaOnboardingPageComponent>>
+/** Create the real shell template against test-only state boundaries and a controlled service. */
+function _CreateShellFixture(service: PersonaOnboardingService): ComponentFixture<PersonaOnboardingPageComponent>
 {
 	TestBed.overrideComponent(PersonaOnboardingPageComponent,
 	{
@@ -176,7 +211,13 @@ async function _RenderShell(snapshot: PersonaOnboardingSnapshot, service: Person
 		}
 	});
 	TestBed.configureTestingModule({ imports: [PersonaOnboardingPageComponent], providers: [{ provide: PersonaOnboardingService, useValue: service }] });
-	const fixture = TestBed.createComponent(PersonaOnboardingPageComponent);
+	return TestBed.createComponent(PersonaOnboardingPageComponent);
+}
+
+/** Render the real shell template after its authoritative initial projection resolves. */
+async function _RenderShell(snapshot: PersonaOnboardingSnapshot, service: PersonaOnboardingService = _Service(snapshot)): Promise<ComponentFixture<PersonaOnboardingPageComponent>>
+{
+	const fixture = _CreateShellFixture(service);
 	await vi.waitFor(function _Loaded() { expect(fixture.componentInstance.onboarding.hasValue()).toBe(true); });
 	fixture.detectChanges();
 	return fixture;
@@ -213,6 +254,36 @@ afterEach(function _ResetTestBed()
 
 describe("persona onboarding shell orchestration", function _PersonaOnboardingShellSuite()
 {
+	it("renders the routed loading envelope while the authoritative read is pending", function _LoadingEnvelope()
+	{
+		const service = _Service(_Snapshot());
+		vi.mocked(service.read).mockReturnValue(new Promise<PersonaOnboardingSnapshot>(function _Pending() {}));
+		const fixture = _CreateShellFixture(service);
+
+		fixture.detectChanges();
+
+		expect(fixture.nativeElement.textContent).toContain("Checking your onboarding position");
+		expect(fixture.nativeElement.querySelector("[role='status']")).not.toBeNull();
+	});
+
+	it("renders a blocking load error and retries the authoritative read", async function _LoadErrorRetry()
+	{
+		const snapshot = _Snapshot();
+		const service = _Service(snapshot);
+		vi.mocked(service.read).mockRejectedValueOnce(new Error("temporarily unavailable")).mockResolvedValueOnce(snapshot);
+		const fixture = _CreateShellFixture(service);
+		await vi.waitFor(function _Failed() { expect(fixture.componentInstance.onboarding.error()).not.toBeUndefined(); });
+		fixture.detectChanges();
+
+		expect(fixture.nativeElement.textContent).toContain("The persona authority is unavailable");
+		expect(fixture.nativeElement.textContent).toContain("Retry");
+
+		fixture.componentInstance.retry();
+
+		await vi.waitFor(function _Loaded() { expect(fixture.componentInstance.onboarding.hasValue()).toBe(true); });
+		expect(service.read).toHaveBeenCalledTimes(2);
+	});
+
 	it.each(Object.values(PersonaOnboardingStates))("routes %s through exactly one rendered state component", async function _RoutesState(state)
 	{
 		const fixture = await _RenderShell(_StateSnapshot(state));
@@ -259,6 +330,66 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		await vi.waitFor(function _Routed() { expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding/chat"); });
 	});
 
+	it("retries ready-route resolution through the component-scoped store", async function _RetryReadyRoute()
+	{
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		_loadRouteState
+			.mockRejectedValueOnce(new Error("temporary route failure"))
+			.mockResolvedValueOnce(_RouteSnapshot(UserOnboardingRouteStates.BootstrapChatPending));
+		const fixture = await _RenderShell(ready);
+
+		await vi.waitFor(function _Failed() { expect(fixture.componentInstance.actionError()).toContain("could not resolve"); });
+		expect(_loadRouteState).toHaveBeenCalledTimes(1);
+
+		fixture.componentInstance.retry();
+
+		await vi.waitFor(function _Routed() { expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding/chat"); });
+		expect(_loadRouteState).toHaveBeenCalledTimes(2);
+	});
+
+	it("replays the exact approval once when persona activation outlives its workflow transition", async function _RecoverApprovalTransition()
+	{
+		const review = _ReviewSnapshot("revision-1");
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		const service = _Service(review);
+		vi.mocked(service.read).mockResolvedValueOnce(review).mockResolvedValueOnce(ready);
+		vi.mocked(service.approve).mockRejectedValueOnce(new Error("Onboarding workflow is temporarily unavailable.")).mockResolvedValueOnce(ready);
+		_loadRouteState
+			.mockResolvedValueOnce(_RouteSnapshot(UserOnboardingRouteStates.SurveyInProgress))
+			.mockResolvedValueOnce(_RouteSnapshot(UserOnboardingRouteStates.BootstrapChatPending));
+		const fixture = await _RenderShell(review, service);
+
+		await fixture.componentInstance.approve({ personaRevisionId: "revision-1", instructionPreview: "Lead with a direct recommendation." });
+
+		expect(fixture.componentInstance.onboarding.value()).toBe(ready);
+		await vi.waitFor(function _UnresolvedSurveyRoute() { expect(_loadRouteState).toHaveBeenCalledTimes(1); });
+		expect(_navigateByUrl).not.toHaveBeenCalled();
+
+		fixture.componentInstance.retry();
+
+		await vi.waitFor(function _RecoveredRoute() { expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding/chat"); });
+		expect(service.approve).toHaveBeenCalledTimes(2);
+		expect(service.approve).toHaveBeenNthCalledWith(1, "revision-1");
+		expect(service.approve).toHaveBeenNthCalledWith(2, "revision-1");
+		expect(_loadRouteState).toHaveBeenCalledTimes(2);
+	});
+
+	it("admits only one ready-route read while the component-scoped store has one in flight", async function _SingleReadyRouteRead()
+	{
+		let finish: ((snapshot: UserOnboardingRouteSnapshot) => void) | undefined;
+		const pending = new Promise<UserOnboardingRouteSnapshot>(function _Pending(resolve) { finish = resolve; });
+		const ready = _ReviewSnapshot("revision-1", PersonaOnboardingStates.Ready);
+		_loadRouteState.mockReturnValue(pending);
+		const fixture = await _RenderShell(ready);
+		await vi.waitFor(function _Reading() { expect(_loadRouteState).toHaveBeenCalledTimes(1); });
+
+		fixture.componentInstance.retry();
+		expect(_loadRouteState).toHaveBeenCalledTimes(1);
+
+		finish?.(_RouteSnapshot(UserOnboardingRouteStates.BootstrapChatPending));
+		await vi.waitFor(function _Routed() { expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding/chat"); });
+	});
+
 	it("saves the final answer and adopts the confirmed review state", async function _SurveyCompletion()
 	{
 		const initial = _Snapshot();
@@ -296,6 +427,24 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 		await Promise.all([first, duplicate]);
 	});
 
+	it("reconciles authority state instead of replaying an uncertain command", async function _CommandReconciliation()
+	{
+		const initial = _Snapshot();
+		const reconciled = _ReviewSnapshot("revision-1");
+		const service = _Service(initial);
+		vi.mocked(service.read).mockResolvedValueOnce(initial).mockResolvedValueOnce(reconciled);
+		vi.mocked(service.answer).mockRejectedValue(new Error("The answer may already be saved."));
+		TestBed.configureTestingModule({ providers: [PersonaOnboardingStore, { provide: PersonaOnboardingService, useValue: service }] });
+		const component = TestBed.runInInjectionContext(function _CreateShell() { return new PersonaOnboardingPageComponent(); });
+		await vi.waitFor(function _Loaded() { expect(component.onboarding.hasValue()).toBe(true); });
+
+		await component.answer({ interviewId: "interview-1", questionId: "q1", choiceId: "fast" });
+
+		expect(service.answer).toHaveBeenCalledTimes(1);
+		expect(service.read).toHaveBeenCalledTimes(2);
+		expect(component.onboarding.value()).toBe(reconciled);
+	});
+
 	it("revalidates immutable review material before calling the approval authority", async function _ApprovalFence()
 	{
 		const review = _ReviewSnapshot("revision-1");
@@ -308,6 +457,15 @@ describe("persona onboarding shell orchestration", function _PersonaOnboardingSh
 
 		expect(service.approve).not.toHaveBeenCalled();
 		expect(component.actionError()).toContain("changed before approval");
+	});
+
+	it.each([UserOnboardingRouteStates.SurveyPending, UserOnboardingRouteStates.SurveyInProgress])("routes first-chat state %s to the canonical onboarding shell", async function _CanonicalOnboardingRoute(state)
+	{
+		TestBed.configureTestingModule({ providers: [{ provide: PersonaFirstChatStore, useValue: _FirstChatStore(_ChatSnapshot(state)) }] });
+		const component = TestBed.runInInjectionContext(function _CreateFirstChat() { return new PersonaFirstChatPageComponent(); });
+		TestBed.flushEffects();
+
+		expect(_navigateByUrl).toHaveBeenCalledWith("/onboarding");
 	});
 
 });

@@ -21,13 +21,16 @@ import {
 } from "../module-growth/core.mjs";
 
 const _SourceExtensions = [
+	".css",
 	".go",
+	".html",
 	".java",
 	".js",
 	".mjs",
 	".prisma",
 	".py",
 	".rs",
+	".scss",
 	".sh",
 	".tf",
 	".ts",
@@ -43,6 +46,8 @@ test("recognizes hand-maintained production source across languages", () =>
 	assert.equal(isProductionSource("services/api/src/Main.java", _SourceExtensions), true);
 	assert.equal(isProductionSource("apps/_infra/deploy-k8s/platform/provision.sh", _SourceExtensions), true);
 	assert.equal(isProductionSource("apps/opencrane/prisma/schema/agent.prisma", _SourceExtensions), true);
+	assert.equal(isProductionSource("libs/frontend/features/chat/page.component.html", _SourceExtensions), true);
+	assert.equal(isProductionSource("libs/frontend/features/chat/page.component.scss", _SourceExtensions), true);
 	assert.equal(isProductionSource("platform/gke/main.tf", _SourceExtensions), true);
 });
 
@@ -178,24 +183,29 @@ test("rejects invalid threshold configuration", () =>
 	}), /invalid schema or threshold order/u);
 });
 
-test("keeps every review-agent surface on the maintainability gate", () =>
+test("keeps the canonical review agent and runtime loaders on the maintainability gate", () =>
 {
-	const reviewAgentPaths = [
-		".agents/skills/review/SKILL.md",
-		".claude/agents/review.md",
-		".codex/agents/review.toml",
-	];
-	for (const path of reviewAgentPaths)
-	{
-		const content = readFileSync(join(_RepositoryRoot, path), "utf8");
-		assert.match(content, /correctness \| security \| maintainability \| residue/u);
-		assert.match(content, /check:module-growth/u);
-		assert.match(content, /exact base and head SHAs|exact base SHA and head SHA/u);
-		assert.match(content, /diff --cached --binary/u);
-		assert.match(content, /incremental/u);
-		assert.match(content, /cumulative/u);
-		assert.match(content, /merge-tree --write-tree/u);
-	}
+	const content = readFileSync(join(_RepositoryRoot, ".claude/agents/review.md"), "utf8");
+	assert.match(content, /correctness \| security \| maintainability \| residue/u);
+	assert.match(content, /check:module-growth/u);
+	assert.match(content, /exact base and head SHAs|exact base SHA and head SHA/u);
+	assert.match(content, /diff --cached --binary/u);
+	assert.match(content, /incremental/u);
+	assert.match(content, /cumulative/u);
+	assert.match(content, /merge-tree --write-tree/u);
+
+	const codexReview = readFileSync(join(_RepositoryRoot, ".codex/agents/review.toml"), "utf8");
+	assert.match(codexReview, /\.claude\/agents\/review\.md/u);
+	const reviewSkill = readFileSync(join(_RepositoryRoot, ".agents/skills/review/SKILL.md"), "utf8");
+	assert.match(reviewSkill, /\.claude\/agents\/review\.md/u);
+	const codexArchitecture = readFileSync(join(_RepositoryRoot, ".codex/agents/architecture.toml"), "utf8");
+	assert.match(codexArchitecture, /\.claude\/agents\/architecture\.md/u);
+	const angularGuidance = readFileSync(join(_RepositoryRoot, "docs/agents/angular.md"), "utf8");
+	assert.match(angularGuidance, /required ownership map/u);
+	assert.match(angularGuidance, /must BLOCK a routed page/u);
+	const reviewPolicy = readFileSync(join(_RepositoryRoot, ".claude/review-policy.md"), "utf8");
+	assert.match(reviewPolicy, /always-review=.*\.component\./u);
+	assert.match(reviewPolicy, /routed Angular component change/u);
 
 	const codexHook = readFileSync(
 		join(_RepositoryRoot, ".codex/hooks/require-review.sh"),
@@ -275,10 +285,97 @@ test("shared Stop pre-filter blocks a clean committed pre-PR branch without WAVE
 		},
 		input: JSON.stringify({ stop_hook_active: false }),
 	});
-	assert.equal(result.status, 0);
+	assert.equal(result.status, 2);
 	const reviewContext = readFileSync(join(repository, ".claude/.review-context.md"), "utf8");
 	assert.match(reviewContext, /^VERDICT=JUDGE/mu);
 	assert.match(reviewContext, /missing immutable base/u);
+});
+
+function _RunTinyReviewGate(relativeSourcePath)
+{
+	const repository = mkdtempSync(join(tmpdir(), "opencrane-routed-review-"));
+	try
+	{
+		const fakeBin = join(repository, "fake-bin");
+		const fakeNode = join(fakeBin, "node");
+		const sourcePath = join(repository, relativeSourcePath);
+		const policyPath = join(repository, ".claude/review-policy.md");
+		const configurationPath = join(repository, "docs/agents/module-growth-policy.json");
+		mkdirSync(fakeBin, { recursive: true });
+		mkdirSync(dirname(sourcePath), { recursive: true });
+		mkdirSync(dirname(policyPath), { recursive: true });
+		mkdirSync(dirname(configurationPath), { recursive: true });
+		writeFileSync(policyPath, readFileSync(join(_RepositoryRoot, ".claude/review-policy.md")));
+		writeFileSync(configurationPath, JSON.stringify({ sourceExtensions: [".html", ".scss", ".ts"] }));
+		writeFileSync(sourcePath, "value = 1;\n");
+		writeFileSync(
+			fakeNode,
+			[
+				"#!/usr/bin/env bash",
+				"if [ \"$1\" = \"-e\" ]; then",
+				"  printf '%s\\n' ':(icase)*.html' ':(icase)*.scss' ':(icase)*.ts'",
+				"  exit 0",
+				"fi",
+				"printf '%s\\n' 'module-growth-check: 0 error(s), 0 review candidate(s).'",
+				"",
+			].join("\n"),
+		);
+		chmodSync(fakeNode, 0o755);
+		execFileSync("git", ["init", "--quiet", "--initial-branch=develop"], { cwd: repository });
+		execFileSync("git", ["add", "."], { cwd: repository });
+		execFileSync("git", [
+			"-c", "user.name=Routed Review Test",
+			"-c", "user.email=routed-review@example.invalid",
+			"-c", "commit.gpgsign=false",
+			"commit", "--quiet", "-m", "baseline",
+		], { cwd: repository });
+		writeFileSync(sourcePath, "value = 2;\n");
+
+		const sharedHook = join(_RepositoryRoot, ".claude/hooks/require-review.sh");
+		const result = spawnSync("bash", [sharedHook], {
+			cwd: repository,
+			encoding: "utf8",
+			env: {
+				...process.env,
+				CLAUDE_PROJECT_DIR: repository,
+				PATH: `${fakeBin}:${process.env.PATH}`,
+			},
+			input: JSON.stringify({ stop_hook_active: false }),
+		});
+		const reviewContext = readFileSync(join(repository, ".claude/.review-context.md"), "utf8");
+		return { result, reviewContext };
+	}
+	finally
+	{
+		rmSync(repository, { recursive: true, force: true });
+	}
+}
+
+test("shared Stop gate blocks tiny routed component, store, mapper, and view changes", () =>
+{
+	const paths = [
+		"libs/frontend/features/chat/chat-page.component.ts",
+		"libs/frontend/features/chat/chat-page.component.html",
+		"libs/frontend/features/chat/chat-page.component.scss",
+		"libs/frontend/state/chat/chat-page.store.ts",
+		"libs/frontend/features/chat/chat-page.mapper.ts",
+		"libs/frontend/features/chat/chat-page.view.ts",
+	];
+	for (const path of paths)
+	{
+		const { result, reviewContext } = _RunTinyReviewGate(path);
+		assert.equal(result.status, 2, path);
+		assert.match(reviewContext, /^VERDICT=JUDGE/mu, path);
+		assert.match(reviewContext, /CHANGED_LINES=2/u, path);
+	}
+});
+
+test("shared Stop gate skips an excluded routed-component test change", () =>
+{
+	const path = "libs/frontend/features/chat/__tests__/chat-page.component.spec.ts";
+	const { result, reviewContext } = _RunTinyReviewGate(path);
+	assert.equal(result.status, 0);
+	assert.match(reviewContext, /^VERDICT=SKIP/mu);
 });
 
 test("Codex Stop wrapper blocks JUDGE and allows SKIP", (context) =>
@@ -360,7 +457,7 @@ test("shared Stop pre-filter routes checker crashes to JUDGE", (context) =>
 		input: JSON.stringify({ stop_hook_active: false }),
 	});
 
-	assert.equal(result.status, 0);
+	assert.equal(result.status, 2);
 	const reviewContext = readFileSync(
 		join(repository, ".claude/.review-context.md"),
 		"utf8",
