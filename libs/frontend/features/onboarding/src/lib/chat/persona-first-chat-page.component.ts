@@ -114,7 +114,7 @@ export class PersonaFirstChatPageComponent
 		{
 			case UserOnboardingRouteStates.SurveyPending:
 			case UserOnboardingRouteStates.SurveyInProgress:
-				void this._router.navigateByUrl("/onboarding/survey");
+				void this._router.navigateByUrl("/onboarding");
 				return;
 			case UserOnboardingRouteStates.Completed:
 				void this._router.navigateByUrl("/admin");

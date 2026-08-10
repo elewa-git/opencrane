@@ -26,9 +26,10 @@ detection as the application.
 
 ## Story organisation
 
-Every catalogue story lives beside the contract it verifies, under that component's `__tests__/`
-directory. This keeps the visual, interaction, accessibility, and unit-test fixtures together and
-prevents a component implementation from accumulating a second, detached story tree.
+Element stories live beside the contract they verify under that component's `__tests__/` directory.
+A feature may keep one aggregate state catalogue in its own `src/lib/__tests__/` directory when the
+story deliberately composes several feature-local components. This keeps visual, interaction,
+accessibility, and unit-test fixtures with their owning package without creating a detached story tree.
 
 Each story must document three things in its Storybook description: the user-facing state it
 represents, the component contract it verifies, and the authority it deliberately does **not**
