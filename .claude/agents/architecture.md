@@ -129,6 +129,12 @@ preserves the old implementation, so no compatibility or operational-retention g
 
 ## Other architecture checks
 
+- For every materially changed routed Angular page, apply the responsibility inventory in
+  `docs/agents/angular.md` even when the language-neutral growth checker is silent. BLOCK a page that
+  owns server reads, mutation sequencing/concurrency/retry, authoritative adoption, navigation,
+  substantial presentation mapping, and interactive visual regions together. Require a thin page,
+  component-scoped state store, pure feature mapper, and cohesive presentational owners as needed.
+  A generic async callback wrapper or cosmetic helper extraction does not change ownership.
 - Treat `scripts/module-growth-check.mjs` findings as mandatory responsibility-inventory triggers
   across every supported production language. For each candidate, classify configuration/identity,
   external I/O, orchestration, domain policy, protocol translation, persistence, retry/cancellation,
